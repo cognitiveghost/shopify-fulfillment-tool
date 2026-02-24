@@ -1,6 +1,7 @@
 # Shopify Fulfillment Tool - Functions Catalog
 
 ## Table of Contents
+
 - [Backend Functions](#backend-functions)
   - [core.py](#corepy)
   - [analysis.py](#analysispy)
@@ -17,6 +18,9 @@
   - [File Handler](#file-handler)
   - [Other Dialogs](#other-dialogs)
   - [Utility Classes](#utility-classes)
+- [Modules Added After v1.8.6.0](#modules-added-after-v1860)
+
+Note: this document covers modules present at v1.8.6.0. Modules added in subsequent releases are listed in the appendix at the end with brief descriptions.
 
 ---
 
@@ -2567,7 +2571,87 @@ elif status == "Not Fulfillable":
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2025-11-04
-**Total Functions Documented**: 80+
-**Maintained By**: Development Team
+## Modules Added After v1.8.6.0
+
+The following modules were added after this document was last fully reviewed (v1.8.6.0 / 2026-01-22). Each module has inline docstrings; detailed function entries are pending a future documentation pass.
+
+### Backend (shopify_tool/)
+
+**profile_manager.py** — client configuration management; CRUD for client profiles on the file server, 60-second config cache, file locking, automatic backups (last 10 per client).
+
+**session_manager.py** — session lifecycle; creates timestamped directories, manages `session_info.json`, tracks session status.
+
+**barcode_processor.py** — Code-128 label generation; produces 68mm x 38mm PNG labels and combined PDFs for thermal printers; key function: `generate_barcodes(df, packing_list_config, output_dir, sequential_map)`.
+
+**barcode_history.py** — tracks barcode generation runs per session.
+
+**sequential_order.py** — manages independent sequential numbering per packing list for barcode labels.
+
+**pdf_processor.py** — reference labels processor; overlays reference numbers on courier PDF pages, sorts by reference; key function: `process_reference_labels(pdf_path, mapping_csv_path, output_path)`.
+
+**reference_labels_history.py** — tracks reference label processing runs.
+
+**weight_calculator.py** — volumetric weight calculation and box assignment from a configured box list; supports CSV import/export for product weights and box dimensions.
+
+**undo_manager.py** — session-scoped undo/redo for order fulfillment status changes; key functions: `record_change()`, `undo()`, `redo()`.
+
+**set_decoder.py** — expands bundle SKUs into component SKUs using the configured set decoder rules.
+
+**tag_manager.py** — add/remove tag operations on order DataFrame rows.
+
+**groups_manager.py** — client group management; organizes clients into named groups in the configuration.
+
+**sku_writeoff.py** — stock writeoff calculations for stock export generation.
+
+**csv_utils.py** — CSV loading with automatic delimiter detection and encoding handling utilities.
+
+### Frontend (gui/)
+
+**client_sidebar.py** — collapsible client selector with group management.
+
+**session_browser_widget.py** — historical session browser; loads and displays past session metadata and files.
+
+**tag_management_panel.py** — toggleable panel for per-order tag editing (add predefined or custom tags, remove tags).
+
+**barcode_generator_widget.py** — UI for barcode generation integrated with `barcode_processor` via background worker.
+
+**reference_labels_widget.py** — UI for reference labels PDF processing.
+
+**tools_widget.py** — container tab that hosts Barcode Generator and Reference Labels widgets.
+
+**table_config_manager.py** — persists column visibility, ordering, and width per client.
+
+**theme_manager.py** — applies dark/light theme to the application.
+
+**order_group_delegate.py** — paints visual border separators between different orders in multi-line table views.
+
+**tag_delegate.py** — renders tag badges within table cells on top of row background colors.
+
+**bulk_operations_toolbar.py** — toolbar for batch actions on selected analysis table rows.
+
+**wheel_ignore_combobox.py** — `QComboBox` subclass that ignores the scroll wheel to prevent accidental value changes.
+
+**rule_validator.py** — real-time validation of rule condition/action fields in the settings UI.
+
+**rule_test_dialog.py** — dialog for testing a rule against a sample order.
+
+**background_worker.py** — extended `QRunnable`-based background task support.
+
+**column_config_dialog.py** — dialog for configuring visible columns per client.
+
+**column_mapping_widget.py** — CSV column mapping widget within client settings.
+
+**add_product_dialog.py** — dialog for manually adding a product row to the analysis.
+
+**groups_management_dialog.py** — dialog for managing client groups.
+
+**tag_categories_dialog.py** — dialog for editing tag category definitions.
+
+**selection_helper.py** — table row selection utilities.
+
+**checkbox_delegate.py** — checkbox rendering delegate for table cells.
+
+---
+
+Document version: 1.8.9.6
+Last updated: 2026-02-24

@@ -1,352 +1,190 @@
 # Shopify Fulfillment Tool
 
-![Version](https://img.shields.io/badge/version-1.8.6.0-blue)
-![Status](https://img.shields.io/badge/status-stable-green)
-![Tests](https://img.shields.io/badge/tests-60%2B%20passing-brightgreen)
-![Python](https://img.shields.io/badge/python-3.9+-blue)
-![License](https://img.shields.io/badge/license-proprietary-red)
-
-**Status:** ✅ Production Ready - Stable Release v1.8.6.0
-**Version:** 1.8.6.0
-**Architecture:** Server-Based Multi-Client System
-**Last Updated:** 2026-01-22
+**Version:** 1.8.9.6 (Pre-release)
+**Status:** Active development
+**Platform:** Windows 10/11
+**Last Updated:** 2026-02-24
 
 ---
 
-## 🎉 What's New in v1.8.6.0
+## Overview
 
-### Barcode Generator Integration (Feature #5) ✅ COMPLETE
+The Shopify Fulfillment Tool is a desktop application for warehouse order fulfillment against Shopify order exports. It loads an orders CSV and a stock CSV, simulates fulfillment against available stock, applies configurable business rules, and generates packing lists and stock writeoff exports. All data is stored on a centralized Windows file server, enabling multi-PC warehouse operations.
 
-**🏷️ Warehouse Barcode Labels**
-- Generate Code-128 barcodes from analysis results
-- 8 data fields: Sequential#, Items, Country, Tag, Order#, Courier, Date, Barcode
-- 68mm × 38mm labels optimized for Citizen CL-E300 thermal printer (203 DPI)
-- PNG + PDF output formats with auto-folder opening
-- Independent sequential numbering per packing list
-
-**📋 Smart Organization**
-- Filter by packing list configuration
-- Per-packing-list subdirectories (DHL_Orders/, PostOne_Orders/)
-- Sequential numbering consistent with Reference Labels feature
-- Generation history with statistics tracking
-- Background processing (non-blocking UI)
-
-**📄 Reference Labels PDF Processor (Feature #4)**
-- Automated reference numbering for courier label PDFs
-- 3-step matching: PostOne ID → Tracking → Name
-- Automatic page sorting by reference number
-- CSV-based mapping support
-
-### 🐛 Critical Fixes
-- Fixed barcode font loading errors
-- Fixed item count calculation (sum of quantities)
-- Fixed Order Rules field parameter preservation
-- Fixed Windows file locking for large configurations (70+ sets)
-- Thread safety improvements
+The application is used daily by warehouse staff to determine which orders can be shipped, prioritize multi-item orders, tag and route orders to couriers, and produce formatted packing lists for each courier/route.
 
 ---
 
-*For detailed changes, see [CHANGELOG.md](CHANGELOG.md)*
+## Features
 
----
+### Core
 
-## 📋 Overview
+- Multi-client support — separate configuration and session history per client
+- Session management — each analysis run creates a timestamped session directory on the file server
+- Order analysis — stock simulation that prioritizes multi-item orders to maximize complete shipments
+- Rule engine — configurable conditions and actions for automatic order tagging, routing, and product adjustment (18+ operators, 10+ action types, real-time validation)
+- Sets decoding — automatic expansion of product bundles into component SKUs
+- Manual product addition — add items on the fly with live recalculation
+- Repeated orders detection — cross-session detection of repeat customers
+- Undo/redo — session-based undo management for fulfillment toggles
 
-The Shopify Fulfillment Tool is a professional desktop application designed for **small to medium-sized businesses** running Shopify e-commerce operations. It streamlines warehouse order fulfillment through intelligent analysis, automation, and seamless integration with warehouse execution systems.
+### Reports and Exports
 
-### What Makes This Tool Special?
+- Packing lists — Excel reports filtered by courier or other criteria, with JSON copies for Packing Tool integration
+- Stock exports — aggregated writeoff quantities by SKU (.xlsx and .xls)
+- Barcode labels — Code-128 thermal labels (68mm x 38mm, Citizen CL-E300, 203 DPI) generated as PNG and PDF
+- Reference labels — PDF processing for courier label PDFs with reference number overlay and automatic page sorting
 
-✅ **Server-Based Architecture** - Multi-PC warehouse operations with centralized data
-✅ **Multi-Client Support** - Manage multiple clients/brands from a single installation
-✅ **Smart Prioritization** - Multi-item orders processed first to maximize complete shipments
-✅ **Packing Tool Integration** - JSON exports ready for warehouse packing stations
-✅ **Production Proven** - Used daily in warehouse operations with 99%+ reliability
+### Tools
 
-### Target Users
-- Warehouse managers and logistics coordinators
-- Small/medium e-commerce fulfillment centers
-- Multi-brand warehouse operations
-- Shopify merchants with in-house fulfillment
-
----
-
-## ✨ Key Features
-
-### Core Functionality
-- **Multi-Client Support**: Manage multiple clients with separate configurations
-- **Session Management**: Server-based sessions with automatic state persistence
-- **Order Analysis**: Intelligent fulfillment simulation with stock allocation
-- **Rule Engine**: Flexible business rules for order processing and tagging
-- **Sets Decoding**: Automatic expansion of product bundles into components
-- **Manual Product Addition**: Add items on-the-fly with live recalculation
-
-### Advanced Features
-- **Repeated Orders Detection**: Automatic identification across sessions
-- **Priority Management**: Multi-item orders prioritized for completion rate
-- **Courier Mapping**: Flexible shipping method configuration
-- **Stock Simulation**: Real-time stock availability checking
-- **History Tracking**: Full audit trail of fulfillment operations
-- **Undo/Redo System**: Session-based undo management
-
-### Reports & Exports
-- **Packing Lists**: Formatted Excel reports with multiple filter options
-- **Stock Exports**: Multiple format support (.xlsx, .xls)
-- **JSON Integration**: Seamless integration with Packing Tool
-- **Analysis Reports**: Comprehensive fulfillment statistics
-- **Custom Filters**: SKU exclusion, courier-specific reports
-
-### Tools Window
-- **Barcode Generator**: Generate Code-128 warehouse labels from analysis results
-  - 68mm × 38mm labels for Citizen CL-E300 thermal printer
-  - 8 data fields per label (sequential#, items, country, tag, etc.)
-  - Filter by packing list configuration
-  - PNG + PDF output with auto-open
-  - Generation history and statistics
-
-- **Reference Labels**: PDF processing for courier reference numbers
-  - Automated reference numbering for PostOne labels
-  - 3-step matching algorithm (ID → Tracking → Name)
-  - Automatic page sorting by reference number
+- Weight and packaging engine — volumetric weight calculation, box assignment, CSV import/export for product weights and box dimensions
+- Statistics — session and cross-session fulfillment statistics with per-courier breakdown
+- Dark/light theme support
 
 ### User Interface
-- **Modern Qt6 Interface**: Fast, responsive desktop application
-- **Tabbed Workflow**: Session Setup, Analysis Results, History, Info
-- **Smart Widgets**: Wheel-scroll-proof combo boxes for better UX
-- **Real-time Updates**: Live statistics and progress tracking
-- **Session Browser**: Easy navigation through historical sessions
-- **Column Mapping**: Flexible CSV header adaptation
 
-### Technical Excellence
-- **Vectorized Operations**: High-performance pandas operations
-- **Modular Architecture**: Clean separation of concerns
-- **Comprehensive Logging**: Detailed debug information
-- **Error Handling**: Specific exceptions with helpful messages
-- **Type Hints**: Full type safety throughout codebase
-- **Extensive Documentation**: Detailed docstrings on all functions
+- Tabbed workflow: Session Setup, Analysis Results, Session Browser, Information, Tools
+- Interactive analysis table with sorting, filtering, column customization, and context menu
+- Collapsible client sidebar with group management
+- Tag management panel for per-order tagging
+- Background processing for long operations (barcode generation, analysis)
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-### Server-Based File Structure
+### File Server Structure
 
-The application uses a **centralized file server** for all data storage, enabling multi-PC warehouse operations:
+All data is stored on a centralized Windows file server. The path is configured via the `FULFILLMENT_SERVER_PATH` environment variable (or defaults to the production UNC path).
 
-```
+```text
 \\Server\Share\0UFulfilment\
-├── Clients/                          # Client-specific configurations
-│   ├── CLIENT_M/
-│   │   ├── client_config.json        # General client settings
-│   │   ├── shopify_config.json       # Shopify-specific config (rules, packing lists, etc.)
-│   │   ├── fulfillment_history.csv   # Historical fulfillment data
-│   │   └── backups/                  # Automatic config backups (last 10)
-│   └── CLIENT_{ID}/
-│       └── ...
+├── Clients\
+│   └── CLIENT_{ID}\
+│       ├── client_config.json        # General client settings and UI preferences
+│       ├── shopify_config.json       # Rules, packing lists, couriers, column mappings
+│       └── backups\                  # Automatic config backups (last 10 versions)
 │
-├── Sessions/                         # Session-based work folders
-│   ├── CLIENT_M/
-│   │   ├── 2025-11-05_1/            # Dated session folder
-│   │   │   ├── session_info.json    # Session metadata
-│   │   │   ├── input/               # Orders & stock CSV files
-│   │   │   ├── analysis/            # Analysis results (XLSX + JSON)
-│   │   │   ├── packing_lists/       # Generated packing lists (XLSX + JSON)
-│   │   │   └── stock_exports/       # Stock writeoff exports (XLS)
-│   │   └── 2025-11-05_2/
-│   │       └── ...
-│   └── CLIENT_{ID}/
-│       └── ...
+├── Sessions\
+│   └── CLIENT_{ID}\
+│       └── 2025-11-05_1\            # Timestamped session folder
+│           ├── session_info.json    # Session metadata
+│           ├── input\               # Uploaded orders and stock CSV files
+│           ├── analysis\            # Analysis results (XLSX + JSON)
+│           ├── packing_lists\       # Packing list reports (XLSX + JSON)
+│           ├── stock_exports\       # Stock writeoff exports (XLS)
+│           └── barcodes\            # Generated barcode labels
 │
-├── Stats/                            # Unified statistics
-│   └── global_stats.json             # Cross-tool statistics database
+├── Stats\
+│   └── global_stats.json            # Cross-tool unified statistics
 │
-└── Logs/                             # Centralized logging
-    └── shopify_tool/                 # Application logs
+└── Logs\
+    └── shopify_tool\                # Application logs
 ```
 
 ### Core Components
 
-- **ProfileManager** (`shopify_tool/profile_manager.py`): Manages client configurations with caching, file locking, and automatic backups
-- **SessionManager** (`shopify_tool/session_manager.py`): Creates and manages work sessions on the file server
-- **StatsManager** (`shared/stats_manager.py`): Unified statistics tracking for both Shopify and Packing tools
-- **Analysis Engine** (`shopify_tool/analysis.py`): Core fulfillment simulation logic
-- **Rule Engine** (`shopify_tool/rules.py`): Configurable automation rules
+- **ProfileManager** (`shopify_tool/profile_manager.py`) — client configuration with caching, file locking, and automatic backups
+- **SessionManager** (`shopify_tool/session_manager.py`) — session lifecycle on the file server
+- **StatsManager** (`shared/stats_manager.py`) — unified statistics for Shopify and Packing tools
+- **Analysis Engine** (`shopify_tool/analysis.py`) — fulfillment simulation and stock allocation
+- **Rule Engine** (`shopify_tool/rules.py`) — configurable conditions/actions for order processing
+- **WeightCalculator** (`shopify_tool/weight_calculator.py`) — volumetric weight and box assignment
+- **BarcodeProcessor** (`shopify_tool/barcode_processor.py`) — Code-128 label generation
 
-For detailed architecture information, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For detailed architecture information, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Prerequisites
 
-- **Python 3.9+** (required for type hints and modern features)
-- **Windows 10/11** (primary platform, works on Windows Server)
-- **Network Access** to file server: `\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment\`
+- Python 3.9+
+- Windows 10/11
+- Network access to the file server at `\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment\`
 
 ### Production Setup
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/cognitiveclodfr/shopify-fulfillment-tool.git
-   cd shopify-fulfillment-tool
-   ```
+```bash
+git clone https://github.com/cognitiveclodfr/shopify-fulfillment-tool.git
+cd shopify-fulfillment-tool
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python gui_main.py
+```
 
-2. **Create a virtual environment** (recommended)
-   ```bash
-   python -m venv venv
+The application connects to the production file server automatically if `FULFILLMENT_SERVER_PATH` is not set.
 
-   # Windows
-   venv\Scripts\activate
+### Development Setup
 
-   # macOS/Linux
-   source venv/bin/activate
-   ```
+For local development without access to the production server:
 
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+python scripts/setup_dev_env.py
+```
 
-4. **Configure server access**
-   - The application will automatically connect to the production file server
-   - Default path: `\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment`
-   - Ensure network connectivity and proper permissions
+This creates a local mock server structure with test client profiles and sample data.
 
-5. **Run the application**
-   ```bash
-   python gui_main.py
-   ```
+Then set the environment variable before launching:
 
-### Development Environment Setup
+```cmd
+# CMD
+set FULFILLMENT_SERVER_PATH=D:\Dev\fulfillment-server-mock
+python gui_main.py
 
-For local development **without** access to the production server:
+# PowerShell
+$env:FULFILLMENT_SERVER_PATH='D:\Dev\fulfillment-server-mock'
+python gui_main.py
+```
 
-1. **Run the automated setup script**
-   ```bash
-   python scripts/setup_dev_env.py
-   ```
-   This will:
-   - Create local mock server structure
-   - Generate test client profiles (CLIENT_M, CLIENT_TEST)
-   - Create comprehensive test data
-   - Set up logging directories
+Or use the convenience launcher:
 
-2. **Set the environment variable**
+```cmd
+START_DEV.bat
+```
 
-   **Windows (CMD):**
-   ```cmd
-   set FULFILLMENT_SERVER_PATH=D:\Dev\fulfillment-server-mock
-   python gui_main.py
-   ```
-
-   **Windows (PowerShell):**
-   ```powershell
-   $env:FULFILLMENT_SERVER_PATH='D:\Dev\fulfillment-server-mock'
-   python gui_main.py
-   ```
-
-   **Linux/macOS:**
-   ```bash
-   export FULFILLMENT_SERVER_PATH=~/Dev/fulfillment-server-mock
-   python gui_main.py
-   ```
-
-3. **Or use the convenience script** (Windows):
-   ```cmd
-   START_DEV.bat
-   ```
-
-The application **automatically detects** the environment:
-- If `FULFILLMENT_SERVER_PATH` is set → Uses local dev directory
-- If not set → Uses production network server
-
-**No code changes needed!** See [README_DEV.md](README_DEV.md) for detailed dev setup instructions.
+See [README_DEV.md](README_DEV.md) for full development setup instructions.
 
 ---
 
-## 📖 Usage Workflow
+## Usage Workflow
 
-### Basic Workflow (5 Steps)
+### Basic Steps
 
-#### 1. Select Client
-- Launch the application
-- Choose a client from the dropdown (e.g., "CLIENT_M")
-- Client configuration loads automatically
+1. **Select client** — choose a client from the sidebar; configuration loads automatically
+2. **Create session** — click "Create New Session" to create a timestamped session directory on the server
+3. **Load files** — upload the Shopify orders CSV and the current stock CSV
+4. **Run analysis** — the engine cleans the data, prioritizes orders, simulates stock allocation, applies rules, and produces statistics; results appear in the table color-coded by status (fulfillable / not fulfillable / repeat)
+5. **Generate reports** — create packing lists per courier and stock exports
 
-#### 2. Create Session
-- Click **"Create New Session"**
-- A timestamped folder is created on the server: `Sessions/CLIENT_M/2025-11-10_1/`
-- Session structure is automatically set up (input/, analysis/, packing_lists/, stock_exports/)
+### Settings
 
-#### 3. Load Data Files
-- **Load Orders File**: Select your Shopify orders export CSV
-- **Load Stock File**: Select your current inventory CSV
-- Files are validated and copied to the session's `input/` directory
+Open **Client Settings** to configure:
 
-#### 4. Run Analysis
-- Click **"Run Analysis"**
-- The tool will:
-  - Clean and standardize data
-  - Prioritize multi-item orders for complete fulfillment
-  - Simulate stock allocation
-  - Apply automation rules from your configuration
-  - Calculate comprehensive statistics
-  - Detect repeat customers
-- Results appear in the data table with color coding:
-  - 🟢 **Green**: Fulfillable orders
-  - 🔴 **Red**: Not fulfillable (out of stock)
-  - 🟡 **Yellow**: Repeat customer orders
-
-#### 5. Generate Reports
-- **Packing Lists**: Click "Create Packing List" and select from pre-configured lists
-  - Filtered by courier (DHL, DPD, PostOne, Speedy, etc.)
-  - Excludes virtual SKUs (e.g., "07", "Shipping protection")
-  - Generates both XLSX (for printing) and JSON (for Packing Tool)
-- **Stock Exports**: Click "Create Stock Export" for courier system integration
-  - Aggregated quantities by SKU
-  - XLS format for compatibility
-
-### Advanced Features
-
-#### Client Settings
-Click **"Client Settings"** to configure:
-- **Settings Tab**: General preferences, stock alert thresholds
-- **Rules Tab**: Automation rules (conditions → actions)
-- **Packing Lists Tab**: Configure filtered packing lists per courier/criteria
-- **Stock Exports Tab**: Configure stock export formats
-- **Mappings Tab**: CSV column mappings for different data sources
-
-#### Interactive Data Table
-- **Filtering**: Search/filter by any column (supports regex)
-- **Sorting**: Click column headers to sort
-- **Context Menu**: Right-click for quick actions
-- **Manual Toggle**: Double-click to manually change order fulfillment status
-- **Color Indicators**: Instant visual status
-
-#### Statistics Panel
-View real-time statistics:
-- Total orders completed / not completed
-- Total items to write off
-- Per-courier breakdown
-- Repeat order counts
-- Low stock alerts
+- **Rules** — automation rules with conditions and actions
+- **Packing Lists** — courier-specific list configurations and SKU exclusions
+- **Stock Exports** — export format configuration
+- **Mappings** — CSV column name mappings for different data sources
+- **Weight** — product weights and box dimensions (CSV import/export supported)
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
-### Configuration Files
+### Config Files
 
-**All configurations are stored on the file server:**
-- **Client Config**: `Clients/CLIENT_{ID}/client_config.json`
-- **Shopify Config**: `Clients/CLIENT_{ID}/shopify_config.json`
+Stored on the file server per client:
 
-**Old local configs** (`%APPDATA%/ShopifyFulfillmentTool/`) are **obsolete** after Phase 1 migration.
+- `client_config.json` — general settings, UI preferences, table layout
+- `shopify_config.json` — V2 format with column mappings, courier patterns, tag categories, rules, packing list definitions, set decoders
 
 ### Required CSV Columns
 
-#### Orders File (`orders_export.csv`):
-```
+**Orders file:**
+
+```text
 Name                - Order number
 Lineitem sku        - Product SKU
 Lineitem quantity   - Quantity ordered
@@ -354,398 +192,66 @@ Shipping Method     - Shipping method
 Shipping Country    - Destination country
 Tags                - Order tags
 Notes               - Order notes
-Total               - Order total (optional)
 ```
 
-#### Stock File (`inventory.csv`):
-```
+**Stock file:**
+
+```text
 Артикул            - Product SKU
-Име                - Product name
 Наличност          - Available quantity
 ```
 
-**Note:** Cyrillic column headers are supported. Column mappings can be customized in Client Settings → Mappings tab.
-
-### Exclude SKUs
-
-Configure SKUs to exclude from packing lists (e.g., virtual items):
-- `07` - Sample virtual SKU
-- `Shipping protection` - Insurance add-on
-- `Gift wrapping` - Service items
-
-Set these in Client Settings → Packing Lists → Exclude SKUs field.
+Column names can be remapped in Client Settings → Mappings if your CSV uses different headers. Cyrillic headers are supported.
 
 ---
 
-## 🧪 Testing
-
-### Test Suite
-
-**Current Status:** ✅ 55/55 tests passing (100%)
+## Testing
 
 ```bash
 # Run all tests
 pytest tests/ -v
 
-# Run specific test categories
-pytest tests/test_core.py -v              # Core analysis
-pytest tests/test_analysis.py -v          # Analysis engine
-pytest tests/test_profile_manager.py -v   # Profile management
-pytest tests/gui/ -v                      # GUI components
-
 # Run with coverage
 pytest tests/ --cov=shopify_tool --cov=gui --cov-report=html
+
+# GUI tests (offscreen mode for CI)
+pytest tests/gui/ -v
 ```
 
-### Test Coverage
-
-| Module | Tests | Coverage |
-|--------|-------|----------|
-| Core Analysis | 17 | ~95% |
-| Analysis Engine | 38 | ~90% |
-| Profile Manager | 12 | ~85% |
-| Session Manager | 15 | ~85% |
-| GUI Components | 8 | ~70% |
-| **Total** | **90+** | **~85%** |
-
-### Testing Philosophy
-
-- **Unit Tests**: Individual function testing
-- **Integration Tests**: Module interaction testing
-- **GUI Tests**: UI component testing with pytest-qt
-- **Regression Tests**: Ensure refactoring doesn't break functionality
+The test suite uses pytest with pytest-qt for GUI components. Tests run in offscreen mode and do not require a display or server connection.
 
 ---
 
-## 📚 Documentation
-
-Comprehensive documentation is available in the `docs/` directory:
+## Documentation
 
 | Document | Description |
-|----------|-------------|
-| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System design, server architecture, data flow, and design patterns |
-| **[API.md](docs/API.md)** | Complete API reference for all classes and methods |
-| **[FUNCTIONS.md](docs/FUNCTIONS.md)** | Detailed function catalog with examples |
-| **[INTEGRATION.md](docs/INTEGRATION.md)** | Integration guide for Packing Tool and file server workflows |
-| **[MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md)** | Phase 1 migration from local to server-based architecture |
-| **[MIGRATION_CHECKLIST.md](docs/MIGRATION_CHECKLIST.md)** | Step-by-step migration verification checklist |
-| **[TEST_SCENARIOS.md](docs/TEST_SCENARIOS.md)** | Comprehensive test data scenarios and expected results |
-| **[TESTING_CHECKLIST.md](docs/TESTING_CHECKLIST.md)** | Manual testing procedures and validation steps |
+| -------- | ----------- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, component overview |
+| [docs/API.md](docs/API.md) | API reference for all modules and classes |
+| [docs/FUNCTIONS.md](docs/FUNCTIONS.md) | Detailed function catalog with parameters and examples |
+| [README_DEV.md](README_DEV.md) | Development environment setup and workflow |
 
 ---
 
-## 🔗 Integration with Packing Tool
+## Integration with Packing Tool
 
-The Shopify Fulfillment Tool integrates seamlessly with the **Packing Tool** (warehouse execution system) through the shared file server:
+The Shopify Fulfillment Tool integrates with a separate Packing Tool (warehouse execution system) through the shared file server. Packing lists are exported as both XLSX and JSON. The JSON format includes order metadata fields consumed by the Packing Tool.
 
-### Workflow
-
-```
-┌────────────────────┐
-│  Shopify Tool      │
-│  1. Analyze orders │───┐
-│  2. Generate lists │   │
-└────────────────────┘   │
-                         │ Session on
-                         │ File Server
-┌────────────────────┐   │
-│  Packing Tool      │   │
-│  1. Load session   │◄──┘
-│  2. Pack orders    │
-│  3. Track stats    │
-└────────────────────┘
-```
-
-### Integration Features
-
-- **JSON Exports**: Packing lists exported in JSON format for Packing Tool consumption
-- **Session Metadata**: `session_info.json` tracks analysis status and available reports
-- **Unified Statistics**: Both tools write to `Stats/global_stats.json`
-- **Session Locking**: File locking prevents concurrent access conflicts
-
-### JSON Format Example
-
-```json
-{
-  "session_id": "2025-11-10_1",
-  "created_at": "2025-11-10T10:30:00.123456",
-  "total_orders": 150,
-  "total_items": 450,
-  "orders": [
-    {
-      "order_number": "12345",
-      "order_type": "Multi",
-      "items": [
-        {
-          "sku": "SKU-001",
-          "product_name": "Product A",
-          "quantity": 2
-        }
-      ],
-      "courier": "DHL",
-      "destination": "Bulgaria",
-      "tags": ["Priority"]
-    }
-  ]
-}
-```
-
-See [docs/INTEGRATION.md](docs/INTEGRATION.md) for detailed integration documentation.
+Both tools write to the same `Stats/global_stats.json` for unified statistics tracking.
 
 ---
 
-## ⚡ Performance
+## Contributing
 
-The tool is optimized for real-world warehouse operations:
-
-### Benchmarks
-
-| Dataset Size | Analysis Time | Memory Usage |
-|--------------|---------------|--------------|
-| 100 orders | <1 second | ~50 MB |
-| 1,000 orders | <3 seconds | ~100 MB |
-| 10,000 orders | <30 seconds | ~500 MB |
-
-### Optimizations
-
-- **Vectorized DataFrame Operations**: 10-50x faster than row iteration
-- **Efficient Stock Simulation**: O(n) complexity for order processing
-- **Smart Priority Sorting**: Multi-item orders processed first
-- **Batch File Operations**: Reduced I/O overhead
-- **Memory-Efficient**: Processes large datasets without memory issues
-
-### Tested With
-
-✅ Up to 10,000+ order lines
-✅ Concurrent multi-user access
-✅ Large CSV files (50+ MB)
-✅ Complex rule sets (50+ rules)
+1. Create a feature branch: `git checkout -b feature/your-feature-name`
+2. Follow PEP 8 style guidelines
+3. Add type hints to all new functions
+4. Write tests for new functionality (target: existing coverage maintained)
+5. Run the test suite and linter before submitting: `pytest tests/ -v && ruff check shopify_tool/ gui/`
+6. Use conventional commit messages: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
 
 ---
 
-## 🛠️ Technology Stack
+## License
 
-### Core Technologies
-- **Python 3.8+** - Programming language
-- **PySide6 (Qt 6)** - Cross-platform GUI framework
-- **pandas 2.3+** - Data manipulation and analysis
-- **numpy 2.3+** - Numerical computations
-
-### Data Processing
-- **openpyxl 3.1+** - Modern Excel (.xlsx) file handling
-- **xlsxwriter 3.2+** - Excel file creation with formatting
-- **xlwt/xlrd/xlutils** - Legacy Excel (.xls) support
-
-### Development Tools
-- **pytest** - Testing framework
-- **pytest-qt** - Qt testing utilities
-- **pytest-mock** - Mocking support
-
----
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**Issue: "File server not accessible"**
-- Check network connectivity to `\\192.168.88.101`
-- Verify you have read/write permissions
-- Ensure VPN is connected if working remotely
-
-**Issue: "CSV parsing error"**
-- Check file encoding (should be UTF-8)
-- Verify CSV has required columns (Order_Number, SKU, Quantity)
-- Use automatic delimiter detection feature
-
-**Issue: "Session already locked"**
-- Another user may be working on the same session
-- Check `.session.lock` file timestamp
-- Wait or contact the other user
-
-**Issue: Tests failing**
-- Ensure all dependencies installed: `pip install -r requirements-dev.txt`
-- Clear pytest cache: `pytest --cache-clear`
-- Check Python version: `python --version` (should be 3.9+)
-
-### Logging
-
-Application logs are stored at:
-- **Server:** `\\SERVER\SHARE\0UFulfilment\Logs\shopify_tool\`
-- **Format:** `shopify_tool_YYYY-MM-DD.log`
-
-Enable debug logging:
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
-
-For more help, check logs or contact support.
-
----
-
-## 📊 Project Status
-
-### Current Phase: Phase 1 Complete ✅
-
-**Phase 1 - Unified Development (Server-Based Architecture)**
-- ✅ ProfileManager: Multi-client support on file server
-- ✅ SessionManager: Server-based session management
-- ✅ StatsManager: Unified statistics tracking
-- ✅ Integration: JSON exports for Packing Tool
-- ✅ Testing: 99%+ pass rate with comprehensive test suite
-- ✅ Documentation: Complete docs for architecture and integration
-
-### Test Results Summary
-
-| Category | Tests | Status |
-|----------|-------|--------|
-| Core Analysis | 85+ | ✅ Passing |
-| File Operations | 30+ | ✅ Passing |
-| Configuration | 25+ | ✅ Passing |
-| Integration | 15+ | ✅ Passing |
-| GUI Components | 20+ | ✅ Passing |
-
-### Roadmap
-
-**Phase 2 - Advanced Features** (Planned)
-- Enhanced filtering and saved filter presets
-- Advanced reporting templates
-- Performance optimizations for large datasets
-- Additional courier integrations
-
-**Phase 3 - Analytics** (Planned)
-- Fulfillment trend analysis
-- Inventory forecasting
-- Worker performance metrics
-- Dashboard visualizations
-
----
-
-## 🤝 Contributing
-
-### Development Workflow
-
-1. **Create feature branch**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make changes**
-   - Follow PEP 8 style guidelines
-   - Add type hints to all functions
-   - Write comprehensive docstrings (Google style)
-   - Add unit tests for new functionality
-
-3. **Run tests**
-   ```bash
-   pytest tests/ -v
-   ruff check shopify_tool/ gui/
-   ```
-
-4. **Commit changes**
-   ```bash
-   git commit -m "feat: add your feature description"
-   ```
-
-5. **Push and create PR**
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-### Code Quality Standards
-
-✅ **Type Hints**: All functions must have type hints
-✅ **Docstrings**: Google-style docstrings required
-✅ **Tests**: Maintain >85% test coverage
-✅ **Linting**: Pass ruff checks
-✅ **No Regressions**: All existing tests must pass
-
-### Commit Message Format
-
-Use conventional commits:
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `refactor:` - Code refactoring
-- `docs:` - Documentation updates
-- `test:` - Test additions/updates
-- `chore:` - Maintenance tasks
-
----
-
-## 📄 License
-
-This project is proprietary software developed for internal warehouse operations.
-
----
-
-## 👥 Authors & Acknowledgments
-
-**Development Team**
-- Initial architecture and implementation
-- Phase 1 migration to server-based system
-- Integration with Packing Tool
-
-**Built With**
-- [PySide6](https://www.qt.io/qt-for-python) - Qt for Python GUI framework
-- [pandas](https://pandas.pydata.org/) - Data analysis library
-- [openpyxl](https://openpyxl.readthedocs.io/) - Excel file handling
-- [pytest](https://pytest.org/) - Testing framework
-
----
-
-## 📞 Support
-
-For issues, questions, or feature requests:
-- **GitHub Issues**: [cognitiveclodfr/shopify-fulfillment-tool/issues](https://github.com/cognitiveclodfr/shopify-fulfillment-tool/issues)
-- **Documentation**: See `docs/` directory for detailed technical documentation
-
----
-
-## 📊 Project Statistics
-
-- **Lines of Code**: ~14,000+
-- **Modules**: 30
-- **Functions**: 350+
-- **Classes**: 35+
-- **Test Files**: 25
-- **Documentation Files**: 10
-- **Test Coverage**: ~85%
-
----
-
-## 📝 Version History
-
-**Current Version:** 1.8.6.0 (Stable)
-
-Major releases:
-- **v1.8.6.0** (2026-01-22): Barcode Generator + Reference Labels + Stability Fixes
-- **v1.8.1** (2025-11-18): UX Improvements & Enhancements
-- **v1.8.0** (2025-11-17): Performance & refactoring release
-- **v1.7.1** (2025-11-10): Post-migration stable release
-- **v1.7.0** (2025-11-04): Phase 1 unified server architecture
-- **v1.6.x**: Legacy local storage architecture
-
-For detailed changes, see [CHANGELOG.md](CHANGELOG.md)
-
----
-
-## 📞 Support
-
-For issues, questions, or feature requests:
-- **Issues**: [GitHub Issues](https://github.com/cognitiveclodfr/shopify-fulfillment-tool/issues)
-- **Documentation**: See `docs/` directory
-- **Logs**: Check `Logs/shopify_tool/` on file server
-
----
-
-## 📄 License
-
-This project is proprietary software developed for internal warehouse operations.
-
----
-
-**Built with ❤️ for efficient warehouse fulfillment operations**
-
-**Last Updated:** 2026-01-22
-**Version:** 1.8.6.0-stable
-**Status:** Production Ready ✅
+Proprietary software developed for internal warehouse operations.
