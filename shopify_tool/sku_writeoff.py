@@ -143,13 +143,15 @@ def calculate_writeoff_quantities(
     # Accumulator: {sku: {"quantity": float, "tags": set, "orders": set}}
     writeoff_accumulator = {}
 
-    # Process each row
-    for idx, row in analysis_df.iterrows():
-        # Only write off packaging for orders that are actually Fulfillable
-        if "Order_Fulfillment_Status" in analysis_df.columns:
-            if row.get("Order_Fulfillment_Status", "") != "Fulfillable":
-                continue
+    # Pre-filter to Fulfillable rows only when the status column is present
+    has_status_col = "Order_Fulfillment_Status" in analysis_df.columns
+    if has_status_col:
+        rows_df = analysis_df[analysis_df["Order_Fulfillment_Status"] == "Fulfillable"]
+    else:
+        rows_df = analysis_df
 
+    # Process each row
+    for idx, row in rows_df.iterrows():
         tags = parse_tags(row.get("Internal_Tags"))
 
         # Get order number (use row index if Order_Number not present)

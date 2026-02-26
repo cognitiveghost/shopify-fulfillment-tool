@@ -85,8 +85,7 @@ class TagDelegate(QStyledItemDelegate):
         tags = parse_tags(tags_value)
         if not tags:
             return QSize(50, 30)
-        font = QFont()
-        font.setPointSize(8)
+        font = option.font
         metrics = QFontMetrics(font)
         padding = 8
         spacing = 4
