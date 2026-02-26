@@ -402,6 +402,10 @@ class ActionsHandler(QObject):
 
                 self.log.info(f"Tag categories updated for CLIENT_{self.mw.current_client_id}")
 
+                # Refresh tag delegate so new tags get correct colors immediately
+                if hasattr(self.mw, 'tag_delegate') and self.mw.tag_delegate is not None:
+                    self.mw.tag_delegate.tag_categories = updated_categories
+
             except Exception as e:
                 self.log.error(f"Error saving tag categories: {e}")
                 QMessageBox.critical(

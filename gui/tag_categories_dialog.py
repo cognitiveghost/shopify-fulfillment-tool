@@ -250,6 +250,9 @@ class TagCategoriesDialog(QDialog):
         self.writeoff_mappings_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.writeoff_mappings_table.setMaximumHeight(200)
         self.writeoff_mappings_table.setEnabled(False)  # Disabled until checkbox is checked
+        self.writeoff_mappings_table.itemSelectionChanged.connect(
+            self._update_remove_mapping_btn_state
+        )
         writeoff_layout.addWidget(self.writeoff_mappings_table)
 
         # Buttons
@@ -564,16 +567,19 @@ class TagCategoriesDialog(QDialog):
 
         return False
 
+    def _update_remove_mapping_btn_state(self):
+        """Update remove mapping button enabled state based on selection and checkbox."""
+        enabled = self.writeoff_enabled_checkbox.isChecked()
+        has_selection = len(self.writeoff_mappings_table.selectedItems()) > 0
+        self.remove_mapping_btn.setEnabled(enabled and has_selection)
+
     def _on_writeoff_enabled_changed(self, state):
         """Handle writeoff enabled checkbox state change."""
         enabled = (state == Qt.Checked)
 
         self.writeoff_mappings_table.setEnabled(enabled)
         self.add_mapping_btn.setEnabled(enabled)
-
-        # Enable remove button only if rows selected
-        has_selection = len(self.writeoff_mappings_table.selectedItems()) > 0
-        self.remove_mapping_btn.setEnabled(enabled and has_selection)
+        self._update_remove_mapping_btn_state()
 
         # Mark as modified
         self._on_editor_changed()

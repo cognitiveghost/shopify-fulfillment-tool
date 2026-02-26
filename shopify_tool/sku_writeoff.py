@@ -145,6 +145,11 @@ def calculate_writeoff_quantities(
 
     # Process each row
     for idx, row in analysis_df.iterrows():
+        # Only write off packaging for orders that are actually Fulfillable
+        if "Order_Fulfillment_Status" in analysis_df.columns:
+            if row.get("Order_Fulfillment_Status", "") != "Fulfillable":
+                continue
+
         tags = parse_tags(row.get("Internal_Tags"))
 
         # Get order number (use row index if Order_Number not present)
