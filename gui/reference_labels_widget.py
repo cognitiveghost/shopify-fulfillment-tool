@@ -258,7 +258,8 @@ class ReferenceLabelsWidget(QWidget):
             self.pdf_path = file_path
             file_name = Path(file_path).name
             self.pdf_label.setText(file_name)
-            self.pdf_label.setStyleSheet("color: black; font-weight: bold;")
+            theme = get_theme_manager().get_current_theme()
+            self.pdf_label.setStyleSheet(f"color: {theme.text}; font-weight: bold;")
             self.pdf_label.setToolTip(file_path)
 
             self.log.info(f"PDF selected: {file_path}")
@@ -277,7 +278,8 @@ class ReferenceLabelsWidget(QWidget):
             self.csv_path = file_path
             file_name = Path(file_path).name
             self.csv_label.setText(file_name)
-            self.csv_label.setStyleSheet("color: black; font-weight: bold;")
+            theme = get_theme_manager().get_current_theme()
+            self.csv_label.setStyleSheet(f"color: {theme.text}; font-weight: bold;")
             self.csv_label.setToolTip(file_path)
 
             self.log.info(f"CSV selected: {file_path}")
@@ -334,7 +336,8 @@ class ReferenceLabelsWidget(QWidget):
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
             self.output_dir_label.setText(str(self.output_dir))
-            self.output_dir_label.setStyleSheet("color: black;")
+            theme = get_theme_manager().get_current_theme()
+            self.output_dir_label.setStyleSheet(f"color: {theme.text};")
 
             # Initialize history manager
             self.history = ReferenceLabelsHistory(self.output_dir)

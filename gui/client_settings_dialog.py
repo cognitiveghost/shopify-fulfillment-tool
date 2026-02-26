@@ -432,6 +432,7 @@ class ClientSettingsDialog(QDialog):
         """Create Appearance tab."""
         widget = QWidget()
         layout = QFormLayout(widget)
+        theme = get_theme_manager().get_current_theme()
 
         # Pin checkbox
         self.pin_checkbox = QCheckBox("Pin this client to top of sidebar")
@@ -467,7 +468,6 @@ class ClientSettingsDialog(QDialog):
             "Badges are displayed next to the client name."
         )
         info_label.setWordWrap(True)
-        theme = get_theme_manager().get_current_theme()
         info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; padding: 10px;")
         layout.addRow(info_label)
 
@@ -477,6 +477,7 @@ class ClientSettingsDialog(QDialog):
         """Create Statistics tab."""
         widget = QWidget()
         layout = QFormLayout(widget)
+        theme = get_theme_manager().get_current_theme()
 
         # Total sessions (readonly)
         self.total_sessions_label = QLabel()

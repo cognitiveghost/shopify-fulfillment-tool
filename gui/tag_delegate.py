@@ -3,7 +3,7 @@
 import json
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle
 from PySide6.QtCore import Qt, QRect, QSize
-from PySide6.QtGui import QPainter, QColor, QFont, QPen
+from PySide6.QtGui import QPainter, QColor, QFont, QPen, QFontMetrics
 
 from shopify_tool.tag_manager import parse_tags, get_tag_color
 
@@ -16,12 +16,14 @@ class TagDelegate(QStyledItemDelegate):
         self.tag_categories = tag_categories
 
     def paint(self, painter, option, index):
-        """Paint tags as colored badges while respecting row background color."""
-        # FIRST: Paint row background color from model
-        # This ensures Fulfillable (green) / Not Fulfillable (red) shows through
-        bg_color = index.data(Qt.BackgroundRole)
-        if bg_color:
-            painter.fillRect(option.rect, bg_color)
+        """Paint tags as colored badges while respecting row background and selection."""
+        # Handle selection highlight; fall back to model background color
+        if option.state & QStyle.State_Selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+        else:
+            bg_color = index.data(Qt.BackgroundRole)
+            if bg_color:
+                painter.fillRect(option.rect, bg_color)
 
         # Get tags to render
         tags_value = index.data(Qt.DisplayRole)
@@ -78,5 +80,16 @@ class TagDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, option, index):
-        """Return size hint for cell (fixed height for badges)."""
-        return QSize(option.rect.width(), 30)
+        """Return size hint for cell based on actual badge widths."""
+        tags_value = index.data(Qt.DisplayRole)
+        tags = parse_tags(tags_value)
+        if not tags:
+            return QSize(50, 30)
+        font = option.font
+        metrics = QFontMetrics(font)
+        padding = 8
+        spacing = 4
+        total_width = 10  # left margin
+        for tag in tags:
+            total_width += metrics.horizontalAdvance(tag) + padding * 2 + spacing
+        return QSize(total_width, 30)
