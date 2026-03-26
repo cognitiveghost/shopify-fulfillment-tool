@@ -93,3 +93,7 @@ fulfillment-server-mock/
 # Temporary audit/analysis files
 PROJECT_AUDIT.txt
 *_AUDIT.txt
+
+# Development artifacts
+.connection_test
+nul

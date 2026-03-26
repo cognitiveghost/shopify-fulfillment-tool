@@ -13,8 +13,7 @@ Physical fit check:
 """
 
 import logging
-from itertools import permutations
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import pandas as pd
 

@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import logging
 from datetime import datetime
-from .csv_utils import normalize_sku, normalize_sku_for_matching
+from .csv_utils import normalize_sku_for_matching
 
 logger = logging.getLogger("ShopifyToolLogger")
 
