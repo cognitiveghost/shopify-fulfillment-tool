@@ -14,12 +14,11 @@ import logging
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Tuple, Optional, Callable
+from typing import Dict, Optional, Callable
 import csv
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
 from io import BytesIO
 
 

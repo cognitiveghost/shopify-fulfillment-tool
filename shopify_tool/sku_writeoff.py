@@ -42,7 +42,7 @@ Example usage:
 import logging
 import os
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from shopify_tool.tag_manager import parse_tags, _normalize_tag_categories
 

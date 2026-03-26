@@ -1,10 +1,10 @@
 """
 Shopify Fulfillment Tool
 
-Version: 1.8.6.0
+Version: 1.8.9.6
 """
 
-__version__ = "1.8.6.0"
+__version__ = "1.8.9.6"
 
 from .logger_config import setup_logging
 

@@ -991,12 +991,6 @@ class RuleEngine:
             elif action_type == "ADD_ORDER_TAG":
                 # Add tag to Status_Note (for order-level tagging)
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
-
-                def append_note(note):
-                    if value in note.split(", "):
-                        return note
-                    return f"{note}, {value}" if note else value
-
                 new_notes = current_notes.apply(append_note)
                 df.loc[matches, "Status_Note"] = new_notes
 
