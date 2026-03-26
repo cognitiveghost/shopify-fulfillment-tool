@@ -50,6 +50,16 @@ OPERATOR_MAP = {
     "does not match regex": "_op_does_not_match_regex",
 }
 
+# --- Action Helpers ---
+
+
+def _append_to_note(note: str, value: str) -> str:
+    """Append value to a comma-separated Status_Note without duplicates."""
+    if value in note.split(", "):
+        return note
+    return f"{note}, {value}" if note else value
+
+
 # --- Operator Implementations ---
 
 
@@ -978,20 +988,13 @@ class RuleEngine:
             if action_type == "ADD_TAG":
                 # Per user feedback, ADD_TAG should modify Status_Note, not Tags
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
-
-                # Append new tag, handling empty notes and preventing duplicates
-                def append_note(note):
-                    if value in note.split(", "):
-                        return note
-                    return f"{note}, {value}" if note else value
-
-                new_notes = current_notes.apply(append_note)
+                new_notes = current_notes.apply(lambda n: _append_to_note(n, value))
                 df.loc[matches, "Status_Note"] = new_notes
 
             elif action_type == "ADD_ORDER_TAG":
                 # Add tag to Status_Note (for order-level tagging)
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
-                new_notes = current_notes.apply(append_note)
+                new_notes = current_notes.apply(lambda n: _append_to_note(n, value))
                 df.loc[matches, "Status_Note"] = new_notes
 
             elif action_type == "ADD_INTERNAL_TAG":
