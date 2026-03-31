@@ -1,9 +1,114 @@
 import pandas as pd
 import numpy as np
-from typing import Tuple, Dict, List, Optional
+from typing import Tuple, Dict, List, Optional, Union
+from datetime import date
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_expiry_date(raw) -> Optional[date]:
+    """Parse a raw expiry string from the stock CSV to a comparable date object.
+
+    Handles:
+    - "1" or None or NaN or "" → None  (sentinel for "no expiry info")
+    - 6-digit YYMMDD  e.g. "261230" → date(2026, 12, 30)
+    - 8-digit YYYYMMDD e.g. "20270131" → date(2027, 1, 31)
+    - Anything else unparseable → None (logged at debug level, no exception)
+    """
+    if raw is None:
+        return None
+    try:
+        import math
+        if isinstance(raw, float) and math.isnan(raw):
+            return None
+    except (TypeError, ValueError):
+        pass
+    s = str(raw).strip()
+    if not s or s == "1":
+        return None
+    try:
+        if len(s) == 6:
+            yy, mm, dd = int(s[0:2]), int(s[2:4]), int(s[4:6])
+            return date(2000 + yy, mm, dd)
+        elif len(s) == 8:
+            yyyy, mm, dd = int(s[0:4]), int(s[4:6]), int(s[6:8])
+            return date(yyyy, mm, dd)
+    except (ValueError, OverflowError):
+        pass
+    logger.debug(f"Could not parse expiry date: {s!r}")
+    return None
+
+
+def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
+    """Build a FIFO-sorted lot inventory from a multi-row stock DataFrame.
+
+    Returns None when neither Expiry_Date nor Batch column is present
+    (backward-compatibility gate — no lot tracking needed).
+
+    Each SKU maps to a list of lot dicts sorted for FIFO consumption:
+        {"expiry": str, "expiry_dt": Optional[date], "batch": Optional[str], "qty": float}
+
+    Sort order: expiry_dt ASC (earliest first), None (no-expiry) sorts last.
+    SKUs where every row has no expiry AND no batch are represented as a
+    single pseudo-lot with expiry="1"/batch=None — functionally equivalent
+    to the legacy no-lot path.
+
+    Args:
+        stock_df: Stock DataFrame with internal column names already applied.
+                  Expected columns: SKU, Stock; optional: Expiry_Date, Batch.
+
+    Returns:
+        Dict mapping SKU → sorted list of lot dicts, or None if no lot columns.
+    """
+    has_expiry = "Expiry_Date" in stock_df.columns
+    has_batch = "Batch" in stock_df.columns
+    if not has_expiry and not has_batch:
+        return None
+
+    fifo_lots: Dict[str, List[dict]] = {}
+    _SENTINEL = date(9999, 12, 31)  # sorts after all real dates
+
+    for sku, group in stock_df.groupby("SKU"):
+        lots = []
+        for _, row in group.iterrows():
+            qty = float(row["Stock"]) if pd.notna(row["Stock"]) else 0.0
+            if qty <= 0:
+                continue
+            raw_e = row["Expiry_Date"] if has_expiry and pd.notna(row.get("Expiry_Date")) else None
+            if raw_e is None:
+                expiry_raw = "1"
+            elif isinstance(raw_e, float):
+                expiry_raw = str(int(raw_e))
+            else:
+                expiry_raw = str(raw_e).strip()
+
+            raw_b = row["Batch"] if has_batch and pd.notna(row.get("Batch")) else None
+            if raw_b is None:
+                batch_raw = None
+            elif isinstance(raw_b, float):
+                batch_raw = str(int(raw_b))
+            else:
+                batch_raw = str(raw_b).strip()
+
+            if batch_raw == "1":
+                batch_raw = None
+            expiry_dt = _parse_expiry_date(expiry_raw)
+            lots.append({
+                "expiry": expiry_raw,
+                "expiry_dt": expiry_dt,
+                "batch": batch_raw,
+                "qty": qty,
+            })
+
+        if not lots:
+            continue
+
+        # Sort: real expiry dates first (ASC), no-expiry last
+        lots.sort(key=lambda l: (l["expiry_dt"] or _SENTINEL, l["batch"] or ""))
+        fifo_lots[str(sku)] = lots
+
+    return fifo_lots if fifo_lots else {}
 
 
 def _clean_and_prepare_data(
@@ -77,13 +182,23 @@ def _clean_and_prepare_data(
                 "stock": {
                     "Артикул": "SKU",
                     "Име": "Product_Name",
-                    "Наличност": "Stock"
+                    "Наличност": "Stock",
+                    "Годност": "Expiry_Date",
+                    "Партида": "Batch"
                 }
             }
 
         # Get mappings for orders and stock
         orders_mappings = column_mappings.get("orders", {})
         stock_mappings = column_mappings.get("stock", {})
+
+        # Inject lot column defaults for any keys not already in the config mapping.
+        # This ensures lot tracking works for existing clients whose configs pre-date
+        # this feature without requiring a config migration or UI change.
+        _LOT_DEFAULTS = {"Годност": "Expiry_Date", "Партида": "Batch"}
+        missing = {k: v for k, v in _LOT_DEFAULTS.items() if k not in stock_mappings}
+        if missing:
+            stock_mappings = {**stock_mappings, **missing}
 
         # Apply mappings to orders DataFrame
         # Only rename columns that exist in the DataFrame AND are different from internal names
@@ -228,13 +343,31 @@ def _clean_and_prepare_data(
     if missing_stock_cols:
         raise ValueError(f"Missing required columns in stock DataFrame after mapping: {missing_stock_cols}")
 
-    stock_clean_df = stock_df[stock_cols_to_keep].copy()
-    stock_clean_df = stock_clean_df.dropna(subset=["SKU"])
-    stock_clean_df = stock_clean_df.drop_duplicates(subset=["SKU"], keep="first")
+    # Detect whether lot columns (Expiry_Date / Batch) are present after mapping
+    stock_lot_cols = [c for c in ["Expiry_Date", "Batch"] if c in stock_df.columns]
+    lot_columns_present = bool(stock_lot_cols)
 
-    # CRITICAL: Normalize SKU to standard format for consistent merging
-    # This handles float artifacts (5170.0 → "5170"), whitespace, and leading zeros
-    stock_clean_df["SKU"] = stock_clean_df["SKU"].apply(normalize_sku)
+    if not lot_columns_present:
+        # EXISTING PATH — single-row-per-SKU, keep first occurrence
+        stock_clean_df = stock_df[stock_cols_to_keep].copy()
+        stock_clean_df = stock_clean_df.dropna(subset=["SKU"])
+        stock_clean_df = stock_clean_df.drop_duplicates(subset=["SKU"], keep="first")
+        stock_clean_df["SKU"] = stock_clean_df["SKU"].apply(normalize_sku)
+        fifo_lots = None
+    else:
+        # NEW PATH — build FIFO lot structure before aggregation, then aggregate
+        # totals per SKU so downstream merge/display shows correct total stock
+        fifo_lots = _build_fifo_lots(stock_df)
+        # Normalize keys to match the normalized SKU format used in orders_clean
+        if fifo_lots:
+            fifo_lots = {normalize_sku(k): v for k, v in fifo_lots.items()}
+        agg_dict: dict = {"Stock": ("Stock", "sum")}
+        if "Product_Name" in stock_df.columns:
+            agg_dict["Product_Name"] = ("Product_Name", "first")
+        stock_agg = stock_df.groupby("SKU", as_index=False).agg(**agg_dict)
+        stock_clean_df = stock_agg.dropna(subset=["SKU"]).copy()
+        # CRITICAL: Normalize SKU to standard format for consistent merging
+        stock_clean_df["SKU"] = stock_clean_df["SKU"].apply(normalize_sku)
 
     # --- Set/Bundle Decoding ---
     # Expand sets into component SKUs before fulfillment simulation
@@ -266,6 +399,8 @@ def _clean_and_prepare_data(
         orders_clean_df["Is_Set_Component"] = False
 
     logger.debug(f"Cleaned {len(orders_clean_df)} order rows, {len(stock_clean_df)} SKUs")
+    if lot_columns_present:
+        return orders_clean_df, stock_clean_df, fifo_lots
     return orders_clean_df, stock_clean_df
 
 
@@ -314,37 +449,34 @@ def _prioritize_orders(orders_df: pd.DataFrame) -> pd.DataFrame:
 def _simulate_stock_allocation(
     orders_df: pd.DataFrame,
     stock_df: pd.DataFrame,
-    prioritized_orders: pd.DataFrame
-) -> Dict[str, str]:
+    prioritized_orders: pd.DataFrame,
+    fifo_lots: Optional[Dict[str, List[dict]]] = None
+) -> Tuple[Dict[str, dict], Dict[str, Dict[str, List[dict]]]]:
     """
     Simulate stock allocation across prioritized orders.
 
     Algorithm:
-    1. Initialize stock availability dict from stock DataFrame
+    1. Initialize stock availability dict from stock DataFrame (or FIFO lot structure)
     2. Process orders in priority sequence
-    3. For each order, check if all items available
+    3. For each order, check if ALL items available (all-or-nothing)
     4. Mark order as fulfillable/not fulfillable
     5. Deduct stock for fulfillable orders
 
     Skips items without SKU (Has_SKU=False) as they don't consume stock.
 
-    Performance:
-    Uses VECTORIZED operations where possible. The main loop iterates over
-    unique orders (not individual items), which is necessary for the sequential
-    stock allocation logic.
-
     Args:
         orders_df: Cleaned orders DataFrame with item counts
-        stock_df: Stock availability DataFrame
+        stock_df: Stock availability DataFrame (aggregated per SKU)
         prioritized_orders: DataFrame with ["Order_Number", "item_count"] in priority order
+        fifo_lots: Optional FIFO lot structure from _build_fifo_lots(). When provided,
+                   consumes lots in expiry-date order (earliest first) and tracks which
+                   lots were allocated per order.
 
     Returns:
-        Dictionary mapping order_number to fulfillment status
-        Format: {"ORDER-123": "Fulfillable", "ORDER-124": "Not Fulfillable"}
-
-    Note:
-        This is the core fulfillment simulation algorithm.
-        Changes here affect all downstream reporting.
+        Tuple of (fulfillment_results, lot_allocations):
+        - fulfillment_results: {order_number: {"fulfillable": bool, "reason": str}}
+        - lot_allocations: {order_number: {sku: [{expiry, batch, qty_allocated}]}}
+                           Empty dict when fifo_lots is None.
     """
     logger.debug("Phase 3/7: Simulating stock allocation...")
 
@@ -357,56 +489,102 @@ def _simulate_stock_allocation(
     else:
         orders_for_simulation = orders_df.copy()
 
-    # Initialize stock tracking - VECTORIZED dict creation
-    live_stock = pd.Series(stock_df.Stock.values, index=stock_df.SKU).to_dict()
-    fulfillment_results = {}
-
     # Add item_count to orders for filtering
     order_item_counts = orders_for_simulation.groupby("Order_Number").size().rename("item_count")
     orders_with_counts = pd.merge(orders_for_simulation, order_item_counts, on="Order_Number")
 
-    # Iterate over prioritized orders (necessary for sequential allocation)
-    for order_number in prioritized_orders["Order_Number"]:
-        # Get all items for this order - VECTORIZED filter
-        order_items = orders_with_counts[orders_with_counts["Order_Number"] == order_number]
+    fulfillment_results = {}
 
-        # Check if order can be fulfilled - VECTORIZED check
-        # Group by SKU to handle multiple line items of same SKU
-        required_quantities = order_items.groupby("SKU")["Quantity"].sum()
+    if fifo_lots is None:
+        # --- LEGACY PATH (no lot tracking) ---
+        # Initialize stock tracking - VECTORIZED dict creation
+        live_stock = pd.Series(stock_df.Stock.values, index=stock_df.SKU).to_dict()
+        lot_allocations: Dict[str, Dict[str, List[dict]]] = {}
 
-        can_fulfill_order = True
-        unfulfillable_reasons = []
+        for order_number in prioritized_orders["Order_Number"]:
+            order_items = orders_with_counts[orders_with_counts["Order_Number"] == order_number]
+            required_quantities = order_items.groupby("SKU")["Quantity"].sum()
 
-        for sku, required_qty in required_quantities.items():
-            available = live_stock.get(sku, 0)
-            if available == 0:
-                unfulfillable_reasons.append(f"{sku}: Out of stock")
-                can_fulfill_order = False
-            elif required_qty > available:
-                unfulfillable_reasons.append(
-                    f"{sku}: Insufficient stock (need {int(required_qty)}, have {int(available)})"
-                )
-                can_fulfill_order = False
+            can_fulfill_order = True
+            unfulfillable_reasons = []
 
-        # Update fulfillment status and deduct stock if fulfillable
-        if can_fulfill_order:
-            fulfillment_results[order_number] = {
-                "fulfillable": True,
-                "reason": ""
-            }
-            # Deduct stock - VECTORIZED operation
-            for sku, qty in required_quantities.items():
-                live_stock[sku] -= qty
-        else:
-            fulfillment_results[order_number] = {
-                "fulfillable": False,
-                "reason": "; ".join(unfulfillable_reasons)
-            }
+            for sku, required_qty in required_quantities.items():
+                available = live_stock.get(sku, 0)
+                if available == 0:
+                    unfulfillable_reasons.append(f"{sku}: Out of stock")
+                    can_fulfill_order = False
+                elif required_qty > available:
+                    unfulfillable_reasons.append(
+                        f"{sku}: Insufficient stock (need {int(required_qty)}, have {int(available)})"
+                    )
+                    can_fulfill_order = False
 
-    fulfillable_count = sum(1 for result in fulfillment_results.values() if result.get("fulfillable", False))
+            if can_fulfill_order:
+                fulfillment_results[order_number] = {"fulfillable": True, "reason": ""}
+                for sku, qty in required_quantities.items():
+                    live_stock[sku] -= qty
+            else:
+                fulfillment_results[order_number] = {
+                    "fulfillable": False,
+                    "reason": "; ".join(unfulfillable_reasons)
+                }
+
+    else:
+        # --- FIFO LOT PATH ---
+        import copy
+        live_lots = copy.deepcopy(fifo_lots)
+        lot_allocations = {}
+
+        for order_number in prioritized_orders["Order_Number"]:
+            order_items = orders_with_counts[orders_with_counts["Order_Number"] == order_number]
+            required_quantities = order_items.groupby("SKU")["Quantity"].sum()
+
+            can_fulfill_order = True
+            unfulfillable_reasons = []
+
+            # CHECK PHASE (read-only — don't mutate lots yet)
+            for sku, needed in required_quantities.items():
+                available = sum(lot["qty"] for lot in live_lots.get(sku, []))
+                if available == 0:
+                    unfulfillable_reasons.append(f"{sku}: Out of stock")
+                    can_fulfill_order = False
+                elif needed > available:
+                    unfulfillable_reasons.append(
+                        f"{sku}: Insufficient stock (need {int(needed)}, have {int(available)})"
+                    )
+                    can_fulfill_order = False
+
+            # COMMIT PHASE (mutate live_lots only if order is fulfillable)
+            if can_fulfill_order:
+                order_alloc: Dict[str, List[dict]] = {}
+                for sku, needed in required_quantities.items():
+                    remaining = needed
+                    sku_alloc: List[dict] = []
+                    for lot in live_lots.get(sku, []):
+                        if remaining <= 0:
+                            break
+                        take = min(lot["qty"], remaining)
+                        if take > 0:
+                            sku_alloc.append({
+                                "expiry": lot["expiry"],
+                                "batch": lot["batch"],
+                                "qty_allocated": take,
+                            })
+                            lot["qty"] -= take
+                            remaining -= take
+                    order_alloc[sku] = sku_alloc
+                lot_allocations[order_number] = order_alloc
+                fulfillment_results[order_number] = {"fulfillable": True, "reason": ""}
+            else:
+                fulfillment_results[order_number] = {
+                    "fulfillable": False,
+                    "reason": "; ".join(unfulfillable_reasons)
+                }
+
+    fulfillable_count = sum(1 for r in fulfillment_results.values() if r.get("fulfillable", False))
     logger.debug(f"Fulfillable: {fulfillable_count}/{len(fulfillment_results)} orders")
 
-    return fulfillment_results
+    return fulfillment_results, lot_allocations
 
 
 def _calculate_final_stock(
@@ -598,7 +776,8 @@ def _merge_results_to_dataframe(
     history_df: pd.DataFrame,
     courier_mappings: Optional[dict] = None,
     repeat_window_days: int = 1,
-    additional_columns_config: Optional[list] = None
+    additional_columns_config: Optional[list] = None,
+    lot_allocations: Optional[Dict[str, Dict[str, List[dict]]]] = None
 ) -> pd.DataFrame:
     """
     Merge all analysis results into final output DataFrame.
@@ -768,6 +947,14 @@ def _merge_results_to_dataframe(
     # Migrate Packaging_Tags to Internal_Tags if it exists
     final_df = _migrate_packaging_tags(final_df)
 
+    # Attach lot allocation details per order/SKU row
+    if lot_allocations:
+        def _get_lot_details(row):
+            return lot_allocations.get(row["Order_Number"], {}).get(row["SKU"])
+        final_df["Lot_Details"] = final_df.apply(_get_lot_details, axis=1)
+    else:
+        final_df["Lot_Details"] = None
+
     # Select and order output columns
     output_columns = [
         "Order_Number",
@@ -789,6 +976,7 @@ def _merge_results_to_dataframe(
         "System_note",
         "Status_Note",
         "Internal_Tags",  # Structured tagging system
+        "Lot_Details",    # Per-lot FIFO allocation data (None when no lot tracking)
     ]
     if "Total_Price" in final_df.columns:
         # Insert 'Total_Price' into the list at a specific position for consistent column order.
@@ -1048,9 +1236,13 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         if enabled_additional:
             logger.info(f"Enabled columns: {[col['csv_name'] for col in enabled_additional]}")
 
-        orders_clean, stock_clean = _clean_and_prepare_data(
+        _prepare_result = _clean_and_prepare_data(
             orders_df, stock_df, column_mappings, additional_columns_config
         )
+        orders_clean, stock_clean = _prepare_result[0], _prepare_result[1]
+        fifo_lots = _prepare_result[2] if len(_prepare_result) == 3 else None
+        if fifo_lots is not None:
+            logger.info(f"FIFO lot tracking enabled for {len(fifo_lots)} SKUs")
 
         logger.info(f"After cleaning: orders_clean has {len(orders_clean.columns)} columns: {list(orders_clean.columns)}")
 
@@ -1060,8 +1252,8 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
 
         # Phase 3: Simulate stock allocation
         logger.info("Phase 3/7: Stock allocation simulation")
-        fulfillment_results = _simulate_stock_allocation(
-            orders_clean, stock_clean, prioritized_orders
+        fulfillment_results, lot_allocations = _simulate_stock_allocation(
+            orders_clean, stock_clean, prioritized_orders, fifo_lots
         )
 
         # Phase 4: Calculate final stock
@@ -1077,7 +1269,7 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         final_df = _merge_results_to_dataframe(
             orders_clean, stock_clean, order_item_counts, final_stock,
             fulfillment_results, history_df, courier_mappings, repeat_window_days,
-            additional_columns_config
+            additional_columns_config, lot_allocations
         )
 
         # Phase 7: Generate summary reports

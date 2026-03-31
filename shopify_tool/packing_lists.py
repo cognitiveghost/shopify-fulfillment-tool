@@ -7,6 +7,55 @@ from .csv_utils import normalize_sku_for_matching
 logger = logging.getLogger("ShopifyToolLogger")
 
 
+def _expand_lot_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Expand packing list rows that span multiple lots into one row per lot.
+
+    For rows where Lot_Details is None or empty the row is kept as-is with
+    Lot_Expiry="" and Lot_Batch="".
+
+    For rows where Lot_Details is a list of lot dicts the row is duplicated
+    once per lot entry, with Quantity replaced by qty_allocated and
+    Lot_Expiry / Lot_Batch populated from the dict.
+
+    Destination_Country de-duplication must be re-applied by the caller
+    AFTER calling this function (expansion changes row count per order).
+
+    Args:
+        df: Sorted packing list DataFrame with optional Lot_Details column.
+
+    Returns:
+        New DataFrame with Lot_Expiry and Lot_Batch columns added.
+    """
+    rows = []
+    seen_order_sku: set = set()
+    for _, row in df.iterrows():
+        lot_details = row.get("Lot_Details")
+        if lot_details and isinstance(lot_details, list) and len(lot_details) > 0:
+            order_key = (row.get("Order_Number", ""), row.get("SKU", ""))
+            if order_key in seen_order_sku:
+                continue
+            seen_order_sku.add(order_key)
+            for entry in lot_details:
+                new_row = row.copy()
+                new_row["Quantity"] = entry.get("qty_allocated", new_row["Quantity"])
+                expiry = entry.get("expiry") or ""
+                new_row["Lot_Expiry"] = "" if expiry == "1" else expiry
+                batch = entry.get("batch") or ""
+                new_row["Lot_Batch"] = "" if batch == "1" else batch
+                rows.append(new_row)
+        else:
+            new_row = row.copy()
+            new_row["Lot_Expiry"] = ""
+            new_row["Lot_Batch"] = ""
+            rows.append(new_row)
+    if not rows:
+        result = df.copy()
+        result["Lot_Expiry"] = ""
+        result["Lot_Batch"] = ""
+        return result
+    return pd.DataFrame(rows).reset_index(drop=True)
+
+
 def create_packing_list(analysis_df, output_file, report_name="Packing List", filters=None, exclude_skus=None):
     """Creates a versatile, formatted packing list in an Excel .xlsx file.
 
@@ -121,20 +170,43 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
         filtered_orders["sort_priority"] = filtered_orders["Shipping_Provider"].map(provider_map).fillna(3)
         sorted_list = filtered_orders.sort_values(by=["sort_priority", "Order_Number", "SKU"])
 
-        # Show destination country only for the first item of an order
-        sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
-            ~sorted_list["Order_Number"].duplicated(), ""
+        # Detect whether lot tracking data is present
+        has_lot_details = (
+            "Lot_Details" in sorted_list.columns
+            and sorted_list["Lot_Details"].notna().any()
         )
 
-        # Define the columns for the final print list
-        columns_for_print = [
-            "Destination_Country",
-            "Order_Number",
-            "SKU",
-            "Warehouse_Name",  # From stock file - actual warehouse product names (or Product_Name fallback)
-            "Quantity",
-            "Shipping_Provider",
-        ]
+        if has_lot_details:
+            # Expand lot rows BEFORE destination-country deduplication so the
+            # dedup correctly picks only the first row of each (now expanded) order
+            sorted_list = _expand_lot_rows(sorted_list)
+            sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
+                ~sorted_list["Order_Number"].duplicated(), ""
+            )
+            columns_for_print = [
+                "Destination_Country",
+                "Order_Number",
+                "SKU",
+                "Warehouse_Name",
+                "Quantity",
+                "Lot_Expiry",
+                "Lot_Batch",
+                "Shipping_Provider",
+            ]
+        else:
+            # Show destination country only for the first item of an order
+            sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
+                ~sorted_list["Order_Number"].duplicated(), ""
+            )
+            columns_for_print = [
+                "Destination_Country",
+                "Order_Number",
+                "SKU",
+                "Warehouse_Name",  # From stock file - actual warehouse product names (or Product_Name fallback)
+                "Quantity",
+                "Shipping_Provider",
+            ]
+
         print_list = sorted_list[columns_for_print]
 
         generation_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -194,7 +266,9 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
                 for col_num, col_name in enumerate(print_list.columns):
                     original_col_name = columns_for_print[col_num]
                     fmt_key = (
-                        row_type + "_centered" if original_col_name in ["Destination_Country", "Quantity"] else row_type
+                        row_type + "_centered"
+                        if original_col_name in ["Destination_Country", "Quantity", "Lot_Expiry", "Lot_Batch"]
+                        else row_type
                     )
                     worksheet.write(row_num + 1, col_num, print_list.iloc[row_num, col_num], cell_formats[fmt_key])
 
@@ -208,6 +282,10 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
                     max_len = min(max_len, 45)
                 elif original_col_name == "SKU":
                     max_len = min(max_len, 25)
+                elif original_col_name == "Lot_Expiry":
+                    max_len = 10
+                elif original_col_name == "Lot_Batch":
+                    max_len = min(max_len, 14)
                 worksheet.set_column(i, i, max_len)
 
             # Set print settings

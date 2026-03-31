@@ -721,8 +721,10 @@ class ProfileManager:
                 },
                 "stock": {
                     "Артикул": "SKU",
-                    "Име": "Product_Name",
-                    "Наличност": "Stock"
+                    "Иmе": "Product_Name",
+                    "Наличност": "Stock",
+                    "Годност": "Expiry_Date",
+                    "Партида": "Batch"
                 }
             },
 
