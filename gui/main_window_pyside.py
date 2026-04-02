@@ -358,59 +358,54 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.critical(self, "Undo Failed", message)
 
-    def _add_internal_tag(self, order_number: str, tag: str):
-        """Add internal tag to all items in an order.
-
-        Args:
-            order_number: Order number to tag
-            tag: Tag to add
-        """
+    def _apply_tag_operation(self, mask, description: str, params: dict, tag: str):
+        """Apply add_tag to DataFrame rows matching mask, record undo, and refresh UI."""
         from shopify_tool.tag_manager import add_tag
 
-        # Ensure Internal_Tags column exists
         if "Internal_Tags" not in self.analysis_results_df.columns:
             self.analysis_results_df["Internal_Tags"] = "[]"
 
-        # Get affected rows (all items in the order) BEFORE modification
-        mask = self.analysis_results_df["Order_Number"] == order_number
         affected_rows_before = self.analysis_results_df[mask].copy()
-
-        # Update tags for all items in the order
-        current_tags = self.analysis_results_df.loc[mask, "Internal_Tags"]
-        new_tags = current_tags.apply(lambda t: add_tag(t, tag))
-        self.analysis_results_df.loc[mask, "Internal_Tags"] = new_tags
-
-        # Record operation for undo (AFTER modification)
+        self.analysis_results_df.loc[mask, "Internal_Tags"] = (
+            self.analysis_results_df.loc[mask, "Internal_Tags"].apply(lambda t: add_tag(t, tag))
+        )
         self.undo_manager.record_operation(
             operation_type="add_internal_tag",
-            description=f"Add Internal Tag: {tag} to order {order_number}",
-            params={
-                "order_number": order_number,
-                "tag": tag
-            },
+            description=description,
+            params=params,
             affected_rows_before=affected_rows_before
         )
-
-        # Save state and update UI
         self.save_session_state()
         self._update_all_views()
-        self.log_activity("Internal Tag", f"Added '{tag}' to order {order_number}")
-
-        # Update undo button
+        self.log_activity("Internal Tag", description)
         if hasattr(self, 'undo_button'):
             self.undo_button.setEnabled(True)
-            self.undo_button.setToolTip(f"Undo: Add Internal Tag: {tag} (Ctrl+Z)")
+            self.undo_button.setToolTip(f"Undo: {description} (Ctrl+Z)")
+
+    def _add_internal_tag(self, order_number: str, sku: str, tag: str):
+        """Add internal tag to the specific row identified by order_number + sku."""
+        mask = (
+            (self.analysis_results_df["Order_Number"] == order_number) &
+            (self.analysis_results_df["SKU"] == sku)
+        )
+        self._apply_tag_operation(
+            mask,
+            description=f"Add Internal Tag: {tag} to order {order_number} / {sku}",
+            params={"order_number": order_number, "sku": sku, "tag": tag},
+            tag=tag,
+        )
 
     def add_internal_tag_to_order(self, order_number, tag):
-        """Add an Internal Tag to all items in an order (public interface).
-
-        Args:
-            order_number: Order number to tag
-            tag: Tag to add
-        """
-        self._add_internal_tag(order_number, tag)
-
-        # Update tag panel if visible
+        """Add an Internal Tag to all rows of an order (called from tag_management_panel signal)."""
+        if self.analysis_results_df is None or self.analysis_results_df.empty:
+            return
+        mask = self.analysis_results_df["Order_Number"] == order_number
+        self._apply_tag_operation(
+            mask,
+            description=f"Add Internal Tag: {tag} to order {order_number}",
+            params={"order_number": order_number, "tag": tag},
+            tag=tag,
+        )
         if hasattr(self, 'tag_management_panel') and self.tag_management_panel.isVisible():
             self.on_selection_changed_for_tags()
 
@@ -1125,18 +1120,29 @@ class MainWindow(QMainWindow):
                     self.courier_cards_layout.count() - 1, card
                 )
 
-        # === 3. Tag cards ===
-        if hasattr(self, 'tags_cards_layout'):
-            while self.tags_cards_layout.count() > 1:
-                item = self.tags_cards_layout.takeAt(0)
+        # === 3. Tag cards (Fulfillable + Not Fulfillable) ===
+        from shopify_tool.tag_manager import get_tag_color
+        tag_cats = _normalize_tag_categories(
+            self.active_profile_config.get("tag_categories", {})
+            if self.active_profile_config else {}
+        )
+
+        def _populate_tag_layout(layout_attr, breakdown_key):
+            layout = getattr(self, layout_attr, None)
+            if layout is None:
+                return
+            while layout.count() > 1:
+                item = layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
-            tags_breakdown = self.analysis_stats.get("tags_breakdown") or {}
-            for tag, count in tags_breakdown.items():
-                card = self.ui_manager._make_tag_card(tag, str(count))
-                self.tags_cards_layout.insertWidget(
-                    self.tags_cards_layout.count() - 1, card
-                )
+            breakdown = self.analysis_stats.get(breakdown_key) or {}
+            for tag, count in breakdown.items():
+                color = get_tag_color(tag, tag_cats)
+                card = self.ui_manager._make_tag_card(tag, str(count), color=color)
+                layout.insertWidget(layout.count() - 1, card)
+
+        _populate_tag_layout("tags_fulfillable_layout", "tags_breakdown_fulfillable")
+        _populate_tag_layout("tags_not_fulfillable_layout", "tags_breakdown_not_fulfillable")
 
         # === 4. SKU table ===
         if hasattr(self, 'sku_table'):
@@ -1178,11 +1184,13 @@ class MainWindow(QMainWindow):
                 if item.widget():
                     item.widget().deleteLater()
 
-        if hasattr(self, 'tags_cards_layout'):
-            while self.tags_cards_layout.count() > 1:
-                item = self.tags_cards_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
+        for layout_attr in ('tags_fulfillable_layout', 'tags_not_fulfillable_layout'):
+            layout = getattr(self, layout_attr, None)
+            if layout is not None:
+                while layout.count() > 1:
+                    item = layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
 
         if hasattr(self, 'sku_table'):
             self.sku_table.setRowCount(0)
@@ -1293,9 +1301,9 @@ class MainWindow(QMainWindow):
 
                 for tag in config.get("tags", []):
                     add_tag_action = QAction(f"Add {tag}", self)
-                    # Use partial to properly bind tag value
+                    # Use partial to properly bind order_number, sku and tag values
                     add_tag_action.triggered.connect(
-                        partial(self._add_internal_tag, order_number, tag)
+                        partial(self._add_internal_tag, order_number, sku, tag)
                     )
                     category_menu.addAction(add_tag_action)
 

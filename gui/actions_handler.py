@@ -245,18 +245,6 @@ class ActionsHandler(QObject):
             # END STATISTICS RECORDING
             # ========================================
 
-            # Update sequential order map after analysis
-            try:
-                from shopify_tool.sequential_order import generate_sequential_order_map
-
-                generate_sequential_order_map(
-                    self.mw.analysis_results_df,
-                    Path(self.mw.session_path),
-                    force_regenerate=False  # Preserve existing numbering
-                )
-            except Exception as e:
-                self.log.error(f"Failed to update sequential order map: {e}")
-
             # Auto-switch to Analysis Results tab (Tab 2)
             if hasattr(self.mw, 'main_tabs'):
                 self.mw.main_tabs.setCurrentIndex(1)

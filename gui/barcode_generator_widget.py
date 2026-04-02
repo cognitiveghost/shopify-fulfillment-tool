@@ -390,12 +390,7 @@ class BarcodeGeneratorWidget(QWidget):
     def _generate_barcodes_worker(self):
         """Worker function for barcode generation."""
         from shopify_tool.barcode_processor import generate_barcodes_batch
-        from shopify_tool.sequential_order import load_sequential_order_map
-
-        session_path = Path(self.mw.session_path)
-
-        # Load sequential order map (optional - for independent numbering per packing list)
-        sequential_map = load_sequential_order_map(session_path)
+        from shopify_tool.csv_utils import order_number_sort_key
 
         # Filter to unique orders and calculate item count (total quantity of products)
         unique_orders = self.filtered_orders_df.groupby('Order_Number').first().reset_index()
@@ -406,16 +401,17 @@ class BarcodeGeneratorWidget(QWidget):
         # Add item_count column to unique_orders (total quantity of products)
         unique_orders['item_count'] = unique_orders['Order_Number'].map(item_counts)
 
-        if sequential_map:
-            self.log.info(f"Using sequential map for numbering ({len(sequential_map)} total orders)")
-        else:
-            self.log.info("Sequential map not found - using packing list order (1, 2, 3...)")
+        # Sort by natural order so sequential numbering (idx+1) matches numeric order
+        unique_orders['_order_sort'] = unique_orders['Order_Number'].apply(order_number_sort_key)
+        unique_orders = unique_orders.sort_values('_order_sort').drop(columns=['_order_sort']).reset_index(drop=True)
 
-        # Generate barcodes with independent numbering per packing list
+        self.log.info("Using independent sequential numbering (1, 2, 3...) in natural order")
+
+        # Generate barcodes with independent numbering per packing list (sequential_map=None)
         results = generate_barcodes_batch(
             df=unique_orders,
             output_dir=self.barcodes_dir,
-            sequential_map=sequential_map,  # Optional - uses packing list order if None
+            sequential_map=None,  # Independent per-generation numbering
             progress_callback=None  # No progress updates from worker thread
         )
 

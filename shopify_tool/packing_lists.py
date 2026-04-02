@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import logging
 from datetime import datetime
-from .csv_utils import normalize_sku_for_matching
+from .csv_utils import normalize_sku_for_matching, order_number_sort_key
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -169,10 +169,14 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
                 logger.warning("Neither Warehouse_Name nor Product_Name found, using empty string")
                 filtered_orders["Warehouse_Name"] = ""
 
-        # Sort the list for optimal packing order
+        # Sort by provider priority, then numeric order number, then SKU.
+        # order_number_sort_key avoids lexicographic issues ("#9" vs "#10").
         provider_map = {"DHL": 0, "PostOne": 1, "DPD": 2}
+        filtered_orders = filtered_orders.copy()
         filtered_orders["sort_priority"] = filtered_orders["Shipping_Provider"].map(provider_map).fillna(3)
-        sorted_list = filtered_orders.sort_values(by=["sort_priority", "Order_Number", "SKU"])
+        filtered_orders["_order_sort"] = filtered_orders["Order_Number"].apply(order_number_sort_key)
+        sorted_list = filtered_orders.sort_values(by=["sort_priority", "_order_sort", "SKU"])
+        sorted_list = sorted_list.drop(columns=["_order_sort"])
 
         # Detect whether lot tracking data is present
         has_lot_details = (

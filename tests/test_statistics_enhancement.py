@@ -6,7 +6,12 @@ from shopify_tool.analysis import recalculate_statistics
 
 
 def test_recalculate_statistics_with_tags():
-    """Test that tags_breakdown is calculated correctly."""
+    """Test that tags_breakdown counts per unique ORDER (union of tags per order).
+
+    Order A (Fulfillable) has two SKU rows both carrying "Priority"; this still counts
+    as 1 fulfillable order with "Priority".  Order B (Not Fulfillable) carries "Standard"
+    and is tracked separately in tags_breakdown_not_fulfillable.
+    """
     df = pd.DataFrame({
         "Order_Number": ["A", "A", "B"],
         "SKU": ["S1", "S2", "S3"],
@@ -21,11 +26,17 @@ def test_recalculate_statistics_with_tags():
 
     stats = recalculate_statistics(df)
 
+    # tags_breakdown = fulfillable only, per-order count
     assert "tags_breakdown" in stats
     assert stats["tags_breakdown"] is not None
-    assert stats["tags_breakdown"]["Priority"] == 2
+    # Order A is 1 fulfillable order that has both Priority and Express
+    assert stats["tags_breakdown"]["Priority"] == 1
     assert stats["tags_breakdown"]["Express"] == 1
-    assert stats["tags_breakdown"]["Standard"] == 1
+    assert "Standard" not in stats["tags_breakdown"]  # Standard is not-fulfillable
+
+    # Not-fulfillable breakdown
+    assert stats["tags_breakdown_not_fulfillable"] is not None
+    assert stats["tags_breakdown_not_fulfillable"]["Standard"] == 1
 
 
 def test_recalculate_statistics_with_sku_summary():

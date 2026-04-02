@@ -1121,24 +1121,6 @@ def run_full_analysis(
             profile_manager
         )
 
-        # Generate sequential order map for barcode/reference labels
-        # This provides consistent numbering across all label types
-        if use_session_mode and session_path:
-            try:
-                from shopify_tool.sequential_order import generate_sequential_order_map
-
-                sequential_map = generate_sequential_order_map(
-                    final_df,
-                    Path(session_path),
-                    force_regenerate=False  # Don't overwrite existing numbering
-                )
-
-                logger.info(f"Sequential order map: {len(sequential_map)} orders numbered")
-
-            except Exception as e:
-                logger.error(f"Failed to generate sequential order map: {e}")
-                # Non-critical error - continue without sequential numbering
-
         # Return success
         logger.info("Analysis completed successfully!")
         return True, primary_path, final_df, stats

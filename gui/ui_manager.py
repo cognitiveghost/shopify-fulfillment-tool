@@ -1567,8 +1567,8 @@ class UIManager:
         card_layout.addWidget(repeated_lbl)
         return card
 
-    def _make_tag_card(self, tag: str, count: str) -> QFrame:
-        """Tag card: count on top, tag name below."""
+    def _make_tag_card(self, tag: str, count: str, color: str = "#9E9E9E") -> QFrame:
+        """Tag card: colored count badge on top, tag name below."""
         card = QFrame()
         card.setFrameShape(QFrame.StyledPanel)
         card.setFrameShadow(QFrame.Raised)
@@ -1579,7 +1579,10 @@ class UIManager:
 
         count_lbl = QLabel(count)
         count_lbl.setAlignment(Qt.AlignCenter)
-        count_lbl.setStyleSheet("font-size: 20px; font-weight: bold;")
+        count_lbl.setStyleSheet(
+            f"font-size: 20px; font-weight: bold; color: white; "
+            f"background-color: {color}; border-radius: 10px; padding: 4px 8px;"
+        )
 
         tag_lbl = QLabel(tag)
         tag_lbl.setAlignment(Qt.AlignCenter)
@@ -1639,6 +1642,7 @@ class UIManager:
         courier_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         courier_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         courier_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
+        courier_hscroll.setMinimumHeight(130)
 
         courier_container = QWidget()
         self.mw.courier_cards_layout = QHBoxLayout(courier_container)
@@ -1649,29 +1653,53 @@ class UIManager:
         courier_group_layout.addWidget(courier_hscroll)
         layout.addWidget(courier_group)
 
-        # ── 3. Tags Breakdown ──────────────────────────────────────────────
-        tags_group = QGroupBox("🏷️ Tags Breakdown")
-        tags_group_layout = QVBoxLayout(tags_group)
-        tags_group_layout.setContentsMargins(8, 8, 8, 8)
-        tags_group_layout.setSpacing(0)
+        # ── 3. Tags Breakdown (Fulfillable) ────────────────────────────────
+        tags_f_group = QGroupBox("🏷️ Fulfillable Tags")
+        tags_f_group_layout = QVBoxLayout(tags_f_group)
+        tags_f_group_layout.setContentsMargins(8, 8, 8, 8)
+        tags_f_group_layout.setSpacing(0)
 
-        tags_hscroll = QScrollArea()
-        tags_hscroll.setWidgetResizable(True)
-        tags_hscroll.setFrameShape(QFrame.NoFrame)
-        tags_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        tags_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        tags_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
+        tags_f_hscroll = QScrollArea()
+        tags_f_hscroll.setWidgetResizable(True)
+        tags_f_hscroll.setFrameShape(QFrame.NoFrame)
+        tags_f_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tags_f_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        tags_f_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
+        tags_f_hscroll.setMinimumHeight(130)
 
-        tags_container = QWidget()
-        self.mw.tags_cards_layout = QHBoxLayout(tags_container)
-        self.mw.tags_cards_layout.setSpacing(8)
-        self.mw.tags_cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.mw.tags_cards_layout.addStretch()
-        tags_hscroll.setWidget(tags_container)
-        tags_group_layout.addWidget(tags_hscroll)
-        layout.addWidget(tags_group)
+        tags_f_container = QWidget()
+        self.mw.tags_fulfillable_layout = QHBoxLayout(tags_f_container)
+        self.mw.tags_fulfillable_layout.setSpacing(8)
+        self.mw.tags_fulfillable_layout.setContentsMargins(0, 0, 0, 0)
+        self.mw.tags_fulfillable_layout.addStretch()
+        tags_f_hscroll.setWidget(tags_f_container)
+        tags_f_group_layout.addWidget(tags_f_hscroll)
+        layout.addWidget(tags_f_group)
 
-        # ── 4. SKU Summary ─────────────────────────────────────────────────
+        # ── 4. Tags Breakdown (Not Fulfillable) ────────────────────────────
+        tags_nf_group = QGroupBox("🏷️ Not Fulfillable Tags")
+        tags_nf_group_layout = QVBoxLayout(tags_nf_group)
+        tags_nf_group_layout.setContentsMargins(8, 8, 8, 8)
+        tags_nf_group_layout.setSpacing(0)
+
+        tags_nf_hscroll = QScrollArea()
+        tags_nf_hscroll.setWidgetResizable(True)
+        tags_nf_hscroll.setFrameShape(QFrame.NoFrame)
+        tags_nf_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tags_nf_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        tags_nf_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
+        tags_nf_hscroll.setMinimumHeight(130)
+
+        tags_nf_container = QWidget()
+        self.mw.tags_not_fulfillable_layout = QHBoxLayout(tags_nf_container)
+        self.mw.tags_not_fulfillable_layout.setSpacing(8)
+        self.mw.tags_not_fulfillable_layout.setContentsMargins(0, 0, 0, 0)
+        self.mw.tags_not_fulfillable_layout.addStretch()
+        tags_nf_hscroll.setWidget(tags_nf_container)
+        tags_nf_group_layout.addWidget(tags_nf_hscroll)
+        layout.addWidget(tags_nf_group)
+
+        # ── 5. SKU Summary ─────────────────────────────────────────────────
         sku_group = QGroupBox("📦 SKU Summary")
         sku_layout = QVBoxLayout(sku_group)
         sku_layout.setContentsMargins(8, 8, 8, 8)
