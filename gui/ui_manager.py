@@ -612,16 +612,11 @@ class UIManager:
         self.mw.packing_list_button.setToolTip("Generate packing lists based on pre-defined filters.")
         self.mw.stock_export_button = QPushButton("📊 Create Stock Export")
         self.mw.stock_export_button.setToolTip("Generate stock export files for couriers.")
-        self.mw.writeoff_report_button = QPushButton("📦 Create Writeoff Report")
-        self.mw.writeoff_report_button.setToolTip("Generate SKU writeoff report based on Internal Tags.")
-
         self.mw.packing_list_button.setEnabled(False)
         self.mw.stock_export_button.setEnabled(False)
-        self.mw.writeoff_report_button.setEnabled(False)
 
         layout.addWidget(self.mw.packing_list_button)
         layout.addWidget(self.mw.stock_export_button)
-        layout.addWidget(self.mw.writeoff_report_button)
 
         # Add "Open Session Folder" button
         self.mw.open_session_folder_button = QPushButton("📁 Open Session Folder")
@@ -708,17 +703,7 @@ class UIManager:
         self.mw.settings_button.setEnabled(False)
         settings_layout.addWidget(self.mw.settings_button)
 
-        # Tag Categories
-        self.mw.tag_categories_button = QPushButton("🏷️ Tag Categories")
-        self.mw.tag_categories_button.setToolTip("Manage Internal Tags categories")
-        self.mw.tag_categories_button.setEnabled(False)
-        settings_layout.addWidget(self.mw.tag_categories_button)
-
-        # Configure Columns
-        self.mw.configure_columns_button = QPushButton("📊 Configure Columns")
-        self.mw.configure_columns_button.setToolTip("Customize table columns")
-        self.mw.configure_columns_button.setEnabled(False)
-        settings_layout.addWidget(self.mw.configure_columns_button)
+        # (Tag Categories and Configure Columns moved to Settings window tabs)
 
         main_layout.addLayout(settings_layout)
 

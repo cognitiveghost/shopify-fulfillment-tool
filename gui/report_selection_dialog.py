@@ -1,5 +1,9 @@
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel, QCheckBox, QFrame
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QCheckBox,
+    QFrame, QListWidget, QListWidgetItem, QSplitter, QGroupBox, QTextEdit,
+    QWidget
+)
+from PySide6.QtCore import Signal, Slot, Qt
 from gui.theme_manager import get_theme_manager
 
 
@@ -185,3 +189,270 @@ class ReportSelectionDialog(QDialog):
 
         self.reportSelected.emit(report_config)
         self.accept()
+
+
+class _BaseReportDialog(QDialog):
+    """Base class for the new preview-enabled report dialogs."""
+
+    reportSelected = Signal(dict)
+
+    def __init__(self, title, reports_config, analysis_df, apply_filters_fn, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setMinimumSize(750, 500)
+        self.reports_config = reports_config
+        self.analysis_df = analysis_df
+        self.apply_filters_fn = apply_filters_fn  # callable(df, filters) -> filtered_df
+        self._selected_config = None
+
+        self.theme = get_theme_manager().get_current_theme()
+        self._init_ui()
+        self._populate_list()
+
+        # Select first item automatically
+        if self.report_list.count() > 0:
+            self.report_list.setCurrentRow(0)
+
+    def _init_ui(self):
+        """Create the two-column splitter layout. Subclasses extend this."""
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(6)
+
+        # ---- Left panel: report list ----
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 6, 0)
+
+        list_label = QLabel("Available Reports")
+        list_label.setStyleSheet("font-weight: bold; font-size: 11pt; padding-bottom: 4px;")
+        left_layout.addWidget(list_label)
+
+        self.report_list = QListWidget()
+        self.report_list.currentRowChanged.connect(self._on_report_selected)
+        left_layout.addWidget(self.report_list)
+
+        splitter.addWidget(left_panel)
+
+        # ---- Right panel: preview + actions ----
+        right_panel = self._create_right_panel()
+        splitter.addWidget(right_panel)
+
+        splitter.setSizes([280, 460])
+        main_layout.addWidget(splitter, 1)
+
+    def _create_right_panel(self):
+        """Create the right panel. Subclasses override to add extra sections."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(6, 0, 0, 0)
+
+        # Preview group
+        preview_group = QGroupBox("Preview")
+        preview_layout = QVBoxLayout(preview_group)
+
+        self.preview_orders_label = QLabel("Select a report to see preview")
+        self.preview_orders_label.setStyleSheet("font-size: 10pt; padding: 2px;")
+        preview_layout.addWidget(self.preview_orders_label)
+
+        self.preview_filters_text = QTextEdit()
+        self.preview_filters_text.setReadOnly(True)
+        self.preview_filters_text.setMaximumHeight(120)
+        self.preview_filters_text.setStyleSheet(
+            f"background-color: {self.theme.background}; "
+            f"color: {self.theme.text_secondary}; font-size: 9pt;"
+        )
+        preview_layout.addWidget(self.preview_filters_text)
+
+        layout.addWidget(preview_group)
+
+        # Subclasses add extra sections here
+        self._add_extra_sections(layout)
+
+        layout.addStretch()
+
+        # Generate button
+        self.generate_btn = QPushButton("Generate Report")
+        self.generate_btn.setMinimumHeight(40)
+        self.generate_btn.setEnabled(False)
+        self.generate_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                font-size: 13px;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #1976D2; }
+            QPushButton:pressed { background-color: #0D47A1; }
+            QPushButton:disabled { background-color: #757575; color: #bdbdbd; }
+        """)
+        self.generate_btn.clicked.connect(self._on_generate)
+        layout.addWidget(self.generate_btn)
+
+        return panel
+
+    def _add_extra_sections(self, layout):
+        """Override in subclasses to add sections between preview and generate button."""
+        pass
+
+    def _populate_list(self):
+        """Fill the report list from reports_config."""
+        self.report_list.clear()
+        for cfg in self.reports_config:
+            name = cfg.get("name", "Unnamed Report")
+            filters = cfg.get("filters", [])
+            item = QListWidgetItem(name)
+            item.setData(Qt.UserRole, cfg)
+            item.setToolTip(f"Filters: {len(filters)} active" if filters else "No filters")
+            self.report_list.addItem(item)
+
+    def _on_report_selected(self, row):
+        """Handle selection of a report from the list."""
+        if row < 0:
+            self._selected_config = None
+            self.generate_btn.setEnabled(False)
+            self.preview_orders_label.setText("Select a report to see preview")
+            self.preview_filters_text.setPlainText("")
+            return
+
+        item = self.report_list.item(row)
+        cfg = item.data(Qt.UserRole)
+        self._selected_config = cfg
+        self.generate_btn.setEnabled(True)
+        self._update_preview(cfg)
+
+    def _update_preview(self, cfg):
+        """Compute and show preview for the selected report config."""
+        filters = cfg.get("filters", [])
+
+        # Count matching rows
+        if self.analysis_df is not None and not self.analysis_df.empty and self.apply_filters_fn:
+            try:
+                filtered = self.apply_filters_fn(self.analysis_df, filters)
+                order_col = "Order_Number" if "Order_Number" in filtered.columns else filtered.columns[0]
+                num_orders = filtered[order_col].nunique() if not filtered.empty else 0
+                num_rows = len(filtered)
+                self.preview_orders_label.setText(
+                    f"Matching: {num_orders} orders · {num_rows} rows"
+                )
+            except Exception:
+                self.preview_orders_label.setText("Preview unavailable")
+        else:
+            self.preview_orders_label.setText("Run analysis first to see preview")
+
+        # Format filters description
+        if filters:
+            lines = []
+            for f in filters:
+                field = f.get("field", "?")
+                op = f.get("operator", "=")
+                val = f.get("value", "")
+                lines.append(f"• {field} {op} {val}")
+            self.preview_filters_text.setPlainText("\n".join(lines))
+        else:
+            self.preview_filters_text.setPlainText("(no filters — includes all data)")
+
+    def _build_emit_config(self):
+        """Build the config dict to emit. Override to inject extra fields."""
+        return dict(self._selected_config)
+
+    def _on_generate(self):
+        """Emit reportSelected with the selected config and close."""
+        if self._selected_config is None:
+            return
+        emit_config = self._build_emit_config()
+        self.reportSelected.emit(emit_config)
+        self.accept()
+
+
+class PackingListDialog(_BaseReportDialog):
+    """Two-column dialog for selecting and previewing packing list reports."""
+
+    def __init__(self, reports_config, analysis_df, apply_filters_fn, parent=None):
+        super().__init__(
+            "Generate Packing List",
+            reports_config,
+            analysis_df,
+            apply_filters_fn,
+            parent
+        )
+        self.setWindowTitle("Generate Packing List")
+
+
+class StockExportDialog(_BaseReportDialog):
+    """Two-column dialog for selecting and previewing stock export reports.
+
+    Includes an integrated Writeoff Report section replacing the old standalone button.
+    """
+
+    writeoff_requested = Signal()  # emitted when "Generate Writeoff Only" is clicked
+
+    def __init__(self, reports_config, analysis_df, apply_filters_fn,
+                 writeoff_handler=None, parent=None):
+        """
+        Args:
+            writeoff_handler: Callable to call when "Generate Writeoff Only" is clicked.
+                              If None, the button is hidden.
+        """
+        self._writeoff_handler = writeoff_handler
+        super().__init__(
+            "Generate Stock Export",
+            reports_config,
+            analysis_df,
+            apply_filters_fn,
+            parent
+        )
+        self.setWindowTitle("Generate Stock Export")
+
+    def _add_extra_sections(self, layout):
+        """Add the Writeoff section between preview and generate button."""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(sep)
+
+        writeoff_group = QGroupBox("Writeoff Report")
+        writeoff_layout = QVBoxLayout(writeoff_group)
+
+        self.writeoff_checkbox = QCheckBox("Include Packaging Materials in export (SKU Writeoff)")
+        self.writeoff_checkbox.setToolTip(
+            "When enabled, packaging materials (based on Internal Tags) will be\n"
+            "automatically added to the stock export as separate SKU lines.\n"
+            "Example: Orders with 'BOX' tag will add PKG-BOX-SMALL to the export."
+        )
+        writeoff_layout.addWidget(self.writeoff_checkbox)
+
+        if self._writeoff_handler:
+            self.writeoff_only_btn = QPushButton("Generate Writeoff Report Only")
+            self.writeoff_only_btn.setMinimumHeight(36)
+            self.writeoff_only_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #FF9800;
+                    color: white;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 4px;
+                }
+                QPushButton:hover { background-color: #F57C00; }
+                QPushButton:pressed { background-color: #E65100; }
+            """)
+            self.writeoff_only_btn.clicked.connect(self._on_writeoff_only)
+            writeoff_layout.addWidget(self.writeoff_only_btn)
+
+        layout.addWidget(writeoff_group)
+
+    def _on_writeoff_only(self):
+        """Call writeoff handler and close the dialog."""
+        if self._writeoff_handler:
+            self._writeoff_handler()
+        self.accept()
+
+    def _build_emit_config(self):
+        """Include apply_writeoff flag in the emitted config."""
+        cfg = dict(self._selected_config)
+        cfg["apply_writeoff"] = self.writeoff_checkbox.isChecked() if hasattr(self, 'writeoff_checkbox') else False
+        return cfg

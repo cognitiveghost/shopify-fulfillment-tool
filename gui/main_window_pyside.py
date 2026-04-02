@@ -197,8 +197,6 @@ class MainWindow(QMainWindow):
                     self.packing_list_button.setEnabled(False)
                 if hasattr(self, 'stock_export_button'):
                     self.stock_export_button.setEnabled(False)
-                if hasattr(self, 'writeoff_report_button'):
-                    self.writeoff_report_button.setEnabled(False)
                 if hasattr(self, 'add_product_button'):
                     self.add_product_button.setEnabled(False)
 
@@ -261,8 +259,6 @@ class MainWindow(QMainWindow):
         # Main actions
         self.run_analysis_button.clicked.connect(self.actions_handler.run_analysis)
         self.settings_button.clicked.connect(self.actions_handler.open_settings_window)
-        self.tag_categories_button.clicked.connect(self.actions_handler.open_tag_categories_dialog)
-        self.configure_columns_button.clicked.connect(self.open_column_config_dialog)
         self.add_product_button.clicked.connect(self.actions_handler.show_add_product_dialog)
 
         # Reports
@@ -271,9 +267,6 @@ class MainWindow(QMainWindow):
         )
         self.stock_export_button.clicked.connect(
             lambda: self.actions_handler.open_report_selection_dialog("stock_exports")
-        )
-        self.writeoff_report_button.clicked.connect(
-            lambda: self.actions_handler.generate_writeoff_report()
         )
 
         # Table interactions
@@ -631,10 +624,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'settings_button_tab2'):
             self.settings_button_tab2.setEnabled(has_client)
 
-        # Tag Categories button
-        if hasattr(self, 'tag_categories_button'):
-            self.tag_categories_button.setEnabled(has_client)
-
         # File loading
         self.load_orders_btn.setEnabled(has_session)
         self.load_stock_btn.setEnabled(has_session)
@@ -652,12 +641,8 @@ class MainWindow(QMainWindow):
             self.packing_list_button.setEnabled(reports_enabled)
         if hasattr(self, 'stock_export_button'):
             self.stock_export_button.setEnabled(reports_enabled)
-        if hasattr(self, 'writeoff_report_button'):
-            self.writeoff_report_button.setEnabled(reports_enabled)
         if hasattr(self, 'add_product_button'):
             self.add_product_button.setEnabled(has_analysis)
-        if hasattr(self, 'configure_columns_button'):
-            self.configure_columns_button.setEnabled(has_analysis)
 
         # Tab 2 buttons
         if hasattr(self, 'packing_list_button_tab2'):
