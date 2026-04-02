@@ -21,7 +21,11 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
     """
     lot_rows_data: dict = {}   # (sku, expiry, batch) → total qty
     no_lot_skus: dict = {}     # sku → total qty
-    seen_order_sku: set = set()  # dedup: set expansion creates multiple rows per (order, sku)
+    # The simulation allocates at the (order, SKU) level — all DataFrame rows for the
+    # same (order, SKU) pair carry an identical Lot_Details object representing the full
+    # allocation for that pair.  Without this guard we would count the same allocation
+    # once per duplicate row instead of once per (order, SKU).
+    seen_order_sku: set = set()
 
     for _, row in filtered_items.iterrows():
         sku = row["SKU"]

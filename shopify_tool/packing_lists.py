@@ -27,6 +27,10 @@ def _expand_lot_rows(df: pd.DataFrame) -> pd.DataFrame:
         New DataFrame with Lot_Expiry and Lot_Batch columns added.
     """
     rows = []
+    # The simulation allocates at the (order, SKU) level — all DataFrame rows for the
+    # same (order, SKU) pair carry an identical Lot_Details object representing the full
+    # allocation for that pair.  Without this guard we would emit duplicate lot rows
+    # once per duplicate row instead of once per (order, SKU).
     seen_order_sku: set = set()
     for _, row in df.iterrows():
         lot_details = row.get("Lot_Details")
