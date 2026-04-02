@@ -1,10 +1,15 @@
+import copy
+import math
 import pandas as pd
 import numpy as np
-from typing import Tuple, Dict, List, Optional, Union
+from typing import Tuple, Dict, List, Optional
 from datetime import date
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Bulgarian ERP CSV column names for lot tracking (Expiry_Date, Batch)
+_LOT_COLUMN_DEFAULTS: Dict[str, str] = {"Годност": "Expiry_Date", "Партида": "Batch"}
 
 
 def _parse_expiry_date(raw) -> Optional[date]:
@@ -19,7 +24,6 @@ def _parse_expiry_date(raw) -> Optional[date]:
     if raw is None:
         return None
     try:
-        import math
         if isinstance(raw, float) and math.isnan(raw):
             return None
     except (TypeError, ValueError):
@@ -116,7 +120,7 @@ def _clean_and_prepare_data(
     stock_df: pd.DataFrame,
     column_mappings: Optional[dict] = None,
     additional_columns_config: Optional[List[dict]] = None
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Dict[str, List[dict]]]]:
     """
     Clean and standardize input data for analysis.
 
@@ -195,8 +199,7 @@ def _clean_and_prepare_data(
         # Inject lot column defaults for any keys not already in the config mapping.
         # This ensures lot tracking works for existing clients whose configs pre-date
         # this feature without requiring a config migration or UI change.
-        _LOT_DEFAULTS = {"Годност": "Expiry_Date", "Партида": "Batch"}
-        missing = {k: v for k, v in _LOT_DEFAULTS.items() if k not in stock_mappings}
+        missing = {k: v for k, v in _LOT_COLUMN_DEFAULTS.items() if k not in stock_mappings}
         if missing:
             stock_mappings = {**stock_mappings, **missing}
 
@@ -399,9 +402,7 @@ def _clean_and_prepare_data(
         orders_clean_df["Is_Set_Component"] = False
 
     logger.debug(f"Cleaned {len(orders_clean_df)} order rows, {len(stock_clean_df)} SKUs")
-    if lot_columns_present:
-        return orders_clean_df, stock_clean_df, fifo_lots
-    return orders_clean_df, stock_clean_df
+    return orders_clean_df, stock_clean_df, fifo_lots
 
 
 def _prioritize_orders(orders_df: pd.DataFrame) -> pd.DataFrame:
@@ -531,7 +532,6 @@ def _simulate_stock_allocation(
 
     else:
         # --- FIFO LOT PATH ---
-        import copy
         live_lots = copy.deepcopy(fifo_lots)
         lot_allocations = {}
 
@@ -1236,11 +1236,9 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         if enabled_additional:
             logger.info(f"Enabled columns: {[col['csv_name'] for col in enabled_additional]}")
 
-        _prepare_result = _clean_and_prepare_data(
+        orders_clean, stock_clean, fifo_lots = _clean_and_prepare_data(
             orders_df, stock_df, column_mappings, additional_columns_config
         )
-        orders_clean, stock_clean = _prepare_result[0], _prepare_result[1]
-        fifo_lots = _prepare_result[2] if len(_prepare_result) == 3 else None
         if fifo_lots is not None:
             logger.info(f"FIFO lot tracking enabled for {len(fifo_lots)} SKUs")
 

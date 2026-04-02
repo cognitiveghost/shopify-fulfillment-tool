@@ -172,7 +172,7 @@ class TestAdditionalColumnsInAnalysis:
             }
         ]
 
-        cleaned_orders, cleaned_stock = _clean_and_prepare_data(
+        cleaned_orders, cleaned_stock, _ = _clean_and_prepare_data(
             orders_df,
             stock_df,
             column_mappings=None,  # Use defaults
@@ -206,7 +206,7 @@ class TestAdditionalColumnsInAnalysis:
             }
         ]
 
-        cleaned_orders, _ = _clean_and_prepare_data(
+        cleaned_orders, _, _fifo = _clean_and_prepare_data(
             orders_df,
             stock_df,
             column_mappings=None,
@@ -240,7 +240,7 @@ class TestAdditionalColumnsInAnalysis:
         ]
 
         # Should not raise exception
-        cleaned_orders, _ = _clean_and_prepare_data(
+        cleaned_orders, _, _fifo = _clean_and_prepare_data(
             orders_df,
             stock_df,
             column_mappings=None,
@@ -267,7 +267,7 @@ class TestAdditionalColumnsInAnalysis:
         # Empty config
         additional_columns_config = []
 
-        cleaned_orders, _ = _clean_and_prepare_data(
+        cleaned_orders, _, _fifo = _clean_and_prepare_data(
             orders_df,
             stock_df,
             column_mappings=None,
@@ -291,7 +291,7 @@ class TestAdditionalColumnsInAnalysis:
             "Stock": [10]
         })
 
-        cleaned_orders, _ = _clean_and_prepare_data(
+        cleaned_orders, _, _fifo = _clean_and_prepare_data(
             orders_df,
             stock_df,
             column_mappings=None,
@@ -338,7 +338,7 @@ class TestAdditionalColumnsInAnalysis:
             }
         ]
 
-        cleaned_orders, _ = _clean_and_prepare_data(
+        cleaned_orders, _, _fifo = _clean_and_prepare_data(
             orders_df,
             stock_df,
             column_mappings=None,
