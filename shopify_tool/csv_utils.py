@@ -3,11 +3,23 @@ CSV utility functions for delimiter detection and validation.
 """
 import csv
 import os
+import re
 import logging
 from typing import Tuple, Any, List, Optional, Dict
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def order_number_sort_key(s) -> int:
+    """Return a numeric sort key for an order-number string.
+
+    Extracts the last run of digits so that "#1009" < "#1010" < "#1011"
+    instead of the lexicographic "#1009" < "#101" < "#1010".
+    Returns 0 for strings with no digits.
+    """
+    nums = re.findall(r'\d+', str(s))
+    return int(nums[-1]) if nums else 0
 
 
 def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> Tuple[str, str]:

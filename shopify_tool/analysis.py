@@ -1,10 +1,12 @@
 import copy
 import math
+import re
 import pandas as pd
 import numpy as np
 from typing import Tuple, Dict, List, Optional
 from datetime import date
 import logging
+from shopify_tool.csv_utils import order_number_sort_key
 
 logger = logging.getLogger(__name__)
 
@@ -436,11 +438,16 @@ def _prioritize_orders(orders_df: pd.DataFrame) -> pd.DataFrame:
     # Merge counts back to get unique orders with their counts
     orders_with_counts = pd.merge(orders_df, order_item_counts, on="Order_Number")
 
-    # Get unique orders and sort by item count (descending), then by order number
+    # Get unique orders and sort by:
+    #   1. item_count descending  (multi-line orders first)
+    #   2. numeric part of Order_Number ascending  (oldest/lowest number first within group)
+    # Using order_number_sort_key avoids lexicographic issues (e.g. "#9" vs "#10").
+    unique_orders = orders_with_counts[["Order_Number", "item_count"]].drop_duplicates().copy()
+    unique_orders["_order_sort"] = unique_orders["Order_Number"].apply(order_number_sort_key)
     prioritized_orders = (
-        orders_with_counts[["Order_Number", "item_count"]]
-        .drop_duplicates()
-        .sort_values(by=["item_count", "Order_Number"], ascending=[False, True])
+        unique_orders
+        .sort_values(by=["item_count", "_order_sort"], ascending=[False, True])
+        .drop(columns=["_order_sort"])
     )
 
     logger.debug(f"Prioritized {len(prioritized_orders)} unique orders")
@@ -1329,16 +1336,12 @@ def recalculate_statistics(df):
     missing = [col for col in required_cols if col not in df.columns]
 
     if missing:
-        import logging
-        logger = logging.getLogger("ShopifyToolLogger")
         logger.error(f"Missing required columns in DataFrame: {missing}")
         logger.error(f"Available columns: {list(df.columns)}")
         raise ValueError(f"DataFrame missing required columns: {missing}")
 
     # Add Shipping_Provider if missing (older sessions may not have it)
     if "Shipping_Provider" not in df.columns:
-        import logging
-        logger = logging.getLogger("ShopifyToolLogger")
         logger.warning("Shipping_Provider column missing - defaulting to 'Unknown'")
         df = df.copy()
         df["Shipping_Provider"] = "Unknown"
@@ -1367,39 +1370,50 @@ def recalculate_statistics(df):
     # Keep empty list as is - UI will handle display appropriately
     stats["couriers_stats"] = courier_stats
 
-    # === NEW: Tags Breakdown ===
+    # === Tags Breakdown (split by fulfillment status, counted per unique order) ===
+    # Each tag is counted once per ORDER that has it (union of tags across all SKU rows of the order).
     tags_breakdown = None
+    tags_breakdown_fulfillable = None
+    tags_breakdown_not_fulfillable = None
     if "Internal_Tags" in df.columns:
         try:
-            # Parse all tags from Internal_Tags column (JSON format)
             from shopify_tool.tag_manager import parse_tags
 
-            # Collect all tags across all orders
-            all_tags = []
-            for tags_json in df["Internal_Tags"].dropna():
-                tags = parse_tags(tags_json)  # Returns list of tag strings
-                all_tags.extend(tags)
+            def _build_order_tag_counts(rows_df):
+                """Count how many orders have each tag (union across all rows per order).
 
-            # Count occurrences
-            from collections import Counter
-            tag_counts = Counter(all_tags)
+                Vectorized: parse → explode → deduplicate (order, tag) → value_counts.
+                """
+                if rows_df.empty:
+                    return {}
+                exploded = (
+                    rows_df[["Order_Number", "Internal_Tags"]]
+                    .assign(Internal_Tags=lambda d: d["Internal_Tags"].fillna("[]").apply(parse_tags))
+                    .explode("Internal_Tags")
+                    .rename(columns={"Internal_Tags": "tag"})
+                    .dropna(subset=["tag"])
+                )
+                exploded = exploded[exploded["tag"].astype(str).str.len() > 0]
+                if exploded.empty:
+                    return {}
+                counts = exploded.drop_duplicates()["tag"].value_counts()
+                return dict(counts.items())
 
-            # Convert to sorted dict (by count, descending)
-            tags_breakdown = dict(sorted(
-                tag_counts.items(),
-                key=lambda x: x[1],
-                reverse=True
-            ))
+            fulfillable_df = df[df["Order_Fulfillment_Status"] == "Fulfillable"]
+            not_fulfillable_df = df[df["Order_Fulfillment_Status"] != "Fulfillable"]
 
-            import logging
-            logger = logging.getLogger("ShopifyToolLogger")
-            logger.info(f"Tags breakdown calculated: {len(tags_breakdown)} unique tags")
+            tags_breakdown_fulfillable = _build_order_tag_counts(fulfillable_df)
+            tags_breakdown_not_fulfillable = _build_order_tag_counts(not_fulfillable_df)
+            # Backward-compat key: fulfillable tags (primary view for UI)
+            tags_breakdown = tags_breakdown_fulfillable
+
+            logger.info(
+                f"Tags breakdown: {len(tags_breakdown_fulfillable)} fulfillable, "
+                f"{len(tags_breakdown_not_fulfillable)} not-fulfillable unique tags"
+            )
 
         except Exception as e:
-            import logging
-            logger = logging.getLogger("ShopifyToolLogger")
             logger.error(f"Failed to calculate tags breakdown: {e}", exc_info=True)
-            tags_breakdown = None
 
     # === NEW: SKU Summary ===
     sku_summary = None
@@ -1431,17 +1445,15 @@ def recalculate_statistics(df):
         # Convert to list of dicts
         sku_summary = sku_groups.to_dict("records")
 
-        import logging
-        logger = logging.getLogger("ShopifyToolLogger")
         logger.info(f"SKU summary calculated: {len(sku_summary)} unique SKUs")
 
     except Exception as e:
-        import logging
-        logger = logging.getLogger("ShopifyToolLogger")
         logger.error(f"Failed to calculate SKU summary: {e}", exc_info=True)
         sku_summary = None
 
     stats["tags_breakdown"] = tags_breakdown
+    stats["tags_breakdown_fulfillable"] = tags_breakdown_fulfillable
+    stats["tags_breakdown_not_fulfillable"] = tags_breakdown_not_fulfillable
     stats["sku_summary"] = sku_summary
 
     return stats
