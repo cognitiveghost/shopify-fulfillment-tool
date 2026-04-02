@@ -4,6 +4,64 @@ import pandas as pd
 logger = logging.getLogger("ShopifyToolLogger")
 
 
+def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate fulfilled quantities per (SKU, expiry, batch) lot for write-off requests.
+
+    When Lot_Details is present in the analysis DataFrame this function replaces
+    the simple SKU-level groupby, producing one row per unique (SKU, Годност, Партида)
+    combination across all fulfillable orders.  Items with no lot info fall back to
+    SKU-only aggregation with empty Годност/Партида values.
+
+    Args:
+        filtered_items: Fulfillable order rows from the analysis DataFrame.
+                        Must have a 'Lot_Details' column.
+
+    Returns:
+        DataFrame with columns: Артикул, Годност, Партида, Наличност
+    """
+    lot_rows_data: dict = {}   # (sku, expiry, batch) → total qty
+    no_lot_skus: dict = {}     # sku → total qty
+    # The simulation allocates at the (order, SKU) level — all DataFrame rows for the
+    # same (order, SKU) pair carry an identical Lot_Details object representing the full
+    # allocation for that pair.  Without this guard we would count the same allocation
+    # once per duplicate row instead of once per (order, SKU).
+    seen_order_sku: set = set()
+
+    for _, row in filtered_items.iterrows():
+        sku = row["SKU"]
+        lot_details = row.get("Lot_Details")
+        if lot_details and isinstance(lot_details, list) and len(lot_details) > 0:
+            order_key = (row.get("Order_Number", ""), sku)
+            if order_key in seen_order_sku:
+                continue
+            seen_order_sku.add(order_key)
+            for entry in lot_details:
+                expiry = entry.get("expiry") or ""
+                if expiry == "1":
+                    expiry = ""
+                batch = entry.get("batch") or ""
+                if batch == "1":
+                    batch = ""
+                qty = entry.get("qty_allocated", 0)
+                key = (sku, expiry, batch)
+                lot_rows_data[key] = lot_rows_data.get(key, 0) + qty
+        else:
+            qty = row.get("Quantity", 0)
+            no_lot_skus[sku] = no_lot_skus.get(sku, 0) + qty
+
+    records = []
+    for (sku, expiry, batch), qty in lot_rows_data.items():
+        if qty > 0:
+            records.append({"Артикул": sku, "Годност": expiry, "Партида": batch, "Наличност": int(qty)})
+    for sku, qty in no_lot_skus.items():
+        if qty > 0:
+            records.append({"Артикул": sku, "Годност": "", "Партида": "", "Наличност": int(qty)})
+
+    if not records:
+        return pd.DataFrame(columns=["Артикул", "Годност", "Партида", "Наличност"])
+    return pd.DataFrame(records)
+
+
 def create_stock_export(
     analysis_df,
     output_file,
@@ -71,10 +129,28 @@ def create_stock_export(
         full_query = " & ".join(query_parts)
         filtered_items = analysis_df.query(full_query).copy()
 
+        # Detect whether lot tracking data is present
+        has_lot_details = (
+            "Lot_Details" in filtered_items.columns
+            and filtered_items["Lot_Details"].notna().any()
+        )
+
         if filtered_items.empty:
             logger.warning(f"Report '{report_name}': No items found matching the criteria.")
             # Still create an empty file with headers
-            export_df = pd.DataFrame(columns=["Артикул", "Наличност"])
+            if has_lot_details:
+                export_df = pd.DataFrame(columns=["Артикул", "Годност", "Партида", "Наличност"])
+            else:
+                export_df = pd.DataFrame(columns=["Артикул", "Наличност"])
+        elif has_lot_details:
+            # Per-lot aggregation for warehouse write-off precision
+            logger.info(f"Report '{report_name}': Using per-lot aggregation (FIFO lot tracking active).")
+            export_df = _expand_lot_summary(filtered_items)
+            export_df = export_df[export_df["Наличност"] > 0].reset_index(drop=True)
+            if export_df.empty:
+                logger.warning(f"Report '{report_name}': No items with positive quantity after lot expansion.")
+            else:
+                logger.info(f"Found {len(export_df)} lot rows to write for report '{report_name}'.")
         else:
             # Summarize quantities by SKU
             sku_summary = filtered_items.groupby("SKU")["Quantity"].sum().astype(int).reset_index()
@@ -92,30 +168,35 @@ def create_stock_export(
                     "Наличност": sku_summary["Quantity"]
                 })
 
-                # Add packaging materials if writeoff enabled
-                if apply_writeoff and tag_categories:
-                    logger.info(f"Calculating packaging materials for report '{report_name}'")
-                    from shopify_tool.sku_writeoff import calculate_writeoff_quantities
+        # Add packaging materials if writeoff enabled (runs for both lot and non-lot paths)
+        if apply_writeoff and tag_categories:
+            logger.info(f"Calculating packaging materials for report '{report_name}'")
+            from shopify_tool.sku_writeoff import calculate_writeoff_quantities
 
-                    # Calculate packaging materials needed from FILTERED items
-                    writeoff_df = calculate_writeoff_quantities(filtered_items, tag_categories)
+            # Calculate packaging materials needed from FILTERED items
+            writeoff_df = calculate_writeoff_quantities(filtered_items, tag_categories)
 
-                    if not writeoff_df.empty:
-                        # Convert packaging materials to stock export format
-                        packaging_rows = pd.DataFrame({
-                            "Артикул": writeoff_df["SKU"],
-                            "Наличност": writeoff_df["Writeoff_Quantity"].astype(int)
-                        })
+            if not writeoff_df.empty:
+                # Convert packaging materials to stock export format
+                packaging_rows = pd.DataFrame({
+                    "Артикул": writeoff_df["SKU"],
+                    "Наличност": writeoff_df["Writeoff_Quantity"].astype(int)
+                })
+                # When lot columns are present, add empty lot fields for packaging rows
+                if has_lot_details:
+                    packaging_rows["Годност"] = ""
+                    packaging_rows["Партида"] = ""
+                    packaging_rows = packaging_rows[["Артикул", "Годност", "Партида", "Наличност"]]
 
-                        # APPEND packaging materials as additional rows
-                        export_df = pd.concat([export_df, packaging_rows], ignore_index=True)
+                # APPEND packaging materials as additional rows
+                export_df = pd.concat([export_df, packaging_rows], ignore_index=True)
 
-                        logger.info(
-                            f"Added {len(packaging_rows)} packaging SKUs to export "
-                            f"(total: {packaging_rows['Наличност'].sum()} units)"
-                        )
-                    else:
-                        logger.info("No packaging materials required (no writeoff mappings triggered)")
+                logger.info(
+                    f"Added {len(packaging_rows)} packaging SKUs to export "
+                    f"(total: {packaging_rows['Наличност'].sum()} units)"
+                )
+            else:
+                logger.info("No packaging materials required (no writeoff mappings triggered)")
 
         # Save to an .xls file
         try:

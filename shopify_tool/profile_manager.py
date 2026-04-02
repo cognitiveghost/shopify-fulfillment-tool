@@ -722,7 +722,9 @@ class ProfileManager:
                 "stock": {
                     "Артикул": "SKU",
                     "Име": "Product_Name",
-                    "Наличност": "Stock"
+                    "Наличност": "Stock",
+                    "Годност": "Expiry_Date",
+                    "Партида": "Batch"
                 }
             },
 
