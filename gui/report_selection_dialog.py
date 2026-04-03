@@ -92,9 +92,10 @@ class ReportSelectionDialog(QDialog):
         tooltip = self._create_tooltip_text(report_config)
         button.setToolTip(tooltip)
 
-        button.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
+        theme = get_theme_manager().get_current_theme()
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.accent_blue};
                 color: white;
                 padding: 10px;
                 font-size: 13px;
@@ -102,13 +103,9 @@ class ReportSelectionDialog(QDialog):
                 text-align: left;
                 border: none;
                 border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:pressed {
-                background-color: #0D47A1;
-            }
+            }}
+            QPushButton:hover {{ background-color: {theme.button_hover_light}; }}
+            QPushButton:pressed {{ background-color: {theme.button_hover_light}; }}
         """)
 
         return button
@@ -206,6 +203,7 @@ class _BaseReportDialog(QDialog):
         self._selected_config = None
 
         self.theme = get_theme_manager().get_current_theme()
+        self._preview_cache: dict = {}  # filters fingerprint → (num_orders, num_rows)
         self._init_ui()
         self._populate_list()
 
@@ -277,18 +275,18 @@ class _BaseReportDialog(QDialog):
         self.generate_btn = QPushButton("Generate Report")
         self.generate_btn.setMinimumHeight(40)
         self.generate_btn.setEnabled(False)
-        self.generate_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
+        self.generate_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.theme.accent_blue};
                 color: white;
                 font-size: 13px;
                 font-weight: bold;
                 border: none;
                 border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #1976D2; }
-            QPushButton:pressed { background-color: #0D47A1; }
-            QPushButton:disabled { background-color: #757575; color: #bdbdbd; }
+            }}
+            QPushButton:hover {{ background-color: {self.theme.button_hover_light}; }}
+            QPushButton:pressed {{ background-color: {self.theme.button_hover_light}; }}
+            QPushButton:disabled {{ background-color: {self.theme.border}; color: {self.theme.text_secondary}; }}
         """)
         self.generate_btn.clicked.connect(self._on_generate)
         layout.addWidget(self.generate_btn)
@@ -329,13 +327,16 @@ class _BaseReportDialog(QDialog):
         """Compute and show preview for the selected report config."""
         filters = cfg.get("filters", [])
 
-        # Count matching rows
+        # Count matching rows (cached by filter fingerprint to avoid re-filtering on every click)
         if self.analysis_df is not None and not self.analysis_df.empty and self.apply_filters_fn:
             try:
-                filtered = self.apply_filters_fn(self.analysis_df, filters)
-                order_col = "Order_Number" if "Order_Number" in filtered.columns else filtered.columns[0]
-                num_orders = filtered[order_col].nunique() if not filtered.empty else 0
-                num_rows = len(filtered)
+                cache_key = str(filters)
+                if cache_key not in self._preview_cache:
+                    filtered = self.apply_filters_fn(self.analysis_df, filters)
+                    order_col = "Order_Number" if "Order_Number" in filtered.columns else (filtered.columns[0] if not filtered.empty else None)
+                    num_orders = filtered[order_col].nunique() if (not filtered.empty and order_col) else 0
+                    self._preview_cache[cache_key] = (num_orders, len(filtered))
+                num_orders, num_rows = self._preview_cache[cache_key]
                 self.preview_orders_label.setText(
                     f"Matching: {num_orders} orders · {num_rows} rows"
                 )
@@ -429,16 +430,17 @@ class StockExportDialog(_BaseReportDialog):
         if self._writeoff_handler:
             self.writeoff_only_btn = QPushButton("Generate Writeoff Report Only")
             self.writeoff_only_btn.setMinimumHeight(36)
-            self.writeoff_only_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #FF9800;
+            theme = get_theme_manager().get_current_theme()
+            self.writeoff_only_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.accent_orange};
                     color: white;
                     font-weight: bold;
                     border: none;
                     border-radius: 4px;
-                }
-                QPushButton:hover { background-color: #F57C00; }
-                QPushButton:pressed { background-color: #E65100; }
+                }}
+                QPushButton:hover {{ background-color: #F57C00; }}
+                QPushButton:pressed {{ background-color: #E65100; }}
             """)
             self.writeoff_only_btn.clicked.connect(self._on_writeoff_only)
             writeoff_layout.addWidget(self.writeoff_only_btn)

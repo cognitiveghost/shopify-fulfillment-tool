@@ -793,21 +793,19 @@ class ColumnConfigPanel(QWidget):
         csv_name = checkbox.text()
         is_enabled = (state == Qt.CheckState.Checked)
 
-        for col in self.additional_columns_config:
-            if col["internal_name"] == internal_name:
-                col["enabled"] = is_enabled
-                logger.debug(f"Toggled '{csv_name}' ({internal_name}): enabled={is_enabled}")
-                break
+        col = next((c for c in self.additional_columns_config if c["internal_name"] == internal_name), None)
+        if col:
+            col["enabled"] = is_enabled
+            logger.debug(f"Toggled '{csv_name}' ({internal_name}): enabled={is_enabled}")
 
     def _on_order_level_toggled(self, state):
         """Handle order-level checkbox state change."""
         checkbox = self.sender()
         internal_name = checkbox.property("internal_name")
 
-        for col in self.additional_columns_config:
-            if col["internal_name"] == internal_name:
-                col["is_order_level"] = (state == Qt.CheckState.Checked)
-                break
+        col = next((c for c in self.additional_columns_config if c["internal_name"] == internal_name), None)
+        if col:
+            col["is_order_level"] = (state == Qt.CheckState.Checked)
 
     def _on_enable_all_additional(self):
         """Enable all additional columns that exist in current CSV."""

@@ -34,8 +34,6 @@ class TagCategoriesPanel(QWidget):
     def __init__(self, tag_categories: Dict, parent=None):
         super().__init__(parent)
 
-        # Store original and working copy
-        self.original_categories = tag_categories.copy()
         self.working_categories = tag_categories.copy()
 
         # Ensure v2 format
