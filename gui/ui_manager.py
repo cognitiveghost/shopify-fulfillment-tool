@@ -1002,7 +1002,7 @@ class UIManager:
             if category_id in categories:
                 category_label = categories[category_id].get("label", category_id)
             else:
-                category_label = "Інші"  # Custom/unknown tags
+                category_label = "Others"  # Custom/unknown tags
 
             if category_label not in grouped:
                 grouped[category_label] = []
@@ -1626,7 +1626,7 @@ class UIManager:
         courier_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         courier_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         courier_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        courier_hscroll.setMinimumHeight(130)
+        courier_hscroll.setMinimumHeight(90)
 
         courier_container = QWidget()
         self.mw.courier_cards_layout = QHBoxLayout(courier_container)

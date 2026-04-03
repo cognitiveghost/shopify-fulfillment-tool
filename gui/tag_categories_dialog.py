@@ -259,7 +259,13 @@ class TagCategoriesPanel(QWidget):
             item = QListWidgetItem(category_config.get("label", category_id))
             item.setData(Qt.UserRole, category_id)
             color = category_config.get("color", "#9E9E9E")
-            item.setBackground(QColor(color).lighter(180))
+            _cat = QColor(color)
+            _bg = QColor(get_theme_manager().get_current_theme().background)
+            item.setBackground(QColor(
+                int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+            ))
             self.categories_list.addItem(item)
 
     def _on_category_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
@@ -429,7 +435,13 @@ class TagCategoriesPanel(QWidget):
         current_item = self.categories_list.currentItem()
         if current_item:
             current_item.setText(category["label"])
-            current_item.setBackground(QColor(self.current_color).lighter(180))
+            _cat = QColor(self.current_color)
+            _bg = QColor(get_theme_manager().get_current_theme().background)
+            current_item.setBackground(QColor(
+                int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+            ))
 
     def _choose_color(self):
         """Open color picker dialog."""

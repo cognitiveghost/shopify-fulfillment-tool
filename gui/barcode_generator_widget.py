@@ -403,17 +403,16 @@ class BarcodeGeneratorWidget(QWidget):
 
         # Merge tags from ALL rows of each order (not just the first row)
         if 'Internal_Tags' in self.filtered_orders_df.columns:
-            def _merge_tags(series):
+            merged_tags = {}
+            for order_num, group in self.filtered_orders_df.groupby('Order_Number', sort=False):
                 seen, result = set(), []
-                for val in series.dropna():
+                for val in group['Internal_Tags'].dropna():
                     for t in str(val).split(','):
                         t = t.strip()
                         if t and t not in seen:
                             seen.add(t)
                             result.append(t)
-                return ', '.join(result)
-
-            merged_tags = self.filtered_orders_df.groupby('Order_Number')['Internal_Tags'].apply(_merge_tags)
+                merged_tags[order_num] = ', '.join(result)
             unique_orders['Internal_Tags'] = unique_orders['Order_Number'].map(merged_tags)
 
         # Sort by natural order so sequential numbering (idx+1) matches numeric order
