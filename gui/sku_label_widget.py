@@ -133,13 +133,14 @@ class SKULabelWidget(QWidget):
 
         self.print_btn = QPushButton("Print Label")
         self.print_btn.setMinimumHeight(44)
+        theme = get_theme_manager().get_current_theme()
         self.print_btn.setStyleSheet(
-            "QPushButton {"
-            "  font-size: 15px; font-weight: bold;"
-            "  background-color: #4CAF50; color: white; border-radius: 5px;"
-            "}"
-            "QPushButton:hover { background-color: #45a049; }"
-            "QPushButton:disabled { background-color: #888; color: #ccc; }"
+            f"QPushButton {{"
+            f"  font-size: 15px; font-weight: bold;"
+            f"  background-color: {theme.accent_green}; color: white; border-radius: 5px;"
+            f"}}"
+            f"QPushButton:hover {{ background-color: {theme.accent_green}; }}"
+            f"QPushButton:disabled {{ background-color: {theme.border}; color: {theme.text_secondary}; }}"
         )
         self.print_btn.setEnabled(False)
         layout.addWidget(self.print_btn)
@@ -183,14 +184,6 @@ class SKULabelWidget(QWidget):
 
         config = self.mw.active_profile_config.get("sku_label_config", {})
         self._manager = SKULabelManager(config)
-
-        # Restore saved default printer
-        saved_printer = config.get("default_printer", "")
-        if saved_printer:
-            idx = self.printer_combo.findText(saved_printer)
-            if idx >= 0:
-                self.printer_combo.setCurrentIndex(idx)
-
         self._set_scan_status(_READY_MSG)
 
     def _refresh_printers(self):
@@ -210,14 +203,14 @@ class SKULabelWidget(QWidget):
             for pi in printers:
                 self.printer_combo.addItem(pi.printerName())
 
-            # Restore previous selection or system default
-            idx = self.printer_combo.findText(current) if current else -1
-            if idx >= 0:
-                self.printer_combo.setCurrentIndex(idx)
-            elif default_name:
-                idx = self.printer_combo.findText(default_name)
-                if idx >= 0:
-                    self.printer_combo.setCurrentIndex(idx)
+            # Priority: current in-session selection → config default → system default
+            config_default = self._manager.default_printer if self._manager else ""
+            for candidate in (current, config_default, default_name):
+                if candidate:
+                    idx = self.printer_combo.findText(candidate)
+                    if idx >= 0:
+                        self.printer_combo.setCurrentIndex(idx)
+                        break
 
         except Exception:
             logger.exception("Failed to enumerate printers")
@@ -295,10 +288,9 @@ class SKULabelWidget(QWidget):
         """Handle print job result."""
         if result["success"]:
             pages = result["pages_printed"]
-            self._set_print_status(f"Printed {pages} page(s) successfully.", success=True)
             logger.info("Print success: %d pages for SKU '%s'", pages, self._current_sku)
-            # Auto-clear after successful print
             self._on_clear_clicked()
+            self._set_scan_status(f"Printed {pages} page(s). Ready — scan next product.")
         else:
             err = result.get("error", "Unknown error")
             self._set_print_status(f"Error: {err}", error=True)
@@ -350,17 +342,17 @@ class SKULabelWidget(QWidget):
 
     def _set_scan_status(self, text: str, *, error: bool = False):
         theme = get_theme_manager().get_current_theme()
-        color = "#e53935" if error else theme.text_secondary
+        color = theme.accent_red if error else theme.text_secondary
         self.scan_status_label.setText(text)
         self.scan_status_label.setStyleSheet(f"color: {color}; font-style: italic;")
 
     def _set_print_status(self, text: str, *, success: bool = False, error: bool = False):
+        theme = get_theme_manager().get_current_theme()
         if success:
-            color = "#43a047"
+            color = theme.accent_green
         elif error:
-            color = "#e53935"
+            color = theme.accent_red
         else:
-            theme = get_theme_manager().get_current_theme()
             color = theme.text_secondary
         self.print_status_label.setText(text)
         self.print_status_label.setStyleSheet(f"color: {color};")

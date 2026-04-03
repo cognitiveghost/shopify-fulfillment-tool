@@ -178,8 +178,14 @@ class SettingsWindow(QDialog):
         self.courier_mapping_widgets = []
 
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
-        self.setMinimumSize(1150, 850)
+        self.setMinimumSize(1100, 600)
         self.setModal(True)
+
+        screen_geo = QApplication.primaryScreen().availableGeometry()
+        self.resize(
+            min(1250, screen_geo.width() - 40),
+            min(920, screen_geo.height() - 60),
+        )
 
         main_layout = QVBoxLayout(self)
         self.tab_widget = QTabWidget()
@@ -3171,8 +3177,7 @@ class SettingsWindow(QDialog):
 
                 self.config_data["sku_label_config"] = {
                     "sku_to_label": sku_to_label,
-                    "default_printer": self.sku_default_printer_combo.currentText()
-                    if hasattr(self, "sku_default_printer_combo") else "",
+                    "default_printer": self.sku_default_printer_combo.currentText(),
                 }
 
             # ========================================

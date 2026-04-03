@@ -188,7 +188,7 @@ class SKULabelManager:
 
         try:
             dpi = printer.resolution()
-            page_rect = printer.pageRect(QPrinter.Unit.DevicePixel)
+            page_rect = printer.pageRect(QPrinter.DevicePixel)
             target_rect = QRectF(page_rect)
 
             for copy_idx in range(copies):
