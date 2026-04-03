@@ -32,36 +32,35 @@ from gui.theme_manager import get_theme_manager
 logger = logging.getLogger(__name__)
 
 
-class ColumnConfigDialog(QDialog):
-    """Dialog for configuring table column visibility and order."""
+class ColumnConfigPanel(QWidget):
+    """Embeddable panel for configuring table column visibility and order.
 
-    # Signal emitted when configuration is applied
+    Can be used inside a QDialog (ColumnConfigDialog) or embedded directly
+    into a QTabWidget (e.g., SettingsWindow).
+    """
+
     config_applied = Signal()
 
-    def __init__(self, table_config_manager, parent=None):
+    def __init__(self, table_config_manager, main_window=None, parent=None):
         """
-        Initialize the Column Configuration Dialog.
+        Initialize the Column Configuration Panel.
 
         Args:
             table_config_manager: TableConfigManager instance
-            parent: Parent widget (MainWindow)
+            main_window: MainWindow reference (for analysis_results_df, tableView, etc.)
+            parent: Parent widget
         """
         super().__init__(parent)
         self.table_config_manager = table_config_manager
-        self.parent_window = parent
+        # parent_window kept for backward-compat within the methods below
+        self.parent_window = main_window
 
-        # Track original configuration for cancel
         self._original_config = None
-        self._original_view_name = None  # Store original view name for cancel
+        self._original_view_name = None
         self._current_columns: List[str] = []
         self._is_loading = False
 
-        # Initialize additional columns config (always defined)
         self.additional_columns_config: List[dict] = []
-
-        self.setWindowTitle("Manage Table Columns")
-        self.setMinimumSize(600, 700)
-        self.setModal(True)
 
         self._init_ui()
         self._connect_signals()
@@ -144,7 +143,6 @@ class ColumnConfigDialog(QDialog):
         additional_group = QGroupBox("Additional CSV Columns")
         additional_layout = QVBoxLayout()
 
-        # Info label
         info_label = QLabel(
             "Configure additional columns from your CSV file to include in analysis.\n"
             "These columns are not in the standard mapping but can be preserved if needed."
@@ -154,17 +152,14 @@ class ColumnConfigDialog(QDialog):
         info_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic;")
         additional_layout.addWidget(info_label)
 
-        # Scan button
         self.scan_csv_button = QPushButton("Scan Current CSV for Available Columns")
         self.scan_csv_button.clicked.connect(self._on_scan_csv)
         additional_layout.addWidget(self.scan_csv_button)
 
-        # Additional columns list
         self.additional_columns_list = QListWidget()
         self.additional_columns_list.setMaximumHeight(200)
         additional_layout.addWidget(self.additional_columns_list)
 
-        # Bulk operations
         additional_buttons = QHBoxLayout()
         self.enable_all_additional_button = QPushButton("Enable All")
         self.enable_all_additional_button.clicked.connect(self._on_enable_all_additional)
@@ -178,53 +173,37 @@ class ColumnConfigDialog(QDialog):
         additional_group.setLayout(additional_layout)
         main_layout.addWidget(additional_group)
 
-        # Reset section
-        reset_layout = QHBoxLayout()
+        # Reset + Apply row
+        action_layout = QHBoxLayout()
         self.reset_button = QPushButton("Reset to Default")
         self.reset_button.setToolTip("Reset all columns to default visibility and order")
-        reset_layout.addStretch()
-        reset_layout.addWidget(self.reset_button)
-        main_layout.addLayout(reset_layout)
-
-        # Dialog buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        self.cancel_button = QPushButton("Cancel")
-        self.apply_button = QPushButton("Apply")
+        action_layout.addWidget(self.reset_button)
+        action_layout.addStretch()
+        self.apply_button = QPushButton("Apply Column Configuration")
         self.apply_button.setDefault(True)
-        button_layout.addWidget(self.cancel_button)
-        button_layout.addWidget(self.apply_button)
-        main_layout.addLayout(button_layout)
+        action_layout.addWidget(self.apply_button)
+        main_layout.addLayout(action_layout)
 
     def _connect_signals(self):
         """Connect UI signals to slots."""
-        # Search
         self.search_input.textChanged.connect(self._on_search_changed)
 
-        # Column list
         self.column_list.itemChanged.connect(self._on_item_changed)
         self.column_list.currentRowChanged.connect(self._update_button_states)
 
-        # Reorder buttons
         self.up_button.clicked.connect(self._on_move_up)
         self.down_button.clicked.connect(self._on_move_down)
 
-        # Visibility controls
         self.show_all_button.clicked.connect(self._on_show_all)
         self.hide_all_button.clicked.connect(self._on_hide_all)
         self.auto_hide_checkbox.toggled.connect(self._on_auto_hide_toggled)
 
-        # View management
         self.view_combo.currentTextChanged.connect(self._on_view_changed)
         self.save_view_button.clicked.connect(self._on_save_view)
         self.delete_view_button.clicked.connect(self._on_delete_view)
 
-        # Reset
         self.reset_button.clicked.connect(self._on_reset)
-
-        # Dialog buttons
-        self.cancel_button.clicked.connect(self._on_cancel)
-        self.apply_button.clicked.connect(self._on_apply)
+        self.apply_button.clicked.connect(self.apply_config)
 
     def _load_current_config(self):
         """Load the current table configuration."""
@@ -236,26 +215,17 @@ class ColumnConfigDialog(QDialog):
         self._is_loading = True
 
         try:
-            # Get current configuration
             config = self.table_config_manager.get_current_config()
             if config is None:
-                # Load config for current client
                 config = self.table_config_manager.load_config(client_id)
 
-            # Store original config and view name for cancel
             self._original_config = config
             self._original_view_name = self.table_config_manager.get_current_view_name()
 
-            # Load auto-hide setting
             self.auto_hide_checkbox.setChecked(config.auto_hide_empty)
 
-            # Load views
             self._load_views()
-
-            # Load columns
             self._load_columns(config)
-
-            # Load existing additional columns configuration
             self._load_additional_columns_config()
 
         finally:
@@ -273,13 +243,11 @@ class ColumnConfigDialog(QDialog):
 
             self.view_combo.addItems(views)
 
-            # Set current view
             current_view = self.table_config_manager.get_current_view_name()
             index = self.view_combo.findText(current_view)
             if index >= 0:
                 self.view_combo.setCurrentIndex(index)
 
-            # Update delete button state
             self._update_delete_button_state()
 
         finally:
@@ -290,20 +258,15 @@ class ColumnConfigDialog(QDialog):
         self.column_list.clear()
         self._current_columns = []
 
-        # Get columns from current DataFrame or config
         if hasattr(self.parent_window, 'analysis_results_df') and \
            self.parent_window.analysis_results_df is not None:
             df = self.parent_window.analysis_results_df
             all_columns = df.columns.tolist()
         else:
-            # No DataFrame, use config columns
             all_columns = config.column_order if config.column_order else list(config.visible_columns.keys())
 
-        # Use config order if available, otherwise use DataFrame order
         if config.column_order:
-            # Start with ordered columns
             ordered_columns = [col for col in config.column_order if col in all_columns]
-            # Add any new columns not in config
             for col in all_columns:
                 if col not in ordered_columns:
                     ordered_columns.append(col)
@@ -311,19 +274,15 @@ class ColumnConfigDialog(QDialog):
         else:
             columns = all_columns
 
-        # Create list items
         for col_name in columns:
             item = QListWidgetItem(col_name)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
 
-            # Check if column is visible
             is_visible = config.visible_columns.get(col_name, True)
             item.setCheckState(Qt.Checked if is_visible else Qt.Unchecked)
 
-            # Mark locked columns
             if col_name in config.locked_columns:
                 item.setToolTip("⚠ Locked column (always visible and first)")
-                # Set bold font for locked columns
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
@@ -331,7 +290,6 @@ class ColumnConfigDialog(QDialog):
             self.column_list.addItem(item)
             self._current_columns.append(col_name)
 
-        # Update button states
         self._update_button_states()
 
     def _on_search_changed(self, text: str):
@@ -342,7 +300,6 @@ class ColumnConfigDialog(QDialog):
             item = self.column_list.item(i)
             column_name = item.text()
 
-            # Show/hide based on search
             if text in column_name.lower():
                 item.setHidden(False)
             else:
@@ -356,7 +313,6 @@ class ColumnConfigDialog(QDialog):
         column_name = item.text()
         config = self.table_config_manager.get_current_config()
 
-        # Prevent unchecking locked columns
         if column_name in config.locked_columns and item.checkState() == Qt.Unchecked:
             self._is_loading = True
             item.setCheckState(Qt.Checked)
@@ -378,7 +334,6 @@ class ColumnConfigDialog(QDialog):
         item = self.column_list.currentItem()
         column_name = item.text()
 
-        # Prevent moving locked columns or moving to locked position
         if column_name in config.locked_columns:
             QMessageBox.warning(
                 self,
@@ -387,7 +342,6 @@ class ColumnConfigDialog(QDialog):
             )
             return
 
-        # Prevent moving to position 0 if Order_Number is locked there
         if current_row == 1 and "Order_Number" in config.locked_columns:
             target_col = self.column_list.item(0).text()
             if target_col == "Order_Number":
@@ -398,12 +352,10 @@ class ColumnConfigDialog(QDialog):
                 )
                 return
 
-        # Move the item
         item = self.column_list.takeItem(current_row)
         self.column_list.insertItem(current_row - 1, item)
         self.column_list.setCurrentRow(current_row - 1)
 
-        # Update internal list
         self._current_columns.insert(current_row - 1, self._current_columns.pop(current_row))
 
     def _on_move_down(self):
@@ -416,7 +368,6 @@ class ColumnConfigDialog(QDialog):
         item = self.column_list.currentItem()
         column_name = item.text()
 
-        # Prevent moving locked columns
         if column_name in config.locked_columns:
             QMessageBox.warning(
                 self,
@@ -425,7 +376,6 @@ class ColumnConfigDialog(QDialog):
             )
             return
 
-        # Prevent moving above locked column to position 0
         if current_row == 0 and "Order_Number" in config.locked_columns:
             QMessageBox.warning(
                 self,
@@ -434,12 +384,10 @@ class ColumnConfigDialog(QDialog):
             )
             return
 
-        # Move the item
         item = self.column_list.takeItem(current_row)
         self.column_list.insertItem(current_row + 1, item)
         self.column_list.setCurrentRow(current_row + 1)
 
-        # Update internal list
         self._current_columns.insert(current_row + 1, self._current_columns.pop(current_row))
 
     def _on_show_all(self):
@@ -452,7 +400,6 @@ class ColumnConfigDialog(QDialog):
         finally:
             self._is_loading = False
 
-        # Disable auto-hide so empty columns stay visible after Apply
         self.auto_hide_checkbox.setChecked(False)
 
     def _on_hide_all(self):
@@ -465,7 +412,6 @@ class ColumnConfigDialog(QDialog):
                 item = self.column_list.item(i)
                 column_name = item.text()
 
-                # Skip locked columns
                 if column_name in config.locked_columns:
                     continue
 
@@ -475,7 +421,6 @@ class ColumnConfigDialog(QDialog):
 
     def _on_auto_hide_toggled(self, checked: bool):
         """Handle auto-hide toggle."""
-        # Will be saved when Apply is clicked
         pass
 
     def _on_view_changed(self, view_name: str):
@@ -483,23 +428,19 @@ class ColumnConfigDialog(QDialog):
         if self._is_loading or not view_name:
             return
 
-        # Load the selected view
         config = self.table_config_manager.load_view(view_name)
         if config:
             self._is_loading = True
             try:
-                # Update UI with new config
                 self.auto_hide_checkbox.setChecked(config.auto_hide_empty)
                 self._load_columns(config)
             finally:
                 self._is_loading = False
 
-        # Update delete button state
         self._update_delete_button_state()
 
     def _on_save_view(self):
         """Save current configuration as a named view."""
-        # Get view name from user
         view_name, ok = QInputDialog.getText(
             self,
             "Save View As",
@@ -512,7 +453,6 @@ class ColumnConfigDialog(QDialog):
 
         view_name = view_name.strip()
 
-        # Check if view already exists
         existing_views = self.table_config_manager.list_views()
         if view_name in existing_views:
             reply = QMessageBox.question(
@@ -525,15 +465,12 @@ class ColumnConfigDialog(QDialog):
             if reply == QMessageBox.No:
                 return
 
-        # Create config from current UI state
         config = self._get_config_from_ui()
 
-        # Save view
         try:
             self.table_config_manager.save_view(view_name, config)
             logger.info(f"View '{view_name}' saved successfully")
 
-            # Reload views and select the new one
             self._load_views()
             index = self.view_combo.findText(view_name)
             if index >= 0:
@@ -564,7 +501,6 @@ class ColumnConfigDialog(QDialog):
             )
             return
 
-        # Confirm deletion
         reply = QMessageBox.question(
             self,
             "Delete View",
@@ -576,12 +512,10 @@ class ColumnConfigDialog(QDialog):
         if reply == QMessageBox.No:
             return
 
-        # Delete view
         try:
             self.table_config_manager.delete_view(view_name)
             logger.info(f"View '{view_name}' deleted successfully")
 
-            # Reload views and select Default
             self._load_views()
             index = self.view_combo.findText("Default")
             if index >= 0:
@@ -608,18 +542,15 @@ class ColumnConfigDialog(QDialog):
         if reply == QMessageBox.No:
             return
 
-        # Get default config
         if hasattr(self.parent_window, 'analysis_results_df') and \
            self.parent_window.analysis_results_df is not None:
             df = self.parent_window.analysis_results_df
             columns = df.columns.tolist()
         else:
-            # Use current columns
             columns = self._current_columns
 
         default_config = self.table_config_manager.get_default_config(columns)
 
-        # Load default config into UI
         self._is_loading = True
         try:
             self.auto_hide_checkbox.setChecked(default_config.auto_hide_empty)
@@ -627,35 +558,25 @@ class ColumnConfigDialog(QDialog):
         finally:
             self._is_loading = False
 
-    def _on_cancel(self):
-        """Cancel changes and restore original view."""
-        # Restore original view if it was changed
+    def revert_config(self):
+        """Revert to the original view (called on cancel)."""
         if self._original_view_name and hasattr(self.parent_window, 'current_client_id'):
             client_id = self.parent_window.current_client_id
             if client_id:
-                # Reload original view
                 self.table_config_manager.load_config(client_id, self._original_view_name)
                 logger.info(f"Restored original view: {self._original_view_name}")
 
-        # Close dialog
-        self.reject()
-
-    def _on_apply(self):
-        """Apply the current configuration."""
+    def apply_config(self):
+        """Apply the current configuration (save + update table view)."""
         try:
-            # Create config from UI state
             config = self._get_config_from_ui()
 
-            # Save configuration
             if hasattr(self.parent_window, 'current_client_id') and self.parent_window.current_client_id:
                 client_id = self.parent_window.current_client_id
                 view_name = self.view_combo.currentText() or "Default"
                 self.table_config_manager.save_config(client_id, config, view_name)
 
-                # Save additional columns config (always save, even if empty)
                 if hasattr(self, 'additional_columns_config'):
-                    # CRITICAL: Sync UI state to config before saving
-                    # This ensures all checkbox changes are captured, even if signal handlers missed any
                     if self.additional_columns_config:
                         logger.debug("Syncing UI checkbox states to config before saving...")
                         self._sync_ui_to_config()
@@ -669,7 +590,6 @@ class ColumnConfigDialog(QDialog):
 
                     client_config = self.table_config_manager.pm.load_client_config(client_id)
 
-                    # Update additional_columns in config
                     if "ui_settings" not in client_config:
                         client_config["ui_settings"] = {}
                     if "table_view" not in client_config["ui_settings"]:
@@ -677,11 +597,9 @@ class ColumnConfigDialog(QDialog):
 
                     client_config["ui_settings"]["table_view"]["additional_columns"] = self.additional_columns_config
 
-                    # Save config
                     self.table_config_manager.pm.save_client_config(client_id, client_config)
                     logger.info(f"✓ Saved additional columns: {len(enabled_cols)} enabled ({', '.join([col['csv_name'] for col in enabled_cols])})")
 
-                # Apply to table view if available
                 if hasattr(self.parent_window, 'tableView') and \
                    hasattr(self.parent_window, 'analysis_results_df') and \
                    self.parent_window.analysis_results_df is not None:
@@ -692,7 +610,6 @@ class ColumnConfigDialog(QDialog):
 
                 logger.info("Column configuration applied successfully")
 
-                # Show info message if additional columns were configured and enabled
                 if hasattr(self, 'additional_columns_config') and any(col.get('enabled', False) for col in self.additional_columns_config):
                     QMessageBox.information(
                         self,
@@ -702,11 +619,8 @@ class ColumnConfigDialog(QDialog):
                         "to see the changes in the results table."
                     )
 
-                # Emit signal
                 self.config_applied.emit()
 
-                # Close dialog
-                self.accept()
             else:
                 QMessageBox.warning(
                     self,
@@ -726,7 +640,6 @@ class ColumnConfigDialog(QDialog):
         """Create TableConfig from current UI state."""
         from gui.table_config_manager import TableConfig
 
-        # Get column order and visibility
         visible_columns = {}
         column_order = []
 
@@ -738,12 +651,10 @@ class ColumnConfigDialog(QDialog):
             visible_columns[column_name] = is_visible
             column_order.append(column_name)
 
-        # Get current config for widths and locked columns
         current_config = self.table_config_manager.get_current_config()
         if current_config is None:
             current_config = self.table_config_manager.get_default_config(column_order)
 
-        # Create new config
         config = TableConfig(
             version=1,
             visible_columns=visible_columns,
@@ -760,21 +671,16 @@ class ColumnConfigDialog(QDialog):
         current_row = self.column_list.currentRow()
         count = self.column_list.count()
 
-        # Up button: enabled if not first row
         self.up_button.setEnabled(current_row > 0)
-
-        # Down button: enabled if not last row
         self.down_button.setEnabled(current_row >= 0 and current_row < count - 1)
 
     def _update_delete_button_state(self):
         """Update enabled state of delete view button."""
         view_name = self.view_combo.currentText()
-        # Cannot delete Default view
         self.delete_view_button.setEnabled(view_name != "Default" and bool(view_name))
 
     def _on_scan_csv(self):
         """Scan current analysis dataframe for additional columns."""
-        # Get main window reference
         main_window = self.table_config_manager.mw
 
         if not hasattr(main_window, 'last_loaded_orders_df') or main_window.last_loaded_orders_df is None:
@@ -785,36 +691,28 @@ class ColumnConfigDialog(QDialog):
             )
             return
 
-        # IMPORTANT: Save current UI state before scanning, so user's checkbox changes aren't lost
         if hasattr(self, 'additional_columns_config') and self.additional_columns_config:
             self._sync_ui_to_config()
 
-        # Get the original orders dataframe (before analysis)
         orders_df = main_window.last_loaded_orders_df
 
-        # Get column mappings from shopify config
         client_id = main_window.current_client_id
         shopify_config = self.table_config_manager.pm.load_shopify_config(client_id)
         column_mappings = shopify_config.get("column_mappings", {})
 
-        # Use current in-memory config if available, otherwise load from disk
         if hasattr(self, 'additional_columns_config') and self.additional_columns_config:
             current_additional = self.additional_columns_config
         else:
             client_config = self.table_config_manager.pm.load_client_config(client_id)
             current_additional = client_config.get("ui_settings", {}).get("table_view", {}).get("additional_columns", [])
 
-        # Discover available columns
         from shopify_tool.csv_utils import discover_additional_columns
         discovered = discover_additional_columns(orders_df, column_mappings, current_additional)
 
-        # Update UI list
         self._populate_additional_columns_list(discovered)
 
-        # Store config for saving later
         self.additional_columns_config = discovered
 
-        # Show result message
         available_count = sum(1 for col in discovered if col["exists_in_df"])
         QMessageBox.information(
             self,
@@ -830,18 +728,15 @@ class ColumnConfigDialog(QDialog):
         for col_config in columns_config:
             item = QListWidgetItem()
 
-            # Create widget for list item
             widget = QWidget()
             layout = QHBoxLayout()
             layout.setContentsMargins(4, 2, 4, 2)
 
-            # Checkbox for enabled state
             checkbox = QCheckBox(col_config["csv_name"])
             checkbox.setChecked(col_config["enabled"])
             checkbox.setProperty("internal_name", col_config["internal_name"])
             checkbox.stateChanged.connect(self._on_additional_column_toggled)
 
-            # Order-level checkbox
             order_level_cb = QCheckBox("Order-Level")
             order_level_cb.setChecked(col_config["is_order_level"])
             order_level_cb.setProperty("internal_name", col_config["internal_name"])
@@ -852,7 +747,6 @@ class ColumnConfigDialog(QDialog):
             layout.addStretch()
             layout.addWidget(order_level_cb)
 
-            # Visual indicator if column doesn't exist in current CSV
             if not col_config["exists_in_df"]:
                 not_found_label = QLabel("(not in current CSV)")
                 theme = get_theme_manager().get_current_theme()
@@ -862,7 +756,6 @@ class ColumnConfigDialog(QDialog):
 
             widget.setLayout(layout)
 
-            # Add to list
             item.setSizeHint(widget.sizeHint())
             self.additional_columns_list.addItem(item)
             self.additional_columns_list.setItemWidget(item, widget)
@@ -881,16 +774,11 @@ class ColumnConfigDialog(QDialog):
                 logger.debug("No client config found")
                 return
 
-            # Get existing additional columns configuration
             existing_additional = client_config.get("ui_settings", {}).get("table_view", {}).get("additional_columns", [])
 
             if existing_additional:
-                # Store config
                 self.additional_columns_config = existing_additional
-
-                # Populate the list with existing configuration
                 self._populate_additional_columns_list(existing_additional)
-
                 logger.info(f"Loaded {len(existing_additional)} additional columns from client config")
             else:
                 logger.debug("No additional columns configuration found for this client")
@@ -905,23 +793,19 @@ class ColumnConfigDialog(QDialog):
         csv_name = checkbox.text()
         is_enabled = (state == Qt.CheckState.Checked)
 
-        # Update config
-        for col in self.additional_columns_config:
-            if col["internal_name"] == internal_name:
-                col["enabled"] = is_enabled
-                logger.debug(f"Toggled '{csv_name}' ({internal_name}): enabled={is_enabled}")
-                break
+        col = next((c for c in self.additional_columns_config if c["internal_name"] == internal_name), None)
+        if col:
+            col["enabled"] = is_enabled
+            logger.debug(f"Toggled '{csv_name}' ({internal_name}): enabled={is_enabled}")
 
     def _on_order_level_toggled(self, state):
         """Handle order-level checkbox state change."""
         checkbox = self.sender()
         internal_name = checkbox.property("internal_name")
 
-        # Update config
-        for col in self.additional_columns_config:
-            if col["internal_name"] == internal_name:
-                col["is_order_level"] = (state == Qt.CheckState.Checked)
-                break
+        col = next((c for c in self.additional_columns_config if c["internal_name"] == internal_name), None)
+        if col:
+            col["is_order_level"] = (state == Qt.CheckState.Checked)
 
     def _on_enable_all_additional(self):
         """Enable all additional columns that exist in current CSV."""
@@ -937,15 +821,10 @@ class ColumnConfigDialog(QDialog):
         self._populate_additional_columns_list(self.additional_columns_config)
 
     def _sync_ui_to_config(self):
-        """Sync current UI checkbox states back to self.additional_columns_config.
-
-        This is called before scanning CSV again, so that user's checkbox changes
-        are not lost when the list is regenerated.
-        """
+        """Sync current UI checkbox states back to self.additional_columns_config."""
         if not hasattr(self, 'additional_columns_config') or not self.additional_columns_config:
             return
 
-        # Build a map of current checkbox states from UI
         ui_states = {}
 
         for i in range(self.additional_columns_list.count()):
@@ -955,11 +834,10 @@ class ColumnConfigDialog(QDialog):
             if widget is None:
                 continue
 
-            # Find checkboxes in the widget
             checkboxes = widget.findChildren(QCheckBox)
             if len(checkboxes) >= 2:
-                main_checkbox = checkboxes[0]  # Column name checkbox
-                order_level_checkbox = checkboxes[1]  # Order-Level checkbox
+                main_checkbox = checkboxes[0]
+                order_level_checkbox = checkboxes[1]
 
                 internal_name = main_checkbox.property("internal_name")
                 if internal_name:
@@ -968,7 +846,6 @@ class ColumnConfigDialog(QDialog):
                         "is_order_level": order_level_checkbox.isChecked()
                     }
 
-        # Update config with UI states
         changes_count = 0
         for col in self.additional_columns_config:
             internal_name = col["internal_name"]
@@ -987,3 +864,75 @@ class ColumnConfigDialog(QDialog):
             logger.debug(f"Synced {changes_count} checkbox state changes from UI")
 
         logger.debug(f"Synced UI state to config: {len(ui_states)} columns updated")
+
+
+class ColumnConfigDialog(QDialog):
+    """Dialog wrapper around ColumnConfigPanel for standalone use."""
+
+    config_applied = Signal()
+
+    def __init__(self, table_config_manager, parent=None, main_window=None):
+        """
+        Initialize the Column Configuration Dialog.
+
+        Args:
+            table_config_manager: TableConfigManager instance
+            parent: Qt parent widget
+            main_window: MainWindow reference (falls back to parent if not given)
+        """
+        super().__init__(parent)
+        self.setWindowTitle("Manage Table Columns")
+        self.setMinimumSize(600, 700)
+        self.setModal(True)
+
+        main_layout = QVBoxLayout(self)
+
+        self.panel = ColumnConfigPanel(table_config_manager, main_window=main_window or parent, parent=self)
+        # Remove the panel's built-in Apply button (dialog has its own)
+        self.panel.apply_button.hide()
+        self.panel.reset_button.hide()
+        main_layout.addWidget(self.panel)
+
+        # Dialog-level buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        self.reset_button = QPushButton("Reset to Default")
+        self.reset_button.setToolTip("Reset all columns to default visibility and order")
+        self.reset_button.clicked.connect(self.panel._on_reset)
+        button_layout.addWidget(self.reset_button)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self._on_cancel)
+        button_layout.addWidget(self.cancel_button)
+
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.setDefault(True)
+        self.apply_button.clicked.connect(self._on_apply)
+        button_layout.addWidget(self.apply_button)
+
+        main_layout.addLayout(button_layout)
+
+        # Close dialog when panel successfully applies
+        self.panel.config_applied.connect(self._on_panel_applied)
+
+    def __getattr__(self, name):
+        """Proxy attribute lookups to the embedded panel for backwards compatibility."""
+        panel = self.__dict__.get('panel')
+        if panel is not None and hasattr(panel, name):
+            return getattr(panel, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    def _on_panel_applied(self):
+        """Called when panel.config_applied is emitted."""
+        self.config_applied.emit()
+        self.accept()
+
+    def _on_apply(self):
+        """Trigger panel apply (dialog will close via signal)."""
+        self.panel.apply_config()
+
+    def _on_cancel(self):
+        """Cancel changes and restore original view."""
+        self.panel.revert_config()
+        self.reject()

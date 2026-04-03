@@ -612,16 +612,11 @@ class UIManager:
         self.mw.packing_list_button.setToolTip("Generate packing lists based on pre-defined filters.")
         self.mw.stock_export_button = QPushButton("📊 Create Stock Export")
         self.mw.stock_export_button.setToolTip("Generate stock export files for couriers.")
-        self.mw.writeoff_report_button = QPushButton("📦 Create Writeoff Report")
-        self.mw.writeoff_report_button.setToolTip("Generate SKU writeoff report based on Internal Tags.")
-
         self.mw.packing_list_button.setEnabled(False)
         self.mw.stock_export_button.setEnabled(False)
-        self.mw.writeoff_report_button.setEnabled(False)
 
         layout.addWidget(self.mw.packing_list_button)
         layout.addWidget(self.mw.stock_export_button)
-        layout.addWidget(self.mw.writeoff_report_button)
 
         # Add "Open Session Folder" button
         self.mw.open_session_folder_button = QPushButton("📁 Open Session Folder")
@@ -708,17 +703,7 @@ class UIManager:
         self.mw.settings_button.setEnabled(False)
         settings_layout.addWidget(self.mw.settings_button)
 
-        # Tag Categories
-        self.mw.tag_categories_button = QPushButton("🏷️ Tag Categories")
-        self.mw.tag_categories_button.setToolTip("Manage Internal Tags categories")
-        self.mw.tag_categories_button.setEnabled(False)
-        settings_layout.addWidget(self.mw.tag_categories_button)
-
-        # Configure Columns
-        self.mw.configure_columns_button = QPushButton("📊 Configure Columns")
-        self.mw.configure_columns_button.setToolTip("Customize table columns")
-        self.mw.configure_columns_button.setEnabled(False)
-        settings_layout.addWidget(self.mw.configure_columns_button)
+        # (Tag Categories and Configure Columns moved to Settings window tabs)
 
         main_layout.addLayout(settings_layout)
 
@@ -900,8 +885,7 @@ class UIManager:
             from gui.tag_delegate import TagDelegate
 
             tag_categories = self.mw.active_profile_config.get("tag_categories", {})
-            if not hasattr(self.mw, 'tag_delegate') or self.mw.tag_delegate is None:
-                self.mw.tag_delegate = TagDelegate(tag_categories, self.mw)
+            self.mw.tag_delegate = TagDelegate(tag_categories, self.mw)
 
             # Adjust column index for checkbox column if enabled
             col_index = main_df.columns.get_loc("Internal_Tags")
@@ -1018,7 +1002,7 @@ class UIManager:
             if category_id in categories:
                 category_label = categories[category_id].get("label", category_id)
             else:
-                category_label = "Інші"  # Custom/unknown tags
+                category_label = "Others"  # Custom/unknown tags
 
             if category_label not in grouped:
                 grouped[category_label] = []
@@ -1572,16 +1556,16 @@ class UIManager:
         card = QFrame()
         card.setFrameShape(QFrame.StyledPanel)
         card.setFrameShadow(QFrame.Raised)
-        card.setMinimumWidth(80)
+        card.setMinimumWidth(60)
         card_layout = QVBoxLayout(card)
         card_layout.setSpacing(2)
-        card_layout.setContentsMargins(12, 8, 12, 8)
+        card_layout.setContentsMargins(6, 4, 6, 4)
 
         count_lbl = QLabel(count)
         count_lbl.setAlignment(Qt.AlignCenter)
         count_lbl.setStyleSheet(
-            f"font-size: 20px; font-weight: bold; color: white; "
-            f"background-color: {color}; border-radius: 10px; padding: 4px 8px;"
+            f"font-size: 14px; font-weight: bold; color: white; "
+            f"background-color: {color}; border-radius: 8px; padding: 2px 6px;"
         )
 
         tag_lbl = QLabel(tag)
@@ -1642,7 +1626,7 @@ class UIManager:
         courier_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         courier_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         courier_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        courier_hscroll.setMinimumHeight(130)
+        courier_hscroll.setMinimumHeight(90)
 
         courier_container = QWidget()
         self.mw.courier_cards_layout = QHBoxLayout(courier_container)
@@ -1653,7 +1637,12 @@ class UIManager:
         courier_group_layout.addWidget(courier_hscroll)
         layout.addWidget(courier_group)
 
-        # ── 3. Tags Breakdown (Fulfillable) ────────────────────────────────
+        # ── 3 & 4. Tags Breakdown (Fulfillable + Not Fulfillable, side by side) ──
+        tags_row_widget = QWidget()
+        tags_row_layout = QHBoxLayout(tags_row_widget)
+        tags_row_layout.setSpacing(8)
+        tags_row_layout.setContentsMargins(0, 0, 0, 0)
+
         tags_f_group = QGroupBox("🏷️ Fulfillable Tags")
         tags_f_group_layout = QVBoxLayout(tags_f_group)
         tags_f_group_layout.setContentsMargins(8, 8, 8, 8)
@@ -1665,7 +1654,7 @@ class UIManager:
         tags_f_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         tags_f_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         tags_f_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        tags_f_hscroll.setMinimumHeight(130)
+        tags_f_hscroll.setMinimumHeight(90)
 
         tags_f_container = QWidget()
         self.mw.tags_fulfillable_layout = QHBoxLayout(tags_f_container)
@@ -1674,9 +1663,8 @@ class UIManager:
         self.mw.tags_fulfillable_layout.addStretch()
         tags_f_hscroll.setWidget(tags_f_container)
         tags_f_group_layout.addWidget(tags_f_hscroll)
-        layout.addWidget(tags_f_group)
+        tags_row_layout.addWidget(tags_f_group)
 
-        # ── 4. Tags Breakdown (Not Fulfillable) ────────────────────────────
         tags_nf_group = QGroupBox("🏷️ Not Fulfillable Tags")
         tags_nf_group_layout = QVBoxLayout(tags_nf_group)
         tags_nf_group_layout.setContentsMargins(8, 8, 8, 8)
@@ -1688,7 +1676,7 @@ class UIManager:
         tags_nf_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         tags_nf_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         tags_nf_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        tags_nf_hscroll.setMinimumHeight(130)
+        tags_nf_hscroll.setMinimumHeight(90)
 
         tags_nf_container = QWidget()
         self.mw.tags_not_fulfillable_layout = QHBoxLayout(tags_nf_container)
@@ -1697,7 +1685,9 @@ class UIManager:
         self.mw.tags_not_fulfillable_layout.addStretch()
         tags_nf_hscroll.setWidget(tags_nf_container)
         tags_nf_group_layout.addWidget(tags_nf_hscroll)
-        layout.addWidget(tags_nf_group)
+        tags_row_layout.addWidget(tags_nf_group)
+
+        layout.addWidget(tags_row_widget)
 
         # ── 5. SKU Summary ─────────────────────────────────────────────────
         sku_group = QGroupBox("📦 SKU Summary")

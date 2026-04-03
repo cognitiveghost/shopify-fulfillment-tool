@@ -172,7 +172,7 @@ class SettingsWindow(QDialog):
         self.courier_mapping_widgets = []
 
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
-        self.setMinimumSize(900, 750)  # Slightly larger for new tabs
+        self.setMinimumSize(1150, 850)
         self.setModal(True)
 
         main_layout = QVBoxLayout(self)
@@ -187,6 +187,8 @@ class SettingsWindow(QDialog):
         self.create_mappings_tab()
         self.create_sets_tab()  # Sets/Bundles tab
         self.create_weight_tab()  # Volumetric Weight tab
+        self.create_tag_categories_tab()  # Tag Categories tab
+        self.create_column_config_tab()  # Column Configuration tab
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.save_settings)
@@ -198,6 +200,7 @@ class SettingsWindow(QDialog):
         """Generic helper to delete a group box widget and its reference from a list."""
         widget_refs["group_box"].deleteLater()
         ref_list.remove(widget_refs)
+        self._update_rules_count_label()
 
     # Generic helper to delete a row widget and its reference from a list
     def _delete_row_from_list(self, row_widget, ref_list, ref_dict):
@@ -455,9 +458,20 @@ class SettingsWindow(QDialog):
         """Creates the 'Rules' tab for dynamically managing automation rules."""
         tab = QWidget()
         main_layout = QVBoxLayout(tab)
+
+        # Header row with Add button and rule count label
+        header_row = QHBoxLayout()
         add_rule_btn = QPushButton("Add New Rule")
-        add_rule_btn.clicked.connect(lambda: [self.add_rule_widget(), self._update_priority_labels()])
-        main_layout.addWidget(add_rule_btn, 0, Qt.AlignLeft)
+        add_rule_btn.clicked.connect(lambda: [self.add_rule_widget(), self._update_priority_labels(), self._update_rules_count_label()])
+        header_row.addWidget(add_rule_btn)
+        header_row.addStretch()
+        self.rules_count_label = QLabel("")
+        from gui.theme_manager import get_theme_manager
+        theme = get_theme_manager().get_current_theme()
+        self.rules_count_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt;")
+        header_row.addWidget(self.rules_count_label)
+        main_layout.addLayout(header_row)
+
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         main_layout.addWidget(scroll_area)
@@ -468,7 +482,33 @@ class SettingsWindow(QDialog):
         self.tab_widget.addTab(tab, "Rules")
         for rule_config in self.config_data.get("rules", []):
             self.add_rule_widget(rule_config)
-        self._update_priority_labels()  # NEW: Update priority labels after loading rules
+        self._update_priority_labels()
+        self._update_rules_count_label()
+
+    def _update_rules_count_label(self):
+        """Update the rules summary label in the Rules tab header."""
+        if not hasattr(self, 'rules_count_label'):
+            return
+        rules = self.config_data.get("rules", [])
+        article_count = sum(1 for r in rules if r.get("level", "article") == "article")
+        order_count = sum(1 for r in rules if r.get("level") == "order")
+        # Count from live widgets instead if available
+        if hasattr(self, 'rule_widgets'):
+            article_count = 0
+            order_count = 0
+            for rw in self.rule_widgets:
+                level = rw.get("level_combo")
+                if level:
+                    if level.currentText() == "order":
+                        order_count += 1
+                    else:
+                        article_count += 1
+        parts = []
+        if article_count:
+            parts.append(f"{article_count} article rule{'s' if article_count != 1 else ''}")
+        if order_count:
+            parts.append(f"{order_count} order rule{'s' if order_count != 1 else ''}")
+        self.rules_count_label.setText(", ".join(parts) if parts else "No rules defined")
 
     def add_rule_widget(self, config=None):
         """Adds a new group of widgets for creating/editing a single rule.
@@ -1807,6 +1847,13 @@ class SettingsWindow(QDialog):
         help_text.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 10px;")
         main_layout.addWidget(help_text)
 
+        # Search box
+        self.sets_search = QLineEdit()
+        self.sets_search.setPlaceholderText("Search by SKU or components...")
+        self.sets_search.setClearButtonEnabled(True)
+        self.sets_search.textChanged.connect(self._filter_sets_table)
+        main_layout.addWidget(self.sets_search)
+
         # Sets table
         self.sets_table = QTableWidget()
         self.sets_table.setColumnCount(3)
@@ -1907,6 +1954,21 @@ class SettingsWindow(QDialog):
 
             actions_layout.addStretch()
             self.sets_table.setCellWidget(row_idx, 2, actions_widget)
+
+        # Re-apply search filter after repopulate
+        if hasattr(self, 'sets_search'):
+            self._filter_sets_table(self.sets_search.text())
+
+    def _filter_sets_table(self, text: str):
+        """Filter sets table rows by SKU or components text."""
+        text = text.lower().strip()
+        for row in range(self.sets_table.rowCount()):
+            sku_item = self.sets_table.item(row, 0)
+            comp_item = self.sets_table.item(row, 1)
+            sku_text = sku_item.text().lower() if sku_item else ""
+            comp_text = comp_item.text().lower() if comp_item else ""
+            visible = not text or text in sku_text or text in comp_text
+            self.sets_table.setRowHidden(row, not visible)
 
     def _add_set_dialog(self):
         """Show dialog to add a new set."""
@@ -2063,10 +2125,13 @@ class SettingsWindow(QDialog):
 
     # ========================================
     def create_weight_tab(self):
-        """Create the Volumetric Weight management tab."""
+        """Create the Volumetric Weight management tab with sub-tabs for Products and Boxes."""
+        from PySide6.QtWidgets import QTabWidget as _QTabWidget
+
         tab = QWidget()
         main_layout = QVBoxLayout(tab)
-        main_layout.setSpacing(10)
+        main_layout.setSpacing(6)
+        main_layout.setContentsMargins(8, 8, 8, 8)
 
         from gui.theme_manager import get_theme_manager
         theme = get_theme_manager().get_current_theme()
@@ -2077,27 +2142,38 @@ class SettingsWindow(QDialog):
             "boxes": []
         })
 
-        # ---- Global Settings ----
-        global_group = QGroupBox("Global Settings")
-        global_layout = QFormLayout(global_group)
-
+        # ---- Global Settings (compact row) ----
+        global_row = QHBoxLayout()
+        global_row.setContentsMargins(0, 0, 0, 0)
+        div_label = QLabel("Volumetric Divisor (cm³ → kg):")
         self.weight_divisor_spin = QDoubleSpinBox()
         self.weight_divisor_spin.setRange(1, 100000)
         self.weight_divisor_spin.setDecimals(0)
         self.weight_divisor_spin.setValue(float(weight_cfg.get("volumetric_divisor", 6000)))
+        self.weight_divisor_spin.setFixedWidth(100)
         self.weight_divisor_spin.setToolTip(
             "Volumetric weight formula: L × W × H / divisor\n"
             "6000 = DPD/Speedy standard (cm³ → kg)\n"
             "5000 = DHL/FedEx standard"
         )
-        global_layout.addRow("Volumetric Divisor (cm³ → kg):", self.weight_divisor_spin)
-        main_layout.addWidget(global_group)
+        hint = QLabel("(6000 = DPD/Speedy · 5000 = DHL/FedEx)")
+        hint.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt;")
+        global_row.addWidget(div_label)
+        global_row.addWidget(self.weight_divisor_spin)
+        global_row.addWidget(hint)
+        global_row.addStretch()
+        main_layout.addLayout(global_row)
 
-        # ---- Products Section ----
-        products_group = QGroupBox("Products (SKU Dimensions)")
-        products_layout = QVBoxLayout(products_group)
+        # ---- Sub-tabs: Products | Boxes ----
+        weight_sub_tabs = _QTabWidget()
+        weight_sub_tabs.setDocumentMode(True)
 
-        # Toolbar
+        # --- Products sub-tab ---
+        products_tab = QWidget()
+        products_layout = QVBoxLayout(products_tab)
+        products_layout.setContentsMargins(4, 6, 4, 4)
+        products_layout.setSpacing(4)
+
         prod_toolbar = QHBoxLayout()
         import_sku_btn = QPushButton("Import from Stock CSV")
         import_sku_btn.setToolTip("Load SKUs from the current stock CSV file")
@@ -2120,7 +2196,12 @@ class SettingsWindow(QDialog):
         prod_toolbar.addStretch()
         products_layout.addLayout(prod_toolbar)
 
-        # Table: SKU | Name | L(cm) | W(cm) | H(cm) | Vol.Weight | No Packaging
+        self.products_search = QLineEdit()
+        self.products_search.setPlaceholderText("Search by SKU or name...")
+        self.products_search.setClearButtonEnabled(True)
+        self.products_search.textChanged.connect(self._filter_products_table)
+        products_layout.addWidget(self.products_search)
+
         self.weight_products_table = QTableWidget(0, 7)
         self.weight_products_table.setHorizontalHeaderLabels([
             "SKU", "Name", "L (cm)", "W (cm)", "H (cm)", "Vol. Weight (kg)", "No Packaging"
@@ -2133,17 +2214,18 @@ class SettingsWindow(QDialog):
         self.weight_products_table.setColumnWidth(5, 110)
         self.weight_products_table.setColumnWidth(6, 100)
         self.weight_products_table.setAlternatingRowColors(True)
-        self.weight_products_table.setMinimumHeight(200)
-        # Recalculate vol weight when dimensions change
         self.weight_products_table.cellChanged.connect(
             lambda row, col: self._weight_recalc_vol_weight(self.weight_products_table, row, col, [2, 3, 4])
         )
         products_layout.addWidget(self.weight_products_table)
-        main_layout.addWidget(products_group)
 
-        # ---- Boxes Section ----
-        boxes_group = QGroupBox("Boxes (Packaging Reference)")
-        boxes_layout = QVBoxLayout(boxes_group)
+        weight_sub_tabs.addTab(products_tab, "Products (SKU Dimensions)")
+
+        # --- Boxes sub-tab ---
+        boxes_tab = QWidget()
+        boxes_layout = QVBoxLayout(boxes_tab)
+        boxes_layout.setContentsMargins(4, 6, 4, 4)
+        boxes_layout.setSpacing(4)
 
         box_toolbar = QHBoxLayout()
         import_box_btn = QPushButton("Import CSV")
@@ -2163,7 +2245,12 @@ class SettingsWindow(QDialog):
         box_toolbar.addStretch()
         boxes_layout.addLayout(box_toolbar)
 
-        # Table: Name | L(cm) | W(cm) | H(cm) | Vol.Weight
+        self.boxes_search = QLineEdit()
+        self.boxes_search.setPlaceholderText("Search by box name...")
+        self.boxes_search.setClearButtonEnabled(True)
+        self.boxes_search.textChanged.connect(self._filter_boxes_table)
+        boxes_layout.addWidget(self.boxes_search)
+
         self.weight_boxes_table = QTableWidget(0, 5)
         self.weight_boxes_table.setHorizontalHeaderLabels([
             "Box Name", "L (cm)", "W (cm)", "H (cm)", "Vol. Weight (kg)"
@@ -2174,24 +2261,23 @@ class SettingsWindow(QDialog):
         self.weight_boxes_table.setColumnWidth(3, 70)
         self.weight_boxes_table.setColumnWidth(4, 110)
         self.weight_boxes_table.setAlternatingRowColors(True)
-        self.weight_boxes_table.setMinimumHeight(150)
         self.weight_boxes_table.cellChanged.connect(
             lambda row, col: self._weight_recalc_vol_weight(self.weight_boxes_table, row, col, [1, 2, 3])
         )
         boxes_layout.addWidget(self.weight_boxes_table)
-        main_layout.addWidget(boxes_group)
 
-        tips = QLabel(
-            "Volumetric weight = L × W × H / Divisor\n"
-            "No Packaging: orders where ALL items have this flag will skip box selection\n"
-            "order_min_box — smallest box that physically fits all items (e.g. 'S', 'M', 'L')\n"
-            "Possible values: box name / NO_BOX_NEEDED / NO_BOX_FITS / UNKNOWN_DIMS"
+        tips_box = QLabel(
+            "Volumetric weight = L × W × H / Divisor · "
+            "No Packaging skips box selection · "
+            "Values: box name / NO_BOX_NEEDED / NO_BOX_FITS / UNKNOWN_DIMS"
         )
-        tips.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; margin-top: 5px;")
-        tips.setWordWrap(True)
-        main_layout.addWidget(tips)
-        main_layout.addStretch()
+        tips_box.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt;")
+        tips_box.setWordWrap(True)
+        boxes_layout.addWidget(tips_box)
 
+        weight_sub_tabs.addTab(boxes_tab, "Boxes (Packaging Reference)")
+
+        main_layout.addWidget(weight_sub_tabs, 1)
         self.tab_widget.addTab(tab, "Weight")
 
         # Populate with existing data
@@ -2250,6 +2336,8 @@ class SettingsWindow(QDialog):
             chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.weight_products_table.setCellWidget(row, 6, chk_widget)
         self.weight_products_table.blockSignals(False)
+        if hasattr(self, 'products_search'):
+            self._filter_products_table(self.products_search.text())
 
     def _weight_populate_boxes(self, boxes: list):
         """Fill boxes table from config list."""
@@ -2272,6 +2360,28 @@ class SettingsWindow(QDialog):
             vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.weight_boxes_table.setItem(row, 4, vol_item)
         self.weight_boxes_table.blockSignals(False)
+        if hasattr(self, 'boxes_search'):
+            self._filter_boxes_table(self.boxes_search.text())
+
+    def _filter_products_table(self, text: str):
+        """Filter products table rows by SKU or name."""
+        text = text.lower().strip()
+        for row in range(self.weight_products_table.rowCount()):
+            sku_item = self.weight_products_table.item(row, 0)
+            name_item = self.weight_products_table.item(row, 1)
+            sku_text = sku_item.text().lower() if sku_item else ""
+            name_text = name_item.text().lower() if name_item else ""
+            visible = not text or text in sku_text or text in name_text
+            self.weight_products_table.setRowHidden(row, not visible)
+
+    def _filter_boxes_table(self, text: str):
+        """Filter boxes table rows by box name."""
+        text = text.lower().strip()
+        for row in range(self.weight_boxes_table.rowCount()):
+            name_item = self.weight_boxes_table.item(row, 0)
+            name_text = name_item.text().lower() if name_item else ""
+            visible = not text or text in name_text
+            self.weight_boxes_table.setRowHidden(row, not visible)
 
     def _weight_add_product_row(self):
         """Add a blank product row to the products table."""
@@ -3014,6 +3124,17 @@ class SettingsWindow(QDialog):
             self.config_data["weight_config"] = self._weight_collect_config()
 
             # ========================================
+            # Tag Categories Tab
+            # ========================================
+            if hasattr(self, 'tag_categories_panel'):
+                is_valid, errors = self.tag_categories_panel.validate_categories()
+                if not is_valid:
+                    error_msg = "Tag Categories validation errors:\n\n" + "\n".join(f"- {err}" for err in errors)
+                    QMessageBox.warning(self, "Tag Categories Invalid", error_msg)
+                    return
+                self.config_data["tag_categories"] = self.tag_categories_panel.get_categories()
+
+            # ========================================
             # Save to server via ProfileManager
             # ========================================
             success = self.profile_manager.save_shopify_config(
@@ -3060,6 +3181,64 @@ class SettingsWindow(QDialog):
                 "Error",
                 f"Failed to save settings:\n\n{str(e)}\n\n{traceback.format_exc()}"
             )
+    # ========================================
+    # TAG CATEGORIES TAB
+    # ========================================
+    def create_tag_categories_tab(self):
+        """Create the Tag Categories management tab."""
+        from gui.tag_categories_dialog import TagCategoriesPanel
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
+
+        tag_categories = self.config_data.get("tag_categories", {"version": 2, "categories": {}})
+        self.tag_categories_panel = TagCategoriesPanel(tag_categories, parent=tab)
+        layout.addWidget(self.tag_categories_panel)
+
+        self.tab_widget.addTab(tab, "Tag Categories")
+
+    # ========================================
+    # COLUMN CONFIGURATION TAB
+    # ========================================
+    def create_column_config_tab(self):
+        """Create the Column Configuration tab (embedded ColumnConfigPanel)."""
+        from gui.column_config_dialog import ColumnConfigPanel
+
+        main_window = self.parent()
+        if main_window is None or not hasattr(main_window, 'table_config_manager'):
+            tab = QWidget()
+            layout = QVBoxLayout(tab)
+            layout.addWidget(QLabel("Column configuration is not available in this context."))
+            self.tab_widget.addTab(tab, "Column Config")
+            return
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        header_label = QLabel("📋 Column Configuration")
+        header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
+        layout.addWidget(header_label)
+
+        from gui.theme_manager import get_theme_manager
+        theme = get_theme_manager().get_current_theme()
+        help_text = QLabel(
+            "Configure which columns are visible in the analysis table, their order, and saved views."
+        )
+        help_text.setWordWrap(True)
+        help_text.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 6px;")
+        layout.addWidget(help_text)
+
+        self.column_config_panel = ColumnConfigPanel(
+            main_window.table_config_manager,
+            main_window=main_window,
+            parent=tab
+        )
+        layout.addWidget(self.column_config_panel)
+
+        self.tab_widget.addTab(tab, "Column Config")
 
 
 # ========================================

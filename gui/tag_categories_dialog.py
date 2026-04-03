@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QWidget, QFormLayout, QSpinBox,
     QDialogButtonBox, QMessageBox, QColorDialog, QSplitter, QGroupBox,
     QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QDoubleSpinBox, QComboBox
+    QDoubleSpinBox, QComboBox, QInputDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
@@ -22,27 +22,18 @@ from gui.theme_manager import get_theme_manager
 logger = logging.getLogger(__name__)
 
 
-class TagCategoriesDialog(QDialog):
-    """Dialog for managing tag categories (v2 format)."""
+class TagCategoriesPanel(QWidget):
+    """Embeddable panel for managing tag categories (v2 format).
 
-    # Signal emitted when categories are saved
+    Can be used standalone inside a QDialog or embedded directly into
+    a QTabWidget (e.g., SettingsWindow).
+    """
+
     categories_updated = Signal(dict)
 
     def __init__(self, tag_categories: Dict, parent=None):
-        """
-        Initialize Tag Categories Dialog.
-
-        Args:
-            tag_categories: Tag categories dict (v2 format expected)
-            parent: Parent widget
-        """
         super().__init__(parent)
-        self.setWindowTitle("Tag Categories Management")
-        self.setModal(True)
-        self.setMinimumSize(900, 600)
 
-        # Store original and working copy
-        self.original_categories = tag_categories.copy()
         self.working_categories = tag_categories.copy()
 
         # Ensure v2 format
@@ -55,51 +46,31 @@ class TagCategoriesDialog(QDialog):
         self.current_category_id: Optional[str] = None
         self.modified = False
 
-        # Store theme for use across methods
         self.theme = get_theme_manager().get_current_theme()
 
         self._init_ui()
         self._load_categories()
 
-        # Listen for theme changes
-        theme_manager = get_theme_manager()
-        theme_manager.theme_changed.connect(self._on_theme_changed)
+        get_theme_manager().theme_changed.connect(self._on_theme_changed)
 
     def _init_ui(self):
-        """Initialize the user interface."""
+        """Initialize the panel UI (splitter layout, no dialog buttons)."""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        # Title
-        title_label = QLabel("Manage Tag Categories")
-        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; padding: 10px;")
-        layout.addWidget(title_label)
-
-        # Create splitter for two-panel layout
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left panel: Categories list
         left_panel = self._create_categories_list_panel()
         splitter.addWidget(left_panel)
 
-        # Right panel: Category editor
         right_panel = self._create_category_editor_panel()
         splitter.addWidget(right_panel)
 
-        # Set initial splitter sizes (30% left, 70% right)
-        splitter.setSizes([270, 630])
+        splitter.setSizes([320, 780])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
 
-        layout.addWidget(splitter)
-
-        # Button box
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Save | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
-        )
-        button_box.accepted.connect(self._on_save)
-        button_box.rejected.connect(self._on_cancel)
-        button_box.button(QDialogButtonBox.Apply).clicked.connect(self._on_apply)
-        layout.addWidget(button_box)
-
-        self.button_box = button_box
+        layout.addWidget(splitter, 1)
 
     def _create_categories_list_panel(self) -> QWidget:
         """Create left panel with categories list."""
@@ -107,17 +78,14 @@ class TagCategoriesDialog(QDialog):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Header
         header_label = QLabel("Categories")
         header_label.setStyleSheet("font-weight: bold; font-size: 11pt; padding: 5px;")
         layout.addWidget(header_label)
 
-        # List widget
         self.categories_list = QListWidget()
         self.categories_list.currentItemChanged.connect(self._on_category_selected)
         layout.addWidget(self.categories_list)
 
-        # Buttons
         buttons_layout = QHBoxLayout()
 
         self.new_category_btn = QPushButton("+ New")
@@ -141,15 +109,12 @@ class TagCategoriesDialog(QDialog):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Header
         self.editor_header_label = QLabel("Category Editor")
         self.editor_header_label.setStyleSheet("font-weight: bold; font-size: 11pt; padding: 5px;")
         layout.addWidget(self.editor_header_label)
 
-        # Form layout for category fields
         form_layout = QFormLayout()
 
-        # Category ID (read-only for existing, editable for new)
         self.category_id_input = QLineEdit()
         self.category_id_input.setPlaceholderText("e.g., my_category")
         self.category_id_input.setToolTip(
@@ -159,14 +124,12 @@ class TagCategoriesDialog(QDialog):
         self.category_id_input.textChanged.connect(self._on_editor_changed)
         form_layout.addRow("Category ID:", self.category_id_input)
 
-        # Display Label
         self.label_input = QLineEdit()
         self.label_input.setPlaceholderText("e.g., My Category")
         self.label_input.setToolTip("Display name for this category")
         self.label_input.textChanged.connect(self._on_editor_changed)
         form_layout.addRow("Display Label:", self.label_input)
 
-        # Color picker
         color_layout = QHBoxLayout()
         self.color_display = QLabel()
         self.color_display.setFixedSize(40, 30)
@@ -181,7 +144,6 @@ class TagCategoriesDialog(QDialog):
         self.current_color = "#9E9E9E"
         form_layout.addRow("Color:", color_layout)
 
-        # Display Order
         self.order_spin = QSpinBox()
         self.order_spin.setMinimum(1)
         self.order_spin.setMaximum(999)
@@ -196,12 +158,10 @@ class TagCategoriesDialog(QDialog):
         tags_group = QGroupBox("Tags")
         tags_layout = QVBoxLayout(tags_group)
 
-        # Tags list
         self.tags_list = QListWidget()
         self.tags_list.setMaximumHeight(150)
         tags_layout.addWidget(self.tags_list)
 
-        # Add/Remove tag buttons
         tag_buttons_layout = QHBoxLayout()
 
         self.add_tag_btn = QPushButton("+ Add Tag")
@@ -227,7 +187,6 @@ class TagCategoriesDialog(QDialog):
         writeoff_group = QGroupBox("SKU Writeoff")
         writeoff_layout = QVBoxLayout(writeoff_group)
 
-        # Enable checkbox
         self.writeoff_enabled_checkbox = QCheckBox("Enable writeoff for this category")
         self.writeoff_enabled_checkbox.setToolTip(
             "When enabled, tags in this category can trigger automatic SKU writeoffs\n"
@@ -236,7 +195,6 @@ class TagCategoriesDialog(QDialog):
         self.writeoff_enabled_checkbox.stateChanged.connect(self._on_writeoff_enabled_changed)
         writeoff_layout.addWidget(self.writeoff_enabled_checkbox)
 
-        # Mappings table
         mappings_label = QLabel("Writeoff Mappings:")
         mappings_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
         writeoff_layout.addWidget(mappings_label)
@@ -249,13 +207,12 @@ class TagCategoriesDialog(QDialog):
         self.writeoff_mappings_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.writeoff_mappings_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.writeoff_mappings_table.setMaximumHeight(200)
-        self.writeoff_mappings_table.setEnabled(False)  # Disabled until checkbox is checked
+        self.writeoff_mappings_table.setEnabled(False)
         self.writeoff_mappings_table.itemSelectionChanged.connect(
             self._update_remove_mapping_btn_state
         )
         writeoff_layout.addWidget(self.writeoff_mappings_table)
 
-        # Buttons
         mappings_buttons = QHBoxLayout()
         self.add_mapping_btn = QPushButton("+ Add Mapping")
         self.add_mapping_btn.clicked.connect(self._on_add_mapping)
@@ -273,10 +230,19 @@ class TagCategoriesDialog(QDialog):
 
         layout.addStretch()
 
-        # Initially disable editor
         self._set_editor_enabled(False)
 
         return panel
+
+    # ------------------------------------------------------------------
+    # Data management
+    # ------------------------------------------------------------------
+
+    def get_categories(self) -> Dict:
+        """Return the current working categories dict (including pending edits)."""
+        if self.current_category_id:
+            self._save_editor_to_working_copy()
+        return self.working_categories
 
     def _load_categories(self):
         """Load categories into the list widget."""
@@ -284,7 +250,6 @@ class TagCategoriesDialog(QDialog):
 
         categories = self.working_categories.get("categories", {})
 
-        # Sort by order
         sorted_categories = sorted(
             categories.items(),
             key=lambda x: x[1].get("order", 999)
@@ -293,11 +258,14 @@ class TagCategoriesDialog(QDialog):
         for category_id, category_config in sorted_categories:
             item = QListWidgetItem(category_config.get("label", category_id))
             item.setData(Qt.UserRole, category_id)
-
-            # Show color indicator
             color = category_config.get("color", "#9E9E9E")
-            item.setBackground(QColor(color).lighter(180))
-
+            _cat = QColor(color)
+            _bg = QColor(get_theme_manager().get_current_theme().background)
+            item.setBackground(QColor(
+                int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+            ))
             self.categories_list.addItem(item)
 
     def _on_category_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
@@ -310,7 +278,6 @@ class TagCategoriesDialog(QDialog):
         category_id = current.data(Qt.UserRole)
         self.current_category_id = category_id
 
-        # Load category into editor
         self._load_category_into_editor(category_id)
         self._set_editor_enabled(True)
         self.delete_category_btn.setEnabled(True)
@@ -320,43 +287,36 @@ class TagCategoriesDialog(QDialog):
         categories = self.working_categories.get("categories", {})
         category = categories.get(category_id, {})
 
-        # Block signals while loading
         self.category_id_input.blockSignals(True)
         self.label_input.blockSignals(True)
         self.order_spin.blockSignals(True)
 
-        # Load fields
         self.category_id_input.setText(category_id)
-        self.category_id_input.setReadOnly(True)  # Cannot change ID for existing
+        self.category_id_input.setReadOnly(True)
 
         self.label_input.setText(category.get("label", ""))
         self.current_color = category.get("color", "#9E9E9E")
         self.color_display.setStyleSheet(f"border: 1px solid {self.theme.border}; background-color: {self.current_color};")
         self.order_spin.setValue(category.get("order", 1))
 
-        # Load tags
         self.tags_list.clear()
         for tag in category.get("tags", []):
             self.tags_list.addItem(tag)
 
-        # Unblock signals
         self.category_id_input.blockSignals(False)
         self.label_input.blockSignals(False)
         self.order_spin.blockSignals(False)
 
-        # Load writeoff configuration
         sku_writeoff = category.get("sku_writeoff", {"enabled": False, "mappings": {}})
 
         self.writeoff_enabled_checkbox.blockSignals(True)
 
-        # Load enabled state
         enabled = sku_writeoff.get("enabled", False)
         self.writeoff_enabled_checkbox.setChecked(enabled)
         self.writeoff_mappings_table.setEnabled(enabled)
         self.add_mapping_btn.setEnabled(enabled)
         self.remove_mapping_btn.setEnabled(False)
 
-        # Load mappings
         self.writeoff_mappings_table.setRowCount(0)
         mappings = sku_writeoff.get("mappings", {})
 
@@ -378,13 +338,11 @@ class TagCategoriesDialog(QDialog):
 
         self.writeoff_enabled_checkbox.blockSignals(False)
 
-        # Update header
         self.editor_header_label.setText(f"Editing: {category.get('label', category_id)}")
 
     def _on_theme_changed(self):
         """Handle theme changes."""
         self.theme = get_theme_manager().get_current_theme()
-        # Update color display if editor is active
         if self.current_category_id:
             self.color_display.setStyleSheet(
                 f"border: 1px solid {self.theme.border}; background-color: {self.current_color};"
@@ -399,7 +357,6 @@ class TagCategoriesDialog(QDialog):
         self.tags_list.setEnabled(enabled)
         self.add_tag_btn.setEnabled(enabled)
 
-        # Enable writeoff controls based on overall enabled state AND checkbox state
         self.writeoff_enabled_checkbox.setEnabled(enabled)
         if enabled and self.writeoff_enabled_checkbox.isChecked():
             self.writeoff_mappings_table.setEnabled(True)
@@ -421,8 +378,6 @@ class TagCategoriesDialog(QDialog):
         """Handle editor field changes."""
         if not self.current_category_id:
             return
-
-        # Save changes to working copy
         self._save_editor_to_working_copy()
         self.modified = True
 
@@ -432,25 +387,19 @@ class TagCategoriesDialog(QDialog):
             return
 
         categories = self.working_categories.setdefault("categories", {})
-
-        # Get or create category
         category = categories.setdefault(self.current_category_id, {})
 
-        # Update fields
         category["label"] = self.label_input.text()
         category["color"] = self.current_color
         category["order"] = self.order_spin.value()
 
-        # Update tags
         tags = []
         for i in range(self.tags_list.count()):
             tags.append(self.tags_list.item(i).text())
         category["tags"] = tags
 
-        # Save writeoff configuration
         enabled = self.writeoff_enabled_checkbox.isChecked()
 
-        # Extract mappings from table
         mappings = {}
         for row in range(self.writeoff_mappings_table.rowCount()):
             tag_item = self.writeoff_mappings_table.item(row, 0)
@@ -483,11 +432,16 @@ class TagCategoriesDialog(QDialog):
             "mappings": mappings
         }
 
-        # Update list item
         current_item = self.categories_list.currentItem()
         if current_item:
             current_item.setText(category["label"])
-            current_item.setBackground(QColor(self.current_color).lighter(180))
+            _cat = QColor(self.current_color)
+            _bg = QColor(get_theme_manager().get_current_theme().background)
+            current_item.setBackground(QColor(
+                int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+            ))
 
     def _choose_color(self):
         """Open color picker dialog."""
@@ -506,8 +460,6 @@ class TagCategoriesDialog(QDialog):
 
     def _on_add_tag(self):
         """Handle add tag button click."""
-        from PySide6.QtWidgets import QInputDialog
-
         tag, ok = QInputDialog.getText(
             self,
             "Add Tag",
@@ -523,13 +475,11 @@ class TagCategoriesDialog(QDialog):
                 QMessageBox.warning(self, "Invalid Tag", "Tag cannot be empty.")
                 return
 
-            # Check for duplicates in current category
             existing_tags = [self.tags_list.item(i).text() for i in range(self.tags_list.count())]
             if tag in existing_tags:
                 QMessageBox.warning(self, "Duplicate Tag", f"Tag '{tag}' already exists in this category.")
                 return
 
-            # Check for duplicates in other categories
             if self._is_tag_in_other_categories(tag):
                 QMessageBox.warning(
                     self,
@@ -539,7 +489,6 @@ class TagCategoriesDialog(QDialog):
                 )
                 return
 
-            # Add tag
             self.tags_list.addItem(tag)
             self._on_editor_changed()
 
@@ -561,14 +510,13 @@ class TagCategoriesDialog(QDialog):
         for category_id, category_config in categories.items():
             if category_id == self.current_category_id:
                 continue
-
             if tag in category_config.get("tags", []):
                 return True
 
         return False
 
     def _update_remove_mapping_btn_state(self):
-        """Update remove mapping button enabled state based on selection and checkbox."""
+        """Update remove mapping button enabled state."""
         enabled = self.writeoff_enabled_checkbox.isChecked()
         has_selection = len(self.writeoff_mappings_table.selectedItems()) > 0
         self.remove_mapping_btn.setEnabled(enabled and has_selection)
@@ -581,7 +529,6 @@ class TagCategoriesDialog(QDialog):
         self.add_mapping_btn.setEnabled(enabled)
         self._update_remove_mapping_btn_state()
 
-        # Mark as modified
         self._on_editor_changed()
 
     def _on_add_mapping(self):
@@ -589,7 +536,6 @@ class TagCategoriesDialog(QDialog):
         if not self.current_category_id:
             return
 
-        # Get current category tags
         categories = self.working_categories.get("categories", {})
         category = categories.get(self.current_category_id, {})
         available_tags = category.get("tags", [])
@@ -602,22 +548,18 @@ class TagCategoriesDialog(QDialog):
             )
             return
 
-        # Custom dialog for mapping input
         dialog = QDialog(self)
         dialog.setWindowTitle("Add Writeoff Mapping")
         dialog_layout = QFormLayout(dialog)
 
-        # Tag selector
         tag_combo = QComboBox()
         tag_combo.addItems(available_tags)
         dialog_layout.addRow("Tag:", tag_combo)
 
-        # SKU input
         sku_input = QLineEdit()
         sku_input.setPlaceholderText("e.g., PKG-BOX-SMALL")
         dialog_layout.addRow("SKU:", sku_input)
 
-        # Quantity spinner
         quantity_spin = QDoubleSpinBox()
         quantity_spin.setMinimum(0.01)
         quantity_spin.setMaximum(999.99)
@@ -625,7 +567,6 @@ class TagCategoriesDialog(QDialog):
         quantity_spin.setValue(1.0)
         dialog_layout.addRow("Quantity:", quantity_spin)
 
-        # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
@@ -640,7 +581,6 @@ class TagCategoriesDialog(QDialog):
                 QMessageBox.warning(self, "Invalid Input", "SKU cannot be empty.")
                 return
 
-            # Add row to table
             row_position = self.writeoff_mappings_table.rowCount()
             self.writeoff_mappings_table.insertRow(row_position)
 
@@ -657,7 +597,6 @@ class TagCategoriesDialog(QDialog):
         if not selected_rows:
             return
 
-        # Remove in reverse order to avoid index shifting
         for row in sorted(selected_rows, reverse=True):
             self.writeoff_mappings_table.removeRow(row)
 
@@ -665,8 +604,6 @@ class TagCategoriesDialog(QDialog):
 
     def _on_new_category(self):
         """Handle new category button click."""
-        from PySide6.QtWidgets import QInputDialog
-
         category_id, ok = QInputDialog.getText(
             self,
             "New Category",
@@ -680,7 +617,6 @@ class TagCategoriesDialog(QDialog):
 
         category_id = category_id.strip().lower()
 
-        # Validate ID
         if not category_id:
             QMessageBox.warning(self, "Invalid ID", "Category ID cannot be empty.")
             return
@@ -693,13 +629,11 @@ class TagCategoriesDialog(QDialog):
             )
             return
 
-        # Check for duplicates
         categories = self.working_categories.get("categories", {})
         if category_id in categories:
             QMessageBox.warning(self, "Duplicate ID", f"Category '{category_id}' already exists.")
             return
 
-        # Create new category
         new_category = {
             "label": category_id.replace("_", " ").title(),
             "color": "#9E9E9E",
@@ -714,10 +648,8 @@ class TagCategoriesDialog(QDialog):
         categories[category_id] = new_category
         self.modified = True
 
-        # Reload list and select new category
         self._load_categories()
 
-        # Find and select new item
         for i in range(self.categories_list.count()):
             item = self.categories_list.item(i)
             if item.data(Qt.UserRole) == category_id:
@@ -732,7 +664,6 @@ class TagCategoriesDialog(QDialog):
         categories = self.working_categories.get("categories", {})
         category = categories.get(self.current_category_id, {})
 
-        # Confirm deletion
         reply = QMessageBox.question(
             self,
             "Delete Category",
@@ -746,53 +677,79 @@ class TagCategoriesDialog(QDialog):
             del categories[self.current_category_id]
             self.modified = True
 
-            # Clear selection and reload
             self.current_category_id = None
             self._load_categories()
             self._set_editor_enabled(False)
             self.delete_category_btn.setEnabled(False)
 
-    def _validate_categories(self) -> bool:
-        """Validate current categories configuration."""
-        # Save current editor state first
+    def validate_categories(self) -> tuple:
+        """Validate current categories. Returns (is_valid, errors)."""
         if self.current_category_id:
             self._save_editor_to_working_copy()
+        return validate_tag_categories_v2(self.working_categories)
 
-        # Validate using tag_manager validator
-        is_valid, errors = validate_tag_categories_v2(self.working_categories)
 
+class TagCategoriesDialog(QDialog):
+    """Dialog wrapper around TagCategoriesPanel for standalone use."""
+
+    categories_updated = Signal(dict)
+
+    def __init__(self, tag_categories: Dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Tag Categories Management")
+        self.setModal(True)
+        self.setMinimumSize(900, 600)
+
+        layout = QVBoxLayout(self)
+
+        title_label = QLabel("Manage Tag Categories")
+        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; padding: 10px;")
+        layout.addWidget(title_label)
+
+        self.panel = TagCategoriesPanel(tag_categories, parent=self)
+        layout.addWidget(self.panel)
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Save | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
+        )
+        button_box.accepted.connect(self._on_save)
+        button_box.rejected.connect(self._on_cancel)
+        button_box.button(QDialogButtonBox.Apply).clicked.connect(self._on_apply)
+        layout.addWidget(button_box)
+
+        self.button_box = button_box
+
+    def __getattr__(self, name):
+        """Proxy attribute lookups to the embedded panel for backwards compatibility."""
+        # Avoid infinite recursion during __init__ before self.panel exists
+        panel = self.__dict__.get('panel')
+        if panel is not None and hasattr(panel, name):
+            return getattr(panel, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    def _validate(self) -> bool:
+        is_valid, errors = self.panel.validate_categories()
         if not is_valid:
             error_msg = "Validation errors:\n\n" + "\n".join(f"- {err}" for err in errors)
             QMessageBox.critical(self, "Validation Failed", error_msg)
             return False
-
         return True
 
     def _on_apply(self):
-        """Handle Apply button click (save without closing)."""
-        if not self._validate_categories():
+        if not self._validate():
             return
-
-        self.categories_updated.emit(self.working_categories)
-        self.modified = False
-
-        QMessageBox.information(
-            self,
-            "Saved",
-            "Tag categories have been saved successfully."
-        )
+        self.categories_updated.emit(self.panel.get_categories())
+        self.panel.modified = False
+        QMessageBox.information(self, "Saved", "Tag categories have been saved successfully.")
 
     def _on_save(self):
-        """Handle Save button click (save and close)."""
-        if not self._validate_categories():
+        if not self._validate():
             return
-
-        self.categories_updated.emit(self.working_categories)
+        self.categories_updated.emit(self.panel.get_categories())
         self.accept()
 
     def _on_cancel(self):
-        """Handle Cancel button click."""
-        if self.modified:
+        if self.panel.modified:
             reply = QMessageBox.question(
                 self,
                 "Unsaved Changes",
@@ -800,12 +757,10 @@ class TagCategoriesDialog(QDialog):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
-
             if reply == QMessageBox.No:
                 return
-
         self.reject()
 
     def get_categories(self) -> Dict:
         """Get the current categories configuration."""
-        return self.working_categories
+        return self.panel.get_categories()

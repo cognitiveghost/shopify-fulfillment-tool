@@ -480,10 +480,27 @@ class ActionsHandler(QObject):
             )
             return
 
-        # Open selection dialog
-        from gui.report_selection_dialog import ReportSelectionDialog
+        # Open selection dialog (new preview-enabled dialogs)
+        analysis_df = self.mw.analysis_results_df
 
-        dialog = ReportSelectionDialog(report_type, report_configs, self.mw)
+        if report_type == "packing_lists":
+            from gui.report_selection_dialog import PackingListDialog
+            dialog = PackingListDialog(
+                report_configs,
+                analysis_df,
+                self._apply_filters,
+                self.mw
+            )
+        else:
+            from gui.report_selection_dialog import StockExportDialog
+            dialog = StockExportDialog(
+                report_configs,
+                analysis_df,
+                self._apply_filters,
+                writeoff_handler=self.generate_writeoff_report,
+                parent=self.mw
+            )
+
         dialog.reportSelected.connect(
             lambda rc: self._generate_single_report(report_type, rc, session_path)
         )

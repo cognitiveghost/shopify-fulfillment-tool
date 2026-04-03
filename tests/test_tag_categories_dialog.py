@@ -45,11 +45,11 @@ def tag_categories_v2():
 
 
 @pytest.fixture
-def dialog(qtbot, tag_categories_v2):
+def dialog(qapp, tag_categories_v2):
     """Create dialog instance."""
     dlg = TagCategoriesDialog(tag_categories_v2)
-    qtbot.addWidget(dlg)
-    return dlg
+    yield dlg
+    dlg.close()
 
 
 # ============================================================================
@@ -149,7 +149,7 @@ def test_edit_category_order(dialog):
     assert categories["packaging"]["order"] == 5
 
 
-def test_edit_category_color(dialog, qtbot):
+def test_edit_category_color(dialog):
     """Test editing category color."""
     dialog.categories_list.setCurrentRow(0)
 
@@ -229,7 +229,7 @@ def test_add_tag_duplicate_across_categories_warning(dialog, monkeypatch):
     assert "another category" in str(mock_warning.call_args).lower()
 
 
-def test_remove_tag_from_category(dialog, qtbot):
+def test_remove_tag_from_category(dialog):
     """Test removing tag from category."""
     dialog.categories_list.setCurrentRow(0)
 
@@ -374,7 +374,7 @@ def test_validation_fails_with_invalid_config(dialog, monkeypatch):
     # Break the config
     dialog.working_categories["categories"]["packaging"]["color"] = "invalid"  # Invalid color
 
-    result = dialog._validate_categories()
+    result = dialog._validate()
 
     assert result is False
     # Should show error message
@@ -383,7 +383,7 @@ def test_validation_fails_with_invalid_config(dialog, monkeypatch):
 
 def test_validation_passes_with_valid_config(dialog):
     """Test validation passes with valid config."""
-    result = dialog._validate_categories()
+    result = dialog._validate()
 
     assert result is True
 
@@ -393,7 +393,7 @@ def test_validation_passes_with_valid_config(dialog):
 # ============================================================================
 
 
-def test_save_emits_signal(dialog, qtbot, monkeypatch):
+def test_save_emits_signal(dialog, monkeypatch):
     """Test save button emits categories_updated signal."""
     signal_spy = Mock()
     dialog.categories_updated.connect(signal_spy)
