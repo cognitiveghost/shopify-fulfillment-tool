@@ -1595,6 +1595,31 @@ class UIManager:
         scroll.setWidget(scroll_widget)
         outer_layout.addWidget(scroll)
 
+        # ── 0. Global Statistics (all-time, from global_stats.json) ────────
+        global_group = QGroupBox("🌐 Global Statistics (all sessions, all clients)")
+        global_row = QHBoxLayout(global_group)
+        global_row.setSpacing(8)
+        global_row.setContentsMargins(8, 8, 8, 8)
+
+        self.mw.global_stat_labels = {}
+        for key, label_text in [
+            ("total_orders_analyzed", "Orders\nAnalyzed"),
+            ("total_orders_packed",   "Orders\nPacked"),
+            ("total_sessions",        "Sessions\nRun"),
+        ]:
+            card, val_lbl = self._make_stat_card("-", label_text)
+            self.mw.global_stat_labels[key] = val_lbl
+            global_row.addWidget(card)
+
+        self.mw.global_stats_updated_lbl = QLabel("")
+        theme = get_theme_manager().get_current_theme()
+        self.mw.global_stats_updated_lbl.setStyleSheet(
+            f"font-size: 10px; color: {theme.text_secondary};"
+        )
+        global_row.addStretch()
+        global_row.addWidget(self.mw.global_stats_updated_lbl)
+        layout.addWidget(global_group)
+
         # ── 1. Session Totals ───────────────────────────────────────────────
         totals_group = QGroupBox("📊 Session Totals")
         totals_row = QHBoxLayout(totals_group)
