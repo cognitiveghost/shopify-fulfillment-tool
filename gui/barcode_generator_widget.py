@@ -401,6 +401,21 @@ class BarcodeGeneratorWidget(QWidget):
         # Add item_count column to unique_orders (total quantity of products)
         unique_orders['item_count'] = unique_orders['Order_Number'].map(item_counts)
 
+        # Merge tags from ALL rows of each order (not just the first row)
+        if 'Internal_Tags' in self.filtered_orders_df.columns:
+            def _merge_tags(series):
+                seen, result = set(), []
+                for val in series.dropna():
+                    for t in str(val).split(','):
+                        t = t.strip()
+                        if t and t not in seen:
+                            seen.add(t)
+                            result.append(t)
+                return ', '.join(result)
+
+            merged_tags = self.filtered_orders_df.groupby('Order_Number')['Internal_Tags'].apply(_merge_tags)
+            unique_orders['Internal_Tags'] = unique_orders['Order_Number'].map(merged_tags)
+
         # Sort by natural order so sequential numbering (idx+1) matches numeric order
         unique_orders['_order_sort'] = unique_orders['Order_Number'].apply(order_number_sort_key)
         unique_orders = unique_orders.sort_values('_order_sort').drop(columns=['_order_sort']).reset_index(drop=True)
