@@ -165,6 +165,12 @@ class SettingsWindow(QDialog):
         if "stock_export_configs" not in self.config_data:
             self.config_data["stock_export_configs"] = []
 
+        if "sku_label_config" not in self.config_data:
+            self.config_data["sku_label_config"] = {
+                "sku_to_label": {},
+                "default_printer": ""
+            }
+
         # Widget lists
         self.rule_widgets = []
         self.packing_list_widgets = []
@@ -172,8 +178,14 @@ class SettingsWindow(QDialog):
         self.courier_mapping_widgets = []
 
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
-        self.setMinimumSize(1150, 850)
+        self.setMinimumSize(1100, 600)
         self.setModal(True)
+
+        screen_geo = QApplication.primaryScreen().availableGeometry()
+        self.resize(
+            min(1250, screen_geo.width() - 40),
+            min(920, screen_geo.height() - 60),
+        )
 
         main_layout = QVBoxLayout(self)
         self.tab_widget = QTabWidget()
@@ -189,6 +201,7 @@ class SettingsWindow(QDialog):
         self.create_weight_tab()  # Volumetric Weight tab
         self.create_tag_categories_tab()  # Tag Categories tab
         self.create_column_config_tab()  # Column Configuration tab
+        self.create_sku_labels_tab()     # SKU Label Printing tab
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.save_settings)
@@ -3135,6 +3148,39 @@ class SettingsWindow(QDialog):
                 self.config_data["tag_categories"] = self.tag_categories_panel.get_categories()
 
             # ========================================
+            # SKU Labels Tab
+            # ========================================
+            if hasattr(self, "sku_table"):
+                sku_to_label = {}
+                for row in range(self.sku_table.rowCount()):
+                    sku_item = self.sku_table.item(row, 0)
+                    bc_item = self.sku_table.item(row, 1)
+                    path_widget = self.sku_table.cellWidget(row, 2)
+
+                    sku = sku_item.text().strip() if sku_item else ""
+                    if not sku:
+                        continue
+
+                    barcodes_raw = bc_item.text().strip() if bc_item else ""
+                    barcodes = [b.strip() for b in barcodes_raw.split(",") if b.strip()]
+
+                    path_edit = path_widget.findChild(QLineEdit) if path_widget else None
+                    pdf_path = path_edit.text().strip() if path_edit else ""
+
+                    # Preserve existing extra fields (backwards compat)
+                    existing = self.config_data["sku_label_config"]["sku_to_label"].get(sku, {})
+                    sku_to_label[sku] = {
+                        **{k: v for k, v in existing.items() if k not in ("barcodes", "pdf_path")},
+                        "barcodes": barcodes,
+                        "pdf_path": pdf_path,
+                    }
+
+                self.config_data["sku_label_config"] = {
+                    "sku_to_label": sku_to_label,
+                    "default_printer": self.sku_default_printer_combo.currentText(),
+                }
+
+            # ========================================
             # Save to server via ProfileManager
             # ========================================
             success = self.profile_manager.save_shopify_config(
@@ -3239,6 +3285,135 @@ class SettingsWindow(QDialog):
         layout.addWidget(self.column_config_panel)
 
         self.tab_widget.addTab(tab, "Column Config")
+
+    # ========================================
+    # SKU LABELS TAB
+    # ========================================
+    def create_sku_labels_tab(self):
+        """Create the SKU Label Printing settings tab."""
+        from PySide6.QtPrintSupport import QPrinterInfo
+        from gui.theme_manager import get_theme_manager
+
+        theme = get_theme_manager().get_current_theme()
+
+        tab = QWidget()
+        main_layout = QVBoxLayout(tab)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
+
+        header_label = QLabel("🖨️ SKU Label Printing")
+        header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
+        main_layout.addWidget(header_label)
+
+        help_text = QLabel(
+            "Map barcodes → SKU → PDF label file. "
+            "Each SKU can have multiple barcodes (comma-separated). "
+            "PDF files may be on the file server (UNC paths supported)."
+        )
+        help_text.setWordWrap(True)
+        help_text.setStyleSheet(
+            f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 4px;"
+        )
+        main_layout.addWidget(help_text)
+
+        # Default printer row
+        printer_row = QHBoxLayout()
+        printer_row.addWidget(QLabel("Default Printer:"))
+        self.sku_default_printer_combo = QComboBox()
+        self.sku_default_printer_combo.addItem("")
+        for pi in QPrinterInfo.availablePrinters():
+            self.sku_default_printer_combo.addItem(pi.printerName())
+        saved_printer = self.config_data["sku_label_config"].get("default_printer", "")
+        if saved_printer:
+            idx = self.sku_default_printer_combo.findText(saved_printer)
+            if idx >= 0:
+                self.sku_default_printer_combo.setCurrentIndex(idx)
+        printer_row.addWidget(self.sku_default_printer_combo, 1)
+        main_layout.addLayout(printer_row)
+
+        # Mapping table group
+        mapping_group = QGroupBox("SKU → Barcodes → PDF Label Mappings")
+        mapping_layout = QVBoxLayout(mapping_group)
+
+        add_btn = QPushButton("+ Add Row")
+        add_btn.setMaximumWidth(140)
+        add_btn.clicked.connect(self._sku_add_mapping_row)
+        mapping_layout.addWidget(add_btn)
+
+        self.sku_table = QTableWidget()
+        self.sku_table.setColumnCount(4)
+        self.sku_table.setHorizontalHeaderLabels(["SKU", "Barcodes (comma-separated)", "PDF File", ""])
+        hdr = self.sku_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.sku_table.setColumnWidth(3, 80)
+        self.sku_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.sku_table.verticalHeader().setVisible(False)
+        mapping_layout.addWidget(self.sku_table)
+
+        main_layout.addWidget(mapping_group, 1)
+
+        self.tab_widget.addTab(tab, "SKU Labels")
+
+        # Populate from config
+        self._sku_populate_table()
+
+    def _sku_populate_table(self):
+        """Populate the SKU mapping table from current config."""
+        sku_to_label = self.config_data.get("sku_label_config", {}).get("sku_to_label", {})
+        for sku, entry in sku_to_label.items():
+            barcodes_str = ", ".join(entry.get("barcodes", []))
+            pdf_path = entry.get("pdf_path", "")
+            self._sku_add_mapping_row(sku=sku, barcodes_str=barcodes_str, pdf_path=pdf_path)
+
+    def _sku_add_mapping_row(self, sku: str = "", barcodes_str: str = "", pdf_path: str = ""):
+        """Add one row to the SKU mapping table."""
+        row = self.sku_table.rowCount()
+        self.sku_table.insertRow(row)
+
+        self.sku_table.setItem(row, 0, QTableWidgetItem(sku))
+        self.sku_table.setItem(row, 1, QTableWidgetItem(barcodes_str))
+
+        # PDF path cell: QLineEdit + Browse button
+        path_widget = QWidget()
+        path_layout = QHBoxLayout(path_widget)
+        path_layout.setContentsMargins(2, 1, 2, 1)
+        path_layout.setSpacing(4)
+        path_edit = QLineEdit(pdf_path)
+        path_edit.setPlaceholderText("\\\\SERVER\\Share\\Labels\\sku.pdf")
+        browse_btn = QPushButton("Browse")
+        browse_btn.setMaximumWidth(60)
+        browse_btn.clicked.connect(lambda _, e=path_edit: self._sku_browse_pdf(e))
+        path_layout.addWidget(path_edit, 1)
+        path_layout.addWidget(browse_btn)
+        self.sku_table.setCellWidget(row, 2, path_widget)
+
+        # Delete button
+        del_btn = QPushButton("✕")
+        del_btn.setMaximumWidth(60)
+        del_btn.setToolTip("Delete row")
+        del_btn.clicked.connect(
+            lambda _, btn=del_btn: self.sku_table.removeRow(
+                self.sku_table.indexAt(btn.parent().pos()).row()
+            )
+        )
+        del_widget = QWidget()
+        del_layout = QHBoxLayout(del_widget)
+        del_layout.setContentsMargins(2, 1, 2, 1)
+        del_layout.addWidget(del_btn)
+        self.sku_table.setCellWidget(row, 3, del_widget)
+
+        self.sku_table.setRowHeight(row, 38)
+
+    def _sku_browse_pdf(self, path_edit: QLineEdit):
+        """Open file dialog to select a PDF label file."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Label PDF", "", "PDF Files (*.pdf)"
+        )
+        if path:
+            path_edit.setText(path)
 
 
 # ========================================

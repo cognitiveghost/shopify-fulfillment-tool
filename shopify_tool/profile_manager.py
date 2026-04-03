@@ -687,6 +687,22 @@ class ProfileManager:
         logger.info(f"Added default 'weight_config' for CLIENT_{client_id}")
         return True
 
+    def _migrate_add_sku_label_config(self, client_id: str, config: Dict) -> bool:
+        """Add sku_label_config section if missing (new feature migration).
+
+        Returns:
+            bool: True if migration was performed, False if already present
+        """
+        if "sku_label_config" in config:
+            return False
+
+        config["sku_label_config"] = {
+            "sku_to_label": {},
+            "default_printer": ""
+        }
+        logger.info(f"Added default 'sku_label_config' for CLIENT_{client_id}")
+        return True
+
     @staticmethod
     def _create_default_shopify_config(client_id: str, client_name: str) -> Dict:
         """Create default Shopify configuration.
@@ -836,6 +852,11 @@ class ProfileManager:
                         }
                     }
                 }
+            },
+
+            "sku_label_config": {
+                "sku_to_label": {},
+                "default_printer": ""
             }
         }
 
@@ -922,8 +943,9 @@ class ProfileManager:
             migrated_tag_categories = self._migrate_add_tag_categories(client_id, config)
             migrated_tag_categories_v2 = self._migrate_tag_categories_v1_to_v2(client_id, config)
             migrated_weight = self._migrate_add_weight_config(client_id, config)
+            migrated_sku_labels = self._migrate_add_sku_label_config(client_id, config)
 
-            if migrated_mappings or migrated_delimiters or migrated_tag_categories or migrated_tag_categories_v2 or migrated_weight:
+            if migrated_mappings or migrated_delimiters or migrated_tag_categories or migrated_tag_categories_v2 or migrated_weight or migrated_sku_labels:
                 # If config was migrated, save it immediately
                 self.save_shopify_config(client_id, config)
                 logger.info(f"Config migrations completed for CLIENT_{client_id}")
