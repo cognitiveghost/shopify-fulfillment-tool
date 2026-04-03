@@ -709,6 +709,14 @@ class TagCategoriesDialog(QDialog):
 
         self.button_box = button_box
 
+    def __getattr__(self, name):
+        """Proxy attribute lookups to the embedded panel for backwards compatibility."""
+        # Avoid infinite recursion during __init__ before self.panel exists
+        panel = self.__dict__.get('panel')
+        if panel is not None and hasattr(panel, name):
+            return getattr(panel, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
     def _validate(self) -> bool:
         is_valid, errors = self.panel.validate_categories()
         if not is_valid:

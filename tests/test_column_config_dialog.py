@@ -110,27 +110,7 @@ def table_config_manager(mock_main_window, mock_profile_manager):
 @pytest.fixture
 def dialog(qapp, table_config_manager, mock_main_window):
     """Create a ColumnConfigDialog for testing."""
-    # Temporarily set parent_window before init to avoid loading issues
-    # We'll create the dialog with the manager that already has the config loaded
-    dialog = ColumnConfigDialog.__new__(ColumnConfigDialog)
-    dialog.table_config_manager = table_config_manager
-    dialog.parent_window = mock_main_window
-    dialog._current_columns = []
-    dialog._is_loading = False
-
-    # Initialize QDialog part
-    from PySide6.QtWidgets import QDialog
-    QDialog.__init__(dialog, None)
-
-    dialog.setWindowTitle("Manage Table Columns")
-    dialog.setMinimumSize(600, 700)
-    dialog.setModal(True)
-
-    # Initialize UI
-    dialog._init_ui()
-    dialog._connect_signals()
-    dialog._load_current_config()
-
+    dialog = ColumnConfigDialog(table_config_manager, parent=None, main_window=mock_main_window)
     yield dialog
     dialog.close()
 

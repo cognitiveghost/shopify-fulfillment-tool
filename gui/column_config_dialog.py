@@ -873,13 +873,14 @@ class ColumnConfigDialog(QDialog):
 
     config_applied = Signal()
 
-    def __init__(self, table_config_manager, parent=None):
+    def __init__(self, table_config_manager, parent=None, main_window=None):
         """
         Initialize the Column Configuration Dialog.
 
         Args:
             table_config_manager: TableConfigManager instance
-            parent: Parent widget (MainWindow)
+            parent: Qt parent widget
+            main_window: MainWindow reference (falls back to parent if not given)
         """
         super().__init__(parent)
         self.setWindowTitle("Manage Table Columns")
@@ -888,7 +889,7 @@ class ColumnConfigDialog(QDialog):
 
         main_layout = QVBoxLayout(self)
 
-        self.panel = ColumnConfigPanel(table_config_manager, main_window=parent, parent=self)
+        self.panel = ColumnConfigPanel(table_config_manager, main_window=main_window or parent, parent=self)
         # Remove the panel's built-in Apply button (dialog has its own)
         self.panel.apply_button.hide()
         self.panel.reset_button.hide()
@@ -916,6 +917,13 @@ class ColumnConfigDialog(QDialog):
 
         # Close dialog when panel successfully applies
         self.panel.config_applied.connect(self._on_panel_applied)
+
+    def __getattr__(self, name):
+        """Proxy attribute lookups to the embedded panel for backwards compatibility."""
+        panel = self.__dict__.get('panel')
+        if panel is not None and hasattr(panel, name):
+            return getattr(panel, name)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def _on_panel_applied(self):
         """Called when panel.config_applied is emitted."""
