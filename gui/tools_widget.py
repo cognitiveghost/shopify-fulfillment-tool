@@ -4,6 +4,7 @@ Tools Widget - Main container for utility tools.
 Contains sub-tabs:
 - Reference Labels: PDF processing for reference numbers
 - Barcode Generator: Generate warehouse barcode labels
+- SKU Labels: Barcode-scan-to-print labeling workflow
 """
 
 from PySide6.QtWidgets import (
@@ -13,6 +14,7 @@ from PySide6.QtCore import Qt
 
 from gui.reference_labels_widget import ReferenceLabelsWidget
 from gui.barcode_generator_widget import BarcodeGeneratorWidget
+from gui.sku_label_widget import SKULabelWidget
 
 
 class ToolsWidget(QWidget):
@@ -52,6 +54,13 @@ class ToolsWidget(QWidget):
         self.sub_tabs.addTab(
             self.barcode_generator_widget,
             "🏷️ Barcode Generator"
+        )
+
+        # Sub-tab 3: SKU Labels
+        self.sku_label_widget = SKULabelWidget(self.mw)
+        self.sub_tabs.addTab(
+            self.sku_label_widget,
+            "🖨️ SKU Labels"
         )
 
         layout.addWidget(self.sub_tabs)
