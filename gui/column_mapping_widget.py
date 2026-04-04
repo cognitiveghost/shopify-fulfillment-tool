@@ -97,7 +97,7 @@ class ColumnMappingWidget(QWidget):
 
         # Help text at bottom
         help_text = QLabel(
-            "ℹ️ Enter the exact column names as they appear in your CSV file.\n"
+            "Enter the exact column names as they appear in your CSV file.\n"
             "Example: 'Name' → 'Order_Number' means your CSV has a 'Name' column "
             "that will be used for order numbers."
         )

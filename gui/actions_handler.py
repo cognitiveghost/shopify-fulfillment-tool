@@ -726,7 +726,7 @@ class ActionsHandler(QObject):
             # ========================================
             # Show brief status message instead of blocking dialog
             self.mw.statusBar().showMessage(
-                f"✅ Report saved: {os.path.basename(output_file)}",
+                f"Report saved: {os.path.basename(output_file)}",
                 5000  # 5 seconds
             )
             self.log.info(f"Report generated: {output_file}")
@@ -818,7 +818,7 @@ class ActionsHandler(QObject):
 
             # Show success message in status bar
             self.mw.statusBar().showMessage(
-                f"✅ Writeoff report saved: {output_file.name}",
+                f"Writeoff report saved: {output_file.name}",
                 5000  # 5 seconds
             )
             self.log.info(f"Writeoff report created: {output_file}")

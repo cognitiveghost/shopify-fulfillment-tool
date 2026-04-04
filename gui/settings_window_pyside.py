@@ -556,7 +556,7 @@ class SettingsWindow(QDialog):
         header_layout.addWidget(down_btn)
 
         # Test button
-        test_btn = QPushButton("🧪 Test")
+        test_btn = QPushButton("Test")
         test_btn.setMaximumWidth(70)
         test_btn.setToolTip("Test this rule against current analysis data")
         from gui.theme_manager import get_theme_manager
@@ -1689,7 +1689,7 @@ class SettingsWindow(QDialog):
         # ========================================
         # COLUMN MAPPINGS - Orders
         # ========================================
-        orders_box = QGroupBox("📋 Orders CSV Column Mapping")
+        orders_box = QGroupBox("Orders CSV Column Mapping")
         orders_layout = QVBoxLayout(orders_box)
 
         # Define required and optional fields for orders
@@ -1714,7 +1714,7 @@ class SettingsWindow(QDialog):
         # ========================================
         # COLUMN MAPPINGS - Stock
         # ========================================
-        stock_box = QGroupBox("📦 Stock CSV Column Mapping")
+        stock_box = QGroupBox("Stock CSV Column Mapping")
         stock_layout = QVBoxLayout(stock_box)
 
         # Define required and optional fields for stock
@@ -1845,7 +1845,7 @@ class SettingsWindow(QDialog):
         main_layout.setContentsMargins(10, 10, 10, 10)
 
         # Header
-        header_label = QLabel("🎁 Set/Bundle Definitions")
+        header_label = QLabel("Set/Bundle Definitions")
         header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
         main_layout.addWidget(header_label)
 
@@ -1887,15 +1887,15 @@ class SettingsWindow(QDialog):
         # Buttons row
         buttons_layout = QHBoxLayout()
 
-        add_btn = QPushButton("➕ Add Set")
+        add_btn = QPushButton("Add Set")
         add_btn.clicked.connect(self._add_set_dialog)
         buttons_layout.addWidget(add_btn)
 
-        import_btn = QPushButton("📁 Import from CSV")
+        import_btn = QPushButton("Import from CSV")
         import_btn.clicked.connect(self._import_sets_from_csv)
         buttons_layout.addWidget(import_btn)
 
-        export_btn = QPushButton("💾 Export to CSV")
+        export_btn = QPushButton("Export to CSV")
         export_btn.clicked.connect(self._export_sets_to_csv)
         buttons_layout.addWidget(export_btn)
 
@@ -1905,7 +1905,7 @@ class SettingsWindow(QDialog):
 
         # Tips
         tips_label = QLabel(
-            "💡 Tips:\n"
+            "Tips:\n"
             "• CSV format: Set_SKU, Component_SKU, Component_Quantity\n"
             "• Sets are expanded before fulfillment simulation\n"
             "• Components must exist in your stock file"
@@ -1955,12 +1955,12 @@ class SettingsWindow(QDialog):
             actions_layout.setContentsMargins(5, 2, 5, 2)
             actions_layout.setSpacing(5)
 
-            edit_btn = QPushButton("✏️ Edit")
+            edit_btn = QPushButton("Edit")
             edit_btn.setMaximumWidth(70)
             edit_btn.clicked.connect(lambda checked, sku=set_sku: self._edit_set_dialog(sku))
             actions_layout.addWidget(edit_btn)
 
-            delete_btn = QPushButton("🗑️ Delete")
+            delete_btn = QPushButton("Delete")
             delete_btn.setMaximumWidth(70)
             delete_btn.clicked.connect(lambda checked, sku=set_sku: self._delete_set(sku))
             actions_layout.addWidget(delete_btn)
@@ -3264,7 +3264,7 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        header_label = QLabel("📋 Column Configuration")
+        header_label = QLabel("Column Configuration")
         header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
         layout.addWidget(header_label)
 
@@ -3301,7 +3301,7 @@ class SettingsWindow(QDialog):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
 
-        header_label = QLabel("🖨️ SKU Label Printing")
+        header_label = QLabel("SKU Label Printing")
         header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
         main_layout.addWidget(header_label)
 
@@ -3481,7 +3481,7 @@ class SetEditorDialog(QDialog):
 
         # Tips
         tips_label = QLabel(
-            "💡 Tip: Components are SKUs that exist in your stock file.\n"
+            "Tip: Components are SKUs that exist in your stock file.\n"
             "Quantity indicates how many of each component are in one set."
         )
         from gui.theme_manager import get_theme_manager
@@ -3518,7 +3518,7 @@ class SetEditorDialog(QDialog):
         self.components_table.setCellWidget(row_idx, 1, qty_spinbox)
 
         # Remove button - використовуємо sender() щоб знайти правильний row
-        remove_btn = QPushButton("🗑️")
+        remove_btn = QPushButton("X")
         remove_btn.setMaximumWidth(60)
         remove_btn.clicked.connect(self._remove_component_row)
         self.components_table.setCellWidget(row_idx, 2, remove_btn)
