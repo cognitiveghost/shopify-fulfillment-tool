@@ -112,6 +112,7 @@ class UIManager:
         self.mw.main_tabs.addTab(tab1, file_icon, "Session Setup")
         self.mw.main_tabs.addTab(tab2, table_icon, "Analysis Results")
         self.mw.main_tabs.addTab(tab3, folder_icon, "Session Browser")
+        self.mw.information_tab = tab4
         self.mw.main_tabs.addTab(tab4, info_icon, "Information")
         self.mw.main_tabs.addTab(tab5, tools_icon, "Tools")
 
@@ -249,7 +250,7 @@ class UIManager:
         layout.setContentsMargins(10, 10, 10, 10)
 
         # Title
-        title = QLabel("📁 Session Browser")
+        title = QLabel("Session Browser")
         title.setStyleSheet("font-size: 11pt; font-weight: bold;")
         layout.addWidget(title)
 
@@ -326,6 +327,7 @@ class UIManager:
 
         layout.addWidget(self.mw.session_browser, 1)  # Full stretch
 
+        self.mw.session_browser_tab = tab
         return tab
 
     def _create_tab4_information(self):
@@ -342,15 +344,15 @@ class UIManager:
 
         # Sub-tab 1: Statistics
         stats_tab = self._create_statistics_subtab()
-        sub_tabs.addTab(stats_tab, "📊 Statistics")
+        sub_tabs.addTab(stats_tab, "Statistics")
 
         # Sub-tab 2: Activity Log
         activity_tab = self._create_activity_log_subtab()
-        sub_tabs.addTab(activity_tab, "📋 Activity Log")
+        sub_tabs.addTab(activity_tab, "Activity Log")
 
         # Sub-tab 3: Execution Log
         execution_tab = self._create_execution_log_subtab()
-        sub_tabs.addTab(execution_tab, "🔧 Execution Log")
+        sub_tabs.addTab(execution_tab, "Execution Log")
 
         return sub_tabs
 
@@ -417,7 +419,7 @@ class UIManager:
 
     def _create_orders_file_section(self):
         """Creates Orders file selection with folder support."""
-        group_box = QGroupBox("📦 Orders File")
+        group_box = QGroupBox("Orders File")
         layout = QVBoxLayout()
 
         # Mode selector (Radio buttons)
@@ -486,7 +488,7 @@ class UIManager:
 
     def _create_stock_file_section(self):
         """Creates Stock file selection with folder support."""
-        group_box = QGroupBox("📊 Stock File")
+        group_box = QGroupBox("Stock File")
         layout = QVBoxLayout()
 
         # Mode selector (Radio buttons)
@@ -608,9 +610,9 @@ class UIManager:
         layout = QVBoxLayout()
         group.setLayout(layout)
 
-        self.mw.packing_list_button = QPushButton("📄 Create Packing List")
+        self.mw.packing_list_button = QPushButton("Create Packing List")
         self.mw.packing_list_button.setToolTip("Generate packing lists based on pre-defined filters.")
-        self.mw.stock_export_button = QPushButton("📊 Create Stock Export")
+        self.mw.stock_export_button = QPushButton("Create Stock Export")
         self.mw.stock_export_button.setToolTip("Generate stock export files for couriers.")
         self.mw.packing_list_button.setEnabled(False)
         self.mw.stock_export_button.setEnabled(False)
@@ -619,7 +621,7 @@ class UIManager:
         layout.addWidget(self.mw.stock_export_button)
 
         # Add "Open Session Folder" button
-        self.mw.open_session_folder_button = QPushButton("📁 Open Session Folder")
+        self.mw.open_session_folder_button = QPushButton("Open Session Folder")
         self.mw.open_session_folder_button.setIcon(
             self.mw.style().standardIcon(QStyle.SP_DirOpenIcon)
         )
@@ -686,7 +688,7 @@ class UIManager:
         primary_layout.addWidget(self.mw.run_analysis_button, 2)
 
         # Add Product to Order
-        self.mw.add_product_button = QPushButton("➕ Add Product to Order")
+        self.mw.add_product_button = QPushButton("+ Add Product to Order")
         self.mw.add_product_button.setMinimumHeight(70)
         self.mw.add_product_button.setEnabled(False)
         self.mw.add_product_button.setToolTip("Manually add a product to an existing order")
@@ -698,7 +700,7 @@ class UIManager:
         settings_layout = QHBoxLayout()
 
         # Client Settings
-        self.mw.settings_button = QPushButton("⚙️ Client Settings")
+        self.mw.settings_button = QPushButton("Client Settings")
         self.mw.settings_button.setToolTip("Open the settings window")
         self.mw.settings_button.setEnabled(False)
         settings_layout.addWidget(self.mw.settings_button)
@@ -1015,7 +1017,7 @@ class UIManager:
 
     def _create_session_management_section(self):
         """Create session management UI for Tab 1."""
-        group = QGroupBox("📂 Session Management")
+        group = QGroupBox("Session Management")
         layout = QHBoxLayout(group)
 
         # Create new session button
@@ -1096,7 +1098,7 @@ class UIManager:
         layout.addSpacing(20)
 
         # Add Product button (Tab 2 version - keep reference for signal connection)
-        self.mw.add_product_button_tab2 = QPushButton("➕ Add Product to Order")
+        self.mw.add_product_button_tab2 = QPushButton("+ Add Product to Order")
         self.mw.add_product_button_tab2.setEnabled(False)
         self.mw.add_product_button_tab2.setToolTip(
             "Manually add a product to an existing order"
@@ -1109,7 +1111,7 @@ class UIManager:
         layout.addWidget(self.mw.add_product_button_tab2)
 
         # Packing List button (Tab 2 version)
-        self.mw.packing_list_button_tab2 = QPushButton("📄 Packing List")
+        self.mw.packing_list_button_tab2 = QPushButton("Packing List")
         self.mw.packing_list_button_tab2.setEnabled(False)
         self.mw.packing_list_button_tab2.setToolTip(
             "Generate packing lists based on pre-defined filters"
@@ -1121,7 +1123,7 @@ class UIManager:
         layout.addWidget(self.mw.packing_list_button_tab2)
 
         # Stock Export button (Tab 2 version)
-        self.mw.stock_export_button_tab2 = QPushButton("📊 Stock Export")
+        self.mw.stock_export_button_tab2 = QPushButton("Stock Export")
         self.mw.stock_export_button_tab2.setEnabled(False)
         self.mw.stock_export_button_tab2.setToolTip(
             "Generate stock export files for couriers"
@@ -1133,7 +1135,7 @@ class UIManager:
         layout.addWidget(self.mw.stock_export_button_tab2)
 
         # Settings button (Tab 2 version)
-        self.mw.settings_button_tab2 = QPushButton("⚙️ Client Settings")
+        self.mw.settings_button_tab2 = QPushButton("Client Settings")
         self.mw.settings_button_tab2.setEnabled(False)
         self.mw.settings_button_tab2.setToolTip(
             "Open the settings window for the active client"
@@ -1145,7 +1147,7 @@ class UIManager:
         layout.addWidget(self.mw.settings_button_tab2)
 
         # Configure Columns button (Tab 2 version)
-        self.mw.configure_columns_button_tab2 = QPushButton("📊 Configure Columns")
+        self.mw.configure_columns_button_tab2 = QPushButton("Configure Columns")
         self.mw.configure_columns_button_tab2.setEnabled(False)
         self.mw.configure_columns_button_tab2.setToolTip(
             "Customize table column visibility and order"
@@ -1160,7 +1162,7 @@ class UIManager:
         layout.addSpacing(20)
 
         # Tag Management Panel toggle button
-        self.mw.toggle_tags_panel_btn = QPushButton("🏷️ Tags Manager")
+        self.mw.toggle_tags_panel_btn = QPushButton("Tags Manager")
         self.mw.toggle_tags_panel_btn.setCheckable(True)
         self.mw.toggle_tags_panel_btn.setEnabled(False)
         self.mw.toggle_tags_panel_btn.setToolTip("Show/hide Internal Tags management panel")
@@ -1171,7 +1173,7 @@ class UIManager:
         layout.addSpacing(20)
 
         # Bulk Operations toggle button (NEW)
-        self.mw.toggle_bulk_mode_btn = QPushButton("📦 Bulk Operations")
+        self.mw.toggle_bulk_mode_btn = QPushButton("Bulk Operations")
         self.mw.toggle_bulk_mode_btn.setCheckable(True)
         self.mw.toggle_bulk_mode_btn.setEnabled(False)
         self.mw.toggle_bulk_mode_btn.setToolTip("Enable bulk selection and operations on multiple orders")
@@ -1426,7 +1428,7 @@ class UIManager:
 
         # Display format: total (fulfillable)
         self.mw.summary_label.setText(
-            f"📊 {total_orders} orders ({fulfillable_orders} fulfillable) │ "
+            f"{total_orders} orders ({fulfillable_orders} fulfillable) | "
             f"{total_items} items ({fulfillable_items} fulfillable)"
         )
 
@@ -1596,7 +1598,7 @@ class UIManager:
         outer_layout.addWidget(scroll)
 
         # ── 0. Global Statistics (all-time, from global_stats.json) ────────
-        global_group = QGroupBox("🌐 Global Statistics (all sessions, all clients)")
+        global_group = QGroupBox("Global Statistics (all sessions, all clients)")
         global_row = QHBoxLayout(global_group)
         global_row.setSpacing(8)
         global_row.setContentsMargins(8, 8, 8, 8)
@@ -1621,7 +1623,7 @@ class UIManager:
         layout.addWidget(global_group)
 
         # ── 1. Session Totals ───────────────────────────────────────────────
-        totals_group = QGroupBox("📊 Session Totals")
+        totals_group = QGroupBox("Session Totals")
         totals_row = QHBoxLayout(totals_group)
         totals_row.setSpacing(8)
         totals_row.setContentsMargins(8, 8, 8, 8)
@@ -1640,7 +1642,7 @@ class UIManager:
         layout.addWidget(totals_group)
 
         # ── 2. By Courier ──────────────────────────────────────────────────
-        courier_group = QGroupBox("🚚 By Courier")
+        courier_group = QGroupBox("By Courier")
         courier_group_layout = QVBoxLayout(courier_group)
         courier_group_layout.setContentsMargins(8, 8, 8, 8)
         courier_group_layout.setSpacing(0)
@@ -1668,7 +1670,7 @@ class UIManager:
         tags_row_layout.setSpacing(8)
         tags_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        tags_f_group = QGroupBox("🏷️ Fulfillable Tags")
+        tags_f_group = QGroupBox("Fulfillable Tags")
         tags_f_group_layout = QVBoxLayout(tags_f_group)
         tags_f_group_layout.setContentsMargins(8, 8, 8, 8)
         tags_f_group_layout.setSpacing(0)
@@ -1690,7 +1692,7 @@ class UIManager:
         tags_f_group_layout.addWidget(tags_f_hscroll)
         tags_row_layout.addWidget(tags_f_group)
 
-        tags_nf_group = QGroupBox("🏷️ Not Fulfillable Tags")
+        tags_nf_group = QGroupBox("Not Fulfillable Tags")
         tags_nf_group_layout = QVBoxLayout(tags_nf_group)
         tags_nf_group_layout.setContentsMargins(8, 8, 8, 8)
         tags_nf_group_layout.setSpacing(0)
@@ -1715,7 +1717,7 @@ class UIManager:
         layout.addWidget(tags_row_widget)
 
         # ── 5. SKU Summary ─────────────────────────────────────────────────
-        sku_group = QGroupBox("📦 SKU Summary")
+        sku_group = QGroupBox("SKU Summary")
         sku_layout = QVBoxLayout(sku_group)
         sku_layout.setContentsMargins(8, 8, 8, 8)
 
@@ -1793,10 +1795,10 @@ class UIManager:
         theme_manager = get_theme_manager()
         if theme_manager.is_dark_theme():
             # Currently dark, button shows "switch to light"
-            self.mw.theme_toggle_btn.setText("☀️ Light Mode")
+            self.mw.theme_toggle_btn.setText("Light Mode")
         else:
             # Currently light, button shows "switch to dark"
-            self.mw.theme_toggle_btn.setText("🌙 Dark Mode")
+            self.mw.theme_toggle_btn.setText("Dark Mode")
 
     def _on_theme_toggle_clicked(self):
         """Handle theme toggle button click."""

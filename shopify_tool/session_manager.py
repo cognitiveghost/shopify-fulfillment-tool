@@ -22,6 +22,7 @@ Directory Structure:
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -66,6 +67,7 @@ class SessionManager:
     # Class-level caches (mtime-based, shared across instances)
     _sessions_index_cache: Dict[str, Tuple[Dict, float]] = {}
     _registry_cache: Dict[str, Tuple[Dict, float]] = {}
+    _cache_lock = threading.Lock()
 
     def __init__(self, profile_manager):
         """Initialize SessionManager with ProfileManager.
@@ -85,7 +87,8 @@ class SessionManager:
     def _get_sessions_index_path(self, client_id: str) -> Path:
         return self.sessions_root / f"CLIENT_{client_id}" / "shopify_sessions_index.json"
 
-    def _get_registry_path(self, client_id: str) -> Path:
+    def get_registry_path(self, client_id: str) -> Path:
+        """Return the path to the Packer Tool's registry_index.json for a client."""
         return self.sessions_root / f"CLIENT_{client_id}" / "registry_index.json"
 
     def _read_sessions_index(self, client_id: str) -> Optional[Dict]:
@@ -95,12 +98,14 @@ class SessionManager:
             return None
         try:
             mtime = index_path.stat().st_mtime
-            cached = SessionManager._sessions_index_cache.get(client_id)
-            if cached and cached[1] == mtime:
-                return cached[0]
+            with SessionManager._cache_lock:
+                cached = SessionManager._sessions_index_cache.get(client_id)
+                if cached and cached[1] == mtime:
+                    return cached[0]
             with open(index_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            SessionManager._sessions_index_cache[client_id] = (data, mtime)
+            with SessionManager._cache_lock:
+                SessionManager._sessions_index_cache[client_id] = (data, mtime)
             return data
         except Exception as e:
             logger.warning(f"Failed to read sessions index for {client_id}: {e}")
@@ -129,7 +134,8 @@ class SessionManager:
                         raise
                     time.sleep(0.05)
             mtime = index_path.stat().st_mtime
-            SessionManager._sessions_index_cache[client_id] = (index_data, mtime)
+            with SessionManager._cache_lock:
+                SessionManager._sessions_index_cache[client_id] = (index_data, mtime)
             return True
         except Exception as e:
             logger.warning(f"Failed to write sessions index for {client_id}: {e}")
@@ -148,6 +154,8 @@ class SessionManager:
             "status": session_info.get("status", "active"),
             "orders_count": stats.get("total_orders", 0),
             "items_count": stats.get("total_items", 0),
+            "fulfillable_orders": session_info.get("fulfillable_orders", 0),
+            "not_fulfillable_orders": session_info.get("not_fulfillable_orders", 0),
             "packing_lists_count": stats.get("packing_lists_count", 0),
             "packing_lists": stats.get("packing_lists", []),
             "comments": session_info.get("comments", ""),
@@ -176,8 +184,9 @@ class SessionManager:
                 continue
             session_info = self.get_session_info(str(item))
             if session_info:
-                session_name = session_info.get("session_name", item.name)
-                index["sessions"][session_name] = self._make_index_entry(session_info)
+                # Use the actual folder name as the key so session_path is always correct,
+                # even if session_info["session_name"] was manually edited.
+                index["sessions"][item.name] = self._make_index_entry(session_info)
         self._write_sessions_index(client_id, index)
         logger.debug(f"Sessions index rebuilt for {client_id}: {len(index['sessions'])} sessions")
         return index
@@ -188,17 +197,19 @@ class SessionManager:
 
     def read_packing_registry(self, client_id: str) -> Dict:
         """Read Packer Tool's registry_index.json with mtime-based cache."""
-        registry_path = self._get_registry_path(client_id)
+        registry_path = self.get_registry_path(client_id)
         if not registry_path.exists():
             return {}
         try:
             mtime = registry_path.stat().st_mtime
-            cached = SessionManager._registry_cache.get(client_id)
-            if cached and cached[1] == mtime:
-                return cached[0]
+            with SessionManager._cache_lock:
+                cached = SessionManager._registry_cache.get(client_id)
+                if cached and cached[1] == mtime:
+                    return cached[0]
             with open(registry_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            SessionManager._registry_cache[client_id] = (data, mtime)
+            with SessionManager._cache_lock:
+                SessionManager._registry_cache[client_id] = (data, mtime)
             return data
         except Exception as e:
             logger.warning(f"Failed to read packing registry for {client_id}: {e}")
@@ -466,6 +477,8 @@ class SessionManager:
                 "statistics": {
                     "total_orders": entry.get("orders_count", 0),
                     "total_items": entry.get("items_count", 0),
+                    "fulfillable_orders": entry.get("fulfillable_orders", 0),
+                    "not_fulfillable_orders": entry.get("not_fulfillable_orders", 0),
                     "packing_lists_count": entry.get("packing_lists_count", 0),
                     "packing_lists": entry.get("packing_lists", []),
                 },

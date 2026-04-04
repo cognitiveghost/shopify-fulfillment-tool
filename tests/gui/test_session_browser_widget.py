@@ -27,7 +27,7 @@ def mock_session_manager(tmp_path):
     # sessions_root is an instance attribute — add it manually
     sm.sessions_root = tmp_path
     # Packing registry methods return empty data by default
-    sm._get_registry_path.return_value = tmp_path / "registry_index.json"
+    sm.get_registry_path.return_value = tmp_path / "registry_index.json"
     sm.get_session_packing_summary.return_value = {
         "pack_status": "not_started",
         "packed_orders": 0,

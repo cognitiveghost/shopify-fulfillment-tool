@@ -183,19 +183,21 @@ class SessionBrowserWidget(QWidget):
 
         group_layout.addLayout(filter_layout)
 
-        # Sessions table — 9 columns
+        # Sessions table — 11 columns
         self.sessions_table = QTableWidget()
-        self.sessions_table.setColumnCount(9)
+        self.sessions_table.setColumnCount(11)
         self.sessions_table.setHorizontalHeaderLabels([
             "Session Name",  # 0
             "Created",       # 1
             "Status",        # 2
             "Orders",        # 3
             "Items",         # 4
-            "Packing Lists", # 5
-            "Packed",        # 6  ← Packer Tool data
-            "Packer",        # 7  ← Packer Tool data
-            "Comments",      # 8
+            "Fulfillable",   # 5
+            "Not Fulf.",     # 6
+            "Packing Lists", # 7
+            "Packed",        # 8  ← Packer Tool data
+            "Packer",        # 9  ← Packer Tool data
+            "Comments",      # 10
         ])
         self.sessions_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.sessions_table.setSelectionMode(QTableWidget.SingleSelection)
@@ -215,12 +217,16 @@ class SessionBrowserWidget(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(4, 70)   # Items
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 100)  # Packing Lists
+        header.resizeSection(5, 80)   # Fulfillable
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(6, 90)   # Packed
+        header.resizeSection(6, 75)   # Not Fulf.
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(7, 100)  # Packer
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Stretch)  # Comments
+        header.resizeSection(7, 100)  # Packing Lists
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(8, 90)   # Packed
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(9, 100)  # Packer
+        header.setSectionResizeMode(10, QHeaderView.ResizeMode.Stretch)  # Comments
 
         group_layout.addWidget(self.sessions_table)
 
@@ -274,7 +280,7 @@ class SessionBrowserWidget(QWidget):
             return
 
         sm = self.session_manager
-        registry_path = str(sm._get_registry_path(client_id))
+        registry_path = str(sm.get_registry_path(client_id))
 
         # Only watch the Packer Tool registry file (watcher silently ignores
         # paths that don't exist yet — that's fine, poll timer is the fallback)
@@ -287,7 +293,7 @@ class SessionBrowserWidget(QWidget):
         """Called when a watched file changes."""
         sm = self.session_manager
         if self.current_client_id:
-            registry_path = str(sm._get_registry_path(self.current_client_id))
+            registry_path = str(sm.get_registry_path(self.current_client_id))
             if path == registry_path:
                 # Re-add the path — some editors/writers remove and recreate the file
                 self._file_watcher.addPath(path)
@@ -314,7 +320,7 @@ class SessionBrowserWidget(QWidget):
             self._debounce_timer.start()
 
     def _refresh_packing_columns(self):
-        """Lightweight refresh: re-read packing registry and update columns 6-7 only."""
+        """Lightweight refresh: re-read packing registry and update columns 8-9 only."""
         if not self.current_client_id or not self.sessions_data:
             return
 
@@ -334,12 +340,22 @@ class SessionBrowserWidget(QWidget):
         if self.sessions_table is None:
             return
         self.sessions_table.setSortingEnabled(False)
-        for row, session_info in enumerate(self.sessions_data):
-            name = session_info.get("session_name", "")
-            summary = summaries.get(name)
-            if summary:
+        theme = get_theme_manager().get_current_theme()
+        # Pre-build name→session_info map so the inner lookup is O(1) per row.
+        session_by_name = {s.get("session_name", ""): s for s in self.sessions_data}
+        # Resolve rows by col-0 display text so sort order doesn't misalign data.
+        for row in range(self.sessions_table.rowCount()):
+            item = self.sessions_table.item(row, 0)
+            if item is None:
+                continue
+            session_name = item.text()
+            summary = summaries.get(session_name)
+            if not summary:
+                continue
+            session_info = session_by_name.get(session_name)
+            if session_info is not None:
                 session_info["packing_summary"] = summary
-                self._update_packing_cells(row, summary)
+            self._update_packing_cells(row, summary, theme)
         self.sessions_table.setSortingEnabled(True)
 
     # ------------------------------------------------------------------
@@ -438,6 +454,7 @@ class SessionBrowserWidget(QWidget):
         """Populate the table with sessions data."""
         self.sessions_table.setSortingEnabled(False)
         self.sessions_table.setRowCount(len(self.sessions_data))
+        theme = get_theme_manager().get_current_theme()
 
         for row, session_info in enumerate(self.sessions_data):
             session_path = session_info.get("session_path", "")
@@ -492,24 +509,36 @@ class SessionBrowserWidget(QWidget):
             items_item.setTextAlignment(Qt.AlignCenter)
             self.sessions_table.setItem(row, 4, items_item)
 
-            # Col 5: Packing Lists
+            # Col 5: Fulfillable orders
+            fulfillable = stats.get("fulfillable_orders", 0)
+            fulfillable_item = QTableWidgetItem(str(fulfillable) if fulfillable > 0 else "N/A")
+            fulfillable_item.setTextAlignment(Qt.AlignCenter)
+            self.sessions_table.setItem(row, 5, fulfillable_item)
+
+            # Col 6: Not fulfillable orders
+            not_fulfillable = stats.get("not_fulfillable_orders", 0)
+            not_fulfillable_item = QTableWidgetItem(str(not_fulfillable) if not_fulfillable > 0 else "N/A")
+            not_fulfillable_item.setTextAlignment(Qt.AlignCenter)
+            self.sessions_table.setItem(row, 6, not_fulfillable_item)
+
+            # Col 7: Packing Lists
             packing_lists_count = stats.get("packing_lists_count", 0)
             packing_lists_item = QTableWidgetItem(str(packing_lists_count))
             packing_lists_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 5, packing_lists_item)
+            self.sessions_table.setItem(row, 7, packing_lists_item)
 
-            # Cols 6-7: Packing data from Packer Tool registry
+            # Cols 8-9: Packing data from Packer Tool registry
             summary = session_info.get("packing_summary")
-            self._update_packing_cells(row, summary)
+            self._update_packing_cells(row, summary, theme)
 
-            # Col 8: Comments (editable)
+            # Col 10: Comments (editable)
             comments = session_info.get("comments", "")
             comments_edit = QLineEdit(comments)
             comments_edit.setPlaceholderText("Add comments...")
             comments_edit.editingFinished.connect(
                 lambda path=session_path, widget=comments_edit: self._on_comments_changed(path, widget.text())
             )
-            self.sessions_table.setCellWidget(row, 8, comments_edit)
+            self.sessions_table.setCellWidget(row, 10, comments_edit)
 
             # Tooltip
             packing_lists_str = ", ".join(stats.get("packing_lists", [])) or "None"
@@ -537,9 +566,14 @@ class SessionBrowserWidget(QWidget):
         self.sessions_table.setSortingEnabled(True)
         self.sessions_table.sortItems(1, Qt.DescendingOrder)
 
-    def _update_packing_cells(self, row: int, summary: dict):
-        """Update columns 6 (Packed) and 7 (Packer) for a single row."""
-        theme = get_theme_manager().get_current_theme()
+    def _update_packing_cells(self, row: int, summary: dict, theme=None):
+        """Update columns 8 (Packed) and 9 (Packer) for a single row.
+
+        Pass ``theme`` from the caller when updating many rows to avoid
+        repeated theme lookups in the hot path.
+        """
+        if theme is None:
+            theme = get_theme_manager().get_current_theme()
 
         if not summary or summary.get("pack_status") == "not_started":
             packed_item = QTableWidgetItem("-")
@@ -552,7 +586,6 @@ class SessionBrowserWidget(QWidget):
 
             packed_text = f"{packed}/{total}" if total > 0 else "-"
             packed_item = QTableWidgetItem(packed_text)
-            packed_item.setTextAlignment(Qt.AlignCenter)
 
             if pack_status == "completed":
                 packed_item.setForeground(QBrush(QColor(theme.accent_green)))
@@ -565,8 +598,8 @@ class SessionBrowserWidget(QWidget):
 
         packed_item.setTextAlignment(Qt.AlignCenter)
         packer_item.setTextAlignment(Qt.AlignCenter)
-        self.sessions_table.setItem(row, 6, packed_item)
-        self.sessions_table.setItem(row, 7, packer_item)
+        self.sessions_table.setItem(row, 8, packed_item)
+        self.sessions_table.setItem(row, 9, packer_item)
 
     # ------------------------------------------------------------------
     # Interaction

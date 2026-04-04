@@ -313,14 +313,21 @@ class MainWindow(QMainWindow):
             self.bulk_toolbar.delete_orders_clicked.connect(self.actions_handler.bulk_delete_orders)
             self.bulk_toolbar.export_selection_clicked.connect(self.actions_handler.bulk_export_selection)
 
-        # Refresh global stats when Statistics/Information tab (index 3) becomes active
+        # Refresh global stats when the Information tab becomes active
         if hasattr(self, 'main_tabs'):
             self.main_tabs.currentChanged.connect(self._on_main_tab_changed)
 
     def _on_main_tab_changed(self, index: int):
-        """Refresh global stats whenever the Information/Statistics tab is shown."""
-        if index == 3:
+        """Refresh global stats whenever the Information/Statistics tab is shown.
+        Also refresh session browser if navigating to Tab 3 with no data loaded yet."""
+        if index == self.main_tabs.indexOf(self.information_tab):
             self._load_global_stats_async()
+        elif (hasattr(self, 'session_browser_tab')
+              and index == self.main_tabs.indexOf(self.session_browser_tab)):
+            if (hasattr(self, 'session_browser')
+                    and self.session_browser.current_client_id
+                    and not self.session_browser.sessions_data):
+                self.session_browser.refresh_sessions()
 
     def clear_filter(self):
         """Clears the filter input text box, tag filter, and resets proxy model."""
@@ -576,7 +583,7 @@ class MainWindow(QMainWindow):
             self._update_bulk_toolbar_state()
             logging.info("Bulk mode enabled")
         else:
-            self.toggle_bulk_mode_btn.setText("📦 Bulk Operations")
+            self.toggle_bulk_mode_btn.setText("Bulk Operations")
             self.toggle_bulk_mode_btn.setStyleSheet("")
             logging.info("Bulk mode disabled")
 
@@ -744,8 +751,7 @@ class MainWindow(QMainWindow):
             self.update_session_info_label()
 
             # Update session browser to show this client's sessions
-            # Don't auto-refresh here - let the second call handle it
-            self.session_browser.set_client(client_id, auto_refresh=False)
+            self.session_browser.set_client(client_id)
 
             # Update session browser widget in right panel (Tab 1)
             # This one WILL refresh (eliminates duplicate refresh)
