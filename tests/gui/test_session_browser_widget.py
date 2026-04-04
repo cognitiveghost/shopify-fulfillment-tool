@@ -101,7 +101,7 @@ def sample_sessions():
 def test_session_browser_initialization(session_browser):
     """Test that SessionBrowserWidget initializes correctly."""
     assert session_browser.sessions_table.rowCount() == 0
-    assert session_browser.sessions_table.columnCount() == 9
+    assert session_browser.sessions_table.columnCount() == 11
     assert not session_browser.open_btn.isEnabled()
 
 
