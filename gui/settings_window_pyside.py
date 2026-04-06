@@ -180,12 +180,7 @@ class SettingsWindow(QDialog):
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
         self.setMinimumSize(1100, 600)
         self.setModal(True)
-
-        screen_geo = QApplication.primaryScreen().availableGeometry()
-        self.resize(
-            min(1250, screen_geo.width() - 40),
-            min(920, screen_geo.height() - 60),
-        )
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
         main_layout = QVBoxLayout(self)
         self.tab_widget = QTabWidget()
@@ -207,6 +202,10 @@ class SettingsWindow(QDialog):
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
+
+        _screen = parent.screen() if parent else QApplication.primaryScreen()
+        _geo = _screen.availableGeometry()
+        self.resize(min(1250, _geo.width() - 40), min(820, _geo.height() - 100))
 
     # Generic helper to delete a widget and its reference from a list
     def _delete_widget_from_list(self, widget_refs, ref_list):
