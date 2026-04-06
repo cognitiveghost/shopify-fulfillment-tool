@@ -1216,6 +1216,7 @@ class MainWindow(QMainWindow):
 
         worker = Worker(_fetch)
         worker.signals.result.connect(self._on_global_stats_loaded)
+        worker.signals.error.connect(self._on_global_stats_error)
         self.threadpool.start(worker)
 
     def _on_global_stats_loaded(self, data: dict):
@@ -1233,6 +1234,11 @@ class MainWindow(QMainWindow):
                 self.global_stats_updated_lbl.setText(f"Updated: {dt.strftime('%Y-%m-%d %H:%M')}")
             except Exception:
                 self.global_stats_updated_lbl.setText(f"Updated: {last_updated[:16]}")
+
+    def _on_global_stats_error(self, error_tuple):
+        """Log global stats loading failure silently — non-critical background task."""
+        exctype, value, _ = error_tuple
+        logger.warning(f"Global stats load failed ({exctype.__name__}): {value}")
 
     def log_activity(self, op_type, desc):
         """Adds a new entry to the 'Activity Log' table in the UI.

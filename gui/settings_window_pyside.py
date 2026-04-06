@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QDateEdit,
     QCheckBox,
+    QSizePolicy,
+    QLayout,
 )
 from PySide6.QtCore import Qt, QTimer, QDate
 
@@ -178,18 +180,22 @@ class SettingsWindow(QDialog):
         self.courier_mapping_widgets = []
 
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
-        self.setMinimumSize(1100, 600)
+        self.setMinimumSize(900, 500)
         self.setModal(True)
 
         screen_geo = QApplication.primaryScreen().availableGeometry()
         self.resize(
             min(1250, screen_geo.width() - 40),
-            min(920, screen_geo.height() - 60),
+            min(800, screen_geo.height() - 80),
         )
 
         main_layout = QVBoxLayout(self)
+        main_layout.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
         self.tab_widget = QTabWidget()
+        self.tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.tab_widget.setMinimumHeight(350)
         main_layout.addWidget(self.tab_widget)
+        main_layout.setStretchFactor(self.tab_widget, 1)
 
         # Create all tabs
         self.create_general_tab()
@@ -207,6 +213,7 @@ class SettingsWindow(QDialog):
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
+        main_layout.setStretchFactor(button_box, 0)
 
     # Generic helper to delete a widget and its reference from a list
     def _delete_widget_from_list(self, widget_refs, ref_list):

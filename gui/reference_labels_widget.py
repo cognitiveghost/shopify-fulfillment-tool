@@ -26,7 +26,7 @@ from gui.worker import Worker
 from shopify_tool.reference_labels_history import ReferenceLabelsHistory
 
 from gui.theme_manager import get_theme_manager
-from gui.pdf_printer import populate_printer_combo, print_pdf_to_printer
+from gui.pdf_printer import populate_printer_combo, print_pdf_to_printer, handle_print_worker_error
 
 class ReferenceLabelsWidget(QWidget):
     """Widget for processing reference labels PDFs."""
@@ -229,6 +229,7 @@ class ReferenceLabelsWidget(QWidget):
         self.print_btn.setEnabled(False)
         worker = Worker(self._print_pdf_worker, self.last_output_path, printer_name)
         worker.signals.result.connect(self._on_print_result)
+        worker.signals.error.connect(self._on_print_error)
         worker.signals.finished.connect(lambda: self.print_btn.setEnabled(True))
         QThreadPool.globalInstance().start(worker)
 
@@ -242,6 +243,9 @@ class ReferenceLabelsWidget(QWidget):
         else:
             QMessageBox.warning(self, "Print Failed", f"Print failed:\n{result.get('error', 'Unknown error')}")
             self.log.error(f"Print failed: {result.get('error')}")
+
+    def _on_print_error(self, error_tuple):
+        handle_print_worker_error(self, self.log, error_tuple)
 
     def _create_history_group(self):
         """Create history section."""

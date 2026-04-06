@@ -5,7 +5,7 @@ echo ========================================
 echo.
 
 REM Set development environment variable
-set FULFILLMENT_SERVER_PATH=D:\Dev\fulfillment-server-mock
+set FULFILLMENT_SERVER_PATH=C:\Dev\fulfillment-server-mock
 
 echo Environment: DEVELOPMENT
 echo Server Path: %FULFILLMENT_SERVER_PATH%

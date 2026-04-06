@@ -382,6 +382,16 @@ def generate_barcode_label(
                         draw.text((tag_x, tag_y), current_line, font=font_tag_multiline, fill='black')
                         tag_y += line_height
                     current_line = tag
+                    # Truncate a single tag that is still wider than the available area
+                    bbox_single = draw.textbbox((0, 0), current_line, font=font_tag_multiline)
+                    if bbox_single[2] - bbox_single[0] > available_width:
+                        for cut in range(len(current_line), 0, -1):
+                            candidate = current_line[:cut] + "..."
+                            if draw.textbbox((0, 0), candidate, font=font_tag_multiline)[2] <= available_width:
+                                current_line = candidate
+                                break
+                        else:
+                            current_line = "..."
 
                 # Check if we're out of vertical space
                 if tag_y + line_height > tag_start_y + available_height:

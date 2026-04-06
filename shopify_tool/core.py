@@ -1251,7 +1251,8 @@ def get_unique_column_values(df, column_name):
     try:
         unique_values = df[column_name].dropna().unique().tolist()
         return sorted([str(v) for v in unique_values])
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"get_unique_column_values failed for column '{column_name}': {exc}")
         return []
 
 

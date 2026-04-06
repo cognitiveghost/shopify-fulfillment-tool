@@ -445,16 +445,18 @@ class SessionManager:
         if not client_sessions_dir.exists():
             return []
 
-        # Determine whether the index is usable or needs a rebuild
+        # Determine whether the index is usable or needs a rebuild.
+        # Compare folder names rather than directory mtime: on a multi-PC network
+        # share the directory mtime changes whenever any session file is modified,
+        # causing unnecessary full rebuilds.  A single iterdir() call (no file I/O
+        # per session) tells us if folders were added or removed.
         index = self._read_sessions_index(client_id)
         if index is not None:
-            index_path = self._get_sessions_index_path(client_id)
             try:
-                dir_mtime = client_sessions_dir.stat().st_mtime
-                index_mtime = index_path.stat().st_mtime
-                if dir_mtime > index_mtime:
-                    # A new session folder was added (possibly from another PC)
-                    index = None
+                actual_names = {item.name for item in client_sessions_dir.iterdir() if item.is_dir()}
+                indexed_names = set(index.get("sessions", {}).keys())
+                if actual_names != indexed_names:
+                    index = None  # Rebuild only when session folders are added or removed
             except Exception:
                 index = None
 

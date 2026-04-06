@@ -28,7 +28,8 @@ from PySide6.QtCore import QUrl
 
 from gui.worker import Worker
 from gui.theme_manager import get_theme_manager
-from gui.pdf_printer import populate_printer_combo, print_pdf_to_printer
+from gui.pdf_printer import populate_printer_combo, print_pdf_to_printer, handle_print_worker_error
+from shopify_tool.tag_manager import parse_tags
 
 
 class BarcodeGeneratorWidget(QWidget):
@@ -202,6 +203,7 @@ class BarcodeGeneratorWidget(QWidget):
         self.print_btn.setEnabled(False)
         worker = Worker(self._print_pdf_worker, self.last_pdf_path, printer_name)
         worker.signals.result.connect(self._on_print_result)
+        worker.signals.error.connect(self._on_print_error)
         worker.signals.finished.connect(lambda: self.print_btn.setEnabled(True))
         QThreadPool.globalInstance().start(worker)
 
@@ -215,6 +217,9 @@ class BarcodeGeneratorWidget(QWidget):
         else:
             QMessageBox.warning(self, "Print Failed", f"Print failed:\n{result.get('error', 'Unknown error')}")
             self.log.error(f"Print failed: {result.get('error')}")
+
+    def _on_print_error(self, error_tuple):
+        handle_print_worker_error(self, self.log, error_tuple)
 
     def _create_generation_section(self):
         """Create generation section."""
@@ -467,18 +472,19 @@ class BarcodeGeneratorWidget(QWidget):
         # Add item_count column to unique_orders (total quantity of products)
         unique_orders['item_count'] = unique_orders['Order_Number'].map(item_counts)
 
-        # Merge tags from ALL rows of each order (not just the first row)
+        # Merge tags from ALL rows of each order (not just the first row).
+        # Use parse_tags() to correctly handle JSON array format (["TAG1", "TAG2"])
+        # and produce pipe-separated output expected by format_tags_for_barcode().
         if 'Internal_Tags' in self.filtered_orders_df.columns:
             merged_tags = {}
             for order_num, group in self.filtered_orders_df.groupby('Order_Number', sort=False):
                 seen, result = set(), []
                 for val in group['Internal_Tags'].dropna():
-                    for t in str(val).split(','):
-                        t = t.strip()
-                        if t and t not in seen:
-                            seen.add(t)
-                            result.append(t)
-                merged_tags[order_num] = ', '.join(result)
+                    for tag in parse_tags(val):
+                        if tag and tag not in seen:
+                            seen.add(tag)
+                            result.append(tag)
+                merged_tags[order_num] = '|'.join(result)
             unique_orders['Internal_Tags'] = unique_orders['Order_Number'].map(merged_tags)
 
         # Sort by natural order so sequential numbering (idx+1) matches numeric order

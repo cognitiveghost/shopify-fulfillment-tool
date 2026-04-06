@@ -31,6 +31,20 @@ def populate_printer_combo(combo, log) -> None:
         log.warning(f"Failed to enumerate printers: {exc}")
 
 
+def handle_print_worker_error(parent, log, error_tuple) -> None:
+    """Show error dialog and log the traceback for an unexpected print worker failure.
+
+    Shared by any widget that delegates printing to a background Worker.
+    The button re-enable is intentionally omitted — the worker's ``finished``
+    signal (which fires unconditionally in the ``finally`` block) handles it.
+    """
+    from PySide6.QtWidgets import QMessageBox
+    exctype, value, tb = error_tuple
+    log.error(f"Print worker raised {exctype.__name__}: {value}\n{tb}")
+    QMessageBox.warning(parent, "Print Error",
+                        f"An unexpected error occurred while printing:\n{value}")
+
+
 def print_pdf_to_printer(pdf_path, printer_name: str) -> dict:
     """Render every page of *pdf_path* and send it to *printer_name*.
 
@@ -40,7 +54,7 @@ def print_pdf_to_printer(pdf_path, printer_name: str) -> dict:
     """
     from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
     from PySide6.QtPdf import QPdfDocument
-    from PySide6.QtGui import QPainter
+    from PySide6.QtGui import QPainter, QImage
     from PySide6.QtCore import QSize, QRectF
 
     # Locate the QPrinterInfo for the chosen printer so we can pass it to
@@ -66,6 +80,7 @@ def print_pdf_to_printer(pdf_path, printer_name: str) -> dict:
         doc.close()
         return {"success": False, "error": f"Failed to begin printing to '{printer_name}'"}
 
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
     try:
         dpi = printer.resolution()
         page_rect = printer.pageRect(QPrinter.DevicePixel)
@@ -75,7 +90,14 @@ def print_pdf_to_printer(pdf_path, printer_name: str) -> dict:
             render_w = max(1, int(page_size_pt.width() / 72.0 * dpi))
             render_h = max(1, int(page_size_pt.height() / 72.0 * dpi))
             image = doc.render(page_idx, QSize(render_w, render_h))
-            painter.drawImage(target_rect, image)
+            if image.isNull():
+                return {"success": False, "error": f"Failed to render page {page_idx + 1}"}
+            # Convert ARGB32 → Grayscale8: removes alpha-channel noise for B&W thermal prints
+            try:
+                gray_image = image.convertToFormat(QImage.Format.Format_Grayscale8)
+            except Exception:
+                gray_image = image  # fall back to ARGB32 if conversion unavailable
+            painter.drawImage(target_rect, gray_image)
             if page_idx < page_count - 1:
                 printer.newPage()
         return {"success": True, "pages_printed": page_count}
