@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -67,6 +68,9 @@ class ProfileManager:
 
     # Class-level constants for metadata cache
     METADATA_CACHE_TIMEOUT_SECONDS = 300  # 5 minutes
+
+    # Clients index cache (mtime-based)
+    _clients_index_cache: Tuple[Optional[Dict], float] = (None, 0.0)
 
     def __init__(self, base_path: str = None):
         """Initialize ProfileManager with automatic environment detection.
@@ -219,14 +223,152 @@ class ProfileManager:
 
         return True, ""
 
+    # ------------------------------------------------------------------
+    # Clients Index (clients_index.json)
+    # ------------------------------------------------------------------
+
+    def _get_clients_index_path(self) -> Path:
+        return self.clients_dir / "clients_index.json"
+
+    def _read_clients_index(self) -> Optional[Dict]:
+        """Read clients index with mtime-based cache. Returns None if missing/corrupt."""
+        index_path = self._get_clients_index_path()
+        if not index_path.exists():
+            return None
+        try:
+            mtime = index_path.stat().st_mtime
+            cached_data, cached_mtime = ProfileManager._clients_index_cache
+            if cached_data is not None and cached_mtime == mtime:
+                return cached_data
+            with open(index_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            ProfileManager._clients_index_cache = (data, mtime)
+            return data
+        except Exception as e:
+            logger.warning(f"Failed to read clients index: {e}")
+            return None
+
+    def _write_clients_index(self, index_data: Dict) -> bool:
+        """Atomically write clients index using temp-file rename.
+
+        Uses a PID-unique temp filename to avoid collisions between concurrent
+        writers, then retries os.replace() on transient Windows locking errors.
+        """
+        index_path = self._get_clients_index_path()
+        tmp_path = index_path.with_name(f"clients_index.{uuid.uuid4().hex[:12]}.tmp")
+        try:
+            index_data["last_updated"] = datetime.now().isoformat()
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(index_data, f, indent=2)
+            # Retry os.replace() — Windows can refuse if another reader has the
+            # destination file open momentarily (WinError 32 / WinError 5).
+            for attempt in range(4):
+                try:
+                    os.replace(str(tmp_path), str(index_path))
+                    break
+                except OSError:
+                    if attempt == 3:
+                        raise
+                    time.sleep(0.05)
+            mtime = index_path.stat().st_mtime
+            ProfileManager._clients_index_cache = (index_data, mtime)
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to write clients index: {e}")
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return False
+
+    def _extract_index_entry(self, client_id: str, config: Dict) -> Dict:
+        """Extract the lightweight fields stored per-client in the index."""
+        ui = config.get("ui_settings", {})
+        meta = config.get("metadata", {})
+        return {
+            "client_name": config.get("client_name", client_id),
+            "group_id": ui.get("group_id"),
+            "is_pinned": ui.get("is_pinned", False),
+            "display_order": ui.get("display_order", 0),
+            "custom_color": ui.get("custom_color", "#4CAF50"),
+            "last_accessed": meta.get("last_accessed", ""),
+            "total_sessions": meta.get("total_sessions", 0),
+            "last_session_date": meta.get("last_session_date"),
+        }
+
+    def _update_client_in_index(self, client_id: str, config: Dict) -> None:
+        """Update a single client entry in the clients index (non-fatal)."""
+        try:
+            index = self._read_clients_index()
+            if index is None:
+                index = {"version": "1.0", "clients": {}}
+            index["clients"][client_id] = self._extract_index_entry(client_id, config)
+            self._write_clients_index(index)
+        except Exception as e:
+            logger.debug(f"Clients index update skipped for {client_id}: {e}")
+
+    def _remove_client_from_index(self, client_id: str) -> None:
+        """Remove a client entry from the index (non-fatal)."""
+        try:
+            index = self._read_clients_index()
+            if index and client_id in index.get("clients", {}):
+                del index["clients"][client_id]
+                self._write_clients_index(index)
+        except Exception as e:
+            logger.debug(f"Clients index removal skipped for {client_id}: {e}")
+
+    def _build_clients_index(self) -> Dict:
+        """Rebuild clients index by scanning all client directories."""
+        index: Dict = {"version": "1.0", "clients": {}}
+        if not self.clients_dir.exists():
+            return index
+        for item in self.clients_dir.iterdir():
+            if not (item.is_dir() and item.name.startswith("CLIENT_")):
+                continue
+            client_id = item.name.replace("CLIENT_", "")
+            config = self.load_client_config(client_id)
+            if config:
+                index["clients"][client_id] = self._extract_index_entry(client_id, config)
+        self._write_clients_index(index)
+        logger.debug(f"Clients index rebuilt: {len(index['clients'])} clients")
+        return index
+
+    def get_clients_index(self) -> Dict[str, Dict]:
+        """Return the clients index dict (client_id → metadata).
+
+        Rebuilds automatically if stale. Useful for callers that need
+        group/pinned info without loading individual client configs.
+        """
+        index = self._read_clients_index()
+        if index is not None:
+            index_path = self._get_clients_index_path()
+            try:
+                dir_mtime = self.clients_dir.stat().st_mtime
+                index_mtime = index_path.stat().st_mtime
+                if dir_mtime > index_mtime:
+                    index = None  # clients dir changed — rebuild
+            except Exception:
+                index = None
+        if index is None:
+            index = self._build_clients_index()
+        return index.get("clients", {})
+
     def list_clients(self) -> List[str]:
         """Get list of available client IDs.
 
+        Uses clients_index.json for fast O(1) lookup.
+        Falls back to directory scan and rebuilds index if missing/stale.
+
         Returns:
-            List[str]: List of client IDs (without CLIENT_ prefix)
-                Example: ["M", "A", "B"]
+            List[str]: Sorted list of client IDs (without CLIENT_ prefix)
+                Example: ["A", "B", "M"]
         """
         try:
+            clients_data = self.get_clients_index()
+            if clients_data:
+                return sorted(clients_data.keys())
+
+            # Index empty but directory may still have clients — fall back
             if not self.clients_dir.exists():
                 self.clients_dir.mkdir(parents=True, exist_ok=True)
                 return []
@@ -234,9 +376,7 @@ class ProfileManager:
             clients = []
             for item in self.clients_dir.iterdir():
                 if item.is_dir() and item.name.startswith("CLIENT_"):
-                    client_id = item.name.replace("CLIENT_", "")
-                    clients.append(client_id)
-
+                    clients.append(item.name.replace("CLIENT_", ""))
             return sorted(clients)
 
         except PermissionError as e:
@@ -311,6 +451,8 @@ class ProfileManager:
             session_client_dir.mkdir(parents=True, exist_ok=True)
 
             logger.info(f"Client profile created: CLIENT_{client_id}")
+            # Add to clients index
+            self._update_client_in_index(client_id, client_config)
             return True
 
         except Exception as e:
@@ -1439,6 +1581,8 @@ class ProfileManager:
                         f"Client config saved successfully for CLIENT_{client_id} "
                         f"(attempt {attempt + 1}/{max_retries})"
                     )
+                    # Update clients index with new ui_settings / metadata
+                    self._update_client_in_index(client_id, config)
                     return True
                 else:
                     # File lock failed, retry

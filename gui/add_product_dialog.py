@@ -143,7 +143,7 @@ class AddProductDialog(QDialog):
     def _create_info_box(self):
         """Create info box."""
         text = (
-            "ℹ️ INFO\n\n"
+            "INFO\n\n"
             "• Product will be added with Source: 'Manual'\n"
             "• Fulfillment will be recalculated for this order\n"
             "• Manual addition will be saved in session\n"
@@ -265,7 +265,7 @@ class AddProductDialog(QDialog):
         # Show warning if low/zero stock
         if current_stock == 0:
             warning_text = (
-                "⚠️ WARNING\n\n"
+                "WARNING\n\n"
                 f"Product {text} has 0 stock available!\n"
                 "Adding this product will affect order fulfillment."
             )
@@ -281,7 +281,7 @@ class AddProductDialog(QDialog):
             """)
         elif current_stock < 5:
             warning_text = (
-                "⚠️ WARNING\n\n"
+                "WARNING\n\n"
                 f"Product {text} has low stock ({current_stock} units)."
             )
             self.warning_box.setText(warning_text)

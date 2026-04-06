@@ -28,6 +28,8 @@ from PySide6.QtCore import QUrl
 
 from gui.worker import Worker
 from gui.theme_manager import get_theme_manager
+from gui.pdf_printer import populate_printer_combo, print_pdf_to_printer, handle_print_worker_error
+from shopify_tool.tag_manager import parse_tags
 
 
 class BarcodeGeneratorWidget(QWidget):
@@ -52,6 +54,7 @@ class BarcodeGeneratorWidget(QWidget):
         self.current_packing_list = None
         self.filtered_orders_df = None
         self.barcodes_dir = None
+        self.last_pdf_path = None
 
         self._init_ui()
         self._connect_signals()
@@ -69,7 +72,10 @@ class BarcodeGeneratorWidget(QWidget):
         # Section 2: Options
         layout.addWidget(self._create_options_section())
 
-        # Section 3: Generation
+        # Section 3: Print
+        layout.addWidget(self._create_print_section())
+
+        # Section 4: Generation
         layout.addWidget(self._create_generation_section())
 
         # Spacer to push content to top
@@ -118,10 +124,10 @@ class BarcodeGeneratorWidget(QWidget):
         group = QGroupBox("Options")
         layout = QVBoxLayout(group)
 
-        # Auto-open folder checkbox
-        self.auto_open_folder_checkbox = QCheckBox("Auto-open barcodes folder after generation")
-        self.auto_open_folder_checkbox.setChecked(True)
-        layout.addWidget(self.auto_open_folder_checkbox)
+        # Auto-open file checkbox
+        self.auto_open_pdf_checkbox = QCheckBox("Auto-open PDF after generation")
+        self.auto_open_pdf_checkbox.setChecked(True)
+        layout.addWidget(self.auto_open_pdf_checkbox)
 
         # Output format options
         format_label = QLabel("Output Format:")
@@ -149,6 +155,71 @@ class BarcodeGeneratorWidget(QWidget):
         layout.addLayout(output_row)
 
         return group
+
+    def _create_print_section(self):
+        """Create print controls section."""
+        group = QGroupBox("Print")
+        layout = QVBoxLayout(group)
+
+        # Printer selection row
+        printer_row = QHBoxLayout()
+        printer_row.addWidget(QLabel("Printer:"))
+        self.printer_combo = QComboBox()
+        self.printer_combo.setMinimumWidth(200)
+        printer_row.addWidget(self.printer_combo, 1)
+        refresh_printers_btn = QPushButton("Refresh")
+        refresh_printers_btn.setMaximumWidth(70)
+        refresh_printers_btn.clicked.connect(self._refresh_printers)
+        printer_row.addWidget(refresh_printers_btn)
+        layout.addLayout(printer_row)
+
+        # Auto-print checkbox
+        self.auto_print_checkbox = QCheckBox("Auto-print PDF after generation")
+        self.auto_print_checkbox.setChecked(False)
+        layout.addWidget(self.auto_print_checkbox)
+
+        # Manual print button
+        self.print_btn = QPushButton("Print PDF")
+        self.print_btn.setEnabled(False)
+        self.print_btn.setToolTip("Print the last generated PDF to the selected printer")
+        self.print_btn.clicked.connect(self._on_print_clicked)
+        layout.addWidget(self.print_btn)
+
+        self._refresh_printers()
+        return group
+
+    def _refresh_printers(self):
+        populate_printer_combo(self.printer_combo, self.log)
+
+    def _on_print_clicked(self):
+        """Print last generated PDF to selected printer."""
+        if not self.last_pdf_path or not Path(self.last_pdf_path).exists():
+            QMessageBox.warning(self, "Nothing to Print", "No PDF has been generated yet.")
+            return
+        printer_name = self.printer_combo.currentText()
+        if not printer_name or printer_name == "(no printers found)":
+            QMessageBox.warning(self, "No Printer", "Please select a printer.")
+            return
+        self.print_btn.setEnabled(False)
+        worker = Worker(self._print_pdf_worker, self.last_pdf_path, printer_name)
+        worker.signals.result.connect(self._on_print_result)
+        worker.signals.error.connect(self._on_print_error)
+        worker.signals.finished.connect(lambda: self.print_btn.setEnabled(True))
+        QThreadPool.globalInstance().start(worker)
+
+    def _print_pdf_worker(self, pdf_path, printer_name):
+        return print_pdf_to_printer(pdf_path, printer_name)
+
+    def _on_print_result(self, result):
+        """Handle print job result in main thread."""
+        if result.get("success"):
+            self.log.info(f"Printed {result.get('pages_printed', 0)} page(s)")
+        else:
+            QMessageBox.warning(self, "Print Failed", f"Print failed:\n{result.get('error', 'Unknown error')}")
+            self.log.error(f"Print failed: {result.get('error')}")
+
+    def _on_print_error(self, error_tuple):
+        handle_print_worker_error(self, self.log, error_tuple)
 
     def _create_generation_section(self):
         """Create generation section."""
@@ -401,18 +472,19 @@ class BarcodeGeneratorWidget(QWidget):
         # Add item_count column to unique_orders (total quantity of products)
         unique_orders['item_count'] = unique_orders['Order_Number'].map(item_counts)
 
-        # Merge tags from ALL rows of each order (not just the first row)
+        # Merge tags from ALL rows of each order (not just the first row).
+        # Use parse_tags() to correctly handle JSON array format (["TAG1", "TAG2"])
+        # and produce pipe-separated output expected by format_tags_for_barcode().
         if 'Internal_Tags' in self.filtered_orders_df.columns:
             merged_tags = {}
             for order_num, group in self.filtered_orders_df.groupby('Order_Number', sort=False):
                 seen, result = set(), []
                 for val in group['Internal_Tags'].dropna():
-                    for t in str(val).split(','):
-                        t = t.strip()
-                        if t and t not in seen:
-                            seen.add(t)
-                            result.append(t)
-                merged_tags[order_num] = ', '.join(result)
+                    for tag in parse_tags(val):
+                        if tag and tag not in seen:
+                            seen.add(tag)
+                            result.append(tag)
+                merged_tags[order_num] = '|'.join(result)
             unique_orders['Internal_Tags'] = unique_orders['Order_Number'].map(merged_tags)
 
         # Sort by natural order so sequential numbering (idx+1) matches numeric order
@@ -473,9 +545,13 @@ class BarcodeGeneratorWidget(QWidget):
 
         QMessageBox.information(self, "Generation Complete", message)
 
-        # Auto-open folder if enabled
-        if self.auto_open_folder_checkbox.isChecked():
-            self._open_barcodes_folder()
+        # Auto-open PDF if enabled
+        if self.auto_open_pdf_checkbox.isChecked() and self.last_pdf_path and Path(self.last_pdf_path).exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.last_pdf_path)))
+
+        # Auto-print if enabled
+        if self.auto_print_checkbox.isChecked() and self.last_pdf_path and Path(self.last_pdf_path).exists():
+            self._on_print_clicked()
 
         # Emit signal
         self.generation_complete.emit({
@@ -507,28 +583,20 @@ class BarcodeGeneratorWidget(QWidget):
         self.generate_btn.setEnabled(True)
 
     def _generate_pdf_from_results(self, results):
-        """Generate PDF automatically after barcode generation."""
+        """Generate PDF automatically after barcode generation. Stores path in self.last_pdf_path."""
         try:
-            from pathlib import Path
             from shopify_tool.barcode_processor import generate_barcodes_pdf
 
-            # Convert string paths back to Path objects
             barcode_files = [Path(r['file_path']) for r in results if r.get('file_path')]
-
             if not barcode_files:
                 return
 
             pdf_filename = f"{self.current_packing_list}_barcodes.pdf"
             pdf_path = self.barcodes_dir / pdf_filename
-
             generate_barcodes_pdf(barcode_files, pdf_path)
-
+            self.last_pdf_path = pdf_path
+            self.print_btn.setEnabled(True)
             self.log.info(f"Auto-generated PDF: {pdf_path}")
-
-            # Open PDF
-            url = QUrl.fromLocalFile(str(pdf_path))
-            QDesktopServices.openUrl(url)
-
         except Exception as e:
             self.log.error(f"Auto PDF generation failed: {e}")
 
@@ -551,18 +619,4 @@ class BarcodeGeneratorWidget(QWidget):
             self.log.error(f"PNG cleanup failed: {e}")
 
 
-    def _open_barcodes_folder(self):
-        """Open barcodes folder in file explorer."""
-        if not self.barcodes_dir or not self.barcodes_dir.exists():
-            QMessageBox.warning(
-                self,
-                "Folder Not Found",
-                "Barcodes folder not found."
-            )
-            return
-
-        url = QUrl.fromLocalFile(str(self.barcodes_dir))
-        QDesktopServices.openUrl(url)
-
-        self.log.info(f"Opened barcodes folder: {self.barcodes_dir}")
 

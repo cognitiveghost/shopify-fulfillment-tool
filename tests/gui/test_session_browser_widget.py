@@ -21,9 +21,21 @@ from shopify_tool.session_manager import SessionManager
 
 
 @pytest.fixture
-def mock_session_manager():
+def mock_session_manager(tmp_path):
     """Create a mock SessionManager."""
     sm = Mock(spec=SessionManager)
+    # sessions_root is an instance attribute — add it manually
+    sm.sessions_root = tmp_path
+    # Packing registry methods return empty data by default
+    sm.get_registry_path.return_value = tmp_path / "registry_index.json"
+    sm.get_session_packing_summary.return_value = {
+        "pack_status": "not_started",
+        "packed_orders": 0,
+        "total_orders": 0,
+        "worker_names": [],
+        "packing_lists": [],
+        "last_pack_activity": "",
+    }
     return sm
 
 
@@ -89,7 +101,7 @@ def sample_sessions():
 def test_session_browser_initialization(session_browser):
     """Test that SessionBrowserWidget initializes correctly."""
     assert session_browser.sessions_table.rowCount() == 0
-    assert session_browser.sessions_table.columnCount() == 7
+    assert session_browser.sessions_table.columnCount() == 11
     assert not session_browser.open_btn.isEnabled()
 
 

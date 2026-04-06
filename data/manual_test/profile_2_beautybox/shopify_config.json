@@ -1,0 +1,331 @@
+{
+  "client_id": "BEAUTYBOX",
+  "client_name": "BeautyBox",
+  "created_at": "2026-04-04T10:00:00.000000",
+  "last_updated": "2026-04-04T10:00:00.000000",
+  "updated_by": "MANUAL-TEST",
+  "config_version": "2.1",
+
+  "column_mappings": {
+    "version": 2,
+    "orders": {
+      "Name": "Order_Number",
+      "Lineitem sku": "SKU",
+      "Lineitem quantity": "Quantity",
+      "Lineitem name": "Product_Name",
+      "Shipping Method": "Shipping_Method",
+      "Shipping Country": "Shipping_Country",
+      "Tags": "Tags",
+      "Notes": "Notes",
+      "Total": "Total_Price",
+      "Subtotal": "Subtotal",
+      "Email": "Email",
+      "Financial Status": "Financial_Status"
+    },
+    "stock": {
+      "Артикул": "SKU",
+      "Ime": "Product_Name",
+      "Наличност": "Stock",
+      "Годност": "Expiry_Date",
+      "Партида": "Batch"
+    }
+  },
+
+  "courier_mappings": {
+    "DHL": {
+      "patterns": ["dhl", "dhl express", "dhl priority"]
+    },
+    "Nova Poshta": {
+      "patterns": ["nova poshta", "nova post", "np"]
+    },
+    "Meest": {
+      "patterns": ["meest", "meest express"]
+    },
+    "Justin": {
+      "patterns": ["justin"]
+    }
+  },
+
+  "settings": {
+    "stock_csv_delimiter": ";",
+    "orders_csv_delimiter": ",",
+    "low_stock_threshold": 5,
+    "repeat_detection_days": 1
+  },
+
+  "rules": [
+    {
+      "name": "Tag DHL orders as DHL-EXPRESS",
+      "priority": 1,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Shipping_Method",
+          "operator": "contains",
+          "value": "DHL"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "DHL-EXPRESS"
+        }
+      ]
+    },
+    {
+      "name": "Tag high-value orders (Total > 500) — two actions",
+      "priority": 2,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Total_Price",
+          "operator": "is greater than",
+          "value": "500"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "HIGH-VALUE"
+        },
+        {
+          "type": "ADD_INTERNAL_TAG",
+          "value": "vip"
+        }
+      ]
+    },
+    {
+      "name": "Tag fragile orders (Tags contains FRAGILE)",
+      "priority": 3,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Tags",
+          "operator": "contains",
+          "value": "FRAGILE"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "HANDLE-WITH-CARE"
+        }
+      ]
+    },
+    {
+      "name": "Tag bulk quantity lines (qty > 20)",
+      "priority": 4,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Quantity",
+          "operator": "is greater than",
+          "value": "20"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "BULK-ORDER"
+        }
+      ]
+    },
+    {
+      "name": "Tag Ukraine orders with internal tag",
+      "priority": 5,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Shipping_Country",
+          "operator": "equals",
+          "value": "Ukraine"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_INTERNAL_TAG",
+          "value": "UA-LOCAL"
+        }
+      ]
+    },
+    {
+      "name": "Tag gift set orders (SKU contains GIFT)",
+      "priority": 6,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "SKU",
+          "operator": "contains",
+          "value": "GIFT"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "GIFT-PACKAGING"
+        }
+      ]
+    },
+    {
+      "name": "Tag urgent orders (Notes contains urgent)",
+      "priority": 7,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Notes",
+          "operator": "contains",
+          "value": "urgent"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "URGENT"
+        }
+      ]
+    },
+    {
+      "name": "Tag multi-item orders with internal tag",
+      "priority": 8,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Order_Type",
+          "operator": "equals",
+          "value": "Multi"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_INTERNAL_TAG",
+          "value": "multi-item"
+        }
+      ]
+    }
+  ],
+
+  "set_decoders": {
+    "BB-STARTER-KIT": [
+      {"sku": "BB-SERUM-30", "quantity": 1},
+      {"sku": "BB-CREAM-50", "quantity": 1},
+      {"sku": "BB-TONER-100", "quantity": 1}
+    ]
+  },
+
+  "weight_config": {
+    "volumetric_divisor": 6000,
+    "products": {
+      "BB-SERUM-30":  {"weight_g": 80,  "length_cm": 8,  "width_cm": 5,  "height_cm": 5},
+      "BB-CREAM-50":  {"weight_g": 150, "length_cm": 9,  "width_cm": 6,  "height_cm": 6},
+      "BB-TONER-100": {"weight_g": 200, "length_cm": 16, "width_cm": 6,  "height_cm": 6},
+      "BB-MASK-SET":  {"weight_g": 300, "length_cm": 15, "width_cm": 10, "height_cm": 8},
+      "BB-GLOSS-RED": {"weight_g": 50,  "length_cm": 12, "width_cm": 3,  "height_cm": 2},
+      "BB-GLOSS-PINK":{"weight_g": 50,  "length_cm": 12, "width_cm": 3,  "height_cm": 2},
+      "BB-PERFUME-50":{"weight_g": 250, "length_cm": 10, "width_cm": 5,  "height_cm": 5},
+      "BB-GIFT-SET-A":{"weight_g": 600, "length_cm": 25, "width_cm": 20, "height_cm": 15}
+    },
+    "boxes": [
+      {
+        "id": "BOX-MINI",
+        "name": "Mini Box",
+        "max_weight_g": 500,
+        "length_cm": 15,
+        "width_cm": 10,
+        "height_cm": 8
+      },
+      {
+        "id": "BOX-S",
+        "name": "Small Box",
+        "max_weight_g": 2000,
+        "length_cm": 25,
+        "width_cm": 20,
+        "height_cm": 15
+      },
+      {
+        "id": "BOX-M",
+        "name": "Medium Box",
+        "max_weight_g": 5000,
+        "length_cm": 35,
+        "width_cm": 30,
+        "height_cm": 25
+      }
+    ]
+  },
+
+  "packing_list_configs": [
+    {
+      "name": "Nova Poshta Orders",
+      "output_filename": "packing_nova_poshta.xlsx",
+      "filters": [
+        {
+          "field": "Shipping_Provider",
+          "operator": "==",
+          "value": "Nova Poshta"
+        }
+      ],
+      "exclude_skus": []
+    },
+    {
+      "name": "All Fulfillable Orders",
+      "output_filename": "packing_all.xlsx",
+      "filters": [],
+      "exclude_skus": []
+    }
+  ],
+
+  "stock_export_configs": [],
+
+  "tag_categories": {
+    "version": 2,
+    "categories": {
+      "handling": {
+        "label": "Handling",
+        "color": "#FF5722",
+        "order": 1,
+        "tags": ["HANDLE-WITH-CARE", "FRAGILE", "GIFT-PACKAGING"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      },
+      "priority": {
+        "label": "Priority",
+        "color": "#FF9800",
+        "order": 2,
+        "tags": ["URGENT", "HIGH-VALUE"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      },
+      "shipping": {
+        "label": "Shipping",
+        "color": "#2196F3",
+        "order": 3,
+        "tags": ["DHL-EXPRESS", "STANDARD"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      },
+      "operations": {
+        "label": "Operations",
+        "color": "#9C27B0",
+        "order": 4,
+        "tags": ["BULK-ORDER"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      },
+      "status": {
+        "label": "Status",
+        "color": "#4CAF50",
+        "order": 5,
+        "tags": ["CHECKED", "PROBLEM", "HOLD"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      }
+    }
+  },
+
+  "sku_label_config": {
+    "sku_to_label": {},
+    "default_printer": ""
+  }
+}

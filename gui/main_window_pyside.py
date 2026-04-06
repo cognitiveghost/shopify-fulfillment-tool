@@ -22,6 +22,7 @@ from shopify_tool.undo_manager import UndoManager
 from shopify_tool.tag_manager import _normalize_tag_categories
 from gui.log_handler import QtLogHandler
 from gui.ui_manager import UIManager
+from gui.worker import Worker
 from gui.file_handler import FileHandler
 from gui.actions_handler import ActionsHandler
 from gui.client_settings_dialog import ClientSelectorWidget
@@ -312,6 +313,22 @@ class MainWindow(QMainWindow):
             self.bulk_toolbar.delete_orders_clicked.connect(self.actions_handler.bulk_delete_orders)
             self.bulk_toolbar.export_selection_clicked.connect(self.actions_handler.bulk_export_selection)
 
+        # Refresh global stats when the Information tab becomes active
+        if hasattr(self, 'main_tabs'):
+            self.main_tabs.currentChanged.connect(self._on_main_tab_changed)
+
+    def _on_main_tab_changed(self, index: int):
+        """Refresh global stats whenever the Information/Statistics tab is shown.
+        Also refresh session browser if navigating to Tab 3 with no data loaded yet."""
+        if index == self.main_tabs.indexOf(self.information_tab):
+            self._load_global_stats_async()
+        elif (hasattr(self, 'session_browser_tab')
+              and index == self.main_tabs.indexOf(self.session_browser_tab)):
+            if (hasattr(self, 'session_browser')
+                    and self.session_browser.current_client_id
+                    and not self.session_browser.sessions_data):
+                self.session_browser.refresh_sessions()
+
     def clear_filter(self):
         """Clears the filter input text box, tag filter, and resets proxy model."""
         self.filter_input.clear()
@@ -566,7 +583,7 @@ class MainWindow(QMainWindow):
             self._update_bulk_toolbar_state()
             logging.info("Bulk mode enabled")
         else:
-            self.toggle_bulk_mode_btn.setText("📦 Bulk Operations")
+            self.toggle_bulk_mode_btn.setText("Bulk Operations")
             self.toggle_bulk_mode_btn.setStyleSheet("")
             logging.info("Bulk mode disabled")
 
@@ -734,8 +751,7 @@ class MainWindow(QMainWindow):
             self.update_session_info_label()
 
             # Update session browser to show this client's sessions
-            # Don't auto-refresh here - let the second call handle it
-            self.session_browser.set_client(client_id, auto_refresh=False)
+            self.session_browser.set_client(client_id)
 
             # Update session browser widget in right panel (Tab 1)
             # This one WILL refresh (eliminates duplicate refresh)
@@ -1080,6 +1096,9 @@ class MainWindow(QMainWindow):
 
     def update_statistics_tab(self):
         """Populates the 'Statistics' tab with the latest analysis data."""
+        # Always refresh global stats (they update even when no session is open)
+        self._load_global_stats_async()
+
         if not self.analysis_stats:
             return
 
@@ -1179,6 +1198,47 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, 'sku_table'):
             self.sku_table.setRowCount(0)
+
+    def _load_global_stats_async(self):
+        """Load global stats from global_stats.json in the background and update the UI."""
+        if not hasattr(self, 'profile_manager') or self.profile_manager is None:
+            return
+
+        base_path = str(self.profile_manager.base_path)
+
+        def _fetch():
+            from shared.stats_manager import StatsManager
+            mgr = StatsManager(base_path=base_path)
+            return {
+                "global": mgr.get_global_stats(),
+                "by_client": mgr.get_all_clients_stats(),
+            }
+
+        worker = Worker(_fetch)
+        worker.signals.result.connect(self._on_global_stats_loaded)
+        worker.signals.error.connect(self._on_global_stats_error)
+        self.threadpool.start(worker)
+
+    def _on_global_stats_loaded(self, data: dict):
+        """Update global stats section in the statistics tab (main thread)."""
+        if not hasattr(self, 'global_stat_labels'):
+            return
+        g = data.get("global", {})
+        for key, lbl in self.global_stat_labels.items():
+            lbl.setText(str(g.get(key, "-")))
+        last_updated = g.get("last_updated", "")
+        if last_updated and hasattr(self, 'global_stats_updated_lbl'):
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(last_updated)
+                self.global_stats_updated_lbl.setText(f"Updated: {dt.strftime('%Y-%m-%d %H:%M')}")
+            except Exception:
+                self.global_stats_updated_lbl.setText(f"Updated: {last_updated[:16]}")
+
+    def _on_global_stats_error(self, error_tuple):
+        """Log global stats loading failure silently — non-critical background task."""
+        exctype, value, _ = error_tuple
+        logger.warning(f"Global stats load failed ({exctype.__name__}): {value}")
 
     def log_activity(self, op_type, desc):
         """Adds a new entry to the 'Activity Log' table in the UI.

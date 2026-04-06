@@ -1,0 +1,279 @@
+{
+  "client_id": "STYLEHUB",
+  "client_name": "StyleHub",
+  "created_at": "2026-04-04T10:00:00.000000",
+  "last_updated": "2026-04-04T10:00:00.000000",
+  "updated_by": "MANUAL-TEST",
+  "config_version": "2.1",
+
+  "column_mappings": {
+    "version": 2,
+    "orders": {
+      "Name": "Order_Number",
+      "Lineitem sku": "SKU",
+      "Lineitem quantity": "Quantity",
+      "Lineitem name": "Product_Name",
+      "Shipping Method": "Shipping_Method",
+      "Shipping Country": "Shipping_Country",
+      "Tags": "Tags",
+      "Notes": "Notes",
+      "Total": "Total_Price",
+      "Subtotal": "Subtotal",
+      "Email": "Email",
+      "Financial Status": "Financial_Status"
+    },
+    "stock": {
+      "Артикул": "SKU",
+      "Ime": "Product_Name",
+      "Наличност": "Stock"
+    }
+  },
+
+  "courier_mappings": {
+    "DHL": {
+      "patterns": ["dhl", "dhl express", "dhl standard", "dhl international"]
+    },
+    "DPD": {
+      "patterns": ["dpd", "dpd standard"]
+    },
+    "Speedy": {
+      "patterns": ["speedy"]
+    },
+    "PostOne": {
+      "patterns": ["postone", "post one"]
+    }
+  },
+
+  "settings": {
+    "stock_csv_delimiter": ";",
+    "orders_csv_delimiter": ",",
+    "low_stock_threshold": 5,
+    "repeat_detection_days": 1
+  },
+
+  "rules": [
+    {
+      "name": "Tag DHL orders as EXPRESS-DELIVERY",
+      "priority": 1,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Shipping_Method",
+          "operator": "contains",
+          "value": "DHL"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "EXPRESS-DELIVERY"
+        }
+      ]
+    },
+    {
+      "name": "Tag Germany orders with internal tag",
+      "priority": 2,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Shipping_Country",
+          "operator": "equals",
+          "value": "Germany"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_INTERNAL_TAG",
+          "value": "DE-ORDER"
+        }
+      ]
+    },
+    {
+      "name": "Tag high-value orders (Total > 200)",
+      "priority": 3,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Total_Price",
+          "operator": "is greater than",
+          "value": "200"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "HIGH-VALUE"
+        }
+      ]
+    },
+    {
+      "name": "Tag VIP customer orders",
+      "priority": 4,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Tags",
+          "operator": "contains",
+          "value": "VIP"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "VIP-PRIORITY"
+        }
+      ]
+    },
+    {
+      "name": "Tag bulk quantity lines (qty > 5)",
+      "priority": 5,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Quantity",
+          "operator": "is greater than",
+          "value": "5"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_TAG",
+          "value": "BULK-QTY"
+        }
+      ]
+    },
+    {
+      "name": "Tag multi-item orders with internal tag",
+      "priority": 6,
+      "enabled": true,
+      "match": "ALL",
+      "conditions": [
+        {
+          "field": "Order_Type",
+          "operator": "equals",
+          "value": "Multi"
+        }
+      ],
+      "actions": [
+        {
+          "type": "ADD_INTERNAL_TAG",
+          "value": "MULTI-ITEM"
+        }
+      ]
+    }
+  ],
+
+  "set_decoders": {
+    "STH-SET-SUMMER": [
+      {"sku": "STH-SHIRT-M", "quantity": 1},
+      {"sku": "STH-SHORTS-M", "quantity": 1}
+    ],
+    "STH-SET-WINTER": [
+      {"sku": "STH-JACKET-L", "quantity": 1},
+      {"sku": "STH-PANTS-L", "quantity": 1},
+      {"sku": "STH-SCARF-OS", "quantity": 1}
+    ]
+  },
+
+  "weight_config": {
+    "volumetric_divisor": 6000,
+    "products": {
+      "STH-SHIRT-S": {"weight_g": 180, "length_cm": 35, "width_cm": 25, "height_cm": 3},
+      "STH-SHIRT-M": {"weight_g": 200, "length_cm": 35, "width_cm": 25, "height_cm": 3},
+      "STH-SHIRT-L": {"weight_g": 220, "length_cm": 38, "width_cm": 27, "height_cm": 3},
+      "STH-SHORTS-M": {"weight_g": 300, "length_cm": 35, "width_cm": 25, "height_cm": 4},
+      "STH-SHORTS-L": {"weight_g": 320, "length_cm": 38, "width_cm": 27, "height_cm": 4},
+      "STH-JACKET-L": {"weight_g": 800, "length_cm": 50, "width_cm": 40, "height_cm": 8},
+      "STH-PANTS-L":  {"weight_g": 600, "length_cm": 45, "width_cm": 35, "height_cm": 5},
+      "STH-SCARF-OS": {"weight_g": 150, "length_cm": 30, "width_cm": 20, "height_cm": 2},
+      "STH-HOODIE-M": {"weight_g": 600, "length_cm": 40, "width_cm": 30, "height_cm": 6},
+      "STH-DRESS-M":  {"weight_g": 350, "length_cm": 40, "width_cm": 30, "height_cm": 3},
+      "STH-LEGGINGS-S": {"weight_g": 200, "length_cm": 35, "width_cm": 20, "height_cm": 3}
+    },
+    "boxes": [
+      {
+        "id": "BOX-S",
+        "name": "Small Box",
+        "max_weight_g": 2000,
+        "length_cm": 40,
+        "width_cm": 30,
+        "height_cm": 20
+      },
+      {
+        "id": "BOX-M",
+        "name": "Medium Box",
+        "max_weight_g": 5000,
+        "length_cm": 60,
+        "width_cm": 50,
+        "height_cm": 30
+      }
+    ]
+  },
+
+  "packing_list_configs": [
+    {
+      "name": "DHL Orders Only",
+      "output_filename": "packing_dhl.xlsx",
+      "filters": [
+        {
+          "field": "Shipping_Provider",
+          "operator": "==",
+          "value": "DHL"
+        }
+      ],
+      "exclude_skus": []
+    },
+    {
+      "name": "All Fulfillable Orders",
+      "output_filename": "packing_all.xlsx",
+      "filters": [],
+      "exclude_skus": []
+    }
+  ],
+
+  "stock_export_configs": [],
+
+  "tag_categories": {
+    "version": 2,
+    "categories": {
+      "shipping": {
+        "label": "Shipping",
+        "color": "#2196F3",
+        "order": 1,
+        "tags": ["EXPRESS-DELIVERY", "STANDARD"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      },
+      "priority": {
+        "label": "Priority",
+        "color": "#FF9800",
+        "order": 2,
+        "tags": ["VIP-PRIORITY", "HIGH-VALUE", "URGENT"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      },
+      "handling": {
+        "label": "Handling",
+        "color": "#9C27B0",
+        "order": 3,
+        "tags": ["BULK-QTY", "FRAGILE", "GIFT-WRAP"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      },
+      "status": {
+        "label": "Status",
+        "color": "#4CAF50",
+        "order": 4,
+        "tags": ["CHECKED", "PROBLEM", "ON-HOLD"],
+        "sku_writeoff": {"enabled": false, "mappings": {}}
+      }
+    }
+  },
+
+  "sku_label_config": {
+    "sku_to_label": {},
+    "default_printer": ""
+  }
+}

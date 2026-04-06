@@ -101,12 +101,15 @@ def _op_not_equals(series_val, rule_val):
 
 def _op_contains(series_val, rule_val):
     """Returns True where the series string contains the rule string (case-insensitive)."""
-    # Case-insensitive containment check for strings
+    if pd.api.types.is_numeric_dtype(series_val):
+        return pd.Series(False, index=series_val.index)
     return series_val.str.contains(rule_val, case=False, na=False)
 
 
 def _op_not_contains(series_val, rule_val):
     """Returns True where the series string does not contain the rule string (case-insensitive)."""
+    if pd.api.types.is_numeric_dtype(series_val):
+        return pd.Series(True, index=series_val.index)
     return ~series_val.str.contains(rule_val, case=False, na=False)
 
 
@@ -132,11 +135,15 @@ def _op_less_than_or_equal(series_val, rule_val):
 
 def _op_starts_with(series_val, rule_val):
     """Returns True where the series string starts with the rule string."""
+    if pd.api.types.is_numeric_dtype(series_val):
+        return pd.Series(False, index=series_val.index)
     return series_val.str.startswith(rule_val, na=False)
 
 
 def _op_ends_with(series_val, rule_val):
     """Returns True where the series string ends with the rule string."""
+    if pd.api.types.is_numeric_dtype(series_val):
+        return pd.Series(False, index=series_val.index)
     return series_val.str.endswith(rule_val, na=False)
 
 

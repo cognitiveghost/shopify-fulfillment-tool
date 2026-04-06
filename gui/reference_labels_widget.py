@@ -16,7 +16,7 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
     QLabel, QProgressBar, QTableWidget, QFileDialog, QCheckBox,
-    QMessageBox, QTableWidgetItem, QHeaderView
+    QMessageBox, QTableWidgetItem, QHeaderView, QComboBox
 )
 from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtGui import QDesktopServices
@@ -26,6 +26,7 @@ from gui.worker import Worker
 from shopify_tool.reference_labels_history import ReferenceLabelsHistory
 
 from gui.theme_manager import get_theme_manager
+from gui.pdf_printer import populate_printer_combo, print_pdf_to_printer, handle_print_worker_error
 
 class ReferenceLabelsWidget(QWidget):
     """Widget for processing reference labels PDFs."""
@@ -52,6 +53,7 @@ class ReferenceLabelsWidget(QWidget):
         self.pdf_path = None
         self.csv_path = None
         self.output_dir = None
+        self.last_output_path = None
 
         # History manager
         self.history = None
@@ -78,12 +80,15 @@ class ReferenceLabelsWidget(QWidget):
         # Section 3: Processing
         layout.addWidget(self._create_processing_group())
 
-        # Section 4: History
+        # Section 4: Print
+        layout.addWidget(self._create_print_section())
+
+        # Section 5: History
         layout.addWidget(self._create_history_group(), 1)  # Stretch
 
     def _create_file_selection_group(self):
         """Create file selection section."""
-        group = QGroupBox("📁 File Selection")
+        group = QGroupBox("File Selection")
         layout = QVBoxLayout(group)
 
         # PDF Selection Row
@@ -115,7 +120,7 @@ class ReferenceLabelsWidget(QWidget):
 
         # Info label
         info_label = QLabel(
-            "ℹ️ CSV format: PostOne ID (column 0), Tracking (column 1), "
+            "CSV format: PostOne ID (column 0), Tracking (column 1), "
             "Reference Number (column 2), Name (column 6)"
         )
         info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 10px; padding: 5px;")
@@ -126,7 +131,7 @@ class ReferenceLabelsWidget(QWidget):
 
     def _create_output_settings_group(self):
         """Create output settings section."""
-        group = QGroupBox("📂 Output Settings")
+        group = QGroupBox("Output Settings")
         layout = QVBoxLayout(group)
 
         # Output directory row
@@ -153,11 +158,11 @@ class ReferenceLabelsWidget(QWidget):
 
     def _create_processing_group(self):
         """Create processing section."""
-        group = QGroupBox("⚙️ Processing")
+        group = QGroupBox("Processing")
         layout = QVBoxLayout(group)
 
         # Process button
-        self.process_btn = QPushButton("🚀 Process Labels")
+        self.process_btn = QPushButton("Process Labels")
         self.process_btn.setMinimumHeight(50)
         self.process_btn.setEnabled(False)
         self.process_btn.setToolTip("Process PDF with reference numbers")
@@ -177,9 +182,74 @@ class ReferenceLabelsWidget(QWidget):
 
         return group
 
+    def _create_print_section(self):
+        """Create print controls section."""
+        group = QGroupBox("Print")
+        layout = QVBoxLayout(group)
+
+        # Printer selection row
+        printer_row = QHBoxLayout()
+        printer_row.addWidget(QLabel("Printer:"))
+        self.printer_combo = QComboBox()
+        self.printer_combo.setMinimumWidth(200)
+        printer_row.addWidget(self.printer_combo, 1)
+        refresh_printers_btn = QPushButton("Refresh")
+        refresh_printers_btn.setMaximumWidth(70)
+        refresh_printers_btn.clicked.connect(self._refresh_printers)
+        printer_row.addWidget(refresh_printers_btn)
+        layout.addLayout(printer_row)
+
+        # Auto-print checkbox
+        self.auto_print_checkbox = QCheckBox("Auto-print after processing")
+        self.auto_print_checkbox.setChecked(False)
+        layout.addWidget(self.auto_print_checkbox)
+
+        # Manual print button
+        self.print_btn = QPushButton("Print PDF")
+        self.print_btn.setEnabled(False)
+        self.print_btn.setToolTip("Print the last processed PDF to the selected printer")
+        self.print_btn.clicked.connect(self._on_print_clicked)
+        layout.addWidget(self.print_btn)
+
+        self._refresh_printers()
+        return group
+
+    def _refresh_printers(self):
+        populate_printer_combo(self.printer_combo, self.log)
+
+    def _on_print_clicked(self):
+        """Print last processed PDF to selected printer."""
+        if not self.last_output_path or not Path(self.last_output_path).exists():
+            QMessageBox.warning(self, "Nothing to Print", "No processed PDF is available.")
+            return
+        printer_name = self.printer_combo.currentText()
+        if not printer_name or printer_name == "(no printers found)":
+            QMessageBox.warning(self, "No Printer", "Please select a printer.")
+            return
+        self.print_btn.setEnabled(False)
+        worker = Worker(self._print_pdf_worker, self.last_output_path, printer_name)
+        worker.signals.result.connect(self._on_print_result)
+        worker.signals.error.connect(self._on_print_error)
+        worker.signals.finished.connect(lambda: self.print_btn.setEnabled(True))
+        QThreadPool.globalInstance().start(worker)
+
+    def _print_pdf_worker(self, pdf_path, printer_name):
+        return print_pdf_to_printer(pdf_path, printer_name)
+
+    def _on_print_result(self, result):
+        """Handle print job result in main thread."""
+        if result.get("success"):
+            self.log.info(f"Printed {result.get('pages_printed', 0)} page(s)")
+        else:
+            QMessageBox.warning(self, "Print Failed", f"Print failed:\n{result.get('error', 'Unknown error')}")
+            self.log.error(f"Print failed: {result.get('error')}")
+
+    def _on_print_error(self, error_tuple):
+        handle_print_worker_error(self, self.log, error_tuple)
+
     def _create_history_group(self):
         """Create history section."""
-        group = QGroupBox("📋 Processing History")
+        group = QGroupBox("Processing History")
         layout = QVBoxLayout(group)
 
         # History table
@@ -306,10 +376,10 @@ class ReferenceLabelsWidget(QWidget):
         self.process_btn.setEnabled(has_both_files and has_output)
 
         if has_both_files and has_output:
-            self.status_label.setText("✅ Ready to process")
+            self.status_label.setText("Ready to process")
             self.status_label.setStyleSheet("color: green; font-weight: bold;")
         elif not has_output:
-            self.status_label.setText("⚠️ No session selected")
+            self.status_label.setText("No session selected")
             self.status_label.setStyleSheet("color: orange;")
         else:
             self.status_label.setText("⏳ Waiting for files...")
@@ -478,7 +548,7 @@ class ReferenceLabelsWidget(QWidget):
             result: Processing result dict
         """
         self.progress_bar.setValue(100)
-        self.status_label.setText("✅ Processing complete!")
+        self.status_label.setText("Processing complete!")
         self.status_label.setStyleSheet("color: green; font-weight: bold;")
 
         self.log.info(
@@ -511,9 +581,17 @@ class ReferenceLabelsWidget(QWidget):
             f"Output: {Path(result['output_file']).name}"
         )
 
+        # Track last output for print button
+        self.last_output_path = result['output_file']
+        self.print_btn.setEnabled(True)
+
         # Auto-open if checkbox enabled
         if self.auto_open_checkbox.isChecked():
             self._open_pdf(result['output_file'])
+
+        # Auto-print if enabled
+        if self.auto_print_checkbox.isChecked():
+            self._on_print_clicked()
 
         # Emit signal
         self.processing_complete.emit(result)
@@ -527,7 +605,7 @@ class ReferenceLabelsWidget(QWidget):
         """
         exctype, value, traceback_str = error_info
 
-        self.status_label.setText("❌ Processing failed")
+        self.status_label.setText("Processing failed")
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
 
         self.log.error(f"PDF processing failed: {value}\n{traceback_str}")
