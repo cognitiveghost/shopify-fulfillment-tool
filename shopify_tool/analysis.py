@@ -305,6 +305,19 @@ def _clean_and_prepare_data(
     logger.info(f"Columns existing in DataFrame: {len(columns_to_keep_existing)}")
     orders_clean_df = orders_df[columns_to_keep_existing].copy()
 
+    # Convert Quantity to numeric — pandas 3.x may infer StringDtype for columns
+    # that end up as strings during CSV loading, causing comparison failures downstream.
+    if "Quantity" in orders_clean_df.columns:
+        orders_clean_df["Quantity"] = (
+            pd.to_numeric(orders_clean_df["Quantity"], errors="coerce").fillna(0).astype(int)
+        )
+
+    # Coerce string columns to object dtype — all-NaN columns (e.g. empty Notes/Tags in
+    # real Shopify exports) get inferred as float64 by pandas 3.x, which breaks .str accessor.
+    for _str_col in ("Tags", "Notes", "Shipping_Method", "Shipping_Country", "SKU", "Product_Name"):
+        if _str_col in orders_clean_df.columns and pd.api.types.is_numeric_dtype(orders_clean_df[_str_col]):
+            orders_clean_df[_str_col] = orders_clean_df[_str_col].astype(object)
+
     # Mark rows without SKU but keep them (don't drop)
     orders_clean_df["Has_SKU"] = orders_clean_df["SKU"].notna()
 
