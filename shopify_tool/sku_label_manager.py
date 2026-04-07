@@ -2,7 +2,7 @@
 SKU Label Manager - Business logic for SKU label lookup and PDF printing.
 
 Maps barcodes → SKUs → PDF label files. Handles label printing via
-QPrinter + QPdfDocument (PySide6). Designed to run in Worker threads.
+QPrinter + QPdfDocument (PySide6) or Windows Shell. Designed to run in Worker threads.
 """
 
 import logging
@@ -22,7 +22,8 @@ class SKULabelManager:
                     "pdf_path": "\\\\SERVER\\Share\\Labels\\sku001.pdf"
                 }
             },
-            "default_printer": ""
+            "default_printer": "",
+            "print_backend": "qt"   # "qt" (supersampling) | "shell" (Windows native)
         }
     """
 
@@ -35,6 +36,13 @@ class SKULabelManager:
         """
         self._sku_to_label: dict = config.get("sku_to_label", {})
         self._default_printer: str = config.get("default_printer", "")
+        self._print_backend: str = config.get("print_backend", "qt")
+        # Optional label size override in mm — used when the printer driver reports
+        # an incorrect page size. Format: {"width": 62.0, "height": 100.0} or {}
+        _lsz = config.get("label_size_mm", {})
+        w = float(_lsz.get("width", 0) or 0)
+        h = float(_lsz.get("height", 0) or 0)
+        self._label_size_mm: tuple[float, float] | None = (w, h) if w > 0 and h > 0 else None
         self._barcode_index: dict[str, str] = self._build_barcode_index()
 
     def _build_barcode_index(self) -> dict:
@@ -108,6 +116,27 @@ class SKULabelManager:
         """Saved default printer name from config."""
         return self._default_printer
 
+    @property
+    def print_backend(self) -> str:
+        """Active print backend: 'qt' or 'shell'."""
+        return self._print_backend
+
+    @print_backend.setter
+    def print_backend(self, value: str):
+        if value in ("qt", "shell"):
+            self._print_backend = value
+        else:
+            logger.warning("Unknown print backend '%s', keeping '%s'", value, self._print_backend)
+
+    @property
+    def label_size_mm(self) -> tuple[float, float] | None:
+        """Label size override as (width_mm, height_mm), or None to auto-detect from PDF."""
+        return self._label_size_mm
+
+    @label_size_mm.setter
+    def label_size_mm(self, value: tuple[float, float] | None):
+        self._label_size_mm = value
+
     def print_label(self, sku: str, copies: int, printer_name: str) -> dict:
         """
         Print the PDF label for a SKU N times to the specified printer.
@@ -122,11 +151,6 @@ class SKULabelManager:
         Returns:
             Dict: {'success': bool, 'pages_printed': int, 'error': str|None}
         """
-        from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
-        from PySide6.QtPdf import QPdfDocument
-        from PySide6.QtGui import QPainter
-        from PySide6.QtCore import QSize, QRectF
-
         entry = self._sku_to_label.get(sku)
         if not entry:
             return {
@@ -143,7 +167,30 @@ class SKULabelManager:
                 "error": f"PDF file not found: {pdf_path}",
             }
 
-        # Find the target printer by name
+        if self._print_backend == "shell":
+            return self._print_label_shell(pdf_path, copies, printer_name, sku)
+        return self._print_label_qt(pdf_path, copies, printer_name, sku)
+
+    # ------------------------------------------------------------------
+    # Qt backend — supersampling for improved print quality
+    # ------------------------------------------------------------------
+
+    def _print_label_qt(self, pdf_path: str, copies: int, printer_name: str, sku: str) -> dict:
+        """
+        Print via QPrinter + QPdfDocument with 2× supersampling.
+
+        Uses printer.pageRect(DevicePixel) as the authoritative target size — this
+        matches the driver's configured label dimensions exactly. Renders the PDF at
+        2× that size then downsamples with smooth interpolation (supersampling).
+
+        If the driver reports an incorrect page size, set label_size_mm in config to
+        override it before QPainter starts.
+        """
+        from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
+        from PySide6.QtPdf import QPdfDocument
+        from PySide6.QtGui import QPainter, QPageSize, QPageLayout, QImage
+        from PySide6.QtCore import QSize, QSizeF, QMarginsF, Qt
+
         target_info = None
         for pi in QPrinterInfo.availablePrinters():
             if pi.printerName() == printer_name:
@@ -157,10 +204,8 @@ class SKULabelManager:
                 "error": f"Printer not found: '{printer_name}'",
             }
 
-        # Load PDF document
         doc = QPdfDocument(None)
         doc.load(pdf_path)
-
         page_count = doc.pageCount()
         if page_count == 0:
             doc.close()
@@ -170,9 +215,24 @@ class SKULabelManager:
                 "error": f"PDF has no pages or could not be loaded: {pdf_path}",
             }
 
-        # Create printer and painter
         printer = QPrinter(target_info)
         printer.setOutputFormat(QPrinter.OutputFormat.NativeFormat)
+        printer.setCopyCount(copies)  # driver handles copies natively — no render loop needed
+
+        # Override page size if the driver reports incorrect dimensions.
+        # Default: derive from PDF page 0 so pageRect aligns with PDF content.
+        if self._label_size_mm is not None:
+            w_mm, h_mm = self._label_size_mm
+        else:
+            page_size_pt = doc.pagePointSize(0)
+            w_mm = page_size_pt.width() / 72.0 * 25.4
+            h_mm = page_size_pt.height() / 72.0 * 25.4
+        printer.setPageSize(QPageSize(QSizeF(w_mm, h_mm), QPageSize.Unit.Millimeter))
+        printer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout.Unit.Millimeter)
+        logger.debug(
+            "Qt print: page size set to %.1f×%.1f mm (%s)",
+            w_mm, h_mm, "config override" if self._label_size_mm else "from PDF"
+        )
 
         painter = QPainter()
         if not painter.begin(printer):
@@ -187,37 +247,143 @@ class SKULabelManager:
         error_msg = None
 
         try:
-            dpi = printer.resolution()
-            page_rect = printer.pageRect(QPrinter.DevicePixel)
-            target_rect = QRectF(page_rect)
+            # Force 1:1 logical-to-device-pixel mapping so drawImage has no hidden rescale.
+            # By default QPainter on QPrinter uses a point-based logical coordinate system
+            # (1 unit = 1/72 inch), which causes Qt to stretch any image drawn at pixel sizes.
+            vp = painter.viewport()
+            painter.setWindow(vp)
+            target_w = max(1, vp.width())
+            target_h = max(1, vp.height())
+            logger.debug("Qt print: viewport %d×%d px", target_w, target_h)
 
-            for copy_idx in range(copies):
-                for page_idx in range(page_count):
-                    # Render PDF page to QImage at printer DPI
-                    page_size_pt = doc.pagePointSize(page_idx)
-                    render_w = max(1, int(page_size_pt.width() / 72.0 * dpi))
-                    render_h = max(1, int(page_size_pt.height() / 72.0 * dpi))
-                    image = doc.render(page_idx, QSize(render_w, render_h))
+            for page_idx in range(page_count):
+                # Render at 2× for high-quality anti-aliased source.
+                image_hi = doc.render(page_idx, QSize(target_w * 2, target_h * 2))
 
-                    painter.drawImage(target_rect, image)
-                    pages_printed += 1
+                # Remove premultiplied alpha — QPrinter composites ARGB32_Premultiplied
+                # incorrectly, causing pale/washed-out output.
+                image_rgb = image_hi.convertToFormat(QImage.Format.Format_RGB32)
 
-                    is_last = (copy_idx == copies - 1) and (page_idx == page_count - 1)
-                    if not is_last:
-                        printer.newPage()
+                # Downsample to printer DPI with smooth interpolation.
+                image_scaled = image_rgb.scaled(
+                    target_w, target_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+                )
+
+                # Convert to 1-bit with threshold (no halftoning).
+                # Thermal printers are binary (dot/no-dot). Sending a grayscale image causes
+                # the driver to apply a halftone dot pattern. ThresholdDither snaps each pixel
+                # to pure black or white — the driver receives 1-bit data and prints it directly.
+                image_mono = image_scaled.convertToFormat(
+                    QImage.Format.Format_Mono,
+                    Qt.ImageConversionFlag.ThresholdDither,
+                )
+
+                painter.drawImage(0, 0, image_mono)
+                pages_printed += 1
+
+                if page_idx < page_count - 1:
+                    printer.newPage()
 
         except Exception as exc:
             error_msg = str(exc)
-            logger.exception("Print error for SKU '%s'", sku)
+            logger.exception("Qt print error for SKU '%s'", sku)
         finally:
             painter.end()
             doc.close()
 
         if error_msg:
-            return {"success": False, "pages_printed": pages_printed, "error": error_msg}
+            return {"success": False, "pages_printed": pages_printed * copies, "error": error_msg}
 
+        total_pages = pages_printed * copies
         logger.info(
-            "Printed %d page(s) for SKU '%s' (%d cop%s) to '%s'",
-            pages_printed, sku, copies, "y" if copies == 1 else "ies", printer_name,
+            "Printed %d page(s) for SKU '%s' (%d cop%s) via Qt to '%s'",
+            total_pages, sku, copies, "y" if copies == 1 else "ies", printer_name,
         )
-        return {"success": True, "pages_printed": pages_printed, "error": None}
+        return {"success": True, "pages_printed": total_pages, "error": None}
+
+    # ------------------------------------------------------------------
+    # Shell backend — Windows native PDF printing (identical to manual print)
+    # ------------------------------------------------------------------
+
+    def _print_label_shell(self, pdf_path: str, copies: int, printer_name: str, sku: str) -> dict:
+        """
+        Print via Windows ShellExecute 'printto' verb.
+
+        Delegates to Windows' default PDF handler (Edge, Adobe Reader, etc.) — exactly
+        the same rendering path as manually opening the PDF and clicking Print.
+        For copies > 1, uses pypdf to assemble a temp PDF with repeated pages.
+        Fire-and-forget: returns success once the job is handed to the shell.
+        """
+        import ctypes
+        import os
+        import tempfile
+        import threading
+        import time
+
+        from pypdf import PdfReader, PdfWriter
+
+        # Build temp PDF with N copies of all pages
+        tmp_path = None
+        try:
+            reader = PdfReader(pdf_path)
+            pages = list(reader.pages)
+            page_count = len(pages)
+            writer = PdfWriter()
+            for _ in range(copies):
+                for page in pages:
+                    writer.add_page(page)
+
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp_path = tmp.name
+                writer.write(tmp)
+        except Exception as exc:
+            logger.exception("Shell print: failed to build temp PDF for SKU '%s'", sku)
+            return {
+                "success": False,
+                "pages_printed": 0,
+                "error": f"Failed to prepare print file: {exc}",
+            }
+
+        # ShellExecute "printto" — Windows routes to default PDF viewer → printer
+        try:
+            result = ctypes.windll.shell32.ShellExecuteW(
+                None, "printto", tmp_path, f'"{printer_name}"', None, 0
+            )
+        except Exception as exc:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            logger.exception("ShellExecute failed for SKU '%s'", sku)
+            return {"success": False, "pages_printed": 0, "error": f"ShellExecute failed: {exc}"}
+
+        if result <= 32:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            return {
+                "success": False,
+                "pages_printed": 0,
+                "error": (
+                    f"Windows Shell print failed (code {result}). "
+                    "Ensure a PDF viewer (Edge, Adobe Reader) is installed."
+                ),
+            }
+
+        # Schedule temp file cleanup — give PDF viewer time to spool the job
+        def _cleanup():
+            time.sleep(15)
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+        threading.Thread(target=_cleanup, daemon=True).start()
+
+        total_pages = page_count * copies
+        logger.info(
+            "Sent %d page(s) for SKU '%s' (%d cop%s) to '%s' via Windows Shell",
+            total_pages, sku, copies, "y" if copies == 1 else "ies", printer_name,
+        )
+        return {"success": True, "pages_printed": total_pages, "error": None}
