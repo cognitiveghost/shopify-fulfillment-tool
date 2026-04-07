@@ -292,13 +292,14 @@ class SKULabelManager:
             doc.close()
 
         if error_msg:
-            return {"success": False, "pages_printed": pages_printed, "error": error_msg}
+            return {"success": False, "pages_printed": pages_printed * copies, "error": error_msg}
 
+        total_pages = pages_printed * copies
         logger.info(
             "Printed %d page(s) for SKU '%s' (%d cop%s) via Qt to '%s'",
-            pages_printed, sku, copies, "y" if copies == 1 else "ies", printer_name,
+            total_pages, sku, copies, "y" if copies == 1 else "ies", printer_name,
         )
-        return {"success": True, "pages_printed": pages_printed, "error": None}
+        return {"success": True, "pages_printed": total_pages, "error": None}
 
     # ------------------------------------------------------------------
     # Shell backend — Windows native PDF printing (identical to manual print)
