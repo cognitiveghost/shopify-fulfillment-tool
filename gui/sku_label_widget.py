@@ -13,10 +13,10 @@ import logging
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-    QPushButton, QLabel, QLineEdit, QSpinBox, QComboBox, QFormLayout,
+    QPushButton, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QFormLayout,
     QMessageBox, QSizePolicy,
 )
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, QTimer
 
 from gui.worker import Worker
 from gui.theme_manager import get_theme_manager
@@ -44,6 +44,12 @@ class SKULabelWidget(QWidget):
         self.mw = main_window
         self._manager: SKULabelManager | None = None
         self._current_sku: str | None = None
+
+        # Debounce timer for label size saves — avoids a network write per keystroke
+        self._label_size_save_timer = QTimer(self)
+        self._label_size_save_timer.setSingleShot(True)
+        self._label_size_save_timer.setInterval(1000)
+        self._label_size_save_timer.timeout.connect(self._flush_label_size_save)
 
         self._init_ui()
         self._connect_signals()
@@ -129,6 +135,35 @@ class SKULabelWidget(QWidget):
         self.printer_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         form.addRow("Printer:", self.printer_combo)
 
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItem("Qt Supersampling", userData="qt")
+        self.backend_combo.addItem("Windows Native (Shell)", userData="shell")
+        self.backend_combo.setToolTip(
+            "Qt Supersampling: renders at 2× DPI then downsamples — no extra software needed.\n"
+            "Windows Native: uses your PDF viewer (Edge/Adobe) — identical quality to manual print."
+        )
+        form.addRow("Print Engine:", self.backend_combo)
+
+        # Label size override — Qt mode only. Leave at 0×0 to auto-detect from PDF.
+        size_row = QHBoxLayout()
+        self.label_width_spin = QDoubleSpinBox()
+        self.label_width_spin.setRange(0, 500)
+        self.label_width_spin.setDecimals(1)
+        self.label_width_spin.setSuffix(" mm")
+        self.label_width_spin.setSpecialValueText("auto")
+        self.label_width_spin.setMinimumWidth(90)
+        self.label_height_spin = QDoubleSpinBox()
+        self.label_height_spin.setRange(0, 500)
+        self.label_height_spin.setDecimals(1)
+        self.label_height_spin.setSuffix(" mm")
+        self.label_height_spin.setSpecialValueText("auto")
+        self.label_height_spin.setMinimumWidth(90)
+        size_row.addWidget(self.label_width_spin)
+        size_row.addWidget(QLabel("×"))
+        size_row.addWidget(self.label_height_spin)
+        size_row.addStretch()
+        form.addRow("Label Size (Qt):", size_row)
+
         layout.addLayout(form)
 
         self.print_btn = QPushButton("Print Label")
@@ -159,6 +194,9 @@ class SKULabelWidget(QWidget):
         self.barcode_input.returnPressed.connect(self._on_barcode_submitted)
         self.print_btn.clicked.connect(self._on_print_clicked)
         self.clear_btn.clicked.connect(self._on_clear_clicked)
+        self.backend_combo.currentIndexChanged.connect(self._on_backend_changed)
+        self.label_width_spin.editingFinished.connect(self._on_label_size_changed)
+        self.label_height_spin.editingFinished.connect(self._on_label_size_changed)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -184,6 +222,21 @@ class SKULabelWidget(QWidget):
 
         config = self.mw.active_profile_config.get("sku_label_config", {})
         self._manager = SKULabelManager(config)
+
+        # Sync backend combo to saved preference without triggering the save handler
+        backend = config.get("print_backend", "qt")
+        idx = self.backend_combo.findData(backend)
+        self.backend_combo.blockSignals(True)
+        self.backend_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.backend_combo.blockSignals(False)
+
+        # Sync label size override fields
+        lsz = config.get("label_size_mm", {}) or {}
+        for spin, key in ((self.label_width_spin, "width"), (self.label_height_spin, "height")):
+            spin.blockSignals(True)
+            spin.setValue(float(lsz.get(key, 0) or 0))
+            spin.blockSignals(False)
+
         self._set_scan_status(_READY_MSG)
 
     def _refresh_printers(self):
@@ -315,6 +368,43 @@ class SKULabelWidget(QWidget):
         """Re-enable controls after print job completes."""
         self.print_btn.setEnabled(self._current_sku is not None)
         self.clear_btn.setEnabled(True)
+
+    def _on_backend_changed(self, _: int):
+        backend = self.backend_combo.currentData() or "qt"
+        if self._manager is not None:
+            self._manager.print_backend = backend
+        self._save_sku_label_config("print_backend", backend)
+
+    def _on_label_size_changed(self):
+        w = self.label_width_spin.value()
+        h = self.label_height_spin.value()
+        if self._manager is not None:
+            self._manager.label_size_mm = (w, h) if w > 0 and h > 0 else None
+        # Debounce: wait 1s after last edit before writing to file server
+        self._label_size_save_timer.start()
+
+    def _flush_label_size_save(self):
+        w = self.label_width_spin.value()
+        h = self.label_height_spin.value()
+        lsz = {"width": w, "height": h} if w > 0 and h > 0 else {}
+        self._save_sku_label_config("label_size_mm", lsz)
+
+    def _save_sku_label_config(self, key: str, value) -> None:
+        """Update one key in sku_label_config and persist to file server."""
+        if not hasattr(self.mw, "active_profile_config") or not self.mw.active_profile_config:
+            return
+        try:
+            self.mw.active_profile_config.setdefault("sku_label_config", {})[key] = value
+            if (
+                hasattr(self.mw, "profile_manager")
+                and hasattr(self.mw, "current_client_id")
+                and self.mw.current_client_id
+            ):
+                self.mw.profile_manager.save_shopify_config(
+                    self.mw.current_client_id, self.mw.active_profile_config
+                )
+        except Exception:
+            logger.exception("Failed to save sku_label_config['%s']", key)
 
     # ------------------------------------------------------------------
     # Clear / Reset
