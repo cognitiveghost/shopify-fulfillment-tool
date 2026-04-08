@@ -79,10 +79,7 @@ class ClientReportsWidget(QWidget):
             self._header_label.setText(f"Reports — CLIENT_{client_id}")
         else:
             self._header_label.setText("Reports — No Client Selected")
-        # Only refresh when the client has changed since last show — avoids
-        # redundant file-server reads on rapid tab switches.
-        if client_id != self._label_tab.last_loaded_client:
-            self._label_tab.refresh()
+        self._label_tab.refresh()
 
 
 class _StatCard(QFrame):
@@ -124,7 +121,6 @@ class LabelPrintingTab(QWidget):
         super().__init__(parent)
         self.mw = main_window
         self._history: list = []
-        self.last_loaded_client: str | None = None
         self._init_ui()
 
     # ------------------------------------------------------------------
@@ -260,8 +256,6 @@ class LabelPrintingTab(QWidget):
         qdate_to = self._date_to.date()
         start_dt = datetime(qdate_from.year(), qdate_from.month(), qdate_from.day())
         end_dt = datetime(qdate_to.year(), qdate_to.month(), qdate_to.day())
-
-        self.last_loaded_client = client_id
 
         def _load():
             from shared.stats_manager import StatsManager

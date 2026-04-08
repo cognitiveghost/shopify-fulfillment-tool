@@ -44,6 +44,7 @@ class SKULabelWidget(QWidget):
         self.mw = main_window
         self._manager: SKULabelManager | None = None
         self._current_sku: str | None = None
+        self._pending_print_copies: int = 1
 
         # Debounce timer for label size saves — avoids a network write per keystroke
         self._label_size_save_timer = QTimer(self)
@@ -327,13 +328,14 @@ class SKULabelWidget(QWidget):
         copies = self.copies_spinbox.value()
         copy_word = "copy" if copies == 1 else "copies"
 
+        self._pending_print_copies = copies
+
         self.print_btn.setEnabled(False)
         self.clear_btn.setEnabled(False)
         self._set_print_status(f"Printing {copies} {copy_word} for {sku}...")
 
         worker = Worker(self._manager.print_label, sku, copies, printer_name)
         worker.signals.result.connect(self._on_print_result)
-        worker.signals.result.connect(lambda res, s=sku, c=copies: self._try_record_print_stats(res, s, c))
         worker.signals.error.connect(self._on_print_error)
         worker.signals.finished.connect(self._on_print_finished)
         QThreadPool.globalInstance().start(worker)
@@ -341,6 +343,7 @@ class SKULabelWidget(QWidget):
     def _on_print_result(self, result: dict):
         """Handle print job result."""
         if result["success"]:
+            self._record_print_stats(self._current_sku, self._pending_print_copies)
             pages = result["pages_printed"]
             logger.info("Print success: %d pages for SKU '%s'", pages, self._current_sku)
             self._on_clear_clicked()
@@ -354,28 +357,26 @@ class SKULabelWidget(QWidget):
                 f"Failed to print label:\n\n{err}",
             )
 
-    def _try_record_print_stats(self, result: dict, sku: str, copies: int):
-        """Fire-and-forget label print stats recording on successful print."""
-        if not result["success"]:
-            return
+    def _record_print_stats(self, sku: str, copies: int):
+        """Fire-and-forget stats recording. Called on main thread, runs I/O in daemon thread."""
+        import threading
         client_id = getattr(self.mw, "current_client_id", None)
         base_path = (
             str(self.mw.profile_manager.base_path)
             if hasattr(self.mw, "profile_manager") and hasattr(self.mw.profile_manager, "base_path")
             else None
         )
-        if not (client_id and base_path):
+        if not (sku and client_id and base_path):
             return
         from shared.stats_manager import StatsManager
 
         def _record():
-            StatsManager(base_path).record_label_print(client_id, sku, copies)
+            try:
+                StatsManager(base_path).record_label_print(client_id, sku, copies)
+            except Exception:
+                logger.exception("Label stats record failed for SKU '%s'", sku)
 
-        stats_worker = Worker(_record)
-        stats_worker.signals.error.connect(
-            lambda err: logger.error("Label stats record failed: %s", err[1])
-        )
-        QThreadPool.globalInstance().start(stats_worker)
+        threading.Thread(target=_record, daemon=True).start()
 
     def _on_print_error(self, error_info: tuple):
         """Handle unexpected Worker exception."""
