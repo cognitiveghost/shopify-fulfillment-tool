@@ -23,7 +23,7 @@ class SKULabelManager:
                 }
             },
             "default_printer": "",
-            "print_backend": "qt"   # "qt" (supersampling) | "shell" (Windows native)
+            "print_backend": "shell"   # "shell" (Windows native, default) | "qt" (future/WIP)
         }
     """
 
@@ -36,7 +36,7 @@ class SKULabelManager:
         """
         self._sku_to_label: dict = config.get("sku_to_label", {})
         self._default_printer: str = config.get("default_printer", "")
-        self._print_backend: str = config.get("print_backend", "qt")
+        self._print_backend: str = config.get("print_backend", "shell")
         # Optional label size override in mm — used when the printer driver reports
         # an incorrect page size. Format: {"width": 62.0, "height": 100.0} or {}
         _lsz = config.get("label_size_mm", {})
@@ -167,29 +167,47 @@ class SKULabelManager:
                 "error": f"PDF file not found: {pdf_path}",
             }
 
-        if self._print_backend == "shell":
-            return self._print_label_shell(pdf_path, copies, printer_name, sku)
-        return self._print_label_qt(pdf_path, copies, printer_name, sku)
+        if self._print_backend == "qt":
+            return self._print_label_qt(pdf_path, copies, printer_name, sku)
+        return self._print_label_shell(pdf_path, copies, printer_name, sku)
 
     # ------------------------------------------------------------------
-    # Qt backend — supersampling for improved print quality
+    # Qt backend — FUTURE / WIP (not currently used)
+    #
+    # Goal: silent synchronous printing without spawning the PDF viewer.
+    # Status: rendering quality does not yet match the Shell backend.
+    #   - QPdfDocument (pdfium) renders for screen (LCD anti-aliasing) →
+    #     no post-processing reliably converts to clean 1-bit thermal output.
+    #   - PyMuPDF (fitz) integration is in place; needs quality validation
+    #     once pymupdf is available in the .venv.
+    #
+    # To re-enable: set print_backend = "qt" in sku_label_config.
     # ------------------------------------------------------------------
 
     def _print_label_qt(self, pdf_path: str, copies: int, printer_name: str, sku: str) -> dict:
         """
-        Print via QPrinter + QPdfDocument with 2× supersampling.
+        Print via QPrinter + PyMuPDF (fitz) rendering.
 
-        Uses printer.pageRect(DevicePixel) as the authoritative target size — this
-        matches the driver's configured label dimensions exactly. Renders the PDF at
-        2× that size then downsamples with smooth interpolation (supersampling).
+        QPdfDocument renders for screen (anti-aliased for LCD), producing gray
+        sub-pixel blending that no amount of post-processing can convert cleanly
+        to 1-bit for thermal printers.  PyMuPDF uses the MuPDF engine, which
+        renders at any DPI with print-quality hinting — output matches the
+        Windows native PDF renderer used by the Shell backend.
 
-        If the driver reports an incorrect page size, set label_size_mm in config to
-        override it before QPainter starts.
+        Falls back to Shell backend if pymupdf is not installed.
         """
+        try:
+            import fitz  # PyMuPDF — older versions register as 'fitz'
+        except ImportError:
+            try:
+                import pymupdf as fitz  # PyMuPDF >= 1.24 — registered as 'pymupdf'
+            except ImportError:
+                logger.warning("pymupdf not installed — falling back to shell backend")
+                return self._print_label_shell(pdf_path, copies, printer_name, sku)
+
         from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
-        from PySide6.QtPdf import QPdfDocument
         from PySide6.QtGui import QPainter, QPageSize, QPageLayout, QImage
-        from PySide6.QtCore import QSize, QSizeF, QMarginsF, Qt
+        from PySide6.QtCore import QSizeF, QMarginsF, Qt
 
         target_info = None
         for pi in QPrinterInfo.availablePrinters():
@@ -204,11 +222,10 @@ class SKULabelManager:
                 "error": f"Printer not found: '{printer_name}'",
             }
 
-        doc = QPdfDocument(None)
-        doc.load(pdf_path)
-        page_count = doc.pageCount()
+        fitz_doc = fitz.open(pdf_path)
+        page_count = fitz_doc.page_count
         if page_count == 0:
-            doc.close()
+            fitz_doc.close()
             return {
                 "success": False,
                 "pages_printed": 0,
@@ -217,26 +234,25 @@ class SKULabelManager:
 
         printer = QPrinter(target_info)
         printer.setOutputFormat(QPrinter.OutputFormat.NativeFormat)
-        printer.setCopyCount(copies)  # driver handles copies natively — no render loop needed
+        printer.setCopyCount(copies)  # driver handles copies natively
 
-        # Override page size if the driver reports incorrect dimensions.
-        # Default: derive from PDF page 0 so pageRect aligns with PDF content.
+        # Derive page size from PDF or config override.
         if self._label_size_mm is not None:
             w_mm, h_mm = self._label_size_mm
         else:
-            page_size_pt = doc.pagePointSize(0)
-            w_mm = page_size_pt.width() / 72.0 * 25.4
-            h_mm = page_size_pt.height() / 72.0 * 25.4
+            rect = fitz_doc[0].rect  # points (1 pt = 1/72 inch)
+            w_mm = rect.width / 72.0 * 25.4
+            h_mm = rect.height / 72.0 * 25.4
         printer.setPageSize(QPageSize(QSizeF(w_mm, h_mm), QPageSize.Unit.Millimeter))
         printer.setPageMargins(QMarginsF(0, 0, 0, 0), QPageLayout.Unit.Millimeter)
         logger.debug(
-            "Qt print: page size set to %.1f×%.1f mm (%s)",
-            w_mm, h_mm, "config override" if self._label_size_mm else "from PDF"
+            "Qt/fitz print: page %.1f×%.1f mm (%s)",
+            w_mm, h_mm, "config override" if self._label_size_mm else "from PDF",
         )
 
         painter = QPainter()
         if not painter.begin(printer):
-            doc.close()
+            fitz_doc.close()
             return {
                 "success": False,
                 "pages_printed": 0,
@@ -247,38 +263,44 @@ class SKULabelManager:
         error_msg = None
 
         try:
-            # Force 1:1 logical-to-device-pixel mapping so drawImage has no hidden rescale.
-            # By default QPainter on QPrinter uses a point-based logical coordinate system
-            # (1 unit = 1/72 inch), which causes Qt to stretch any image drawn at pixel sizes.
             vp = painter.viewport()
-            painter.setWindow(vp)
-            target_w = max(1, vp.width())
-            target_h = max(1, vp.height())
-            logger.debug("Qt print: viewport %d×%d px", target_w, target_h)
+            printer_dpi = printer.resolution()
+            render_w = max(1, round(w_mm / 25.4 * printer_dpi))
+            render_h = max(1, round(h_mm / 25.4 * printer_dpi))
+            painter.setWindow(0, 0, render_w, render_h)
+            logger.debug(
+                "Qt/fitz print: DPI=%d  render=%d×%d px  viewport=%d×%d px",
+                printer_dpi, render_w, render_h, vp.width(), vp.height(),
+            )
+
+            # Scale matrix: PDF points (1/72 in) → printer pixels at printer_dpi.
+            mat = fitz.Matrix(printer_dpi / 72.0, printer_dpi / 72.0)
 
             for page_idx in range(page_count):
-                # Render at 2× for high-quality anti-aliased source.
-                image_hi = doc.render(page_idx, QSize(target_w * 2, target_h * 2))
+                page = fitz_doc[page_idx]
 
-                # Remove premultiplied alpha — QPrinter composites ARGB32_Premultiplied
-                # incorrectly, causing pale/washed-out output.
-                image_rgb = image_hi.convertToFormat(QImage.Format.Format_RGB32)
+                # Render at printer DPI in greyscale.
+                # MuPDF applies print-optimised hinting at the target DPI, producing
+                # clean dark-on-white pixels rather than LCD-tuned anti-aliased grey.
+                pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, alpha=False)
 
-                # Downsample to printer DPI with smooth interpolation.
-                image_scaled = image_rgb.scaled(
-                    target_w, target_h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+                # Wrap raw greyscale bytes in a QImage (bytes() copies the buffer so
+                # QImage does not hold a dangling reference into the fitz pixmap).
+                img = QImage(
+                    bytes(pix.samples),
+                    pix.width, pix.height, pix.stride,
+                    QImage.Format.Format_Grayscale8,
                 )
 
-                # Convert to 1-bit with threshold (no halftoning).
-                # Thermal printers are binary (dot/no-dot). Sending a grayscale image causes
-                # the driver to apply a halftone dot pattern. ThresholdDither snaps each pixel
-                # to pure black or white — the driver receives 1-bit data and prints it directly.
-                image_mono = image_scaled.convertToFormat(
+                # Convert to 1-bit for the thermal driver.
+                # MuPDF's output has clear dark text / white background — ThresholdDither
+                # works reliably here, unlike on QPdfDocument's blended grey pixels.
+                img_mono = img.convertToFormat(
                     QImage.Format.Format_Mono,
                     Qt.ImageConversionFlag.ThresholdDither,
                 )
 
-                painter.drawImage(0, 0, image_mono)
+                painter.drawImage(0, 0, img_mono)
                 pages_printed += 1
 
                 if page_idx < page_count - 1:
@@ -286,17 +308,17 @@ class SKULabelManager:
 
         except Exception as exc:
             error_msg = str(exc)
-            logger.exception("Qt print error for SKU '%s'", sku)
+            logger.exception("Qt/fitz print error for SKU '%s'", sku)
         finally:
             painter.end()
-            doc.close()
+            fitz_doc.close()
 
         if error_msg:
             return {"success": False, "pages_printed": pages_printed * copies, "error": error_msg}
 
         total_pages = pages_printed * copies
         logger.info(
-            "Printed %d page(s) for SKU '%s' (%d cop%s) via Qt to '%s'",
+            "Printed %d page(s) for SKU '%s' (%d cop%s) via Qt/fitz to '%s'",
             total_pages, sku, copies, "y" if copies == 1 else "ies", printer_name,
         )
         return {"success": True, "pages_printed": total_pages, "error": None}

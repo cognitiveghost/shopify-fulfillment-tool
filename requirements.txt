@@ -33,6 +33,7 @@ typing_extensions>=4.0.0  # Backported type hints for older Python versions
 # -----------------------------------------------
 pypdf>=4.0.0           # PDF reading and manipulation (formerly PyPDF2)
 reportlab>=4.0.0       # PDF generation and text overlay
+pymupdf>=1.24.0        # MuPDF-based PDF rendering — print-quality rasterisation for Qt print path
 
 # Barcode Generation (Feature #5 - Barcode Generator)
 # ----------------------------------------------------

@@ -89,18 +89,19 @@ class UIManager:
         self.log.info("UI widgets created successfully with tab-based structure and sidebar.")
 
     def _create_tabs(self):
-        """Create main tab widget with 5 tabs."""
+        """Create main tab widget with 6 tabs."""
         self.mw.main_tabs = QTabWidget()
         self.mw.main_tabs.setDocumentMode(True)  # Cleaner look
         self.mw.main_tabs.setTabPosition(QTabWidget.North)
         self.mw.main_tabs.setMovable(False)  # Prevent accidental reorder
 
-        # Create the 5 main tabs
+        # Create the 6 main tabs
         tab1 = self._create_tab1_session_setup()
         tab2 = self._create_tab2_analysis_results()
         tab3 = self._create_tab3_session_browser()
         tab4 = self._create_tab4_information()
         tab5 = self._create_tab5_tools()
+        tab6 = self._create_tab6_reports()
 
         # Add tabs with icons (using QStyle built-in icons)
         file_icon = self.mw.style().standardIcon(QStyle.SP_FileIcon)
@@ -108,12 +109,14 @@ class UIManager:
         folder_icon = self.mw.style().standardIcon(QStyle.SP_DirIcon)
         info_icon = self.mw.style().standardIcon(QStyle.SP_MessageBoxInformation)
         tools_icon = self.mw.style().standardIcon(QStyle.SP_FileDialogContentsView)
+        reports_icon = self.mw.style().standardIcon(QStyle.SP_FileDialogListView)
 
         self.mw.main_tabs.addTab(tab1, file_icon, "Session Setup")
         self.mw.main_tabs.addTab(tab2, table_icon, "Analysis Results")
         self.mw.main_tabs.addTab(tab3, folder_icon, "Session Browser")
         self.mw.main_tabs.addTab(tab4, info_icon, "Information")
         self.mw.main_tabs.addTab(tab5, tools_icon, "Tools")
+        self.mw.main_tabs.addTab(tab6, reports_icon, "Reports")
 
         # Add keyboard shortcuts for tab switching
         self._setup_tab_shortcuts()
@@ -187,6 +190,8 @@ class UIManager:
                   lambda: self.mw.main_tabs.setCurrentIndex(3))
         QShortcut(QKeySequence("Ctrl+5"), self.mw,
                   lambda: self.mw.main_tabs.setCurrentIndex(4))
+        QShortcut(QKeySequence("Ctrl+6"), self.mw,
+                  lambda: self.mw.main_tabs.setCurrentIndex(5))
 
         # Set tooltips on tabs
         self.mw.main_tabs.setTabToolTip(0, "Session setup and file loading (Ctrl+1)")
@@ -194,6 +199,7 @@ class UIManager:
         self.mw.main_tabs.setTabToolTip(2, "Browse past sessions (Ctrl+3)")
         self.mw.main_tabs.setTabToolTip(3, "Statistics and logs (Ctrl+4)")
         self.mw.main_tabs.setTabToolTip(4, "PDF processing and utilities (Ctrl+5)")
+        self.mw.main_tabs.setTabToolTip(5, "Global reports and statistics (Ctrl+6)")
 
     def _create_tab1_session_setup(self):
         """Create Tab 1: Session Setup with split layout.
@@ -1762,6 +1768,20 @@ class UIManager:
 
         self.mw.tools_widget = ToolsWidget(self.mw)
         return self.mw.tools_widget
+
+    def _create_tab6_reports(self):
+        """Create Tab 6: Reports
+
+        Contains ClientReportsWidget with sub-tab structure for global
+        client statistics and reports. Designed for future expansion.
+
+        Returns:
+            QWidget: Reports widget with sub-tabs
+        """
+        from gui.client_reports_widget import ClientReportsWidget
+
+        self.mw.reports_widget = ClientReportsWidget(self.mw)
+        return self.mw.reports_widget
 
     def _update_theme_button_text(self):
         """Update theme toggle button text based on current theme."""
