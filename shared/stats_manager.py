@@ -131,9 +131,11 @@ class StatsManager:
             "total_orders_analyzed": 0,
             "total_orders_packed": 0,
             "total_sessions": 0,
+            "total_labels_printed": 0,
             "by_client": {},
             "analysis_history": [],
             "packing_history": [],
+            "label_print_history": [],
             "last_updated": datetime.now().isoformat(),
             "version": "1.0"
         }
@@ -582,6 +584,129 @@ class StatsManager:
             history = history[:limit]
 
         return history
+
+    def record_label_print(
+        self,
+        client_id: str,
+        sku: str,
+        copies: int,
+    ) -> None:
+        """
+        Record a label print event from SKU Label widget.
+
+        Args:
+            client_id: Client identifier (e.g., "M", "A")
+            sku: SKU that was printed
+            copies: Number of copies printed
+        """
+        def update(stats):
+            stats["total_labels_printed"] += copies
+
+            if client_id not in stats["by_client"]:
+                stats["by_client"][client_id] = {
+                    "orders_analyzed": 0,
+                    "orders_packed": 0,
+                    "sessions": 0,
+                    "labels_printed": 0,
+                }
+            client = stats["by_client"][client_id]
+            if "labels_printed" not in client:
+                client["labels_printed"] = 0
+            client["labels_printed"] += copies
+
+            record = {
+                "timestamp": datetime.now().isoformat(),
+                "client_id": client_id,
+                "sku": sku,
+                "copies": copies,
+            }
+            stats["label_print_history"].append(record)
+
+            if len(stats["label_print_history"]) > 1000:
+                stats["label_print_history"] = stats["label_print_history"][-1000:]
+
+        self._atomic_update(update)
+
+    def get_label_print_history(
+        self,
+        client_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get label print history with optional filtering.
+
+        Args:
+            client_id: Filter by client ID (None for all clients)
+            start_date: Filter records on or after this datetime
+            end_date: Filter records on or before this datetime (inclusive, extended to end of day)
+            limit: Maximum number of records to return (newest first)
+
+        Returns:
+            List of label print records
+        """
+        stats = self._load_stats()
+        history = stats.get("label_print_history", [])
+
+        if client_id:
+            history = [h for h in history if h.get("client_id") == client_id]
+
+        if start_date:
+            history = [
+                h for h in history
+                if datetime.fromisoformat(h["timestamp"]) >= start_date
+            ]
+
+        if end_date:
+            end_dt = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            history = [
+                h for h in history
+                if datetime.fromisoformat(h["timestamp"]) <= end_dt
+            ]
+
+        history.sort(key=lambda h: h.get("timestamp", ""), reverse=True)
+
+        if limit:
+            history = history[:limit]
+
+        return history
+
+    def get_label_stats(
+        self,
+        client_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get label printing summary statistics.
+
+        Args:
+            client_id: Filter by client ID (None for all clients)
+
+        Returns:
+            Dictionary with:
+            {
+                "total_labels_printed": N,
+                "unique_skus": N,
+                "top_sku": "SKU" or None,
+                "sku_breakdown": {"SKU": total_copies, ...}
+            }
+        """
+        history = self.get_label_print_history(client_id=client_id)
+
+        sku_counts: Dict[str, int] = {}
+        for record in history:
+            sku = record.get("sku", "Unknown")
+            sku_counts[sku] = sku_counts.get(sku, 0) + record.get("copies", 1)
+
+        total = sum(sku_counts.values())
+        top_sku = max(sku_counts, key=sku_counts.get) if sku_counts else None
+
+        return {
+            "total_labels_printed": total,
+            "unique_skus": len(sku_counts),
+            "top_sku": top_sku,
+            "sku_breakdown": sku_counts,
+        }
 
     def reset_stats(self) -> None:
         """

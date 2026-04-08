@@ -333,6 +333,7 @@ class SKULabelWidget(QWidget):
 
         worker = Worker(self._manager.print_label, sku, copies, printer_name)
         worker.signals.result.connect(self._on_print_result)
+        worker.signals.result.connect(lambda res, s=sku, c=copies: self._try_record_print_stats(res, s, c))
         worker.signals.error.connect(self._on_print_error)
         worker.signals.finished.connect(self._on_print_finished)
         QThreadPool.globalInstance().start(worker)
@@ -352,6 +353,29 @@ class SKULabelWidget(QWidget):
                 "Print Error",
                 f"Failed to print label:\n\n{err}",
             )
+
+    def _try_record_print_stats(self, result: dict, sku: str, copies: int):
+        """Fire-and-forget label print stats recording on successful print."""
+        if not result["success"]:
+            return
+        client_id = getattr(self.mw, "current_client_id", None)
+        base_path = (
+            str(self.mw.profile_manager.base_path)
+            if hasattr(self.mw, "profile_manager") and hasattr(self.mw.profile_manager, "base_path")
+            else None
+        )
+        if not (client_id and base_path):
+            return
+        from shared.stats_manager import StatsManager
+
+        def _record():
+            StatsManager(base_path).record_label_print(client_id, sku, copies)
+
+        stats_worker = Worker(_record)
+        stats_worker.signals.error.connect(
+            lambda err: logger.error("Label stats record failed: %s", err[1])
+        )
+        QThreadPool.globalInstance().start(stats_worker)
 
     def _on_print_error(self, error_info: tuple):
         """Handle unexpected Worker exception."""
