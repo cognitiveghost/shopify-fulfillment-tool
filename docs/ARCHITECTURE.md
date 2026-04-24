@@ -432,7 +432,7 @@ Worker threads communicate back to the main thread exclusively via Qt signals (`
     └── shopify_tool/               # Application logs
 ```
 
-The server path defaults to `\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment\`. Setting the `FULFILLMENT_SERVER_PATH` environment variable overrides this for local development.
+The server path defaults to `\\192.168.88.101\_Fulfilment_\0UFulfilment\`. Setting the `FULFILLMENT_SERVER_PATH` environment variable overrides this for local development.
 
 ### Integration with Packing Tool
 

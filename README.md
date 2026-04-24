@@ -102,7 +102,7 @@ For detailed architecture information, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 
 - Python 3.9+
 - Windows 10/11
-- Network access to the file server at `\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment\`
+- Network access to the file server at `\\192.168.88.101\_Fulfilment_\0UFulfilment\`
 
 ### Production Setup
 
