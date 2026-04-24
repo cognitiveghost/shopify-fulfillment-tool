@@ -901,7 +901,7 @@ def __init__(self, base_path: str)
 ```
 
 **Parameters**:
-- `base_path` (str): Root path on file server (e.g., `\\\\192.168.88.101\\Z_GreenDelivery\\WAREHOUSE\\0UFulfilment`)
+- `base_path` (str): Root path on file server (e.g., `\\\\192.168.88.101\\_Fulfilment_\\0UFulfilment`)
 
 **Raises**:
 - `NetworkError`: If file server is not accessible

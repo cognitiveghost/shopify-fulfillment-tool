@@ -64,7 +64,7 @@ def setup_logging(
     separately by the UI code.
 
     Args:
-        server_base_path: Base path to the server (e.g., r"\\\\192.168.88.101\\Z_GreenDelivery\\WAREHOUSE\\0UFulfilment")
+        server_base_path: Base path to the server (e.g., r"\\\\192.168.88.101\\_Fulfilment_\\0UFulfilment")
                          If None, uses local "logs" directory for development/testing
         client_id: Current client ID for structured logging (optional)
         session_id: Current session ID for structured logging (optional)

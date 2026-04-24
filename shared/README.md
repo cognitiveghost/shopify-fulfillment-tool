@@ -47,7 +47,7 @@ Record analysis completion:
 from shared import StatsManager
 
 # Initialize (pass path to 0UFulfilment directory)
-base_path = r"\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment"
+base_path = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
 stats_manager = StatsManager(base_path)
 
 # After completing analysis
@@ -70,7 +70,7 @@ Record packing session completion:
 from shared import StatsManager
 
 # Initialize
-base_path = r"\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment"
+base_path = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
 stats_manager = StatsManager(base_path)
 
 # After completing packing session

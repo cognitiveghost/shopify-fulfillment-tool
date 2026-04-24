@@ -172,7 +172,7 @@ Consolidation release: Barcode Generator (Feature #5), Reference Labels processo
 - Added SessionManager — server-based session lifecycle
 - Added StatsManager — unified statistics for Shopify and Packing tools
 - Added JSON export for Packing Tool integration
-- Migrated from local storage to centralized file server (`\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment\`)
+- Migrated from local storage to centralized file server (`\\192.168.88.101\_Fulfilment_\0UFulfilment\`)
 - Centralized logging under `Logs/shopify_tool/`
 
 ---

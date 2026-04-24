@@ -132,7 +132,7 @@ class ProfileManager:
             return env_path
 
         # Default to production path
-        prod_path = r"\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment"
+        prod_path = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
         logger.info(f"Using default production server path: {prod_path}")
         return prod_path
 

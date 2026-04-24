@@ -721,7 +721,7 @@ class StatsManager:
 # Example usage
 if __name__ == "__main__":
     # Example for testing
-    base_path = r"\\192.168.88.101\Z_GreenDelivery\WAREHOUSE\0UFulfilment"
+    base_path = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
 
     # Create manager
     manager = StatsManager(base_path)
