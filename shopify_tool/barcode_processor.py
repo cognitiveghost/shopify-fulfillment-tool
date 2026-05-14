@@ -89,14 +89,15 @@ def sanitize_order_number(order_number: str) -> str:
     """
     Clean order number for Code-128 barcode encoding.
 
-    Removes non-alphanumeric characters except hyphens and underscores.
-    Code-128 supports alphanumeric content for reliable scanning.
+    Preserves alphanumeric characters, hyphens, underscores, and the '#' prefix
+    used by Shopify order numbers (e.g. #1029392, #BG10129). Code-128 mode B
+    supports the full printable ASCII range so '#' encodes reliably.
 
     Args:
         order_number: Raw order number
 
     Returns:
-        Sanitized order number safe for barcode
+        Sanitized order number safe for barcode encoding
 
     Raises:
         InvalidOrderNumberError: If order number is empty after sanitization
@@ -104,8 +105,8 @@ def sanitize_order_number(order_number: str) -> str:
     if not order_number:
         raise InvalidOrderNumberError("Order number cannot be empty")
 
-    # Remove non-alphanumeric except hyphen and underscore
-    clean = ''.join(c for c in order_number if c.isalnum() or c in ['-', '_'])
+    # Remove characters outside Code-128 mode B printable set; preserve '#' for Shopify prefix
+    clean = ''.join(c for c in order_number if c.isalnum() or c in ['-', '_', '#'])
 
     if not clean:
         raise InvalidOrderNumberError(f"Order number '{order_number}' contains no valid characters")
@@ -432,7 +433,8 @@ def generate_barcode_label(
             draw.text((text_x_last, text_y), last_three, font=font_barcode_num_bold, fill='black')
 
         # === STEP 5: Save PNG with DPI metadata ===
-        output_file = output_dir / f"{safe_order_number}.png"
+        filename_safe = safe_order_number.replace('#', '')
+        output_file = output_dir / f"{filename_safe}.png"
         label_img.save(output_file, dpi=(dpi, dpi))
 
         # Get file size

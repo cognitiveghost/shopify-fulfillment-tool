@@ -134,7 +134,15 @@ class TestUtilityFunctions:
     def test_sanitize_order_number_special_chars(self):
         """Test sanitizing order number with special characters."""
         result = sanitize_order_number("ORDER#12345!")
-        assert result == "ORDER12345"
+        assert result == "ORDER#12345"
+
+    def test_sanitize_shopify_hash_numeric(self):
+        """# prefix preserved for Shopify numeric orders."""
+        assert sanitize_order_number("#1029392") == "#1029392"
+
+    def test_sanitize_shopify_hash_alphanumeric(self):
+        """# prefix preserved for Shopify alphanumeric orders."""
+        assert sanitize_order_number("#BG10129") == "#BG10129"
 
     def test_sanitize_order_number_empty(self):
         """Test sanitizing empty order number."""
