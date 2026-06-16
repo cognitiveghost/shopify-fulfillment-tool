@@ -827,28 +827,18 @@ def _save_results_and_reports(
 
         worksheet = writer.sheets["fulfillment_analysis"]
         highlight_format = workbook.add_format({"bg_color": "#FFC7CE", "font_color": "#9C0006"})
-        for idx, col in enumerate(final_df.columns):
-            try:
-                # Convert to string and handle NaN values before calculating length
-                col_data = final_df[col]
-                # Ensure we have a Series, not DataFrame
-                if isinstance(col_data, pd.DataFrame):
-                    col_data = col_data.iloc[:, 0]
-
-                col_strings = col_data.astype(str).fillna('')
-
-                # Calculate max length safely
-                if len(col_strings) > 0:
-                    max_data_len = col_strings.str.len().max()
-                    max_len = max(max_data_len, len(str(col))) + 2
-                else:
-                    max_len = len(str(col)) + 2
-
-                worksheet.set_column(idx, idx, max_len)
-            except Exception as e:
-                # If column width calculation fails, use default width
-                logger.warning(f"Could not calculate width for column '{col}': {e}")
-                worksheet.set_column(idx, idx, 15)  # Default width
+        try:
+            # Vectorised: compute all column widths in one pass
+            str_df = final_df.fillna('').astype(str)
+            data_widths = str_df.apply(lambda s: s.str.len().max())
+            header_widths = pd.Series([len(str(c)) for c in final_df.columns], index=final_df.columns)
+            col_widths = data_widths.combine(header_widths, max) + 2
+            for idx, (col, width) in enumerate(zip(final_df.columns, col_widths)):
+                worksheet.set_column(idx, idx, int(width))
+        except Exception as e:
+            logger.warning(f"Could not calculate column widths, using defaults: {e}")
+            for idx in range(len(final_df.columns)):
+                worksheet.set_column(idx, idx, 15)
         for row_num, status in enumerate(final_df["Order_Fulfillment_Status"]):
             if status == "Not Fulfillable":
                 worksheet.set_row(row_num + 1, None, highlight_format)

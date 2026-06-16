@@ -297,6 +297,8 @@ def enrich_dataframe_with_weights(df: pd.DataFrame, weight_config: Dict) -> pd.D
     df["All_No_Packaging"] = df["Order_Number"].map(order_all_no_pkg).fillna(False)
     if boxes:
         df["Order_Min_Box"] = df["Order_Number"].map(order_min_box).fillna(UNKNOWN_DIMS)
+    else:
+        df["Order_Min_Box"] = UNKNOWN_DIMS
 
     logger.info(
         f"[WeightCalc] Enriched {len(df)} rows with volumetric weights. "

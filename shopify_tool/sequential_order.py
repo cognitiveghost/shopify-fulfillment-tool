@@ -72,8 +72,8 @@ def generate_sequential_order_map(
         analysis_results_df['Order_Fulfillment_Status'] == 'Fulfillable'
     ].copy()
 
-    # Get unique order numbers
-    unique_orders = fulfillable_df['Order_Number'].unique()
+    # Get unique order numbers (drop NaN to avoid JSON serialization failure)
+    unique_orders = fulfillable_df['Order_Number'].dropna().unique()
 
     # Sort with numeric awareness (ORDER-1, ORDER-2, ORDER-10)
     def natural_sort_key(s):

@@ -222,10 +222,13 @@ class TestEnrichDataframeWithWeights:
         result = enrich_dataframe_with_weights(df, config_with_boxes)
         assert "Order_Min_Box" in result.columns
 
-    def test_order_min_box_not_added_when_no_boxes(self):
+    def test_order_min_box_always_present_defaults_to_unknown(self):
+        # Column must always exist so downstream code never gets KeyError
+        from shopify_tool.weight_calculator import UNKNOWN_DIMS
         df = self._make_df()
         result = enrich_dataframe_with_weights(df, SAMPLE_WEIGHT_CONFIG)
-        assert "Order_Min_Box" not in result.columns
+        assert "Order_Min_Box" in result.columns
+        assert (result["Order_Min_Box"] == UNKNOWN_DIMS).all()
 
 
 # ---------------------------------------------------------------------------
