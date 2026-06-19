@@ -26,8 +26,38 @@ import pytest
 
 from shared.stats_manager import StatsManager
 from shopify_tool import core
+from shopify_tool.db_manager import get_db
 from shopify_tool.profile_manager import ProfileManager
 from shopify_tool.session_manager import SessionManager
+
+
+_INTEGRATION_CLIENTS = ["M", "TEST", "TESTCLIENT", "PERF"]
+
+
+def _wipe_integration_clients():
+    db = get_db()
+    for table in ("analysis_events", "packing_events", "label_print_events", "sessions"):
+        try:
+            db.execute(
+                f"DELETE FROM {table} WHERE client_id = ANY(%s)",
+                (_INTEGRATION_CLIENTS,),
+            )
+        except Exception:
+            pass
+    try:
+        db.execute(
+            "DELETE FROM clients WHERE client_id = ANY(%s)",
+            (_INTEGRATION_CLIENTS,),
+        )
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def clean_integration_clients():
+    _wipe_integration_clients()
+    yield
+    _wipe_integration_clients()
 
 
 def make_test_config(low_stock_threshold=5):
@@ -116,30 +146,24 @@ class TestClientProfileCreation:
     """Test 1: Створення клієнтського профілю"""
 
     def test_create_client_profile(self, profile_manager, temp_file_server):
-        """Test creating a client profile with proper directory structure."""
+        """Test creating a client profile stored in PostgreSQL."""
         client_id = "M"
         client_name = "M Cosmetics"
 
-        # Create client profile
         result = profile_manager.create_client_profile(client_id, client_name)
 
         assert result is True
         assert profile_manager.client_exists(client_id)
 
-        # Verify directory structure exists
-        client_dir = temp_file_server / "Clients" / f"CLIENT_{client_id}"
-        assert client_dir.exists()
-        assert (client_dir / "client_config.json").exists()
-        assert (client_dir / "shopify_config.json").exists()
-        assert (client_dir / "backups").exists()
-
-        # Verify client_config.json content
-        with open(client_dir / "client_config.json") as f:
-            client_config = json.load(f)
-
+        # Verify config is readable from DB
+        client_config = profile_manager.load_client_config(client_id)
         assert client_config["client_id"] == client_id
         assert client_config["client_name"] == client_name
         assert "created_at" in client_config
+
+        shopify_config = profile_manager.load_shopify_config(client_id)
+        assert shopify_config is not None
+        assert shopify_config["client_id"] == client_id
 
 
 class TestConfigurationManagement:
@@ -215,12 +239,10 @@ class TestSessionCreation:
         assert (session_path_obj / "analysis").exists()
         assert (session_path_obj / "packing_lists").exists()
         assert (session_path_obj / "stock_exports").exists()
-        assert (session_path_obj / "session_info.json").exists()
 
-        # Verify session_info.json content
-        with open(session_path_obj / "session_info.json") as f:
-            session_info = json.load(f)
-
+        # Verify session info is in DB (no session_info.json in new implementation)
+        session_info = session_manager.get_session_info(session_path)
+        assert session_info is not None
         assert session_info["created_by_tool"] == "shopify"
         assert session_info["client_id"] == client_id
         assert session_info["status"] == "active"

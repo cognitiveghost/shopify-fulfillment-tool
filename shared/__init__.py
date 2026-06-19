@@ -7,7 +7,10 @@ ensuring consistency and reducing code duplication.
 Phase 1.4: Unified Statistics System
 """
 
-from .stats_manager import StatsManager, StatsManagerError, FileLockError
+from .stats_manager import StatsManager, StatsManagerError
+
+# FileLockError removed — DB backend uses transactions instead of file locks
+FileLockError = StatsManagerError  # alias kept for any stale import sites
 
 __all__ = [
     'StatsManager',

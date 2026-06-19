@@ -4,6 +4,7 @@ import json
 import tempfile
 import pytest
 from pathlib import Path
+from shopify_tool.db_manager import get_db
 from shopify_tool.profile_manager import ProfileManager
 
 
@@ -12,12 +13,23 @@ from shopify_tool.profile_manager import ProfileManager
 # ============================================================================
 
 
+def _wipe_test_clients():
+    db = get_db()
+    try:
+        db.execute("DELETE FROM sessions WHERE client_id IN ('TEST', 'MIGTEST')")
+        db.execute("DELETE FROM clients WHERE client_id IN ('TEST', 'MIGTEST')")
+    except Exception:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def clear_profile_manager_cache():
-    """Clear class-level cache before each test to prevent cross-test contamination."""
+    """Clear class-level cache and DB test clients before each test."""
     ProfileManager._config_cache.clear()
+    _wipe_test_clients()
     yield
     ProfileManager._config_cache.clear()
+    _wipe_test_clients()
 
 
 @pytest.fixture
@@ -268,31 +280,16 @@ def test_migrate_tag_categories_v1_to_v2_order_is_set(profile_manager, config_v1
 # ============================================================================
 
 
-def test_load_shopify_config_triggers_migration(profile_manager, temp_profile_dir, config_v1_basic):
-    """Test that loading v1 config triggers automatic migration."""
-    # Create Clients directory structure
-    clients_dir = temp_profile_dir / "Clients"
-    clients_dir.mkdir(exist_ok=True)
-    client_dir = clients_dir / "CLIENT_TEST"
-    client_dir.mkdir()
-    config_path = client_dir / "shopify_config.json"
+def test_load_shopify_config_returns_v2(profile_manager):
+    """Test that load_shopify_config returns v2 tag_categories from DB."""
+    profile_manager.create_client_profile("TEST", "Test Client")
 
-    with open(config_path, 'w', encoding='utf-8') as f:
-        json.dump(config_v1_basic, f, indent=2)
-
-    # Load config (should trigger migration)
     loaded_config = profile_manager.load_shopify_config("TEST")
 
     assert loaded_config is not None
     assert "tag_categories" in loaded_config
     assert loaded_config["tag_categories"]["version"] == 2
     assert "categories" in loaded_config["tag_categories"]
-
-    # Check that migration was saved to disk
-    with open(config_path, 'r', encoding='utf-8') as f:
-        saved_config = json.load(f)
-
-    assert saved_config["tag_categories"]["version"] == 2
 
 
 def test_create_default_shopify_config_uses_v2(profile_manager):

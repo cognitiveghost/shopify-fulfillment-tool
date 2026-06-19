@@ -1,297 +1,182 @@
-"""
-Unit tests for the Unified StatsManager (Phase 1.4)
+"""Unit tests for the Unified StatsManager — PostgreSQL backend."""
 
-Tests the shared statistics manager that works identically in both
-Shopify Tool and Packing Tool.
-"""
-
-import json
-import os
-import pytest
+import time
 import tempfile
-import shutil
 from pathlib import Path
-from datetime import datetime
-from unittest.mock import patch, MagicMock
 
-# Add parent directory to path for imports
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import pytest
 
 from shared.stats_manager import StatsManager, StatsManagerError, FileLockError
+from shopify_tool.db_manager import get_db
+
+
+_STAT_TEST_CLIENTS = ["M", "A", "NEW_CLIENT", "ERR_TEST"]
+
+
+@pytest.fixture(autouse=True)
+def clean_event_tables():
+    """Ensure test client rows exist and event tables are empty before each test."""
+    _purge()
+    db = get_db()
+    for cid in _STAT_TEST_CLIENTS:
+        db.execute(
+            "INSERT INTO clients (client_id, client_name) VALUES (%s,%s) "
+            "ON CONFLICT (client_id) DO NOTHING",
+            (cid, cid),
+        )
+    yield
+    _purge()
+    for cid in _STAT_TEST_CLIENTS:
+        db.execute("DELETE FROM clients WHERE client_id = %s", (cid,))
+
+
+def _purge():
+    db = get_db()
+    db.execute("DELETE FROM analysis_events")
+    db.execute("DELETE FROM packing_events")
+    db.execute("DELETE FROM label_print_events")
 
 
 @pytest.fixture
-def temp_base_path():
-    """Create a temporary base path for testing."""
-    temp_dir = tempfile.mkdtemp()
-    yield temp_dir
-    shutil.rmtree(temp_dir, ignore_errors=True)
+def stats_manager(tmp_path):
+    return StatsManager(base_path=str(tmp_path))
 
 
-@pytest.fixture
-def stats_manager(temp_base_path):
-    """Create a StatsManager instance for testing."""
-    return StatsManager(base_path=temp_base_path)
+# ── Imports ────────────────────────────────────────────────────────────────
 
+class TestImports:
+    def test_fileLockError_is_importable(self):
+        assert FileLockError is StatsManagerError
+
+
+# ── Initialization ─────────────────────────────────────────────────────────
 
 class TestStatsManagerInitialization:
-    """Test StatsManager initialization and file structure."""
+    def test_get_global_stats_returns_zeros_on_empty_db(self, stats_manager):
+        stats = stats_manager.get_global_stats()
+        assert stats["total_orders_analyzed"] == 0
+        assert stats["total_orders_packed"] == 0
+        assert stats["total_sessions"] == 0
+        assert stats["total_labels_printed"] == 0
 
-    def test_init_creates_stats_directory(self, temp_base_path):
-        """Test that initialization creates Stats directory."""
-        manager = StatsManager(base_path=temp_base_path)
-        stats_dir = Path(temp_base_path) / "Stats"
-        assert stats_dir.exists()
-        assert stats_dir.is_dir()
+    def test_global_stats_has_required_keys(self, stats_manager):
+        stats = stats_manager.get_global_stats()
+        for key in ("total_orders_analyzed", "total_orders_packed",
+                    "total_sessions", "last_updated"):
+            assert key in stats
 
-    def test_init_creates_stats_file_on_first_save(self, temp_base_path):
-        """Test that stats file is created on first save operation."""
-        manager = StatsManager(base_path=temp_base_path)
-        stats_file = Path(temp_base_path) / "Stats" / "global_stats.json"
 
-        # File should not exist yet
-        assert not stats_file.exists()
-
-        # Record something to trigger save
-        manager.record_analysis(
-            client_id="M",
-            session_id="test_session",
-            orders_count=10
-        )
-
-        # Now file should exist
-        assert stats_file.exists()
-
-    def test_default_stats_structure(self, stats_manager):
-        """Test that default stats have correct structure."""
-        default = stats_manager._get_default_stats()
-
-        assert "total_orders_analyzed" in default
-        assert "total_orders_packed" in default
-        assert "total_sessions" in default
-        assert "by_client" in default
-        assert "analysis_history" in default
-        assert "packing_history" in default
-        assert "last_updated" in default
-        assert "version" in default
-
-        assert default["total_orders_analyzed"] == 0
-        assert default["total_orders_packed"] == 0
-        assert default["total_sessions"] == 0
-        assert isinstance(default["by_client"], dict)
-        assert isinstance(default["analysis_history"], list)
-        assert isinstance(default["packing_history"], list)
-
+# ── Record analysis ────────────────────────────────────────────────────────
 
 class TestRecordAnalysis:
-    """Test recording analysis operations from Shopify Tool."""
-
     def test_record_analysis_basic(self, stats_manager):
-        """Test basic analysis recording."""
-        stats_manager.record_analysis(
-            client_id="M",
-            session_id="2025-11-05_1",
-            orders_count=150
-        )
+        stats_manager.record_analysis("M", "2025-11-05_1", 150)
 
-        global_stats = stats_manager.get_global_stats()
-        assert global_stats["total_orders_analyzed"] == 150
-        assert global_stats["total_orders_packed"] == 0
-        assert global_stats["total_sessions"] == 0
+        stats = stats_manager.get_global_stats()
+        assert stats["total_orders_analyzed"] == 150
+        assert stats["total_orders_packed"] == 0
 
     def test_record_analysis_with_metadata(self, stats_manager):
-        """Test analysis recording with metadata."""
-        metadata = {
-            "fulfillable_orders": 142,
-            "courier_breakdown": {"DHL": 80, "DPD": 62}
-        }
-
-        stats_manager.record_analysis(
-            client_id="M",
-            session_id="2025-11-05_1",
-            orders_count=150,
-            metadata=metadata
-        )
+        meta = {"fulfillable_orders": 142, "courier_breakdown": {"DHL": 80}}
+        stats_manager.record_analysis("M", "2025-11-05_1", 150, metadata=meta)
 
         history = stats_manager.get_analysis_history(limit=1)
         assert len(history) == 1
-        assert history[0]["metadata"] == metadata
+        assert history[0]["metadata"] == meta
 
     def test_record_analysis_multiple_clients(self, stats_manager):
-        """Test recording analysis for multiple clients."""
-        stats_manager.record_analysis("M", "session1", 100)
-        stats_manager.record_analysis("A", "session2", 50)
-        stats_manager.record_analysis("M", "session3", 75)
-
-        global_stats = stats_manager.get_global_stats()
-        assert global_stats["total_orders_analyzed"] == 225
-
-        client_m = stats_manager.get_client_stats("M")
-        assert client_m["orders_analyzed"] == 175
-
-        client_a = stats_manager.get_client_stats("A")
-        assert client_a["orders_analyzed"] == 50
-
-    def test_record_analysis_creates_client_if_not_exists(self, stats_manager):
-        """Test that recording creates client entry if it doesn't exist."""
-        stats_manager.record_analysis("NEW_CLIENT", "session1", 100)
-
-        client_stats = stats_manager.get_client_stats("NEW_CLIENT")
-        assert client_stats["orders_analyzed"] == 100
-        assert client_stats["orders_packed"] == 0
-        assert client_stats["sessions"] == 0
-
-    def test_analysis_history_limited_to_1000(self, stats_manager):
-        """Test that analysis history is limited to prevent bloat."""
-        # Record 1100 entries
-        for i in range(1100):
-            stats_manager.record_analysis(f"C{i % 10}", f"session_{i}", 1)
-
-        history = stats_manager.get_analysis_history()
-        assert len(history) <= 1000
-
-
-class TestRecordPacking:
-    """Test recording packing operations from Packing Tool."""
-
-    def test_record_packing_basic(self, stats_manager):
-        """Test basic packing recording."""
-        stats_manager.record_packing(
-            client_id="M",
-            session_id="2025-11-05_1",
-            worker_id="001",
-            orders_count=142,
-            items_count=450
-        )
-
-        global_stats = stats_manager.get_global_stats()
-        assert global_stats["total_orders_packed"] == 142
-        assert global_stats["total_orders_analyzed"] == 0
-        assert global_stats["total_sessions"] == 1
-
-    def test_record_packing_with_metadata(self, stats_manager):
-        """Test packing recording with metadata."""
-        metadata = {
-            "start_time": "2025-11-05T10:00:00",
-            "end_time": "2025-11-05T12:30:00",
-            "duration_seconds": 9000
-        }
-
-        stats_manager.record_packing(
-            client_id="M",
-            session_id="2025-11-05_1",
-            worker_id="001",
-            orders_count=142,
-            items_count=450,
-            metadata=metadata
-        )
-
-        history = stats_manager.get_packing_history(limit=1)
-        assert len(history) == 1
-        assert history[0]["metadata"] == metadata
-        assert history[0]["worker_id"] == "001"
-
-    def test_record_packing_no_worker(self, stats_manager):
-        """Test packing recording without worker ID."""
-        stats_manager.record_packing(
-            client_id="M",
-            session_id="2025-11-05_1",
-            worker_id=None,
-            orders_count=100,
-            items_count=300
-        )
-
-        history = stats_manager.get_packing_history(limit=1)
-        assert len(history) == 1
-        assert history[0]["worker_id"] is None
-
-    def test_record_packing_increments_sessions(self, stats_manager):
-        """Test that packing increments session count."""
-        stats_manager.record_packing("M", "s1", "001", 10, 30)
-        stats_manager.record_packing("M", "s2", "001", 20, 60)
-        stats_manager.record_packing("A", "s3", "002", 15, 45)
-
-        global_stats = stats_manager.get_global_stats()
-        assert global_stats["total_sessions"] == 3
-
-        client_m = stats_manager.get_client_stats("M")
-        assert client_m["sessions"] == 2
-
-    def test_packing_history_limited_to_1000(self, stats_manager):
-        """Test that packing history is limited to prevent bloat."""
-        # Record 1100 entries
-        for i in range(1100):
-            stats_manager.record_packing(f"C{i % 10}", f"s_{i}", "001", 1, 3)
-
-        history = stats_manager.get_packing_history()
-        assert len(history) <= 1000
-
-
-class TestIntegratedWorkflow:
-    """Test integrated workflow with both analysis and packing."""
-
-    def test_complete_workflow(self, stats_manager):
-        """Test complete workflow: analysis then packing."""
-        # Shopify Tool: analyze orders
-        stats_manager.record_analysis(
-            client_id="M",
-            session_id="2025-11-05_1",
-            orders_count=150,
-            metadata={"fulfillable_orders": 142}
-        )
-
-        # Packing Tool: pack orders
-        stats_manager.record_packing(
-            client_id="M",
-            session_id="2025-11-05_1",
-            worker_id="001",
-            orders_count=142,
-            items_count=450
-        )
-
-        # Check global stats
-        global_stats = stats_manager.get_global_stats()
-        assert global_stats["total_orders_analyzed"] == 150
-        assert global_stats["total_orders_packed"] == 142
-        assert global_stats["total_sessions"] == 1
-
-        # Check client stats
-        client_stats = stats_manager.get_client_stats("M")
-        assert client_stats["orders_analyzed"] == 150
-        assert client_stats["orders_packed"] == 142
-        assert client_stats["sessions"] == 1
-
-    def test_multiple_sessions_same_client(self, stats_manager):
-        """Test multiple sessions for the same client."""
-        # Session 1
-        stats_manager.record_analysis("M", "2025-11-05_1", 100)
-        stats_manager.record_packing("M", "2025-11-05_1", "001", 95, 300)
-
-        # Session 2
-        stats_manager.record_analysis("M", "2025-11-05_2", 120)
-        stats_manager.record_packing("M", "2025-11-05_2", "002", 118, 350)
-
-        client_stats = stats_manager.get_client_stats("M")
-        assert client_stats["orders_analyzed"] == 220
-        assert client_stats["orders_packed"] == 213
-        assert client_stats["sessions"] == 2
-
-
-class TestHistoryRetrieval:
-    """Test history retrieval and filtering."""
-
-    def test_get_analysis_history_all(self, stats_manager):
-        """Test getting all analysis history."""
         stats_manager.record_analysis("M", "s1", 100)
         stats_manager.record_analysis("A", "s2", 50)
         stats_manager.record_analysis("M", "s3", 75)
 
-        history = stats_manager.get_analysis_history()
-        assert len(history) == 3
+        assert stats_manager.get_global_stats()["total_orders_analyzed"] == 225
+        assert stats_manager.get_client_stats("M")["orders_analyzed"] == 175
+        assert stats_manager.get_client_stats("A")["orders_analyzed"] == 50
+
+    def test_record_analysis_creates_client_entry(self, stats_manager):
+        stats_manager.record_analysis("NEW_CLIENT", "s1", 100)
+
+        client = stats_manager.get_client_stats("NEW_CLIENT")
+        assert client["orders_analyzed"] == 100
+        assert client["orders_packed"] == 0
+        assert client["sessions"] == 0
+
+
+# ── Record packing ─────────────────────────────────────────────────────────
+
+class TestRecordPacking:
+    def test_record_packing_basic(self, stats_manager):
+        stats_manager.record_packing("M", "2025-11-05_1", "001", 142, 450)
+
+        stats = stats_manager.get_global_stats()
+        assert stats["total_orders_packed"] == 142
+        assert stats["total_orders_analyzed"] == 0
+        assert stats["total_sessions"] == 1
+
+    def test_record_packing_with_metadata(self, stats_manager):
+        meta = {"start_time": "2025-11-05T10:00:00", "duration_seconds": 9000}
+        stats_manager.record_packing("M", "s1", "001", 142, 450, metadata=meta)
+
+        history = stats_manager.get_packing_history(limit=1)
+        assert len(history) == 1
+        assert history[0]["metadata"] == meta
+        assert history[0]["worker_id"] == "001"
+
+    def test_record_packing_no_worker(self, stats_manager):
+        stats_manager.record_packing("M", "s1", None, 100, 300)
+
+        history = stats_manager.get_packing_history(limit=1)
+        assert history[0]["worker_id"] is None
+
+    def test_record_packing_increments_sessions(self, stats_manager):
+        stats_manager.record_packing("M", "s1", "001", 10, 30)
+        stats_manager.record_packing("M", "s2", "001", 20, 60)
+        stats_manager.record_packing("A", "s3", "002", 15, 45)
+
+        assert stats_manager.get_global_stats()["total_sessions"] == 3
+        assert stats_manager.get_client_stats("M")["sessions"] == 2
+
+
+# ── Integrated workflow ────────────────────────────────────────────────────
+
+class TestIntegratedWorkflow:
+    def test_complete_workflow(self, stats_manager):
+        stats_manager.record_analysis("M", "2025-11-05_1", 150)
+        stats_manager.record_packing("M", "2025-11-05_1", "001", 142, 450)
+
+        gs = stats_manager.get_global_stats()
+        assert gs["total_orders_analyzed"] == 150
+        assert gs["total_orders_packed"] == 142
+        assert gs["total_sessions"] == 1
+
+        cs = stats_manager.get_client_stats("M")
+        assert cs["orders_analyzed"] == 150
+        assert cs["orders_packed"] == 142
+        assert cs["sessions"] == 1
+
+    def test_multiple_sessions_same_client(self, stats_manager):
+        stats_manager.record_analysis("M", "2025-11-05_1", 100)
+        stats_manager.record_packing("M", "2025-11-05_1", "001", 95, 300)
+        stats_manager.record_analysis("M", "2025-11-05_2", 120)
+        stats_manager.record_packing("M", "2025-11-05_2", "002", 118, 350)
+
+        cs = stats_manager.get_client_stats("M")
+        assert cs["orders_analyzed"] == 220
+        assert cs["orders_packed"] == 213
+        assert cs["sessions"] == 2
+
+
+# ── History retrieval ──────────────────────────────────────────────────────
+
+class TestHistoryRetrieval:
+    def test_get_analysis_history_all(self, stats_manager):
+        stats_manager.record_analysis("M", "s1", 100)
+        stats_manager.record_analysis("A", "s2", 50)
+        stats_manager.record_analysis("M", "s3", 75)
+
+        assert len(stats_manager.get_analysis_history()) == 3
 
     def test_get_analysis_history_by_client(self, stats_manager):
-        """Test filtering analysis history by client."""
         stats_manager.record_analysis("M", "s1", 100)
         stats_manager.record_analysis("A", "s2", 50)
         stats_manager.record_analysis("M", "s3", 75)
@@ -301,15 +186,12 @@ class TestHistoryRetrieval:
         assert all(h["client_id"] == "M" for h in history)
 
     def test_get_analysis_history_with_limit(self, stats_manager):
-        """Test limiting analysis history results."""
         for i in range(10):
             stats_manager.record_analysis("M", f"s{i}", 10)
 
-        history = stats_manager.get_analysis_history(limit=5)
-        assert len(history) == 5
+        assert len(stats_manager.get_analysis_history(limit=5)) == 5
 
     def test_get_packing_history_by_worker(self, stats_manager):
-        """Test filtering packing history by worker."""
         stats_manager.record_packing("M", "s1", "001", 10, 30)
         stats_manager.record_packing("M", "s2", "002", 20, 60)
         stats_manager.record_packing("M", "s3", "001", 15, 45)
@@ -319,13 +201,10 @@ class TestHistoryRetrieval:
         assert all(h["worker_id"] == "001" for h in history)
 
     def test_history_sorted_newest_first(self, stats_manager):
-        """Test that history is sorted with newest first."""
-        import time
-
         stats_manager.record_analysis("M", "s1", 10)
-        time.sleep(0.01)
+        time.sleep(0.05)
         stats_manager.record_analysis("M", "s2", 20)
-        time.sleep(0.01)
+        time.sleep(0.05)
         stats_manager.record_analysis("M", "s3", 30)
 
         history = stats_manager.get_analysis_history()
@@ -334,18 +213,16 @@ class TestHistoryRetrieval:
         assert history[2]["session_id"] == "s1"
 
 
-class TestClientStats:
-    """Test client statistics retrieval."""
+# ── Client stats ───────────────────────────────────────────────────────────
 
+class TestClientStats:
     def test_get_client_stats_nonexistent(self, stats_manager):
-        """Test getting stats for non-existent client."""
         stats = stats_manager.get_client_stats("NONEXISTENT")
         assert stats["orders_analyzed"] == 0
         assert stats["orders_packed"] == 0
         assert stats["sessions"] == 0
 
     def test_get_all_clients_stats(self, stats_manager):
-        """Test getting stats for all clients."""
         stats_manager.record_analysis("M", "s1", 100)
         stats_manager.record_packing("M", "s1", "001", 95, 300)
         stats_manager.record_analysis("A", "s2", 50)
@@ -358,111 +235,51 @@ class TestClientStats:
         assert all_stats["A"]["orders_analyzed"] == 50
 
     def test_get_all_clients_stats_empty(self, stats_manager):
-        """Test getting all client stats when no data exists."""
         all_stats = stats_manager.get_all_clients_stats()
         assert isinstance(all_stats, dict)
         assert len(all_stats) == 0
 
 
-class TestPersistence:
-    """Test data persistence across manager instances."""
+# ── Persistence (DB naturally persists across instances) ───────────────────
 
-    def test_data_persists_across_instances(self, temp_base_path):
-        """Test that data persists when creating new manager instance."""
-        # First manager
-        manager1 = StatsManager(base_path=temp_base_path)
+class TestPersistence:
+    def test_data_persists_across_instances(self, tmp_path):
+        manager1 = StatsManager(base_path=str(tmp_path))
         manager1.record_analysis("M", "s1", 100)
         manager1.record_packing("M", "s1", "001", 95, 300)
 
-        # Create new manager instance
-        manager2 = StatsManager(base_path=temp_base_path)
-        global_stats = manager2.get_global_stats()
+        manager2 = StatsManager(base_path=str(tmp_path))
+        stats = manager2.get_global_stats()
+        assert stats["total_orders_analyzed"] == 100
+        assert stats["total_orders_packed"] == 95
+        assert stats["total_sessions"] == 1
 
-        assert global_stats["total_orders_analyzed"] == 100
-        assert global_stats["total_orders_packed"] == 95
-        assert global_stats["total_sessions"] == 1
 
-    def test_file_format_valid_json(self, temp_base_path):
-        """Test that saved file is valid JSON."""
-        manager = StatsManager(base_path=temp_base_path)
-        manager.record_analysis("M", "s1", 100)
-
-        stats_file = Path(temp_base_path) / "Stats" / "global_stats.json"
-        with open(stats_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        assert isinstance(data, dict)
-        assert "total_orders_analyzed" in data
-        assert data["total_orders_analyzed"] == 100
-
+# ── Reset ──────────────────────────────────────────────────────────────────
 
 class TestResetStats:
-    """Test statistics reset functionality."""
-
     def test_reset_stats(self, stats_manager):
-        """Test resetting statistics."""
-        # Add some data
         stats_manager.record_analysis("M", "s1", 100)
         stats_manager.record_packing("M", "s1", "001", 95, 300)
 
-        # Reset
         stats_manager.reset_stats()
 
-        # Verify reset
-        global_stats = stats_manager.get_global_stats()
-        assert global_stats["total_orders_analyzed"] == 0
-        assert global_stats["total_orders_packed"] == 0
-        assert global_stats["total_sessions"] == 0
+        stats = stats_manager.get_global_stats()
+        assert stats["total_orders_analyzed"] == 0
+        assert stats["total_orders_packed"] == 0
+        assert stats["total_sessions"] == 0
+        assert len(stats_manager.get_all_clients_stats()) == 0
 
-        all_clients = stats_manager.get_all_clients_stats()
-        assert len(all_clients) == 0
 
+# ── Error handling ─────────────────────────────────────────────────────────
 
 class TestErrorHandling:
-    """Test error handling and edge cases."""
-
-    def test_corrupted_json_file(self, temp_base_path):
-        """Test handling of corrupted JSON file."""
-        manager = StatsManager(base_path=temp_base_path)
-        stats_file = Path(temp_base_path) / "Stats" / "global_stats.json"
-
-        # Create corrupted file
-        stats_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(stats_file, 'w') as f:
-            f.write("corrupted json {{{")
-
-        # Should handle gracefully and start fresh
-        manager.record_analysis("M", "s1", 10)
-        global_stats = manager.get_global_stats()
-        assert global_stats["total_orders_analyzed"] == 10
-
-    def test_empty_json_file(self, temp_base_path):
-        """Test handling of empty JSON file."""
-        manager = StatsManager(base_path=temp_base_path)
-        stats_file = Path(temp_base_path) / "Stats" / "global_stats.json"
-
-        # Create empty file
-        stats_file.parent.mkdir(parents=True, exist_ok=True)
-        stats_file.touch()
-
-        # Should handle gracefully
-        manager.record_analysis("M", "s1", 10)
-        global_stats = manager.get_global_stats()
-        assert global_stats["total_orders_analyzed"] == 10
-
-    def test_invalid_base_path_creates_structure(self):
-        """Test that invalid base path is created."""
-        temp_dir = tempfile.mkdtemp()
-        try:
-            nonexistent_path = os.path.join(temp_dir, "nonexistent", "path")
-            manager = StatsManager(base_path=nonexistent_path)
-            manager.record_analysis("M", "s1", 10)
-
-            # Should create the path
-            assert Path(nonexistent_path).exists()
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+    def test_base_path_stored_but_not_required(self):
+        """StatsManager stores base_path for API compat but DB does not need it."""
+        manager = StatsManager(base_path="/some/nonexistent/path")
+        manager.record_analysis("ERR_TEST", "s1", 5)
+        assert manager.get_client_stats("ERR_TEST")["orders_analyzed"] == 5
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

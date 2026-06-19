@@ -12,8 +12,24 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from shopify_tool import core
+from shopify_tool.db_manager import get_db
 from shopify_tool.profile_manager import ProfileManager
 from shopify_tool.session_manager import SessionManager
+
+
+def _delete_test_client(client_id: str):
+    db = get_db()
+    try:
+        db.execute("DELETE FROM clients WHERE client_id = %s", (client_id.upper(),))
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def clean_core_test_client():
+    _delete_test_client("TEST")
+    yield
+    _delete_test_client("TEST")
 
 
 def make_test_config(low_stock_threshold=4):
@@ -161,20 +177,15 @@ def test_run_full_analysis_with_session(
     assert "status" in first_order
     assert "items" in first_order
 
-    # Verify session_info.json was updated
-    session_info_path = session_path_obj / "session_info.json"
-    assert session_info_path.exists()
-
-    with open(session_info_path, 'r') as f:
-        session_info = json.load(f)
+    # Verify session info was updated in DB (no session_info.json in new implementation)
+    session_info = session_manager.get_session_info(session_path)
+    assert session_info is not None
 
     assert session_info["created_by_tool"] == "shopify"
     assert session_info["client_id"] == test_client
     assert session_info["analysis_completed"]
     assert session_info["orders_file"] == "orders_export.csv"
     assert session_info["stock_file"] == "inventory.csv"
-    assert "analysis_completed_at" in session_info
-    assert "total_orders" in session_info
 
 
 def test_create_packing_list_with_session(

@@ -149,6 +149,12 @@ class UIManager:
 
         toggle_row.addStretch()
 
+        self.mw.db_settings_btn = QPushButton("DB")
+        self.mw.db_settings_btn.setMaximumWidth(40)
+        self.mw.db_settings_btn.setToolTip("Database connection settings")
+        self.mw.db_settings_btn.clicked.connect(self.mw._open_db_settings)
+        toggle_row.addWidget(self.mw.db_settings_btn)
+
         layout.addLayout(toggle_row)
 
         # Row 2: Session info

@@ -1342,6 +1342,11 @@ class MainWindow(QMainWindow):
 
             menu.exec(table.viewport().mapToGlobal(pos))
 
+    def _open_db_settings(self):
+        from gui.db_settings_dialog import DbSettingsDialog
+        dlg = DbSettingsDialog(self)
+        dlg.exec()
+
     def closeEvent(self, event):
         """Handles the application window being closed.
 

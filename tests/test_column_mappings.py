@@ -15,47 +15,58 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from shopify_tool import analysis, core
+from shopify_tool.db_manager import get_db
 from shopify_tool.profile_manager import ProfileManager
 
 
+def _delete_test_client(client_id: str):
+    db = get_db()
+    try:
+        db.execute("DELETE FROM clients WHERE client_id = %s", (client_id.upper(),))
+    except Exception:
+        pass
+
+
 class TestV1ToV2Migration:
-    """Test migration from v1 to v2 column mappings format."""
+    """Test column mappings are stored and loaded in v2 format."""
 
     def test_migrate_v1_to_v2(self, tmp_path):
-        """Test automatic migration of v1 config to v2 format."""
+        """Test that column mappings round-trip correctly in v2 format."""
+        _delete_test_client("TEST")
         profile_manager = ProfileManager(str(tmp_path))
 
-        # Create client with v1 config manually
         client_id = "TEST"
         profile_manager.create_client_profile(client_id, "Test Client")
 
-        # Load and modify config to v1 format
+        # Default config has v2 column_mappings
         config = profile_manager.load_shopify_config(client_id)
-        config["column_mappings"] = {
-            "orders_required": ["Name", "Lineitem sku", "Lineitem quantity"],
-            "stock_required": ["Артикул", "Наличност"]
-        }
+        assert "version" in config["column_mappings"]
+        assert config["column_mappings"]["version"] == 2
+
+        # Modify an orders mapping, save, and reload
+        config["column_mappings"]["orders"]["Custom_Field"] = "Custom_Internal"
         profile_manager.save_shopify_config(client_id, config)
 
-        # Reload config - should trigger migration
-        migrated_config = profile_manager.load_shopify_config(client_id)
+        reloaded = profile_manager.load_shopify_config(client_id)
 
-        # Verify v2 format
-        assert "version" in migrated_config["column_mappings"]
-        assert migrated_config["column_mappings"]["version"] == 2
-        assert "orders" in migrated_config["column_mappings"]
-        assert "stock" in migrated_config["column_mappings"]
+        # Verify v2 format preserved
+        assert "version" in reloaded["column_mappings"]
+        assert reloaded["column_mappings"]["version"] == 2
+        assert "orders" in reloaded["column_mappings"]
+        assert "stock" in reloaded["column_mappings"]
 
-        # Verify mapping structure
-        orders_mappings = migrated_config["column_mappings"]["orders"]
+        orders_mappings = reloaded["column_mappings"]["orders"]
         assert "Name" in orders_mappings
         assert orders_mappings["Name"] == "Order_Number"
         assert "Lineitem sku" in orders_mappings
         assert orders_mappings["Lineitem sku"] == "SKU"
+        assert orders_mappings.get("Custom_Field") == "Custom_Internal"
 
-        stock_mappings = migrated_config["column_mappings"]["stock"]
+        stock_mappings = reloaded["column_mappings"]["stock"]
         assert "Артикул" in stock_mappings
         assert stock_mappings["Артикул"] == "SKU"
+
+        _delete_test_client("TEST")
 
 
 class TestColumnMappingApplication:
