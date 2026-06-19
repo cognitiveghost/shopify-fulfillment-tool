@@ -24,6 +24,7 @@ Fields:
 
 import io
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Callable
 from datetime import datetime
@@ -114,9 +115,10 @@ def sanitize_order_number(order_number: str) -> str:
     return clean
 
 
+@lru_cache(maxsize=None)
 def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     """
-    Load font with fallback strategy.
+    Load font with fallback strategy, cached to avoid repeated disk reads.
 
     Tries to load Arial, falls back to DejaVu Sans if not available.
 
@@ -130,17 +132,14 @@ def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     font_name = "arialbd.ttf" if bold else "arial.ttf"
 
     try:
-        # Try Windows fonts
         return ImageFont.truetype(font_name, size)
     except OSError:
         pass
 
     try:
-        # Try system fonts (Linux/Mac)
         fallback = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
         return ImageFont.truetype(fallback, size)
     except OSError:
-        # Last resort: default font
         logger.warning(f"Could not load font {font_name}, using default")
         return ImageFont.load_default()
 
@@ -565,7 +564,13 @@ def generate_barcodes_batch(
 
         # Get item count (number of unique items/SKUs in order)
         # Use 'item_count' column if available, otherwise fall back to 'Quantity'
-        item_count = int(row.get('item_count', row.get('Quantity', 1)))
+        raw_count = row.get('item_count')
+        if pd.isna(raw_count):
+            raw_count = row.get('Quantity', 1)
+        try:
+            item_count = int(float(raw_count or 1))
+        except (ValueError, TypeError):
+            item_count = 1
 
         # Generate barcode
         try:

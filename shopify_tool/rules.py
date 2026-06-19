@@ -1,3 +1,4 @@
+import copy
 import pandas as pd
 import re
 from functools import lru_cache
@@ -249,15 +250,16 @@ def _parse_range(range_str: str) -> Optional[tuple[float, float]]:
 
     range_str = str(range_str).strip()
 
-    # Split on dash
-    parts = range_str.split("-")
-    if len(parts) != 2:
+    # Use regex to support negative numbers: e.g. "-10-0", "-10--5"
+    # Pattern: optional minus + digits (+ optional decimal) DASH optional minus + digits
+    match = re.match(r'^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$', range_str)
+    if not match:
         logger.warning(f"[RULE ENGINE] Invalid range format: '{range_str}' (expected 'start-end')")
         return None
 
     try:
-        start = float(parts[0].strip())
-        end = float(parts[1].strip())
+        start = float(match.group(1))
+        end = float(match.group(2))
 
         # Validate order
         if start > end:
@@ -655,8 +657,11 @@ class RuleEngine:
             self.rules = []
             return
 
+        # Deep-copy so we never mutate the caller's config in-place
+        rules_working = copy.deepcopy(rules_config)
+
         # Normalize: add default priority to rules without it
-        self.rules = self._normalize_priorities(rules_config)
+        self.rules = self._normalize_priorities(rules_working)
 
         # Normalize: convert old single-step format to steps array
         for rule in self.rules:

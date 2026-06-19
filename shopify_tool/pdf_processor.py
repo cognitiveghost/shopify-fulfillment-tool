@@ -261,50 +261,53 @@ def load_csv_mapping(csv_path: str) -> Dict[str, Dict]:
         'by_name': {}
     }
 
-    # Try different encodings
+    # Read raw bytes once to avoid repeated network/disk I/O per encoding attempt
+    try:
+        raw_bytes = Path(csv_path).read_bytes()
+    except OSError as e:
+        raise InvalidCSVError(f"Could not read CSV file: {e}")
+
     encodings = ['utf-8-sig', 'utf-8', 'cp1251', 'latin-1']
 
     for encoding in encodings:
         try:
-            with open(csv_path, 'r', encoding=encoding, newline='') as f:
-                reader = csv.reader(f)
-                header = next(reader, None)
+            text = raw_bytes.decode(encoding)
+            reader = csv.reader(text.splitlines())
+            header = next(reader, None)
 
-                if not header:
+            if not header:
+                continue
+
+            row_count = 0
+            for row in reader:
+                if len(row) < 7:
                     continue
 
-                row_count = 0
-                for row in reader:
-                    if len(row) < 7:
-                        continue
+                p_number = row[0].strip()
+                tracking = row[1].strip()
+                ref_num = row[2].strip()
+                client_name = row[6].strip()
 
-                    p_number = row[0].strip()
-                    tracking = row[1].strip()
-                    ref_num = row[2].strip()
-                    client_name = row[6].strip()
+                data_pack = {'ref': ref_num, 'name': client_name}
 
-                    data_pack = {'ref': ref_num, 'name': client_name}
+                if p_number:
+                    mappings['by_postone'][p_number] = data_pack
+                if tracking:
+                    mappings['by_tracking'][tracking] = data_pack
+                if client_name:
+                    normalized_name = normalize_text(client_name)
+                    mappings['by_name'][normalized_name] = data_pack
 
-                    if p_number:
-                        mappings['by_postone'][p_number] = data_pack
-                    if tracking:
-                        mappings['by_tracking'][tracking] = data_pack
-                    if client_name:
-                        normalized_name = normalize_text(client_name)
-                        mappings['by_name'][normalized_name] = data_pack
+                row_count += 1
 
-                    row_count += 1
-
-                if row_count > 0:
-                    logger.info(
-                        f"CSV loaded with encoding {encoding}: {row_count} rows"
-                    )
-                    return mappings
+            if row_count > 0:
+                logger.info(f"CSV loaded with encoding {encoding}: {row_count} rows")
+                return mappings
 
         except UnicodeDecodeError:
             continue
         except Exception as e:
-            logger.warning(f"Failed to read CSV with encoding {encoding}: {e}")
+            logger.warning(f"Failed to parse CSV with encoding {encoding}: {e}")
             continue
 
     raise InvalidCSVError("Could not read CSV file with any supported encoding")
