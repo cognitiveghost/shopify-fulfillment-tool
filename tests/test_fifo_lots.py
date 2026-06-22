@@ -172,7 +172,7 @@ class TestSimulateStockAllocationFifo:
         stock = _make_stock_df({"A": 10})
         prioritized = _make_prioritized(["O1"])
 
-        results, lot_allocs = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=None)
+        results, lot_allocs, _ = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=None)
         assert results["O1"]["fulfillable"] is True
         assert lot_allocs == {}
 
@@ -185,7 +185,7 @@ class TestSimulateStockAllocationFifo:
         stock = _make_stock_df({"A": 10})
         prioritized = _make_prioritized(["O1"])
 
-        results, lot_allocs = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
+        results, lot_allocs, _ = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
         assert results["O1"]["fulfillable"] is True
         assert "O1" in lot_allocs
         assert lot_allocs["O1"]["A"][0]["qty_allocated"] == 5
@@ -205,7 +205,7 @@ class TestSimulateStockAllocationFifo:
         stock = _make_stock_df({"A": 15})
         prioritized = _make_prioritized(["O1"])
 
-        results, lot_allocs = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
+        results, lot_allocs, _ = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
         assert results["O1"]["fulfillable"] is True
         alloc = lot_allocs["O1"]["A"]
         assert len(alloc) == 2
@@ -224,7 +224,7 @@ class TestSimulateStockAllocationFifo:
         stock = _make_stock_df({"A": 3})
         prioritized = _make_prioritized(["O1"])
 
-        results, lot_allocs = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
+        results, lot_allocs, _ = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
         assert results["O1"]["fulfillable"] is False
         assert "O1" not in lot_allocs
         # Stock must not be mutated on failure
@@ -236,7 +236,7 @@ class TestSimulateStockAllocationFifo:
         stock = _make_stock_df({})
         prioritized = _make_prioritized(["O1"])
 
-        results, lot_allocs = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
+        results, lot_allocs, _ = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
         assert results["O1"]["fulfillable"] is False
 
     def test_all_or_nothing_semantics(self):
@@ -252,7 +252,7 @@ class TestSimulateStockAllocationFifo:
         stock = _make_stock_df({"A": 10, "B": 0})
         prioritized = _make_prioritized(["O1"])
 
-        results, lot_allocs = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
+        results, lot_allocs, _ = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
         assert results["O1"]["fulfillable"] is False
         assert "O1" not in lot_allocs
         # A's lot must not have been decremented
@@ -270,7 +270,7 @@ class TestSimulateStockAllocationFifo:
         stock = _make_stock_df({"A": 6})
         prioritized = _make_prioritized(["O1", "O2"])
 
-        results, lot_allocs = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
+        results, lot_allocs, _ = _simulate_stock_allocation(orders, stock, prioritized, fifo_lots=fifo_lots)
         assert results["O1"]["fulfillable"] is True
         assert results["O2"]["fulfillable"] is False  # only 2 remain after O1
 

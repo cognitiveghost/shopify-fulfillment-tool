@@ -61,9 +61,10 @@ class ProfileManager:
         is_network_available (bool): Whether file server is accessible
     """
 
-    # Class-level caches (shared across instances)
-    _config_cache: Dict[str, Tuple[Dict, datetime]] = {}
-    CACHE_TIMEOUT_SECONDS = 60  # Cache valid for 1 minute
+    # Class-level cache: key → (data, mtime_float). mtime-based invalidation is more
+    # correct than TTL — no stale reads after a write, no unnecessary re-reads within a window.
+    # Key includes base_path so multiple instances with different roots don't collide.
+    _config_cache: Dict[str, Tuple[Dict, float]] = {}
 
     # Class-level constants for metadata cache
     METADATA_CACHE_TIMEOUT_SECONDS = 300  # 5 minutes
@@ -384,7 +385,9 @@ class ProfileManager:
             "stock": {
                 "Артикул": "SKU",
                 "Име": "Product_Name",
-                "Наличност": "Stock"
+                "Наличност": "Stock",
+                "Годност": "Expiry_Date",
+                "Партида": "Batch"
             }
         }
 
@@ -903,10 +906,10 @@ class ProfileManager:
             return None
 
     def load_shopify_config(self, client_id: str) -> Optional[Dict]:
-        """Load Shopify configuration for a client with caching.
+        """Load Shopify configuration for a client with mtime-based caching.
 
-        Uses time-based caching (60 seconds) to reduce network round-trips.
-        Automatically migrates old v1 configs to v2 format.
+        Cache is invalidated by file mtime rather than TTL: no stale reads after
+        another PC saves a change, and no unnecessary re-reads while the file is stable.
 
         Args:
             client_id (str): Client ID
@@ -915,23 +918,24 @@ class ProfileManager:
             Optional[Dict]: Shopify configuration or None if not found
         """
         client_id = client_id.upper()
-        cache_key = f"shopify_{client_id}"
-
-        # Check cache first
-        if cache_key in self._config_cache:
-            cached_data, cached_time = self._config_cache[cache_key]
-            age_seconds = (datetime.now() - cached_time).total_seconds()
-
-            if age_seconds < self.CACHE_TIMEOUT_SECONDS:
-                logger.debug(f"Using cached shopify config for {client_id}")
-                return cached_data
-
-        # Load from disk
+        cache_key = f"{self.base_path}::shopify_{client_id}"
         config_path = self.clients_dir / f"CLIENT_{client_id}" / "shopify_config.json"
 
         if not config_path.exists():
             logger.warning(f"Shopify config not found: CLIENT_{client_id}")
             return None
+
+        # Check cache against current file mtime
+        try:
+            current_mtime = config_path.stat().st_mtime
+        except OSError:
+            current_mtime = None
+
+        if current_mtime is not None and cache_key in self._config_cache:
+            cached_data, cached_mtime = self._config_cache[cache_key]
+            if cached_mtime == current_mtime:
+                logger.debug(f"Using cached shopify config for {client_id}")
+                return cached_data
 
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -946,12 +950,14 @@ class ProfileManager:
             migrated_sku_labels = self._migrate_add_sku_label_config(client_id, config)
 
             if migrated_mappings or migrated_delimiters or migrated_tag_categories or migrated_tag_categories_v2 or migrated_weight or migrated_sku_labels:
-                # If config was migrated, save it immediately
+                # If config was migrated, save it immediately (cache is invalidated by save)
                 self.save_shopify_config(client_id, config)
                 logger.info(f"Config migrations completed for CLIENT_{client_id}")
+                return config
 
-            # Update cache
-            self._config_cache[cache_key] = (config, datetime.now())
+            # Update cache with current mtime
+            if current_mtime is not None:
+                self._config_cache[cache_key] = (config, current_mtime)
 
             return config
 
@@ -1023,7 +1029,7 @@ class ProfileManager:
 
                 if success:
                     # Invalidate cache
-                    cache_key = f"shopify_{client_id}"
+                    cache_key = f"{self.base_path}::shopify_{client_id}"
                     self._config_cache.pop(cache_key, None)
 
                     elapsed_ms = (time.perf_counter() - start_time) * 1000

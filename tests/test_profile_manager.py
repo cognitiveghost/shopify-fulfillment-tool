@@ -265,27 +265,23 @@ class TestCaching:
         assert config1 is not config2  # Different object reference
         assert config2["settings"]["low_stock_threshold"] == 10
 
-    def test_cache_expiration(self, profile_manager):
-        """Test that cache expires after timeout."""
+    def test_cache_invalidation_by_mtime(self, profile_manager):
+        """Test that cache is invalidated when file mtime changes (mtime-based cache)."""
         profile_manager.create_client_profile("M", "M Cosmetics")
 
-        # First load
+        # First load — populates cache
         config1 = profile_manager.load_shopify_config("M")
 
-        # Manually expire cache by modifying timeout
-        old_timeout = ProfileManager.CACHE_TIMEOUT_SECONDS
-        ProfileManager.CACHE_TIMEOUT_SECONDS = 0.1
+        # Advance mtime by touching the file
+        config_path = profile_manager.clients_dir / "CLIENT_M" / "shopify_config.json"
+        current_mtime = config_path.stat().st_mtime
+        import os
+        os.utime(config_path, (current_mtime + 1, current_mtime + 1))
 
-        # Wait for expiration
-        time.sleep(0.2)
-
-        # Second load (should be fresh from disk)
+        # Second load — mtime changed, should re-read from disk
         config2 = profile_manager.load_shopify_config("M")
 
-        # Restore timeout
-        ProfileManager.CACHE_TIMEOUT_SECONDS = old_timeout
-
-        # Should be different objects (cache expired)
+        # Different objects because cache was invalidated
         assert config1 is not config2
 
 

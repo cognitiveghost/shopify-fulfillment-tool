@@ -184,10 +184,14 @@ class PandasModel(QAbstractTableModel):
         has_system_note = "System_note" in self._dataframe.columns
         has_status = "Order_Fulfillment_Status" in self._dataframe.columns
 
+        # Pre-compute column indices so the hot loop uses iat (scalar, ~5-10x faster than iloc[i]["col"])
+        sn_col = self._dataframe.columns.get_loc("System_note") if has_system_note else -1
+        st_col = self._dataframe.columns.get_loc("Order_Fulfillment_Status") if has_status else -1
+
         for i in range(n):
             try:
                 if has_system_note:
-                    sn_val = self._dataframe.iloc[i]["System_note"]
+                    sn_val = self._dataframe.iat[i, sn_col]
                     if pd.notna(sn_val):
                         sn = str(sn_val)
                         if "Repeat" in sn and not sn.startswith("Cannot fulfill"):
@@ -196,7 +200,7 @@ class PandasModel(QAbstractTableModel):
                             continue
 
                 if has_status:
-                    status = self._dataframe.iloc[i]["Order_Fulfillment_Status"]
+                    status = self._dataframe.iat[i, st_col]
                     if status == "Fulfillable":
                         bg[i] = self.colors["Fulfillable"]
                         fg[i] = self.text_colors["Fulfillable"]
