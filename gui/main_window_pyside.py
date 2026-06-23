@@ -207,6 +207,16 @@ class MainWindow(QMainWindow):
                     self.undo_manager.reset_for_session()
                 self._update_all_views()
 
+                # Restore inventory memory checkbox state from config
+                if hasattr(self, "inventory_memory_checkbox"):
+                    inv_mem_cfg = config.get("inventory_memory", {})
+                    self.inventory_memory_checkbox.blockSignals(True)
+                    self.inventory_memory_checkbox.setChecked(
+                        inv_mem_cfg.get("enabled", False)
+                    )
+                    self.inventory_memory_checkbox.setEnabled(True)
+                    self.inventory_memory_checkbox.blockSignals(False)
+
                 # Disable file loading buttons until a session is created/selected
                 self.load_orders_btn.setEnabled(False)
                 self.load_stock_btn.setEnabled(False)
@@ -312,6 +322,12 @@ class MainWindow(QMainWindow):
         self.case_sensitive_checkbox.stateChanged.connect(self.filter_table)
         self.clear_filter_button.clicked.connect(self.clear_filter)
         self.tag_filter_combo.currentIndexChanged.connect(self.filter_table)
+
+        # Inventory memory toggle
+        if hasattr(self, "inventory_memory_checkbox"):
+            self.inventory_memory_checkbox.stateChanged.connect(
+                self._on_inventory_memory_toggled
+            )
 
         # Add Ctrl+R shortcut for Run Analysis
         from PySide6.QtGui import QShortcut, QKeySequence
@@ -688,8 +704,19 @@ class MainWindow(QMainWindow):
         self.load_orders_btn.setEnabled(has_session)
         self.load_stock_btn.setEnabled(has_session)
 
-        # Run Analysis button
-        self.run_analysis_button.setEnabled(has_session and has_orders and has_stock)
+        # Run Analysis button — memory mode allows skipping stock file
+        inv_memory_enabled = (
+            hasattr(self, "inventory_memory_checkbox")
+            and self.inventory_memory_checkbox.isChecked()
+        )
+        inv_memory_has_skus = bool(
+            inv_memory_enabled
+            and self.active_profile_config
+            and self.active_profile_config.get("inventory_memory", {}).get("skus")
+        )
+        self.run_analysis_button.setEnabled(
+            has_session and has_orders and (has_stock or inv_memory_has_skus)
+        )
 
         # Reports and actions (both Tab 1 and Tab 2 versions)
         reports_enabled = has_session and has_analysis
@@ -734,6 +761,27 @@ class MainWindow(QMainWindow):
             )
         else:
             self.statusBar().showMessage("Ready - select a client to begin", 5000)
+
+    def _on_inventory_memory_toggled(self, state: int):
+        """Persist the inventory memory enabled flag when the checkbox is toggled."""
+        if not self.current_client_id or not self.active_profile_config:
+            return
+        try:
+            enabled = bool(state)
+            inv_mem = self.active_profile_config.get("inventory_memory", {})
+            inv_mem["enabled"] = enabled
+            self.active_profile_config["inventory_memory"] = inv_mem
+            self.profile_manager.save_shopify_config(
+                self.current_client_id, self.active_profile_config
+            )
+            logging.info(
+                f"Inventory memory {'enabled' if enabled else 'disabled'} for CLIENT_{self.current_client_id}"
+            )
+            # Re-evaluate run button (memory mode may unlock it)
+            if hasattr(self, "update_ui_state"):
+                self.update_ui_state()
+        except Exception as e:
+            logging.warning(f"Failed to save inventory memory toggle: {e}")
 
     # --- Client and Session Management (New Architecture) ---
     def on_client_changed(self, client_id: str):

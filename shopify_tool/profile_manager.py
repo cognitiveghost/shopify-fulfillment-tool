@@ -715,6 +715,24 @@ class ProfileManager:
         logger.info(f"Added default 'sku_label_config' for CLIENT_{client_id}")
         return True
 
+    def _migrate_add_inventory_memory(self, client_id: str, config: Dict) -> bool:
+        """Add inventory_memory section if missing (new feature migration).
+
+        Returns:
+            bool: True if migration was performed, False if already present
+        """
+        if "inventory_memory" in config:
+            return False
+
+        config["inventory_memory"] = {
+            "enabled": False,
+            "skus": {},
+            "last_updated": None,
+            "total_units": 0,
+        }
+        logger.info(f"Added default 'inventory_memory' for CLIENT_{client_id}")
+        return True
+
     @staticmethod
     def _create_default_shopify_config(client_id: str, client_name: str) -> Dict:
         """Create default Shopify configuration.
@@ -831,6 +849,12 @@ class ProfileManager:
                 },
             },
             "sku_label_config": {"sku_to_label": {}, "default_printer": ""},
+            "inventory_memory": {
+                "enabled": False,
+                "skus": {},
+                "last_updated": None,
+                "total_units": 0,
+            },
         }
 
     def load_client_config(self, client_id: str) -> Optional[Dict]:
@@ -931,6 +955,7 @@ class ProfileManager:
             )
             migrated_weight = self._migrate_add_weight_config(client_id, config)
             migrated_sku_labels = self._migrate_add_sku_label_config(client_id, config)
+            migrated_inv_memory = self._migrate_add_inventory_memory(client_id, config)
 
             if (
                 migrated_mappings
@@ -939,6 +964,7 @@ class ProfileManager:
                 or migrated_tag_categories_v2
                 or migrated_weight
                 or migrated_sku_labels
+                or migrated_inv_memory
             ):
                 # If config was migrated, save it immediately (cache is invalidated by save)
                 self.save_shopify_config(client_id, config)
@@ -1062,6 +1088,22 @@ class ProfileManager:
         return False
 
     # --- Set/Bundle Management Methods ---
+
+    def save_inventory_memory(self, client_id: str, stock_dict: dict) -> bool:
+        """Persist final stock snapshot to shopify_config inventory_memory section."""
+        config = self.load_shopify_config(client_id) or {}
+        config["inventory_memory"] = {
+            "enabled": config.get("inventory_memory", {}).get("enabled", False),
+            "skus": {str(k): float(v) for k, v in stock_dict.items() if v > 0},
+            "last_updated": datetime.now().isoformat(timespec="seconds"),
+            "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
+        }
+        return self.save_shopify_config(client_id, config)
+
+    def get_inventory_memory(self, client_id: str) -> dict:
+        """Return inventory_memory dict; empty dict if not set."""
+        config = self.load_shopify_config(client_id) or {}
+        return config.get("inventory_memory", {})
 
     def get_set_decoders(self, client_id: str) -> Dict:
         """Get set/bundle decoder definitions for a client.

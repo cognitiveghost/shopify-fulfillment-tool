@@ -304,16 +304,19 @@ def _validate_dataframes(orders_df, stock_df, config):
             )
 
     # Check stock DataFrame for required columns
-    for internal_name in REQUIRED_INTERNAL_STOCK:
-        csv_column = internal_to_csv_stock.get(internal_name)
-        if csv_column is None:
-            errors.append(
-                f"Missing mapping for required field '{internal_name}' in stock configuration"
-            )
-        elif csv_column not in stock_df.columns:
-            errors.append(
-                f"Missing required column in Stock file: '{csv_column}' (needed for {internal_name})"
-            )
+    # Skip stock CSV-column validation when stock was reconstructed from inventory memory
+    # (it uses internal names SKU/Stock directly, not raw CSV headers).
+    if not config.get("_stock_from_memory", False):
+        for internal_name in REQUIRED_INTERNAL_STOCK:
+            csv_column = internal_to_csv_stock.get(internal_name)
+            if csv_column is None:
+                errors.append(
+                    f"Missing mapping for required field '{internal_name}' in stock configuration"
+                )
+            elif csv_column not in stock_df.columns:
+                errors.append(
+                    f"Missing required column in Stock file: '{csv_column}' (needed for {internal_name})"
+                )
 
     return errors
 
@@ -616,6 +619,19 @@ def _load_and_validate_files(
         # For testing: allow passing DataFrames directly
         stock_df = config.get("test_stock_df")
         orders_df = config.get("test_orders_df")
+
+        # Inventory memory fallback: reconstruct stock from last session's snapshot
+        # when no stock file was provided and memory mode is enabled.
+        # ponytail: synthetic stock uses internal column names directly; _stock_from_memory
+        # flag bypasses CSV-column-name validation (which expects raw CSV headers).
+        if stock_df is None:
+            inv_mem = config.get("_inventory_memory", {})
+            if inv_mem.get("enabled") and inv_mem.get("skus"):
+                stock_df = pd.DataFrame(
+                    [{"SKU": sku, "Stock": qty} for sku, qty in inv_mem["skus"].items()]
+                )
+                config["_stock_from_memory"] = True
+                logger.info(f"Loaded {len(stock_df)} SKUs from inventory memory")
 
     logger.info("Data loaded successfully.")
 
@@ -1048,6 +1064,29 @@ def _save_results_and_reports(
             logger.error(f"Failed to save history: {e}")
             # Don't fail the entire analysis if history save fails
 
+    # Persist inventory memory if enabled (or unconditionally update the SKU snapshot)
+    if (
+        profile_manager
+        and client_id
+        and "Final_Stock" in final_df.columns
+        and "SKU" in final_df.columns
+    ):
+        try:
+            inv_mem = profile_manager.get_inventory_memory(client_id)
+            if inv_mem.get("enabled", False):
+                # Build final_stock_dict: min Final_Stock per SKU (post-fulfillment state)
+                final_stock_dict = (
+                    final_df.groupby("SKU")["Final_Stock"]
+                    .min()
+                    .dropna()
+                    .apply(lambda x: max(0.0, float(x)))
+                    .to_dict()
+                )
+                profile_manager.save_inventory_memory(client_id, final_stock_dict)
+                logger.info(f"Inventory memory updated: {len(final_stock_dict)} SKUs")
+        except Exception as e:
+            logger.warning(f"Failed to save inventory memory: {e}")
+
     # Return appropriate path based on mode
     if use_session_mode:
         return working_path, None
@@ -1137,6 +1176,11 @@ def run_full_analysis(
 
         # Step 2: Load and validate files
         logger.info("Step 2: Loading and validating CSV files...")
+        # Inject inventory memory into config so _load_and_validate_files can use it
+        if profile_manager and client_id:
+            config["_inventory_memory"] = profile_manager.get_inventory_memory(
+                client_id
+            )
         orders_df, stock_df = _load_and_validate_files(
             stock_file_path, orders_file_path, stock_delimiter, orders_delimiter, config
         )

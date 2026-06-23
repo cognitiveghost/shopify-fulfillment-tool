@@ -569,6 +569,15 @@ class UIManager:
 
         layout.addLayout(path_layout)
 
+        # Inventory memory toggle
+        self.mw.inventory_memory_checkbox = QCheckBox("Use Inventory Memory")
+        self.mw.inventory_memory_checkbox.setToolTip(
+            "When enabled, analysis starts from the final stock of the last session "
+            "instead of requiring a new stock file."
+        )
+        self.mw.inventory_memory_checkbox.setEnabled(False)  # enabled after client load
+        layout.addWidget(self.mw.inventory_memory_checkbox)
+
         # File list preview (only visible in folder mode)
         self.mw.stock_file_list_widget = QListWidget()
         self.mw.stock_file_list_widget.setMaximumHeight(120)
