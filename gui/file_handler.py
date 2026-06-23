@@ -41,7 +41,9 @@ class FileHandler:
         is ready to run the analysis. Auto-detects delimiter and prompts user
         if detected delimiter differs from configured one.
         """
-        filepath, _ = QFileDialog.getOpenFileName(self.mw, "Select Orders File", "", "CSV files (*.csv)")
+        filepath, _ = QFileDialog.getOpenFileName(
+            self.mw, "Select Orders File", "", "CSV files (*.csv)"
+        )
         if not filepath:
             return
 
@@ -58,7 +60,9 @@ class FileHandler:
 
         try:
             detected_delimiter, method = detect_csv_delimiter(filepath)
-            self.log.info(f"Orders file: detected delimiter '{detected_delimiter}' using {method}")
+            self.log.info(
+                f"Orders file: detected delimiter '{detected_delimiter}' using {method}"
+            )
         except FileNotFoundError as e:
             self.log.error(f"Orders file not found for delimiter detection: {e}")
             detected_delimiter = ","  # fallback to comma
@@ -69,7 +73,9 @@ class FileHandler:
             self.log.error(f"Encoding error in orders file: {e}")
             detected_delimiter = ","  # fallback to comma
         except Exception as e:
-            self.log.error(f"Unexpected error detecting delimiter for orders: {e}", exc_info=True)
+            self.log.error(
+                f"Unexpected error detecting delimiter for orders: {e}", exc_info=True
+            )
             detected_delimiter = ","  # fallback to comma
 
         # Determine which delimiter to use
@@ -84,7 +90,7 @@ class FileHandler:
                 f"Configured delimiter: '{config_delimiter}'\n\n"
                 f"Which delimiter should be used for orders file?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
+                QMessageBox.StandardButton.Yes,
             )
 
             if result == QMessageBox.StandardButton.Yes:
@@ -96,15 +102,19 @@ class FileHandler:
                     self.mw,
                     "Update Settings",
                     f"Would you like to save '{delimiter}' as default orders delimiter?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 )
 
                 if update == QMessageBox.StandardButton.Yes:
-                    self.mw.active_profile_config["settings"]["orders_csv_delimiter"] = delimiter
+                    self.mw.active_profile_config["settings"][
+                        "orders_csv_delimiter"
+                    ] = delimiter
                     # Save config through ProfileManager
                     client_id = self.mw.active_profile_config.get("client_id")
-                    if client_id and hasattr(self.mw, 'profile_manager'):
-                        self.mw.profile_manager.save_shopify_config(client_id, self.mw.active_profile_config)
+                    if client_id and hasattr(self.mw, "profile_manager"):
+                        self.mw.profile_manager.save_shopify_config(
+                            client_id, self.mw.active_profile_config
+                        )
                         self.log.info(f"Saved orders delimiter '{delimiter}' to config")
             else:
                 delimiter = config_delimiter
@@ -113,11 +123,16 @@ class FileHandler:
         # Load and store original orders DataFrame for column discovery
         try:
             import pandas as pd
-            orders_df = pd.read_csv(filepath, delimiter=delimiter, encoding='utf-8-sig')
+
+            orders_df = pd.read_csv(filepath, delimiter=delimiter, encoding="utf-8-sig")
             self.mw.last_loaded_orders_df = orders_df.copy()
-            self.log.info(f"Loaded orders DataFrame: {len(orders_df)} rows, {len(orders_df.columns)} columns")
+            self.log.info(
+                f"Loaded orders DataFrame: {len(orders_df)} rows, {len(orders_df.columns)} columns"
+            )
         except Exception as e:
-            self.log.warning(f"Failed to load orders DataFrame for column discovery: {e}")
+            self.log.warning(
+                f"Failed to load orders DataFrame for column discovery: {e}"
+            )
             # Don't fail the file selection, just skip storing the DataFrame
             self.mw.last_loaded_orders_df = None
 
@@ -132,10 +147,7 @@ class FileHandler:
         and prompts user if detected delimiter differs from configured one.
         """
         filepath, _ = QFileDialog.getOpenFileName(
-            self.mw,
-            "Select Stock File",
-            "",
-            "CSV files (*.csv);;All Files (*)"
+            self.mw, "Select Stock File", "", "CSV files (*.csv);;All Files (*)"
         )
 
         if not filepath:
@@ -165,7 +177,9 @@ class FileHandler:
             self.log.error(f"Encoding error in stock file: {e}")
             detected_delimiter = ";"  # fallback
         except Exception as e:
-            self.log.error(f"Unexpected error detecting delimiter for stock: {e}", exc_info=True)
+            self.log.error(
+                f"Unexpected error detecting delimiter for stock: {e}", exc_info=True
+            )
             detected_delimiter = ";"  # fallback
 
         # Determine which delimiter to use
@@ -180,7 +194,7 @@ class FileHandler:
                 f"Configured delimiter: '{config_delimiter}'\n\n"
                 f"Which delimiter should be used?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
+                QMessageBox.StandardButton.Yes,
             )
 
             if result == QMessageBox.StandardButton.Yes:
@@ -192,15 +206,19 @@ class FileHandler:
                     self.mw,
                     "Update Settings",
                     f"Would you like to save '{delimiter}' as default stock delimiter?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 )
 
                 if update == QMessageBox.StandardButton.Yes:
-                    self.mw.active_profile_config["settings"]["stock_csv_delimiter"] = delimiter
+                    self.mw.active_profile_config["settings"]["stock_csv_delimiter"] = (
+                        delimiter
+                    )
                     # Save config through ProfileManager
                     client_id = self.mw.active_profile_config.get("client_id")
-                    if client_id and hasattr(self.mw, 'profile_manager'):
-                        self.mw.profile_manager.save_shopify_config(client_id, self.mw.active_profile_config)
+                    if client_id and hasattr(self.mw, "profile_manager"):
+                        self.mw.profile_manager.save_shopify_config(
+                            client_id, self.mw.active_profile_config
+                        )
                         self.log.info(f"Saved delimiter '{delimiter}' to config")
             else:
                 delimiter = config_delimiter
@@ -212,11 +230,19 @@ class FileHandler:
             # Get SKU columns from config to force as string
             column_mappings = self.mw.active_profile_config.get("column_mappings", {})
             stock_mappings = column_mappings.get("stock", {})
-            sku_columns = [csv_col for csv_col, internal_name in stock_mappings.items() if internal_name == "SKU"]
+            sku_columns = [
+                csv_col
+                for csv_col, internal_name in stock_mappings.items()
+                if internal_name == "SKU"
+            ]
             dtype_dict = {col: str for col in sku_columns}
 
-            stock_df = pd.read_csv(filepath, delimiter=delimiter, encoding='utf-8-sig', dtype=dtype_dict)
-            self.log.info(f"Loaded stock CSV with delimiter '{delimiter}': {len(stock_df)} rows")
+            stock_df = pd.read_csv(
+                filepath, delimiter=delimiter, encoding="utf-8-sig", dtype=dtype_dict
+            )
+            self.log.info(
+                f"Loaded stock CSV with delimiter '{delimiter}': {len(stock_df)} rows"
+            )
 
         except Exception as e:
             self.log.error(f"Failed to load stock CSV: {e}")
@@ -225,13 +251,110 @@ class FileHandler:
                 "File Load Error",
                 f"Failed to load stock file:\n{str(e)}\n\n"
                 f"Make sure the delimiter is set correctly in Settings.\n"
-                f"Current delimiter: '{delimiter}'"
+                f"Current delimiter: '{delimiter}'",
             )
             return
+
+        # Anomaly check against saved inventory memory and update snapshot
+        client_id = (
+            self.mw.active_profile_config.get("client_id")
+            if self.mw.active_profile_config
+            else None
+        )
+        if client_id and hasattr(self.mw, "profile_manager"):
+            try:
+                column_mappings = self.mw.active_profile_config.get(
+                    "column_mappings", {}
+                )
+                stock_mappings = column_mappings.get("stock", {})
+                sku_col = next(
+                    (c for c, n in stock_mappings.items() if n == "SKU"), None
+                )
+                stock_col = next(
+                    (c for c, n in stock_mappings.items() if n == "Stock"), None
+                )
+
+                # Build an internal-name view of stock for anomaly check and snapshot
+                mapped_df = stock_df.copy()
+                rename_map = {}
+                if sku_col and sku_col in mapped_df.columns:
+                    rename_map[sku_col] = "SKU"
+                if stock_col and stock_col in mapped_df.columns:
+                    rename_map[stock_col] = "Stock"
+                if rename_map:
+                    mapped_df = mapped_df.rename(columns=rename_map)
+
+                memory = self.mw.profile_manager.get_inventory_memory(client_id)
+                is_anomaly, anomaly_msg = self._check_inventory_anomaly(
+                    mapped_df, memory
+                )
+                if is_anomaly:
+                    reply = QMessageBox.warning(
+                        self.mw,
+                        "Inventory Anomaly Detected",
+                        f"{anomaly_msg}\n\nContinue with this stock file?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No,
+                    )
+                    if reply != QMessageBox.Yes:
+                        # Cancel: clear the stock selection
+                        self.mw.stock_file_path = None
+                        self.mw.stock_file_path_label.setText("Stock file not selected")
+                        self.mw.stock_file_status_label.setText("")
+                        return
+
+                # Always update the raw SKU snapshot (enabled flag preserved by save_inventory_memory)
+                if "SKU" in mapped_df.columns and "Stock" in mapped_df.columns:
+                    raw_stock = (
+                        mapped_df[["SKU", "Stock"]]
+                        .dropna(subset=["SKU"])
+                        .set_index("SKU")["Stock"]
+                        .apply(lambda x: max(0.0, float(x)) if pd.notna(x) else 0.0)
+                        .to_dict()
+                    )
+                    self.mw.profile_manager.save_inventory_memory(client_id, raw_stock)
+                    self.log.info(
+                        f"Inventory memory snapshot updated: {len(raw_stock)} SKUs"
+                    )
+            except Exception as e:
+                self.log.warning(f"Inventory memory check/update failed: {e}")
 
         # Validate headers
         self.validate_file("stock")
         self.check_files_ready()
+
+    def _check_inventory_anomaly(
+        self, new_stock_df: pd.DataFrame, memory: dict
+    ) -> tuple:
+        """Check whether a freshly loaded stock file looks wrong compared to saved memory.
+
+        Returns:
+            (is_anomaly: bool, message: str)
+        """
+        if not memory.get("skus"):
+            return False, ""
+        old_skus = set(memory["skus"])
+        new_skus = (
+            set(new_stock_df["SKU"].unique())
+            if "SKU" in new_stock_df.columns
+            else set()
+        )
+        overlap = len(old_skus & new_skus) / max(len(old_skus), 1)
+        if overlap < 0.5:
+            return (
+                True,
+                f"Only {overlap:.0%} SKU overlap with saved inventory ({len(old_skus)} known SKUs). Wrong client file?",
+            )
+        old_total = memory.get("total_units", 0)
+        new_total = (
+            new_stock_df["Stock"].sum() if "Stock" in new_stock_df.columns else 0
+        )
+        if old_total > 0 and abs(new_total - old_total) / old_total > 0.40:
+            return (
+                True,
+                f"Total units changed by {(new_total - old_total) / old_total:+.0%} ({int(old_total)} → {int(new_total)}). Confirm?",
+            )
+        return False, ""
 
     def validate_file(self, file_type):
         """Validates that a selected CSV file contains the required headers.
@@ -254,7 +377,12 @@ class FileHandler:
         column_mappings = client_config.get("column_mappings", {})
 
         # Define which internal names are required
-        REQUIRED_INTERNAL_ORDERS = ["Order_Number", "SKU", "Quantity", "Shipping_Method"]
+        REQUIRED_INTERNAL_ORDERS = [
+            "Order_Number",
+            "SKU",
+            "Quantity",
+            "Shipping_Method",
+        ]
         REQUIRED_INTERNAL_STOCK = ["SKU", "Stock"]
 
         if file_type == "orders":
@@ -268,16 +396,26 @@ class FileHandler:
             # Backward compatibility: check for v1 format
             if not orders_mappings and "orders_required" in column_mappings:
                 # V1 format - use default Shopify column names
-                required_cols = ["Name", "Lineitem sku", "Lineitem quantity", "Shipping Method"]
+                required_cols = [
+                    "Name",
+                    "Lineitem sku",
+                    "Lineitem quantity",
+                    "Shipping Method",
+                ]
             else:
                 # V2 format - extract CSV column names that map to required internal names
-                required_cols = [csv_col for csv_col, internal in orders_mappings.items()
-                                if internal in REQUIRED_INTERNAL_ORDERS]
+                required_cols = [
+                    csv_col
+                    for csv_col, internal in orders_mappings.items()
+                    if internal in REQUIRED_INTERNAL_ORDERS
+                ]
 
         else:  # stock
             path = self.mw.stock_file_path
             label = self.mw.stock_file_status_label
-            delimiter = client_config.get("settings", {}).get("stock_csv_delimiter", ";")
+            delimiter = client_config.get("settings", {}).get(
+                "stock_csv_delimiter", ";"
+            )
 
             # Get CSV column names from v2 mappings
             stock_mappings = column_mappings.get("stock", {})
@@ -288,15 +426,20 @@ class FileHandler:
                 required_cols = ["Артикул", "Наличност"]
             else:
                 # V2 format - extract CSV column names that map to required internal names
-                required_cols = [csv_col for csv_col, internal in stock_mappings.items()
-                                if internal in REQUIRED_INTERNAL_STOCK]
+                required_cols = [
+                    csv_col
+                    for csv_col, internal in stock_mappings.items()
+                    if internal in REQUIRED_INTERNAL_STOCK
+                ]
 
         if not path:
             self.log.warning(f"Validation skipped for '{file_type}': path is missing.")
             return
 
         self.log.info(f"Validating '{file_type}' file: {path}")
-        is_valid, missing_cols = core.validate_csv_headers(path, required_cols, delimiter)
+        is_valid, missing_cols = core.validate_csv_headers(
+            path, required_cols, delimiter
+        )
 
         if is_valid:
             label.setText("✓")
@@ -317,8 +460,12 @@ class FileHandler:
         method enables the main 'Run Analysis' button in the UI. Otherwise,
         the button remains disabled.
         """
-        orders_ok = self.mw.orders_file_path and self.mw.orders_file_status_label.text() == "✓"
-        stock_ok = self.mw.stock_file_path and self.mw.stock_file_status_label.text() == "✓"
+        orders_ok = (
+            self.mw.orders_file_path and self.mw.orders_file_status_label.text() == "✓"
+        )
+        stock_ok = (
+            self.mw.stock_file_path and self.mw.stock_file_status_label.text() == "✓"
+        )
         if orders_ok and stock_ok:
             self.mw.run_analysis_button.setEnabled(True)
             self.log.info("Both files are validated and ready for analysis.")
@@ -362,10 +509,7 @@ class FileHandler:
         """
         # 1. Open folder dialog
         folder_path = QFileDialog.getExistingDirectory(
-            self.mw,
-            "Select Orders Folder",
-            "",
-            QFileDialog.ShowDirsOnly
+            self.mw, "Select Orders Folder", "", QFileDialog.ShowDirsOnly
         )
 
         if not folder_path:
@@ -381,7 +525,7 @@ class FileHandler:
             QMessageBox.warning(
                 self.mw,
                 "No Files Found",
-                f"No CSV files found in folder:\n{folder_path}"
+                f"No CSV files found in folder:\n{folder_path}",
             )
             return
 
@@ -390,14 +534,11 @@ class FileHandler:
         # 3. Validate all files
         try:
             valid_files, invalid_files, total_rows = self.validate_multiple_files(
-                csv_files,
-                "orders"
+                csv_files, "orders"
             )
         except Exception as e:
             QMessageBox.critical(
-                self.mw,
-                "Validation Error",
-                f"Error validating files:\n{str(e)}"
+                self.mw, "Validation Error", f"Error validating files:\n{str(e)}"
             )
             return
 
@@ -406,7 +547,9 @@ class FileHandler:
             msg = f"All {len(csv_files)} files are invalid.\n\n"
             msg += "Invalid files:\n"
             for filepath, missing in invalid_files[:5]:  # Show first 5
-                msg += f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
+                msg += (
+                    f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
+                )
 
             QMessageBox.critical(self.mw, "No Valid Files", msg)
             return
@@ -417,16 +560,10 @@ class FileHandler:
 
         # 6. Merge files
         try:
-            merged_path = self.merge_and_save_files(
-                valid_files,
-                "orders",
-                folder_path
-            )
+            merged_path = self.merge_and_save_files(valid_files, "orders", folder_path)
         except Exception as e:
             QMessageBox.critical(
-                self.mw,
-                "Merge Failed",
-                f"Failed to merge files:\n{str(e)}"
+                self.mw, "Merge Failed", f"Failed to merge files:\n{str(e)}"
             )
             return
 
@@ -437,11 +574,18 @@ class FileHandler:
         # Load and store original orders DataFrame for column discovery
         try:
             import pandas as pd
-            orders_df = pd.read_csv(merged_path, delimiter=delimiter, encoding='utf-8-sig')
+
+            orders_df = pd.read_csv(
+                merged_path, delimiter=delimiter, encoding="utf-8-sig"
+            )
             self.mw.last_loaded_orders_df = orders_df.copy()
-            self.log.info(f"Loaded merged orders DataFrame: {len(orders_df)} rows, {len(orders_df.columns)} columns")
+            self.log.info(
+                f"Loaded merged orders DataFrame: {len(orders_df)} rows, {len(orders_df.columns)} columns"
+            )
         except Exception as e:
-            self.log.warning(f"Failed to load merged orders DataFrame for column discovery: {e}")
+            self.log.warning(
+                f"Failed to load merged orders DataFrame for column discovery: {e}"
+            )
             # Don't fail the merge, just skip storing the DataFrame
             self.mw.last_loaded_orders_df = None
 
@@ -458,7 +602,9 @@ class FileHandler:
             self.mw.orders_file_list_widget.addItem(item)
 
         for filepath, missing in invalid_files:
-            item = QListWidgetItem(f"✗ {os.path.basename(filepath)} (missing: {', '.join(missing)})")
+            item = QListWidgetItem(
+                f"✗ {os.path.basename(filepath)} (missing: {', '.join(missing)})"
+            )
             item.setForeground(QColor("red"))
             self.mw.orders_file_list_widget.addItem(item)
 
@@ -472,7 +618,9 @@ class FileHandler:
         # Check if ready to run analysis
         self.check_files_ready()
 
-        self.log.info(f"✓ Successfully merged {len(valid_files)} files into {merged_path}")
+        self.log.info(
+            f"✓ Successfully merged {len(valid_files)} files into {merged_path}"
+        )
 
     def select_stock_folder(self):
         """
@@ -482,10 +630,7 @@ class FileHandler:
         """
         # 1. Open folder dialog
         folder_path = QFileDialog.getExistingDirectory(
-            self.mw,
-            "Select Stock Folder",
-            "",
-            QFileDialog.ShowDirsOnly
+            self.mw, "Select Stock Folder", "", QFileDialog.ShowDirsOnly
         )
 
         if not folder_path:
@@ -501,7 +646,7 @@ class FileHandler:
             QMessageBox.warning(
                 self.mw,
                 "No Files Found",
-                f"No CSV files found in folder:\n{folder_path}"
+                f"No CSV files found in folder:\n{folder_path}",
             )
             return
 
@@ -510,14 +655,11 @@ class FileHandler:
         # 3. Validate all files
         try:
             valid_files, invalid_files, total_rows = self.validate_multiple_files(
-                csv_files,
-                "stock"
+                csv_files, "stock"
             )
         except Exception as e:
             QMessageBox.critical(
-                self.mw,
-                "Validation Error",
-                f"Error validating files:\n{str(e)}"
+                self.mw, "Validation Error", f"Error validating files:\n{str(e)}"
             )
             return
 
@@ -526,7 +668,9 @@ class FileHandler:
             msg = f"All {len(csv_files)} files are invalid.\n\n"
             msg += "Invalid files:\n"
             for filepath, missing in invalid_files[:5]:  # Show first 5
-                msg += f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
+                msg += (
+                    f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
+                )
 
             QMessageBox.critical(self.mw, "No Valid Files", msg)
             return
@@ -537,16 +681,10 @@ class FileHandler:
 
         # 6. Merge files
         try:
-            merged_path = self.merge_and_save_files(
-                valid_files,
-                "stock",
-                folder_path
-            )
+            merged_path = self.merge_and_save_files(valid_files, "stock", folder_path)
         except Exception as e:
             QMessageBox.critical(
-                self.mw,
-                "Merge Failed",
-                f"Failed to merge files:\n{str(e)}"
+                self.mw, "Merge Failed", f"Failed to merge files:\n{str(e)}"
             )
             return
 
@@ -567,7 +705,9 @@ class FileHandler:
             self.mw.stock_file_list_widget.addItem(item)
 
         for filepath, missing in invalid_files:
-            item = QListWidgetItem(f"✗ {os.path.basename(filepath)} (missing: {', '.join(missing)})")
+            item = QListWidgetItem(
+                f"✗ {os.path.basename(filepath)} (missing: {', '.join(missing)})"
+            )
             item.setForeground(QColor("red"))
             self.mw.stock_file_list_widget.addItem(item)
 
@@ -581,13 +721,12 @@ class FileHandler:
         # Check if ready to run analysis
         self.check_files_ready()
 
-        self.log.info(f"✓ Successfully merged {len(valid_files)} files into {merged_path}")
+        self.log.info(
+            f"✓ Successfully merged {len(valid_files)} files into {merged_path}"
+        )
 
     def scan_folder_for_csv(
-        self,
-        folder_path: str,
-        recursive: bool = False,
-        pattern: str = "*.csv"
+        self, folder_path: str, recursive: bool = False, pattern: str = "*.csv"
     ) -> List[str]:
         """
         Scan folder for CSV files.
@@ -613,14 +752,14 @@ class FileHandler:
         # Convert to strings
         result = [str(f) for f in csv_files]
 
-        self.log.info(f"Scanned folder (recursive={recursive}): found {len(result)} files")
+        self.log.info(
+            f"Scanned folder (recursive={recursive}): found {len(result)} files"
+        )
 
         return result
 
     def validate_multiple_files(
-        self,
-        file_paths: List[str],
-        file_type: str
+        self, file_paths: List[str], file_type: str
     ) -> Tuple[List[str], List[Tuple[str, List[str]]], int]:
         """
         Validate multiple CSV files.
@@ -657,7 +796,8 @@ class FileHandler:
 
         # Get CSV column names that map to required internal names
         required_csv_cols = [
-            csv_col for csv_col, internal_name in mappings.items()
+            csv_col
+            for csv_col, internal_name in mappings.items()
             if internal_name in REQUIRED_INTERNAL
         ]
 
@@ -672,6 +812,7 @@ class FileHandler:
             try:
                 # Auto-detect delimiter for this file
                 from shopify_tool.csv_utils import detect_csv_delimiter
+
                 detected_delimiter, _ = detect_csv_delimiter(filepath)
 
                 # Use detected delimiter
@@ -679,9 +820,7 @@ class FileHandler:
 
                 # Validate headers
                 is_valid, missing_cols = core.validate_csv_headers(
-                    filepath,
-                    required_csv_cols,
-                    file_delimiter
+                    filepath, required_csv_cols, file_delimiter
                 )
 
                 if is_valid:
@@ -689,16 +828,16 @@ class FileHandler:
 
                     # Count rows
                     df = pd.read_csv(
-                        filepath,
-                        delimiter=file_delimiter,
-                        encoding='utf-8-sig'
+                        filepath, delimiter=file_delimiter, encoding="utf-8-sig"
                     )
                     total_rows += len(df)
 
                     self.log.info(f"  ✓ {os.path.basename(filepath)}: {len(df)} rows")
                 else:
                     invalid_files.append((filepath, missing_cols))
-                    self.log.warning(f"  ✗ {os.path.basename(filepath)}: missing {missing_cols}")
+                    self.log.warning(
+                        f"  ✗ {os.path.basename(filepath)}: missing {missing_cols}"
+                    )
 
             except Exception as e:
                 invalid_files.append((filepath, [f"Error: {str(e)}"]))
@@ -711,7 +850,7 @@ class FileHandler:
         file_type: str,
         valid_files: List[str],
         invalid_files: List[Tuple[str, List[str]]],
-        total_rows: int
+        total_rows: int,
     ) -> bool:
         """
         Show preview dialog with file list.
@@ -740,16 +879,16 @@ class FileHandler:
         if invalid_files:
             msg += "Invalid files:\n"
             for filepath, missing in invalid_files[:5]:
-                msg += f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
+                msg += (
+                    f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
+                )
             if len(invalid_files) > 5:
                 msg += f"  ... and {len(invalid_files) - 5} more\n"
             msg += "\n"
 
         # Duplicate warning (if applicable)
         remove_duplicates = getattr(
-            self.mw,
-            f"{file_type}_remove_duplicates_checkbox",
-            None
+            self.mw, f"{file_type}_remove_duplicates_checkbox", None
         )
         if remove_duplicates and remove_duplicates.isChecked():
             msg += "⚠ Duplicates will be removed (keep first occurrence)\n\n"
@@ -757,19 +896,13 @@ class FileHandler:
         msg += f"Continue with {len(valid_files)} valid files?"
 
         reply = QMessageBox.question(
-            self.mw,
-            "Confirm Merge",
-            msg,
-            QMessageBox.Yes | QMessageBox.No
+            self.mw, "Confirm Merge", msg, QMessageBox.Yes | QMessageBox.No
         )
 
         return reply == QMessageBox.Yes
 
     def merge_and_save_files(
-        self,
-        file_paths: List[str],
-        file_type: str,
-        original_folder: str
+        self, file_paths: List[str], file_type: str, original_folder: str
     ) -> str:
         """
         Merge CSV files and save to temp location.
@@ -794,8 +927,11 @@ class FileHandler:
 
             # Get SKU columns to force as string type
             orders_mappings = column_mappings.get("orders", {})
-            sku_columns = [csv_col for csv_col, internal_name in orders_mappings.items()
-                          if internal_name == "SKU"]
+            sku_columns = [
+                csv_col
+                for csv_col, internal_name in orders_mappings.items()
+                if internal_name == "SKU"
+            ]
             dtype_dict = {col: str for col in sku_columns}
 
             # Dynamically find duplicate key columns from mappings
@@ -811,8 +947,11 @@ class FileHandler:
 
             # Get SKU columns to force as string type
             stock_mappings = column_mappings.get("stock", {})
-            sku_columns = [csv_col for csv_col, internal_name in stock_mappings.items()
-                          if internal_name == "SKU"]
+            sku_columns = [
+                csv_col
+                for csv_col, internal_name in stock_mappings.items()
+                if internal_name == "SKU"
+            ]
             dtype_dict = {col: str for col in sku_columns}
 
             # Try to find the SKU column name from mappings
@@ -836,14 +975,16 @@ class FileHandler:
             dtype_dict=dtype_dict,
             add_source_column=True,
             remove_duplicates=remove_dups_checkbox.isChecked(),
-            duplicate_keys=duplicate_keys if (remove_dups_checkbox.isChecked() and duplicate_keys) else None
+            duplicate_keys=duplicate_keys
+            if (remove_dups_checkbox.isChecked() and duplicate_keys)
+            else None,
         )
 
         self.log.info(f"Merge complete: {len(merged_df)} rows")
 
         # Save to temp location
         # Use session path if available, otherwise temp dir
-        if hasattr(self.mw, 'session_path') and self.mw.session_path:
+        if hasattr(self.mw, "session_path") and self.mw.session_path:
             temp_dir = Path(self.mw.session_path) / "input"
             temp_dir.mkdir(parents=True, exist_ok=True)
         else:
@@ -853,11 +994,7 @@ class FileHandler:
         merged_path = temp_dir / merged_filename
 
         # Save
-        merged_df.to_csv(
-            merged_path,
-            index=False,
-            encoding='utf-8-sig'
-        )
+        merged_df.to_csv(merged_path, index=False, encoding="utf-8-sig")
 
         self.log.info(f"Saved merged file: {merged_path}")
 
