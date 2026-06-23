@@ -266,6 +266,9 @@ class MainWindow(QMainWindow):
 
         # Session browser (new architecture)
         self.session_browser.session_selected.connect(self.on_session_selected)
+        self.session_browser.multi_export_requested.connect(
+            self.actions_handler.handle_multi_session_stock_export
+        )
 
         # Session and file loading
         self.new_session_btn.clicked.connect(self.actions_handler.create_new_session)

@@ -313,6 +313,9 @@ class UIManager:
         self.mw.session_browser_widget.session_selected.connect(
             self.mw.on_session_selected
         )
+        self.mw.session_browser_widget.multi_export_requested.connect(
+            self.mw.actions_handler.handle_multi_session_stock_export
+        )
 
         layout.addWidget(self.mw.session_browser_widget, 1)
 

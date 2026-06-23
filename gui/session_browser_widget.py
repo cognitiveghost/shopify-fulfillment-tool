@@ -7,8 +7,18 @@ with filtering by status and the ability to open existing sessions.
 import logging
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QComboBox, QGroupBox, QHeaderView, QMessageBox, QLineEdit
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTableWidget,
+    QTableWidgetItem,
+    QPushButton,
+    QComboBox,
+    QGroupBox,
+    QHeaderView,
+    QMessageBox,
+    QLineEdit,
 )
 from PySide6.QtCore import Signal, Qt, QEvent
 
@@ -51,13 +61,14 @@ class SessionLoaderWorker(BackgroundWorker):
 
             # This is the potentially slow I/O operation (200-1000ms on slow UNC)
             sessions = self.session_manager.list_client_sessions(
-                self.client_id,
-                status_filter=self.status_filter
+                self.client_id, status_filter=self.status_filter
             )
 
             if not self._is_cancelled:
                 self.finished_with_data.emit(sessions)
-                logger.debug(f"Loaded {len(sessions)} sessions for CLIENT_{self.client_id}")
+                logger.debug(
+                    f"Loaded {len(sessions)} sessions for CLIENT_{self.client_id}"
+                )
 
         except Exception as e:
             if not self._is_cancelled:
@@ -73,15 +84,18 @@ class SessionBrowserWidget(QWidget):
     - Status filter (all/active/completed)
     - "Refresh" button to reload sessions
     - Double-click or "Open Session" to load a session
+    - Multi-select + "Export Combined Stock" for 2+ sessions
 
     Uses async loading via BackgroundWorker to keep UI responsive during
     slow file server operations.
 
     Signals:
         session_selected: Emitted when user wants to open a session (session_path: str)
+        multi_export_requested: Emitted with list of session_path strings for combined export
     """
 
     session_selected = Signal(str)  # Emits session_path
+    multi_export_requested = Signal(list)  # Emits list of session_path strings
 
     # Class variable for testing - set to False to disable async loading in tests
     USE_ASYNC = True
@@ -110,7 +124,9 @@ class SessionBrowserWidget(QWidget):
         filter_layout.addWidget(QLabel("Status:"))
 
         self.status_filter = WheelIgnoreComboBox()
-        self.status_filter.addItems(["All", "Active", "Completed", "Abandoned", "Archived"])
+        self.status_filter.addItems(
+            ["All", "Active", "Completed", "Abandoned", "Archived"]
+        )
         self.status_filter.setToolTip("Filter sessions by status")
         self.status_filter.currentTextChanged.connect(self._apply_filter)
         filter_layout.addWidget(self.status_filter)
@@ -127,17 +143,19 @@ class SessionBrowserWidget(QWidget):
         # Sessions table
         self.sessions_table = QTableWidget()
         self.sessions_table.setColumnCount(7)
-        self.sessions_table.setHorizontalHeaderLabels([
-            "Session Name",
-            "Created",
-            "Status",
-            "Orders",
-            "Items",
-            "Packing Lists",
-            "Comments"
-        ])
+        self.sessions_table.setHorizontalHeaderLabels(
+            [
+                "Session Name",
+                "Created",
+                "Status",
+                "Orders",
+                "Items",
+                "Packing Lists",
+                "Comments",
+            ]
+        )
         self.sessions_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.sessions_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.sessions_table.setSelectionMode(QTableWidget.ExtendedSelection)
         self.sessions_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.sessions_table.doubleClicked.connect(self._on_session_double_clicked)
         self.sessions_table.setSortingEnabled(True)
@@ -151,9 +169,9 @@ class SessionBrowserWidget(QWidget):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(2, 100)  # Status
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 80)   # Orders
+        header.resizeSection(3, 80)  # Orders
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(4, 80)   # Items
+        header.resizeSection(4, 80)  # Items
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(5, 120)  # Packing Lists
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)  # Comments
@@ -163,6 +181,14 @@ class SessionBrowserWidget(QWidget):
         # Action buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
+
+        self.combined_export_btn = QPushButton("Export Combined Stock")
+        self.combined_export_btn.setEnabled(False)
+        self.combined_export_btn.setToolTip(
+            "Select 2+ sessions to export a combined stock summary"
+        )
+        self.combined_export_btn.clicked.connect(self._on_combined_export)
+        button_layout.addWidget(self.combined_export_btn)
 
         self.open_btn = QPushButton("Open Selected Session")
         self.open_btn.setToolTip("Load the selected session")
@@ -180,9 +206,12 @@ class SessionBrowserWidget(QWidget):
         # cause the table to visually jump selection to whichever row the cursor is over.
         self.sessions_table.viewport().installEventFilter(self)
 
-        # Enable open button on actual click or keyboard navigation.
+        # Enable open/export buttons on actual click or keyboard navigation.
         self.sessions_table.clicked.connect(lambda _: self._on_selection_changed())
         self.sessions_table.currentItemChanged.connect(self._on_selection_changed)
+        self.sessions_table.selectionModel().selectionChanged.connect(
+            lambda *_: self._on_selection_changed()
+        )
 
     def set_client(self, client_id: str, auto_refresh: bool = True):
         """Set the client to show sessions for.
@@ -229,9 +258,7 @@ class SessionBrowserWidget(QWidget):
 
         # 4. Create and start new worker
         self.worker = SessionLoaderWorker(
-            self.session_manager,
-            self.current_client_id,
-            status_filter
+            self.session_manager, self.current_client_id, status_filter
         )
 
         # 5. Connect signals
@@ -255,8 +282,7 @@ class SessionBrowserWidget(QWidget):
 
             # Load sessions (blocks UI in sync mode)
             self.sessions_data = self.session_manager.list_client_sessions(
-                self.current_client_id,
-                status_filter=status_filter
+                self.current_client_id, status_filter=status_filter
             )
 
             # Populate table
@@ -295,9 +321,7 @@ class SessionBrowserWidget(QWidget):
 
         # Show error to user
         QMessageBox.warning(
-            self,
-            "Error Loading Sessions",
-            f"Failed to load sessions:\n{error_msg}"
+            self, "Error Loading Sessions", f"Failed to load sessions:\n{error_msg}"
         )
 
     def _populate_table(self):
@@ -341,21 +365,29 @@ class SessionBrowserWidget(QWidget):
                 status_combo.setStyleSheet("QComboBox { color: red; }")
             elif status == "archived":
                 theme = get_theme_manager().get_current_theme()
-                status_combo.setStyleSheet(f"QComboBox {{ color: {theme.text_secondary}; }}")
+                status_combo.setStyleSheet(
+                    f"QComboBox {{ color: {theme.text_secondary}; }}"
+                )
             status_combo.currentTextChanged.connect(
-                lambda new_status, path=session_path: self._on_status_changed(path, new_status)
+                lambda new_status, path=session_path: self._on_status_changed(
+                    path, new_status
+                )
             )
             self.sessions_table.setCellWidget(row, 2, status_combo)
 
             # Column 3: Orders (READ-ONLY)
             orders_count = stats.get("total_orders", 0)
-            orders_item = QTableWidgetItem(str(orders_count) if orders_count > 0 else "N/A")
+            orders_item = QTableWidgetItem(
+                str(orders_count) if orders_count > 0 else "N/A"
+            )
             orders_item.setTextAlignment(Qt.AlignCenter)
             self.sessions_table.setItem(row, 3, orders_item)
 
             # Column 4: Items (READ-ONLY)
             items_count = stats.get("total_items", 0)
-            items_item = QTableWidgetItem(str(items_count) if items_count > 0 else "N/A")
+            items_item = QTableWidgetItem(
+                str(items_count) if items_count > 0 else "N/A"
+            )
             items_item.setTextAlignment(Qt.AlignCenter)
             self.sessions_table.setItem(row, 4, items_item)
 
@@ -370,19 +402,20 @@ class SessionBrowserWidget(QWidget):
             comments_edit = QLineEdit(comments)
             comments_edit.setPlaceholderText("Add comments...")
             comments_edit.editingFinished.connect(
-                lambda path=session_path, widget=comments_edit: self._on_comments_changed(path, widget.text())
+                lambda path=session_path,
+                widget=comments_edit: self._on_comments_changed(path, widget.text())
             )
             self.sessions_table.setCellWidget(row, 6, comments_edit)
 
             # Build tooltip with full info
             packing_lists_str = ", ".join(stats.get("packing_lists", [])) or "None"
-            tooltip = f"""Session: {session_info.get('session_name', '')}
+            tooltip = f"""Session: {session_info.get("session_name", "")}
 Created: {created_str}
 Status: {status.capitalize()}
-Orders: {orders_count if orders_count > 0 else 'N/A'}
-Items: {items_count if items_count > 0 else 'N/A'}
+Orders: {orders_count if orders_count > 0 else "N/A"}
+Items: {items_count if items_count > 0 else "N/A"}
 Packing Lists ({packing_lists_count}): {packing_lists_str}
-Comments: {comments if comments else 'None'}"""
+Comments: {comments if comments else "None"}"""
 
             # Apply tooltip to all cells in row
             for col in range(7):
@@ -402,6 +435,21 @@ Comments: {comments if comments else 'None'}"""
         """Handle table selection change (fires on click/keyboard, not hover)."""
         has_selection = self.sessions_table.currentRow() >= 0
         self.open_btn.setEnabled(has_selection)
+        selected_count = len(self.sessions_table.selectionModel().selectedRows())
+        self.combined_export_btn.setEnabled(selected_count >= 2)
+
+    def _on_combined_export(self):
+        """Emit multi_export_requested with session paths for all selected rows."""
+        selected_rows = self.sessions_table.selectionModel().selectedRows()
+        session_paths = []
+        for idx in selected_rows:
+            row = idx.row()
+            if row < len(self.sessions_data):
+                path = self.sessions_data[row].get("session_path")
+                if path:
+                    session_paths.append(path)
+        if len(session_paths) >= 2:
+            self.multi_export_requested.emit(session_paths)
 
     def _on_session_double_clicked(self, index):
         """Handle double-click on session."""
@@ -424,11 +472,7 @@ Comments: {comments if comments else 'None'}"""
             logger.info(f"Opening session: {session_path}")
             self.session_selected.emit(session_path)
         else:
-            QMessageBox.warning(
-                self,
-                "Error",
-                "Selected session has no valid path."
-            )
+            QMessageBox.warning(self, "Error", "Selected session has no valid path.")
 
     def get_selected_session_path(self) -> str:
         """Get the path of the currently selected session.
@@ -461,11 +505,7 @@ Comments: {comments if comments else 'None'}"""
 
         except Exception as e:
             logger.error(f"Failed to update status: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to update status:\n{str(e)}"
-            )
+            QMessageBox.critical(self, "Error", f"Failed to update status:\n{str(e)}")
             # Revert to previous value
             self.refresh_sessions()
 
@@ -478,9 +518,9 @@ Comments: {comments if comments else 'None'}"""
         """
         try:
             # Update session_info.json
-            self.session_manager.update_session_info(session_path, {
-                "comments": comments
-            })
+            self.session_manager.update_session_info(
+                session_path, {"comments": comments}
+            )
 
             logger.info(f"Updated session comments: {session_path}")
 
