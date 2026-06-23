@@ -279,3 +279,79 @@ def create_stock_export(
 
     except Exception as e:
         logger.error(f"Error while creating stock export '{report_name}': {e}")
+
+
+def merge_session_stock_exports(
+    session_paths: list, client_id: str = ""
+) -> pd.DataFrame:
+    """Read stock export data from multiple sessions and sum quantities.
+
+    Args:
+        session_paths: List of path-like objects, each pointing to a session directory.
+        client_id: For logging.
+
+    Returns:
+        DataFrame with columns: Артикул, Мярка, Колич, and optionally Годност, Партида
+        (summed across all sessions, grouped by Артикул + Годност + Партида).
+    """
+    from pathlib import Path
+
+    all_dfs = []
+    for session_path in session_paths:
+        session_path = Path(session_path)
+        stock_exports_dir = session_path / "stock_exports"
+        if not stock_exports_dir.exists():
+            logger.warning(f"No stock_exports dir in {session_path}")
+            continue
+
+        csv_files = list(stock_exports_dir.glob("*.csv"))
+        xls_files = list(stock_exports_dir.glob("*.xls")) + list(
+            stock_exports_dir.glob("*.xlsx")
+        )
+        target_files = csv_files or xls_files
+
+        if not target_files:
+            logger.warning(f"No export files found in {stock_exports_dir}")
+            continue
+
+        # ponytail: pick most-recently-modified file
+        target_file = max(target_files, key=lambda p: p.stat().st_mtime)
+        try:
+            if target_file.suffix == ".csv":
+                df = pd.read_csv(target_file, encoding="utf-8-sig")
+            else:
+                df = pd.read_excel(target_file)
+            all_dfs.append(df)
+            logger.info(
+                f"[merge_stock client={client_id}] Loaded {len(df)} rows from {target_file.name}"
+            )
+        except Exception as e:
+            logger.warning(f"Could not read {target_file}: {e}")
+            continue
+
+    if not all_dfs:
+        return pd.DataFrame(columns=["Артикул", "Мярка", "Колич", "Годност", "Партида"])
+
+    combined = pd.concat(all_dfs, ignore_index=True)
+
+    qty_col = "Колич" if "Колич" in combined.columns else "Наличност"
+
+    group_cols = ["Артикул"]
+    for optional in ("Годност", "Партида"):
+        if optional in combined.columns:
+            group_cols.append(optional)
+            combined[optional] = combined[optional].fillna("")
+
+    result = (
+        combined.groupby(group_cols, as_index=False)[qty_col]
+        .sum()
+        .rename(columns={qty_col: "Колич"})
+    )
+    result["Мярка"] = "бр"
+
+    final_cols = ["Артикул", "Мярка", "Колич"]
+    for col in ("Годност", "Партида"):
+        if col in result.columns:
+            final_cols.append(col)
+
+    return result[final_cols].sort_values("Артикул").reset_index(drop=True)
