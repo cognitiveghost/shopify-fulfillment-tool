@@ -77,11 +77,11 @@ def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
 
     for sku, group in stock_df.groupby("SKU"):
         lots = []
-        for _, row in group.iterrows():
-            qty = float(row["Stock"]) if pd.notna(row["Stock"]) else 0.0
+        for row in group.itertuples(index=False):
+            qty = float(row.Stock) if pd.notna(row.Stock) else 0.0
             if qty <= 0:
                 continue
-            raw_e = row["Expiry_Date"] if has_expiry and pd.notna(row.get("Expiry_Date")) else None
+            raw_e = row.Expiry_Date if has_expiry and pd.notna(row.Expiry_Date) else None
             if raw_e is None:
                 expiry_raw = "1"
             elif isinstance(raw_e, float):
@@ -89,7 +89,7 @@ def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
             else:
                 expiry_raw = str(raw_e).strip()
 
-            raw_b = row["Batch"] if has_batch and pd.notna(row.get("Batch")) else None
+            raw_b = row.Batch if has_batch and pd.notna(row.Batch) else None
             if raw_b is None:
                 batch_raw = None
             elif isinstance(raw_b, float):
@@ -156,67 +156,52 @@ def _clean_and_prepare_data(
     logger.debug("Phase 1/7: Cleaning and preparing data...")
 
     # --- Step 0: Apply Column Mappings ---
-    # Check if DataFrames already have internal names (backward compatibility for tests)
-    orders_has_internal_names = all(
-        col in orders_df.columns for col in ["Order_Number", "SKU", "Quantity"]
-    )
-    stock_has_internal_names = all(
-        col in stock_df.columns for col in ["SKU", "Stock"]
-    )
-
-    # If DataFrames already have internal names, skip mapping
-    if orders_has_internal_names and stock_has_internal_names and column_mappings is None:
-        # Already using internal names (e.g., in tests), no mapping needed
-        pass
-    else:
-        # Apply column mappings
-        # Default mappings for backward compatibility (Shopify + Bulgarian warehouse)
-        if column_mappings is None:
-            column_mappings = {
-                "orders": {
-                    "Name": "Order_Number",
-                    "Lineitem sku": "SKU",
-                    "Lineitem quantity": "Quantity",
-                    "Lineitem name": "Product_Name",
-                    "Shipping Method": "Shipping_Method",
-                    "Shipping Country": "Shipping_Country",
-                    "Tags": "Tags",
-                    "Notes": "Notes",
-                    "Total": "Total_Price",
-                    "Subtotal": "Subtotal"
-                },
-                "stock": {
-                    "Артикул": "SKU",
-                    "Име": "Product_Name",
-                    "Наличност": "Stock",
-                    "Годност": "Expiry_Date",
-                    "Партида": "Batch"
-                }
+    if column_mappings is None:
+        column_mappings = {
+            "orders": {
+                "Name": "Order_Number",
+                "Lineitem sku": "SKU",
+                "Lineitem quantity": "Quantity",
+                "Lineitem name": "Product_Name",
+                "Shipping Method": "Shipping_Method",
+                "Shipping Country": "Shipping_Country",
+                "Tags": "Tags",
+                "Notes": "Notes",
+                "Total": "Total_Price",
+                "Subtotal": "Subtotal"
+            },
+            "stock": {
+                "Артикул": "SKU",
+                "Име": "Product_Name",
+                "Наличност": "Stock",
+                "Годност": "Expiry_Date",
+                "Партида": "Batch"
             }
+        }
 
-        # Get mappings for orders and stock
-        orders_mappings = column_mappings.get("orders", {})
-        stock_mappings = column_mappings.get("stock", {})
+    # Get mappings for orders and stock
+    orders_mappings = column_mappings.get("orders", {})
+    stock_mappings = column_mappings.get("stock", {})
 
-        # Inject lot column defaults for any keys not already in the config mapping.
-        # This ensures lot tracking works for existing clients whose configs pre-date
-        # this feature without requiring a config migration or UI change.
-        missing = {k: v for k, v in _LOT_COLUMN_DEFAULTS.items() if k not in stock_mappings}
-        if missing:
-            stock_mappings = {**stock_mappings, **missing}
+    # Inject lot column defaults for any keys not already in the config mapping.
+    # This ensures lot tracking works for existing clients whose configs pre-date
+    # this feature without requiring a config migration or UI change.
+    missing = {k: v for k, v in _LOT_COLUMN_DEFAULTS.items() if k not in stock_mappings}
+    if missing:
+        stock_mappings = {**stock_mappings, **missing}
 
-        # Apply mappings to orders DataFrame
-        # Only rename columns that exist in the DataFrame AND are different from internal names
-        orders_rename_map = {csv_col: internal_col for csv_col, internal_col in orders_mappings.items()
-                             if csv_col in orders_df.columns and csv_col != internal_col}
-        if orders_rename_map:
-            orders_df = orders_df.rename(columns=orders_rename_map)
+    # Apply mappings to orders DataFrame
+    # Only rename columns that exist in the DataFrame AND are different from internal names
+    orders_rename_map = {csv_col: internal_col for csv_col, internal_col in orders_mappings.items()
+                         if csv_col in orders_df.columns and csv_col != internal_col}
+    if orders_rename_map:
+        orders_df = orders_df.rename(columns=orders_rename_map)
 
-        # Apply mappings to stock DataFrame
-        stock_rename_map = {csv_col: internal_col for csv_col, internal_col in stock_mappings.items()
-                            if csv_col in stock_df.columns and csv_col != internal_col}
-        if stock_rename_map:
-            stock_df = stock_df.rename(columns=stock_rename_map)
+    # Apply mappings to stock DataFrame
+    stock_rename_map = {csv_col: internal_col for csv_col, internal_col in stock_mappings.items()
+                        if csv_col in stock_df.columns and csv_col != internal_col}
+    if stock_rename_map:
+        stock_df = stock_df.rename(columns=stock_rename_map)
 
     # Rename additional columns from CSV names to internal names
     if additional_columns_config:
@@ -481,10 +466,12 @@ def _simulate_stock_allocation(
                    lots were allocated per order.
 
     Returns:
-        Tuple of (fulfillment_results, lot_allocations):
+        Tuple of (fulfillment_results, lot_allocations, final_stock_dict):
         - fulfillment_results: {order_number: {"fulfillable": bool, "reason": str}}
         - lot_allocations: {order_number: {sku: [{expiry, batch, qty_allocated}]}}
                            Empty dict when fifo_lots is None.
+        - final_stock_dict: {sku: remaining_qty} after all fulfillments applied.
+                            Eliminates the need for a separate _calculate_final_stock replay pass.
     """
     logger.debug("Phase 3/7: Simulating stock allocation...")
 
@@ -497,9 +484,11 @@ def _simulate_stock_allocation(
     else:
         orders_for_simulation = orders_df.copy()
 
-    # Add item_count to orders for filtering
-    order_item_counts = orders_for_simulation.groupby("Order_Number").size().rename("item_count")
-    orders_with_counts = pd.merge(orders_for_simulation, order_item_counts, on="Order_Number")
+    # Pre-group required quantities per order — single O(N) pass avoids O(N²) per-order scans
+    order_required_quantities: Dict[str, "pd.Series"] = {
+        order_num: grp.groupby("SKU")["Quantity"].sum()
+        for order_num, grp in orders_for_simulation.groupby("Order_Number")
+    }
 
     fulfillment_results = {}
 
@@ -510,8 +499,9 @@ def _simulate_stock_allocation(
         lot_allocations: Dict[str, Dict[str, List[dict]]] = {}
 
         for order_number in prioritized_orders["Order_Number"]:
-            order_items = orders_with_counts[orders_with_counts["Order_Number"] == order_number]
-            required_quantities = order_items.groupby("SKU")["Quantity"].sum()
+            required_quantities = order_required_quantities.get(order_number)
+            if required_quantities is None:
+                continue
 
             can_fulfill_order = True
             unfulfillable_reasons = []
@@ -537,14 +527,17 @@ def _simulate_stock_allocation(
                     "reason": "; ".join(unfulfillable_reasons)
                 }
 
+        final_stock_dict = live_stock
+
     else:
         # --- FIFO LOT PATH ---
         live_lots = copy.deepcopy(fifo_lots)
         lot_allocations = {}
 
         for order_number in prioritized_orders["Order_Number"]:
-            order_items = orders_with_counts[orders_with_counts["Order_Number"] == order_number]
-            required_quantities = order_items.groupby("SKU")["Quantity"].sum()
+            required_quantities = order_required_quantities.get(order_number)
+            if required_quantities is None:
+                continue
 
             can_fulfill_order = True
             unfulfillable_reasons = []
@@ -588,10 +581,16 @@ def _simulate_stock_allocation(
                     "reason": "; ".join(unfulfillable_reasons)
                 }
 
+        # Derive final stock from remaining live_lots; seed from stock_df for zero-stock SKUs
+        # (SKUs whose all lots had qty<=0 are absent from live_lots; seed preserves them at 0)
+        final_stock_dict = dict(zip(stock_df["SKU"], stock_df["Stock"])) if "Stock" in stock_df.columns else {}
+        for sku, lots in live_lots.items():
+            final_stock_dict[sku] = sum(lot["qty"] for lot in lots)
+
     fulfillable_count = sum(1 for r in fulfillment_results.values() if r.get("fulfillable", False))
     logger.debug(f"Fulfillable: {fulfillable_count}/{len(fulfillment_results)} orders")
 
-    return fulfillment_results, lot_allocations
+    return fulfillment_results, lot_allocations, final_stock_dict
 
 
 def _calculate_final_stock(
@@ -1257,14 +1256,16 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
 
         # Phase 3: Simulate stock allocation
         logger.info("Phase 3/7: Stock allocation simulation")
-        fulfillment_results, lot_allocations = _simulate_stock_allocation(
+        fulfillment_results, lot_allocations, final_stock_dict = _simulate_stock_allocation(
             orders_clean, stock_clean, prioritized_orders, fifo_lots
         )
 
-        # Phase 4: Calculate final stock
+        # Phase 4: Convert live stock dict to DataFrame (no replay needed — simulation already tracked it)
         logger.info("Phase 4/7: Final stock calculations")
-        final_stock = _calculate_final_stock(
-            stock_clean, fulfillment_results, orders_clean
+        final_stock = (
+            pd.Series(final_stock_dict, name="Final_Stock")
+            .reset_index()
+            .rename(columns={"index": "SKU"})
         )
 
         # Phase 5: Already handled in Phase 6 (_detect_repeated_orders is called there)
@@ -1489,16 +1490,14 @@ def toggle_order_fulfillment(df, order_number):
     if df is None:
         return False, "DataFrame is None.", df
 
-    # Convert order_number to string for comparison (handles int/float order numbers)
+    # Compute boolean mask once — reused for existence check, status lookup, and status update
     order_number_str = str(order_number).strip()
-    order_numbers_str = df["Order_Number"].astype(str).str.strip()
+    order_mask = df["Order_Number"].astype(str).str.strip() == order_number_str
 
-    if order_number_str not in order_numbers_str.values:
+    if not order_mask.any():
         return False, "Order number not found.", df
 
     # Find current status (assuming all rows for an order have the same status)
-    # Use string comparison for finding the order
-    order_mask = order_numbers_str == order_number_str
     current_status = df.loc[order_mask, "Order_Fulfillment_Status"].iloc[0]
 
     if current_status == "Fulfillable":
@@ -1518,11 +1517,14 @@ def toggle_order_fulfillment(df, order_number):
         order_items = df.loc[order_mask]
         items_needed = order_items.groupby("SKU")["Quantity"].sum()
 
+        # Pre-compute once — avoids O(N) unique() call inside each loop iteration
+        known_skus = set(df["SKU"])
+
         # Pre-flight check for stock availability
         lacking_skus = []
         for sku, needed_qty in items_needed.items():
             # Check if the SKU is even in our dataframe (for the unlisted stock case)
-            if sku not in df["SKU"].unique():
+            if sku not in known_skus:
                 continue  # This is an unlisted item, we assume it's on hand
 
             # Get current final stock for this SKU
@@ -1538,7 +1540,7 @@ def toggle_order_fulfillment(df, order_number):
         # If check passes, deduct stock
         for sku, needed_qty in items_needed.items():
             # For unlisted SKUs, we need to add them to the df to track their negative stock
-            if sku not in df["SKU"].unique():
+            if sku not in known_skus:
                 # Find one of the order rows to copy base data from
                 template_row = order_items.iloc[0].to_dict()
                 new_row = {key: (None if key not in ["SKU", "Quantity"] else template_row[key]) for key in df.columns}
