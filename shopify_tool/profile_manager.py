@@ -28,16 +28,19 @@ logger = logging.getLogger("ShopifyToolLogger")
 # Custom Exceptions
 class ProfileManagerError(Exception):
     """Base exception for ProfileManager errors."""
+
     pass
 
 
 class NetworkError(ProfileManagerError):
     """Raised when file server is not accessible."""
+
     pass
 
 
 class ValidationError(ProfileManagerError):
     """Raised when validation fails."""
+
     pass
 
 
@@ -126,7 +129,7 @@ class ProfileManager:
             Base path string
         """
         # Check for development environment variable
-        env_path = os.environ.get('FULFILLMENT_SERVER_PATH')
+        env_path = os.environ.get("FULFILLMENT_SERVER_PATH")
 
         if env_path:
             logger.info(f"Using server path from environment variable: {env_path}")
@@ -143,7 +146,7 @@ class ProfileManager:
         Returns:
             True if FULFILLMENT_SERVER_PATH environment variable is set
         """
-        return 'FULFILLMENT_SERVER_PATH' in os.environ
+        return "FULFILLMENT_SERVER_PATH" in os.environ
 
     def _test_connection(self) -> bool:
         """Test if file server is accessible.
@@ -178,7 +181,9 @@ class ProfileManager:
             logger.error(f"Network connection FAILED - OS error (network issue?): {e}")
             return False
         except Exception as e:
-            logger.error(f"Network connection FAILED - Unexpected error: {e}", exc_info=True)
+            logger.error(
+                f"Network connection FAILED - Unexpected error: {e}", exc_info=True
+            )
             return False
 
     @staticmethod
@@ -206,15 +211,30 @@ class ProfileManager:
         if len(client_id) > 20:
             return False, "Client ID too long (max 20 characters)"
 
-        if not re.match(r'^[A-Z0-9_]+$', client_id.upper()):
+        if not re.match(r"^[A-Z0-9_]+$", client_id.upper()):
             return False, "Client ID can only contain letters, numbers, and underscore"
 
         if client_id.upper().startswith("CLIENT_"):
-            return False, "Don't include 'CLIENT_' prefix, it will be added automatically"
+            return (
+                False,
+                "Don't include 'CLIENT_' prefix, it will be added automatically",
+            )
 
         # Windows reserved names
-        reserved = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4',
-                    'LPT1', 'LPT2', 'LPT3', 'LPT4']
+        reserved = [
+            "CON",
+            "PRN",
+            "AUX",
+            "NUL",
+            "COM1",
+            "COM2",
+            "COM3",
+            "COM4",
+            "LPT1",
+            "LPT2",
+            "LPT3",
+            "LPT4",
+        ]
         if client_id.upper() in reserved:
             return False, f"'{client_id}' is a reserved system name"
 
@@ -293,18 +313,18 @@ class ProfileManager:
                 "client_id": client_id,
                 "client_name": client_name,
                 "created_at": datetime.now().isoformat(),
-                "created_by": os.environ.get('COMPUTERNAME', 'Unknown'),
+                "created_by": os.environ.get("COMPUTERNAME", "Unknown"),
             }
 
             config_path = client_dir / "client_config.json"
-            with open(config_path, 'w', encoding='utf-8') as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(client_config, f, indent=2)
 
             # Create default shopify config
             shopify_config = self._create_default_shopify_config(client_id, client_name)
 
             shopify_config_path = client_dir / "shopify_config.json"
-            with open(shopify_config_path, 'w', encoding='utf-8') as f:
+            with open(shopify_config_path, "w", encoding="utf-8") as f:
                 json.dump(shopify_config, f, indent=2)
 
             # Create session directory
@@ -358,11 +378,15 @@ class ProfileManager:
                 return False
 
         # Check if v1 format (has orders_required/stock_required)
-        is_v1 = ("orders_required" in column_mappings or "stock_required" in column_mappings)
+        is_v1 = (
+            "orders_required" in column_mappings or "stock_required" in column_mappings
+        )
 
         if not is_v1:
             # Unknown format, assume it needs migration
-            logger.warning(f"Unknown column_mappings format for CLIENT_{client_id}, applying default v2")
+            logger.warning(
+                f"Unknown column_mappings format for CLIENT_{client_id}, applying default v2"
+            )
 
         # Migrate to v2 with default Shopify/Bulgarian mappings
         logger.info(f"Migrating column mappings v1 → v2 for CLIENT_{client_id}")
@@ -380,15 +404,15 @@ class ProfileManager:
                 "Tags": "Tags",
                 "Notes": "Notes",
                 "Total": "Total_Price",
-                "Subtotal": "Subtotal"
+                "Subtotal": "Subtotal",
             },
             "stock": {
                 "Артикул": "SKU",
                 "Име": "Product_Name",
                 "Наличност": "Stock",
                 "Годност": "Expiry_Date",
-                "Партида": "Batch"
-            }
+                "Партида": "Batch",
+            },
         }
 
         # Replace old mappings with new
@@ -399,7 +423,7 @@ class ProfileManager:
             "migrated_at": datetime.now().isoformat(),
             "from_version": 1,
             "to_version": 2,
-            "migrated_by": os.environ.get('COMPUTERNAME', 'Unknown')
+            "migrated_by": os.environ.get("COMPUTERNAME", "Unknown"),
         }
 
         logger.info(f"Migration successful for CLIENT_{client_id}")
@@ -419,7 +443,9 @@ class ProfileManager:
             logger.debug(f"tag_categories already exists for CLIENT_{client_id}")
             return False
 
-        logger.info(f"Adding tag_categories (v2 format) to config for CLIENT_{client_id}")
+        logger.info(
+            f"Adding tag_categories (v2 format) to config for CLIENT_{client_id}"
+        )
 
         # Add default tag categories in v2 format
         config["tag_categories"] = {
@@ -430,72 +456,51 @@ class ProfileManager:
                     "color": "#4CAF50",
                     "order": 1,
                     "tags": ["SMALL_BAG", "LARGE_BAG", "BOX", "NO_BOX", "BOX+ANY"],
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 },
                 "priority": {
                     "label": "Пріоритет",
                     "color": "#FF9800",
                     "order": 2,
                     "tags": ["URGENT", "HIGH_VALUE", "DOUBLE_TRACK"],
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 },
                 "status": {
                     "label": "Статус",
                     "color": "#2196F3",
                     "order": 3,
                     "tags": ["CHECKED", "PROBLEM", "VERIFIED"],
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 },
                 "order_type": {
                     "label": "Тип замовлення",
                     "color": "#9C27B0",
                     "order": 4,
                     "tags": ["RETAIL", "WHOLESALE", "RETURN", "EXCHANGE"],
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 },
                 "accessories": {
                     "label": "Додатки",
                     "color": "#E91E63",
                     "order": 5,
                     "tags": ["STICKER", "BUSINESS_CARD", "GIFT_BOX"],
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 },
                 "delivery": {
                     "label": "Кур'єр/Доставка",
                     "color": "#FF5722",
                     "order": 6,
                     "tags": ["NOVA_POSHTA", "UKRPOSHTA", "SELF_PICKUP"],
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 },
                 "custom": {
                     "label": "Інші",
                     "color": "#9E9E9E",
                     "order": 999,
                     "tags": [],
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
-                }
-            }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
+                },
+            },
         }
 
         logger.info(f"Tag categories (v2) added for CLIENT_{client_id}")
@@ -542,7 +547,15 @@ class ProfileManager:
         order_counter = 1
 
         # Known categories with predefined order
-        known_order = ["packaging", "priority", "status", "order_type", "accessories", "delivery", "custom"]
+        known_order = [
+            "packaging",
+            "priority",
+            "status",
+            "order_type",
+            "accessories",
+            "delivery",
+            "custom",
+        ]
 
         for category_id in known_order:
             if category_id in tag_categories:
@@ -552,28 +565,26 @@ class ProfileManager:
                     "color": old_category.get("color", "#9E9E9E"),
                     "order": order_counter,
                     "tags": old_category.get("tags", []),
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 }
                 order_counter += 1
 
         # Handle any custom categories not in known_order
         for category_id, category_config in tag_categories.items():
-            if category_id not in migrated_categories and isinstance(category_config, dict):
+            if category_id not in migrated_categories and isinstance(
+                category_config, dict
+            ):
                 migrated_categories[category_id] = {
                     "label": category_config.get("label", category_id.title()),
                     "color": category_config.get("color", "#9E9E9E"),
                     "order": order_counter,
                     "tags": category_config.get("tags", []),
-                    "sku_writeoff": {
-                        "enabled": False,
-                        "mappings": {}
-                    }
+                    "sku_writeoff": {"enabled": False, "mappings": {}},
                 }
                 order_counter += 1
-                logger.info(f"Migrated custom category '{category_id}' for CLIENT_{client_id}")
+                logger.info(
+                    f"Migrated custom category '{category_id}' for CLIENT_{client_id}"
+                )
 
         # Add new default categories if missing
         if "order_type" not in migrated_categories:
@@ -582,7 +593,7 @@ class ProfileManager:
                 "color": "#9C27B0",
                 "order": order_counter,
                 "tags": ["RETAIL", "WHOLESALE", "RETURN", "EXCHANGE"],
-                "sku_writeoff": {"enabled": False, "mappings": {}}
+                "sku_writeoff": {"enabled": False, "mappings": {}},
             }
             order_counter += 1
             logger.info(f"Added 'order_type' category for CLIENT_{client_id}")
@@ -593,7 +604,7 @@ class ProfileManager:
                 "color": "#E91E63",
                 "order": order_counter,
                 "tags": ["STICKER", "BUSINESS_CARD", "GIFT_BOX"],
-                "sku_writeoff": {"enabled": False, "mappings": {}}
+                "sku_writeoff": {"enabled": False, "mappings": {}},
             }
             order_counter += 1
             logger.info(f"Added 'accessories' category for CLIENT_{client_id}")
@@ -604,16 +615,13 @@ class ProfileManager:
                 "color": "#FF5722",
                 "order": order_counter,
                 "tags": ["NOVA_POSHTA", "UKRPOSHTA", "SELF_PICKUP"],
-                "sku_writeoff": {"enabled": False, "mappings": {}}
+                "sku_writeoff": {"enabled": False, "mappings": {}},
             }
             order_counter += 1
             logger.info(f"Added 'delivery' category for CLIENT_{client_id}")
 
         # Wrap in v2 structure
-        config["tag_categories"] = {
-            "version": 2,
-            "categories": migrated_categories
-        }
+        config["tag_categories"] = {"version": 2, "categories": migrated_categories}
 
         logger.info(
             f"Tag categories migration to v2 successful for CLIENT_{client_id}: "
@@ -653,7 +661,9 @@ class ProfileManager:
         if "stock_delimiter" in settings:
             if "stock_csv_delimiter" not in settings:
                 settings["stock_csv_delimiter"] = settings["stock_delimiter"]
-                logger.info(f"Migrated 'stock_delimiter' to 'stock_csv_delimiter' for CLIENT_{client_id}")
+                logger.info(
+                    f"Migrated 'stock_delimiter' to 'stock_csv_delimiter' for CLIENT_{client_id}"
+                )
                 migrated = True
             del settings["stock_delimiter"]
             logger.info(f"Removed old 'stock_delimiter' key for CLIENT_{client_id}")
@@ -669,7 +679,9 @@ class ProfileManager:
         if migrated:
             config["config_version"] = "2.1"
             config["migrated_at"] = datetime.now().isoformat()
-            logger.info(f"Delimiter migration successful for CLIENT_{client_id}, version: 2.1")
+            logger.info(
+                f"Delimiter migration successful for CLIENT_{client_id}, version: 2.1"
+            )
 
         return migrated
 
@@ -685,7 +697,7 @@ class ProfileManager:
         config["weight_config"] = {
             "volumetric_divisor": 6000,
             "products": {},
-            "boxes": []
+            "boxes": [],
         }
         logger.info(f"Added default 'weight_config' for CLIENT_{client_id}")
         return True
@@ -699,10 +711,7 @@ class ProfileManager:
         if "sku_label_config" in config:
             return False
 
-        config["sku_label_config"] = {
-            "sku_to_label": {},
-            "default_printer": ""
-        }
+        config["sku_label_config"] = {"sku_to_label": {}, "default_printer": ""}
         logger.info(f"Added default 'sku_label_config' for CLIENT_{client_id}")
         return True
 
@@ -723,7 +732,6 @@ class ProfileManager:
             "client_id": client_id,
             "client_name": client_name,
             "created_at": datetime.now().isoformat(),
-
             "column_mappings": {
                 "version": 2,
                 "orders": {
@@ -736,51 +744,38 @@ class ProfileManager:
                     "Tags": "Tags",
                     "Notes": "Notes",
                     "Total": "Total_Price",
-                    "Subtotal": "Subtotal"
+                    "Subtotal": "Subtotal",
                 },
                 "stock": {
                     "Артикул": "SKU",
                     "Име": "Product_Name",
                     "Наличност": "Stock",
                     "Годност": "Expiry_Date",
-                    "Партида": "Batch"
-                }
+                    "Партида": "Batch",
+                },
             },
-
             "courier_mappings": {
                 "DHL": {
                     "patterns": ["dhl", "dhl express", "dhl_express"],
-                    "case_sensitive": False
+                    "case_sensitive": False,
                 },
-                "DPD": {
-                    "patterns": ["dpd", "dpd bulgaria"],
-                    "case_sensitive": False
-                },
-                "Speedy": {
-                    "patterns": ["speedy"],
-                    "case_sensitive": False
-                }
+                "DPD": {"patterns": ["dpd", "dpd bulgaria"], "case_sensitive": False},
+                "Speedy": {"patterns": ["speedy"], "case_sensitive": False},
             },
-
+            "analysis_mode": "multi_first",
             "settings": {
                 "low_stock_threshold": 5,
                 "stock_csv_delimiter": ";",
                 "orders_csv_delimiter": ",",
-                "repeat_detection_days": 1
+                "repeat_detection_days": 1,
             },
-
             "rules": [],
             "order_rules": [],
             "packing_list_configs": [],
             "stock_export_configs": [],
             "set_decoders": {},
             "packaging_rules": [],
-            "weight_config": {
-                "volumetric_divisor": 6000,
-                "products": {},
-                "boxes": []
-            },
-
+            "weight_config": {"volumetric_divisor": 6000, "products": {}, "boxes": []},
             "tag_categories": {
                 "version": 2,
                 "categories": {
@@ -789,78 +784,53 @@ class ProfileManager:
                         "color": "#4CAF50",
                         "order": 1,
                         "tags": ["SMALL_BAG", "LARGE_BAG", "BOX", "NO_BOX", "BOX+ANY"],
-                        "sku_writeoff": {
-                            "enabled": False,
-                            "mappings": {}
-                        }
+                        "sku_writeoff": {"enabled": False, "mappings": {}},
                     },
                     "priority": {
                         "label": "Пріоритет",
                         "color": "#FF9800",
                         "order": 2,
                         "tags": ["URGENT", "HIGH_VALUE", "DOUBLE_TRACK"],
-                        "sku_writeoff": {
-                            "enabled": False,
-                            "mappings": {}
-                        }
+                        "sku_writeoff": {"enabled": False, "mappings": {}},
                     },
                     "status": {
                         "label": "Статус",
                         "color": "#2196F3",
                         "order": 3,
                         "tags": ["CHECKED", "PROBLEM", "VERIFIED"],
-                        "sku_writeoff": {
-                            "enabled": False,
-                            "mappings": {}
-                        }
+                        "sku_writeoff": {"enabled": False, "mappings": {}},
                     },
                     "order_type": {
                         "label": "Тип замовлення",
                         "color": "#9C27B0",
                         "order": 4,
                         "tags": ["RETAIL", "WHOLESALE", "RETURN", "EXCHANGE"],
-                        "sku_writeoff": {
-                            "enabled": False,
-                            "mappings": {}
-                        }
+                        "sku_writeoff": {"enabled": False, "mappings": {}},
                     },
                     "accessories": {
                         "label": "Додатки",
                         "color": "#E91E63",
                         "order": 5,
                         "tags": ["STICKER", "BUSINESS_CARD", "GIFT_BOX"],
-                        "sku_writeoff": {
-                            "enabled": False,
-                            "mappings": {}
-                        }
+                        "sku_writeoff": {"enabled": False, "mappings": {}},
                     },
                     "delivery": {
                         "label": "Кур'єр/Доставка",
                         "color": "#FF5722",
                         "order": 6,
                         "tags": ["NOVA_POSHTA", "UKRPOSHTA", "SELF_PICKUP"],
-                        "sku_writeoff": {
-                            "enabled": False,
-                            "mappings": {}
-                        }
+                        "sku_writeoff": {"enabled": False, "mappings": {}},
                     },
                     "custom": {
                         "label": "Інші",
                         "color": "#9E9E9E",
                         "order": 999,
                         "tags": [],
-                        "sku_writeoff": {
-                            "enabled": False,
-                            "mappings": {}
-                        }
-                    }
-                }
+                        "sku_writeoff": {"enabled": False, "mappings": {}},
+                    },
+                },
             },
-
-            "sku_label_config": {
-                "sku_to_label": {},
-                "default_printer": ""
-            }
+            "sku_label_config": {"sku_to_label": {}, "default_printer": ""},
         }
 
     def load_client_config(self, client_id: str) -> Optional[Dict]:
@@ -882,7 +852,7 @@ class ProfileManager:
             return None
 
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
 
             # Check if migrations are needed
@@ -896,13 +866,18 @@ class ProfileManager:
             return config
 
         except PermissionError as e:
-            logger.error(f"Permission denied reading client config for CLIENT_{client_id}: {e}")
+            logger.error(
+                f"Permission denied reading client config for CLIENT_{client_id}: {e}"
+            )
             return None
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in client config for CLIENT_{client_id}: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error loading client config for CLIENT_{client_id}: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error loading client config for CLIENT_{client_id}: {e}",
+                exc_info=True,
+            )
             return None
 
     def load_shopify_config(self, client_id: str) -> Optional[Dict]:
@@ -938,18 +913,33 @@ class ProfileManager:
                 return cached_data
 
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
 
             # Check if migrations are needed
-            migrated_mappings = self._migrate_column_mappings_v1_to_v2(client_id, config)
-            migrated_delimiters = self._migrate_delimiter_config_v1_to_v2(client_id, config)
-            migrated_tag_categories = self._migrate_add_tag_categories(client_id, config)
-            migrated_tag_categories_v2 = self._migrate_tag_categories_v1_to_v2(client_id, config)
+            migrated_mappings = self._migrate_column_mappings_v1_to_v2(
+                client_id, config
+            )
+            migrated_delimiters = self._migrate_delimiter_config_v1_to_v2(
+                client_id, config
+            )
+            migrated_tag_categories = self._migrate_add_tag_categories(
+                client_id, config
+            )
+            migrated_tag_categories_v2 = self._migrate_tag_categories_v1_to_v2(
+                client_id, config
+            )
             migrated_weight = self._migrate_add_weight_config(client_id, config)
             migrated_sku_labels = self._migrate_add_sku_label_config(client_id, config)
 
-            if migrated_mappings or migrated_delimiters or migrated_tag_categories or migrated_tag_categories_v2 or migrated_weight or migrated_sku_labels:
+            if (
+                migrated_mappings
+                or migrated_delimiters
+                or migrated_tag_categories
+                or migrated_tag_categories_v2
+                or migrated_weight
+                or migrated_sku_labels
+            ):
                 # If config was migrated, save it immediately (cache is invalidated by save)
                 self.save_shopify_config(client_id, config)
                 logger.info(f"Config migrations completed for CLIENT_{client_id}")
@@ -986,7 +976,9 @@ class ProfileManager:
         config_path = client_dir / "shopify_config.json"
 
         if not client_dir.exists():
-            raise ProfileManagerError(f"Client profile does not exist: CLIENT_{client_id}")
+            raise ProfileManagerError(
+                f"Client profile does not exist: CLIENT_{client_id}"
+            )
 
         # Create backup before saving
         if config_path.exists():
@@ -994,13 +986,13 @@ class ProfileManager:
 
         # Update timestamp
         config["last_updated"] = datetime.now().isoformat()
-        config["updated_by"] = os.environ.get('COMPUTERNAME', 'Unknown')
+        config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
         # Calculate config size and metrics for logging
         start_time = time.perf_counter()
         json_str = json.dumps(config, indent=2, ensure_ascii=False)
-        config_size = len(json_str.encode('utf-8'))
-        num_sets = len(config.get('set_decoders', {}))
+        config_size = len(json_str.encode("utf-8"))
+        num_sets = len(config.get("set_decoders", {}))
 
         logger.info(
             f"Saving config for CLIENT_{client_id}: "
@@ -1022,7 +1014,7 @@ class ProfileManager:
 
             try:
                 # Use platform-specific file locking
-                if os.name == 'nt':  # Windows
+                if os.name == "nt":  # Windows
                     success = self._save_with_windows_lock(config_path, config)
                 else:  # Unix-like
                     success = self._save_with_unix_lock(config_path, config)
@@ -1109,15 +1101,14 @@ class ProfileManager:
 
         success = self.save_shopify_config(client_id, config)
         if success:
-            logger.info(f"Set decoders saved for CLIENT_{client_id}: {len(set_decoders)} sets")
+            logger.info(
+                f"Set decoders saved for CLIENT_{client_id}: {len(set_decoders)} sets"
+            )
 
         return success
 
     def add_set(
-        self,
-        client_id: str,
-        set_sku: str,
-        components: List[Dict[str, any]]
+        self, client_id: str, set_sku: str, components: List[Dict[str, any]]
     ) -> bool:
         """Add or update a set/bundle definition.
 
@@ -1155,7 +1146,9 @@ class ProfileManager:
             try:
                 qty = int(comp["quantity"])
                 if qty <= 0:
-                    raise ValidationError(f"Component {idx} quantity must be positive, got {qty}")
+                    raise ValidationError(
+                        f"Component {idx} quantity must be positive, got {qty}"
+                    )
             except (ValueError, TypeError):
                 raise ValidationError(f"Component {idx} quantity must be an integer")
 
@@ -1168,7 +1161,9 @@ class ProfileManager:
         # Save
         success = self.save_set_decoders(client_id, set_decoders)
         if success:
-            logger.info(f"Set '{set_sku}' added/updated for CLIENT_{client_id} with {len(components)} components")
+            logger.info(
+                f"Set '{set_sku}' added/updated for CLIENT_{client_id} with {len(components)} components"
+            )
 
         return success
 
@@ -1216,16 +1211,16 @@ class ProfileManager:
         import msvcrt
 
         # Write to temp file first
-        temp_path = file_path.with_suffix('.tmp')
+        temp_path = file_path.with_suffix(".tmp")
 
         try:
             # Pre-serialize to know exact size
             json_str = json.dumps(data, indent=2, ensure_ascii=False)
-            file_size = len(json_str.encode('utf-8'))
+            file_size = len(json_str.encode("utf-8"))
 
             logger.debug(f"Attempting to save config, size: {file_size:,} bytes")
 
-            with open(temp_path, 'w', encoding='utf-8') as f:
+            with open(temp_path, "w", encoding="utf-8") as f:
                 # Try to acquire exclusive lock for entire file
                 try:
                     # Ensure file position is at start before locking
@@ -1273,10 +1268,10 @@ class ProfileManager:
         import fcntl
 
         # Write to temp file first
-        temp_path = file_path.with_suffix('.tmp')
+        temp_path = file_path.with_suffix(".tmp")
 
         try:
-            with open(temp_path, 'w', encoding='utf-8') as f:
+            with open(temp_path, "w", encoding="utf-8") as f:
                 # Try to acquire exclusive lock
                 try:
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -1351,11 +1346,11 @@ class ProfileManager:
                         "column_order": [],
                         "column_widths": {},
                         "auto_hide_empty": True,
-                        "locked_columns": ["Order_Number"]
+                        "locked_columns": ["Order_Number"],
                     }
                 },
-                "additional_columns": []
-            }
+                "additional_columns": [],
+            },
         }
 
     def _migrate_add_ui_settings(self, client_id: str, config: Dict) -> bool:
@@ -1375,7 +1370,9 @@ class ProfileManager:
         # Add ui_settings if missing
         if "ui_settings" not in config:
             # Start with all defaults except table_view (added separately below)
-            config["ui_settings"] = {k: v for k, v in defaults.items() if k != "table_view"}
+            config["ui_settings"] = {
+                k: v for k, v in defaults.items() if k != "table_view"
+            }
             logger.info(f"Added ui_settings for CLIENT_{client_id}")
             migrated = True
 
@@ -1409,7 +1406,9 @@ class ProfileManager:
         config_path = client_dir / "client_config.json"
 
         if not client_dir.exists():
-            raise ProfileManagerError(f"Client profile does not exist: CLIENT_{client_id}")
+            raise ProfileManagerError(
+                f"Client profile does not exist: CLIENT_{client_id}"
+            )
 
         # Create backup before saving
         if config_path.exists():
@@ -1417,7 +1416,7 @@ class ProfileManager:
 
         # Update timestamp
         config["last_updated"] = datetime.now().isoformat()
-        config["updated_by"] = os.environ.get('COMPUTERNAME', 'Unknown')
+        config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
         max_retries = 5  # Reduced from 10 to minimize UI blocking
         retry_delay = 0.5  # Reduced from 1.0s (total worst case: 2.5s instead of 10s)
@@ -1435,7 +1434,7 @@ class ProfileManager:
 
             try:
                 # Use platform-specific file locking
-                if os.name == 'nt':  # Windows
+                if os.name == "nt":  # Windows
                     success = self._save_with_windows_lock(config_path, config)
                 else:  # Unix-like
                     success = self._save_with_unix_lock(config_path, config)
@@ -1505,7 +1504,7 @@ class ProfileManager:
                 "group_id": None,
                 "custom_color": "#4CAF50",
                 "custom_badges": [],
-                "display_order": 0
+                "display_order": 0,
             }
 
         # Merge updates (partial update)
@@ -1542,19 +1541,24 @@ class ProfileManager:
                 "group_id": None,
                 "custom_color": "#4CAF50",
                 "custom_badges": [],
-                "display_order": 0
+                "display_order": 0,
             }
 
         # Return ui_settings or defaults
-        return config.get("ui_settings", {
-            "is_pinned": False,
-            "group_id": None,
-            "custom_color": "#4CAF50",
-            "custom_badges": [],
-            "display_order": 0
-        })
+        return config.get(
+            "ui_settings",
+            {
+                "is_pinned": False,
+                "group_id": None,
+                "custom_color": "#4CAF50",
+                "custom_badges": [],
+                "display_order": 0,
+            },
+        )
 
-    def calculate_metadata(self, client_id: str, force_refresh: bool = False) -> Dict[str, Any]:
+    def calculate_metadata(
+        self, client_id: str, force_refresh: bool = False
+    ) -> Dict[str, Any]:
         """Calculate client metadata from filesystem with 5-minute caching.
 
         Args:
@@ -1590,15 +1594,16 @@ class ProfileManager:
             metadata = {
                 "total_sessions": 0,
                 "last_session_date": None,
-                "last_accessed": datetime.now().isoformat()
+                "last_accessed": datetime.now().isoformat(),
             }
             self._metadata_cache[cache_key] = (metadata, datetime.now())
             return metadata
 
         try:
             session_folders = [
-                d for d in sessions_dir.iterdir()
-                if d.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}_\d+', d.name)
+                d
+                for d in sessions_dir.iterdir()
+                if d.is_dir() and re.match(r"\d{4}-\d{2}-\d{2}_\d+", d.name)
             ]
 
             total_sessions = len(session_folders)
@@ -1606,13 +1611,13 @@ class ProfileManager:
             last_session_date = None
             if session_folders:
                 latest = sorted(session_folders, key=lambda d: d.name)[-1]
-                date_part = latest.name.split('_')[0]
+                date_part = latest.name.split("_")[0]
                 last_session_date = date_part
 
             metadata = {
                 "total_sessions": total_sessions,
                 "last_session_date": last_session_date,
-                "last_accessed": datetime.now().isoformat()
+                "last_accessed": datetime.now().isoformat(),
             }
 
             self._metadata_cache[cache_key] = (metadata, datetime.now())
@@ -1627,7 +1632,7 @@ class ProfileManager:
             metadata = {
                 "total_sessions": 0,
                 "last_session_date": None,
-                "last_accessed": datetime.now().isoformat()
+                "last_accessed": datetime.now().isoformat(),
             }
             self._metadata_cache[cache_key] = (metadata, datetime.now())
             return metadata
@@ -1697,7 +1702,7 @@ class ProfileManager:
                 "group_id": None,
                 "custom_color": "#4CAF50",
                 "custom_badges": [],
-                "display_order": 0
+                "display_order": 0,
             }
 
         # Calculate and add metadata

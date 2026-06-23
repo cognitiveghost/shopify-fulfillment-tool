@@ -81,7 +81,9 @@ def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
             qty = float(row.Stock) if pd.notna(row.Stock) else 0.0
             if qty <= 0:
                 continue
-            raw_e = row.Expiry_Date if has_expiry and pd.notna(row.Expiry_Date) else None
+            raw_e = (
+                row.Expiry_Date if has_expiry and pd.notna(row.Expiry_Date) else None
+            )
             if raw_e is None:
                 expiry_raw = "1"
             elif isinstance(raw_e, float):
@@ -100,12 +102,14 @@ def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
             if batch_raw == "1":
                 batch_raw = None
             expiry_dt = _parse_expiry_date(expiry_raw)
-            lots.append({
-                "expiry": expiry_raw,
-                "expiry_dt": expiry_dt,
-                "batch": batch_raw,
-                "qty": qty,
-            })
+            lots.append(
+                {
+                    "expiry": expiry_raw,
+                    "expiry_dt": expiry_dt,
+                    "batch": batch_raw,
+                    "qty": qty,
+                }
+            )
 
         if not lots:
             continue
@@ -121,7 +125,7 @@ def _clean_and_prepare_data(
     orders_df: pd.DataFrame,
     stock_df: pd.DataFrame,
     column_mappings: Optional[dict] = None,
-    additional_columns_config: Optional[List[dict]] = None
+    additional_columns_config: Optional[List[dict]] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Dict[str, List[dict]]]]:
     """
     Clean and standardize input data for analysis.
@@ -168,15 +172,15 @@ def _clean_and_prepare_data(
                 "Tags": "Tags",
                 "Notes": "Notes",
                 "Total": "Total_Price",
-                "Subtotal": "Subtotal"
+                "Subtotal": "Subtotal",
             },
             "stock": {
                 "Артикул": "SKU",
                 "Име": "Product_Name",
                 "Наличност": "Stock",
                 "Годност": "Expiry_Date",
-                "Партида": "Batch"
-            }
+                "Партида": "Batch",
+            },
         }
 
     # Get mappings for orders and stock
@@ -192,20 +196,28 @@ def _clean_and_prepare_data(
 
     # Apply mappings to orders DataFrame
     # Only rename columns that exist in the DataFrame AND are different from internal names
-    orders_rename_map = {csv_col: internal_col for csv_col, internal_col in orders_mappings.items()
-                         if csv_col in orders_df.columns and csv_col != internal_col}
+    orders_rename_map = {
+        csv_col: internal_col
+        for csv_col, internal_col in orders_mappings.items()
+        if csv_col in orders_df.columns and csv_col != internal_col
+    }
     if orders_rename_map:
         orders_df = orders_df.rename(columns=orders_rename_map)
 
     # Apply mappings to stock DataFrame
-    stock_rename_map = {csv_col: internal_col for csv_col, internal_col in stock_mappings.items()
-                        if csv_col in stock_df.columns and csv_col != internal_col}
+    stock_rename_map = {
+        csv_col: internal_col
+        for csv_col, internal_col in stock_mappings.items()
+        if csv_col in stock_df.columns and csv_col != internal_col
+    }
     if stock_rename_map:
         stock_df = stock_df.rename(columns=stock_rename_map)
 
     # Rename additional columns from CSV names to internal names
     if additional_columns_config:
-        logger.info(f"Processing {len(additional_columns_config)} additional columns config")
+        logger.info(
+            f"Processing {len(additional_columns_config)} additional columns config"
+        )
         additional_rename_map = {
             col["csv_name"]: col["internal_name"]
             for col in additional_columns_config
@@ -213,9 +225,13 @@ def _clean_and_prepare_data(
         }
         if additional_rename_map:
             orders_df = orders_df.rename(columns=additional_rename_map)
-            logger.info(f"Renamed {len(additional_rename_map)} additional columns: {list(additional_rename_map.values())}")
+            logger.info(
+                f"Renamed {len(additional_rename_map)} additional columns: {list(additional_rename_map.values())}"
+            )
         else:
-            logger.info("No additional columns to rename (none enabled or found in CSV)")
+            logger.info(
+                "No additional columns to rename (none enabled or found in CSV)"
+            )
 
     # --- Step 1: Data Cleaning (now using internal standard names) ---
     # Forward-fill order-level columns
@@ -240,7 +256,9 @@ def _clean_and_prepare_data(
         for col_name in order_level_additional:
             if col_name in orders_df.columns:
                 orders_df[col_name] = orders_df[col_name].ffill()
-                logger.debug(f"Forward-filled order-level additional column: {col_name}")
+                logger.debug(
+                    f"Forward-filled order-level additional column: {col_name}"
+                )
 
     # Keep only relevant columns (internal names)
     # Base columns (critical + standard optional)
@@ -274,7 +292,8 @@ def _clean_and_prepare_data(
         missing_cols = [
             col["csv_name"]
             for col in additional_columns_config
-            if col.get("enabled", True) and col["internal_name"] not in orders_df.columns
+            if col.get("enabled", True)
+            and col["internal_name"] not in orders_df.columns
         ]
         if missing_cols:
             logger.warning(
@@ -284,9 +303,13 @@ def _clean_and_prepare_data(
 
     # Combine base + additional columns
     columns_to_keep = base_columns + additional_columns
-    logger.info(f"Total columns to keep: {len(columns_to_keep)} ({len(base_columns)} base + {len(additional_columns)} additional)")
+    logger.info(
+        f"Total columns to keep: {len(columns_to_keep)} ({len(base_columns)} base + {len(additional_columns)} additional)"
+    )
     # Filter for existing columns only
-    columns_to_keep_existing = [col for col in columns_to_keep if col in orders_df.columns]
+    columns_to_keep_existing = [
+        col for col in columns_to_keep if col in orders_df.columns
+    ]
     logger.info(f"Columns existing in DataFrame: {len(columns_to_keep_existing)}")
     orders_clean_df = orders_df[columns_to_keep_existing].copy()
 
@@ -310,28 +333,41 @@ def _clean_and_prepare_data(
 
         # Add descriptive product name if missing
         if "Product_Name" in orders_clean_df.columns:
-            orders_clean_df.loc[missing_sku_mask, "Product_Name"] = \
-                orders_clean_df.loc[missing_sku_mask, "Product_Name"].fillna("(No SKU - Shipping/Fee/Note)")
+            orders_clean_df.loc[missing_sku_mask, "Product_Name"] = orders_clean_df.loc[
+                missing_sku_mask, "Product_Name"
+            ].fillna("(No SKU - Shipping/Fee/Note)")
 
     # CRITICAL: Normalize SKU to standard format for consistent merging
     # This handles float artifacts (5170.0 → "5170"), whitespace, and leading zeros
     # Skip normalization for NO_SKU placeholder
     from .csv_utils import normalize_sku
+
     # First, ensure SKU column is string type to avoid dtype errors (pandas 2.x uses 'str')
     dtype_str = str(orders_clean_df["SKU"].dtype)
-    if orders_clean_df["SKU"].dtype != object and dtype_str != 'str' and not dtype_str.startswith('string'):
+    if (
+        orders_clean_df["SKU"].dtype != object
+        and dtype_str != "str"
+        and not dtype_str.startswith("string")
+    ):
         orders_clean_df["SKU"] = orders_clean_df["SKU"].astype(str)
-    orders_clean_df.loc[orders_clean_df["Has_SKU"], "SKU"] = \
-        orders_clean_df.loc[orders_clean_df["Has_SKU"], "SKU"].apply(normalize_sku)
+    orders_clean_df.loc[orders_clean_df["Has_SKU"], "SKU"] = orders_clean_df.loc[
+        orders_clean_df["Has_SKU"], "SKU"
+    ].apply(normalize_sku)
 
     # Clean stock DataFrame (internal names)
     required_stock_cols = ["SKU", "Stock"]
-    stock_cols_to_keep = [col for col in ["SKU", "Product_Name", "Stock"] if col in stock_df.columns]
+    stock_cols_to_keep = [
+        col for col in ["SKU", "Product_Name", "Stock"] if col in stock_df.columns
+    ]
 
     # Verify required columns exist
-    missing_stock_cols = [col for col in required_stock_cols if col not in stock_df.columns]
+    missing_stock_cols = [
+        col for col in required_stock_cols if col not in stock_df.columns
+    ]
     if missing_stock_cols:
-        raise ValueError(f"Missing required columns in stock DataFrame after mapping: {missing_stock_cols}")
+        raise ValueError(
+            f"Missing required columns in stock DataFrame after mapping: {missing_stock_cols}"
+        )
 
     # Detect whether lot columns (Expiry_Date / Batch) are present after mapping
     stock_lot_cols = [c for c in ["Expiry_Date", "Batch"] if c in stock_df.columns]
@@ -388,34 +424,33 @@ def _clean_and_prepare_data(
         orders_clean_df["Original_Quantity"] = orders_clean_df["Quantity"]
         orders_clean_df["Is_Set_Component"] = False
 
-    logger.debug(f"Cleaned {len(orders_clean_df)} order rows, {len(stock_clean_df)} SKUs")
+    logger.debug(
+        f"Cleaned {len(orders_clean_df)} order rows, {len(stock_clean_df)} SKUs"
+    )
     return orders_clean_df, stock_clean_df, fifo_lots
 
 
-def _prioritize_orders(orders_df: pd.DataFrame) -> pd.DataFrame:
+def _prioritize_orders(
+    orders_df: pd.DataFrame, mode: str = "multi_first"
+) -> pd.DataFrame:
     """
-    Prioritize orders to maximize fulfillment completion rate.
+    Prioritize orders for stock allocation.
 
-    Strategy:
-    - Multi-item orders first (higher completion priority)
-    - Then single-item orders
-    - Within each group, sorted by order number for consistency
+    Strategy (controlled by ``mode``):
+    - ``"multi_first"`` (default): multi-item orders first, then by order number ASC.
+      Maximizes the number of *complete* orders fulfilled.
+    - ``"fifo"``: strictly oldest order first (order number ASC), regardless of item count.
 
-    This ensures maximum number of complete orders fulfilled.
     Uses VECTORIZED groupby operations instead of iterrows().
 
     Args:
         orders_df: Cleaned orders DataFrame
+        mode: ``"multi_first"`` or ``"fifo"``
 
     Returns:
         DataFrame with columns ["Order_Number", "item_count"] in priority sequence
-
-    Note:
-        Multi-item orders are prioritized because completing them
-        provides better customer satisfaction than partial fulfillment
-        of multiple orders.
     """
-    logger.debug("Phase 2/7: Prioritizing orders (multi-item first)...")
+    logger.debug(f"Phase 2/7: Prioritizing orders (mode={mode})...")
 
     # VECTORIZED: Count items per order using groupby
     order_item_counts = orders_df.groupby("Order_Number").size().rename("item_count")
@@ -423,17 +458,22 @@ def _prioritize_orders(orders_df: pd.DataFrame) -> pd.DataFrame:
     # Merge counts back to get unique orders with their counts
     orders_with_counts = pd.merge(orders_df, order_item_counts, on="Order_Number")
 
-    # Get unique orders and sort by:
-    #   1. item_count descending  (multi-line orders first)
-    #   2. numeric part of Order_Number ascending  (oldest/lowest number first within group)
     # Using order_number_sort_key avoids lexicographic issues (e.g. "#9" vs "#10").
-    unique_orders = orders_with_counts[["Order_Number", "item_count"]].drop_duplicates().copy()
-    unique_orders["_order_sort"] = unique_orders["Order_Number"].apply(order_number_sort_key)
-    prioritized_orders = (
-        unique_orders
-        .sort_values(by=["item_count", "_order_sort"], ascending=[False, True])
-        .drop(columns=["_order_sort"])
+    unique_orders = (
+        orders_with_counts[["Order_Number", "item_count"]].drop_duplicates().copy()
     )
+    unique_orders["_order_sort"] = unique_orders["Order_Number"].apply(
+        order_number_sort_key
+    )
+
+    if mode == "fifo":
+        prioritized_orders = unique_orders.sort_values(
+            by=["_order_sort"], ascending=True
+        ).drop(columns=["_order_sort"])
+    else:  # multi_first (default, existing behavior)
+        prioritized_orders = unique_orders.sort_values(
+            by=["item_count", "_order_sort"], ascending=[False, True]
+        ).drop(columns=["_order_sort"])
 
     logger.debug(f"Prioritized {len(prioritized_orders)} unique orders")
     return prioritized_orders
@@ -443,7 +483,7 @@ def _simulate_stock_allocation(
     orders_df: pd.DataFrame,
     stock_df: pd.DataFrame,
     prioritized_orders: pd.DataFrame,
-    fifo_lots: Optional[Dict[str, List[dict]]] = None
+    fifo_lots: Optional[Dict[str, List[dict]]] = None,
 ) -> Tuple[Dict[str, dict], Dict[str, Dict[str, List[dict]]]]:
     """
     Simulate stock allocation across prioritized orders.
@@ -524,7 +564,7 @@ def _simulate_stock_allocation(
             else:
                 fulfillment_results[order_number] = {
                     "fulfillable": False,
-                    "reason": "; ".join(unfulfillable_reasons)
+                    "reason": "; ".join(unfulfillable_reasons),
                 }
 
         final_stock_dict = live_stock
@@ -565,11 +605,13 @@ def _simulate_stock_allocation(
                             break
                         take = min(lot["qty"], remaining)
                         if take > 0:
-                            sku_alloc.append({
-                                "expiry": lot["expiry"],
-                                "batch": lot["batch"],
-                                "qty_allocated": take,
-                            })
+                            sku_alloc.append(
+                                {
+                                    "expiry": lot["expiry"],
+                                    "batch": lot["batch"],
+                                    "qty_allocated": take,
+                                }
+                            )
                             lot["qty"] -= take
                             remaining -= take
                     order_alloc[sku] = sku_alloc
@@ -578,25 +620,29 @@ def _simulate_stock_allocation(
             else:
                 fulfillment_results[order_number] = {
                     "fulfillable": False,
-                    "reason": "; ".join(unfulfillable_reasons)
+                    "reason": "; ".join(unfulfillable_reasons),
                 }
 
         # Derive final stock from remaining live_lots; seed from stock_df for zero-stock SKUs
         # (SKUs whose all lots had qty<=0 are absent from live_lots; seed preserves them at 0)
-        final_stock_dict = dict(zip(stock_df["SKU"], stock_df["Stock"])) if "Stock" in stock_df.columns else {}
+        final_stock_dict = (
+            dict(zip(stock_df["SKU"], stock_df["Stock"]))
+            if "Stock" in stock_df.columns
+            else {}
+        )
         for sku, lots in live_lots.items():
             final_stock_dict[sku] = sum(lot["qty"] for lot in lots)
 
-    fulfillable_count = sum(1 for r in fulfillment_results.values() if r.get("fulfillable", False))
+    fulfillable_count = sum(
+        1 for r in fulfillment_results.values() if r.get("fulfillable", False)
+    )
     logger.debug(f"Fulfillable: {fulfillable_count}/{len(fulfillment_results)} orders")
 
     return fulfillment_results, lot_allocations, final_stock_dict
 
 
 def _calculate_final_stock(
-    stock_df: pd.DataFrame,
-    fulfillment_results: Dict[str, str],
-    orders_df: pd.DataFrame
+    stock_df: pd.DataFrame, fulfillment_results: Dict[str, str], orders_df: pd.DataFrame
 ) -> pd.DataFrame:
     """
     Calculate final stock levels after fulfillment simulation.
@@ -632,16 +678,18 @@ def _calculate_final_stock(
                     live_stock[sku] -= qty
 
     # Convert to DataFrame
-    final_stock_levels = pd.Series(live_stock, name="Final_Stock").reset_index().rename(columns={"index": "SKU"})
+    final_stock_levels = (
+        pd.Series(live_stock, name="Final_Stock")
+        .reset_index()
+        .rename(columns={"index": "SKU"})
+    )
 
     logger.debug(f"Calculated final stock for {len(final_stock_levels)} SKUs")
     return final_stock_levels
 
 
 def _detect_repeated_orders(
-    final_df: pd.DataFrame,
-    history_df: pd.DataFrame,
-    repeat_window_days: int = 1
+    final_df: pd.DataFrame, history_df: pd.DataFrame, repeat_window_days: int = 1
 ) -> pd.Series:
     """
     Detect orders that appear in historical fulfillment data AFTER specified time window.
@@ -673,12 +721,16 @@ def _detect_repeated_orders(
         >>> repeated = _detect_repeated_orders(final_df, history_df, repeat_window_days=1)
         >>> final_df['System_note'] = repeated
     """
-    logger.debug(f"Phase 5/7: Detecting repeated orders (window: {repeat_window_days} days)...")
+    logger.debug(
+        f"Phase 5/7: Detecting repeated orders (window: {repeat_window_days} days)..."
+    )
 
     # Handle empty history or missing date column (backward compatibility)
     if history_df.empty or "Execution_Date" not in history_df.columns:
         logger.warning("History has no Execution_Date column, using full history")
-        repeated_orders = history_df["Order_Number"].unique() if not history_df.empty else []
+        repeated_orders = (
+            history_df["Order_Number"].unique() if not history_df.empty else []
+        )
     else:
         # FILTER history by date window
         from datetime import datetime, timedelta
@@ -687,8 +739,7 @@ def _detect_repeated_orders(
             # Parse dates (handle errors gracefully)
             history_df_copy = history_df.copy()
             history_df_copy["Execution_Date_Parsed"] = pd.to_datetime(
-                history_df_copy["Execution_Date"],
-                errors='coerce'
+                history_df_copy["Execution_Date"], errors="coerce"
             )
 
             # Check if all dates are invalid (NaT)
@@ -697,14 +748,18 @@ def _detect_repeated_orders(
                 repeated_orders = history_df["Order_Number"].unique()
             else:
                 # Normalize to date-only (remove time component) for consistent comparison
-                history_df_copy["Execution_Date_Parsed"] = history_df_copy["Execution_Date_Parsed"].dt.normalize()
+                history_df_copy["Execution_Date_Parsed"] = history_df_copy[
+                    "Execution_Date_Parsed"
+                ].dt.normalize()
 
                 # Calculate cutoff: today minus N days
                 # We want orders that are STRICTLY older than (today - N days)
                 # Example: if repeat_window_days=1 and today=2026-01-16:
                 #   - cutoff = 2026-01-16 (today)
                 #   - We want: Execution_Date < 2026-01-16 (i.e., 2026-01-15 and earlier)
-                today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                today = datetime.now().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
                 cutoff_date = today - timedelta(days=repeat_window_days - 1)
 
                 # Filter history: only orders executed BEFORE cutoff (>= N days ago)
@@ -725,14 +780,12 @@ def _detect_repeated_orders(
             logger.warning("Falling back to full history due to date parsing error")
 
     # VECTORIZED: Check if Order_Number exists in filtered history
-    repeated = np.where(
-        final_df["Order_Number"].isin(repeated_orders),
-        "Repeat",
-        ""
-    )
+    repeated = np.where(final_df["Order_Number"].isin(repeated_orders), "Repeat", "")
 
     repeated_count = (repeated == "Repeat").sum()
-    logger.debug(f"Found {repeated_count} repeated orders within {repeat_window_days} days")
+    logger.debug(
+        f"Found {repeated_count} repeated orders within {repeat_window_days} days"
+    )
 
     return pd.Series(repeated, index=final_df.index)
 
@@ -783,7 +836,7 @@ def _merge_results_to_dataframe(
     courier_mappings: Optional[dict] = None,
     repeat_window_days: int = 1,
     additional_columns_config: Optional[list] = None,
-    lot_allocations: Optional[Dict[str, Dict[str, List[dict]]]] = None
+    lot_allocations: Optional[Dict[str, Dict[str, List[dict]]]] = None,
 ) -> pd.DataFrame:
     """
     Merge all analysis results into final output DataFrame.
@@ -832,10 +885,12 @@ def _merge_results_to_dataframe(
 
     if has_product_name_in_orders and has_product_name_in_stock:
         # Both have Product_Name - use suffixes and prefer orders
-        final_df = pd.merge(orders_df, stock_df, on="SKU", how="left", suffixes=('', '_stock'))
+        final_df = pd.merge(
+            orders_df, stock_df, on="SKU", how="left", suffixes=("", "_stock")
+        )
         # Drop stock Product_Name, keep orders Product_Name
-        if 'Product_Name_stock' in final_df.columns:
-            final_df = final_df.drop(columns=['Product_Name_stock'])
+        if "Product_Name_stock" in final_df.columns:
+            final_df = final_df.drop(columns=["Product_Name_stock"])
     else:
         # Simple merge - no conflict
         final_df = pd.merge(orders_df, stock_df, on="SKU", how="left")
@@ -843,10 +898,7 @@ def _merge_results_to_dataframe(
     # --- Add Warehouse_Name column from stock file ---
     # Create stock name lookup dictionary
     if "Product_Name" in stock_df.columns:
-        stock_lookup = dict(zip(
-            stock_df["SKU"],
-            stock_df["Product_Name"]
-        ))
+        stock_lookup = dict(zip(stock_df["SKU"], stock_df["Product_Name"]))
 
         logger.info(f"Creating Warehouse_Name lookup: {len(stock_lookup)} SKUs")
 
@@ -893,11 +945,15 @@ def _merge_results_to_dataframe(
     def get_fulfillment_status(order_number):
         result = fulfillment_results.get(order_number, {})
         if isinstance(result, dict):
-            return "Fulfillable" if result.get("fulfillable", False) else "Not Fulfillable"
+            return (
+                "Fulfillable" if result.get("fulfillable", False) else "Not Fulfillable"
+            )
         # Backward compatibility: if result is a string
         return result
 
-    final_df["Order_Fulfillment_Status"] = final_df["Order_Number"].map(get_fulfillment_status)
+    final_df["Order_Fulfillment_Status"] = final_df["Order_Number"].map(
+        get_fulfillment_status
+    )
 
     # Destination_Country now populated for ALL couriers (not just DHL)
     # All major couriers (DHL, PostOne, DPD) ship internationally
@@ -908,7 +964,9 @@ def _merge_results_to_dataframe(
         final_df["Destination_Country"] = ""
 
     # Detect repeated orders - VECTORIZED
-    final_df["System_note"] = _detect_repeated_orders(final_df, history_df, repeat_window_days)
+    final_df["System_note"] = _detect_repeated_orders(
+        final_df, history_df, repeat_window_days
+    )
 
     # Add unfulfillable reasons to System_note
     def add_fulfillment_reason(row):
@@ -935,8 +993,12 @@ def _merge_results_to_dataframe(
         if no_sku_mask.any():
             final_df.loc[no_sku_mask, "Order_Fulfillment_Status"] = "Not Fulfillable"
             # Add NO_SKU tag to System_note
-            final_df.loc[no_sku_mask, "System_note"] = final_df.loc[no_sku_mask, "System_note"].apply(
-                lambda note: f"{note} [NO_SKU]" if pd.notna(note) and note != "" else "[NO_SKU]"
+            final_df.loc[no_sku_mask, "System_note"] = final_df.loc[
+                no_sku_mask, "System_note"
+            ].apply(
+                lambda note: f"{note} [NO_SKU]"
+                if pd.notna(note) and note != ""
+                else "[NO_SKU]"
             )
             logger.info(f"Marked {no_sku_mask.sum()} NO_SKU items as Not Fulfillable")
 
@@ -955,8 +1017,10 @@ def _merge_results_to_dataframe(
 
     # Attach lot allocation details per order/SKU row
     if lot_allocations:
+
         def _get_lot_details(row):
             return lot_allocations.get(row["Order_Number"], {}).get(row["SKU"])
+
         final_df["Lot_Details"] = final_df.apply(_get_lot_details, axis=1)
     else:
         final_df["Lot_Details"] = None
@@ -982,7 +1046,7 @@ def _merge_results_to_dataframe(
         "System_note",
         "Status_Note",
         "Internal_Tags",  # Structured tagging system
-        "Lot_Details",    # Per-lot FIFO allocation data (None when no lot tracking)
+        "Lot_Details",  # Per-lot FIFO allocation data (None when no lot tracking)
     ]
     if "Total_Price" in final_df.columns:
         # Insert 'Total_Price' into the list at a specific position for consistent column order.
@@ -1007,7 +1071,9 @@ def _merge_results_to_dataframe(
         ]
 
         if enabled_additional:
-            logger.info(f"Adding {len(enabled_additional)} enabled additional columns to output: {enabled_additional}")
+            logger.info(
+                f"Adding {len(enabled_additional)} enabled additional columns to output: {enabled_additional}"
+            )
             # Add enabled additional columns at the end
             output_columns.extend(enabled_additional)
         else:
@@ -1018,14 +1084,18 @@ def _merge_results_to_dataframe(
     # Filter the list to include only columns that actually exist in the DataFrame.
     # This prevents errors if a column is unexpectedly missing.
     final_output_columns = [col for col in output_columns if col in final_df.columns]
-    final_df = final_df[final_output_columns].copy()  # Use .copy() to avoid SettingWithCopyWarning
+    final_df = final_df[
+        final_output_columns
+    ].copy()  # Use .copy() to avoid SettingWithCopyWarning
 
-    logger.debug(f"Final DataFrame: {len(final_df)} rows, {len(final_df.columns)} columns")
+    logger.debug(
+        f"Final DataFrame: {len(final_df)} rows, {len(final_df.columns)} columns"
+    )
     return final_df
 
 
 def _generate_summary_reports(
-    final_df: pd.DataFrame
+    final_df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate summary reports for fulfilled and missing items.
@@ -1050,34 +1120,56 @@ def _generate_summary_reports(
 
     # Group by SKU and Product_Name if available, otherwise just SKU
     if "Product_Name" in present_df.columns:
-        summary_present_df = present_df.groupby(["SKU", "Product_Name"], as_index=False)["Quantity"].sum()
-        summary_present_df = summary_present_df.rename(columns={"Product_Name": "Name", "Quantity": "Total Quantity"})
+        summary_present_df = present_df.groupby(
+            ["SKU", "Product_Name"], as_index=False
+        )["Quantity"].sum()
+        summary_present_df = summary_present_df.rename(
+            columns={"Product_Name": "Name", "Quantity": "Total Quantity"}
+        )
         summary_present_df = summary_present_df[["Name", "SKU", "Total Quantity"]]
     else:
-        summary_present_df = present_df.groupby(["SKU"], as_index=False)["Quantity"].sum()
+        summary_present_df = present_df.groupby(["SKU"], as_index=False)[
+            "Quantity"
+        ].sum()
         summary_present_df["Name"] = "N/A"
-        summary_present_df = summary_present_df.rename(columns={"Quantity": "Total Quantity"})
+        summary_present_df = summary_present_df.rename(
+            columns={"Quantity": "Total Quantity"}
+        )
         summary_present_df = summary_present_df[["Name", "SKU", "Total Quantity"]]
 
     # --- New logic for Summary_Missing ---
     # 1. Get all items from orders that could not be fulfilled.
-    not_fulfilled_df = final_df[final_df["Order_Fulfillment_Status"] == "Not Fulfillable"].copy()
+    not_fulfilled_df = final_df[
+        final_df["Order_Fulfillment_Status"] == "Not Fulfillable"
+    ].copy()
 
     # 2. Identify items that are "truly missing" by comparing required quantity vs initial stock.
-    truly_missing_df = not_fulfilled_df[not_fulfilled_df["Quantity"] > not_fulfilled_df["Stock"]].copy()
+    truly_missing_df = not_fulfilled_df[
+        not_fulfilled_df["Quantity"] > not_fulfilled_df["Stock"]
+    ].copy()
 
     # 3. Create the summary report from this filtered data.
     if not truly_missing_df.empty:
         # Handle Product_Name if available, otherwise use N/A
         if "Product_Name" in truly_missing_df.columns:
-            truly_missing_df["Product_Name"] = truly_missing_df["Product_Name"].fillna("N/A")
-            summary_missing_df = truly_missing_df.groupby(["SKU", "Product_Name"], as_index=False)["Quantity"].sum()
-            summary_missing_df = summary_missing_df.rename(columns={"Product_Name": "Name", "Quantity": "Total Quantity"})
+            truly_missing_df["Product_Name"] = truly_missing_df["Product_Name"].fillna(
+                "N/A"
+            )
+            summary_missing_df = truly_missing_df.groupby(
+                ["SKU", "Product_Name"], as_index=False
+            )["Quantity"].sum()
+            summary_missing_df = summary_missing_df.rename(
+                columns={"Product_Name": "Name", "Quantity": "Total Quantity"}
+            )
             summary_missing_df = summary_missing_df[["Name", "SKU", "Total Quantity"]]
         else:
-            summary_missing_df = truly_missing_df.groupby(["SKU"], as_index=False)["Quantity"].sum()
+            summary_missing_df = truly_missing_df.groupby(["SKU"], as_index=False)[
+                "Quantity"
+            ].sum()
             summary_missing_df["Name"] = "N/A"
-            summary_missing_df = summary_missing_df.rename(columns={"Quantity": "Total Quantity"})
+            summary_missing_df = summary_missing_df.rename(
+                columns={"Quantity": "Total Quantity"}
+            )
             summary_missing_df = summary_missing_df[["Name", "SKU", "Total Quantity"]]
     else:
         summary_missing_df = pd.DataFrame(columns=["Name", "SKU", "Total Quantity"])
@@ -1160,13 +1252,21 @@ def _generalize_shipping_method(method, courier_mappings=None):
     return method_str.title()
 
 
-def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_mappings=None, repeat_window_days=1):
+def run_analysis(
+    stock_df,
+    orders_df,
+    history_df,
+    column_mappings=None,
+    courier_mappings=None,
+    repeat_window_days=1,
+    mode: str = "multi_first",
+):
     """
     Main analysis engine for order fulfillment simulation.
 
     Orchestrates complete analysis workflow through 7 specialized phases:
     1. Data cleaning and preparation
-    2. Order prioritization (multi-item first strategy)
+    2. Order prioritization
     3. Stock allocation simulation
     4. Final stock calculations
     5. Repeated orders detection
@@ -1174,7 +1274,7 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
     7. Summary statistics generation
 
     Algorithm:
-    - Prioritizes multi-item orders for maximum completion rate
+    - Prioritizes orders per ``mode`` (see below)
     - Simulates stock allocation in priority sequence
     - Tracks repeated orders against history
     - Provides comprehensive fulfillment analytics
@@ -1202,6 +1302,10 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         repeat_window_days (int, optional): Number of days to look back for repeat
             detection. Orders fulfilled within this window are marked as "Repeat".
             Default: 1 (only yesterday's fulfillments).
+        mode (str, optional): Order prioritization strategy.
+            ``"multi_first"`` (default): multi-item orders processed first —
+            maximizes the number of complete orders fulfilled.
+            ``"fifo"``: strictly oldest order first regardless of item count.
 
     Returns:
         tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
@@ -1236,11 +1340,19 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         logger.info("Phase 1/7: Data cleaning and preparation")
 
         # Extract additional columns config if present
-        additional_columns_config = column_mappings.get("additional_columns", []) if column_mappings else []
-        enabled_additional = [col for col in additional_columns_config if col.get("enabled", False)]
-        logger.info(f"Additional columns: {len(additional_columns_config)} total, {len(enabled_additional)} enabled")
+        additional_columns_config = (
+            column_mappings.get("additional_columns", []) if column_mappings else []
+        )
+        enabled_additional = [
+            col for col in additional_columns_config if col.get("enabled", False)
+        ]
+        logger.info(
+            f"Additional columns: {len(additional_columns_config)} total, {len(enabled_additional)} enabled"
+        )
         if enabled_additional:
-            logger.info(f"Enabled columns: {[col['csv_name'] for col in enabled_additional]}")
+            logger.info(
+                f"Enabled columns: {[col['csv_name'] for col in enabled_additional]}"
+            )
 
         orders_clean, stock_clean, fifo_lots = _clean_and_prepare_data(
             orders_df, stock_df, column_mappings, additional_columns_config
@@ -1248,16 +1360,20 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         if fifo_lots is not None:
             logger.info(f"FIFO lot tracking enabled for {len(fifo_lots)} SKUs")
 
-        logger.info(f"After cleaning: orders_clean has {len(orders_clean.columns)} columns: {list(orders_clean.columns)}")
+        logger.info(
+            f"After cleaning: orders_clean has {len(orders_clean.columns)} columns: {list(orders_clean.columns)}"
+        )
 
         # Phase 2: Prioritize orders
-        logger.info("Phase 2/7: Order prioritization (multi-item first)")
-        prioritized_orders = _prioritize_orders(orders_clean)
+        logger.info(f"Phase 2/7: Order prioritization (mode={mode})")
+        prioritized_orders = _prioritize_orders(orders_clean, mode=mode)
 
         # Phase 3: Simulate stock allocation
         logger.info("Phase 3/7: Stock allocation simulation")
-        fulfillment_results, lot_allocations, final_stock_dict = _simulate_stock_allocation(
-            orders_clean, stock_clean, prioritized_orders, fifo_lots
+        fulfillment_results, lot_allocations, final_stock_dict = (
+            _simulate_stock_allocation(
+                orders_clean, stock_clean, prioritized_orders, fifo_lots
+            )
         )
 
         # Phase 4: Convert live stock dict to DataFrame (no replay needed — simulation already tracked it)
@@ -1271,11 +1387,20 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         # Phase 5: Already handled in Phase 6 (_detect_repeated_orders is called there)
         # Phase 6: Merge all results
         logger.info("Phase 5/7: Merging results to final DataFrame")
-        order_item_counts = orders_clean.groupby("Order_Number").size().rename("item_count")
+        order_item_counts = (
+            orders_clean.groupby("Order_Number").size().rename("item_count")
+        )
         final_df = _merge_results_to_dataframe(
-            orders_clean, stock_clean, order_item_counts, final_stock,
-            fulfillment_results, history_df, courier_mappings, repeat_window_days,
-            additional_columns_config, lot_allocations
+            orders_clean,
+            stock_clean,
+            order_item_counts,
+            final_stock,
+            fulfillment_results,
+            history_df,
+            courier_mappings,
+            repeat_window_days,
+            additional_columns_config,
+            lot_allocations,
         )
 
         # Phase 7: Generate summary reports
@@ -1289,8 +1414,12 @@ def run_analysis(stock_df, orders_df, history_df, column_mappings=None, courier_
         logger.info("=" * 60)
         logger.info("ANALYSIS COMPLETED SUCCESSFULLY")
         logger.info(f"Total Orders Completed: {stats['total_orders_completed']}")
-        logger.info(f"Total Orders Not Completed: {stats['total_orders_not_completed']}")
-        logger.info(f"Final DataFrame: {len(final_df)} rows, {len(final_df.columns)} columns")
+        logger.info(
+            f"Total Orders Not Completed: {stats['total_orders_not_completed']}"
+        )
+        logger.info(
+            f"Final DataFrame: {len(final_df)} rows, {len(final_df.columns)} columns"
+        )
         logger.info(f"Columns: {list(final_df.columns)}")
         logger.info("=" * 60)
 
@@ -1333,7 +1462,12 @@ def recalculate_statistics(df):
     """
     # Validate DataFrame has required columns
     # Shipping_Provider is optional - older sessions may not have it
-    required_cols = ["Order_Fulfillment_Status", "Order_Number", "Quantity", "System_note"]
+    required_cols = [
+        "Order_Fulfillment_Status",
+        "Order_Number",
+        "Quantity",
+        "System_note",
+    ]
     missing = [col for col in required_cols if col not in df.columns]
 
     if missing:
@@ -1352,20 +1486,28 @@ def recalculate_statistics(df):
     not_completed_orders_df = df[df["Order_Fulfillment_Status"] == "Not Fulfillable"]
 
     stats["total_orders_completed"] = int(completed_orders_df["Order_Number"].nunique())
-    stats["total_orders_not_completed"] = int(not_completed_orders_df["Order_Number"].nunique())
+    stats["total_orders_not_completed"] = int(
+        not_completed_orders_df["Order_Number"].nunique()
+    )
     stats["total_items_to_write_off"] = int(completed_orders_df["Quantity"].sum())
-    stats["total_items_not_to_write_off"] = int(not_completed_orders_df["Quantity"].sum())
+    stats["total_items_not_to_write_off"] = int(
+        not_completed_orders_df["Quantity"].sum()
+    )
 
     courier_stats = []
     if not completed_orders_df.empty:
         # Fill NA to include 'Unknown' providers in the stats
-        completed_orders_df.loc[:, "Shipping_Provider"] = completed_orders_df["Shipping_Provider"].fillna("Unknown")
+        completed_orders_df.loc[:, "Shipping_Provider"] = completed_orders_df[
+            "Shipping_Provider"
+        ].fillna("Unknown")
         grouped_by_courier = completed_orders_df.groupby("Shipping_Provider")
         for provider, group in grouped_by_courier:
             courier_data = {
                 "courier_id": provider,
                 "orders_assigned": int(group["Order_Number"].nunique()),
-                "repeated_orders_found": int(group[group["System_note"] == "Repeat"]["Order_Number"].nunique()),
+                "repeated_orders_found": int(
+                    group[group["System_note"] == "Repeat"]["Order_Number"].nunique()
+                ),
             }
             courier_stats.append(courier_data)
     # Keep empty list as is - UI will handle display appropriately
@@ -1389,7 +1531,11 @@ def recalculate_statistics(df):
                     return {}
                 exploded = (
                     rows_df[["Order_Number", "Internal_Tags"]]
-                    .assign(Internal_Tags=lambda d: d["Internal_Tags"].fillna("[]").apply(parse_tags))
+                    .assign(
+                        Internal_Tags=lambda d: d["Internal_Tags"]
+                        .fillna("[]")
+                        .apply(parse_tags)
+                    )
                     .explode("Internal_Tags")
                     .rename(columns={"Internal_Tags": "tag"})
                     .dropna(subset=["tag"])
@@ -1422,23 +1568,39 @@ def recalculate_statistics(df):
         # Create a helper column for fulfillable quantity
         df_temp = df.copy()
         df_temp["Fulfillable_Qty"] = df_temp.apply(
-            lambda row: row["Quantity"] if row["Order_Fulfillment_Status"] == "Fulfillable" else 0,
-            axis=1
+            lambda row: row["Quantity"]
+            if row["Order_Fulfillment_Status"] == "Fulfillable"
+            else 0,
+            axis=1,
         )
 
         # Group by SKU and aggregate
-        sku_groups = df_temp.groupby("SKU").agg({
-            "Quantity": "sum",  # Total quantity across all orders
-            "Product_Name": "first",  # Product name (should be same for all rows)
-            "Warehouse_Name": "first",  # Warehouse name from stock
-            "Fulfillable_Qty": "sum"  # Sum of fulfillable quantities
-        }).reset_index()
+        sku_groups = (
+            df_temp.groupby("SKU")
+            .agg(
+                {
+                    "Quantity": "sum",  # Total quantity across all orders
+                    "Product_Name": "first",  # Product name (should be same for all rows)
+                    "Warehouse_Name": "first",  # Warehouse name from stock
+                    "Fulfillable_Qty": "sum",  # Sum of fulfillable quantities
+                }
+            )
+            .reset_index()
+        )
 
         # Rename columns for clarity
-        sku_groups.columns = ["SKU", "Total_Quantity", "Product_Name", "Warehouse_Name", "Fulfillable_Items"]
+        sku_groups.columns = [
+            "SKU",
+            "Total_Quantity",
+            "Product_Name",
+            "Warehouse_Name",
+            "Fulfillable_Items",
+        ]
 
         # Calculate not fulfillable items
-        sku_groups["Not_Fulfillable_Items"] = sku_groups["Total_Quantity"] - sku_groups["Fulfillable_Items"]
+        sku_groups["Not_Fulfillable_Items"] = (
+            sku_groups["Total_Quantity"] - sku_groups["Fulfillable_Items"]
+        )
 
         # Sort by total quantity (descending)
         sku_groups = sku_groups.sort_values("Total_Quantity", ascending=False)
@@ -1543,8 +1705,13 @@ def toggle_order_fulfillment(df, order_number):
             if sku not in known_skus:
                 # Find one of the order rows to copy base data from
                 template_row = order_items.iloc[0].to_dict()
-                new_row = {key: (None if key not in ["SKU", "Quantity"] else template_row[key]) for key in df.columns}
-                new_row.update({"SKU": sku, "Quantity": 0, "Stock": 0, "Final_Stock": 0})
+                new_row = {
+                    key: (None if key not in ["SKU", "Quantity"] else template_row[key])
+                    for key in df.columns
+                }
+                new_row.update(
+                    {"SKU": sku, "Quantity": 0, "Stock": 0, "Final_Stock": 0}
+                )
                 # Use pd.concat instead of df.loc[len(df)] for robustness
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
