@@ -48,14 +48,17 @@ def _get_sku_dtype_dict(column_mappings: dict, file_type: str) -> dict:
     mappings = column_mappings.get(file_type, {})
 
     # Find all CSV column names that map to SKU
-    sku_columns = [csv_col for csv_col, internal_name in mappings.items()
-                   if internal_name == "SKU"]
+    sku_columns = [
+        csv_col for csv_col, internal_name in mappings.items() if internal_name == "SKU"
+    ]
 
     # Create dtype dict: {column_name: str}
     dtype_dict = {col: str for col in sku_columns}
 
     if dtype_dict:
-        logger.info(f"Forcing string dtype for {file_type} SKU columns: {list(dtype_dict.keys())}")
+        logger.info(
+            f"Forcing string dtype for {file_type} SKU columns: {list(dtype_dict.keys())}"
+        )
 
     return dtype_dict
 
@@ -80,25 +83,35 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str
     # Parse Internal_Tags: "[]" JSON string → Python list
     tags_raw = first_row.get("Internal_Tags", "[]") or "[]"
     try:
-        internal_tags: List[str] = json.loads(tags_raw) if isinstance(tags_raw, str) else []
+        internal_tags: List[str] = (
+            json.loads(tags_raw) if isinstance(tags_raw, str) else []
+        )
     except (json.JSONDecodeError, TypeError):
         internal_tags = []
 
     # Parse Tags: "tag1, tag2" CSV string → list
     tags_value = first_row.get("Tags", "") or ""
-    tags_list: List[str] = [t.strip() for t in str(tags_value).split(',') if t.strip()] if str(tags_value).strip() else []
+    tags_list: List[str] = (
+        [t.strip() for t in str(tags_value).split(",") if t.strip()]
+        if str(tags_value).strip()
+        else []
+    )
 
     # Optional Order_Min_Box (only present if weight config is active)
     # pd.isna() handles None, float('nan'), pd.NaT from pandas mixed-type columns
     min_box_raw = first_row.get("Order_Min_Box", None)
     order_min_box: Optional[str] = (
         str(min_box_raw)
-        if min_box_raw is not None and not pd.isna(min_box_raw) and str(min_box_raw) != ""
+        if min_box_raw is not None
+        and not pd.isna(min_box_raw)
+        and str(min_box_raw) != ""
         else None
     )
 
     shipping_provider: str = str(first_row.get("Shipping_Provider", "") or "")
-    fulfillment_status: str = str(first_row.get("Order_Fulfillment_Status", "Unknown") or "Unknown")
+    fulfillment_status: str = str(
+        first_row.get("Order_Fulfillment_Status", "Unknown") or "Unknown"
+    )
     destination_country: str = str(first_row.get("Destination_Country", "") or "")
 
     # Build items list with safe Quantity conversion (guards against NaN / non-numeric)
@@ -110,18 +123,24 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str
 
         qty_raw = row.get("Quantity", 0)
         try:
-            quantity: int = int(qty_raw) if qty_raw is not None and not pd.isna(qty_raw) else 0
+            quantity: int = (
+                int(qty_raw) if qty_raw is not None and not pd.isna(qty_raw) else 0
+            )
         except (ValueError, TypeError):
             quantity = 0
 
-        items.append({
-            "sku": str(row.get("SKU", "")),
-            "product_name": str(warehouse_name),
-            "quantity": quantity,
-            "order_fulfillment_status": str(row.get("Order_Fulfillment_Status", "") or ""),
-            "status_note": str(row.get("Status_Note", "") or ""),
-            "system_note": str(row.get("System_note", "") or ""),
-        })
+        items.append(
+            {
+                "sku": str(row.get("SKU", "")),
+                "product_name": str(warehouse_name),
+                "quantity": quantity,
+                "order_fulfillment_status": str(
+                    row.get("Order_Fulfillment_Status", "") or ""
+                ),
+                "status_note": str(row.get("Status_Note", "") or ""),
+                "system_note": str(row.get("System_note", "") or ""),
+            }
+        )
 
     return {
         "order_number": str(order_number),
@@ -167,7 +186,9 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> Dict[str, Any]:
 
         # Calculate statistics
         total_orders = len(orders_data)
-        fulfillable_orders = len([o for o in orders_data if o["order_fulfillment_status"] == "Fulfillable"])
+        fulfillable_orders = len(
+            [o for o in orders_data if o["order_fulfillment_status"] == "Fulfillable"]
+        )
         not_fulfillable_orders = total_orders - fulfillable_orders
 
         analysis_data = {
@@ -175,7 +196,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> Dict[str, Any]:
             "total_orders": total_orders,
             "fulfillable_orders": fulfillable_orders,
             "not_fulfillable_orders": not_fulfillable_orders,
-            "orders": orders_data
+            "orders": orders_data,
         }
 
         return analysis_data
@@ -188,7 +209,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> Dict[str, Any]:
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
             "orders": [],
-            "error": f"Missing required column: {e}"
+            "error": f"Missing required column: {e}",
         }
     except (ValueError, TypeError) as e:
         logger.error(f"Invalid data type in DataFrame for packing analysis: {e}")
@@ -198,7 +219,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> Dict[str, Any]:
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
             "orders": [],
-            "error": f"Invalid data type: {e}"
+            "error": f"Invalid data type: {e}",
         }
     except AttributeError as e:
         logger.error(f"Invalid DataFrame object for packing analysis: {e}")
@@ -208,17 +229,19 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> Dict[str, Any]:
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
             "orders": [],
-            "error": f"Invalid DataFrame: {e}"
+            "error": f"Invalid DataFrame: {e}",
         }
     except Exception as e:
-        logger.error(f"Unexpected error creating analysis data for packing: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error creating analysis data for packing: {e}", exc_info=True
+        )
         return {
             "analyzed_at": datetime.now().isoformat(),
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
             "orders": [],
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -253,17 +276,16 @@ def _validate_dataframes(orders_df, stock_df, config):
     # For backward compatibility: check if v1 format and migrate
     if not orders_mappings and "orders_required" in column_mappings:
         # V1 format detected - use default Shopify mappings
-        logger.warning("V1 column_mappings detected in validation, using default Shopify mappings")
+        logger.warning(
+            "V1 column_mappings detected in validation, using default Shopify mappings"
+        )
         orders_mappings = {
             "Name": "Order_Number",
             "Lineitem sku": "SKU",
             "Lineitem quantity": "Quantity",
-            "Shipping Method": "Shipping_Method"
+            "Shipping Method": "Shipping_Method",
         }
-        stock_mappings = {
-            "Артикул": "SKU",
-            "Наличност": "Stock"
-        }
+        stock_mappings = {"Артикул": "SKU", "Наличност": "Stock"}
 
     # Build reverse mapping (internal_name -> csv_column_name)
     internal_to_csv_orders = {v: k for k, v in orders_mappings.items()}
@@ -273,17 +295,28 @@ def _validate_dataframes(orders_df, stock_df, config):
     for internal_name in REQUIRED_INTERNAL_ORDERS:
         csv_column = internal_to_csv_orders.get(internal_name)
         if csv_column is None:
-            errors.append(f"Missing mapping for required field '{internal_name}' in orders configuration")
+            errors.append(
+                f"Missing mapping for required field '{internal_name}' in orders configuration"
+            )
         elif csv_column not in orders_df.columns:
-            errors.append(f"Missing required column in Orders file: '{csv_column}' (needed for {internal_name})")
+            errors.append(
+                f"Missing required column in Orders file: '{csv_column}' (needed for {internal_name})"
+            )
 
     # Check stock DataFrame for required columns
-    for internal_name in REQUIRED_INTERNAL_STOCK:
-        csv_column = internal_to_csv_stock.get(internal_name)
-        if csv_column is None:
-            errors.append(f"Missing mapping for required field '{internal_name}' in stock configuration")
-        elif csv_column not in stock_df.columns:
-            errors.append(f"Missing required column in Stock file: '{csv_column}' (needed for {internal_name})")
+    # Skip stock CSV-column validation when stock was reconstructed from inventory memory
+    # (it uses internal names SKU/Stock directly, not raw CSV headers).
+    if not config.get("_stock_from_memory", False):
+        for internal_name in REQUIRED_INTERNAL_STOCK:
+            csv_column = internal_to_csv_stock.get(internal_name)
+            if csv_column is None:
+                errors.append(
+                    f"Missing mapping for required field '{internal_name}' in stock configuration"
+                )
+            elif csv_column not in stock_df.columns:
+                errors.append(
+                    f"Missing required column in Stock file: '{csv_column}' (needed for {internal_name})"
+                )
 
     return errors
 
@@ -312,7 +345,9 @@ def validate_csv_headers(file_path, required_columns, delimiter=","):
         return True, []
 
     try:
-        headers = pd.read_csv(file_path, nrows=0, delimiter=delimiter, encoding='utf-8-sig').columns.tolist()
+        headers = pd.read_csv(
+            file_path, nrows=0, delimiter=delimiter, encoding="utf-8-sig"
+        ).columns.tolist()
         missing_columns = [col for col in required_columns if col not in headers]
 
         if not missing_columns:
@@ -324,9 +359,14 @@ def validate_csv_headers(file_path, required_columns, delimiter=","):
         return False, [f"File not found at path: {file_path}"]
     except pd.errors.ParserError as e:
         logger.error(f"Parser error validating CSV '{file_path}': {e}", exc_info=True)
-        return False, [f"Could not parse file. It might be corrupt or not a valid CSV. Error: {e}"]
+        return False, [
+            f"Could not parse file. It might be corrupt or not a valid CSV. Error: {e}"
+        ]
     except Exception as e:
-        logger.error(f"Unexpected error validating CSV headers for {file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Unexpected error validating CSV headers for {file_path}: {e}",
+            exc_info=True,
+        )
         return False, [f"An unexpected error occurred: {e}"]
 
 
@@ -336,7 +376,7 @@ def _validate_and_prepare_inputs(
     output_dir_path: str,
     client_id: Optional[str],
     session_manager: Optional[Any],
-    session_path: Optional[str]
+    session_path: Optional[str],
 ) -> Tuple[bool, Optional[str], str, Optional[str]]:
     """Validates inputs and prepares session/working paths.
 
@@ -377,7 +417,9 @@ def _validate_and_prepare_inputs(
                 logger.error(error_msg, exc_info=True)
                 raise ValueError(error_msg)
             except (OSError, PermissionError) as e:
-                error_msg = f"File system error creating session for client {client_id}: {e}"
+                error_msg = (
+                    f"File system error creating session for client {client_id}: {e}"
+                )
                 logger.error(error_msg, exc_info=True)
                 raise ValueError(error_msg)
 
@@ -406,10 +448,10 @@ def _validate_and_prepare_inputs(
             shutil.copy2(stock_file_path, stock_dest)
 
             # Update session info with input file names
-            session_manager.update_session_info(working_path, {
-                "orders_file": "orders_export.csv",
-                "stock_file": "inventory.csv"
-            })
+            session_manager.update_session_info(
+                working_path,
+                {"orders_file": "orders_export.csv", "stock_file": "inventory.csv"},
+            )
 
             logger.info("Input files copied to session directory")
         except FileNotFoundError as e:
@@ -437,7 +479,7 @@ def _load_and_validate_files(
     orders_file_path: Optional[str],
     stock_delimiter: str,
     orders_delimiter: str,
-    config: dict
+    config: dict,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Loads and validates CSV files.
 
@@ -482,10 +524,12 @@ def _load_and_validate_files(
             stock_df = pd.read_csv(
                 stock_file_path,
                 delimiter=stock_delimiter,
-                encoding='utf-8-sig',
-                dtype=stock_dtype
+                encoding="utf-8-sig",
+                dtype=stock_dtype,
             )
-            logger.info(f"Stock data loaded: {len(stock_df)} rows, {len(stock_df.columns)} columns")
+            logger.info(
+                f"Stock data loaded: {len(stock_df)} rows, {len(stock_df.columns)} columns"
+            )
         except pd.errors.ParserError as e:
             error_msg = (
                 f"Failed to parse stock file. The file may have incorrect delimiter.\n"
@@ -511,11 +555,16 @@ def _load_and_validate_files(
             logger.error(error_msg)
             raise
         except pd.errors.ParserError as e:
-            error_msg = f"Failed to parse stock CSV file (corrupted or invalid format): {e}"
+            error_msg = (
+                f"Failed to parse stock CSV file (corrupted or invalid format): {e}"
+            )
             logger.error(error_msg)
             raise
         except Exception as e:
-            logger.error(f"Unexpected error loading stock file {stock_file_path}: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error loading stock file {stock_file_path}: {e}",
+                exc_info=True,
+            )
             raise
 
         # Load orders file with error handling
@@ -524,10 +573,12 @@ def _load_and_validate_files(
             orders_df = pd.read_csv(
                 orders_file_path,
                 delimiter=orders_delimiter,
-                encoding='utf-8-sig',
-                dtype=orders_dtype
+                encoding="utf-8-sig",
+                dtype=orders_dtype,
             )
-            logger.info(f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns")
+            logger.info(
+                f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns"
+            )
         except pd.errors.ParserError as e:
             error_msg = (
                 f"Failed to parse orders file. The file may have incorrect delimiter.\n"
@@ -553,16 +604,54 @@ def _load_and_validate_files(
             logger.error(error_msg)
             raise
         except pd.errors.ParserError as e:
-            error_msg = f"Failed to parse orders CSV file (corrupted or invalid format): {e}"
+            error_msg = (
+                f"Failed to parse orders CSV file (corrupted or invalid format): {e}"
+            )
             logger.error(error_msg)
             raise
         except Exception as e:
-            logger.error(f"Unexpected error loading orders file {orders_file_path}: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error loading orders file {orders_file_path}: {e}",
+                exc_info=True,
+            )
             raise
     else:
         # For testing: allow passing DataFrames directly
         stock_df = config.get("test_stock_df")
-        orders_df = config.get("test_orders_df")
+
+        # Load orders from file if path provided (inventory-memory mode: no stock file given)
+        if orders_file_path is not None:
+            orders_file_path = _normalize_unc_path(orders_file_path)
+            if not os.path.exists(orders_file_path):
+                raise FileNotFoundError(f"Orders file not found at path: {orders_file_path}")
+            column_mappings = config.get("column_mappings", {})
+            orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
+            orders_df = pd.read_csv(
+                orders_file_path,
+                delimiter=orders_delimiter,
+                encoding="utf-8-sig",
+                dtype=orders_dtype,
+            )
+            logger.info(
+                f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns"
+            )
+        else:
+            orders_df = config.get("test_orders_df")
+
+        # Inventory memory fallback: reconstruct stock from last session's snapshot
+        # when no stock file was provided and memory mode is enabled.
+        # ponytail: synthetic stock uses internal column names directly; _stock_from_memory
+        # flag bypasses CSV-column-name validation (which expects raw CSV headers).
+        if stock_df is None:
+            inv_mem = config.get("_inventory_memory", {})
+            if inv_mem.get("enabled"):
+                skus = inv_mem.get("skus") or {}
+                stock_df = pd.DataFrame(
+                    [{"SKU": sku, "Stock": qty} for sku, qty in skus.items()],
+                    columns=["SKU", "Stock"],
+                )
+                config["_stock_from_memory"] = True
+                logger.info(f"Loaded {len(stock_df)} SKUs from inventory memory")
 
     logger.info("Data loaded successfully.")
 
@@ -581,7 +670,7 @@ def _load_history_data(
     orders_file_path: Optional[str],
     client_id: Optional[str],
     profile_manager: Optional[Any],
-    config: dict
+    config: dict,
 ) -> pd.DataFrame:
     """Loads fulfillment history from appropriate storage location.
 
@@ -624,11 +713,18 @@ def _load_history_data(
                 history_path_str = history_path
 
             # Force SKU column to string to prevent dtype issues
-            history_dtype = {"SKU": str} if "SKU" in pd.read_csv(
-                history_path_str, nrows=0, encoding='utf-8-sig'
-            ).columns else {}
-            history_df = pd.read_csv(history_path_str, encoding='utf-8-sig', dtype=history_dtype)
-            logger.info(f"Loaded {len(history_df)} records from fulfillment history: {history_path}")
+            history_dtype = (
+                {"SKU": str}
+                if "SKU"
+                in pd.read_csv(history_path_str, nrows=0, encoding="utf-8-sig").columns
+                else {}
+            )
+            history_df = pd.read_csv(
+                history_path_str, encoding="utf-8-sig", dtype=history_dtype
+            )
+            logger.info(
+                f"Loaded {len(history_df)} records from fulfillment history: {history_path}"
+            )
 
             # Apply SKU normalization if SKU column exists
             if not history_df.empty and "SKU" in history_df.columns:
@@ -657,7 +753,7 @@ def _run_analysis_and_rules(
     orders_df: pd.DataFrame,
     stock_df: pd.DataFrame,
     history_df: pd.DataFrame,
-    config: dict
+    config: dict,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
     """Runs analysis simulation and applies business rules.
 
@@ -703,10 +799,18 @@ def _run_analysis_and_rules(
     # Get repeat detection window from config
     repeat_window_days = config.get("settings", {}).get("repeat_detection_days", 1)
 
+    # Get analysis mode from config
+    analysis_mode = config.get("analysis_mode", "multi_first")
+
     # Run core analysis
     final_df, summary_present_df, summary_missing_df, stats = analysis.run_analysis(
-        stock_df, orders_df, history_df, column_mappings, courier_mappings,
-        repeat_window_days=repeat_window_days
+        stock_df,
+        orders_df,
+        history_df,
+        column_mappings,
+        courier_mappings,
+        repeat_window_days=repeat_window_days,
+        mode=analysis_mode,
     )
     logger.info("Analysis computation complete.")
 
@@ -719,22 +823,23 @@ def _run_analysis_and_rules(
         status_counts = final_df["Order_Fulfillment_Status"].value_counts().to_dict()
         logger.debug(f"Order_Fulfillment_Status distribution: {status_counts}")
     else:
-        logger.error("CRITICAL: Order_Fulfillment_Status column is missing from analysis result!")
+        logger.error(
+            "CRITICAL: Order_Fulfillment_Status column is missing from analysis result!"
+        )
 
     # Add stock alerts based on config
     low_stock_threshold = config.get("settings", {}).get("low_stock_threshold")
     if low_stock_threshold is not None and "Final_Stock" in final_df.columns:
         logger.info(f"Applying low stock threshold: < {low_stock_threshold}")
         final_df["Stock_Alert"] = np.where(
-            final_df["Final_Stock"] < low_stock_threshold,
-            "Low Stock",
-            ""
+            final_df["Final_Stock"] < low_stock_threshold, "Low Stock", ""
         )
 
     # Enrich DataFrame with volumetric weights before Rule Engine
     weight_config = config.get("weight_config", {})
     if weight_config and weight_config.get("products"):
         from .weight_calculator import enrich_dataframe_with_weights
+
         final_df = enrich_dataframe_with_weights(final_df, weight_config)
 
     # Apply the rule engine
@@ -761,7 +866,7 @@ def _save_results_and_reports(
     output_dir_path: str,
     session_manager: Optional[Any],
     client_id: Optional[str],
-    profile_manager: Optional[Any]
+    profile_manager: Optional[Any],
 ) -> Tuple[str, Optional[str]]:
     """Saves all analysis results, reports, and updates history.
 
@@ -826,12 +931,16 @@ def _save_results_and_reports(
         report_info_sheet.set_column("A:B", 25)
 
         worksheet = writer.sheets["fulfillment_analysis"]
-        highlight_format = workbook.add_format({"bg_color": "#FFC7CE", "font_color": "#9C0006"})
+        highlight_format = workbook.add_format(
+            {"bg_color": "#FFC7CE", "font_color": "#9C0006"}
+        )
         try:
             # Vectorised: compute all column widths in one pass
-            str_df = final_df.fillna('').astype(str)
+            str_df = final_df.fillna("").astype(str)
             data_widths = str_df.apply(lambda s: s.str.len().max())
-            header_widths = pd.Series([len(str(c)) for c in final_df.columns], index=final_df.columns)
+            header_widths = pd.Series(
+                [len(str(c)) for c in final_df.columns], index=final_df.columns
+            )
             col_widths = data_widths.combine(header_widths, max) + 2
             for idx, (col, width) in enumerate(zip(final_df.columns, col_widths)):
                 worksheet.set_column(idx, idx, int(width))
@@ -864,7 +973,7 @@ def _save_results_and_reports(
 
             # Save statistics to JSON
             logger.info(f"Saving analysis_stats.json: {stats_json}")
-            with open(stats_json, 'w', encoding='utf-8') as f:
+            with open(stats_json, "w", encoding="utf-8") as f:
                 json.dump(stats, f, indent=2, ensure_ascii=False)
 
             logger.info("Initial session state files saved successfully")
@@ -873,10 +982,14 @@ def _save_results_and_reports(
             logger.error(f"Permission denied saving session state files: {e}")
             # Continue with the workflow even if initial state save fails
         except OSError as e:
-            logger.error(f"File system error saving session state (disk full or invalid path?): {e}")
+            logger.error(
+                f"File system error saving session state (disk full or invalid path?): {e}"
+            )
             # Continue with the workflow even if initial state save fails
         except Exception as e:
-            logger.error(f"Unexpected error saving initial session state: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error saving initial session state: {e}", exc_info=True
+            )
             # Continue with the workflow even if initial state save fails
 
     # Session mode: Export analysis_data.json and update session_info
@@ -887,26 +1000,29 @@ def _save_results_and_reports(
 
             # Save analysis_data.json
             analysis_data_path = Path(analysis_dir) / "analysis_data.json"
-            with open(analysis_data_path, 'w', encoding='utf-8') as f:
+            with open(analysis_data_path, "w", encoding="utf-8") as f:
                 json.dump(analysis_data, f, indent=2, ensure_ascii=False)
 
             logger.info(f"analysis_data.json saved to: {analysis_data_path}")
 
             # Update session_info.json with analysis results and statistics
-            session_manager.update_session_info(working_path, {
-                "analysis_completed": True,
-                "analysis_completed_at": datetime.now().isoformat(),
-                "total_orders": analysis_data["total_orders"],
-                "fulfillable_orders": analysis_data["fulfillable_orders"],
-                "not_fulfillable_orders": analysis_data["not_fulfillable_orders"],
-                "analysis_report_path": "analysis/analysis_report.xlsx",
-                "statistics": {
-                    "total_orders": len(final_df["Order_Number"].unique()),
-                    "total_items": len(final_df),
-                    "packing_lists_count": 0,
-                    "packing_lists": []
-                }
-            })
+            session_manager.update_session_info(
+                working_path,
+                {
+                    "analysis_completed": True,
+                    "analysis_completed_at": datetime.now().isoformat(),
+                    "total_orders": analysis_data["total_orders"],
+                    "fulfillable_orders": analysis_data["fulfillable_orders"],
+                    "not_fulfillable_orders": analysis_data["not_fulfillable_orders"],
+                    "analysis_report_path": "analysis/analysis_report.xlsx",
+                    "statistics": {
+                        "total_orders": len(final_df["Order_Number"].unique()),
+                        "total_items": len(final_df),
+                        "packing_lists_count": 0,
+                        "packing_lists": [],
+                    },
+                },
+            )
 
             logger.info("Session info updated with analysis results and statistics")
 
@@ -914,13 +1030,19 @@ def _save_results_and_reports(
             logger.error(f"Permission denied exporting analysis data: {e}")
             # Continue with the workflow even if export fails
         except OSError as e:
-            logger.error(f"File system error exporting analysis data (disk full or invalid path?): {e}")
+            logger.error(
+                f"File system error exporting analysis data (disk full or invalid path?): {e}"
+            )
             # Continue with the workflow even if export fails
         except SessionManagerError as e:
-            logger.error(f"Session manager error updating session info: {e}", exc_info=True)
+            logger.error(
+                f"Session manager error updating session info: {e}", exc_info=True
+            )
             # Continue with the workflow even if export fails
         except Exception as e:
-            logger.error(f"Unexpected error exporting analysis data: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error exporting analysis data: {e}", exc_info=True
+            )
             # Continue with the workflow even if export fails
 
     # Update fulfillment history
@@ -955,10 +1077,37 @@ def _save_results_and_reports(
                     os.makedirs(parent_dir, exist_ok=True)
 
             updated_history.to_csv(history_path_str, index=False)
-            logger.info(f"History updated and saved to: {history_path} ({len(newly_fulfilled)} new records)")
+            logger.info(
+                f"History updated and saved to: {history_path} ({len(newly_fulfilled)} new records)"
+            )
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
             # Don't fail the entire analysis if history save fails
+
+    # Persist inventory memory if enabled (or unconditionally update the SKU snapshot)
+    if (
+        profile_manager
+        and client_id
+        and "Final_Stock" in final_df.columns
+        and "SKU" in final_df.columns
+    ):
+        try:
+            full_config = profile_manager.load_shopify_config(client_id) or {}
+            inv_mem = full_config.get("inventory_memory", {})
+            if inv_mem.get("enabled", False):
+                # Build final_stock_dict: last Final_Stock per SKU (true post-fulfillment state;
+                # min() would understate when cancellations/restocks make rows non-monotonic)
+                final_stock_dict = (
+                    final_df.groupby("SKU")["Final_Stock"]
+                    .last()
+                    .dropna()
+                    .apply(lambda x: max(0.0, float(x)))
+                    .to_dict()
+                )
+                profile_manager.save_inventory_memory(client_id, final_stock_dict, config=full_config)
+                logger.info(f"Inventory memory updated: {len(final_stock_dict)} SKUs")
+        except Exception as e:
+            logger.warning(f"Failed to save inventory memory: {e}")
 
     # Return appropriate path based on mode
     if use_session_mode:
@@ -977,7 +1126,7 @@ def run_full_analysis(
     client_id: Optional[str] = None,
     session_manager: Optional[Any] = None,
     profile_manager: Optional[Any] = None,
-    session_path: Optional[str] = None
+    session_path: Optional[str] = None,
 ):
     """Orchestrates the entire fulfillment analysis process.
 
@@ -1044,27 +1193,25 @@ def run_full_analysis(
             output_dir_path,
             client_id,
             session_manager,
-            session_path
+            session_path,
         )
 
         # Step 2: Load and validate files
         logger.info("Step 2: Loading and validating CSV files...")
+        # Shallow copy so caller's dict is never mutated (stale _inventory_memory across calls)
+        config = dict(config)
+        if profile_manager and client_id:
+            config["_inventory_memory"] = profile_manager.get_inventory_memory(
+                client_id
+            )
         orders_df, stock_df = _load_and_validate_files(
-            stock_file_path,
-            orders_file_path,
-            stock_delimiter,
-            orders_delimiter,
-            config
+            stock_file_path, orders_file_path, stock_delimiter, orders_delimiter, config
         )
 
         # Step 3: Load history data
         logger.info("Step 3: Loading fulfillment history...")
         history_df = _load_history_data(
-            stock_file_path,
-            orders_file_path,
-            client_id,
-            profile_manager,
-            config
+            stock_file_path, orders_file_path, client_id, profile_manager, config
         )
 
         # Step 4: Run analysis and apply rules
@@ -1078,19 +1225,26 @@ def run_full_analysis(
             config["_client_config"] = client_config
 
             # Check if there are additional columns configured
-            additional_cols = client_config.get("ui_settings", {}).get("table_view", {}).get("additional_columns", [])
+            additional_cols = (
+                client_config.get("ui_settings", {})
+                .get("table_view", {})
+                .get("additional_columns", [])
+            )
             enabled_cols = [col for col in additional_cols if col.get("enabled", False)]
-            logger.info(f"Loaded client config: {len(additional_cols)} additional columns configured, {len(enabled_cols)} enabled")
+            logger.info(
+                f"Loaded client config: {len(additional_cols)} additional columns configured, {len(enabled_cols)} enabled"
+            )
             if enabled_cols:
-                logger.info(f"Enabled additional columns: {[col['csv_name'] for col in enabled_cols]}")
+                logger.info(
+                    f"Enabled additional columns: {[col['csv_name'] for col in enabled_cols]}"
+                )
         else:
-            logger.warning(f"Cannot load client config: profile_manager={profile_manager is not None}, client_id={client_id}")
+            logger.warning(
+                f"Cannot load client config: profile_manager={profile_manager is not None}, client_id={client_id}"
+            )
 
-        final_df, summary_present_df, summary_missing_df, stats = _run_analysis_and_rules(
-            orders_df,
-            stock_df,
-            history_df,
-            config
+        final_df, summary_present_df, summary_missing_df, stats = (
+            _run_analysis_and_rules(orders_df, stock_df, history_df, config)
         )
 
         # Step 5: Save results and reports
@@ -1108,7 +1262,7 @@ def run_full_analysis(
             output_dir_path,
             session_manager,
             client_id,
-            profile_manager
+            profile_manager,
         )
 
         # Return success
@@ -1137,7 +1291,7 @@ def create_packing_list_report(
     analysis_df,
     report_config,
     session_manager: Optional[Any] = None,
-    session_path: Optional[str] = None
+    session_path: Optional[str] = None,
 ):
     """Generates a single packing list report based on a report configuration.
 
@@ -1199,24 +1353,35 @@ def create_packing_list_report(
                 generated_lists = session_info.get("packing_lists_generated", [])
                 if original_filename not in generated_lists:
                     generated_lists.append(original_filename)
-                    session_manager.update_session_info(session_path, {
-                        "packing_lists_generated": generated_lists
-                    })
-                    logger.info(f"Session info updated: added packing list {original_filename}")
+                    session_manager.update_session_info(
+                        session_path, {"packing_lists_generated": generated_lists}
+                    )
+                    logger.info(
+                        f"Session info updated: added packing list {original_filename}"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to update session info: {e}")
 
-        success_message = f"Report '{report_name}' created successfully at '{output_file}'."
+        success_message = (
+            f"Report '{report_name}' created successfully at '{output_file}'."
+        )
         return True, success_message
     except KeyError as e:
-        error_message = f"Configuration error for report '{report_name}': Missing key {e}."
-        logger.error(f"Config error for packing list '{report_name}': {e}", exc_info=True)
+        error_message = (
+            f"Configuration error for report '{report_name}': Missing key {e}."
+        )
+        logger.error(
+            f"Config error for packing list '{report_name}': {e}", exc_info=True
+        )
         return False, error_message
     except PermissionError:
-        output_filename = report_config.get('output_filename', 'N/A')
-        error_message = f"Permission denied. Could not write report to '{output_filename}'."
+        output_filename = report_config.get("output_filename", "N/A")
+        error_message = (
+            f"Permission denied. Could not write report to '{output_filename}'."
+        )
         logger.error(
-            f"Permission error creating packing list '{report_name}' at '{output_filename}'", exc_info=True
+            f"Permission error creating packing list '{report_name}' at '{output_filename}'",
+            exc_info=True,
         )
         return False, error_message
     except Exception as e:
@@ -1250,7 +1415,7 @@ def create_stock_export_report(
     report_config,
     session_manager: Optional[Any] = None,
     session_path: Optional[str] = None,
-    tag_categories: Optional[Dict] = None
+    tag_categories: Optional[Dict] = None,
 ):
     """Generates a single stock export report based on a configuration.
 
@@ -1296,7 +1461,7 @@ def create_stock_export_report(
             report_name=report_name,
             filters=filters,
             apply_writeoff=apply_writeoff,
-            tag_categories=tag_categories
+            tag_categories=tag_categories,
         )
 
         # Verify file was actually created before updating session info
@@ -1312,25 +1477,37 @@ def create_stock_export_report(
                 generated_exports = session_info.get("stock_exports_generated", [])
                 if original_filename not in generated_exports:
                     generated_exports.append(original_filename)
-                    session_manager.update_session_info(session_path, {
-                        "stock_exports_generated": generated_exports
-                    })
-                    logger.info(f"Session info updated: added stock export {original_filename}")
+                    session_manager.update_session_info(
+                        session_path, {"stock_exports_generated": generated_exports}
+                    )
+                    logger.info(
+                        f"Session info updated: added stock export {original_filename}"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to update session info: {e}")
 
-        success_message = f"Stock export '{report_name}' created successfully at '{output_filename}'."
+        success_message = (
+            f"Stock export '{report_name}' created successfully at '{output_filename}'."
+        )
         return True, success_message
     except KeyError as e:
-        error_message = f"Configuration error for stock export '{report_name}': Missing key {e}."
-        logger.error(f"Config error for stock export '{report_name}': {e}", exc_info=True)
+        error_message = (
+            f"Configuration error for stock export '{report_name}': Missing key {e}."
+        )
+        logger.error(
+            f"Config error for stock export '{report_name}': {e}", exc_info=True
+        )
         return False, error_message
     except PermissionError:
         error_message = "Permission denied. Could not write stock export."
-        logger.error(f"Permission error creating stock export '{report_name}'", exc_info=True)
+        logger.error(
+            f"Permission error creating stock export '{report_name}'", exc_info=True
+        )
         return False, error_message
     except Exception as e:
-        error_message = f"Failed to create stock export '{report_name}'. See logs for details."
+        error_message = (
+            f"Failed to create stock export '{report_name}'. See logs for details."
+        )
         logger.error(f"Error creating stock export '{report_name}': {e}", exc_info=True)
         return False, error_message
 
@@ -1340,7 +1517,7 @@ def create_writeoff_report(
     report_config: Dict,
     tag_categories: Dict,
     session_manager: Optional[Any] = None,
-    session_path: Optional[str] = None
+    session_path: Optional[str] = None,
 ) -> Tuple[bool, str]:
     """Generate standalone SKU writeoff report.
 
@@ -1378,6 +1555,7 @@ def create_writeoff_report(
 
         # Generate report using sku_writeoff module
         from shopify_tool.sku_writeoff import generate_writeoff_report
+
         generate_writeoff_report(analysis_df, tag_categories, output_filename)
 
         # Verify file was created
@@ -1393,10 +1571,12 @@ def create_writeoff_report(
                 generated_reports = session_info.get("writeoff_reports_generated", [])
                 if original_filename not in generated_reports:
                     generated_reports.append(original_filename)
-                    session_manager.update_session_info(session_path, {
-                        "writeoff_reports_generated": generated_reports
-                    })
-                    logger.info(f"Session info updated: added writeoff report {original_filename}")
+                    session_manager.update_session_info(
+                        session_path, {"writeoff_reports_generated": generated_reports}
+                    )
+                    logger.info(
+                        f"Session info updated: added writeoff report {original_filename}"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to update session info: {e}")
 
@@ -1404,14 +1584,24 @@ def create_writeoff_report(
         return True, success_message
 
     except KeyError as e:
-        error_message = f"Configuration error for writeoff report '{report_name}': Missing key {e}."
-        logger.error(f"Config error for writeoff report '{report_name}': {e}", exc_info=True)
+        error_message = (
+            f"Configuration error for writeoff report '{report_name}': Missing key {e}."
+        )
+        logger.error(
+            f"Config error for writeoff report '{report_name}': {e}", exc_info=True
+        )
         return False, error_message
     except PermissionError:
         error_message = "Permission denied. Could not write writeoff report."
-        logger.error(f"Permission error creating writeoff report '{report_name}'", exc_info=True)
+        logger.error(
+            f"Permission error creating writeoff report '{report_name}'", exc_info=True
+        )
         return False, error_message
     except Exception as e:
-        error_message = f"Failed to create writeoff report '{report_name}'. See logs for details."
-        logger.error(f"Error creating writeoff report '{report_name}': {e}", exc_info=True)
+        error_message = (
+            f"Failed to create writeoff report '{report_name}'. See logs for details."
+        )
+        logger.error(
+            f"Error creating writeoff report '{report_name}': {e}", exc_info=True
+        )
         return False, error_message

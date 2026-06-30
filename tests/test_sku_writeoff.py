@@ -437,9 +437,13 @@ def test_generate_writeoff_report_basic(tmp_path, analysis_df_with_tags, tag_cat
     sheet = workbook.sheet_by_name("Sheet1")
     assert sheet.nrows >= 4  # Header + 3 SKUs
 
-    # Verify columns are correct (Артикул, Наличност)
+    # Verify canonical ERP layout: Артикул | blank | Мярка | Брой | Годност | Партида
     assert sheet.cell_value(0, 0) == "Артикул"
-    assert sheet.cell_value(0, 1) == "Наличност"
+    assert sheet.cell_value(0, 1) == ""
+    assert sheet.cell_value(0, 2) == "Мярка"
+    assert sheet.cell_value(0, 3) == "Брой"
+    assert sheet.cell_value(0, 4) == "Годност"
+    assert sheet.cell_value(0, 5) == "Партида"
 
 
 def test_generate_writeoff_report_empty_mappings(tmp_path):
@@ -474,7 +478,7 @@ def test_generate_writeoff_report_empty_mappings(tmp_path):
     sheet = workbook.sheet_by_name("Sheet1")
     assert sheet.nrows == 1  # Only header
     assert sheet.cell_value(0, 0) == "Артикул"
-    assert sheet.cell_value(0, 1) == "Наличност"
+    assert sheet.cell_value(0, 3) == "Брой"
 
 
 def test_generate_writeoff_report_summary_stats(tmp_path, analysis_df_with_tags, tag_categories_with_writeoff):
@@ -487,17 +491,17 @@ def test_generate_writeoff_report_summary_stats(tmp_path, analysis_df_with_tags,
         str(output_file)
     )
 
-    # Read report (simple format with Артикул, Наличност)
+    # Read report (canonical ERP layout)
     report_df = pd.read_excel(str(output_file), sheet_name="Sheet1")
 
     assert "Артикул" in report_df.columns
-    assert "Наличност" in report_df.columns
+    assert "Брой" in report_df.columns
 
     # Should have 3 SKUs
     assert len(report_df) == 3  # PKG-BOX-SMALL, PKG-BAG-L, PKG-SEAL
 
     # Verify total quantity
-    total_quantity = report_df["Наличност"].sum()
+    total_quantity = report_df["Брой"].sum()
     assert total_quantity == 4  # 2 + 1 + 1 from analysis_df_with_tags
 
 

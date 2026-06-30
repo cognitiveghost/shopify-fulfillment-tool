@@ -7,7 +7,14 @@ import logging
 from datetime import datetime
 
 import pandas as pd
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QMenu, QTableWidgetItem, QLabel
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QMessageBox,
+    QMenu,
+    QTableWidgetItem,
+    QLabel,
+)
 from PySide6.QtCore import QThreadPool, QPoint, QModelIndex, QSortFilterProxyModel, Qt
 from PySide6.QtGui import QAction
 
@@ -98,7 +105,7 @@ class MainWindow(QMainWindow):
         self.selection_helper = SelectionHelper(
             table_view=None,  # Will be set after UI creation
             proxy_model=self.proxy_model,
-            main_window=self
+            main_window=self,
         )
 
         # Initialize handlers
@@ -130,15 +137,18 @@ class MainWindow(QMainWindow):
 
             # Initialize TableConfigManager for table customization
             from gui.table_config_manager import TableConfigManager
+
             self.table_config_manager = TableConfigManager(self, self.profile_manager)
 
-            logging.info("ProfileManager, SessionManager, GroupsManager, and TableConfigManager initialized successfully")
+            logging.info(
+                "ProfileManager, SessionManager, GroupsManager, and TableConfigManager initialized successfully"
+            )
         except NetworkError as e:
             QMessageBox.critical(
                 self,
                 "Network Error",
                 f"Cannot connect to file server:\n\n{str(e)}\n\n"
-                f"The application will use offline mode with limited functionality."
+                f"The application will use offline mode with limited functionality.",
             )
             # For now, exit the application if we can't connect
             # In the future, we could implement an offline mode
@@ -148,7 +158,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Initialization Error",
-                f"Failed to initialize profile managers:\n{str(e)}"
+                f"Failed to initialize profile managers:\n{str(e)}",
             )
             QApplication.quit()
             return
@@ -171,8 +181,18 @@ class MainWindow(QMainWindow):
                 self.current_client_id = client_id
                 logging.info(f"Loaded configuration for CLIENT_{client_id}")
 
+                # Sync analysis mode combo (block signals to avoid spurious saves)
+                if hasattr(self, "analysis_mode_combo"):
+                    mode = config.get("analysis_mode", "multi_first")
+                    idx = 1 if mode == "fifo" else 0
+                    self.analysis_mode_combo.blockSignals(True)
+                    self.analysis_mode_combo.setCurrentIndex(idx)
+                    self.analysis_mode_combo.blockSignals(False)
+
                 # Update UI to reflect new client
-                self.session_path_label.setText(f"Client: CLIENT_{client_id} - No session started")
+                self.session_path_label.setText(
+                    f"Client: CLIENT_{client_id} - No session started"
+                )
 
                 # Enable client-specific buttons
                 self.new_session_btn.setEnabled(True)
@@ -183,9 +203,19 @@ class MainWindow(QMainWindow):
                 self.analysis_stats = None
                 self.session_path = None
                 # Clear undo history when switching clients
-                if hasattr(self, 'undo_manager'):
+                if hasattr(self, "undo_manager"):
                     self.undo_manager.reset_for_session()
                 self._update_all_views()
+
+                # Restore inventory memory checkbox state from config
+                if hasattr(self, "inventory_memory_checkbox"):
+                    inv_mem_cfg = config.get("inventory_memory", {})
+                    self.inventory_memory_checkbox.blockSignals(True)
+                    self.inventory_memory_checkbox.setChecked(
+                        inv_mem_cfg.get("enabled", True)
+                    )
+                    self.inventory_memory_checkbox.setEnabled(True)
+                    self.inventory_memory_checkbox.blockSignals(False)
 
                 # Disable file loading buttons until a session is created/selected
                 self.load_orders_btn.setEnabled(False)
@@ -193,11 +223,11 @@ class MainWindow(QMainWindow):
 
                 # Disable report buttons until new analysis
                 self.run_analysis_button.setEnabled(False)
-                if hasattr(self, 'packing_list_button'):
+                if hasattr(self, "packing_list_button"):
                     self.packing_list_button.setEnabled(False)
-                if hasattr(self, 'stock_export_button'):
+                if hasattr(self, "stock_export_button"):
                     self.stock_export_button.setEnabled(False)
-                if hasattr(self, 'add_product_button'):
+                if hasattr(self, "add_product_button"):
                     self.add_product_button.setEnabled(False)
 
                 self.log_activity("Client", f"Switched to CLIENT_{client_id}")
@@ -205,14 +235,12 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "Configuration Error",
-                    f"Could not load configuration for CLIENT_{client_id}"
+                    f"Could not load configuration for CLIENT_{client_id}",
                 )
         except Exception as e:
             logging.error(f"Failed to load client config: {e}", exc_info=True)
             QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load client configuration:\n{str(e)}"
+                self, "Error", f"Failed to load client configuration:\n{str(e)}"
             )
 
     def setup_logging(self):
@@ -223,10 +251,14 @@ class MainWindow(QMainWindow):
         the message to the 'Execution Log' text box in the UI.
         """
         self.log_handler = QtLogHandler()
-        self.log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+        self.log_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        )
         logging.getLogger().addHandler(self.log_handler)
         logging.getLogger().setLevel(logging.INFO)
-        self.log_handler.log_message_received.connect(self.execution_log_edit.appendPlainText)
+        self.log_handler.log_message_received.connect(
+            self.execution_log_edit.appendPlainText
+        )
 
     def connect_signals(self):
         """Connects all UI widget signals to their corresponding slots.
@@ -236,14 +268,17 @@ class MainWindow(QMainWindow):
         from handler classes. This makes the UI event flow easier to trace.
         """
         # Client selection (new architecture) - use sidebar if it exists, otherwise fallback to client_selector
-        if hasattr(self, 'client_sidebar'):
+        if hasattr(self, "client_sidebar"):
             self.client_sidebar.client_selected.connect(self.on_client_changed)
             self.client_sidebar.refresh_requested.connect(self.on_sidebar_refresh)
-        elif hasattr(self, 'client_selector'):
+        elif hasattr(self, "client_selector"):
             self.client_selector.client_changed.connect(self.on_client_changed)
 
         # Session browser (new architecture)
         self.session_browser.session_selected.connect(self.on_session_selected)
+        self.session_browser.multi_export_requested.connect(
+            self.actions_handler.handle_multi_session_stock_export
+        )
 
         # Session and file loading
         self.new_session_btn.clicked.connect(self.actions_handler.create_new_session)
@@ -259,7 +294,12 @@ class MainWindow(QMainWindow):
         # Main actions
         self.run_analysis_button.clicked.connect(self.actions_handler.run_analysis)
         self.settings_button.clicked.connect(self.actions_handler.open_settings_window)
-        self.add_product_button.clicked.connect(self.actions_handler.show_add_product_dialog)
+        self.add_product_button.clicked.connect(
+            self.actions_handler.show_add_product_dialog
+        )
+        self.analysis_mode_combo.currentIndexChanged.connect(
+            self._on_analysis_mode_changed
+        )
 
         # Reports
         self.packing_list_button.clicked.connect(
@@ -283,39 +323,59 @@ class MainWindow(QMainWindow):
         self.clear_filter_button.clicked.connect(self.clear_filter)
         self.tag_filter_combo.currentIndexChanged.connect(self.filter_table)
 
+        # Inventory memory toggle
+        if hasattr(self, "inventory_memory_checkbox"):
+            self.inventory_memory_checkbox.stateChanged.connect(
+                self._on_inventory_memory_toggled
+            )
+
         # Add Ctrl+R shortcut for Run Analysis
         from PySide6.QtGui import QShortcut, QKeySequence
-        QShortcut(QKeySequence("Ctrl+R"), self,
-                  lambda: self.run_analysis_button.click()
-                          if self.run_analysis_button.isEnabled() else None)
+
+        QShortcut(
+            QKeySequence("Ctrl+R"),
+            self,
+            lambda: self.run_analysis_button.click()
+            if self.run_analysis_button.isEnabled()
+            else None,
+        )
 
         # Add Ctrl+F shortcut for Filter
-        QShortcut(QKeySequence("Ctrl+F"), self,
-                  lambda: self.filter_input.setFocus())
+        QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.filter_input.setFocus())
 
         # Add Ctrl+Z shortcut for Undo
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_operation)
 
         # Bulk operations toolbar signals
-        if hasattr(self, 'bulk_toolbar'):
+        if hasattr(self, "bulk_toolbar"):
             self.bulk_toolbar.select_all_clicked.connect(self._on_bulk_select_all)
-            self.bulk_toolbar.clear_selection_clicked.connect(self._on_bulk_clear_selection)
-            self.bulk_toolbar.change_status_clicked.connect(self.actions_handler.bulk_change_status)
+            self.bulk_toolbar.clear_selection_clicked.connect(
+                self._on_bulk_clear_selection
+            )
+            self.bulk_toolbar.change_status_clicked.connect(
+                self.actions_handler.bulk_change_status
+            )
             self.bulk_toolbar.add_tag_clicked.connect(self.actions_handler.bulk_add_tag)
-            self.bulk_toolbar.remove_tag_clicked.connect(self.actions_handler.bulk_remove_tag)
+            self.bulk_toolbar.remove_tag_clicked.connect(
+                self.actions_handler.bulk_remove_tag
+            )
             self.bulk_toolbar.remove_sku_from_orders_clicked.connect(
                 self.actions_handler.bulk_remove_sku_from_orders
             )
             self.bulk_toolbar.remove_orders_with_sku_clicked.connect(
                 self.actions_handler.bulk_remove_orders_with_sku
             )
-            self.bulk_toolbar.delete_orders_clicked.connect(self.actions_handler.bulk_delete_orders)
-            self.bulk_toolbar.export_selection_clicked.connect(self.actions_handler.bulk_export_selection)
+            self.bulk_toolbar.delete_orders_clicked.connect(
+                self.actions_handler.bulk_delete_orders
+            )
+            self.bulk_toolbar.export_selection_clicked.connect(
+                self.actions_handler.bulk_export_selection
+            )
 
     def clear_filter(self):
         """Clears the filter input text box, tag filter, and resets proxy model."""
         self.filter_input.clear()
-        if hasattr(self, 'tag_filter_combo'):
+        if hasattr(self, "tag_filter_combo"):
             self.tag_filter_combo.setCurrentIndex(0)  # Reset to "All Tags"
 
         # Reset proxy model filter state
@@ -338,7 +398,7 @@ class MainWindow(QMainWindow):
             self.save_session_state()
 
             # Update undo button state
-            if hasattr(self, 'undo_button'):
+            if hasattr(self, "undo_button"):
                 self.undo_button.setEnabled(self.undo_manager.can_undo())
                 # Update tooltip with next undo description
                 next_undo = self.undo_manager.get_undo_description()
@@ -360,26 +420,27 @@ class MainWindow(QMainWindow):
 
         affected_rows_before = self.analysis_results_df[mask].copy()
         self.analysis_results_df.loc[mask, "Internal_Tags"] = (
-            self.analysis_results_df.loc[mask, "Internal_Tags"].apply(lambda t: add_tag(t, tag))
+            self.analysis_results_df.loc[mask, "Internal_Tags"].apply(
+                lambda t: add_tag(t, tag)
+            )
         )
         self.undo_manager.record_operation(
             operation_type="add_internal_tag",
             description=description,
             params=params,
-            affected_rows_before=affected_rows_before
+            affected_rows_before=affected_rows_before,
         )
         self.save_session_state()
         self._update_all_views()
         self.log_activity("Internal Tag", description)
-        if hasattr(self, 'undo_button'):
+        if hasattr(self, "undo_button"):
             self.undo_button.setEnabled(True)
             self.undo_button.setToolTip(f"Undo: {description} (Ctrl+Z)")
 
     def _add_internal_tag(self, order_number: str, sku: str, tag: str):
         """Add internal tag to the specific row identified by order_number + sku."""
-        mask = (
-            (self.analysis_results_df["Order_Number"] == order_number) &
-            (self.analysis_results_df["SKU"] == sku)
+        mask = (self.analysis_results_df["Order_Number"] == order_number) & (
+            self.analysis_results_df["SKU"] == sku
         )
         self._apply_tag_operation(
             mask,
@@ -399,7 +460,10 @@ class MainWindow(QMainWindow):
             params={"order_number": order_number, "tag": tag},
             tag=tag,
         )
-        if hasattr(self, 'tag_management_panel') and self.tag_management_panel.isVisible():
+        if (
+            hasattr(self, "tag_management_panel")
+            and self.tag_management_panel.isVisible()
+        ):
             self.on_selection_changed_for_tags()
 
     def remove_internal_tag_from_order(self, order_number, tag):
@@ -428,11 +492,8 @@ class MainWindow(QMainWindow):
         self.undo_manager.record_operation(
             operation_type="remove_internal_tag",
             description=f"Remove Internal Tag: {tag} from order {order_number}",
-            params={
-                "order_number": order_number,
-                "tag": tag
-            },
-            affected_rows_before=affected_rows_before
+            params={"order_number": order_number, "tag": tag},
+            affected_rows_before=affected_rows_before,
         )
 
         # Save state and update UI
@@ -441,17 +502,23 @@ class MainWindow(QMainWindow):
         self.log_activity("Internal Tag", f"Removed '{tag}' from order {order_number}")
 
         # Update undo button
-        if hasattr(self, 'undo_button'):
+        if hasattr(self, "undo_button"):
             self.undo_button.setEnabled(True)
             self.undo_button.setToolTip(f"Undo: Remove Internal Tag: {tag} (Ctrl+Z)")
 
         # Update tag panel if visible
-        if hasattr(self, 'tag_management_panel') and self.tag_management_panel.isVisible():
+        if (
+            hasattr(self, "tag_management_panel")
+            and self.tag_management_panel.isVisible()
+        ):
             self.on_selection_changed_for_tags()
 
     def on_selection_changed_for_tags(self):
         """Update tag management panel when table selection changes."""
-        if not hasattr(self, 'tag_management_panel') or not self.tag_management_panel.isVisible():
+        if (
+            not hasattr(self, "tag_management_panel")
+            or not self.tag_management_panel.isVisible()
+        ):
             return
 
         if self.analysis_results_df is None or self.analysis_results_df.empty:
@@ -480,7 +547,7 @@ class MainWindow(QMainWindow):
 
     def toggle_tag_panel(self):
         """Toggle tag management panel visibility."""
-        if not hasattr(self, 'tag_management_panel'):
+        if not hasattr(self, "tag_management_panel"):
             return
 
         if self.tag_management_panel.isVisible():
@@ -499,24 +566,28 @@ class MainWindow(QMainWindow):
             self.on_selection_changed_for_tags()
 
             # Connect table selection changed signal if not already connected
-            if hasattr(self, 'tableView') and hasattr(self.tableView, 'selectionModel'):
+            if hasattr(self, "tableView") and hasattr(self.tableView, "selectionModel"):
                 try:
-                    self.tableView.selectionModel().selectionChanged.disconnect(self.on_selection_changed_for_tags)
+                    self.tableView.selectionModel().selectionChanged.disconnect(
+                        self.on_selection_changed_for_tags
+                    )
                 except:
                     pass  # Not connected yet
-                self.tableView.selectionModel().selectionChanged.connect(self.on_selection_changed_for_tags)
+                self.tableView.selectionModel().selectionChanged.connect(
+                    self.on_selection_changed_for_tags
+                )
 
     def open_column_config_dialog(self):
         """Open the Column Configuration Dialog."""
-        if not hasattr(self, 'table_config_manager'):
+        if not hasattr(self, "table_config_manager"):
             logger.warning("TableConfigManager not initialized")
             return
 
-        if not hasattr(self, 'current_client_id') or not self.current_client_id:
+        if not hasattr(self, "current_client_id") or not self.current_client_id:
             QMessageBox.warning(
                 self,
                 "No Client Selected",
-                "Please select a client before configuring columns."
+                "Please select a client before configuring columns.",
             )
             return
 
@@ -530,7 +601,7 @@ class MainWindow(QMainWindow):
         """Handle column configuration applied signal."""
         logger.info("Column configuration has been applied")
         # Update hidden columns indicator in summary bar
-        if hasattr(self, 'ui_manager'):
+        if hasattr(self, "ui_manager"):
             self.ui_manager.update_hidden_columns_indicator()
 
     def toggle_bulk_mode(self):
@@ -549,7 +620,7 @@ class MainWindow(QMainWindow):
         is_bulk_mode = self.toggle_bulk_mode_btn.isChecked()
 
         # Show/hide bulk toolbar
-        if hasattr(self, 'bulk_toolbar'):
+        if hasattr(self, "bulk_toolbar"):
             self.bulk_toolbar.setVisible(is_bulk_mode)
 
         # Clear selection when toggling
@@ -562,7 +633,9 @@ class MainWindow(QMainWindow):
         # Update button styling
         if is_bulk_mode:
             self.toggle_bulk_mode_btn.setText("Exit Bulk Mode")
-            self.toggle_bulk_mode_btn.setStyleSheet("background-color: #4CAF50; color: white;")
+            self.toggle_bulk_mode_btn.setStyleSheet(
+                "background-color: #4CAF50; color: white;"
+            )
             self._update_bulk_toolbar_state()
             logging.info("Bulk mode enabled")
         else:
@@ -572,7 +645,7 @@ class MainWindow(QMainWindow):
 
     def _update_bulk_toolbar_state(self):
         """Update bulk toolbar selection counter and button states."""
-        if not hasattr(self, 'bulk_toolbar'):
+        if not hasattr(self, "bulk_toolbar"):
             return
 
         orders_count, items_count = self.selection_helper.get_selection_summary()
@@ -610,59 +683,74 @@ class MainWindow(QMainWindow):
         """
         has_client = bool(self.current_client_id)
         has_session = bool(self.session_path)
-        has_orders = bool(getattr(self, 'orders_file_path', None))
-        has_stock = bool(getattr(self, 'stock_file_path', None))
-        has_analysis = hasattr(self, 'analysis_results_df') and self.analysis_results_df is not None
+        has_orders = bool(getattr(self, "orders_file_path", None))
+        has_stock = bool(getattr(self, "stock_file_path", None))
+        has_analysis = (
+            hasattr(self, "analysis_results_df")
+            and self.analysis_results_df is not None
+        )
 
         # Session management
         self.new_session_btn.setEnabled(has_client)
 
         # Settings button (Tab 1 version)
-        if hasattr(self, 'settings_button'):
+        if hasattr(self, "settings_button"):
             self.settings_button.setEnabled(has_client)
         # Settings button (Tab 2 version)
-        if hasattr(self, 'settings_button_tab2'):
+        if hasattr(self, "settings_button_tab2"):
             self.settings_button_tab2.setEnabled(has_client)
 
         # File loading
         self.load_orders_btn.setEnabled(has_session)
         self.load_stock_btn.setEnabled(has_session)
 
-        # Run Analysis button
+        # Run Analysis button — memory mode allows skipping the stock file ONLY
+        # when memory is enabled AND actually holds a stored stock snapshot.
+        # An enabled-but-empty memory has no stock to reconstruct from, so every
+        # order would be marked Not Fulfillable — require a stock file instead.
+        inv_memory_has_skus = (
+            hasattr(self, "inventory_memory_checkbox")
+            and self.inventory_memory_checkbox.isChecked()
+            and bool(
+                (self.active_profile_config or {})
+                .get("inventory_memory", {})
+                .get("skus")
+            )
+        )
         self.run_analysis_button.setEnabled(
-            has_session and has_orders and has_stock
+            has_session and has_orders and (has_stock or inv_memory_has_skus)
         )
 
         # Reports and actions (both Tab 1 and Tab 2 versions)
         reports_enabled = has_session and has_analysis
 
         # Tab 1 buttons
-        if hasattr(self, 'packing_list_button'):
+        if hasattr(self, "packing_list_button"):
             self.packing_list_button.setEnabled(reports_enabled)
-        if hasattr(self, 'stock_export_button'):
+        if hasattr(self, "stock_export_button"):
             self.stock_export_button.setEnabled(reports_enabled)
-        if hasattr(self, 'add_product_button'):
+        if hasattr(self, "add_product_button"):
             self.add_product_button.setEnabled(has_analysis)
 
         # Tab 2 buttons
-        if hasattr(self, 'packing_list_button_tab2'):
+        if hasattr(self, "packing_list_button_tab2"):
             self.packing_list_button_tab2.setEnabled(reports_enabled)
-        if hasattr(self, 'stock_export_button_tab2'):
+        if hasattr(self, "stock_export_button_tab2"):
             self.stock_export_button_tab2.setEnabled(reports_enabled)
-        if hasattr(self, 'add_product_button_tab2'):
+        if hasattr(self, "add_product_button_tab2"):
             self.add_product_button_tab2.setEnabled(has_analysis)
-        if hasattr(self, 'configure_columns_button_tab2'):
+        if hasattr(self, "configure_columns_button_tab2"):
             self.configure_columns_button_tab2.setEnabled(has_analysis)
         # Tags Manager button
-        if hasattr(self, 'toggle_tags_panel_btn'):
+        if hasattr(self, "toggle_tags_panel_btn"):
             self.toggle_tags_panel_btn.setEnabled(has_analysis)
 
         # Bulk Operations button
-        if hasattr(self, 'toggle_bulk_mode_btn'):
+        if hasattr(self, "toggle_bulk_mode_btn"):
             self.toggle_bulk_mode_btn.setEnabled(has_analysis)
 
         # Open Session Folder button (enabled when session exists)
-        if hasattr(self, 'open_session_folder_button'):
+        if hasattr(self, "open_session_folder_button"):
             self.open_session_folder_button.setEnabled(has_session)
 
         # Update status bar
@@ -671,9 +759,32 @@ class MainWindow(QMainWindow):
         elif has_session:
             self.statusBar().showMessage("Session active - load files to begin", 5000)
         elif has_client:
-            self.statusBar().showMessage("Client selected - create or open a session", 5000)
+            self.statusBar().showMessage(
+                "Client selected - create or open a session", 5000
+            )
         else:
             self.statusBar().showMessage("Ready - select a client to begin", 5000)
+
+    def _on_inventory_memory_toggled(self, state: int):
+        """Persist the inventory memory enabled flag when the checkbox is toggled."""
+        if not self.current_client_id or not self.active_profile_config:
+            return
+        try:
+            enabled = bool(state)
+            inv_mem = self.active_profile_config.get("inventory_memory", {})
+            inv_mem["enabled"] = enabled
+            self.active_profile_config["inventory_memory"] = inv_mem
+            self.profile_manager.save_shopify_config(
+                self.current_client_id, self.active_profile_config
+            )
+            logging.info(
+                f"Inventory memory {'enabled' if enabled else 'disabled'} for CLIENT_{self.current_client_id}"
+            )
+            # Re-evaluate run button (memory mode may unlock it)
+            if hasattr(self, "update_ui_state"):
+                self.update_ui_state()
+        except Exception as e:
+            logging.warning(f"Failed to save inventory memory toggle: {e}")
 
     # --- Client and Session Management (New Architecture) ---
     def on_client_changed(self, client_id: str):
@@ -685,15 +796,15 @@ class MainWindow(QMainWindow):
         logging.info(f"Client changed to: {client_id}")
 
         # Show loading status in status bar
-        if hasattr(self, 'statusBar'):
+        if hasattr(self, "statusBar"):
             self.statusBar().showMessage(f"Loading CLIENT_{client_id}...", 5000)
 
         # Update sidebar active state if sidebar exists
-        if hasattr(self, 'client_sidebar'):
+        if hasattr(self, "client_sidebar"):
             self.client_sidebar.set_active_client(client_id)
 
         # Update header label if it exists
-        if hasattr(self, 'current_client_label'):
+        if hasattr(self, "current_client_label"):
             self.current_client_label.setText(f"CLIENT_{client_id}")
 
         # Store current client ID
@@ -701,12 +812,14 @@ class MainWindow(QMainWindow):
 
         # Load configuration for this client
         try:
-            self.current_client_config = self.profile_manager.load_shopify_config(client_id)
+            self.current_client_config = self.profile_manager.load_shopify_config(
+                client_id
+            )
             if not self.current_client_config:
                 QMessageBox.warning(
                     self,
                     "Configuration Error",
-                    f"Failed to load configuration for client {client_id}"
+                    f"Failed to load configuration for client {client_id}",
                 )
                 return
 
@@ -714,7 +827,7 @@ class MainWindow(QMainWindow):
             self.load_client_config(client_id)
 
             # Load table configuration for this client
-            if hasattr(self, 'table_config_manager'):
+            if hasattr(self, "table_config_manager"):
                 self.table_config_manager.load_config(client_id)
                 logging.info(f"Table configuration loaded for CLIENT_{client_id}")
 
@@ -729,7 +842,7 @@ class MainWindow(QMainWindow):
             # Clear session
             self.session_path = None
             # Clear undo history when switching clients
-            if hasattr(self, 'undo_manager'):
+            if hasattr(self, "undo_manager"):
                 self.undo_manager.reset_for_session()
             self.update_session_info_label()
 
@@ -739,7 +852,7 @@ class MainWindow(QMainWindow):
 
             # Update session browser widget in right panel (Tab 1)
             # This one WILL refresh (eliminates duplicate refresh)
-            if hasattr(self, 'session_browser_widget'):
+            if hasattr(self, "session_browser_widget"):
                 self.session_browser_widget.set_client(client_id)
 
             # Update UI state
@@ -748,21 +861,17 @@ class MainWindow(QMainWindow):
             logging.info(f"Client {client_id} loaded successfully")
 
             # Update status bar with success message
-            if hasattr(self, 'statusBar'):
+            if hasattr(self, "statusBar"):
                 self.statusBar().showMessage(f"CLIENT_{client_id} loaded", 2000)
 
         except Exception as e:
             logging.error(f"Error changing client: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to change client: {str(e)}"
-            )
+            QMessageBox.critical(self, "Error", f"Failed to change client: {str(e)}")
 
     def on_sidebar_refresh(self):
         """Handle manual sidebar refresh request."""
         try:
-            if hasattr(self, 'client_sidebar'):
+            if hasattr(self, "client_sidebar"):
                 self.client_sidebar.refresh()
                 self.log_activity("UI", "Client sidebar refreshed")
         except Exception as e:
@@ -782,7 +891,7 @@ class MainWindow(QMainWindow):
             "Open Session",
             f"Do you want to open this session?\n\n{session_path}\n\n"
             f"This will load any existing analysis data from the session.",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
 
         if reply == QMessageBox.Yes:
@@ -831,7 +940,7 @@ class MainWindow(QMainWindow):
             # Save statistics to JSON
             if self.analysis_stats:
                 logging.info(f"Saving statistics to {stats_path}")
-                with open(stats_path, 'w', encoding='utf-8') as f:
+                with open(stats_path, "w", encoding="utf-8") as f:
                     json.dump(self.analysis_stats, f, indent=2, ensure_ascii=False)
 
             logging.info("Session state saved successfully")
@@ -871,18 +980,24 @@ class MainWindow(QMainWindow):
                     stats_path = analysis_dir / "analysis_stats.json"
                     if stats_path.exists():
                         logging.info(f"Loading statistics from: {stats_path}")
-                        with open(stats_path, 'r', encoding='utf-8') as f:
+                        with open(stats_path, "r", encoding="utf-8") as f:
                             self.analysis_stats = json.load(f)
                     else:
                         # Recalculate if stats file missing
                         logging.info("Statistics file not found - recalculating")
-                        self.analysis_stats = recalculate_statistics(self.analysis_results_df)
+                        self.analysis_stats = recalculate_statistics(
+                            self.analysis_results_df
+                        )
 
-                    logging.info(f"Loaded {len(self.analysis_results_df)} rows from current_state.pkl")
+                    logging.info(
+                        f"Loaded {len(self.analysis_results_df)} rows from current_state.pkl"
+                    )
                     return True
 
                 except Exception as e:
-                    logging.warning(f"Failed to load pickle, trying Excel fallback: {e}")
+                    logging.warning(
+                        f"Failed to load pickle, trying Excel fallback: {e}"
+                    )
                     # Continue to fallback options
 
             # Priority 2: Try loading from current_state.xlsx
@@ -895,16 +1010,22 @@ class MainWindow(QMainWindow):
                     # Load or recalculate statistics
                     stats_path = analysis_dir / "analysis_stats.json"
                     if stats_path.exists():
-                        with open(stats_path, 'r', encoding='utf-8') as f:
+                        with open(stats_path, "r", encoding="utf-8") as f:
                             self.analysis_stats = json.load(f)
                     else:
-                        self.analysis_stats = recalculate_statistics(self.analysis_results_df)
+                        self.analysis_stats = recalculate_statistics(
+                            self.analysis_results_df
+                        )
 
-                    logging.info(f"Loaded {len(self.analysis_results_df)} rows from current_state.xlsx")
+                    logging.info(
+                        f"Loaded {len(self.analysis_results_df)} rows from current_state.xlsx"
+                    )
                     return True
 
                 except Exception as e:
-                    logging.warning(f"Failed to load current_state.xlsx, trying original report: {e}")
+                    logging.warning(
+                        f"Failed to load current_state.xlsx, trying original report: {e}"
+                    )
                     # Continue to fallback
 
             # Priority 3: Fallback to original analysis_report.xlsx
@@ -957,7 +1078,7 @@ class MainWindow(QMainWindow):
             session_name = os.path.basename(session_path)
 
             # Reload undo history for this session
-            if hasattr(self, 'undo_manager'):
+            if hasattr(self, "undo_manager"):
                 self.undo_manager.reload_session_history()
 
             # Update session info labels
@@ -980,16 +1101,18 @@ class MainWindow(QMainWindow):
                         self,
                         "Session Loaded",
                         f"Session loaded successfully:\n{session_name}\n\n"
-                        f"Analysis data: {len(self.analysis_results_df)} rows"
+                        f"Analysis data: {len(self.analysis_results_df)} rows",
                     )
                 else:
                     # Session exists but no analysis yet
-                    self.log_activity("Session", f"Opened session (no analysis): {session_name}")
+                    self.log_activity(
+                        "Session", f"Opened session (no analysis): {session_name}"
+                    )
                     QMessageBox.information(
                         self,
                         "Session Opened",
                         f"Session opened:\n{session_name}\n\n"
-                        f"No analysis data found. You can run a new analysis."
+                        f"No analysis data found. You can run a new analysis.",
                     )
 
                 # Update UI state
@@ -997,11 +1120,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             logging.error(f"Failed to load session: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load session:\n{str(e)}"
-            )
+            QMessageBox.critical(self, "Error", f"Failed to load session:\n{str(e)}")
 
     def filter_table(self):
         """Applies the current filter settings to the results table view.
@@ -1012,13 +1131,16 @@ class MainWindow(QMainWindow):
         """
         # Check if tag filter is active
         selected_tag = None
-        if hasattr(self, 'tag_filter_combo'):
+        if hasattr(self, "tag_filter_combo"):
             selected_tag = self.tag_filter_combo.currentData()
 
         if selected_tag:
             # Tag filter is active - filter by Internal_Tags column
             # Find the Internal_Tags column index
-            if self.analysis_results_df is not None and "Internal_Tags" in self.analysis_results_df.columns:
+            if (
+                self.analysis_results_df is not None
+                and "Internal_Tags" in self.analysis_results_df.columns
+            ):
                 col_index = self.analysis_results_df.columns.get_loc("Internal_Tags")
 
                 # Use JSON-formatted tag as filter pattern (e.g., "URGENT")
@@ -1028,6 +1150,7 @@ class MainWindow(QMainWindow):
                 # Use regex pattern to match the tag within the JSON array
                 # Pattern: "TAGNAME" (with quotes, as it appears in JSON)
                 import re
+
                 pattern = f'"{re.escape(selected_tag)}"'
                 self.proxy_model.setFilterRegularExpression(pattern)
         else:
@@ -1038,7 +1161,11 @@ class MainWindow(QMainWindow):
             # First item is "All Columns", so filter should be -1
             filter_column = column_index - 1
 
-            case_sensitivity = Qt.CaseSensitive if self.case_sensitive_checkbox.isChecked() else Qt.CaseInsensitive
+            case_sensitivity = (
+                Qt.CaseSensitive
+                if self.case_sensitive_checkbox.isChecked()
+                else Qt.CaseInsensitive
+            )
 
             self.proxy_model.setFilterKeyColumn(filter_column)
             self.proxy_model.setFilterCaseSensitivity(case_sensitivity)
@@ -1084,12 +1211,12 @@ class MainWindow(QMainWindow):
             return
 
         # === 1. Session Totals cards ===
-        if hasattr(self, 'stat_card_labels'):
+        if hasattr(self, "stat_card_labels"):
             for key, lbl in self.stat_card_labels.items():
                 lbl.setText(str(self.analysis_stats.get(key, "-")))
 
         # === 2. Courier cards ===
-        if hasattr(self, 'courier_cards_layout'):
+        if hasattr(self, "courier_cards_layout"):
             while self.courier_cards_layout.count() > 1:
                 item = self.courier_cards_layout.takeAt(0)
                 if item.widget():
@@ -1107,9 +1234,11 @@ class MainWindow(QMainWindow):
 
         # === 3. Tag cards (Fulfillable + Not Fulfillable) ===
         from shopify_tool.tag_manager import get_tag_color
+
         tag_cats = _normalize_tag_categories(
             self.active_profile_config.get("tag_categories", {})
-            if self.active_profile_config else {}
+            if self.active_profile_config
+            else {}
         )
 
         def _populate_tag_layout(layout_attr, breakdown_key):
@@ -1127,10 +1256,12 @@ class MainWindow(QMainWindow):
                 layout.insertWidget(layout.count() - 1, card)
 
         _populate_tag_layout("tags_fulfillable_layout", "tags_breakdown_fulfillable")
-        _populate_tag_layout("tags_not_fulfillable_layout", "tags_breakdown_not_fulfillable")
+        _populate_tag_layout(
+            "tags_not_fulfillable_layout", "tags_breakdown_not_fulfillable"
+        )
 
         # === 4. SKU table ===
-        if hasattr(self, 'sku_table'):
+        if hasattr(self, "sku_table"):
             self.sku_table.setRowCount(0)
             sku_summary = self.analysis_stats.get("sku_summary") or []
             for row_idx, sku_data in enumerate(sku_summary):
@@ -1140,15 +1271,18 @@ class MainWindow(QMainWindow):
                 num_item.setTextAlignment(Qt.AlignCenter)
                 self.sku_table.setItem(row_idx, 0, num_item)
 
-                self.sku_table.setItem(row_idx, 1, QTableWidgetItem(str(sku_data.get("SKU", "N/A"))))
+                self.sku_table.setItem(
+                    row_idx, 1, QTableWidgetItem(str(sku_data.get("SKU", "N/A")))
+                )
 
                 product = sku_data.get("Warehouse_Name", "")
-                if not product or (hasattr(pd, 'isna') and pd.isna(product)):
+                if not product or (hasattr(pd, "isna") and pd.isna(product)):
                     product = sku_data.get("Product_Name", "N/A")
                 self.sku_table.setItem(row_idx, 2, QTableWidgetItem(str(product)))
 
                 for col_idx, key in enumerate(
-                    ["Total_Quantity", "Fulfillable_Items", "Not_Fulfillable_Items"], start=3
+                    ["Total_Quantity", "Fulfillable_Items", "Not_Fulfillable_Items"],
+                    start=3,
                 ):
                     val_item = QTableWidgetItem(str(sku_data.get(key, 0)))
                     val_item.setTextAlignment(Qt.AlignCenter)
@@ -1159,17 +1293,17 @@ class MainWindow(QMainWindow):
 
     def _clear_statistics_view(self):
         """Clear statistics display when no analysis results."""
-        if hasattr(self, 'stat_card_labels'):
+        if hasattr(self, "stat_card_labels"):
             for lbl in self.stat_card_labels.values():
                 lbl.setText("-")
 
-        if hasattr(self, 'courier_cards_layout'):
+        if hasattr(self, "courier_cards_layout"):
             while self.courier_cards_layout.count() > 1:
                 item = self.courier_cards_layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
 
-        for layout_attr in ('tags_fulfillable_layout', 'tags_not_fulfillable_layout'):
+        for layout_attr in ("tags_fulfillable_layout", "tags_not_fulfillable_layout"):
             layout = getattr(self, layout_attr, None)
             if layout is not None:
                 while layout.count() > 1:
@@ -1177,8 +1311,24 @@ class MainWindow(QMainWindow):
                     if item.widget():
                         item.widget().deleteLater()
 
-        if hasattr(self, 'sku_table'):
+        if hasattr(self, "sku_table"):
             self.sku_table.setRowCount(0)
+
+    def _on_analysis_mode_changed(self, index: int):
+        """Save the analysis mode selection to shopify_config when the combo changes."""
+        if not self.current_client_id:
+            return
+        mode = "fifo" if index == 1 else "multi_first"
+        self.active_profile_config["analysis_mode"] = mode
+        try:
+            self.profile_manager.save_shopify_config(
+                self.current_client_id, self.active_profile_config
+            )
+            logging.debug(
+                f"Saved analysis_mode={mode!r} for CLIENT_{self.current_client_id}"
+            )
+        except Exception as e:
+            logging.error(f"Failed to save analysis_mode: {e}", exc_info=True)
 
     def log_activity(self, op_type, desc):
         """Adds a new entry to the 'Activity Log' table in the UI.
@@ -1211,7 +1361,9 @@ class MainWindow(QMainWindow):
 
         # We need the original, unfiltered dataframe for this operation
         order_number_col_idx = source_model.get_column_index("Order_Number")
-        order_number = source_model.index(source_index.row(), order_number_col_idx).data()
+        order_number = source_model.index(
+            source_index.row(), order_number_col_idx
+        ).data()
 
         if order_number:
             self.actions_handler.toggle_fulfillment_status_for_order(order_number)
@@ -1253,10 +1405,13 @@ class MainWindow(QMainWindow):
             change_status_action = QAction(
                 self.style().standardIcon(QStyle.SP_BrowserReload),
                 "Change Status",
-                self
+                self,
             )
             change_status_action.triggered.connect(
-                partial(self.actions_handler.toggle_fulfillment_status_for_order, order_number)
+                partial(
+                    self.actions_handler.toggle_fulfillment_status_for_order,
+                    order_number,
+                )
             )
             menu.addAction(change_status_action)
 
@@ -1264,7 +1419,7 @@ class MainWindow(QMainWindow):
             add_tag_action = QAction(
                 self.style().standardIcon(QStyle.SP_FileDialogDetailedView),
                 "Add Tag Manually...",
-                self
+                self,
             )
             add_tag_action.triggered.connect(
                 partial(self.actions_handler.add_tag_manually, order_number)
@@ -1273,7 +1428,9 @@ class MainWindow(QMainWindow):
 
             # Internal Tags submenu
             tags_menu = menu.addMenu("Internal Tags")
-            tags_menu.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
+            tags_menu.setIcon(
+                self.style().standardIcon(QStyle.SP_FileDialogDetailedView)
+            )
 
             # Get tag categories from config
             tag_categories = self.active_profile_config.get("tag_categories", {})
@@ -1298,7 +1455,7 @@ class MainWindow(QMainWindow):
             remove_item_action = QAction(
                 self.style().standardIcon(QStyle.SP_DialogCancelButton),
                 f"Remove Item {sku} from Order",
-                self
+                self,
             )
             remove_item_action.triggered.connect(
                 partial(self.actions_handler.remove_item_from_order, order_number, sku)
@@ -1309,7 +1466,7 @@ class MainWindow(QMainWindow):
             remove_order_action = QAction(
                 self.style().standardIcon(QStyle.SP_TrashIcon),
                 f"Remove Entire Order {order_number}",
-                self
+                self,
             )
             remove_order_action.triggered.connect(
                 partial(self.actions_handler.remove_entire_order, order_number)
@@ -1322,7 +1479,7 @@ class MainWindow(QMainWindow):
             copy_order_action = QAction(
                 self.style().standardIcon(QStyle.SP_FileDialogDetailedView),
                 "Copy Order Number",
-                self
+                self,
             )
             copy_order_action.triggered.connect(
                 partial(QApplication.clipboard().setText, str(order_number))
@@ -1333,7 +1490,7 @@ class MainWindow(QMainWindow):
             copy_sku_action = QAction(
                 self.style().standardIcon(QStyle.SP_FileDialogDetailedView),
                 "Copy SKU",
-                self
+                self,
             )
             copy_sku_action.triggered.connect(
                 partial(QApplication.clipboard().setText, str(sku))

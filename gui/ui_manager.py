@@ -1,9 +1,29 @@
 import logging
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout, QPushButton, QLabel,
-    QTabWidget, QGroupBox, QTableView, QPlainTextEdit, QTableWidget, QTableWidgetItem,
-    QLineEdit, QComboBox, QCheckBox, QRadioButton, QListWidget, QListWidgetItem,
-    QFrame, QStyle, QScrollArea, QSplitter, QHeaderView
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QFormLayout,
+    QPushButton,
+    QLabel,
+    QTabWidget,
+    QGroupBox,
+    QTableView,
+    QPlainTextEdit,
+    QTableWidget,
+    QTableWidgetItem,
+    QLineEdit,
+    QComboBox,
+    QCheckBox,
+    QRadioButton,
+    QListWidget,
+    QListWidgetItem,
+    QFrame,
+    QStyle,
+    QScrollArea,
+    QSplitter,
+    QHeaderView,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
@@ -59,10 +79,11 @@ class UIManager:
 
         # Create sidebar
         from gui.client_sidebar import ClientSidebar
+
         self.mw.client_sidebar = ClientSidebar(
             profile_manager=self.mw.profile_manager,
             groups_manager=self.mw.groups_manager,
-            parent=self.mw
+            parent=self.mw,
         )
         main_horizontal.addWidget(self.mw.client_sidebar)
 
@@ -86,7 +107,9 @@ class UIManager:
         # Setup status bar
         self.mw.statusBar().showMessage("Ready")
 
-        self.log.info("UI widgets created successfully with tab-based structure and sidebar.")
+        self.log.info(
+            "UI widgets created successfully with tab-based structure and sidebar."
+        )
 
     def _create_tabs(self):
         """Create main tab widget with 6 tabs."""
@@ -144,7 +167,9 @@ class UIManager:
         toggle_row.addWidget(self.mw.sidebar_toggle_btn)
 
         self.mw.current_client_label = QLabel("No client selected")
-        self.mw.current_client_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
+        self.mw.current_client_label.setStyleSheet(
+            "font-weight: bold; font-size: 11pt;"
+        )
         toggle_row.addWidget(self.mw.current_client_label)
 
         toggle_row.addStretch()
@@ -180,18 +205,36 @@ class UIManager:
     def _setup_tab_shortcuts(self):
         """Setup keyboard shortcuts for tab switching."""
         # Tab switching shortcuts
-        QShortcut(QKeySequence("Ctrl+1"), self.mw,
-                  lambda: self.mw.main_tabs.setCurrentIndex(0))
-        QShortcut(QKeySequence("Ctrl+2"), self.mw,
-                  lambda: self.mw.main_tabs.setCurrentIndex(1))
-        QShortcut(QKeySequence("Ctrl+3"), self.mw,
-                  lambda: self.mw.main_tabs.setCurrentIndex(2))
-        QShortcut(QKeySequence("Ctrl+4"), self.mw,
-                  lambda: self.mw.main_tabs.setCurrentIndex(3))
-        QShortcut(QKeySequence("Ctrl+5"), self.mw,
-                  lambda: self.mw.main_tabs.setCurrentIndex(4))
-        QShortcut(QKeySequence("Ctrl+6"), self.mw,
-                  lambda: self.mw.main_tabs.setCurrentIndex(5))
+        QShortcut(
+            QKeySequence("Ctrl+1"),
+            self.mw,
+            lambda: self.mw.main_tabs.setCurrentIndex(0),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+2"),
+            self.mw,
+            lambda: self.mw.main_tabs.setCurrentIndex(1),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+3"),
+            self.mw,
+            lambda: self.mw.main_tabs.setCurrentIndex(2),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+4"),
+            self.mw,
+            lambda: self.mw.main_tabs.setCurrentIndex(3),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+5"),
+            self.mw,
+            lambda: self.mw.main_tabs.setCurrentIndex(4),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+6"),
+            self.mw,
+            lambda: self.mw.main_tabs.setCurrentIndex(5),
+        )
 
         # Set tooltips on tabs
         self.mw.main_tabs.setTabToolTip(0, "Session setup and file loading (Ctrl+1)")
@@ -261,14 +304,17 @@ class UIManager:
 
         # Integrate existing SessionBrowserWidget
         from gui.session_browser_widget import SessionBrowserWidget
+
         self.mw.session_browser_widget = SessionBrowserWidget(
-            self.mw.session_manager,
-            parent=panel
+            self.mw.session_manager, parent=panel
         )
 
         # Connect signal to main window's method
         self.mw.session_browser_widget.session_selected.connect(
             self.mw.on_session_selected
+        )
+        self.mw.session_browser_widget.multi_export_requested.connect(
+            self.mw.actions_handler.handle_multi_session_stock_export
         )
 
         layout.addWidget(self.mw.session_browser_widget, 1)
@@ -325,10 +371,8 @@ class UIManager:
 
         # REUSE existing SessionBrowserWidget
         from gui.session_browser_widget import SessionBrowserWidget
-        self.mw.session_browser = SessionBrowserWidget(
-            self.mw.session_manager,
-            self.mw
-        )
+
+        self.mw.session_browser = SessionBrowserWidget(self.mw.session_manager, self.mw)
 
         layout.addWidget(self.mw.session_browser, 1)  # Full stretch
 
@@ -369,10 +413,7 @@ class UIManager:
         group.setLayout(layout)
 
         # Add client selector widget
-        self.mw.client_selector = ClientSelectorWidget(
-            self.mw.profile_manager,
-            self.mw
-        )
+        self.mw.client_selector = ClientSelectorWidget(self.mw.profile_manager, self.mw)
         layout.addWidget(self.mw.client_selector)
         layout.addStretch()
 
@@ -389,7 +430,9 @@ class UIManager:
         # Create new session row
         session_row = QHBoxLayout()
         self.mw.new_session_btn = QPushButton("Create New Session")
-        self.mw.new_session_btn.setToolTip("Creates a new session for the current client.")
+        self.mw.new_session_btn.setToolTip(
+            "Creates a new session for the current client."
+        )
         self.mw.new_session_btn.setEnabled(False)  # Enabled when client is selected
         self.mw.session_path_label = QLabel("No client/session selected.")
 
@@ -399,10 +442,7 @@ class UIManager:
         layout.addLayout(session_row)
 
         # Add session browser
-        self.mw.session_browser = SessionBrowserWidget(
-            self.mw.session_manager,
-            self.mw
-        )
+        self.mw.session_browser = SessionBrowserWidget(self.mw.session_manager, self.mw)
         layout.addWidget(self.mw.session_browser)
 
         return group
@@ -443,7 +483,9 @@ class UIManager:
 
         # Select button (text changes based on mode)
         self.mw.load_orders_btn = QPushButton("Load Orders File (.csv)")
-        self.mw.load_orders_btn.setToolTip("Select the orders_export.csv file from Shopify.")
+        self.mw.load_orders_btn.setToolTip(
+            "Select the orders_export.csv file from Shopify."
+        )
         self.mw.load_orders_btn.setEnabled(False)
         layout.addWidget(self.mw.load_orders_btn)
 
@@ -526,6 +568,15 @@ class UIManager:
         path_layout.addStretch()
 
         layout.addLayout(path_layout)
+
+        # Inventory memory toggle
+        self.mw.inventory_memory_checkbox = QCheckBox("Use Inventory Memory")
+        self.mw.inventory_memory_checkbox.setToolTip(
+            "When enabled, analysis starts from the final stock of the last session "
+            "instead of requiring a new stock file."
+        )
+        self.mw.inventory_memory_checkbox.setEnabled(False)  # enabled after client load
+        layout.addWidget(self.mw.inventory_memory_checkbox)
 
         # File list preview (only visible in folder mode)
         self.mw.stock_file_list_widget = QListWidget()
@@ -615,9 +666,13 @@ class UIManager:
         group.setLayout(layout)
 
         self.mw.packing_list_button = QPushButton("📄 Create Packing List")
-        self.mw.packing_list_button.setToolTip("Generate packing lists based on pre-defined filters.")
+        self.mw.packing_list_button.setToolTip(
+            "Generate packing lists based on pre-defined filters."
+        )
         self.mw.stock_export_button = QPushButton("📊 Create Stock Export")
-        self.mw.stock_export_button.setToolTip("Generate stock export files for couriers.")
+        self.mw.stock_export_button.setToolTip(
+            "Generate stock export files for couriers."
+        )
         self.mw.packing_list_button.setEnabled(False)
         self.mw.stock_export_button.setEnabled(False)
 
@@ -646,27 +701,25 @@ class UIManager:
 
         if not self.mw.session_path:
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.warning(
-                self.mw,
-                "No Session",
-                "No session is currently active."
+                self.mw, "No Session", "No session is currently active."
             )
             return
 
         try:
             system = platform.system()
             if system == "Windows":
-                subprocess.Popen(['explorer', self.mw.session_path])
+                subprocess.Popen(["explorer", self.mw.session_path])
             elif system == "Darwin":  # macOS
                 subprocess.Popen(["open", self.mw.session_path])
             else:  # Linux
                 subprocess.Popen(["xdg-open", self.mw.session_path])
         except Exception as e:
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.critical(
-                self.mw,
-                "Error",
-                f"Failed to open session folder:\n{str(e)}"
+                self.mw, "Error", f"Failed to open session folder:\n{str(e)}"
             )
 
     def _create_main_actions_group(self):
@@ -695,12 +748,29 @@ class UIManager:
         self.mw.add_product_button = QPushButton("➕ Add Product to Order")
         self.mw.add_product_button.setMinimumHeight(70)
         self.mw.add_product_button.setEnabled(False)
-        self.mw.add_product_button.setToolTip("Manually add a product to an existing order")
+        self.mw.add_product_button.setToolTip(
+            "Manually add a product to an existing order"
+        )
         primary_layout.addWidget(self.mw.add_product_button, 1)
 
         main_layout.addLayout(primary_layout)
 
-        # === Row 2: Settings ===
+        # === Row 2: Analysis mode ===
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel("Analysis mode:"))
+        self.mw.analysis_mode_combo = WheelIgnoreComboBox()
+        self.mw.analysis_mode_combo.addItems(
+            ["Multi-item first", "FIFO (oldest first)"]
+        )
+        self.mw.analysis_mode_combo.setToolTip(
+            "Multi-item first: maximizes complete orders fulfilled.\n"
+            "FIFO: processes strictly oldest orders first, regardless of item count."
+        )
+        mode_layout.addWidget(self.mw.analysis_mode_combo)
+        mode_layout.addStretch()
+        main_layout.addLayout(mode_layout)
+
+        # === Row 3: Settings ===
         settings_layout = QHBoxLayout()
 
         # Client Settings
@@ -740,7 +810,9 @@ class UIManager:
         layout = QVBoxLayout(tab)
         self.mw.activity_log_table = QTableWidget()
         self.mw.activity_log_table.setColumnCount(3)
-        self.mw.activity_log_table.setHorizontalHeaderLabels(["Time", "Operation", "Description"])
+        self.mw.activity_log_table.setHorizontalHeaderLabels(
+            ["Time", "Operation", "Description"]
+        )
         self.mw.activity_log_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.mw.activity_log_table)
         return tab
@@ -760,11 +832,10 @@ class UIManager:
 
         filter_layout.addWidget(QLabel("Filter by:"))
         filter_layout.addWidget(self.mw.filter_column_selector)
-        filter_layout.addWidget(self.mw.filter_input, 1) # Allow stretching
+        filter_layout.addWidget(self.mw.filter_input, 1)  # Allow stretching
         filter_layout.addWidget(self.mw.case_sensitive_checkbox)
         filter_layout.addWidget(self.mw.clear_filter_button)
         layout.addLayout(filter_layout)
-
 
         # --- Table View ---
         self.mw.tableView = QTableView()
@@ -828,14 +899,16 @@ class UIManager:
         self.mw.stock_export_button.setEnabled(not is_busy and is_data_loaded)
 
         # Enable "Add Product" button after analysis
-        if hasattr(self.mw, 'add_product_button'):
+        if hasattr(self.mw, "add_product_button"):
             self.mw.add_product_button.setEnabled(not is_busy and is_data_loaded)
 
         # Enable "Bulk Operations" button after analysis
-        if hasattr(self.mw, 'toggle_bulk_mode_btn'):
+        if hasattr(self.mw, "toggle_bulk_mode_btn"):
             self.mw.toggle_bulk_mode_btn.setEnabled(not is_busy and is_data_loaded)
 
-        self.log.debug(f"UI busy state set to: {is_busy}, data_loaded: {is_data_loaded}")
+        self.log.debug(
+            f"UI busy state set to: {is_busy}, data_loaded: {is_data_loaded}"
+        )
 
     def update_results_table(self, data_df):
         """Populates the main results table with new data from a DataFrame.
@@ -860,8 +933,10 @@ class UIManager:
         main_df = data_df.copy()
 
         # Check if bulk mode is active
-        bulk_mode_enabled = (hasattr(self.mw, 'toggle_bulk_mode_btn') and
-                            self.mw.toggle_bulk_mode_btn.isChecked())
+        bulk_mode_enabled = (
+            hasattr(self.mw, "toggle_bulk_mode_btn")
+            and self.mw.toggle_bulk_mode_btn.isChecked()
+        )
 
         # Create model with checkbox support if bulk mode is active
         source_model = PandasModel(main_df, enable_checkboxes=bulk_mode_enabled)
@@ -870,13 +945,18 @@ class UIManager:
 
         # Set order group delegate for visual borders between orders
         from gui.order_group_delegate import OrderGroupDelegate
-        if not hasattr(self.mw, 'order_group_delegate') or self.mw.order_group_delegate is None:
+
+        if (
+            not hasattr(self.mw, "order_group_delegate")
+            or self.mw.order_group_delegate is None
+        ):
             self.mw.order_group_delegate = OrderGroupDelegate(self.mw)
         self.mw.tableView.setItemDelegate(self.mw.order_group_delegate)
 
         # Set checkbox delegate for first column if bulk mode is active
         if bulk_mode_enabled:
             from gui.checkbox_delegate import CheckboxDelegate
+
             checkbox_delegate = CheckboxDelegate(self.mw.selection_helper)
             self.mw.tableView.setItemDelegateForColumn(0, checkbox_delegate)
             # Set checkbox column width
@@ -907,17 +987,16 @@ class UIManager:
         # If the config manager has saved widths it will apply them right after,
         # so we skip the full scan when saved widths are available.
         has_saved_config = (
-            hasattr(self.mw, 'table_config_manager')
+            hasattr(self.mw, "table_config_manager")
             and self.mw.table_config_manager.has_saved_column_widths()
         )
         if not has_saved_config:
             self.mw.tableView.resizeColumnsToContents()
 
         # Apply table configuration (column visibility, order, widths)
-        if hasattr(self.mw, 'table_config_manager'):
+        if hasattr(self.mw, "table_config_manager"):
             self.mw.table_config_manager.apply_config_to_view(
-                self.mw.tableView,
-                data_df
+                self.mw.tableView, data_df
             )
 
         # Update hidden columns indicator
@@ -930,7 +1009,7 @@ class UIManager:
         analysis_results_df, grouped by category. If DataFrame is empty,
         falls back to showing placeholder message.
         """
-        if not hasattr(self.mw, 'tag_filter_combo'):
+        if not hasattr(self.mw, "tag_filter_combo"):
             return
 
         # Clear existing items
@@ -967,7 +1046,9 @@ class UIManager:
                 self.mw.tag_filter_combo.addItem(f"{category_label}: {tag}", tag)
 
         self.mw.tag_filter_combo.setEnabled(True)
-        self.log.info(f"Tag filter populated with {len(unique_tags)} unique tags from DataFrame")
+        self.log.info(
+            f"Tag filter populated with {len(unique_tags)} unique tags from DataFrame"
+        )
 
     def _extract_unique_tags_from_dataframe(self) -> set:
         """Extract all unique tags from analysis_results_df Internal_Tags column.
@@ -1110,7 +1191,8 @@ class UIManager:
         # Connect to same handler as Tab 1 button
         self.mw.add_product_button_tab2.clicked.connect(
             lambda: self.mw.actions_handler.show_add_product_dialog()
-            if hasattr(self.mw, 'actions_handler') else None
+            if hasattr(self.mw, "actions_handler")
+            else None
         )
         layout.addWidget(self.mw.add_product_button_tab2)
 
@@ -1121,8 +1203,11 @@ class UIManager:
             "Generate packing lists based on pre-defined filters"
         )
         self.mw.packing_list_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_report_selection_dialog("packing_lists")
-            if hasattr(self.mw, 'actions_handler') else None
+            lambda: self.mw.actions_handler.open_report_selection_dialog(
+                "packing_lists"
+            )
+            if hasattr(self.mw, "actions_handler")
+            else None
         )
         layout.addWidget(self.mw.packing_list_button_tab2)
 
@@ -1133,8 +1218,11 @@ class UIManager:
             "Generate stock export files for couriers"
         )
         self.mw.stock_export_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_report_selection_dialog("stock_exports")
-            if hasattr(self.mw, 'actions_handler') else None
+            lambda: self.mw.actions_handler.open_report_selection_dialog(
+                "stock_exports"
+            )
+            if hasattr(self.mw, "actions_handler")
+            else None
         )
         layout.addWidget(self.mw.stock_export_button_tab2)
 
@@ -1146,7 +1234,8 @@ class UIManager:
         )
         self.mw.settings_button_tab2.clicked.connect(
             lambda: self.mw.actions_handler.open_settings_window()
-            if hasattr(self.mw, 'actions_handler') else None
+            if hasattr(self.mw, "actions_handler")
+            else None
         )
         layout.addWidget(self.mw.settings_button_tab2)
 
@@ -1158,7 +1247,8 @@ class UIManager:
         )
         self.mw.configure_columns_button_tab2.clicked.connect(
             lambda: self.mw.open_column_config_dialog()
-            if hasattr(self.mw, 'open_column_config_dialog') else None
+            if hasattr(self.mw, "open_column_config_dialog")
+            else None
         )
         layout.addWidget(self.mw.configure_columns_button_tab2)
 
@@ -1169,7 +1259,9 @@ class UIManager:
         self.mw.toggle_tags_panel_btn = QPushButton("🏷️ Tags Manager")
         self.mw.toggle_tags_panel_btn.setCheckable(True)
         self.mw.toggle_tags_panel_btn.setEnabled(False)
-        self.mw.toggle_tags_panel_btn.setToolTip("Show/hide Internal Tags management panel")
+        self.mw.toggle_tags_panel_btn.setToolTip(
+            "Show/hide Internal Tags management panel"
+        )
         self.mw.toggle_tags_panel_btn.clicked.connect(self.mw.toggle_tag_panel)
         layout.addWidget(self.mw.toggle_tags_panel_btn)
 
@@ -1180,7 +1272,9 @@ class UIManager:
         self.mw.toggle_bulk_mode_btn = QPushButton("📦 Bulk Operations")
         self.mw.toggle_bulk_mode_btn.setCheckable(True)
         self.mw.toggle_bulk_mode_btn.setEnabled(False)
-        self.mw.toggle_bulk_mode_btn.setToolTip("Enable bulk selection and operations on multiple orders")
+        self.mw.toggle_bulk_mode_btn.setToolTip(
+            "Enable bulk selection and operations on multiple orders"
+        )
         self.mw.toggle_bulk_mode_btn.clicked.connect(self.mw.toggle_bulk_mode)
         layout.addWidget(self.mw.toggle_bulk_mode_btn)
 
@@ -1231,8 +1325,12 @@ class UIManager:
         self.mw.tag_management_panel.hide()  # Hidden by default
 
         # Connect tag panel signals
-        self.mw.tag_management_panel.tag_added.connect(self.mw.add_internal_tag_to_order)
-        self.mw.tag_management_panel.tag_removed.connect(self.mw.remove_internal_tag_from_order)
+        self.mw.tag_management_panel.tag_added.connect(
+            self.mw.add_internal_tag_to_order
+        )
+        self.mw.tag_management_panel.tag_removed.connect(
+            self.mw.remove_internal_tag_from_order
+        )
 
         # Add tag panel to layout
         layout.addWidget(self.mw.tag_management_panel)
@@ -1258,8 +1356,10 @@ class UIManager:
         header.setSectionsMovable(True)
 
         # Connect resize and move signals to TableConfigManager
-        if hasattr(self.mw, 'table_config_manager'):
-            header.sectionResized.connect(self.mw.table_config_manager.on_column_resized)
+        if hasattr(self.mw, "table_config_manager"):
+            header.sectionResized.connect(
+                self.mw.table_config_manager.on_column_resized
+            )
             header.sectionMoved.connect(self.mw.table_config_manager.on_column_moved)
 
     def _show_header_context_menu(self, position):
@@ -1272,7 +1372,7 @@ class UIManager:
         from PySide6.QtGui import QAction
 
         # Only show menu if table config manager is available
-        if not hasattr(self.mw, 'table_config_manager'):
+        if not hasattr(self.mw, "table_config_manager"):
             return
 
         # Only show menu if data is loaded
@@ -1294,12 +1394,15 @@ class UIManager:
 
         # Get source model (unwrap proxy if present)
         source_model = model
-        if hasattr(model, 'sourceModel') and model.sourceModel() is not None:
+        if hasattr(model, "sourceModel") and model.sourceModel() is not None:
             source_model = model.sourceModel()
 
         # Adjust index if checkbox column exists
         col_index = logical_index
-        if hasattr(source_model, 'enable_checkboxes') and source_model.enable_checkboxes:
+        if (
+            hasattr(source_model, "enable_checkboxes")
+            and source_model.enable_checkboxes
+        ):
             if col_index == 0:
                 # Checkbox column, no menu
                 return
@@ -1314,9 +1417,12 @@ class UIManager:
         column_name = df_columns[col_index]
 
         # Check if column is locked
-        is_locked = (hasattr(self.mw.table_config_manager, '_current_config') and
-                     self.mw.table_config_manager._current_config and
-                     column_name in self.mw.table_config_manager._current_config.locked_columns)
+        is_locked = (
+            hasattr(self.mw.table_config_manager, "_current_config")
+            and self.mw.table_config_manager._current_config
+            and column_name
+            in self.mw.table_config_manager._current_config.locked_columns
+        )
 
         # Create context menu
         menu = QMenu(self.mw)
@@ -1331,14 +1437,16 @@ class UIManager:
             action.setEnabled(False)
             menu.addAction(action)
         else:
-            action_text = f"Hide '{column_name}'" if is_visible else f"Show '{column_name}'"
+            action_text = (
+                f"Hide '{column_name}'" if is_visible else f"Show '{column_name}'"
+            )
             action = QAction(action_text, self.mw)
             action.triggered.connect(
                 lambda: (
                     self.mw.table_config_manager.toggle_column_visibility(
                         self.mw.tableView, column_name, self.mw.analysis_results_df
                     ),
-                    self.update_hidden_columns_indicator()
+                    self.update_hidden_columns_indicator(),
                 )
             )
             menu.addAction(action)
@@ -1352,13 +1460,15 @@ class UIManager:
                 self.mw.table_config_manager.show_all_columns(
                     self.mw.tableView, self.mw.analysis_results_df
                 ),
-                self.update_hidden_columns_indicator()
+                self.update_hidden_columns_indicator(),
             )
         )
         menu.addAction(show_all_action)
 
         # Add submenu for showing hidden columns
-        hidden_columns = self.mw.table_config_manager.get_hidden_columns(self.mw.analysis_results_df)
+        hidden_columns = self.mw.table_config_manager.get_hidden_columns(
+            self.mw.analysis_results_df
+        )
         if hidden_columns:
             show_menu = menu.addMenu("Show Column")
             for hidden_col in hidden_columns:
@@ -1368,7 +1478,7 @@ class UIManager:
                         self.mw.table_config_manager.set_column_visibility(
                             self.mw.tableView, col, True, self.mw.analysis_results_df
                         ),
-                        self.update_hidden_columns_indicator()
+                        self.update_hidden_columns_indicator(),
                     )
                 )
                 show_menu.addAction(col_action)
@@ -1407,28 +1517,41 @@ class UIManager:
             "QPushButton { color: #4A90D9; text-decoration: underline; border: none; padding: 0 5px; }"
             "QPushButton:hover { color: #2A70B9; }"
         )
-        self.mw.hidden_columns_indicator.setToolTip("Click to show/restore hidden columns")
+        self.mw.hidden_columns_indicator.setToolTip(
+            "Click to show/restore hidden columns"
+        )
         self.mw.hidden_columns_indicator.setVisible(False)
-        self.mw.hidden_columns_indicator.clicked.connect(self._show_hidden_columns_popup)
+        self.mw.hidden_columns_indicator.clicked.connect(
+            self._show_hidden_columns_popup
+        )
         layout.addWidget(self.mw.hidden_columns_indicator)
 
         return widget
 
     def update_summary_bar(self):
         """Update summary bar with current analysis stats."""
-        if not hasattr(self.mw, 'analysis_results_df') or self.mw.analysis_results_df is None:
+        if (
+            not hasattr(self.mw, "analysis_results_df")
+            or self.mw.analysis_results_df is None
+        ):
             self.mw.summary_label.setText("No analysis data")
             return
 
         df = self.mw.analysis_results_df
 
         # Get unique order counts
-        total_orders = df['Order_Number'].nunique()
-        fulfillable_orders = df[df['Order_Fulfillment_Status'] == 'Fulfillable']['Order_Number'].nunique()
+        total_orders = df["Order_Number"].nunique()
+        fulfillable_orders = df[df["Order_Fulfillment_Status"] == "Fulfillable"][
+            "Order_Number"
+        ].nunique()
 
         # Get item quantity sums (not row counts)
-        total_items = int(df['Quantity'].sum()) if 'Quantity' in df.columns else len(df)
-        fulfillable_items = int(df[df['Order_Fulfillment_Status'] == 'Fulfillable']['Quantity'].sum()) if 'Quantity' in df.columns else 0
+        total_items = int(df["Quantity"].sum()) if "Quantity" in df.columns else len(df)
+        fulfillable_items = (
+            int(df[df["Order_Fulfillment_Status"] == "Fulfillable"]["Quantity"].sum())
+            if "Quantity" in df.columns
+            else 0
+        )
 
         # Display format: total (fulfillable)
         self.mw.summary_label.setText(
@@ -1438,16 +1561,20 @@ class UIManager:
 
     def update_hidden_columns_indicator(self):
         """Update the hidden columns indicator in the summary bar."""
-        if not hasattr(self.mw, 'hidden_columns_indicator'):
+        if not hasattr(self.mw, "hidden_columns_indicator"):
             return
 
-        if not hasattr(self.mw, 'table_config_manager') or \
-           not hasattr(self.mw, 'analysis_results_df') or \
-           self.mw.analysis_results_df is None:
+        if (
+            not hasattr(self.mw, "table_config_manager")
+            or not hasattr(self.mw, "analysis_results_df")
+            or self.mw.analysis_results_df is None
+        ):
             self.mw.hidden_columns_indicator.setVisible(False)
             return
 
-        hidden = self.mw.table_config_manager.get_hidden_columns(self.mw.analysis_results_df)
+        hidden = self.mw.table_config_manager.get_hidden_columns(
+            self.mw.analysis_results_df
+        )
         if hidden:
             self.mw.hidden_columns_indicator.setText(f"{len(hidden)} columns hidden")
             self.mw.hidden_columns_indicator.setVisible(True)
@@ -1459,11 +1586,15 @@ class UIManager:
         from PySide6.QtWidgets import QMenu
         from PySide6.QtGui import QAction
 
-        if not hasattr(self.mw, 'table_config_manager') or \
-           self.mw.analysis_results_df is None:
+        if (
+            not hasattr(self.mw, "table_config_manager")
+            or self.mw.analysis_results_df is None
+        ):
             return
 
-        hidden = self.mw.table_config_manager.get_hidden_columns(self.mw.analysis_results_df)
+        hidden = self.mw.table_config_manager.get_hidden_columns(
+            self.mw.analysis_results_df
+        )
         if not hidden:
             return
 
@@ -1490,9 +1621,11 @@ class UIManager:
 
     def _restore_hidden_column(self, column_name: str):
         """Restore a single hidden column via the indicator popup."""
-        if hasattr(self.mw, 'table_config_manager') and \
-           hasattr(self.mw, 'tableView') and \
-           self.mw.analysis_results_df is not None:
+        if (
+            hasattr(self.mw, "table_config_manager")
+            and hasattr(self.mw, "tableView")
+            and self.mw.analysis_results_df is not None
+        ):
             self.mw.table_config_manager.set_column_visibility(
                 self.mw.tableView, column_name, True, self.mw.analysis_results_df
             )
@@ -1500,9 +1633,11 @@ class UIManager:
 
     def _restore_all_hidden_columns(self):
         """Restore all hidden columns via the indicator popup."""
-        if hasattr(self.mw, 'table_config_manager') and \
-           hasattr(self.mw, 'tableView') and \
-           self.mw.analysis_results_df is not None:
+        if (
+            hasattr(self.mw, "table_config_manager")
+            and hasattr(self.mw, "tableView")
+            and self.mw.analysis_results_df is not None
+        ):
             self.mw.table_config_manager.show_all_columns(
                 self.mw.tableView, self.mw.analysis_results_df
             )
@@ -1609,9 +1744,9 @@ class UIManager:
 
         self.mw.stat_card_labels = {}
         for key, label_text in [
-            ("total_orders_completed",       "Orders\nCompleted"),
-            ("total_orders_not_completed",   "Orders Not\nCompleted"),
-            ("total_items_to_write_off",     "Items to\nWrite Off"),
+            ("total_orders_completed", "Orders\nCompleted"),
+            ("total_orders_not_completed", "Orders Not\nCompleted"),
+            ("total_items_to_write_off", "Items to\nWrite Off"),
             ("total_items_not_to_write_off", "Items Not\nWrite Off"),
         ]:
             card, val_lbl = self._make_stat_card("-", label_text)
@@ -1706,7 +1841,9 @@ class UIManager:
             ["#", "SKU", "Product", "Total Qty", "Fulfillable", "Not Fulfillable"]
         )
         self.mw.sku_table.horizontalHeader().setStretchLastSection(False)
-        self.mw.sku_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.mw.sku_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.Stretch
+        )
         self.mw.sku_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.mw.sku_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.mw.sku_table.setAlternatingRowColors(True)

@@ -259,6 +259,10 @@ def apply_writeoff_to_stock_export(
     Raises:
         Does not raise exceptions - logs warnings for overages and continues
     """
+    # stock_export.py now emits 'Колич'; older exports used 'Наличност' — normalize here
+    if "Колич" in stock_df.columns and "Наличност" not in stock_df.columns:
+        stock_df = stock_df.rename(columns={"Колич": "Наличност"})
+
     if stock_df.empty or writeoff_df.empty:
         if stock_df.empty:
             logger.warning("Empty stock DataFrame provided to apply_writeoff_to_stock_export")
@@ -372,43 +376,41 @@ def generate_writeoff_report(
     # Calculate writeoffs
     writeoff_df = calculate_writeoff_quantities(analysis_df, tag_categories)
 
-    # Simple format: just SKU and Quantity (same as stock export)
+    # Reuse the stock export's canonical ERP layout so this report auto-detects
+    # in the warehouse system exactly like stock exports do.
+    from shopify_tool.stock_export import (
+        QTY_COL,
+        _empty_export_df,
+        _finalize_export_df,
+    )
+
     if writeoff_df.empty:
         logger.warning("No writeoffs to report - creating empty report")
-        export_df = pd.DataFrame(columns=["Артикул", "Наличност"])
+        export_df = _empty_export_df()
     else:
-        export_df = pd.DataFrame({
-            "Артикул": writeoff_df["SKU"],
-            "Наличност": writeoff_df["Writeoff_Quantity"].astype(int)
-        })
+        export_df = _finalize_export_df(
+            pd.DataFrame({
+                "Артикул": writeoff_df["SKU"],
+                QTY_COL: writeoff_df["Writeoff_Quantity"].astype(int),
+            })
+        )
 
-    # Write to Excel using xlwt (same format as stock_export)
-    try:
-        with pd.ExcelWriter(output_file, engine="xlwt") as writer:
-            export_df.to_excel(writer, sheet_name="Sheet1", index=False)
-    except Exception as e:
-        # Fallback for environments where xlwt might not be properly registered
-        if "No Excel writer 'xlwt'" in str(e):
-            logger.warning("Pandas failed to find 'xlwt' engine. Trying direct save with xlwt.")
-            import xlwt
-            workbook = xlwt.Workbook()
-            sheet = workbook.add_sheet('Sheet1')
+    # Write to Excel using direct xlwt (pandas dropped xlwt engine support)
+    import xlwt
 
-            # Write header
-            for col_num, value in enumerate(export_df.columns):
-                sheet.write(0, col_num, value)
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet("Sheet1")
+    for col_num, value in enumerate(export_df.columns):
+        sheet.write(0, col_num, value)
+    # enumerate, not iterrows() index: export_df may carry a gapped index,
+    # which would write rows to wrong/blank physical positions.
+    for row_num, (_, row) in enumerate(export_df.iterrows()):
+        for col_num, value in enumerate(row):
+            sheet.write(row_num + 1, col_num, value)
+    workbook.save(output_file)
+    logger.info(f"Writeoff report created: {output_file}")
 
-            # Write data
-            for row_num, row in export_df.iterrows():
-                for col_num, value in enumerate(row):
-                    sheet.write(row_num + 1, col_num, value)
-
-            workbook.save(output_file)
-            logger.info(f"Writeoff report created using direct xlwt save: {output_file}")
-        else:
-            raise e
-
-    total_quantity = export_df["Наличност"].sum() if not export_df.empty else 0
+    total_quantity = export_df[QTY_COL].sum() if not export_df.empty else 0
     logger.info(
         f"Writeoff report created: {output_file} "
         f"({len(export_df)} SKUs, {total_quantity} total quantity)"

@@ -3,6 +3,43 @@ import pandas as pd
 
 logger = logging.getLogger("ShopifyToolLogger")
 
+# Canonical column layout for the warehouse ERP's column auto-detection.
+# This MUST match the ERP import template exactly (see screenshot in PR):
+#   A=Артикул  B=<blank spacer>  C=Мярка  D=Брой  E=Годност  F=Партида
+# The blank column (index 1) is an intentional spacer the ERP format expects;
+# Годност/Партида are always present (empty when no lot tracking) so the layout
+# is identical for every export. Do not reorder/rename — the ERP detects columns
+# by position/header.
+BLANK_COL = ""
+QTY_COL = "Брой"
+STOCK_EXPORT_COLUMNS = ["Артикул", BLANK_COL, "Мярка", QTY_COL, "Годност", "Партида"]
+UNIT_VALUE = "брой"
+
+
+def _empty_export_df() -> pd.DataFrame:
+    """Empty export frame carrying the full canonical column layout."""
+    return pd.DataFrame(columns=STOCK_EXPORT_COLUMNS)
+
+
+def _finalize_export_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce a built export frame to the canonical ERP column layout.
+
+    Accepts frames that use the legacy ``Колич`` quantity name or that omit the
+    blank spacer / lot columns, and returns a frame with exactly
+    :data:`STOCK_EXPORT_COLUMNS` in order. Idempotent.
+    """
+    df = df.copy()
+    if "Колич" in df.columns:
+        df = df.rename(columns={"Колич": QTY_COL})
+    if QTY_COL not in df.columns:
+        df[QTY_COL] = 0
+    df["Мярка"] = UNIT_VALUE
+    for col in ("Годност", "Партида"):
+        if col not in df.columns:
+            df[col] = ""
+    df[BLANK_COL] = ""
+    return df[STOCK_EXPORT_COLUMNS].reset_index(drop=True)
+
 
 def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
     """Aggregate fulfilled quantities per (SKU, expiry, batch) lot for write-off requests.
@@ -17,10 +54,10 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
                         Must have a 'Lot_Details' column.
 
     Returns:
-        DataFrame with columns: Артикул, Годност, Партида, Наличност
+        DataFrame with the canonical layout (:data:`STOCK_EXPORT_COLUMNS`).
     """
-    lot_rows_data: dict = {}   # (sku, expiry, batch) → total qty
-    no_lot_skus: dict = {}     # sku → total qty
+    lot_rows_data: dict = {}  # (sku, expiry, batch) → total qty
+    no_lot_skus: dict = {}  # sku → total qty
     # The simulation allocates at the (order, SKU) level — all DataFrame rows for the
     # same (order, SKU) pair carry an identical Lot_Details object representing the full
     # allocation for that pair.  Without this guard we would count the same allocation
@@ -52,14 +89,28 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
     records = []
     for (sku, expiry, batch), qty in lot_rows_data.items():
         if qty > 0:
-            records.append({"Артикул": sku, "Годност": expiry, "Партида": batch, "Наличност": int(qty)})
+            records.append(
+                {
+                    "Артикул": sku,
+                    QTY_COL: int(qty),
+                    "Годност": expiry,
+                    "Партида": batch,
+                }
+            )
     for sku, qty in no_lot_skus.items():
         if qty > 0:
-            records.append({"Артикул": sku, "Годност": "", "Партида": "", "Наличност": int(qty)})
+            records.append(
+                {
+                    "Артикул": sku,
+                    QTY_COL: int(qty),
+                    "Годност": "",
+                    "Партида": "",
+                }
+            )
 
     if not records:
-        return pd.DataFrame(columns=["Артикул", "Годност", "Партида", "Наличност"])
-    return pd.DataFrame(records)
+        return _empty_export_df()
+    return _finalize_export_df(pd.DataFrame(records))
 
 
 def create_stock_export(
@@ -68,7 +119,7 @@ def create_stock_export(
     report_name="Stock Export",
     filters=None,
     apply_writeoff=False,
-    tag_categories=None
+    tag_categories=None,
 ):
     """Creates a stock export .xls file from scratch.
 
@@ -83,8 +134,9 @@ def create_stock_export(
         quantity for each unique SKU.
     3.  **Packaging Materials (Optional)**: If enabled, calculates and adds
         packaging material SKUs based on Internal Tags (e.g., BOX → PKG-BOX-SMALL).
-    4.  **DataFrame Creation**: It creates a new DataFrame with the required
-        columns: 'Артикул' (for SKU) and 'Наличност' (for quantity).
+    4.  **DataFrame Creation**: Every export uses the canonical ERP column layout
+        (:data:`STOCK_EXPORT_COLUMNS`) so the warehouse system auto-detects the
+        columns — Артикул, a blank spacer, Мярка, Брой, Годност, Партида.
     5.  **Saving**: The new DataFrame is saved to the specified .xls output file.
 
     Args:
@@ -136,37 +188,55 @@ def create_stock_export(
         )
 
         if filtered_items.empty:
-            logger.warning(f"Report '{report_name}': No items found matching the criteria.")
-            # Still create an empty file with headers
-            if has_lot_details:
-                export_df = pd.DataFrame(columns=["Артикул", "Годност", "Партида", "Наличност"])
-            else:
-                export_df = pd.DataFrame(columns=["Артикул", "Наличност"])
+            logger.warning(
+                f"Report '{report_name}': No items found matching the criteria."
+            )
+            # Still create an empty file with the canonical headers
+            export_df = _empty_export_df()
         elif has_lot_details:
             # Per-lot aggregation for warehouse write-off precision
-            logger.info(f"Report '{report_name}': Using per-lot aggregation (FIFO lot tracking active).")
+            logger.info(
+                f"Report '{report_name}': Using per-lot aggregation (FIFO lot tracking active)."
+            )
             export_df = _expand_lot_summary(filtered_items)
-            export_df = export_df[export_df["Наличност"] > 0].reset_index(drop=True)
+            export_df = export_df[export_df[QTY_COL] > 0].reset_index(drop=True)
             if export_df.empty:
-                logger.warning(f"Report '{report_name}': No items with positive quantity after lot expansion.")
+                logger.warning(
+                    f"Report '{report_name}': No items with positive quantity after lot expansion."
+                )
             else:
-                logger.info(f"Found {len(export_df)} lot rows to write for report '{report_name}'.")
+                logger.info(
+                    f"Found {len(export_df)} lot rows to write for report '{report_name}'."
+                )
         else:
             # Summarize quantities by SKU
-            sku_summary = filtered_items.groupby("SKU")["Quantity"].sum().astype(int).reset_index()
+            sku_summary = (
+                filtered_items.groupby("SKU")["Quantity"]
+                .sum()
+                .astype(int)
+                .reset_index()
+            )
             sku_summary = sku_summary[sku_summary["Quantity"] > 0]
 
             if sku_summary.empty:
-                logger.warning(f"Report '{report_name}': No items with a positive quantity to export.")
-                export_df = pd.DataFrame(columns=["Артикул", "Наличност"])
+                logger.warning(
+                    f"Report '{report_name}': No items with a positive quantity to export."
+                )
+                export_df = _empty_export_df()
             else:
-                logger.info(f"Found {len(sku_summary)} unique SKUs to write for report '{report_name}'.")
+                logger.info(
+                    f"Found {len(sku_summary)} unique SKUs to write for report '{report_name}'."
+                )
 
                 # Create base export with product SKUs
-                export_df = pd.DataFrame({
-                    "Артикул": sku_summary["SKU"],
-                    "Наличност": sku_summary["Quantity"]
-                })
+                export_df = _finalize_export_df(
+                    pd.DataFrame(
+                        {
+                            "Артикул": sku_summary["SKU"],
+                            QTY_COL: sku_summary["Quantity"],
+                        }
+                    )
+                )
 
         # Add packaging materials if writeoff enabled (runs for both lot and non-lot paths)
         if apply_writeoff and tag_categories:
@@ -177,55 +247,142 @@ def create_stock_export(
             writeoff_df = calculate_writeoff_quantities(filtered_items, tag_categories)
 
             if not writeoff_df.empty:
-                # Convert packaging materials to stock export format
-                packaging_rows = pd.DataFrame({
-                    "Артикул": writeoff_df["SKU"],
-                    "Наличност": writeoff_df["Writeoff_Quantity"].astype(int)
-                })
-                # When lot columns are present, add empty lot fields for packaging rows
-                if has_lot_details:
-                    packaging_rows["Годност"] = ""
-                    packaging_rows["Партида"] = ""
-                    packaging_rows = packaging_rows[["Артикул", "Годност", "Партида", "Наличност"]]
+                # Convert packaging materials to the canonical export layout
+                packaging_rows = _finalize_export_df(
+                    pd.DataFrame(
+                        {
+                            "Артикул": writeoff_df["SKU"],
+                            QTY_COL: writeoff_df["Writeoff_Quantity"].astype(int),
+                        }
+                    )
+                )
 
                 # APPEND packaging materials as additional rows
                 export_df = pd.concat([export_df, packaging_rows], ignore_index=True)
 
                 logger.info(
                     f"Added {len(packaging_rows)} packaging SKUs to export "
-                    f"(total: {packaging_rows['Наличност'].sum()} units)"
+                    f"(total: {packaging_rows[QTY_COL].sum()} units)"
                 )
             else:
-                logger.info("No packaging materials required (no writeoff mappings triggered)")
-
-        # Save to an .xls file
-        try:
-            with pd.ExcelWriter(output_file, engine="xlwt") as writer:
-                export_df.to_excel(writer, index=False, sheet_name="Sheet1")
-            logger.info(f"Stock export '{report_name}' created successfully at '{output_file}'.")
-        except Exception as e:
-            # Fallback for environments where xlwt might not be properly registered
-            if "No Excel writer 'xlwt'" in str(e):
-                logger.warning("Pandas failed to find 'xlwt' engine. Trying direct save with xlwt.")
-                import xlwt
-                workbook = xlwt.Workbook()
-                sheet = workbook.add_sheet('Sheet1')
-
-                # Write header
-                for col_num, value in enumerate(export_df.columns):
-                    sheet.write(0, col_num, value)
-
-                # Write data
-                for row_num, row in export_df.iterrows():
-                    for col_num, value in enumerate(row):
-                        sheet.write(row_num + 1, col_num, value)
-
-                workbook.save(output_file)
                 logger.info(
-                    f"Stock export '{report_name}' created successfully at '{output_file}' using direct xlwt save."
+                    "No packaging materials required (no writeoff mappings triggered)"
                 )
-            else:
-                raise e
+
+        # Guard against any path that bypassed _finalize_export_df
+        export_df = _finalize_export_df(export_df)
+
+        # Save to an .xls file using direct xlwt (pandas dropped xlwt engine support)
+        import xlwt
+
+        workbook = xlwt.Workbook()
+        sheet = workbook.add_sheet("Sheet1")
+        for col_num, value in enumerate(export_df.columns):
+            sheet.write(0, col_num, value)
+        # enumerate, not iterrows() index: export_df may carry a gapped index
+        # (e.g. from the Quantity > 0 filter), which would skip/misplace rows.
+        for row_num, (_, row) in enumerate(export_df.iterrows()):
+            for col_num, value in enumerate(row):
+                sheet.write(row_num + 1, col_num, value)
+        workbook.save(output_file)
+        logger.info(
+            f"Stock export '{report_name}' created successfully at '{output_file}'."
+        )
 
     except Exception as e:
         logger.error(f"Error while creating stock export '{report_name}': {e}")
+
+
+def merge_session_stock_exports(
+    session_paths: list, client_id: str = ""
+) -> pd.DataFrame:
+    """Merge fulfillable order quantities from multiple sessions.
+
+    Reads analysis/current_state.pkl from each session directory and extracts
+    quantities from orders with Order_Fulfillment_Status == 'Fulfillable', grouped by SKU.
+
+    Args:
+        session_paths: List of path-like objects, each pointing to a session directory.
+        client_id: For logging.
+
+    Returns:
+        DataFrame with the canonical export layout (:data:`STOCK_EXPORT_COLUMNS`),
+        summed across all sessions and sorted by Артикул.
+    """
+    from pathlib import Path
+
+    all_dfs = []
+    for session_path in session_paths:
+        session_path = Path(session_path)
+        analysis_dir = session_path / "analysis"
+        pkl_file = analysis_dir / "current_state.pkl"
+        xlsx_file = analysis_dir / "current_state.xlsx"
+
+        df = None
+        if pkl_file.exists():
+            try:
+                df = pd.read_pickle(pkl_file)
+            except Exception as e:
+                logger.warning(
+                    f"[merge_stock client={client_id}] pkl unreadable in {session_path.name}, trying xlsx: {e}"
+                )
+
+        if df is None and xlsx_file.exists():
+            try:
+                df = pd.read_excel(xlsx_file)
+            except Exception as e:
+                logger.warning(f"Could not read {xlsx_file}: {e}")
+
+        if df is None:
+            logger.warning(
+                f"[merge_stock client={client_id}] No readable state file in {session_path.name}/analysis"
+            )
+            continue
+
+        if "Order_Fulfillment_Status" not in df.columns:
+            logger.warning(
+                f"[merge_stock client={client_id}] No Order_Fulfillment_Status in {session_path.name}"
+            )
+            continue
+
+        fulfillable = df[df["Order_Fulfillment_Status"] == "Fulfillable"].copy()
+        all_dfs.append(fulfillable)
+        logger.info(
+            f"[merge_stock client={client_id}] {len(fulfillable)} fulfillable rows from {session_path.name}"
+        )
+
+    if not all_dfs:
+        return _empty_export_df()
+
+    combined = pd.concat(all_dfs, ignore_index=True)
+
+    has_lot_details = (
+        "Lot_Details" in combined.columns
+        and combined["Lot_Details"].notna().any()
+    )
+
+    if has_lot_details:
+        result = _expand_lot_summary(combined)
+        if result.empty:
+            return _empty_export_df()
+        return result.sort_values("Артикул").reset_index(drop=True)
+
+    sku_summary = (
+        combined.groupby("SKU")["Quantity"]
+        .sum()
+        .astype(int)
+        .reset_index()
+    )
+    sku_summary = sku_summary[sku_summary["Quantity"] > 0]
+    if sku_summary.empty:
+        return _empty_export_df()
+
+    result = _finalize_export_df(
+        pd.DataFrame(
+            {
+                "Артикул": sku_summary["SKU"],
+                QTY_COL: sku_summary["Quantity"],
+            }
+        )
+    )
+    return result.sort_values("Артикул").reset_index(drop=True)
