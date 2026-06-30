@@ -46,21 +46,21 @@ class ToolsWidget(QWidget):
         self.reference_labels_widget = ReferenceLabelsWidget(self.mw)
         self.sub_tabs.addTab(
             self.reference_labels_widget,
-            "📄 Reference Labels"
+            "Reference Labels"
         )
 
         # Sub-tab 2: Barcode Generator
         self.barcode_generator_widget = BarcodeGeneratorWidget(self.mw)
         self.sub_tabs.addTab(
             self.barcode_generator_widget,
-            "🏷️ Barcode Generator"
+            "Barcode Generator"
         )
 
         # Sub-tab 3: SKU Labels
         self.sku_label_widget = SKULabelWidget(self.mw)
         self.sub_tabs.addTab(
             self.sku_label_widget,
-            "🖨️ SKU Labels"
+            "SKU Labels"
         )
 
         layout.addWidget(self.sub_tabs)

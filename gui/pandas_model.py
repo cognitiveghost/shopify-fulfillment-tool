@@ -1,7 +1,79 @@
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractTableModel, QSortFilterProxyModel, Qt, QModelIndex
 from PySide6.QtGui import QColor
 import pandas as pd
 from gui.theme_manager import get_theme_manager
+
+
+class FulfillmentFilterProxy(QSortFilterProxyModel):
+    """Proxy that combines a plain-substring text filter with a tag filter.
+
+    Replaces the default ``setFilterRegularExpression`` behaviour, which
+    treated raw user input as a regex (so typing ``(``, ``+`` or ``[`` broke
+    the filter or silently hid every row). Matching is plain substring on the
+    cell's display text, and the text and tag filters are ANDed together
+    instead of being mutually exclusive.
+
+    Columns are addressed by *DataFrame* index (``-1`` = all columns); the
+    proxy reads the source ``PandasModel``'s frame directly via ``iat``, so it
+    is unaffected by the checkbox column offset present in bulk mode.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._df_col = -1  # -1 = search all columns
+        self._case_sensitive = False
+        self._needle = ""  # text filter, pre-folded to match case sensitivity
+        self._tag_needle = None  # tag filter as quoted JSON token, e.g. '"URGENT"'
+
+    def set_text_filter(self, text, df_col=-1, case_sensitive=False):
+        text = text or ""
+        self._df_col = df_col
+        self._case_sensitive = case_sensitive
+        self._needle = text if case_sensitive else text.casefold()
+        self.invalidateFilter()
+
+    def set_tag_filter(self, tag):
+        self._tag_needle = f'"{tag}"' if tag else None
+        self.invalidateFilter()
+
+    def clear_filters(self):
+        self._df_col = -1
+        self._needle = ""
+        self._tag_needle = None
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        model = self.sourceModel()
+        df = getattr(model, "_dataframe", None) if model is not None else None
+        if df is None:
+            return True
+
+        # Tag filter: Internal_Tags stores tags as a JSON array, so a quoted
+        # match ("URGENT") avoids matching substrings of other tag names.
+        if self._tag_needle:
+            if "Internal_Tags" not in df.columns:
+                return False
+            val = df.iat[source_row, df.columns.get_loc("Internal_Tags")]
+            if self._tag_needle not in ("" if pd.isna(val) else str(val)):
+                return False
+
+        if not self._needle:
+            return True
+
+        if self._df_col < 0:
+            col_indices = range(len(df.columns))
+        elif self._df_col < len(df.columns):
+            col_indices = (self._df_col,)
+        else:
+            return True  # stale column index after a data reload
+
+        fold = (lambda s: s) if self._case_sensitive else str.casefold
+        for c in col_indices:
+            cell = df.iat[source_row, c]
+            hay = "" if pd.isna(cell) else str(cell)
+            if self._needle in fold(hay):
+                return True
+        return False
 
 
 class PandasModel(QAbstractTableModel):

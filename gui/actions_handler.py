@@ -480,7 +480,7 @@ class ActionsHandler(QObject):
             )
             return
 
-        # ✅ FIX: Reload fresh config before opening dialog
+        # FIX: Reload fresh config before opening dialog
         try:
             fresh_config = self.mw.profile_manager.load_shopify_config(
                 self.mw.current_client_id
@@ -500,7 +500,7 @@ class ActionsHandler(QObject):
             )
             return
 
-        # ✅ FIX: Use correct config keys
+        # FIX: Use correct config keys
         if report_type == "packing_lists":
             config_key = "packing_list_configs"  # Correct key
         elif report_type == "stock_exports":
@@ -796,7 +796,7 @@ class ActionsHandler(QObject):
             # ========================================
             # Show brief status message instead of blocking dialog
             self.mw.statusBar().showMessage(
-                f"✅ Report saved: {os.path.basename(output_file)}",
+                f"Report saved: {os.path.basename(output_file)}",
                 5000,  # 5 seconds
             )
             self.log.info(f"Report generated: {output_file}")
@@ -900,7 +900,7 @@ class ActionsHandler(QObject):
 
             # Show success message in status bar
             self.mw.statusBar().showMessage(
-                f"✅ Writeoff report saved: {output_file.name}",
+                f"Writeoff report saved: {output_file.name}",
                 5000,  # 5 seconds
             )
             self.log.info(f"Writeoff report created: {output_file}")

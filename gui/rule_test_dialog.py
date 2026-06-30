@@ -93,7 +93,7 @@ class RuleTestDialog(QDialog):
 
     def _create_conditions_section(self):
         """Create section showing condition evaluation results."""
-        group = QGroupBox("📋 Condition Evaluation")
+        group = QGroupBox("Condition Evaluation")
         layout = QVBoxLayout(group)
 
         # Table: Field | Operator | Value | Matched Rows
@@ -117,7 +117,7 @@ class RuleTestDialog(QDialog):
 
     def _create_preview_section(self):
         """Create section showing first 5 matched rows (max 100 total)."""
-        group = QGroupBox("🔍 Matched Rows Preview (Before Actions)")
+        group = QGroupBox("Matched Rows Preview (Before Actions)")
         layout = QVBoxLayout(group)
 
         # Info label
@@ -137,7 +137,7 @@ class RuleTestDialog(QDialog):
 
     def _create_actions_section(self):
         """Create section showing actions to be applied."""
-        group = QGroupBox("⚙️ Actions to be Applied")
+        group = QGroupBox("Actions to be Applied")
         layout = QVBoxLayout(group)
 
         # Actions list label
@@ -150,7 +150,7 @@ class RuleTestDialog(QDialog):
 
     def _create_after_actions_section(self):
         """Create section showing rows after actions applied."""
-        group = QGroupBox("✨ Preview After Actions")
+        group = QGroupBox("Preview After Actions")
         layout = QVBoxLayout(group)
 
         # Preview table
@@ -162,7 +162,7 @@ class RuleTestDialog(QDialog):
         layout.addWidget(self.after_table)
 
         # Legend for highlights
-        legend = QLabel("🟡 Yellow highlight = Modified by rule actions")
+        legend = QLabel("Yellow highlight = Modified by rule actions")
         theme = get_theme_manager().get_current_theme()
         legend.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; margin-top: 5px;")
         layout.addWidget(legend)
@@ -264,7 +264,7 @@ class RuleTestDialog(QDialog):
         percentage = (self.matched_count / total_rows * 100) if total_rows > 0 else 0
         step_info = f"{len(steps)} step(s)" if len(steps) > 1 else "1 step"
 
-        summary = f"📊 Final Result ({step_info}, narrowing): "
+        summary = f"Final Result ({step_info}, narrowing): "
         summary += f"<span style='color: #4CAF50; font-size: 14pt;'>{self.matched_count}</span> rows affected "
         summary += f"({percentage:.1f}% of {total_rows} total rows)"
 

@@ -5,10 +5,88 @@ for performing mass operations on selected rows in the Analysis Results table.
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton,
-    QToolButton, QMenu
+    QWidget, QLayout, QLabel, QPushButton,
+    QToolButton, QMenu, QFrame
 )
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Signal, Qt, QRect, QSize, QPoint
+
+from gui.theme_manager import get_theme_manager
+
+
+class FlowLayout(QLayout):
+    """A layout that lays widgets out left-to-right and wraps to the next row
+    when it runs out of horizontal space.
+
+    Qt has no built-in flow layout; this is the canonical minimal
+    implementation (adapted from the official Qt example). It is what keeps the
+    bulk toolbar's ~10 buttons reachable on a narrow window instead of being
+    clipped off the right edge.
+    """
+
+    def __init__(self, parent=None, margin=5, spacing=8):
+        super().__init__(parent)
+        if parent is not None:
+            self.setContentsMargins(margin, margin, margin, margin)
+        self.setSpacing(spacing)
+        self._items = []
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index):
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientations(Qt.Orientation(0))
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        m = self.contentsMargins()
+        size += QSize(m.left() + m.right(), m.top() + m.bottom())
+        return size
+
+    def _do_layout(self, rect, test_only):
+        m = self.contentsMargins()
+        x = rect.x() + m.left()
+        y = rect.y() + m.top()
+        line_height = 0
+        spacing = self.spacing()
+        right = rect.right() - m.right()
+
+        for item in self._items:
+            hint = item.sizeHint()
+            w, h = hint.width(), hint.height()
+            if x > rect.x() + m.left() and x + w > right:
+                x = rect.x() + m.left()
+                y = y + line_height + spacing
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x = x + w + spacing
+            line_height = max(line_height, h)
+
+        return y + line_height + m.bottom() - rect.y()
 
 
 class BulkOperationsToolbar(QWidget):
@@ -54,16 +132,21 @@ class BulkOperationsToolbar(QWidget):
         """
         super().__init__(parent)
         self._setup_ui()
+        self._apply_theme()
+        get_theme_manager().theme_changed.connect(self._apply_theme)
+
+    def _separator(self):
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Sunken)
+        return line
 
     def _setup_ui(self):
         """Initialize UI components."""
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(10)
+        layout = FlowLayout(self, margin=5, spacing=8)
 
         # Section 1: Selection controls
         self.selection_label = QLabel("Selected: 0 orders (0 items)")
-        self.selection_label.setStyleSheet("font-weight: bold; color: #2196F3;")
         layout.addWidget(self.selection_label)
 
         select_all_btn = QPushButton("Select All")
@@ -76,11 +159,10 @@ class BulkOperationsToolbar(QWidget):
         clear_btn.clicked.connect(self.clear_selection_clicked.emit)
         layout.addWidget(clear_btn)
 
-        layout.addSpacing(20)
+        layout.addWidget(self._separator())
 
         # Section 2: Status operations
-        status_label = QLabel("Status:")
-        layout.addWidget(status_label)
+        layout.addWidget(QLabel("Status:"))
 
         self.fulfillable_btn = QPushButton("Set Fulfillable")
         self.fulfillable_btn.setToolTip("Mark selected orders as Fulfillable")
@@ -92,11 +174,10 @@ class BulkOperationsToolbar(QWidget):
         self.not_fulfillable_btn.clicked.connect(lambda: self.change_status_clicked.emit(False))
         layout.addWidget(self.not_fulfillable_btn)
 
-        layout.addSpacing(20)
+        layout.addWidget(self._separator())
 
         # Section 3: Tag operations
-        tags_label = QLabel("Tags:")
-        layout.addWidget(tags_label)
+        layout.addWidget(QLabel("Tags:"))
 
         self.add_tag_btn = QPushButton("Add Tag")
         self.add_tag_btn.setToolTip("Add Internal Tag to selected orders")
@@ -108,9 +189,9 @@ class BulkOperationsToolbar(QWidget):
         self.remove_tag_btn.clicked.connect(self.remove_tag_clicked.emit)
         layout.addWidget(self.remove_tag_btn)
 
-        layout.addSpacing(20)
+        layout.addWidget(self._separator())
 
-        # Section 4: Delete operations (dropdown menu)
+        # Section 4: Delete operations (dropdown menu) - destructive, styled red
         self.delete_menu_btn = QToolButton()
         self.delete_menu_btn.setText("Delete Operations")
         self.delete_menu_btn.setPopupMode(QToolButton.InstantPopup)
@@ -134,11 +215,10 @@ class BulkOperationsToolbar(QWidget):
         self.delete_menu_btn.setMenu(delete_menu)
         layout.addWidget(self.delete_menu_btn)
 
-        layout.addSpacing(20)
+        layout.addWidget(self._separator())
 
         # Section 5: Export
-        export_label = QLabel("Export:")
-        layout.addWidget(export_label)
+        layout.addWidget(QLabel("Export:"))
 
         self.export_xlsx_btn = QPushButton("XLSX")
         self.export_xlsx_btn.setToolTip("Export selected orders to Excel file")
@@ -150,9 +230,6 @@ class BulkOperationsToolbar(QWidget):
         self.export_csv_btn.clicked.connect(lambda: self.export_selection_clicked.emit('csv'))
         layout.addWidget(self.export_csv_btn)
 
-        # Stretch to push everything left
-        layout.addStretch()
-
         # Store references to operation buttons for enabling/disabling
         self._operation_buttons = [
             self.fulfillable_btn,
@@ -163,6 +240,18 @@ class BulkOperationsToolbar(QWidget):
             self.export_xlsx_btn,
             self.export_csv_btn,
         ]
+
+    def _apply_theme(self):
+        """Apply current theme colors. Re-runs on theme change."""
+        theme = get_theme_manager().get_current_theme()
+        self.selection_label.setStyleSheet(
+            f"font-weight: bold; color: {theme.accent_blue};"
+        )
+        # Destructive operations get a red accent so they're not mistaken for
+        # the safe export/status buttons sitting next to them.
+        self.delete_menu_btn.setStyleSheet(
+            f"QToolButton {{ color: {theme.accent_red}; font-weight: bold; }}"
+        )
 
     def update_selection_count(self, orders_count: int, items_count: int):
         """Update selection counter label.

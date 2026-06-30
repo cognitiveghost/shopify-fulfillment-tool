@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QLabel,
 )
-from PySide6.QtCore import QThreadPool, QPoint, QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtCore import QThreadPool, QPoint, QModelIndex, QTimer, Qt
 from PySide6.QtGui import QAction
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -36,6 +36,7 @@ from gui.session_browser_widget import SessionBrowserWidget
 from gui.profile_manager_dialog import ProfileManagerDialog
 from gui.tag_management_panel import TagManagementPanel
 from gui.selection_helper import SelectionHelper
+from gui.pandas_model import FulfillmentFilterProxy
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +92,7 @@ class MainWindow(QMainWindow):
         self.is_syncing_selection = False
 
         # Models
-        self.proxy_model = QSortFilterProxyModel()
-        self.proxy_model.setFilterCaseSensitivity(Qt.CaseInsensitive)
-        self.proxy_model.setFilterKeyColumn(-1)  # Search across all columns
+        self.proxy_model = FulfillmentFilterProxy()
 
         # Initialize new architecture managers
         self._init_managers()
@@ -316,8 +315,13 @@ class MainWindow(QMainWindow):
         # Custom signals
         self.actions_handler.data_changed.connect(self._update_all_views)
 
-        # Filter input
-        self.filter_input.textChanged.connect(self.filter_table)
+        # Filter input. Typing is debounced so we don't re-scan the whole
+        # DataFrame on every keystroke; the other controls fire immediately.
+        self._filter_debounce = QTimer(self)
+        self._filter_debounce.setSingleShot(True)
+        self._filter_debounce.setInterval(200)
+        self._filter_debounce.timeout.connect(self.filter_table)
+        self.filter_input.textChanged.connect(self._filter_debounce.start)
         self.filter_column_selector.currentIndexChanged.connect(self.filter_table)
         self.case_sensitive_checkbox.stateChanged.connect(self.filter_table)
         self.clear_filter_button.clicked.connect(self.clear_filter)
@@ -379,9 +383,7 @@ class MainWindow(QMainWindow):
             self.tag_filter_combo.setCurrentIndex(0)  # Reset to "All Tags"
 
         # Reset proxy model filter state
-        self.proxy_model.setFilterRegularExpression("")
-        self.proxy_model.setFilterKeyColumn(-1)
-        self.proxy_model.invalidateFilter()
+        self.proxy_model.clear_filters()
 
     def undo_last_operation(self):
         """Undo the last DataFrame modification."""
@@ -639,7 +641,7 @@ class MainWindow(QMainWindow):
             self._update_bulk_toolbar_state()
             logging.info("Bulk mode enabled")
         else:
-            self.toggle_bulk_mode_btn.setText("📦 Bulk Operations")
+            self.toggle_bulk_mode_btn.setText("Bulk Operations")
             self.toggle_bulk_mode_btn.setStyleSheet("")
             logging.info("Bulk mode disabled")
 
@@ -1126,50 +1128,23 @@ class MainWindow(QMainWindow):
         """Applies the current filter settings to the results table view.
 
         Reads the filter text, selected column, and case sensitivity setting
-        from the UI controls and applies them to the `QSortFilterProxyModel`
-        to update the visible rows in the table.
+        from the UI controls and applies them to the proxy model. The text
+        filter and tag filter are combined (ANDed), so the user can narrow by
+        tag and text at the same time.
         """
-        # Check if tag filter is active
         selected_tag = None
         if hasattr(self, "tag_filter_combo"):
             selected_tag = self.tag_filter_combo.currentData()
 
-        if selected_tag:
-            # Tag filter is active - filter by Internal_Tags column
-            # Find the Internal_Tags column index
-            if (
-                self.analysis_results_df is not None
-                and "Internal_Tags" in self.analysis_results_df.columns
-            ):
-                col_index = self.analysis_results_df.columns.get_loc("Internal_Tags")
+        # Column combo: index 0 = "All Columns" (-1), index k = DataFrame col k-1.
+        df_col = self.filter_column_selector.currentIndex() - 1
 
-                # Use JSON-formatted tag as filter pattern (e.g., "URGENT")
-                # This will match if the tag appears in the JSON array
-                self.proxy_model.setFilterKeyColumn(col_index)
-                self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitive)
-                # Use regex pattern to match the tag within the JSON array
-                # Pattern: "TAGNAME" (with quotes, as it appears in JSON)
-                import re
-
-                pattern = f'"{re.escape(selected_tag)}"'
-                self.proxy_model.setFilterRegularExpression(pattern)
-        else:
-            # Regular text filter
-            text = self.filter_input.text()
-            column_index = self.filter_column_selector.currentIndex()
-
-            # First item is "All Columns", so filter should be -1
-            filter_column = column_index - 1
-
-            case_sensitivity = (
-                Qt.CaseSensitive
-                if self.case_sensitive_checkbox.isChecked()
-                else Qt.CaseInsensitive
-            )
-
-            self.proxy_model.setFilterKeyColumn(filter_column)
-            self.proxy_model.setFilterCaseSensitivity(case_sensitivity)
-            self.proxy_model.setFilterRegularExpression(text)
+        self.proxy_model.set_text_filter(
+            self.filter_input.text(),
+            df_col=df_col,
+            case_sensitive=self.case_sensitive_checkbox.isChecked(),
+        )
+        self.proxy_model.set_tag_filter(selected_tag)
 
     def _update_all_views(self):
         """Central slot to refresh all UI components after data changes.

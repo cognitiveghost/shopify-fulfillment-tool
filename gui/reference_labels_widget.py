@@ -83,7 +83,7 @@ class ReferenceLabelsWidget(QWidget):
 
     def _create_file_selection_group(self):
         """Create file selection section."""
-        group = QGroupBox("📁 File Selection")
+        group = QGroupBox("File Selection")
         layout = QVBoxLayout(group)
 
         # PDF Selection Row
@@ -126,7 +126,7 @@ class ReferenceLabelsWidget(QWidget):
 
     def _create_output_settings_group(self):
         """Create output settings section."""
-        group = QGroupBox("📂 Output Settings")
+        group = QGroupBox("Output Settings")
         layout = QVBoxLayout(group)
 
         # Output directory row
@@ -153,11 +153,11 @@ class ReferenceLabelsWidget(QWidget):
 
     def _create_processing_group(self):
         """Create processing section."""
-        group = QGroupBox("⚙️ Processing")
+        group = QGroupBox("Processing")
         layout = QVBoxLayout(group)
 
         # Process button
-        self.process_btn = QPushButton("🚀 Process Labels")
+        self.process_btn = QPushButton("Process Labels")
         self.process_btn.setMinimumHeight(50)
         self.process_btn.setEnabled(False)
         self.process_btn.setToolTip("Process PDF with reference numbers")
@@ -179,7 +179,7 @@ class ReferenceLabelsWidget(QWidget):
 
     def _create_history_group(self):
         """Create history section."""
-        group = QGroupBox("📋 Processing History")
+        group = QGroupBox("Processing History")
         layout = QVBoxLayout(group)
 
         # History table
@@ -306,13 +306,13 @@ class ReferenceLabelsWidget(QWidget):
         self.process_btn.setEnabled(has_both_files and has_output)
 
         if has_both_files and has_output:
-            self.status_label.setText("✅ Ready to process")
+            self.status_label.setText("Ready to process")
             self.status_label.setStyleSheet("color: green; font-weight: bold;")
         elif not has_output:
-            self.status_label.setText("⚠️ No session selected")
+            self.status_label.setText("No session selected")
             self.status_label.setStyleSheet("color: orange;")
         else:
-            self.status_label.setText("⏳ Waiting for files...")
+            self.status_label.setText("Waiting for files...")
             theme = get_theme_manager().get_current_theme()
             self.status_label.setStyleSheet(f"color: {theme.text_secondary};")
 
@@ -409,7 +409,7 @@ class ReferenceLabelsWidget(QWidget):
         # Show progress
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        self.status_label.setText("⏳ Processing...")
+        self.status_label.setText("Processing...")
         self.status_label.setStyleSheet("color: blue;")
 
         self.log.info(f"Starting PDF processing: {self.pdf_path}")
@@ -478,7 +478,7 @@ class ReferenceLabelsWidget(QWidget):
             result: Processing result dict
         """
         self.progress_bar.setValue(100)
-        self.status_label.setText("✅ Processing complete!")
+        self.status_label.setText("Processing complete!")
         self.status_label.setStyleSheet("color: green; font-weight: bold;")
 
         self.log.info(
@@ -527,7 +527,7 @@ class ReferenceLabelsWidget(QWidget):
         """
         exctype, value, traceback_str = error_info
 
-        self.status_label.setText("❌ Processing failed")
+        self.status_label.setText("Processing failed")
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
 
         self.log.error(f"PDF processing failed: {value}\n{traceback_str}")

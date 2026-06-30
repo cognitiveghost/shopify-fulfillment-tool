@@ -351,7 +351,7 @@ class FileHandler:
 
         It reads the required column names from the client-specific configuration
         and uses `core.validate_csv_headers` to perform the check. The result
-        is displayed to the user via a status label (✓ or ✗) with a tooltip
+        is displayed to the user via a status label with a tooltip
         providing details on failure.
 
         Args:
@@ -587,13 +587,13 @@ class FileHandler:
         # Update file list widget
         self.mw.orders_file_list_widget.clear()
         for filepath in valid_files:
-            item = QListWidgetItem(f"✓ {os.path.basename(filepath)}")
+            item = QListWidgetItem(f"{os.path.basename(filepath)}")
             item.setForeground(QColor("green"))
             self.mw.orders_file_list_widget.addItem(item)
 
         for filepath, missing in invalid_files:
             item = QListWidgetItem(
-                f"✗ {os.path.basename(filepath)} (missing: {', '.join(missing)})"
+                f"{os.path.basename(filepath)} (missing: {', '.join(missing)})"
             )
             item.setForeground(QColor("red"))
             self.mw.orders_file_list_widget.addItem(item)
@@ -609,7 +609,7 @@ class FileHandler:
         self.check_files_ready()
 
         self.log.info(
-            f"✓ Successfully merged {len(valid_files)} files into {merged_path}"
+            f"Successfully merged {len(valid_files)} files into {merged_path}"
         )
 
     def select_stock_folder(self):
@@ -690,13 +690,13 @@ class FileHandler:
         # Update file list widget
         self.mw.stock_file_list_widget.clear()
         for filepath in valid_files:
-            item = QListWidgetItem(f"✓ {os.path.basename(filepath)}")
+            item = QListWidgetItem(f"{os.path.basename(filepath)}")
             item.setForeground(QColor("green"))
             self.mw.stock_file_list_widget.addItem(item)
 
         for filepath, missing in invalid_files:
             item = QListWidgetItem(
-                f"✗ {os.path.basename(filepath)} (missing: {', '.join(missing)})"
+                f"{os.path.basename(filepath)} (missing: {', '.join(missing)})"
             )
             item.setForeground(QColor("red"))
             self.mw.stock_file_list_widget.addItem(item)
@@ -712,7 +712,7 @@ class FileHandler:
         self.check_files_ready()
 
         self.log.info(
-            f"✓ Successfully merged {len(valid_files)} files into {merged_path}"
+            f"Successfully merged {len(valid_files)} files into {merged_path}"
         )
 
     def scan_folder_for_csv(
@@ -822,16 +822,16 @@ class FileHandler:
                     )
                     total_rows += len(df)
 
-                    self.log.info(f"  ✓ {os.path.basename(filepath)}: {len(df)} rows")
+                    self.log.info(f"  {os.path.basename(filepath)}: {len(df)} rows")
                 else:
                     invalid_files.append((filepath, missing_cols))
                     self.log.warning(
-                        f"  ✗ {os.path.basename(filepath)}: missing {missing_cols}"
+                        f"  {os.path.basename(filepath)}: missing {missing_cols}"
                     )
 
             except Exception as e:
                 invalid_files.append((filepath, [f"Error: {str(e)}"]))
-                self.log.error(f"  ✗ {os.path.basename(filepath)}: {e}")
+                self.log.error(f"  {os.path.basename(filepath)}: {e}")
 
         return valid_files, invalid_files, total_rows
 
@@ -850,9 +850,9 @@ class FileHandler:
         """
         msg = f"Found {len(valid_files) + len(invalid_files)} CSV files\n\n"
 
-        msg += f"✓ Valid: {len(valid_files)} files ({total_rows} rows)\n"
+        msg += f"Valid: {len(valid_files)} files ({total_rows} rows)\n"
         if invalid_files:
-            msg += f"✗ Invalid: {len(invalid_files)} files\n"
+            msg += f"Invalid: {len(invalid_files)} files\n"
 
         msg += "\n"
 
@@ -881,7 +881,7 @@ class FileHandler:
             self.mw, f"{file_type}_remove_duplicates_checkbox", None
         )
         if remove_duplicates and remove_duplicates.isChecked():
-            msg += "⚠ Duplicates will be removed (keep first occurrence)\n\n"
+            msg += "Duplicates will be removed (keep first occurrence)\n\n"
 
         msg += f"Continue with {len(valid_files)} valid files?"
 
