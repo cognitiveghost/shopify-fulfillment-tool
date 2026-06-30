@@ -1089,15 +1089,22 @@ class ProfileManager:
 
     # --- Set/Bundle Management Methods ---
 
-    def save_inventory_memory(self, client_id: str, stock_dict: dict) -> bool:
+    def save_inventory_memory(self, client_id: str, stock_dict: dict, config: dict = None) -> bool:
         """Persist final stock snapshot to shopify_config inventory_memory section."""
-        config = self.load_shopify_config(client_id) or {}
-        config["inventory_memory"] = {
-            "enabled": config.get("inventory_memory", {}).get("enabled", False),
-            "skus": {str(k): float(v) for k, v in stock_dict.items() if v > 0},
+        # ponytail: read-modify-write; ceiling is concurrent PC writes can still clobber
+        # enabled between load and save. Upgrade: hold file lock across load+save.
+        # Pass config to skip the extra disk read when the caller already holds it.
+        if config is None:
+            config = self.load_shopify_config(client_id) or {}
+        # Use update() so enabled (and any future keys) come from the freshly loaded config
+        config.setdefault("inventory_memory", {})
+        config["inventory_memory"].update({
+            # Keep zero-qty SKUs: dropping them shrinks old_skus overlap ratio and can
+            # trigger a false 'Wrong client file?' anomaly on the next stock load.
+            "skus": {str(k): float(v) for k, v in stock_dict.items()},
             "last_updated": datetime.now().isoformat(timespec="seconds"),
             "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
-        }
+        })
         return self.save_shopify_config(client_id, config)
 
     def get_inventory_memory(self, client_id: str) -> dict:

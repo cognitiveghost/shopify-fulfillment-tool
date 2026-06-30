@@ -618,7 +618,25 @@ def _load_and_validate_files(
     else:
         # For testing: allow passing DataFrames directly
         stock_df = config.get("test_stock_df")
-        orders_df = config.get("test_orders_df")
+
+        # Load orders from file if path provided (inventory-memory mode: no stock file given)
+        if orders_file_path is not None:
+            orders_file_path = _normalize_unc_path(orders_file_path)
+            if not os.path.exists(orders_file_path):
+                raise FileNotFoundError(f"Orders file not found at path: {orders_file_path}")
+            column_mappings = config.get("column_mappings", {})
+            orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
+            orders_df = pd.read_csv(
+                orders_file_path,
+                delimiter=orders_delimiter,
+                encoding="utf-8-sig",
+                dtype=orders_dtype,
+            )
+            logger.info(
+                f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns"
+            )
+        else:
+            orders_df = config.get("test_orders_df")
 
         # Inventory memory fallback: reconstruct stock from last session's snapshot
         # when no stock file was provided and memory mode is enabled.
@@ -626,9 +644,11 @@ def _load_and_validate_files(
         # flag bypasses CSV-column-name validation (which expects raw CSV headers).
         if stock_df is None:
             inv_mem = config.get("_inventory_memory", {})
-            if inv_mem.get("enabled") and inv_mem.get("skus"):
+            if inv_mem.get("enabled"):
+                skus = inv_mem.get("skus") or {}
                 stock_df = pd.DataFrame(
-                    [{"SKU": sku, "Stock": qty} for sku, qty in inv_mem["skus"].items()]
+                    [{"SKU": sku, "Stock": qty} for sku, qty in skus.items()],
+                    columns=["SKU", "Stock"],
                 )
                 config["_stock_from_memory"] = True
                 logger.info(f"Loaded {len(stock_df)} SKUs from inventory memory")
@@ -1072,17 +1092,19 @@ def _save_results_and_reports(
         and "SKU" in final_df.columns
     ):
         try:
-            inv_mem = profile_manager.get_inventory_memory(client_id)
+            full_config = profile_manager.load_shopify_config(client_id) or {}
+            inv_mem = full_config.get("inventory_memory", {})
             if inv_mem.get("enabled", False):
-                # Build final_stock_dict: min Final_Stock per SKU (post-fulfillment state)
+                # Build final_stock_dict: last Final_Stock per SKU (true post-fulfillment state;
+                # min() would understate when cancellations/restocks make rows non-monotonic)
                 final_stock_dict = (
                     final_df.groupby("SKU")["Final_Stock"]
-                    .min()
+                    .last()
                     .dropna()
                     .apply(lambda x: max(0.0, float(x)))
                     .to_dict()
                 )
-                profile_manager.save_inventory_memory(client_id, final_stock_dict)
+                profile_manager.save_inventory_memory(client_id, final_stock_dict, config=full_config)
                 logger.info(f"Inventory memory updated: {len(final_stock_dict)} SKUs")
         except Exception as e:
             logger.warning(f"Failed to save inventory memory: {e}")
@@ -1176,7 +1198,8 @@ def run_full_analysis(
 
         # Step 2: Load and validate files
         logger.info("Step 2: Loading and validating CSV files...")
-        # Inject inventory memory into config so _load_and_validate_files can use it
+        # Shallow copy so caller's dict is never mutated (stale _inventory_memory across calls)
+        config = dict(config)
         if profile_manager and client_id:
             config["_inventory_memory"] = profile_manager.get_inventory_memory(
                 client_id

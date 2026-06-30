@@ -213,6 +213,11 @@ class ActionsHandler(QObject):
                 "Analysis", f"Analysis complete. Report saved to: {result_msg}"
             )
 
+            # Inventory memory is persisted by core.run_full_analysis using the
+            # true post-fulfillment Final_Stock (groupby('SKU').last()). Do not
+            # re-save it here — an extra write using .first() would store the
+            # pre-depletion stock and over-promise fulfillment on the next run.
+
             # ========================================
             # NEW: RECORD STATISTICS TO SERVER
             # ========================================
@@ -2028,17 +2033,26 @@ class ActionsHandler(QObject):
         filename, _ = QFileDialog.getSaveFileName(
             self.mw,
             "Save Combined Stock Export",
-            f"combined_stock_{len(session_path_objs)}_sessions.csv",
-            "CSV Files (*.csv);;Excel Files (*.xlsx)",
+            f"combined_stock_{len(session_path_objs)}_sessions.xls",
+            "Excel 97-2003 (*.xls)",
         )
         if not filename:
             return
 
+        if not filename.endswith(".xls"):
+            filename += ".xls"
+
         try:
-            if filename.endswith(".xlsx"):
-                combined_df.to_excel(filename, index=False)
-            else:
-                combined_df.to_csv(filename, index=False, encoding="utf-8-sig")
+            import xlwt
+
+            workbook = xlwt.Workbook()
+            sheet = workbook.add_sheet("Sheet1")
+            for col_num, value in enumerate(combined_df.columns):
+                sheet.write(0, col_num, value)
+            for row_num, row in combined_df.iterrows():
+                for col_num, value in enumerate(row):
+                    sheet.write(row_num + 1, col_num, value)
+            workbook.save(filename)
             QMessageBox.information(
                 self.mw,
                 "Done",

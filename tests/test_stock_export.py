@@ -37,18 +37,21 @@ def test_create_stock_export_success(tmp_path, sample_analysis_df):
     # Read the output and validate its content
     result_df = pd.read_excel(output_path)
 
-    # Expected data: SKU-A: 5+2=7, SKU-B: 3. SKU-C is not fulfillable, SKU-D has 0 quantity.
-    expected_data = {
-        "Артикул": ["SKU-A", "SKU-B"],
-        "Мярка": ["бр", "бр"],
-        "Колич": [7, 3],
-    }
-    expected_df = pd.DataFrame(expected_data)
+    # Canonical ERP layout (blank spacer reads back as "Unnamed: 1").
+    assert list(result_df.columns) == [
+        "Артикул",
+        "Unnamed: 1",
+        "Мярка",
+        "Брой",
+        "Годност",
+        "Партида",
+    ]
 
-    pd.testing.assert_frame_equal(
-        result_df.sort_values(by="Артикул").reset_index(drop=True),
-        expected_df.sort_values(by="Артикул").reset_index(drop=True),
-    )
+    # Expected data: SKU-A: 5+2=7, SKU-B: 3. SKU-C is not fulfillable, SKU-D has 0 quantity.
+    result_df = result_df.sort_values(by="Артикул").reset_index(drop=True)
+    assert list(result_df["Артикул"]) == ["SKU-A", "SKU-B"]
+    assert list(result_df["Брой"]) == [7, 3]
+    assert set(result_df["Мярка"]) == {"брой"}
 
 
 def test_create_stock_export_with_filters(tmp_path, sample_analysis_df):
@@ -64,10 +67,9 @@ def test_create_stock_export_with_filters(tmp_path, sample_analysis_df):
     result_df = pd.read_excel(output_path)
 
     # Should only contain SKU-A from single orders
-    expected_data = {"Артикул": ["SKU-A"], "Мярка": ["бр"], "Колич": [7]}
-    expected_df = pd.DataFrame(expected_data)
-
-    pd.testing.assert_frame_equal(result_df, expected_df)
+    assert list(result_df["Артикул"]) == ["SKU-A"]
+    assert result_df["Брой"].iloc[0] == 7
+    assert result_df["Мярка"].iloc[0] == "брой"
 
 
 def test_create_stock_export_empty_after_filter(tmp_path, sample_analysis_df):
@@ -82,7 +84,14 @@ def test_create_stock_export_empty_after_filter(tmp_path, sample_analysis_df):
     assert os.path.exists(output_path)
     result_df = pd.read_excel(output_path)
     assert result_df.empty
-    assert list(result_df.columns) == ["Артикул", "Мярка", "Колич"]
+    assert list(result_df.columns) == [
+        "Артикул",
+        "Unnamed: 1",
+        "Мярка",
+        "Брой",
+        "Годност",
+        "Партида",
+    ]
 
 
 def test_create_stock_export_no_fulfillable_items(tmp_path):
@@ -101,7 +110,14 @@ def test_create_stock_export_no_fulfillable_items(tmp_path):
     assert os.path.exists(output_path)
     result_df = pd.read_excel(output_path)
     assert result_df.empty
-    assert list(result_df.columns) == ["Артикул", "Мярка", "Колич"]
+    assert list(result_df.columns) == [
+        "Артикул",
+        "Unnamed: 1",
+        "Мярка",
+        "Брой",
+        "Годност",
+        "Партида",
+    ]
 
 
 def test_create_stock_export_skips_invalid_filter(tmp_path, sample_analysis_df, caplog):

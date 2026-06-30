@@ -394,8 +394,8 @@ class TestExpandLotSummary:
         # Should aggregate: A, 261230, B1 = 8
         row = result[(result["Артикул"] == "A") & (result["Годност"] == "261230")]
         assert len(row) == 1
-        assert row.iloc[0]["Колич"] == 8
-        assert row.iloc[0]["Мярка"] == "бр"
+        assert row.iloc[0]["Брой"] == 8
+        assert row.iloc[0]["Мярка"] == "брой"
 
     def test_multi_lot_same_sku(self):
         df = self._fulfillable_df(
@@ -425,8 +425,8 @@ class TestExpandLotSummary:
         result = _expand_lot_summary(df)
         assert len(result) == 1
         assert result.iloc[0]["Артикул"] == "B"
-        assert result.iloc[0]["Колич"] == 10
-        assert result.iloc[0]["Мярка"] == "бр"
+        assert result.iloc[0]["Брой"] == 10
+        assert result.iloc[0]["Мярка"] == "брой"
         assert result.iloc[0]["Годност"] == ""
         assert result.iloc[0]["Партида"] == ""
 
@@ -465,8 +465,9 @@ class TestExpandLotSummary:
         result = _expand_lot_summary(df)
         assert list(result.columns) == [
             "Артикул",
+            "",
             "Мярка",
-            "Колич",
+            "Брой",
             "Годност",
             "Партида",
         ]
@@ -527,9 +528,16 @@ class TestCreateStockExportLots:
         out = tmp_path / "export_noLot.xls"
         stock_export.create_stock_export(df, str(out))
         result = pd.read_excel(str(out))
-        assert "Годност" not in result.columns
-        assert "Партида" not in result.columns
-        assert set(result.columns) == {"Артикул", "Мярка", "Колич"}
+        # Canonical ERP layout is identical regardless of lot tracking; the
+        # blank spacer column reads back as "Unnamed: 1".
+        assert list(result.columns) == [
+            "Артикул",
+            "Unnamed: 1",
+            "Мярка",
+            "Брой",
+            "Годност",
+            "Партида",
+        ]
 
     def test_lot_path_quantities_correct(self, tmp_path):
         df = self._make_df(
@@ -547,7 +555,7 @@ class TestCreateStockExportLots:
         out = tmp_path / "export_qty.xls"
         stock_export.create_stock_export(df, str(out))
         result = pd.read_excel(str(out))
-        total = result["Колич"].sum()
+        total = result["Брой"].sum()
         assert total == 15
 
     def test_lot_path_empty_df(self, tmp_path):

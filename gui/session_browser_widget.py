@@ -335,6 +335,7 @@ class SessionBrowserWidget(QWidget):
 
             # Column 0: Session name
             name_item = QTableWidgetItem(session_info.get("session_name", ""))
+            name_item.setData(Qt.UserRole, session_path)
             self.sessions_table.setItem(row, 0, name_item)
 
             # Column 1: Created at
@@ -443,11 +444,10 @@ Comments: {comments if comments else "None"}"""
         selected_rows = self.sessions_table.selectionModel().selectedRows()
         session_paths = []
         for idx in selected_rows:
-            row = idx.row()
-            if row < len(self.sessions_data):
-                path = self.sessions_data[row].get("session_path")
-                if path:
-                    session_paths.append(path)
+            item = self.sessions_table.item(idx.row(), 0)
+            path = item.data(Qt.UserRole) if item else None
+            if path:
+                session_paths.append(path)
         if len(session_paths) >= 2:
             self.multi_export_requested.emit(session_paths)
 
@@ -462,11 +462,11 @@ Comments: {comments if comments else "None"}"""
     def _open_selected_session(self):
         """Open the currently selected session."""
         current_row = self.sessions_table.currentRow()
-        if current_row < 0 or current_row >= len(self.sessions_data):
+        if current_row < 0:
             return
 
-        session_info = self.sessions_data[current_row]
-        session_path = session_info.get("session_path")
+        item = self.sessions_table.item(current_row, 0)
+        session_path = item.data(Qt.UserRole) if item else None
 
         if session_path:
             logger.info(f"Opening session: {session_path}")

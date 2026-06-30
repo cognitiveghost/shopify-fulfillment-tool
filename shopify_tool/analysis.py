@@ -466,7 +466,7 @@ def _prioritize_orders(
         order_number_sort_key
     )
 
-    if mode == "fifo":
+    if mode and mode.lower() == "fifo":
         prioritized_orders = unique_orders.sort_values(
             by=["_order_sort"], ascending=True
         ).drop(columns=["_order_sort"])

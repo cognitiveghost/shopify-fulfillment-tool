@@ -285,37 +285,27 @@ class FileHandler:
                     mapped_df = mapped_df.rename(columns=rename_map)
 
                 memory = self.mw.profile_manager.get_inventory_memory(client_id)
-                is_anomaly, anomaly_msg = self._check_inventory_anomaly(
-                    mapped_df, memory
-                )
-                if is_anomaly:
-                    reply = QMessageBox.warning(
-                        self.mw,
-                        "Inventory Anomaly Detected",
-                        f"{anomaly_msg}\n\nContinue with this stock file?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.No,
+                if memory.get("enabled", False):
+                    is_anomaly, anomaly_msg = self._check_inventory_anomaly(
+                        mapped_df, memory
                     )
-                    if reply != QMessageBox.Yes:
-                        # Cancel: clear the stock selection
-                        self.mw.stock_file_path = None
-                        self.mw.stock_file_path_label.setText("Stock file not selected")
-                        self.mw.stock_file_status_label.setText("")
-                        return
+                    if is_anomaly:
+                        reply = QMessageBox.warning(
+                            self.mw,
+                            "Inventory Anomaly Detected",
+                            f"{anomaly_msg}\n\nContinue with this stock file?",
+                            QMessageBox.Yes | QMessageBox.No,
+                            QMessageBox.No,
+                        )
+                        if reply != QMessageBox.Yes:
+                            # Cancel: clear the stock selection
+                            self.mw.stock_file_path = None
+                            self.mw.stock_file_path_label.setText("Stock file not selected")
+                            self.mw.stock_file_status_label.setText("")
+                            self.check_files_ready()
+                            return
 
-                # Always update the raw SKU snapshot (enabled flag preserved by save_inventory_memory)
-                if "SKU" in mapped_df.columns and "Stock" in mapped_df.columns:
-                    raw_stock = (
-                        mapped_df[["SKU", "Stock"]]
-                        .dropna(subset=["SKU"])
-                        .set_index("SKU")["Stock"]
-                        .apply(lambda x: max(0.0, float(x)) if pd.notna(x) else 0.0)
-                        .to_dict()
-                    )
-                    self.mw.profile_manager.save_inventory_memory(client_id, raw_stock)
-                    self.log.info(
-                        f"Inventory memory snapshot updated: {len(raw_stock)} SKUs"
-                    )
+                # Memory is updated with Final Stock after analysis (not raw stock on load)
             except Exception as e:
                 self.log.warning(f"Inventory memory check/update failed: {e}")
 

@@ -71,14 +71,14 @@ def test_save_and_get_inventory_memory(tmp_path):
         "SKU-A": 10.0,
         "SKU-B": 5.0,
         "SKU-C": 0.0,
-    }  # SKU-C should be excluded (v <= 0)
+    }  # SKU-C=0 is kept (zero Final Stock = warehouse depleted; needed for anomaly overlap)
 
     result = pm.save_inventory_memory("TEST", stock)
     assert result is True
 
     mem = pm.get_inventory_memory("TEST")
-    assert mem["skus"] == {"SKU-A": 10.0, "SKU-B": 5.0}
-    assert mem["total_units"] == 15
+    assert mem["skus"] == {"SKU-A": 10.0, "SKU-B": 5.0, "SKU-C": 0.0}
+    assert mem["total_units"] == 15  # total_units counts only positive values
     assert mem["last_updated"] is not None
     # enabled flag must be preserved from original config
     assert mem["enabled"] is True

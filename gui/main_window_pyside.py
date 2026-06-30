@@ -212,7 +212,7 @@ class MainWindow(QMainWindow):
                     inv_mem_cfg = config.get("inventory_memory", {})
                     self.inventory_memory_checkbox.blockSignals(True)
                     self.inventory_memory_checkbox.setChecked(
-                        inv_mem_cfg.get("enabled", False)
+                        inv_mem_cfg.get("enabled", True)
                     )
                     self.inventory_memory_checkbox.setEnabled(True)
                     self.inventory_memory_checkbox.blockSignals(False)
@@ -704,15 +704,18 @@ class MainWindow(QMainWindow):
         self.load_orders_btn.setEnabled(has_session)
         self.load_stock_btn.setEnabled(has_session)
 
-        # Run Analysis button — memory mode allows skipping stock file
-        inv_memory_enabled = (
+        # Run Analysis button — memory mode allows skipping the stock file ONLY
+        # when memory is enabled AND actually holds a stored stock snapshot.
+        # An enabled-but-empty memory has no stock to reconstruct from, so every
+        # order would be marked Not Fulfillable — require a stock file instead.
+        inv_memory_has_skus = (
             hasattr(self, "inventory_memory_checkbox")
             and self.inventory_memory_checkbox.isChecked()
-        )
-        inv_memory_has_skus = bool(
-            inv_memory_enabled
-            and self.active_profile_config
-            and self.active_profile_config.get("inventory_memory", {}).get("skus")
+            and bool(
+                (self.active_profile_config or {})
+                .get("inventory_memory", {})
+                .get("skus")
+            )
         )
         self.run_analysis_button.setEnabled(
             has_session and has_orders and (has_stock or inv_memory_has_skus)
