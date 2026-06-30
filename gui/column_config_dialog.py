@@ -282,7 +282,7 @@ class ColumnConfigPanel(QWidget):
             item.setCheckState(Qt.Checked if is_visible else Qt.Unchecked)
 
             if col_name in config.locked_columns:
-                item.setToolTip("⚠ Locked column (always visible and first)")
+                item.setToolTip("Locked column (always visible and first)")
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
@@ -598,7 +598,7 @@ class ColumnConfigPanel(QWidget):
                     client_config["ui_settings"]["table_view"]["additional_columns"] = self.additional_columns_config
 
                     self.table_config_manager.pm.save_client_config(client_id, client_config)
-                    logger.info(f"✓ Saved additional columns: {len(enabled_cols)} enabled ({', '.join([col['csv_name'] for col in enabled_cols])})")
+                    logger.info(f"Saved additional columns: {len(enabled_cols)} enabled ({', '.join([col['csv_name'] for col in enabled_cols])})")
 
                 if hasattr(self.parent_window, 'tableView') and \
                    hasattr(self.parent_window, 'analysis_results_df') and \

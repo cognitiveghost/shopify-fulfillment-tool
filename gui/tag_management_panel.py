@@ -56,7 +56,7 @@ class TagManagementPanel(QWidget):
         self.tags_list_widget.setMaximumHeight(150)
         tags_layout.addWidget(self.tags_list_widget)
 
-        remove_btn = QPushButton("🗑️ Remove Selected Tag")
+        remove_btn = QPushButton("Remove Selected Tag")
         remove_btn.clicked.connect(self.remove_selected_tag)
         tags_layout.addWidget(remove_btn)
 
@@ -73,7 +73,7 @@ class TagManagementPanel(QWidget):
         add_layout.addWidget(QLabel("Predefined Tags:"))
         add_layout.addWidget(self.predefined_combo)
 
-        add_predefined_btn = QPushButton("➕ Add Predefined")
+        add_predefined_btn = QPushButton("Add Predefined")
         add_predefined_btn.clicked.connect(self.add_predefined_tag)
         add_layout.addWidget(add_predefined_btn)
 
@@ -85,7 +85,7 @@ class TagManagementPanel(QWidget):
         self.custom_tag_input.returnPressed.connect(self.add_custom_tag)
         add_layout.addWidget(self.custom_tag_input)
 
-        add_custom_btn = QPushButton("➕ Add Custom")
+        add_custom_btn = QPushButton("Add Custom")
         add_custom_btn.clicked.connect(self.add_custom_tag)
         add_layout.addWidget(add_custom_btn)
 

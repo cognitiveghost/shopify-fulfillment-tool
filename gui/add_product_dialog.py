@@ -229,11 +229,11 @@ class AddProductDialog(QDialog):
             status = order_rows.iloc[0]["Order_Fulfillment_Status"]
 
             self.order_status_label.setText(
-                f"✓ Order found: {item_count} items, Status: {status}"
+                f"Order found: {item_count} items, Status: {status}"
             )
             self.order_status_label.setStyleSheet("color: green;")
         else:
-            self.order_status_label.setText("✗ Order not found")
+            self.order_status_label.setText("Order not found")
             self.order_status_label.setStyleSheet("color: red;")
 
     def _on_sku_changed(self, text):
@@ -248,7 +248,7 @@ class AddProductDialog(QDialog):
         stock_row = self.stock_df[self.stock_df["SKU"].astype(str).str.strip() == text_str]
 
         if stock_row.empty:
-            self.product_info_label.setText("✗ SKU not found in stock")
+            self.product_info_label.setText("SKU not found in stock")
             self.product_info_label.setStyleSheet("color: red;")
             return
 
@@ -258,14 +258,14 @@ class AddProductDialog(QDialog):
         current_stock = self.live_stock.get(text_str, self.live_stock.get(text, 0))
 
         self.product_info_label.setText(
-            f"✓ {product_name} | Live stock: {current_stock}"
+            f"{product_name} | Live stock: {current_stock}"
         )
         self.product_info_label.setStyleSheet("color: green;")
 
         # Show warning if low/zero stock
         if current_stock == 0:
             warning_text = (
-                "⚠️ WARNING\n\n"
+                "WARNING\n\n"
                 f"Product {text} has 0 stock available!\n"
                 "Adding this product will affect order fulfillment."
             )
@@ -281,7 +281,7 @@ class AddProductDialog(QDialog):
             """)
         elif current_stock < 5:
             warning_text = (
-                "⚠️ WARNING\n\n"
+                "WARNING\n\n"
                 f"Product {text} has low stock ({current_stock} units)."
             )
             self.warning_box.setText(warning_text)
