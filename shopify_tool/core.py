@@ -646,9 +646,13 @@ def _load_and_validate_files(
             inv_mem = config.get("_inventory_memory", {})
             if inv_mem.get("enabled"):
                 skus = inv_mem.get("skus") or {}
+                names = inv_mem.get("names") or {}
                 stock_df = pd.DataFrame(
-                    [{"SKU": sku, "Stock": qty} for sku, qty in skus.items()],
-                    columns=["SKU", "Stock"],
+                    [
+                        {"SKU": sku, "Product_Name": names.get(sku), "Stock": qty}
+                        for sku, qty in skus.items()
+                    ],
+                    columns=["SKU", "Product_Name", "Stock"],
                 )
                 config["_stock_from_memory"] = True
                 logger.info(f"Loaded {len(stock_df)} SKUs from inventory memory")
@@ -1104,7 +1108,21 @@ def _save_results_and_reports(
                     .apply(lambda x: max(0.0, float(x)))
                     .to_dict()
                 )
-                profile_manager.save_inventory_memory(client_id, final_stock_dict, config=full_config)
+                # Carry the display name along so the next run's memory-reconstructed
+                # stock_df doesn't show "N/A" in Warehouse_Name for every SKU.
+                # Only pass a non-empty dict -- an empty/None dict means "leave
+                # previously-saved names alone" (see save_inventory_memory), so a
+                # degraded run with no real names never wipes out good ones.
+                names_dict = None
+                if "Warehouse_Name" in final_df.columns:
+                    names_dict = {
+                        sku: name
+                        for sku, name in final_df.groupby("SKU")["Warehouse_Name"].first().items()
+                        if name and name != "N/A"
+                    } or None
+                profile_manager.save_inventory_memory(
+                    client_id, final_stock_dict, config=full_config, names_dict=names_dict
+                )
                 logger.info(f"Inventory memory updated: {len(final_stock_dict)} SKUs")
         except Exception as e:
             logger.warning(f"Failed to save inventory memory: {e}")

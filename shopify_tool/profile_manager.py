@@ -721,17 +721,24 @@ class ProfileManager:
         Returns:
             bool: True if migration was performed, False if already present
         """
-        if "inventory_memory" in config:
-            return False
+        if "inventory_memory" not in config:
+            config["inventory_memory"] = {
+                "enabled": False,
+                "skus": {},
+                "names": {},
+                "last_updated": None,
+                "total_units": 0,
+            }
+            logger.info(f"Added default 'inventory_memory' for CLIENT_{client_id}")
+            return True
 
-        config["inventory_memory"] = {
-            "enabled": False,
-            "skus": {},
-            "last_updated": None,
-            "total_units": 0,
-        }
-        logger.info(f"Added default 'inventory_memory' for CLIENT_{client_id}")
-        return True
+        # Backfill 'names' for configs saved before per-SKU name tracking existed.
+        if "names" not in config["inventory_memory"]:
+            config["inventory_memory"]["names"] = {}
+            logger.info(f"Backfilled 'inventory_memory.names' for CLIENT_{client_id}")
+            return True
+
+        return False
 
     @staticmethod
     def _create_default_shopify_config(client_id: str, client_name: str) -> Dict:
@@ -852,6 +859,7 @@ class ProfileManager:
             "inventory_memory": {
                 "enabled": False,
                 "skus": {},
+                "names": {},
                 "last_updated": None,
                 "total_units": 0,
             },
@@ -1089,8 +1097,17 @@ class ProfileManager:
 
     # --- Set/Bundle Management Methods ---
 
-    def save_inventory_memory(self, client_id: str, stock_dict: dict, config: dict = None) -> bool:
-        """Persist final stock snapshot to shopify_config inventory_memory section."""
+    def save_inventory_memory(
+        self, client_id: str, stock_dict: dict, config: dict = None, names_dict: dict = None
+    ) -> bool:
+        """Persist final stock snapshot to shopify_config inventory_memory section.
+
+        Args:
+            names_dict: Optional {sku: warehouse_display_name}. When omitted,
+                the previously-saved names are left untouched (so a caller
+                that only has quantities on hand doesn't wipe out names saved
+                by an earlier run).
+        """
         # ponytail: read-modify-write; ceiling is concurrent PC writes can still clobber
         # enabled between load and save. Upgrade: hold file lock across load+save.
         # Pass config to skip the extra disk read when the caller already holds it.
@@ -1098,13 +1115,16 @@ class ProfileManager:
             config = self.load_shopify_config(client_id) or {}
         # Use update() so enabled (and any future keys) come from the freshly loaded config
         config.setdefault("inventory_memory", {})
-        config["inventory_memory"].update({
+        updates = {
             # Keep zero-qty SKUs: dropping them shrinks old_skus overlap ratio and can
             # trigger a false 'Wrong client file?' anomaly on the next stock load.
             "skus": {str(k): float(v) for k, v in stock_dict.items()},
             "last_updated": datetime.now().isoformat(timespec="seconds"),
             "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
-        })
+        }
+        if names_dict is not None:
+            updates["names"] = {str(k): str(v) for k, v in names_dict.items()}
+        config["inventory_memory"].update(updates)
         return self.save_shopify_config(client_id, config)
 
     def get_inventory_memory(self, client_id: str) -> dict:
