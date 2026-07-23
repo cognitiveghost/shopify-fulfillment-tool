@@ -3602,7 +3602,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     dummy_config = {
         "settings": {"stock_csv_delimiter": ";", "low_stock_threshold": 5},
-        "paths": {"templates": "data/templates", "output_dir_stock": "data/output"},
+        "paths": {"templates": "/tmp/fake_templates", "output_dir_stock": "/tmp/fake_output"},
         "rules": [
             {
                 "name": "Test Rule",
