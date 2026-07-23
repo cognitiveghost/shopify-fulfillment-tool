@@ -27,7 +27,7 @@ def main():
     """
     # Set platform to offscreen for CI/testing environments
     if "pytest" in sys.modules or os.environ.get("CI"):
-        QApplication.setPlatform("offscreen")
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
         print("Running in offscreen mode.")
 
     app = QApplication(sys.argv)

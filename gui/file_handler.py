@@ -565,6 +565,9 @@ class FileHandler:
         try:
             import pandas as pd
 
+            delimiter = self.mw.active_profile_config.get("settings", {}).get(
+                "orders_csv_delimiter", ","
+            )
             orders_df = pd.read_csv(
                 merged_path, delimiter=delimiter, encoding="utf-8-sig"
             )
