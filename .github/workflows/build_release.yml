@@ -36,7 +36,9 @@ jobs:
         timeout-minutes: 2
         run: CI=1 python run_dev.py
       - name: Run tests (auto-enables once tests/ exists again)
-        run: if [ -d tests ]; then pytest; fi
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: if [ -d tests ]; then python -m pytest; fi
 
   build:
     name: Build Executable

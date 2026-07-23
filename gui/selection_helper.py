@@ -6,7 +6,6 @@ and checkbox state for bulk operations on the Analysis Results table.
 
 from typing import List, Tuple, Set
 import pandas as pd
-from PySide6.QtCore import QModelIndex
 
 
 class SelectionHelper:
@@ -121,21 +120,34 @@ class SelectionHelper:
                 self.checked_rows.add(row)
 
     def select_all(self):
-        """Check all visible rows (respecting current filter).
+        """Check all visible rows (respecting current filter), expanded to
+        every row of the same order.
 
-        Only selects rows that are currently visible through the proxy model.
+        A filter can hide some line items of a multi-item order (e.g. a SKU
+        search). Checking only the visible rows would let a bulk action write
+        a new status/tag to part of an order while leaving its hidden
+        sibling rows on the old value. Every row sharing an Order_Number with
+        a visible row is checked too, mirroring toggle_row()'s expansion.
         """
         self.checked_rows.clear()
 
         if self.proxy_model is None:
             return
 
-        # Iterate through visible proxy rows
+        visible_rows = set()
         for proxy_row in range(self.proxy_model.rowCount()):
             proxy_index = self.proxy_model.index(proxy_row, 0)
             source_index = self.proxy_model.mapToSource(proxy_index)
-            source_row = source_index.row()
-            self.checked_rows.add(source_row)
+            visible_rows.add(source_index.row())
+
+        df = self.main_window.analysis_results_df
+        if df is None or df.empty or "Order_Number" not in df.columns:
+            self.checked_rows = visible_rows
+            return
+
+        visible_indexes = [row for row in visible_rows if row in df.index]
+        visible_orders = df.loc[visible_indexes, "Order_Number"].unique()
+        self.checked_rows = set(df[df["Order_Number"].isin(visible_orders)].index)
 
     def clear_selection(self):
         """Uncheck all rows."""

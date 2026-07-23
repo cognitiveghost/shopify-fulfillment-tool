@@ -356,17 +356,15 @@ def merge_session_stock_exports(
 
     combined = pd.concat(all_dfs, ignore_index=True)
 
-    has_lot_details = (
-        "Lot_Details" in combined.columns
-        and combined["Lot_Details"].notna().any()
-    )
-
-    if has_lot_details:
-        result = _expand_lot_summary(combined)
-        if result.empty:
-            return _empty_export_df()
-        return result.sort_values("Артикул").reset_index(drop=True)
-
+    # Always total by SKU alone here, even when individual sessions used lot
+    # tracking (Lot_Details/Годност/Партида): sessions in this merge are
+    # already fulfilled/closed, so the specific batch each one drew from is
+    # historical record-keeping, not something a cross-session total can
+    # attribute to one row anyway. Per-lot precision for a single session's
+    # own write-off still comes from create_stock_export(), which is
+    # unaffected by this function. Splitting the SAME SKU across multiple
+    # rows here (one per distinct expiry/batch) previously contradicted this
+    # function's own contract of "grouped by SKU... summed across sessions".
     sku_summary = (
         combined.groupby("SKU")["Quantity"]
         .sum()

@@ -150,7 +150,7 @@ class BulkOperationsToolbar(QWidget):
         layout.addWidget(self.selection_label)
 
         select_all_btn = QPushButton("Select All")
-        select_all_btn.setToolTip("Select all visible rows (respects current filter)")
+        select_all_btn.setToolTip("Select all visible rows, plus their full orders")
         select_all_btn.clicked.connect(self.select_all_clicked.emit)
         layout.addWidget(select_all_btn)
 
