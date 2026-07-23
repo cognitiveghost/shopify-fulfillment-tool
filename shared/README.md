@@ -214,18 +214,7 @@ stats_manager = StatsManager(
 
 ### Testing
 
-Run the test suite:
-
-```bash
-# Unit tests
-pytest tests/test_unified_stats_manager.py -v
-
-# Concurrent access tests
-pytest tests/test_stats_concurrent_access.py -v
-
-# All tests
-pytest tests/test_unified_stats_manager.py tests/test_stats_concurrent_access.py -v
-```
+Tests are being rewritten; no test suite exists for this module yet.
 
 ### Integration Example for Packing Tool
 

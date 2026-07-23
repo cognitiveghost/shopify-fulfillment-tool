@@ -8,7 +8,7 @@ import sys
 import os
 from PySide6.QtWidgets import QApplication
 
-__version__ = "1.8.9.6"
+__version__ = "1.9.9.1"
 
 # Ensure the gui directory is on the path if running this as a script
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -27,7 +27,7 @@ def main():
     """
     # Set platform to offscreen for CI/testing environments
     if "pytest" in sys.modules or os.environ.get("CI"):
-        QApplication.setPlatform("offscreen")
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
         print("Running in offscreen mode.")
 
     app = QApplication(sys.argv)

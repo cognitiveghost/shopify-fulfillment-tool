@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 
 logger = logging.getLogger("ShopifyToolLogger")
@@ -38,30 +37,3 @@ def get_persistent_data_path(filename):
         app_dir = "."
 
     return os.path.join(app_dir, filename)
-
-
-def resource_path(relative_path):
-    """Gets the absolute path to a resource, for both dev and PyInstaller.
-
-    When an application is bundled with PyInstaller, its resources (like icons
-    or data files) are stored in a temporary directory. The path to this
-    directory is available in `sys._MEIPASS`.
-
-    This function checks for the `_MEIPASS` attribute. If it exists, the path
-    is constructed relative to it. If not (i.e., when running in a normal
-    development environment), it constructs the path relative to the project's
-    root directory.
-
-    Args:
-        relative_path (str): The path to the resource relative to the
-            application root (e.g., "data/templates/template.xls").
-
-    Returns:
-        str: The absolute path to the resource, suitable for the current
-             execution environment.
-    """
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
