@@ -123,9 +123,6 @@ class TestConfirmedBugs:
     verified to fail against current shopify_tool/rules.py before being marked
     xfail. These serve as regression markers if/when the bug is fixed."""
 
-    @pytest.mark.xfail(strict=True, reason="BUG: 'contains'/'starts with'/'ends with' "
-                        "raise an uncaught AttributeError on numeric-dtype columns "
-                        "instead of degrading to all-False like other operators.")
     def test_contains_on_numeric_column_does_not_crash(self):
         df = _df({"Quantity": [1, 2, 3]})
         rules = [_rule([{"field": "Quantity", "operator": "contains", "value": "2"}],
@@ -133,9 +130,6 @@ class TestConfirmedBugs:
         out = RuleEngine(rules).apply(df.copy())  # currently raises AttributeError
         assert out["Status_Note"].tolist() == ["", "X", ""]
 
-    @pytest.mark.xfail(strict=True, reason="BUG: 'is greater than'/'is less than'/etc "
-                        "call float(rule_val) unguarded; a blank/non-numeric rule value "
-                        "crashes the whole analysis instead of matching zero rows.")
     def test_greater_than_with_blank_value_does_not_crash(self):
         df = _df({"Final_Stock": [1, 2, 3]})
         rules = [_rule([{"field": "Final_Stock", "operator": "is greater than", "value": ""}],
@@ -143,10 +137,6 @@ class TestConfirmedBugs:
         out = RuleEngine(rules).apply(df.copy())  # currently raises ValueError
         assert out["Status_Note"].tolist() == ["", "", ""]
 
-    @pytest.mark.xfail(strict=True, reason="BUG: 'not between' with a malformed/reversed "
-                        "range string (e.g. start > end) degrades the base 'between' "
-                        "check to all-False, and negating all-False matches EVERY row "
-                        "instead of zero rows.")
     def test_not_between_with_malformed_range_matches_nothing(self):
         df = _df({"Final_Stock": [1, 50, 999]})
         rules = [_rule([{"field": "Final_Stock", "operator": "not between", "value": "100-10"}],
@@ -154,10 +144,6 @@ class TestConfirmedBugs:
         out = RuleEngine(rules).apply(df.copy())
         assert out["Status_Note"].tolist() == ["", "", ""]
 
-    @pytest.mark.xfail(strict=True, reason="BUG: 'not in list' with an empty/blank rule "
-                        "value degrades the base 'in list' check to all-False, and "
-                        "negating all-False matches EVERY row instead of zero rows -- "
-                        "a blank filter value in the UI silently tags the entire dataset.")
     def test_not_in_list_with_empty_value_matches_nothing(self):
         df = _df({"Shipping_Provider": ["DHL", "DPD", "PostOne"]})
         rules = [_rule([{"field": "Shipping_Provider", "operator": "not in list", "value": ""}],
@@ -165,11 +151,6 @@ class TestConfirmedBugs:
         out = RuleEngine(rules).apply(df.copy())
         assert out["Status_Note"].tolist() == ["", "", ""]
 
-    @pytest.mark.xfail(strict=True, reason="BUG: an order-level rule's ADD_ORDER_TAG "
-                        "action only stamps the FIRST row of a multi-line order, not "
-                        "every row -- despite the action name implying order-wide "
-                        "application (only the literal 'ADD_TAG' type gets apply-to-all "
-                        "treatment in the order-level branch).")
     def test_add_order_tag_applies_to_every_row_of_the_order(self):
         df = _df({
             "Order_Number": ["#1", "#1", "#2"],
@@ -184,10 +165,6 @@ class TestConfirmedBugs:
         out = RuleEngine(rules).apply(df.copy())
         assert out["Status_Note"].tolist() == ["GIFT", "GIFT", "GIFT"]
 
-    @pytest.mark.xfail(strict=True, reason="BUG: SET_MULTI_TAGS writes to Status_Note "
-                        "but is missing from _prepare_df_for_actions' needed-columns "
-                        "scan, so a rules config using ONLY SET_MULTI_TAGS crashes with "
-                        "KeyError('Status_Note') when that column doesn't already exist.")
     def test_set_multi_tags_does_not_crash_when_status_note_column_absent(self):
         df = _df({
             "Order_Number": ["#1"], "SKU": ["A"], "Quantity": [1],
