@@ -68,18 +68,46 @@ class TestDirectoryGetters:
         assert session_manager.get_stock_exports_dir(session_path) == Path(session_path) / "stock_exports"
 
 
+class TestAppendToSessionList:
+    """append_to_session_list closes a race that survives update_session_info's
+    own lock: two callers each reading a stale list via get_session_info and
+    appending locally would still clobber each other on write."""
+
+    def test_appends_new_value(self, session_manager):
+        session_path = session_manager.create_session("M")
+        assert session_manager.append_to_session_list(session_path, "packing_lists_generated", "a.xlsx") is True
+        info = session_manager.get_session_info(session_path)
+        assert info["packing_lists_generated"] == ["a.xlsx"]
+
+    def test_duplicate_value_is_a_noop(self, session_manager):
+        session_path = session_manager.create_session("M")
+        session_manager.append_to_session_list(session_path, "packing_lists_generated", "a.xlsx")
+        assert session_manager.append_to_session_list(session_path, "packing_lists_generated", "a.xlsx") is False
+        info = session_manager.get_session_info(session_path)
+        assert info["packing_lists_generated"] == ["a.xlsx"]
+
+    def test_concurrent_appends_to_same_field_are_not_lost(self, session_manager):
+        import threading
+
+        session_path = session_manager.create_session("M")
+        barrier = threading.Barrier(2)
+
+        def _append(value):
+            barrier.wait()
+            session_manager.append_to_session_list(session_path, "packing_lists_generated", value)
+
+        t1 = threading.Thread(target=_append, args=("a.xlsx",))
+        t2 = threading.Thread(target=_append, args=("b.xlsx",))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        info = session_manager.get_session_info(session_path)
+        assert set(info["packing_lists_generated"]) == {"a.xlsx", "b.xlsx"}
+
+
 class TestConfirmedBugs:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: update_session_info() does an unlocked read-modify-write "
-               "(get_session_info -> dict.update -> json.dump) with no file "
-               "lock. Two updates that each read the SAME on-disk snapshot "
-               "before either writes back will lose one of the two changes -- "
-               "this reproduces the exact pattern used by "
-               "core.py/create_stock_export_report and "
-               "create_packing_list_report, which both read-append-write the "
-               "'*_generated' list fields on session_info.json.",
-    )
     def test_two_interleaved_updates_do_not_lose_either_field(self, session_manager):
         import threading
         import time
@@ -118,14 +146,6 @@ class TestConfirmedBugs:
         assert final["packing_lists_generated"] == ["dhl.xlsx"]
         assert final["stock_exports_generated"] == ["export.xls"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: delete_session() calls shutil.rmtree(session_path_obj) "
-               "with zero validation that the path resolves under "
-               "self.sessions_root -- any caller passing a path outside the "
-               "sessions tree (e.g. from unsanitized input) can delete "
-               "arbitrary directories.",
-    )
     def test_delete_session_refuses_path_outside_sessions_root(self, session_manager, tmp_path):
         outside_dir = tmp_path / "not_a_session"
         outside_dir.mkdir()

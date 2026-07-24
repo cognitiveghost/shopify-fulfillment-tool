@@ -170,8 +170,8 @@ def format_tags_for_barcode(internal_tag: str) -> str:
     try:
         if internal_tag.startswith('[') and internal_tag.endswith(']'):
             tags_list = json.loads(internal_tag)
-            if isinstance(tags_list, list) and tags_list:
-                # Join all tags with pipe separator
+            if isinstance(tags_list, list):
+                # Join all tags with pipe separator (empty list -> "")
                 return '|'.join(str(tag).strip() for tag in tags_list if tag)
     except (json.JSONDecodeError, ValueError):
         pass
@@ -568,7 +568,9 @@ def generate_barcodes_batch(
         if pd.isna(raw_count):
             raw_count = row.get('Quantity', 1)
         try:
-            item_count = int(float(raw_count or 1))
+            # Do not use `raw_count or 1` -- a genuinely-zero item_count is
+            # falsy in Python and would be wrongly coerced to 1.
+            item_count = int(float(raw_count))
         except (ValueError, TypeError):
             item_count = 1
 

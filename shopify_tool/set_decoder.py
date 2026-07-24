@@ -82,6 +82,7 @@ def decode_sets_in_orders(
             set_orders_count += 1
 
             # Expand into components
+            valid_components_added = 0
             for component in components:
                 component_sku = component.get("sku")
                 component_qty = component.get("quantity")
@@ -105,6 +106,19 @@ def decode_sets_in_orders(
                 new_row["Original_Quantity"] = quantity
                 new_row["Is_Set_Component"] = True
 
+                expanded_rows.append(new_row)
+                valid_components_added += 1
+
+            if valid_components_added == 0:
+                # Every component failed validation -- keep the original order
+                # line instead of letting it vanish with only a debug log.
+                logger.warning(
+                    f"Set '{sku}' has no valid components after validation, keeping original row"
+                )
+                new_row = row.copy()
+                new_row["Original_SKU"] = sku
+                new_row["Original_Quantity"] = quantity
+                new_row["Is_Set_Component"] = False
                 expanded_rows.append(new_row)
 
         else:

@@ -71,7 +71,9 @@ def calc_order_volumetric_weight(order_df: pd.DataFrame, weight_config: Dict) ->
         if not sku or sku == "NO_SKU":
             continue
 
-        qty = float(row.get("Quantity", 1) or 1)
+        # No `or 1` fallback: a genuine Quantity of 0 is falsy in Python and
+        # would otherwise be silently promoted to 1, overcounting weight.
+        qty = float(row.get("Quantity", 1))
         sku_vol_weight = calc_sku_volumetric_weight(sku, weight_config)
         total += qty * sku_vol_weight
 
@@ -212,7 +214,9 @@ def find_min_box_for_order(order_df: pd.DataFrame, weight_config: Dict) -> str:
             has_unknown_dims = True
             continue
 
-        qty = int(float(row.get("Quantity", 1) or 1))
+        # No `or 1` fallback: a genuine Quantity of 0 must contribute zero
+        # items to the box-fit check, not be silently promoted to 1.
+        qty = int(float(row.get("Quantity", 1)))
         for _ in range(qty):
             item_dims_list.append((l, w, h))
 

@@ -11,6 +11,7 @@ Key Features:
     - UUID-based group identification
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -305,6 +306,44 @@ class GroupsManager:
         except Exception as e:
             logger.warning(f"Failed to create backup: {e}")
 
+    @contextlib.contextmanager
+    def _locked_groups_rmw(self):
+        """Blocking exclusive lock spanning a groups.json load-modify-save cycle.
+
+        save_groups() only locks around its own write; without this, two
+        near-simultaneous create/update/delete calls can each load the same
+        stale snapshot and the second save silently clobbers the first.
+        """
+        lock_path = self.groups_path.with_suffix(".lock")
+        lock_file = open(lock_path, "a+")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            finally:
+                lock_file.close()
+
+    @staticmethod
+    def _name_collides_with_special_group(groups_data: Dict[str, Any], name: str) -> bool:
+        special_groups = groups_data.get("special_groups", {})
+        return any(
+            special.get("name", "").lower() == name.lower()
+            for special in special_groups.values()
+        )
+
     def create_group(self, name: str, color: str = "#2196F3") -> str:
         """Create new group.
 
@@ -323,41 +362,44 @@ class GroupsManager:
 
         name = name.strip()
 
-        # Load current groups
-        groups_data = self.load_groups()
+        with self._locked_groups_rmw():
+            # Load current groups
+            groups_data = self.load_groups()
 
-        # Check for duplicate name
-        for group in groups_data.get("groups", []):
-            if group.get("name", "").lower() == name.lower():
+            # Check for duplicate name (including built-in special groups)
+            if self._name_collides_with_special_group(groups_data, name):
                 raise GroupsManagerError(f"Group with name '{name}' already exists")
+            for group in groups_data.get("groups", []):
+                if group.get("name", "").lower() == name.lower():
+                    raise GroupsManagerError(f"Group with name '{name}' already exists")
 
-        # Generate UUID
-        group_id = str(uuid.uuid4())
+            # Generate UUID
+            group_id = str(uuid.uuid4())
 
-        # Calculate display_order (append to end)
-        max_order = -1
-        for group in groups_data.get("groups", []):
-            order = group.get("display_order", 0)
-            if order > max_order:
-                max_order = order
-        display_order = max_order + 1
+            # Calculate display_order (append to end)
+            max_order = -1
+            for group in groups_data.get("groups", []):
+                order = group.get("display_order", 0)
+                if order > max_order:
+                    max_order = order
+            display_order = max_order + 1
 
-        # Create new group
-        new_group = {
-            "id": group_id,
-            "name": name,
-            "color": color,
-            "display_order": display_order,
-            "created_at": datetime.now().isoformat()
-        }
+            # Create new group
+            new_group = {
+                "id": group_id,
+                "name": name,
+                "color": color,
+                "display_order": display_order,
+                "created_at": datetime.now().isoformat()
+            }
 
-        groups_data["groups"].append(new_group)
+            groups_data["groups"].append(new_group)
 
-        # Save
-        self.save_groups(groups_data)
-        logger.info(f"Group created: {name} (ID: {group_id})")
+            # Save
+            self.save_groups(groups_data)
+            logger.info(f"Group created: {name} (ID: {group_id})")
 
-        return group_id
+            return group_id
 
     def update_group(self, group_id: str, name: str = None, color: str = None) -> bool:
         """Update existing group.
@@ -373,40 +415,43 @@ class GroupsManager:
         Raises:
             GroupsManagerError: If group doesn't exist or name is duplicate
         """
-        # Load current groups
-        groups_data = self.load_groups()
+        with self._locked_groups_rmw():
+            # Load current groups
+            groups_data = self.load_groups()
 
-        # Find group
-        target_group = None
-        for group in groups_data.get("groups", []):
-            if group.get("id") == group_id:
-                target_group = group
-                break
-
-        if target_group is None:
-            raise GroupsManagerError(f"Group with ID '{group_id}' not found")
-
-        # Check for duplicate name if updating name
-        if name is not None:
-            name = name.strip()
-            if not name:
-                raise GroupsManagerError("Group name cannot be empty")
-
+            # Find group
+            target_group = None
             for group in groups_data.get("groups", []):
-                if group.get("id") != group_id and group.get("name", "").lower() == name.lower():
+                if group.get("id") == group_id:
+                    target_group = group
+                    break
+
+            if target_group is None:
+                raise GroupsManagerError(f"Group with ID '{group_id}' not found")
+
+            # Check for duplicate name if updating name
+            if name is not None:
+                name = name.strip()
+                if not name:
+                    raise GroupsManagerError("Group name cannot be empty")
+
+                if self._name_collides_with_special_group(groups_data, name):
                     raise GroupsManagerError(f"Group with name '{name}' already exists")
+                for group in groups_data.get("groups", []):
+                    if group.get("id") != group_id and group.get("name", "").lower() == name.lower():
+                        raise GroupsManagerError(f"Group with name '{name}' already exists")
 
-            target_group["name"] = name
+                target_group["name"] = name
 
-        # Update color if provided
-        if color is not None:
-            target_group["color"] = color
+            # Update color if provided
+            if color is not None:
+                target_group["color"] = color
 
-        # Save
-        self.save_groups(groups_data)
-        logger.info(f"Group updated: {group_id}")
+            # Save
+            self.save_groups(groups_data)
+            logger.info(f"Group updated: {group_id}")
 
-        return True
+            return True
 
     def delete_group(self, group_id: str, profile_manager = None) -> bool:
         """Delete group and unassign all clients.
@@ -426,38 +471,39 @@ class GroupsManager:
         if group_id in ["pinned", "all"]:
             raise GroupsManagerError(f"Cannot delete special group: {group_id}")
 
-        # Load current groups
-        groups_data = self.load_groups()
+        with self._locked_groups_rmw():
+            # Load current groups
+            groups_data = self.load_groups()
 
-        # Check if group exists
-        group_exists = any(group.get("id") == group_id for group in groups_data.get("groups", []))
-        if not group_exists:
-            raise GroupsManagerError(f"Group with ID '{group_id}' not found")
+            # Check if group exists
+            group_exists = any(group.get("id") == group_id for group in groups_data.get("groups", []))
+            if not group_exists:
+                raise GroupsManagerError(f"Group with ID '{group_id}' not found")
 
-        # Unassign clients from this group
-        if profile_manager:
-            clients_in_group = self.get_clients_in_group(group_id, profile_manager)
+            # Unassign clients from this group
+            if profile_manager:
+                clients_in_group = self.get_clients_in_group(group_id, profile_manager)
 
-            for client_id in clients_in_group:
-                try:
-                    config = profile_manager.load_client_config(client_id)
-                    if config and "ui_settings" in config:
-                        if config["ui_settings"].get("group_id") == group_id:
-                            config["ui_settings"]["group_id"] = None
-                            profile_manager.save_client_config(client_id, config)
-                            logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
-                except Exception as e:
-                    logger.error(f"Failed to unassign CLIENT_{client_id}: {e}")
-                    # Continue with other clients
+                for client_id in clients_in_group:
+                    try:
+                        config = profile_manager.load_client_config(client_id)
+                        if config and "ui_settings" in config:
+                            if config["ui_settings"].get("group_id") == group_id:
+                                config["ui_settings"]["group_id"] = None
+                                profile_manager.save_client_config(client_id, config)
+                                logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to unassign CLIENT_{client_id}: {e}")
+                        # Continue with other clients
 
-        # Remove group from groups.json
-        groups_data["groups"] = [g for g in groups_data["groups"] if g.get("id") != group_id]
+            # Remove group from groups.json
+            groups_data["groups"] = [g for g in groups_data["groups"] if g.get("id") != group_id]
 
-        # Save
-        self.save_groups(groups_data)
-        logger.info(f"Group deleted: {group_id}")
+            # Save
+            self.save_groups(groups_data)
+            logger.info(f"Group deleted: {group_id}")
 
-        return True
+            return True
 
     def get_group(self, group_id: str) -> Optional[Dict[str, Any]]:
         """Get group by ID.

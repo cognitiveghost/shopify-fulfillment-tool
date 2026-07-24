@@ -100,16 +100,6 @@ class TestLotAggregation:
 
 
 class TestConfirmedBugs:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: _expand_lot_summary dedupes per-(order,SKU) allocations "
-               "using key (Order_Number, SKU) to avoid double-counting a "
-               "duplicated DataFrame row. When Order_Number is blank/missing "
-               "for more than one Fulfillable row sharing a SKU, they all "
-               "collapse to the same ('', SKU) key -- every allocation after "
-               "the first is silently dropped from the write-off export, "
-               "understating the real quantity to deduct from the ERP.",
-    )
     def test_missing_order_number_does_not_drop_distinct_lot_allocations(self, tmp_path):
         df = _analysis_df([
             {"Order_Number": "", "SKU": "A1", "Quantity": 3,

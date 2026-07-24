@@ -100,45 +100,76 @@ def _op_not_equals(series_val, rule_val):
         return series_val != rule_val
 
 
+def _as_str_series(series_val):
+    """Coerce a numeric-dtype Series to string so .str accessors don't crash.
+
+    Non-numeric (object/string) Series are returned unchanged to preserve
+    their existing NaN handling via each operator's na=False.
+    """
+    if pd.api.types.is_numeric_dtype(series_val):
+        return series_val.astype(str)
+    return series_val
+
+
 def _op_contains(series_val, rule_val):
     """Returns True where the series string contains the rule string (case-insensitive)."""
     # Case-insensitive containment check for strings
-    return series_val.str.contains(rule_val, case=False, na=False)
+    return _as_str_series(series_val).str.contains(rule_val, case=False, na=False)
 
 
 def _op_not_contains(series_val, rule_val):
     """Returns True where the series string does not contain the rule string (case-insensitive)."""
-    return ~series_val.str.contains(rule_val, case=False, na=False)
+    return ~_as_str_series(series_val).str.contains(rule_val, case=False, na=False)
+
+
+def _safe_float(value):
+    """Returns float(value), or None if value is blank/non-numeric."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _op_greater_than(series_val, rule_val):
     """Returns True where the series value is greater than the numeric rule value."""
-    return pd.to_numeric(series_val, errors="coerce") > float(rule_val)
+    threshold = _safe_float(rule_val)
+    if threshold is None:
+        return pd.Series([False] * len(series_val), index=series_val.index)
+    return pd.to_numeric(series_val, errors="coerce") > threshold
 
 
 def _op_less_than(series_val, rule_val):
     """Returns True where the series value is less than the numeric rule value."""
-    return pd.to_numeric(series_val, errors="coerce") < float(rule_val)
+    threshold = _safe_float(rule_val)
+    if threshold is None:
+        return pd.Series([False] * len(series_val), index=series_val.index)
+    return pd.to_numeric(series_val, errors="coerce") < threshold
 
 
 def _op_greater_than_or_equal(series_val, rule_val):
     """Returns True where the series value is >= numeric rule value."""
-    return pd.to_numeric(series_val, errors="coerce") >= float(rule_val)
+    threshold = _safe_float(rule_val)
+    if threshold is None:
+        return pd.Series([False] * len(series_val), index=series_val.index)
+    return pd.to_numeric(series_val, errors="coerce") >= threshold
 
 
 def _op_less_than_or_equal(series_val, rule_val):
     """Returns True where the series value is <= numeric rule value."""
-    return pd.to_numeric(series_val, errors="coerce") <= float(rule_val)
+    threshold = _safe_float(rule_val)
+    if threshold is None:
+        return pd.Series([False] * len(series_val), index=series_val.index)
+    return pd.to_numeric(series_val, errors="coerce") <= threshold
 
 
 def _op_starts_with(series_val, rule_val):
     """Returns True where the series string starts with the rule string."""
-    return series_val.str.startswith(rule_val, na=False)
+    return _as_str_series(series_val).str.startswith(rule_val, na=False)
 
 
 def _op_ends_with(series_val, rule_val):
     """Returns True where the series string ends with the rule string."""
-    return series_val.str.endswith(rule_val, na=False)
+    return _as_str_series(series_val).str.endswith(rule_val, na=False)
 
 
 def _op_is_empty(series_val, rule_val):
@@ -333,6 +364,17 @@ def _op_not_in_list(series_val, rule_val):
         2     True
         dtype: bool
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if not rule_val or pd.isna(rule_val):
+        logger.warning("[RULE ENGINE] Empty list value for 'not in list' operator")
+        return pd.Series([False] * len(series_val), index=series_val.index)
+
+    list_values = [v.strip().lower() for v in str(rule_val).split(",") if v.strip()]
+    if not list_values:
+        return pd.Series([False] * len(series_val), index=series_val.index)
+
     return ~_op_in_list(series_val, rule_val)
 
 
@@ -399,6 +441,8 @@ def _op_not_between(series_val, rule_val):
         3     True
         dtype: bool
     """
+    if _parse_range(rule_val) is None:
+        return pd.Series([False] * len(series_val), index=series_val.index)
     return ~_op_between(series_val, rule_val)
 
 
@@ -811,7 +855,7 @@ class RuleEngine:
 
                         for action in actions:
                             action_type = action.get("type", "").upper()
-                            if action_type == "ADD_TAG":
+                            if action_type in ("ADD_TAG", "ADD_ORDER_TAG"):
                                 apply_to_all_actions.append(action)
                             else:
                                 apply_to_first_actions.append(action)
@@ -855,7 +899,7 @@ class RuleEngine:
             for step in rule.get("steps", []):
                 for action in step.get("actions", []):
                     action_type = action.get("type", "").upper()
-                    if action_type in ["ADD_TAG", "ADD_ORDER_TAG"]:
+                    if action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_MULTI_TAGS"]:
                         needed_columns.add("Status_Note")
                     elif action_type == "ADD_INTERNAL_TAG":
                         needed_columns.add("Internal_Tags")
