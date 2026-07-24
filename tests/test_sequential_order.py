@@ -41,11 +41,13 @@ class TestGenerateSequentialOrderMap:
         assert data["order_sequence"] == first
         assert data["total_orders"] == 2
 
-        # Second call with a DIFFERENT df must NOT overwrite -- numbering is
-        # meant to be stable across a session so previously printed labels
-        # stay valid.
-        different_df = _analysis_df(["#5", "#6", "#7"])
-        second = generate_sequential_order_map(different_df, tmp_path)
+        # A second call with the SAME orders must reuse the persisted map,
+        # not regenerate it -- numbering is meant to be stable across a
+        # session so previously printed labels stay valid. (The case of a
+        # second call with NEW orders mixed in is covered separately by
+        # TestStaleMapCollisionRisk, which asserts existing numbers are kept
+        # and only genuinely new orders get appended.)
+        second = generate_sequential_order_map(df, tmp_path)
         assert second == first
 
     def test_force_regenerate_overwrites_existing_map(self, tmp_path):
@@ -90,22 +92,15 @@ class TestLoadAndLookup:
 
 
 class TestStaleMapCollisionRisk:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (design gap): once sequential_order.json exists, "
-               "generate_sequential_order_map() returns the OLD map verbatim "
-               "and never assigns numbers to orders that only became "
-               "Fulfillable after re-analysis (e.g. a restock). Any caller "
-               "that falls back to `idx + 1` for orders missing from the map "
-               "(see barcode_processor.generate_barcodes_batch) can then "
-               "print a sequential number that collides with one already "
-               "assigned to a different order in the persisted map.",
-    )
     def test_new_fulfillable_order_after_restock_gets_a_number(self, tmp_path):
         df_before = _analysis_df(["#1", "#2"])
-        generate_sequential_order_map(df_before, tmp_path)
+        before_map = generate_sequential_order_map(df_before, tmp_path)
 
         # Analysis reruns after a restock: #3 is now also Fulfillable.
         df_after = _analysis_df(["#1", "#2", "#3"])
         order_map = generate_sequential_order_map(df_after, tmp_path)
         assert "#3" in order_map
+        # Existing numbers must not be renumbered -- previously printed
+        # labels for #1/#2 must stay valid.
+        assert order_map["#1"] == before_map["#1"]
+        assert order_map["#2"] == before_map["#2"]

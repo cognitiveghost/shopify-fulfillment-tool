@@ -19,6 +19,7 @@ Directory Structure:
         └── stock_exports/          # Stock writeoff exports
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -246,6 +247,37 @@ class SessionManager:
 
         return sessions
 
+    @contextlib.contextmanager
+    def _locked_session_info(self, session_path_obj: Path):
+        """Blocking exclusive lock spanning a session_info.json read-modify-write.
+
+        Without this, two near-simultaneous updates (e.g. packing list and
+        stock export generation both appending to their own list field) each
+        read the same on-disk snapshot before either writes back, and one
+        update silently loses the other's change.
+        """
+        lock_path = session_path_obj / "session_info.json.lock"
+        lock_file = open(lock_path, "a+")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            finally:
+                lock_file.close()
+
     def get_session_info(self, session_path: str) -> Optional[Dict]:
         """Load session metadata from session_info.json.
 
@@ -301,31 +333,33 @@ class SessionManager:
                 f"Invalid status: {status}. Must be one of {self.VALID_STATUSES}"
             )
 
-        session_info = self.get_session_info(session_path)
-        if not session_info:
-            raise SessionManagerError(f"Session not found: {session_path}")
-
-        # Update status
-        session_info["status"] = status
-        session_info["status_updated_at"] = datetime.now().isoformat()
-
-        # Save back
         session_path_obj = Path(session_path)
-        session_info_path = session_path_obj / "session_info.json"
 
-        try:
-            # Remove computed fields
-            session_info.pop("session_path", None)
+        with self._locked_session_info(session_path_obj):
+            session_info = self.get_session_info(session_path)
+            if not session_info:
+                raise SessionManagerError(f"Session not found: {session_path}")
 
-            with open(session_info_path, 'w', encoding='utf-8') as f:
-                json.dump(session_info, f, indent=2)
+            # Update status
+            session_info["status"] = status
+            session_info["status_updated_at"] = datetime.now().isoformat()
 
-            logger.info(f"Session status updated to '{status}': {session_path}")
-            return True
+            # Save back
+            session_info_path = session_path_obj / "session_info.json"
 
-        except Exception as e:
-            logger.error(f"Failed to update session status: {e}")
-            raise SessionManagerError(f"Failed to update session status: {e}")
+            try:
+                # Remove computed fields
+                session_info.pop("session_path", None)
+
+                with open(session_info_path, 'w', encoding='utf-8') as f:
+                    json.dump(session_info, f, indent=2)
+
+                logger.info(f"Session status updated to '{status}': {session_path}")
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to update session status: {e}")
+                raise SessionManagerError(f"Failed to update session status: {e}")
 
     def update_session_info(self, session_path: str, updates: Dict) -> bool:
         """Update session metadata with arbitrary fields.
@@ -340,31 +374,76 @@ class SessionManager:
         Raises:
             SessionManagerError: If update fails
         """
-        session_info = self.get_session_info(session_path)
-        if not session_info:
-            raise SessionManagerError(f"Session not found: {session_path}")
-
-        # Apply updates
-        session_info.update(updates)
-        session_info["last_updated"] = datetime.now().isoformat()
-
-        # Save back
         session_path_obj = Path(session_path)
-        session_info_path = session_path_obj / "session_info.json"
 
-        try:
-            # Remove computed fields
-            session_info.pop("session_path", None)
+        with self._locked_session_info(session_path_obj):
+            session_info = self.get_session_info(session_path)
+            if not session_info:
+                raise SessionManagerError(f"Session not found: {session_path}")
 
-            with open(session_info_path, 'w', encoding='utf-8') as f:
-                json.dump(session_info, f, indent=2)
+            # Apply updates
+            session_info.update(updates)
+            session_info["last_updated"] = datetime.now().isoformat()
 
-            logger.info(f"Session info updated: {session_path}")
-            return True
+            # Save back
+            session_info_path = session_path_obj / "session_info.json"
 
-        except Exception as e:
-            logger.error(f"Failed to update session info: {e}")
-            raise SessionManagerError(f"Failed to update session info: {e}")
+            try:
+                # Remove computed fields
+                session_info.pop("session_path", None)
+
+                with open(session_info_path, 'w', encoding='utf-8') as f:
+                    json.dump(session_info, f, indent=2)
+
+                logger.info(f"Session info updated: {session_path}")
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to update session info: {e}")
+                raise SessionManagerError(f"Failed to update session info: {e}")
+
+    def append_to_session_list(self, session_path: str, field: str, value) -> bool:
+        """Atomically append value to a list field in session_info.json.
+
+        update_session_info()'s lock only protects its own read-modify-write;
+        a caller that reads the list itself (e.g. via get_session_info),
+        appends locally, and then calls update_session_info() with the whole
+        new list is still racing every other caller doing the same for a
+        DIFFERENT value on the same field (e.g. two packing lists generated
+        back to back) -- each reads a list that doesn't yet contain the
+        other's addition, and whichever writes last wins. Reading the list
+        fresh inside this method's own lock closes that gap.
+
+        Returns:
+            bool: True if value was appended, False if it was already present
+        """
+        session_path_obj = Path(session_path)
+
+        with self._locked_session_info(session_path_obj):
+            session_info = self.get_session_info(session_path)
+            if not session_info:
+                raise SessionManagerError(f"Session not found: {session_path}")
+
+            current_list = session_info.get(field, [])
+            if value in current_list:
+                return False
+
+            session_info[field] = current_list + [value]
+            session_info["last_updated"] = datetime.now().isoformat()
+
+            session_info_path = session_path_obj / "session_info.json"
+            try:
+                session_info.pop("session_path", None)
+
+                with open(session_info_path, 'w', encoding='utf-8') as f:
+                    json.dump(session_info, f, indent=2)
+
+                logger.info(f"Session info updated: appended '{value}' to '{field}'")
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to update session info: {e}")
+                raise SessionManagerError(f"Failed to update session info: {e}")
 
     def get_session_subdirectory(self, session_path: str, subdir_name: str) -> Path:
         """Get path to a session subdirectory.
@@ -499,7 +578,14 @@ class SessionManager:
         Raises:
             SessionManagerError: If deletion fails
         """
-        session_path_obj = Path(session_path)
+        session_path_obj = Path(session_path).resolve()
+
+        try:
+            session_path_obj.relative_to(self.sessions_root.resolve())
+        except ValueError:
+            raise SessionManagerError(
+                f"Refusing to delete path outside sessions root: {session_path}"
+            )
 
         if not session_path_obj.exists():
             logger.warning(f"Session not found for deletion: {session_path}")

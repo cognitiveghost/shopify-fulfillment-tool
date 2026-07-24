@@ -255,7 +255,7 @@ class ProfileManager:
             clients = []
             for item in self.clients_dir.iterdir():
                 if item.is_dir() and item.name.startswith("CLIENT_"):
-                    client_id = item.name.replace("CLIENT_", "")
+                    client_id = item.name[len("CLIENT_"):]
                     clients.append(client_id)
 
             return sorted(clients)
@@ -381,18 +381,15 @@ class ProfileManager:
         is_v1 = (
             "orders_required" in column_mappings or "stock_required" in column_mappings
         )
+        # A dict that already has 'orders'/'stock' mapping keys is v2-shaped --
+        # it's just missing the 'version' tag (e.g. hand-edited, or written by
+        # an older code path). Its real mapping must be preserved, not
+        # silently discarded for the hardcoded default.
+        looks_like_v2_shape = isinstance(column_mappings, dict) and (
+            "orders" in column_mappings or "stock" in column_mappings
+        )
 
-        if not is_v1:
-            # Unknown format, assume it needs migration
-            logger.warning(
-                f"Unknown column_mappings format for CLIENT_{client_id}, applying default v2"
-            )
-
-        # Migrate to v2 with default Shopify/Bulgarian mappings
-        logger.info(f"Migrating column mappings v1 → v2 for CLIENT_{client_id}")
-
-        # Use default mappings (Shopify orders + Bulgarian stock)
-        new_mappings = {
+        default_mappings = {
             "version": 2,
             "orders": {
                 "Name": "Order_Number",
@@ -415,8 +412,22 @@ class ProfileManager:
             },
         }
 
-        # Replace old mappings with new
-        config["column_mappings"] = new_mappings
+        if is_v1:
+            # True v1 format stores required-column lists, not an actual
+            # field mapping -- the hardcoded default is the only sensible migration.
+            logger.info(f"Migrating column mappings v1 → v2 for CLIENT_{client_id}")
+            config["column_mappings"] = default_mappings
+        elif looks_like_v2_shape:
+            logger.info(
+                f"Stamping missing 'version' on existing column_mappings for CLIENT_{client_id}"
+            )
+            column_mappings["version"] = 2
+            config["column_mappings"] = column_mappings
+        else:
+            logger.warning(
+                f"Unknown column_mappings format for CLIENT_{client_id}, applying default v2"
+            )
+            config["column_mappings"] = default_mappings
 
         # Add migration metadata
         config["_migration_info"] = {
@@ -1108,6 +1119,13 @@ class ProfileManager:
                 that only has quantities on hand doesn't wipe out names saved
                 by an earlier run).
         """
+        if not stock_dict:
+            logger.warning(
+                f"save_inventory_memory called with an empty stock_dict for "
+                f"CLIENT_{client_id}; skipping to avoid erasing the existing snapshot"
+            )
+            return False
+
         # ponytail: read-modify-write; ceiling is concurrent PC writes can still clobber
         # enabled between load and save. Upgrade: hold file lock across load+save.
         # Pass config to skip the extra disk read when the caller already holds it.
@@ -1115,10 +1133,12 @@ class ProfileManager:
             config = self.load_shopify_config(client_id) or {}
         # Use update() so enabled (and any future keys) come from the freshly loaded config
         config.setdefault("inventory_memory", {})
+        from .csv_utils import normalize_sku
+
         updates = {
             # Keep zero-qty SKUs: dropping them shrinks old_skus overlap ratio and can
             # trigger a false 'Wrong client file?' anomaly on the next stock load.
-            "skus": {str(k): float(v) for k, v in stock_dict.items()},
+            "skus": {normalize_sku(k): float(v) for k, v in stock_dict.items()},
             "last_updated": datetime.now().isoformat(timespec="seconds"),
             "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
         }

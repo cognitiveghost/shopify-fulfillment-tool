@@ -90,13 +90,6 @@ class TestDecodeSetsInOrders:
         result = decode_sets_in_orders(df, set_decoders)
         assert list(result["SKU"]) == ["INNER-SET"]  # NOT expanded to LEAF
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: when every component of a set is invalid (missing SKU or "
-               "non-positive quantity), the whole order line silently vanishes "
-               "from the output instead of being kept as an error/unfulfillable "
-               "row -- the customer's line item disappears with only a debug log.",
-    )
     def test_set_with_all_invalid_components_does_not_drop_the_order_line(self):
         df = _orders([{"Order_Number": "#1", "SKU": "SET-BROKEN", "Quantity": 1}])
         set_decoders = {"SET-BROKEN": [{"sku": "", "quantity": 1}]}

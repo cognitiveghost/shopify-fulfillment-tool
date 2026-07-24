@@ -274,16 +274,19 @@ def normalize_sku_for_matching(sku: Any) -> str:
     if not normalized:
         return normalized
 
-    try:
-        # Try to parse as pure number and remove leading zeros
-        # "07" → 7 → "7"
-        # "0042" → 42 → "42"
-        return str(int(float(normalized)))
-    except (ValueError, TypeError):
-        # Not a pure number (alphanumeric), return as-is
-        # "ABC-123" stays "ABC-123"
-        # "01-DM-0379" stays "01-DM-0379" (contains non-numeric)
-        return normalized
+    # Only strip leading zeros for a PURE digit string (optionally signed).
+    # float()/int() would also accept "inf"/"Infinity" (raising an uncaught
+    # OverflowError on int(float("inf"))) and scientific notation like "5E3"
+    # (silently mangled to "5000") -- neither is a real numeric SKU.
+    # "07" → "7", "0042" → "42"
+    if normalized.lstrip('-').isdigit():
+        return str(int(normalized))
+
+    # Not a pure number (alphanumeric), return as-is
+    # "ABC-123" stays "ABC-123"
+    # "01-DM-0379" stays "01-DM-0379" (contains non-numeric)
+    # "inf"/"5E3" stay as-is too (not real numeric SKUs)
+    return normalized
 
 
 def merge_csv_files(

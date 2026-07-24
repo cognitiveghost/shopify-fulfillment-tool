@@ -375,14 +375,6 @@ class TestQuantityRobustness:
     anywhere in the module -- correctness relies entirely on pandas' automatic
     CSV dtype inference, which breaks the moment a single row is malformed."""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: one non-numeric Quantity value anywhere in the whole orders "
-               "file (e.g. a stray 'abc' from a data-entry mistake) crashes the "
-               "ENTIRE analysis run with an uncaught TypeError in "
-               "_simulate_stock_allocation ('>' not supported between str and "
-               "int) -- every order in the batch fails, not just the bad row.",
-    )
     def test_single_bad_quantity_value_does_not_crash_whole_batch(self):
         orders = _orders([
             {"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 2},
@@ -392,15 +384,6 @@ class TestQuantityRobustness:
         final_df, *_ = _run(orders, stock)  # currently raises TypeError
         assert final_df[final_df["Order_Number"] == "#1"].iloc[0]["Order_Fulfillment_Status"] == "Fulfillable"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: a blank/NaN Quantity cell is silently summed as 0 needed "
-               "units (pandas groupby.sum() default skipna=True) instead of "
-               "being rejected/flagged -- the order line is marked Fulfillable "
-               "and consumes zero stock even though the true requested quantity "
-               "is unknown, so a picker never gets told to pack that item and "
-               "no error surfaces anywhere.",
-    )
     def test_blank_quantity_is_flagged_not_silently_treated_as_zero(self):
         orders = _orders([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": None}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])

@@ -33,6 +33,24 @@ logger = logging.getLogger(__name__)
 SEQUENTIAL_ORDER_VERSION = "1.0"
 
 
+def _natural_sort_key(s):
+    """Convert string to list of strings and numbers for natural sorting."""
+    return [int(text) if text.isdigit() else text.lower()
+            for text in re.split(r'(\d+)', str(s))]
+
+
+def _write_sequential_order_map(json_path: Path, order_map: Dict[str, int]) -> None:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "version": SEQUENTIAL_ORDER_VERSION,
+        "generated_at": datetime.now().isoformat(),
+        "total_orders": len(order_map),
+        "order_sequence": order_map,
+    }
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
 def generate_sequential_order_map(
     analysis_results_df: pd.DataFrame,
     session_path: Path,
@@ -62,11 +80,6 @@ def generate_sequential_order_map(
     """
     json_path = session_path / "analysis" / "sequential_order.json"
 
-    # Check if map already exists
-    if json_path.exists() and not force_regenerate:
-        logger.info(f"Sequential order map already exists: {json_path}")
-        return load_sequential_order_map(session_path)
-
     # Filter to Fulfillable orders only
     fulfillable_df = analysis_results_df[
         analysis_results_df['Order_Fulfillment_Status'] == 'Fulfillable'
@@ -75,13 +88,36 @@ def generate_sequential_order_map(
     # Get unique order numbers (drop NaN to avoid JSON serialization failure)
     unique_orders = fulfillable_df['Order_Number'].dropna().unique()
 
-    # Sort with numeric awareness (ORDER-1, ORDER-2, ORDER-10)
-    def natural_sort_key(s):
-        """Convert string to list of strings and numbers for natural sorting."""
-        return [int(text) if text.isdigit() else text.lower()
-                for text in re.split(r'(\d+)', str(s))]
+    # Check if map already exists
+    if json_path.exists() and not force_regenerate:
+        existing_map = load_sequential_order_map(session_path)
 
-    unique_orders_sorted = sorted(unique_orders, key=natural_sort_key)
+        # An order that only became Fulfillable after re-analysis (e.g. a
+        # restock) would otherwise be missing from the persisted map forever,
+        # forcing callers to fall back to a number that can collide with one
+        # already assigned to a different order. Extend the map instead of
+        # returning it verbatim, preserving every existing assignment so
+        # already-printed labels stay valid.
+        new_orders = [o for o in unique_orders if o not in existing_map]
+        if not new_orders:
+            logger.info(f"Sequential order map already exists: {json_path}")
+            return existing_map
+
+        new_orders_sorted = sorted(new_orders, key=_natural_sort_key)
+        next_number = max(existing_map.values(), default=0) + 1
+        updated_map = dict(existing_map)
+        for order_num in new_orders_sorted:
+            updated_map[order_num] = next_number
+            next_number += 1
+
+        _write_sequential_order_map(json_path, updated_map)
+        logger.info(
+            f"Extended sequential order map with {len(new_orders)} newly-fulfillable orders"
+        )
+        return updated_map
+
+    # Sort with numeric awareness (ORDER-1, ORDER-2, ORDER-10)
+    unique_orders_sorted = sorted(unique_orders, key=_natural_sort_key)
 
     # Assign sequential numbers (1-indexed)
     order_map = {
@@ -89,19 +125,7 @@ def generate_sequential_order_map(
         for idx, order_num in enumerate(unique_orders_sorted)
     }
 
-    # Save to JSON
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-
-    data = {
-        "version": SEQUENTIAL_ORDER_VERSION,
-        "generated_at": datetime.now().isoformat(),
-        "total_orders": len(order_map),
-        "order_sequence": order_map
-    }
-
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
+    _write_sequential_order_map(json_path, order_map)
     logger.info(f"Generated sequential order map: {len(order_map)} orders")
 
     return order_map

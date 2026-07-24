@@ -1367,13 +1367,9 @@ def create_packing_list_report(
         # Update session info if in session mode
         if session_manager and session_path:
             try:
-                session_info = session_manager.get_session_info(session_path)
-                generated_lists = session_info.get("packing_lists_generated", [])
-                if original_filename not in generated_lists:
-                    generated_lists.append(original_filename)
-                    session_manager.update_session_info(
-                        session_path, {"packing_lists_generated": generated_lists}
-                    )
+                if session_manager.append_to_session_list(
+                    session_path, "packing_lists_generated", original_filename
+                ):
                     logger.info(
                         f"Session info updated: added packing list {original_filename}"
                     )
@@ -1491,13 +1487,9 @@ def create_stock_export_report(
         # Update session info if in session mode
         if session_manager and session_path:
             try:
-                session_info = session_manager.get_session_info(session_path)
-                generated_exports = session_info.get("stock_exports_generated", [])
-                if original_filename not in generated_exports:
-                    generated_exports.append(original_filename)
-                    session_manager.update_session_info(
-                        session_path, {"stock_exports_generated": generated_exports}
-                    )
+                if session_manager.append_to_session_list(
+                    session_path, "stock_exports_generated", original_filename
+                ):
                     logger.info(
                         f"Session info updated: added stock export {original_filename}"
                     )
@@ -1585,13 +1577,9 @@ def create_writeoff_report(
         # Update session info if in session mode
         if session_manager and session_path:
             try:
-                session_info = session_manager.get_session_info(session_path)
-                generated_reports = session_info.get("writeoff_reports_generated", [])
-                if original_filename not in generated_reports:
-                    generated_reports.append(original_filename)
-                    session_manager.update_session_info(
-                        session_path, {"writeoff_reports_generated": generated_reports}
-                    )
+                if session_manager.append_to_session_list(
+                    session_path, "writeoff_reports_generated", original_filename
+                ):
                     logger.info(
                         f"Session info updated: added writeoff report {original_filename}"
                     )

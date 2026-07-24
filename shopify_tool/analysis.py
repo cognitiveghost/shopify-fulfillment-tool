@@ -313,6 +313,17 @@ def _clean_and_prepare_data(
     logger.info(f"Columns existing in DataFrame: {len(columns_to_keep_existing)}")
     orders_clean_df = orders_df[columns_to_keep_existing].copy()
 
+    # CRITICAL: Coerce Quantity to numeric. Without this, a single stray
+    # non-numeric value (e.g. a data-entry typo) leaves the whole column
+    # object-dtype, and a later "> " comparison in _simulate_stock_allocation
+    # crashes with TypeError for the entire batch, not just the bad row.
+    # Invalid/blank values become NaN so they can be explicitly flagged
+    # instead of silently summing to a phantom zero.
+    if "Quantity" in orders_clean_df.columns:
+        orders_clean_df["Quantity"] = pd.to_numeric(
+            orders_clean_df["Quantity"], errors="coerce"
+        )
+
     # Mark rows without SKU but keep them (don't drop)
     orders_clean_df["Has_SKU"] = orders_clean_df["SKU"].notna()
 
@@ -530,6 +541,17 @@ def _simulate_stock_allocation(
         for order_num, grp in orders_for_simulation.groupby("Order_Number")
     }
 
+    # Orders with a NaN Quantity (blank cell or failed numeric coercion) must
+    # not be silently treated as needing zero units -- groupby.sum() skips
+    # NaN, so an order whose only line item is invalid would otherwise look
+    # like a legitimate zero-quantity order and get marked Fulfillable.
+    invalid_qty_rows = orders_for_simulation[orders_for_simulation["Quantity"].isna()]
+    invalid_qty_by_order: Dict[str, List[str]] = (
+        invalid_qty_rows.groupby("Order_Number")["SKU"].apply(list).to_dict()
+        if not invalid_qty_rows.empty
+        else {}
+    )
+
     fulfillment_results = {}
 
     if fifo_lots is None:
@@ -539,6 +561,16 @@ def _simulate_stock_allocation(
         lot_allocations: Dict[str, Dict[str, List[dict]]] = {}
 
         for order_number in prioritized_orders["Order_Number"]:
+            if order_number in invalid_qty_by_order:
+                fulfillment_results[order_number] = {
+                    "fulfillable": False,
+                    "reason": "; ".join(
+                        f"{sku}: Missing/invalid quantity"
+                        for sku in invalid_qty_by_order[order_number]
+                    ),
+                }
+                continue
+
             required_quantities = order_required_quantities.get(order_number)
             if required_quantities is None:
                 continue
@@ -575,6 +607,16 @@ def _simulate_stock_allocation(
         lot_allocations = {}
 
         for order_number in prioritized_orders["Order_Number"]:
+            if order_number in invalid_qty_by_order:
+                fulfillment_results[order_number] = {
+                    "fulfillable": False,
+                    "reason": "; ".join(
+                        f"{sku}: Missing/invalid quantity"
+                        for sku in invalid_qty_by_order[order_number]
+                    ),
+                }
+                continue
+
             required_quantities = order_required_quantities.get(order_number)
             if required_quantities is None:
                 continue

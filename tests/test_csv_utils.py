@@ -56,12 +56,6 @@ class TestNormalizeSkuForMatching:
 
     # --- BUGS found while exercising this function (see also barcode_processor) ---
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: a SKU literally 'inf'/'Infinity'/'-inf' makes float() succeed "
-               "and int(float(...)) raise an uncaught OverflowError instead of "
-               "falling back to the alphanumeric branch like other non-numeric SKUs.",
-    )
     @pytest.mark.parametrize("raw", ["inf", "-inf", "Infinity", "INF"])
     def test_infinity_like_sku_does_not_crash(self, raw):
         # Every other non-numeric SKU (e.g. "ABC-123") is returned unchanged by
@@ -70,12 +64,6 @@ class TestNormalizeSkuForMatching:
         # packing-list filter called it.
         assert normalize_sku_for_matching(raw) == raw
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: scientific-notation-shaped SKUs (e.g. '5E3') are silently "
-               "reinterpreted as numbers via float() and mangled to '5000' instead "
-               "of being treated as an opaque alphanumeric SKU.",
-    )
     def test_scientific_notation_sku_is_not_mangled(self):
         assert normalize_sku_for_matching("5E3") == "5E3"
 

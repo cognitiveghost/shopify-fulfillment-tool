@@ -60,28 +60,11 @@ class TestFormatTagsForBarcode:
         assert format_tags_for_barcode("nan") == ""
         assert format_tags_for_barcode("None") == ""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: analysis.py initializes EVERY order's Internal_Tags to the "
-               "JSON string '[]' (empty array). format_tags_for_barcode('[]') "
-               "should behave like the no-tags case (blank/falsy) but instead "
-               "falls through to the plain-string fallback branch and returns "
-               "the literal text '[]', which then prints on the barcode label "
-               "for essentially every untagged order.",
-    )
     def test_empty_json_array_returns_blank_not_literal_brackets(self):
         assert format_tags_for_barcode("[]") == ""
 
 
 class TestItemCountZeroFalsyBug:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: generate_barcodes_batch computes "
-               "`int(float(raw_count or 1))` -- Python's `or` treats a "
-               "legitimate item_count of 0 as falsy and silently substitutes 1, "
-               "so a genuinely-zero-item row prints 'SUM: 1' on the label "
-               "instead of 'SUM: 0'.",
-    )
     def test_zero_item_count_is_not_coerced_to_one(self, tmp_path, monkeypatch):
         captured = {}
 

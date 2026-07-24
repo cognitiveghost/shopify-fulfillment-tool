@@ -107,30 +107,12 @@ class TestInventoryMemoryRoundTrip:
 
     # --- Confirmed bugs ---
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: save_inventory_memory() casts SKU keys with plain str(k), "
-               "never through csv_utils.normalize_sku() (used everywhere else in "
-               "this codebase, e.g. core.py's history SKU normalization). A "
-               "numeric/float SKU key is persisted as '5170.0' instead of "
-               "'5170', so it will never match the normalize_sku()'d SKU that "
-               "comes back from a real stock CSV on the next analysis run.",
-    )
     def test_float_sku_key_is_normalized_like_everywhere_else(self, profile_manager):
         profile_manager.create_client_profile("M", "Client")
         profile_manager.save_inventory_memory("M", {5170.0: 12})
         mem = profile_manager.get_inventory_memory("M")
         assert "5170" in mem["skus"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: save_inventory_memory() has no guard against an empty "
-               "stock_dict -- calling it with {} (e.g. because every row's "
-               "Final_Stock was NaN in a degenerate analysis run, see "
-               "core.py:1100-1105) silently overwrites and permanently erases "
-               "a previously-good inventory snapshot instead of being a no-op "
-               "or requiring an explicit confirmation.",
-    )
     def test_saving_empty_stock_dict_does_not_erase_previous_snapshot(self, profile_manager):
         profile_manager.create_client_profile("M", "Client")
         profile_manager.save_inventory_memory("M", {"A1": 5, "B1": 3})
@@ -140,17 +122,6 @@ class TestInventoryMemoryRoundTrip:
 
 
 class TestListClientsBug:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: list_clients() strips the directory prefix with "
-               "item.name.replace('CLIENT_', '') instead of a prefix-only "
-               "strip. validate_client_id() only rejects IDs that START WITH "
-               "'CLIENT_', so an id like 'ACLIENT_B' is legal, creates dir "
-               "'CLIENT_ACLIENT_B', but list_clients() replaces BOTH "
-               "occurrences of the substring and reports it as 'AB' -- a name "
-               "that doesn't round-trip through client_exists()/"
-               "get_client_directory() at all.",
-    )
     def test_client_id_containing_client_substring_round_trips(self, profile_manager):
         profile_manager.create_client_profile("ACLIENT_B", "Test")
         listed = profile_manager.list_clients()
@@ -159,17 +130,6 @@ class TestListClientsBug:
 
 
 class TestColumnMappingsMigrationBug:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: _migrate_column_mappings_v1_to_v2 computes is_v1 to decide "
-               "which log message to print, but then unconditionally overwrites "
-               "config['column_mappings'] with the hardcoded default Shopify/"
-               "Bulgarian template regardless of is_v1's value. Any real, valid "
-               "user-authored column_mappings dict that simply lacks the "
-               "'version' key (e.g. hand-edited, or written by an older code "
-               "path) has its actual orders/stock mapping silently discarded "
-               "and replaced by the wrong default on the very next config load.",
-    )
     def test_unversioned_custom_mapping_is_not_silently_replaced(self, profile_manager):
         profile_manager.create_client_profile("M", "Client")
         config = profile_manager.load_shopify_config("M")

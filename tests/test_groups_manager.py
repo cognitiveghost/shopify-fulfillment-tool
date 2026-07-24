@@ -56,26 +56,10 @@ class TestBasicCrud:
 
 
 class TestConfirmedBugs:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: create_group's duplicate-name check only scans "
-               "groups_data['groups'], never special_groups -- "
-               "create_group('Pinned') succeeds and produces a normal group "
-               "whose display name collides with the built-in 'Pinned' group.",
-    )
     def test_create_group_colliding_with_special_group_name_is_rejected(self, groups_manager):
         with pytest.raises(GroupsManagerError):
             groups_manager.create_group("Pinned")
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: save_groups()/create_group() only lock around the final "
-               "write, not the preceding load_groups() read -- two near-"
-               "simultaneous create_group() calls both read the same stale "
-               "snapshot, so the second writer's save clobbers the first "
-               "writer's newly-appended group even though create_group() "
-               "returned a success UUID to both callers.",
-    )
     def test_concurrent_create_group_does_not_lose_an_update(self, groups_manager, monkeypatch):
         original_load = groups_manager.load_groups
 
