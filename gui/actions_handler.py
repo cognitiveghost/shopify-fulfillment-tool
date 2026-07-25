@@ -222,8 +222,8 @@ class ActionsHandler(QObject):
             # NEW: RECORD STATISTICS TO SERVER
             # ========================================
             try:
-                from pathlib import Path
                 from shared.stats_manager import StatsManager
+                from shared.session_id import derive_session_id
 
                 self.log.info("Recording analysis statistics to server...")
 
@@ -233,7 +233,7 @@ class ActionsHandler(QObject):
 
                 # Get session info
                 session_name = (
-                    Path(self.mw.session_path).name
+                    derive_session_id(self.mw.session_path)
                     if self.mw.session_path
                     else "unknown"
                 )
