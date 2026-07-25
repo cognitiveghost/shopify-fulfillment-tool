@@ -214,7 +214,7 @@ stats_manager = StatsManager(
 
 ### Testing
 
-Tests are being rewritten; no test suite exists for this module yet.
+Tests were removed for a rewrite and are not present in this checkout.
 
 ### Integration Example for Packing Tool
 
@@ -331,6 +331,5 @@ If the statistics file becomes corrupted:
 ### Support
 
 For issues or questions:
-1. Check the integration tests for usage examples
-2. Review the inline documentation in `stats_manager.py`
-3. Consult the Unified Development Plan (Phase 1.4)
+1. Review the inline documentation in `stats_manager.py`
+2. Consult the Unified Development Plan (Phase 1.4)
