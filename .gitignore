@@ -97,3 +97,6 @@ PROJECT_AUDIT.txt
 # Development artifacts
 .connection_test
 nul
+
+# graphify skill output
+/graphify-out/
