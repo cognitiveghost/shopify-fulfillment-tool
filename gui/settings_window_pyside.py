@@ -448,20 +448,6 @@ class SettingsWindow(QDialog):
 
         main_layout.addWidget(settings_box)
 
-        # Info about removed fields
-        info_box = QGroupBox("Note")
-        info_layout = QVBoxLayout(info_box)
-        info_label = QLabel(
-            "Templates and custom output directories are no longer used.\n"
-            "All reports are now generated in session-specific folders automatically."
-        )
-        info_label.setWordWrap(True)
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic;")
-        info_layout.addWidget(info_label)
-        main_layout.addWidget(info_box)
-
         main_layout.addStretch()
 
         self.tab_widget.addTab(tab, "General")
@@ -1847,17 +1833,6 @@ class SettingsWindow(QDialog):
         header_label = QLabel("Set/Bundle Definitions")
         header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
         main_layout.addWidget(header_label)
-
-        # Help text
-        help_text = QLabel(
-            "Define sets/bundles that will be automatically expanded into their component SKUs during analysis.\n"
-            "Example: SET-WINTER-KIT → HAT(1x), GLOVES(1x), SCARF(1x)"
-        )
-        help_text.setWordWrap(True)
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
-        help_text.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 10px;")
-        main_layout.addWidget(help_text)
 
         # Search box
         self.sets_search = QLineEdit()

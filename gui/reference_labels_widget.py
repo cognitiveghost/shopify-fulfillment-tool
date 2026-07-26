@@ -113,15 +113,6 @@ class ReferenceLabelsWidget(QWidget):
         csv_row.addWidget(self.csv_label, 1)
         layout.addLayout(csv_row)
 
-        # Info label
-        info_label = QLabel(
-            "ℹ️ CSV format: PostOne ID (column 0), Tracking (column 1), "
-            "Reference Number (column 2), Name (column 6)"
-        )
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 10px; padding: 5px;")
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
-
         return group
 
     def _create_output_settings_group(self):
