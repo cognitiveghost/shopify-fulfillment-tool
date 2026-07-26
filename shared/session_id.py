@@ -3,9 +3,10 @@ Tool, so a record written by one and a record written by the other for the
 same real-world session carry the exact same session_id string.
 """
 from pathlib import Path
+from typing import Union
 
 
-def derive_session_id(session_path: str | Path) -> str:
+def derive_session_id(session_path: Union[str, Path]) -> str:
     """Derive a session_id from a session directory path.
 
     Both apps must call this instead of building their own session_id.

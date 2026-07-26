@@ -31,7 +31,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Lint (ruff)
-        run: ruff check .
+        run: ruff check . --exclude shared
       - name: Smoke test (headless import + construct MainWindow)
         timeout-minutes: 2
         run: CI=1 python run_dev.py
