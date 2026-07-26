@@ -125,7 +125,7 @@ def load_session_summary(path: Path) -> Dict[str, Any]:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        logger.error(f"Corrupted session summary at {path}: {e}")
+        logger.error(f"Corrupted session summary at {path}: {e}", exc_info=True)
         raise
 
     # Check version
