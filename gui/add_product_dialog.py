@@ -66,10 +66,13 @@ class AddProductDialog(QDialog):
         # Section 3: Quantity
         layout.addWidget(self._create_quantity_section())
 
-        # Section 4: Warning
+        # Section 4: Info/Warning
         self.warning_box = self._create_warning_box()
         self.warning_box.setVisible(False)
         layout.addWidget(self.warning_box)
+
+        self.info_box = self._create_info_box()
+        layout.addWidget(self.info_box)
 
         # Section 5: Buttons
         layout.addWidget(self._create_buttons())
@@ -137,6 +140,32 @@ class AddProductDialog(QDialog):
                 background-color: #FFEBEE;
                 color: #1A1A1A;
                 border: 2px solid {theme.accent_red};
+                border-radius: 5px;
+                padding: 10px;
+            }}
+        """)
+        return label
+
+    def _create_info_box(self):
+        """Create info box."""
+        theme = get_theme_manager().get_current_theme()
+        text = (
+            "INFO\n\n"
+            "• Product will be added with Source: 'Manual'\n"
+            "• Fulfillment will be recalculated for this order\n"
+            "• Manual addition will be saved in session\n"
+            "• NO full re-analysis needed"
+        )
+
+        label = QLabel(text)
+        label.setWordWrap(True)
+        # ponytail: literal info-tint background, not worth a new
+        # ThemeTokens field for a handful of call sites.
+        label.setStyleSheet(f"""
+            QLabel {{
+                background-color: #E3F2FD;
+                color: #1A1A1A;
+                border: 2px solid {theme.accent_blue};
                 border-radius: 5px;
                 padding: 10px;
             }}
