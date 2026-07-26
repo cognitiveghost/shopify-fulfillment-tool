@@ -1651,7 +1651,10 @@ class UIManager:
     def _make_tag_card(self, tag: str, count: str, color: str | None = None) -> QFrame:
         """Tag card: colored count badge on top, tag name below."""
         if color is None:
-            color = get_theme_manager().get_current_theme().text_secondary
+            # ponytail: literal neutral badge-fill default, not a text color —
+            # theme.text_secondary differs per theme; this is a background
+            # fill, and no theme-invariant neutral-gray token exists.
+            color = "#9E9E9E"
         card = QFrame()
         card.setFrameShape(QFrame.StyledPanel)
         card.setFrameShadow(QFrame.Raised)
