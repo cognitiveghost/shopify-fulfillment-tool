@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from shared.logger import setup_logging
 from shared.server_connection import resolve_server_path, test_path_reachable
 
 logger = logging.getLogger("ShopifyToolLogger")
@@ -95,6 +96,15 @@ class ProfileManager:
             base_path = self._get_base_path()
 
         self.base_path = Path(base_path)
+
+        # Per-process log file on the same server base_path resolved to -
+        # previously this never happened at all: shopify_tool/__init__.py
+        # called the old setup_logging() at package-import time with no
+        # base_path, so centralized JSON logging silently wrote to a
+        # local ./logs/ folder instead of the network share.
+        log_level_str = os.environ.get("FULFILLMENT_LOG_LEVEL", "INFO")
+        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+        setup_logging("ShopifyTool", str(self.base_path), level=log_level, retention_days=30)
 
         # Log which environment we're using
         if self._is_dev_environment():
