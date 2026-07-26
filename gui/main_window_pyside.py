@@ -268,8 +268,11 @@ class MainWindow(QMainWindow):
         self.log_handler.setFormatter(
             logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         )
+        # Root logger level is owned by shared.logger.setup_logging
+        # (called from ProfileManager, before this runs) - don't
+        # override it back to INFO here, or FULFILLMENT_LOG_LEVEL=DEBUG
+        # would silently have no effect.
         logging.getLogger().addHandler(self.log_handler)
-        logging.getLogger().setLevel(logging.INFO)
         self.log_handler.log_message_received.connect(
             self.execution_log_edit.appendPlainText
         )
@@ -891,7 +894,7 @@ class MainWindow(QMainWindow):
                 self.client_sidebar.refresh()
                 self.log_activity("UI", "Client sidebar refreshed")
         except Exception as e:
-            logging.error(f"Sidebar refresh failed: {e}")
+            logging.error(f"Sidebar refresh failed: {e}", exc_info=True)
             QMessageBox.warning(self, "Refresh Error", str(e))
 
     def on_session_selected(self, session_path: str):

@@ -5,8 +5,3 @@ Version: 1.9.9.1
 """
 
 __version__ = "1.9.9.1"
-
-from .logger_config import setup_logging
-
-# Ensure logging is configured as soon as the package is imported
-setup_logging()

@@ -189,7 +189,7 @@ def process_reference_labels(
                     page.merge_page(PdfReader(overlay).pages[0])
 
                 except Exception as e:
-                    logger.error(f"Failed to add overlay for ref {ref}: {e}")
+                    logger.error(f"Failed to add overlay for ref {ref}: {e}", exc_info=True)
 
             writer.add_page(page)
 

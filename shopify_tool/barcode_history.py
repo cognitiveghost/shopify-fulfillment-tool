@@ -45,7 +45,7 @@ class BarcodeHistory:
             return data
 
         except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to load history: {e}")
+            logger.error(f"Failed to load history: {e}", exc_info=True)
             return {"generated_barcodes": []}
 
     def _save_history(self, data: Dict = None):
@@ -60,7 +60,7 @@ class BarcodeHistory:
             logger.debug(f"Saved history: {len(data.get('generated_barcodes', []))} entries")
 
         except Exception as e:
-            logger.error(f"Failed to save history: {e}")
+            logger.error(f"Failed to save history: {e}", exc_info=True)
 
     def add_entry(self, entry: Dict[str, Any]):
         """

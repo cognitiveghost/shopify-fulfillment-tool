@@ -291,7 +291,7 @@ def create_stock_export(
         )
 
     except Exception as e:
-        logger.error(f"Error while creating stock export '{report_name}': {e}")
+        logger.error(f"Error while creating stock export '{report_name}': {e}", exc_info=True)
 
 
 def merge_session_stock_exports(

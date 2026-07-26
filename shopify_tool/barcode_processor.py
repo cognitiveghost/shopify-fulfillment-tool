@@ -455,7 +455,7 @@ def generate_barcode_label(
         }
 
     except InvalidOrderNumberError as e:
-        logger.error(f"Invalid order number '{order_number}': {e}")
+        logger.error(f"Invalid order number '{order_number}': {e}", exc_info=True)
         return {
             "order_number": order_number,
             "sequential_num": 0,

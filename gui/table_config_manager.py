@@ -206,7 +206,7 @@ class TableConfigManager:
             logger.debug(f"Saved table view '{view_name}' for CLIENT_{client_id}")
 
         except Exception as e:
-            logger.error(f"Failed to save table config for CLIENT_{client_id}: {e}")
+            logger.error(f"Failed to save table config for CLIENT_{client_id}: {e}", exc_info=True)
             raise
 
     def get_default_config(self, columns: List[str]) -> TableConfig:
@@ -729,7 +729,7 @@ class TableConfigManager:
             self._pending_save = False
             logger.debug("Debounced save completed")
         except Exception as e:
-            logger.error(f"Failed to perform debounced save: {e}")
+            logger.error(f"Failed to perform debounced save: {e}", exc_info=True)
 
     # Column visibility management methods (Phase 2)
 
@@ -1022,7 +1022,7 @@ class TableConfigManager:
             views = table_view_settings.get("views", {})
             return list(views.keys())
         except Exception as e:
-            logger.error(f"Failed to list views for CLIENT_{client_id}: {e}")
+            logger.error(f"Failed to list views for CLIENT_{client_id}: {e}", exc_info=True)
             return []
 
     def load_view(self, view_name: str, client_id: Optional[str] = None) -> Optional[TableConfig]:
@@ -1113,5 +1113,5 @@ class TableConfigManager:
                 logger.warning(f"View '{view_name}' not found for CLIENT_{client_id}")
 
         except Exception as e:
-            logger.error(f"Failed to delete view '{view_name}' for CLIENT_{client_id}: {e}")
+            logger.error(f"Failed to delete view '{view_name}' for CLIENT_{client_id}: {e}", exc_info=True)
             raise

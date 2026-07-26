@@ -337,7 +337,7 @@ class ReferenceLabelsWidget(QWidget):
             self.log.info(f"Output directory set: {self.output_dir}")
 
         except Exception as e:
-            self.log.error(f"Failed to set output directory: {e}")
+            self.log.error(f"Failed to set output directory: {e}", exc_info=True)
             self.output_dir = None
             self.output_dir_label.setText("Error accessing session directory")
             self.output_dir_label.setStyleSheet("color: red;")

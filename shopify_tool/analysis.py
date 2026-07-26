@@ -1468,10 +1468,10 @@ def run_analysis(
         return final_df, summary_present_df, summary_missing_df, stats
 
     except ValueError as e:
-        logger.error(f"Validation error during analysis: {e}")
+        logger.error(f"Validation error during analysis: {e}", exc_info=True)
         raise
     except KeyError as e:
-        logger.error(f"Missing required column: {e}")
+        logger.error(f"Missing required column: {e}", exc_info=True)
         raise
     except Exception as e:
         logger.error(f"Unexpected error during analysis: {e}", exc_info=True)

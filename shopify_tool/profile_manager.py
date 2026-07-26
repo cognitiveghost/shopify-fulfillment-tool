@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from shared.logger import setup_logging
 from shared.server_connection import resolve_server_path, test_path_reachable
 
 logger = logging.getLogger("ShopifyToolLogger")
@@ -96,6 +97,15 @@ class ProfileManager:
 
         self.base_path = Path(base_path)
 
+        # Per-process log file on the same server base_path resolved to -
+        # previously this never happened at all: shopify_tool/__init__.py
+        # called the old setup_logging() at package-import time with no
+        # base_path, so centralized JSON logging silently wrote to a
+        # local ./logs/ folder instead of the network share.
+        log_level_str = os.environ.get("FULFILLMENT_LOG_LEVEL", "INFO")
+        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+        setup_logging("ShopifyTool", str(self.base_path), level=log_level, retention_days=30)
+
         # Log which environment we're using
         if self._is_dev_environment():
             logger.info(f"🔧 DEV MODE - Using local mock server: {self.base_path}")
@@ -164,10 +174,10 @@ class ProfileManager:
             self.stats_dir.mkdir(parents=True, exist_ok=True)
             self.logs_dir.mkdir(parents=True, exist_ok=True)
         except PermissionError as e:
-            logger.error(f"Network connection FAILED - Permission denied: {e}")
+            logger.error(f"Network connection FAILED - Permission denied: {e}", exc_info=True)
             return False
         except OSError as e:
-            logger.error(f"Network connection FAILED - OS error (network issue?): {e}")
+            logger.error(f"Network connection FAILED - OS error (network issue?): {e}", exc_info=True)
             return False
         except Exception as e:
             logger.error(
@@ -256,10 +266,10 @@ class ProfileManager:
             return sorted(clients)
 
         except PermissionError as e:
-            logger.error(f"Permission denied accessing clients directory: {e}")
+            logger.error(f"Permission denied accessing clients directory: {e}", exc_info=True)
             return []
         except OSError as e:
-            logger.error(f"File system error listing clients: {e}")
+            logger.error(f"File system error listing clients: {e}", exc_info=True)
             return []
         except Exception as e:
             logger.error(f"Unexpected error listing clients: {e}", exc_info=True)
@@ -330,7 +340,7 @@ class ProfileManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to create client profile: {e}")
+            logger.error(f"Failed to create client profile: {e}", exc_info=True)
             # Cleanup on failure
             if client_dir.exists():
                 shutil.rmtree(client_dir, ignore_errors=True)
@@ -906,10 +916,10 @@ class ProfileManager:
         except PermissionError as e:
             logger.error(
                 f"Permission denied reading client config for CLIENT_{client_id}: {e}"
-            )
+            , exc_info=True)
             return None
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in client config for CLIENT_{client_id}: {e}")
+            logger.error(f"Invalid JSON in client config for CLIENT_{client_id}: {e}", exc_info=True)
             return None
         except Exception as e:
             logger.error(
@@ -992,7 +1002,7 @@ class ProfileManager:
             return config
 
         except Exception as e:
-            logger.error(f"Failed to load shopify config: {e}")
+            logger.error(f"Failed to load shopify config: {e}", exc_info=True)
             return None
 
     def save_shopify_config(self, client_id: str, config: Dict) -> bool:
@@ -1090,7 +1100,7 @@ class ProfileManager:
                     logger.error(
                         f"Save failed after {max_retries} attempts, "
                         f"config size: {config_size:,} bytes, {num_sets} sets"
-                    )
+                    , exc_info=True)
                     raise ProfileManagerError(
                         f"Configuration is locked by another user. Please try again."
                     )
@@ -1372,7 +1382,7 @@ class ProfileManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to save with Unix lock: {e}")
+            logger.error(f"Failed to save with Unix lock: {e}", exc_info=True)
             if temp_path.exists():
                 temp_path.unlink()
             return False
@@ -1547,7 +1557,7 @@ class ProfileManager:
                     time.sleep(retry_delay)
                 else:
                     error_msg = f"Failed to save client config after {max_retries} attempts: {e}"
-                    logger.error(error_msg)
+                    logger.error(error_msg, exc_info=True)
                     raise ProfileManagerError(error_msg)
 
         # If we get here, all retries failed

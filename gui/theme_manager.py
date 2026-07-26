@@ -76,7 +76,7 @@ class ThemeManager(QObject):
             settings.setValue("theme", self._current_theme_name)
             settings.sync()
         except Exception as e:
-            logger.error(f"Failed to save theme preference: {e}")
+            logger.error(f"Failed to save theme preference: {e}", exc_info=True)
 
     def _load_theme_preference(self):
         try:
@@ -84,7 +84,7 @@ class ThemeManager(QObject):
             saved_theme = settings.value("theme", "light")
             self._current_theme_name = saved_theme if saved_theme in ("light", "dark") else "light"
         except Exception as e:
-            logger.error(f"Failed to load theme preference: {e}")
+            logger.error(f"Failed to load theme preference: {e}", exc_info=True)
             self._current_theme_name = "light"
 
 
