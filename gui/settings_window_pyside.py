@@ -7,7 +7,9 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QVBoxLayout,
-    QTabWidget,
+    QListWidget,
+    QListWidgetItem,
+    QStackedWidget,
     QWidget,
     QFormLayout,
     QLabel,
@@ -121,6 +123,15 @@ class SettingsWindow(QDialog):
         "ADD_PRODUCT",
     ]
 
+    # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
+    # Group/order chosen to mirror VS Code's own Settings UI grouping.
+    SETTINGS_NAV_GROUPS = [
+        ("Data", ["General", "Mappings", "Column Config"]),
+        ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
+        ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
+        ("Organization", ["Tag Categories"]),
+    ]
+
     def __init__(self, client_id, client_config, profile_manager, analysis_df=None, parent=None):
         """Initializes the SettingsWindow.
 
@@ -183,10 +194,20 @@ class SettingsWindow(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
         main_layout = QVBoxLayout(self)
-        self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
+        content_layout = QHBoxLayout()
+        main_layout.addLayout(content_layout)
 
-        # Create all tabs
+        self._settings_nav = QListWidget()
+        self._settings_nav.setFixedWidth(170)
+        self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        content_layout.addWidget(self._settings_nav)
+
+        self.tab_widget = QStackedWidget()
+        content_layout.addWidget(self.tab_widget, 1)
+
+        self._page_index_by_name = {}
+
+        # Create all tabs (unchanged call order/method names)
         self.create_general_tab()
         self.create_rules_tab()
         self.create_packing_lists_tab()
@@ -198,6 +219,8 @@ class SettingsWindow(QDialog):
         self.create_column_config_tab()  # Column Configuration tab
         self.create_sku_labels_tab()     # SKU Label Printing tab
 
+        self._build_settings_nav()
+
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
@@ -206,6 +229,47 @@ class SettingsWindow(QDialog):
         _screen = parent.screen() if parent else QApplication.primaryScreen()
         _geo = _screen.availableGeometry()
         self.resize(min(1250, _geo.width() - 40), min(820, _geo.height() - 100))
+
+    def _add_settings_page(self, page: QWidget, name: str) -> None:
+        """Register a settings page under `name`.
+
+        Replaces the old `self.tab_widget.addTab(page, name)` calls — the
+        10-tab horizontal strip is replaced by a grouped left-nav
+        (_build_settings_nav) that looks up pages by this same name.
+        """
+        self.tab_widget.addWidget(page)
+        self._page_index_by_name[name] = self.tab_widget.count() - 1
+
+    def _build_settings_nav(self) -> None:
+        """Populate the left-nav list from SETTINGS_NAV_GROUPS with
+        non-selectable section headers, and wire selection to the stack."""
+        for group_name, page_names in self.SETTINGS_NAV_GROUPS:
+            header = QListWidgetItem(group_name.upper())
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            font = header.font()
+            font.setPointSize(max(font.pointSize() - 1, 7))
+            font.setBold(True)
+            header.setFont(font)
+            self._settings_nav.addItem(header)
+            for page_name in page_names:
+                if page_name not in self._page_index_by_name:
+                    continue
+                item = QListWidgetItem(page_name)
+                item.setData(Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name])
+                self._settings_nav.addItem(item)
+        self._settings_nav.currentItemChanged.connect(self._on_settings_nav_changed)
+        # Select the first real (non-header) entry
+        for row in range(self._settings_nav.count()):
+            if self._settings_nav.item(row).flags() & Qt.ItemFlag.ItemIsSelectable:
+                self._settings_nav.setCurrentRow(row)
+                break
+
+    def _on_settings_nav_changed(self, current, _previous):
+        if current is None:
+            return
+        index = current.data(Qt.ItemDataRole.UserRole)
+        if index is not None:
+            self.tab_widget.setCurrentIndex(index)
 
     # Generic helper to delete a widget and its reference from a list
     def _delete_widget_from_list(self, widget_refs, ref_list):
@@ -448,23 +512,9 @@ class SettingsWindow(QDialog):
 
         main_layout.addWidget(settings_box)
 
-        # Info about removed fields
-        info_box = QGroupBox("Note")
-        info_layout = QVBoxLayout(info_box)
-        info_label = QLabel(
-            "Templates and custom output directories are no longer used.\n"
-            "All reports are now generated in session-specific folders automatically."
-        )
-        info_label.setWordWrap(True)
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic;")
-        info_layout.addWidget(info_label)
-        main_layout.addWidget(info_box)
-
         main_layout.addStretch()
 
-        self.tab_widget.addTab(tab, "General")
+        self._add_settings_page(tab, "General")
 
     def create_rules_tab(self):
         """Creates the 'Rules' tab for dynamically managing automation rules."""
@@ -491,7 +541,7 @@ class SettingsWindow(QDialog):
         self.rules_layout = QVBoxLayout(scroll_content)
         self.rules_layout.setAlignment(Qt.AlignTop)
         scroll_area.setWidget(scroll_content)
-        self.tab_widget.addTab(tab, "Rules")
+        self._add_settings_page(tab, "Rules")
         for rule_config in self.config_data.get("rules", []):
             self.add_rule_widget(rule_config)
         self._update_priority_labels()
@@ -530,6 +580,8 @@ class SettingsWindow(QDialog):
                 rule to load into the widgets. If None, creates a new,
                 blank rule.
         """
+        from gui.theme_manager import get_theme_manager
+        theme = get_theme_manager().get_current_theme()
         if not isinstance(config, dict):
             config = {"name": "New Rule", "level": "article", "match": "ALL", "conditions": [], "actions": []}
         rule_box = QGroupBox()
@@ -539,7 +591,7 @@ class SettingsWindow(QDialog):
         # Priority label (e.g., "Article #1", "Order #2")
         priority_label = QLabel("")
         priority_label.setMinimumWidth(70)
-        priority_label.setStyleSheet("font-weight: bold; color: #2196F3; font-size: 11pt;")
+        priority_label.setStyleSheet(f"font-weight: bold; color: {theme.accent_blue}; font-size: 11pt;")
         header_layout.addWidget(priority_label)
 
         # Up button
@@ -558,8 +610,6 @@ class SettingsWindow(QDialog):
         test_btn = QPushButton("Test")
         test_btn.setMaximumWidth(70)
         test_btn.setToolTip("Test this rule against current analysis data")
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
         test_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.accent_green};
@@ -567,7 +617,7 @@ class SettingsWindow(QDialog):
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: #45a049;
+                background-color: {theme.accent_green};
             }}
             QPushButton:disabled {{
                 background-color: {theme.border_subtle};
@@ -580,7 +630,7 @@ class SettingsWindow(QDialog):
         name_edit = QLineEdit(config.get("name", ""))
         header_layout.addWidget(name_edit)
         delete_rule_btn = QPushButton("Delete Rule")
-        delete_rule_btn.setStyleSheet("background-color: #f44336; color: white;")
+        delete_rule_btn.setStyleSheet(f"background-color: {theme.accent_red}; color: white;")
         header_layout.addWidget(delete_rule_btn)
         rule_layout.addLayout(header_layout)
 
@@ -620,7 +670,7 @@ class SettingsWindow(QDialog):
         # "Add Step" button
         add_step_btn = QPushButton("+ Add Step")
         add_step_btn.setToolTip("Add a new step to this rule (narrowing: each step filters rows from previous step)")
-        add_step_btn.setStyleSheet("color: #2196F3; font-weight: bold;")
+        add_step_btn.setStyleSheet(f"color: {theme.accent_blue}; font-weight: bold;")
         rule_layout.addWidget(add_step_btn, 0, Qt.AlignLeft)
 
         self.rules_layout.addWidget(rule_box)
@@ -669,6 +719,8 @@ class SettingsWindow(QDialog):
             rule_widget_refs (dict): Rule widget references containing steps list
             step_config (dict, optional): Step configuration with conditions/match/actions
         """
+        from gui.theme_manager import get_theme_manager
+        theme = get_theme_manager().get_current_theme()
         if not isinstance(step_config, dict):
             step_config = {"conditions": [], "match": "ALL", "actions": []}
 
@@ -682,15 +734,13 @@ class SettingsWindow(QDialog):
             separator_label = QLabel("   ↓ THEN CHECK ↓")
             separator_label.setAlignment(Qt.AlignCenter)
             separator_label.setStyleSheet(
-                "color: #FF9800; font-weight: bold; font-size: 11pt; "
+                f"color: {theme.accent_orange}; font-weight: bold; font-size: 11pt; "
                 "padding: 4px; margin: 2px 0;"
             )
             steps_container.addWidget(separator_label)
 
         # Step wrapper
         step_box = QGroupBox(f"Step {step_number}")
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
         step_box.setStyleSheet(
             f"QGroupBox {{ font-weight: bold; border: 1px solid {theme.border}; "
             f"border-radius: 4px; margin-top: 6px; padding-top: 10px; }}"
@@ -728,7 +778,7 @@ class SettingsWindow(QDialog):
         delete_step_btn = None
         if step_number > 1:
             delete_step_btn = QPushButton("Delete Step")
-            delete_step_btn.setStyleSheet("color: #f44336;")
+            delete_step_btn.setStyleSheet(f"color: {theme.accent_red};")
             step_layout.addWidget(delete_step_btn, 0, Qt.AlignRight)
 
         steps_container.addWidget(step_box)
@@ -1081,6 +1131,9 @@ class SettingsWindow(QDialog):
         """
         from PySide6.QtWidgets import QLabel
 
+        from gui.theme_manager import get_theme_manager
+        theme = get_theme_manager().get_current_theme()
+
         value_widget = condition_refs.get("value_widget")
         if not value_widget:
             return
@@ -1095,21 +1148,24 @@ class SettingsWindow(QDialog):
 
         feedback_label = condition_refs["feedback_label"]
 
+        # ponytail: literal validation-tint background colors, not worth new
+        # ThemeTokens fields for ~2 call sites; revisit if more validation
+        # states are added.
         if status == "error":
-            value_widget.setStyleSheet("border: 1px solid #f44336; background-color: #ffebee;")
-            feedback_label.setStyleSheet("color: #f44336; font-size: 9pt;")
+            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_red}; background-color: #ffebee; color: #1A1A1A;")
+            feedback_label.setStyleSheet(f"color: {theme.accent_red}; font-size: 9pt;")
             feedback_label.setText(f"{message}")
             feedback_label.show()
 
         elif status == "warning":
-            value_widget.setStyleSheet("border: 1px solid #ff9800; background-color: #fff3e0;")
-            feedback_label.setStyleSheet("color: #ff9800; font-size: 9pt;")
+            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_orange}; background-color: #fff3e0; color: #1A1A1A;")
+            feedback_label.setStyleSheet(f"color: {theme.accent_orange}; font-size: 9pt;")
             feedback_label.setText(f"{message}")
             feedback_label.show()
 
         elif status == "success":
-            value_widget.setStyleSheet("border: 1px solid #4CAF50;")
-            feedback_label.setStyleSheet("color: #4CAF50; font-size: 9pt;")
+            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_green};")
+            feedback_label.setStyleSheet(f"color: {theme.accent_green}; font-size: 9pt;")
             feedback_label.setText(f"{message}")
             feedback_label.show()
 
@@ -1468,7 +1524,7 @@ class SettingsWindow(QDialog):
         self.packing_lists_layout = QVBoxLayout(scroll_content)
         self.packing_lists_layout.setAlignment(Qt.AlignTop)
         scroll_area.setWidget(scroll_content)
-        self.tab_widget.addTab(tab, "Packing Lists")
+        self._add_settings_page(tab, "Packing Lists")
         for pl_config in self.config_data.get("packing_list_configs", []):
             self.add_packing_list_widget(pl_config)
 
@@ -1628,7 +1684,7 @@ class SettingsWindow(QDialog):
         self.stock_exports_layout = QVBoxLayout(scroll_content)
         self.stock_exports_layout.setAlignment(Qt.AlignTop)
         scroll_area.setWidget(scroll_content)
-        self.tab_widget.addTab(tab, "Stock Exports")
+        self._add_settings_page(tab, "Stock Exports")
         for se_config in self.config_data.get("stock_export_configs", []):
             self.add_stock_export_widget(se_config)
 
@@ -1767,7 +1823,7 @@ class SettingsWindow(QDialog):
         scroll.setWidget(scroll_widget)
         main_layout.addWidget(scroll)
 
-        self.tab_widget.addTab(tab, "Mappings")
+        self._add_settings_page(tab, "Mappings")
 
         # Populate existing courier mappings
         courier_mappings = self.config_data.get("courier_mappings", {})
@@ -1848,17 +1904,6 @@ class SettingsWindow(QDialog):
         header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
         main_layout.addWidget(header_label)
 
-        # Help text
-        help_text = QLabel(
-            "Define sets/bundles that will be automatically expanded into their component SKUs during analysis.\n"
-            "Example: SET-WINTER-KIT → HAT(1x), GLOVES(1x), SCARF(1x)"
-        )
-        help_text.setWordWrap(True)
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
-        help_text.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 10px;")
-        main_layout.addWidget(help_text)
-
         # Search box
         self.sets_search = QLineEdit()
         self.sets_search.setPlaceholderText("Search by SKU or components...")
@@ -1915,7 +1960,7 @@ class SettingsWindow(QDialog):
         tips_label.setWordWrap(True)
         main_layout.addWidget(tips_label)
 
-        self.tab_widget.addTab(tab, "Sets")
+        self._add_settings_page(tab, "Sets")
 
         # Populate table with existing sets
         self._populate_sets_table()
@@ -2290,7 +2335,7 @@ class SettingsWindow(QDialog):
         weight_sub_tabs.addTab(boxes_tab, "Boxes (Packaging Reference)")
 
         main_layout.addWidget(weight_sub_tabs, 1)
-        self.tab_widget.addTab(tab, "Weight")
+        self._add_settings_page(tab, "Weight")
 
         # Populate with existing data
         self._weight_populate_products(weight_cfg.get("products", {}))
@@ -3242,7 +3287,7 @@ class SettingsWindow(QDialog):
         self.tag_categories_panel = TagCategoriesPanel(tag_categories, parent=tab)
         layout.addWidget(self.tag_categories_panel)
 
-        self.tab_widget.addTab(tab, "Tag Categories")
+        self._add_settings_page(tab, "Tag Categories")
 
     # ========================================
     # COLUMN CONFIGURATION TAB
@@ -3256,7 +3301,7 @@ class SettingsWindow(QDialog):
             tab = QWidget()
             layout = QVBoxLayout(tab)
             layout.addWidget(QLabel("Column configuration is not available in this context."))
-            self.tab_widget.addTab(tab, "Column Config")
+            self._add_settings_page(tab, "Column Config")
             return
 
         tab = QWidget()
@@ -3283,7 +3328,7 @@ class SettingsWindow(QDialog):
         )
         layout.addWidget(self.column_config_panel)
 
-        self.tab_widget.addTab(tab, "Column Config")
+        self._add_settings_page(tab, "Column Config")
 
     # ========================================
     # SKU LABELS TAB
@@ -3354,7 +3399,7 @@ class SettingsWindow(QDialog):
 
         main_layout.addWidget(mapping_group, 1)
 
-        self.tab_widget.addTab(tab, "SKU Labels")
+        self._add_settings_page(tab, "SKU Labels")
 
         # Populate from config
         self._sku_populate_table()

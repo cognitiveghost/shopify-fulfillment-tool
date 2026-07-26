@@ -236,6 +236,7 @@ class RuleTestDialog(QDialog):
 
     def _populate_conditions_table(self):
         """Populate conditions table with evaluation results (supports steps)."""
+        theme = get_theme_manager().get_current_theme()
         steps = self.rule_config.get("steps", [])
 
         # Collect all conditions across all steps
@@ -265,18 +266,19 @@ class RuleTestDialog(QDialog):
         step_info = f"{len(steps)} step(s)" if len(steps) > 1 else "1 step"
 
         summary = f"Final Result ({step_info}, narrowing): "
-        summary += f"<span style='color: #4CAF50; font-size: 14pt;'>{self.matched_count}</span> rows affected "
+        summary += f"<span style='color: {theme.accent_green}; font-size: 14pt;'>{self.matched_count}</span> rows affected "
         summary += f"({percentage:.1f}% of {total_rows} total rows)"
 
         self.match_summary_label.setText(summary)
 
     def _populate_preview_table(self):
         """Populate preview table with first 5 matched rows."""
+        theme = get_theme_manager().get_current_theme()
         if self.matches is None or self.matched_count == 0:
             self.preview_table.setRowCount(1)
             self.preview_table.setColumnCount(1)
             no_match_item = QTableWidgetItem("No rows matched the conditions")
-            no_match_item.setForeground(QColor("#999"))
+            no_match_item.setForeground(QColor(theme.text_secondary))
             self.preview_table.setItem(0, 0, no_match_item)
             return
 
@@ -352,11 +354,12 @@ class RuleTestDialog(QDialog):
 
     def _populate_after_actions_table(self):
         """Populate after-actions table with changed cells highlighted."""
+        theme = get_theme_manager().get_current_theme()
         if self.matches is None or self.matched_count == 0:
             self.after_table.setRowCount(1)
             self.after_table.setColumnCount(1)
             no_match_item = QTableWidgetItem("No rows to show")
-            no_match_item.setForeground(QColor("#999"))
+            no_match_item.setForeground(QColor(theme.text_secondary))
             self.after_table.setItem(0, 0, no_match_item)
             return
 
@@ -381,6 +384,8 @@ class RuleTestDialog(QDialog):
                 item = QTableWidgetItem(str(value_after))
 
                 # Highlight changed cells
+                # ponytail: literal diff-highlight yellow, not worth a new
+                # ThemeTokens field for this one call site.
                 if value_before != value_after and not (pd.isna(value_before) and pd.isna(value_after)):
                     item.setBackground(QColor("#FFEB3B"))  # Yellow
                     item.setToolTip(f"Changed from: {value_before}")

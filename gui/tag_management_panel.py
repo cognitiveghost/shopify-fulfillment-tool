@@ -102,13 +102,13 @@ class TagManagementPanel(QWidget):
             current_tags_json: Current Internal_Tags value (JSON string)
         """
         self.selected_order = order_number
+        theme = get_theme_manager().get_current_theme()
 
         if order_number:
             self.order_label.setText(f"Order: {order_number}")
-            self.order_label.setStyleSheet("color: #000; font-weight: bold;")
+            self.order_label.setStyleSheet(f"color: {theme.text}; font-weight: bold;")
         else:
             self.order_label.setText("No order selected")
-            theme = get_theme_manager().get_current_theme()
             self.order_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic;")
 
         # Parse and display current tags

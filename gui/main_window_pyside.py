@@ -37,6 +37,7 @@ from gui.profile_manager_dialog import ProfileManagerDialog
 from gui.tag_management_panel import TagManagementPanel
 from gui.selection_helper import SelectionHelper
 from gui.pandas_model import FulfillmentFilterProxy
+from gui.theme_manager import get_theme_manager
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,13 @@ class MainWindow(QMainWindow):
         """Initializes the MainWindow, sets up UI, and connects signals."""
         super().__init__()
         self.setWindowTitle("Shopify Fulfillment Tool - New Architecture")
-        self.setGeometry(100, 100, 1100, 900)
+
+        from PySide6.QtCore import QSettings
+
+        from shared.theme import restore_window_geometry
+        self._geometry_settings = QSettings("ShopifyFulfillmentTool", "MainWindowGeometry")
+        if not restore_window_geometry(self, self._geometry_settings):
+            self.setGeometry(100, 100, 1100, 900)
 
         # Core application attributes
         self.session_path = None
@@ -627,6 +634,7 @@ class MainWindow(QMainWindow):
         - Bulk operations toolbar is hidden
         - Selection is cleared
         """
+        theme = get_theme_manager().get_current_theme()
         is_bulk_mode = self.toggle_bulk_mode_btn.isChecked()
 
         # Show/hide bulk toolbar
@@ -644,7 +652,7 @@ class MainWindow(QMainWindow):
         if is_bulk_mode:
             self.toggle_bulk_mode_btn.setText("Exit Bulk Mode")
             self.toggle_bulk_mode_btn.setStyleSheet(
-                "background-color: #4CAF50; color: white;"
+                f"background-color: {theme.accent_green}; color: white;"
             )
             self._update_bulk_toolbar_state()
             logging.info("Bulk mode enabled")
@@ -860,10 +868,8 @@ class MainWindow(QMainWindow):
             # Don't auto-refresh here - let the second call handle it
             self.session_browser.set_client(client_id, auto_refresh=False)
 
-            # Update session browser widget in right panel (Tab 1)
-            # This one WILL refresh (eliminates duplicate refresh)
-            if hasattr(self, "session_browser_widget"):
-                self.session_browser_widget.set_client(client_id)
+            # Update the Recent Sessions quick-pick in the right panel (Tab 1)
+            self.ui_manager.refresh_recent_sessions(client_id)
 
             # Update UI state
             self.update_ui_state()
@@ -1491,6 +1497,11 @@ class MainWindow(QMainWindow):
         Args:
             event: The close event.
         """
+        from shared.theme import save_window_geometry
+        try:
+            save_window_geometry(self, self._geometry_settings)
+        except Exception as e:
+            logger.warning(f"Failed to save window geometry: {e}")
         # Session data is now managed by SessionManager on the server
         # No need to save local session files
         event.accept()

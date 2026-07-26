@@ -34,7 +34,7 @@ class CollapsedClientIndicator(QWidget):
 
         Args:
             client_id: Client ID (e.g., "M")
-            color: Hex color for circle (e.g., "#4CAF50")
+            color: Hex color for circle (e.g., theme.accent_green)
             parent: Parent widget
         """
         super().__init__(parent)
@@ -280,6 +280,8 @@ class ClientSidebar(QWidget):
         import time
         from PySide6.QtCore import Qt
 
+        theme = get_theme_manager().get_current_theme()
+
         # Show wait cursor during potentially slow operation
         QApplication.setOverrideCursor(Qt.WaitCursor)
 
@@ -334,7 +336,7 @@ class ClientSidebar(QWidget):
             for group in custom_groups:
                 group_id = group.get("id")
                 group_name = group.get("name", "Unknown")
-                group_color = group.get("color", "#2196F3")
+                group_color = group.get("color", theme.accent_blue)
 
                 group_section = self._create_group_section(group_id, group_name, group_color, all_clients)
                 if group_section.card_count() > 0:
@@ -387,9 +389,10 @@ class ClientSidebar(QWidget):
         Returns:
             SectionWidget with pinned clients
         """
+        theme = get_theme_manager().get_current_theme()
         section = SectionWidget(
             config.get("name", "Pinned"),
-            config.get("color", "#FFC107")
+            config.get("color", theme.accent_orange)
         )
 
         for client_id in all_clients:
@@ -514,10 +517,11 @@ class ClientSidebar(QWidget):
         """
         # Update collapsed indicator if collapsed
         if not self.is_expanded and self.collapsed_indicator:
+            theme = get_theme_manager().get_current_theme()
             self.collapsed_indicator.deleteLater()
             config = self.profile_manager.get_client_config_extended(client_id)
             ui_settings = config.get("ui_settings", {})
-            color = ui_settings.get("custom_color", "#4CAF50")
+            color = ui_settings.get("custom_color", theme.accent_green)
             self.collapsed_indicator = CollapsedClientIndicator(client_id, color)
             self.layout().insertWidget(1, self.collapsed_indicator)
 
@@ -594,9 +598,10 @@ class ClientSidebar(QWidget):
 
             # Show collapsed indicator
             if self.active_client_id:
+                theme = get_theme_manager().get_current_theme()
                 config = self.profile_manager.get_client_config_extended(self.active_client_id)
                 ui_settings = config.get("ui_settings", {})
-                color = ui_settings.get("custom_color", "#4CAF50")
+                color = ui_settings.get("custom_color", theme.accent_green)
                 self.collapsed_indicator = CollapsedClientIndicator(self.active_client_id, color)
                 self.layout().insertWidget(1, self.collapsed_indicator)
         else:
@@ -802,7 +807,7 @@ class ClientSidebar(QWidget):
                 background-color: {button_hover};
             }}
             QPushButton:pressed {{
-                background-color: #0D47A1;
+                background-color: {theme.accent_blue};
             }}
         """
 

@@ -95,16 +95,6 @@ class ColumnMappingWidget(QWidget):
         scroll.setWidget(scroll_widget)
         layout.addWidget(scroll)
 
-        # Help text at bottom
-        help_text = QLabel(
-            "ℹ️ Enter the exact column names as they appear in your CSV file.\n"
-            "Example: 'Name' → 'Order_Number' means your CSV has a 'Name' column "
-            "that will be used for order numbers."
-        )
-        help_text.setWordWrap(True)
-        help_text.setStyleSheet("background-color: #e8f4f8; padding: 10px; border-radius: 5px; font-size: 9pt;")
-        layout.addWidget(help_text)
-
     def _create_mapping_row(self, internal_name, required=False):
         """Create a single mapping row.
 

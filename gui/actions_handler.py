@@ -93,9 +93,9 @@ class ActionsHandler(QObject):
             if hasattr(self.mw, "session_browser"):
                 self.mw.session_browser.refresh_sessions()
 
-            # Refresh session browser widget in right panel (Tab 1)
-            if hasattr(self.mw, "session_browser_widget"):
-                self.mw.session_browser_widget.refresh_sessions()
+            # Refresh the Recent Sessions quick-pick in the right panel (Tab 1)
+            if hasattr(self.mw, "ui_manager"):
+                self.mw.ui_manager.refresh_recent_sessions(self.mw.current_client_id)
 
             # Update UI state
             if hasattr(self.mw, "update_ui_state"):

@@ -70,7 +70,7 @@ class ClientCreationDialog(QDialog):
         self.color_display = QLabel()
         self.color_display.setFixedSize(40, 30)
         theme = get_theme_manager().get_current_theme()
-        self.color_display.setStyleSheet(f"border: 1px solid {theme.border}; background-color: #4CAF50;")
+        self.color_display.setStyleSheet(f"border: 1px solid {theme.border}; background-color: {theme.accent_green};")
         color_layout.addWidget(self.color_display)
 
         self.color_button = QPushButton("Choose Color")
@@ -78,7 +78,7 @@ class ClientCreationDialog(QDialog):
         color_layout.addWidget(self.color_button)
         color_layout.addStretch()
 
-        self.current_color = "#4CAF50"  # Default
+        self.current_color = theme.accent_green  # Default
         form_layout.addRow("Color:", color_layout)
 
         # Pin checkbox
@@ -109,13 +109,14 @@ class ClientCreationDialog(QDialog):
 
     def _choose_color(self):
         """Open color picker dialog."""
+        theme = get_theme_manager().get_current_theme()
         current_color = QColor(self.current_color)
         color = QColorDialog.getColor(current_color, self, "Choose Client Color")
 
         if color.isValid():
             self.current_color = color.name()
             self.color_display.setStyleSheet(
-                f"background-color: {self.current_color}; border: 1px solid #ccc;"
+                f"background-color: {self.current_color}; border: 1px solid {theme.border_subtle};"
             )
 
     def _load_groups(self):
@@ -521,6 +522,7 @@ class ClientSettingsDialog(QDialog):
 
     def _load_data(self):
         """Load data into form fields."""
+        theme = get_theme_manager().get_current_theme()
         # Basic Info
         self.client_name_input.setText(self.config.get("client_name", ""))
 
@@ -541,7 +543,7 @@ class ClientSettingsDialog(QDialog):
                     self.group_combo.setCurrentIndex(index)
 
         # Color
-        custom_color = self.ui_settings.get("custom_color", "#4CAF50")
+        custom_color = self.ui_settings.get("custom_color", theme.accent_green)
         self.current_color = custom_color
         self._update_color_display(custom_color)
 
@@ -573,10 +575,11 @@ class ClientSettingsDialog(QDialog):
         """Update color display label.
 
         Args:
-            color_hex: Hex color string (e.g., "#4CAF50")
+            color_hex: Hex color string (e.g., theme.accent_green)
         """
+        theme = get_theme_manager().get_current_theme()
         self.color_display.setStyleSheet(
-            f"background-color: {color_hex}; border: 1px solid #ccc;"
+            f"background-color: {color_hex}; border: 1px solid {theme.border_subtle};"
         )
 
     def _save_and_accept(self):

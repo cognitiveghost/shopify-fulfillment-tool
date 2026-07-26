@@ -439,8 +439,8 @@ class StockExportDialog(_BaseReportDialog):
                     border: none;
                     border-radius: 4px;
                 }}
-                QPushButton:hover {{ background-color: #F57C00; }}
-                QPushButton:pressed {{ background-color: #E65100; }}
+                QPushButton:hover {{ background-color: {theme.accent_orange}; }}
+                QPushButton:pressed {{ background-color: {theme.accent_orange}; }}
             """)
             self.writeoff_only_btn.clicked.connect(self._on_writeoff_only)
             writeoff_layout.addWidget(self.writeoff_only_btn)
