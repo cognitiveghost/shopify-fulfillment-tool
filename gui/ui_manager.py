@@ -263,7 +263,7 @@ class UIManager:
 
         Contains:
         - Left panel (60%): Session management, File loading, Actions, Reports
-        - Right panel (40%): Session Browser for quick session switching
+        - Right panel (40%): Recent Sessions quick-pick (full browser is on Tab 3)
         """
         tab = QWidget()
         main_layout = QHBoxLayout(tab)
@@ -305,35 +305,50 @@ class UIManager:
         return panel
 
     def _create_session_browser_panel(self):
-        """Create right panel with Session Browser."""
+        """Create right panel with a compact 'Recent Sessions' quick-pick.
+
+        The full SessionBrowserWidget lives exclusively on Tab 3 ("Session
+        Browser") — this panel used to embed a second full copy of it squeezed
+        into 40% width, which was too narrow to be useful. See
+        2026-07-26-unified-ui-design-system-design.md.
+        """
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setSpacing(5)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # Title
-        title = QLabel("Session Browser")
+        title = QLabel("Recent Sessions")
         title.setStyleSheet("font-size: 11pt; font-weight: bold;")
         layout.addWidget(title)
 
-        # Integrate existing SessionBrowserWidget
-        from gui.session_browser_widget import SessionBrowserWidget
+        self.mw.recent_sessions_list = QListWidget()
+        self.mw.recent_sessions_list.itemDoubleClicked.connect(self._on_recent_session_double_clicked)
+        layout.addWidget(self.mw.recent_sessions_list, 1)
 
-        self.mw.session_browser_widget = SessionBrowserWidget(
-            self.mw.session_manager, parent=panel
-        )
-
-        # Connect signal to main window's method
-        self.mw.session_browser_widget.session_selected.connect(
-            self.mw.on_session_selected
-        )
-        self.mw.session_browser_widget.multi_export_requested.connect(
-            self.mw.actions_handler.handle_multi_session_stock_export
-        )
-
-        layout.addWidget(self.mw.session_browser_widget, 1)
+        open_full_link = QPushButton("Open full Session Browser →")
+        open_full_link.setFlat(True)
+        open_full_link.clicked.connect(lambda: self.mw.main_tabs.setCurrentIndex(2))
+        layout.addWidget(open_full_link)
 
         return panel
+
+    def _on_recent_session_double_clicked(self, item):
+        session_path = item.data(Qt.ItemDataRole.UserRole)
+        if session_path:
+            self.mw.on_session_selected(session_path)
+
+    def refresh_recent_sessions(self, client_id: str):
+        """Populate the Tab 1 quick-pick list — call this whenever the current
+        client changes (wire into wherever current_client_id is set)."""
+        self.mw.recent_sessions_list.clear()
+        if not client_id:
+            return
+        sessions = self.mw.session_manager.list_client_sessions(client_id)[:5]
+        for info in sessions:
+            label = f"{info.get('session_name', '?')} — {info.get('status', '?')}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, info.get("session_path"))
+            self.mw.recent_sessions_list.addItem(item)
 
     def _create_tab2_analysis_results(self):
         """Create Tab 2: Analysis Results

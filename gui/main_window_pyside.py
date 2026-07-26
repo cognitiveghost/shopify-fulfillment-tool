@@ -868,10 +868,8 @@ class MainWindow(QMainWindow):
             # Don't auto-refresh here - let the second call handle it
             self.session_browser.set_client(client_id, auto_refresh=False)
 
-            # Update session browser widget in right panel (Tab 1)
-            # This one WILL refresh (eliminates duplicate refresh)
-            if hasattr(self, "session_browser_widget"):
-                self.session_browser_widget.set_client(client_id)
+            # Update the Recent Sessions quick-pick in the right panel (Tab 1)
+            self.ui_manager.refresh_recent_sessions(client_id)
 
             # Update UI state
             self.update_ui_state()
