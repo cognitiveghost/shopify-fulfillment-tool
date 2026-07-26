@@ -1,17 +1,19 @@
-import os
-import logging
-import pandas as pd
 import json
+import logging
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, List
-from . import analysis, packing_lists, stock_export
-from .rules import RuleEngine
-from .utils import get_persistent_data_path
-from .csv_utils import normalize_sku
-from .session_manager import SessionManagerError
+from typing import Any
+
 import numpy as np
+import pandas as pd
+
+from . import analysis, packing_lists, stock_export
+from .csv_utils import normalize_sku
+from .rules import RuleEngine
+from .session_manager import SessionManagerError
+from .utils import get_persistent_data_path
 
 SYSTEM_TAGS = ["Repeat", "Priority", "Error"]
 
@@ -63,7 +65,7 @@ def _get_sku_dtype_dict(column_mappings: dict, file_type: str) -> dict:
     return dtype_dict
 
 
-def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str, Any]:
+def build_packing_order_data(order_number: str, group: pd.DataFrame) -> dict[str, Any]:
     """Build canonical order metadata dict for Packer-tool JSON integration.
 
     Used by both analysis_data.json and packing list JSON generators
@@ -83,7 +85,7 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str
     # Parse Internal_Tags: "[]" JSON string → Python list
     tags_raw = first_row.get("Internal_Tags", "[]") or "[]"
     try:
-        internal_tags: List[str] = (
+        internal_tags: list[str] = (
             json.loads(tags_raw) if isinstance(tags_raw, str) else []
         )
     except (json.JSONDecodeError, TypeError):
@@ -91,7 +93,7 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str
 
     # Parse Tags: "tag1, tag2" CSV string → list
     tags_value = first_row.get("Tags", "") or ""
-    tags_list: List[str] = (
+    tags_list: list[str] = (
         [t.strip() for t in str(tags_value).split(",") if t.strip()]
         if str(tags_value).strip()
         else []
@@ -100,7 +102,7 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str
     # Optional Order_Min_Box (only present if weight config is active)
     # pd.isna() handles None, float('nan'), pd.NaT from pandas mixed-type columns
     min_box_raw = first_row.get("Order_Min_Box", None)
-    order_min_box: Optional[str] = (
+    order_min_box: str | None = (
         str(min_box_raw)
         if min_box_raw is not None
         and not pd.isna(min_box_raw)
@@ -115,7 +117,7 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str
     destination_country: str = str(first_row.get("Destination_Country", "") or "")
 
     # Build items list with safe Quantity conversion (guards against NaN / non-numeric)
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     for _, row in group.iterrows():
         warehouse_name = row.get("Warehouse_Name", "")
         if not warehouse_name or warehouse_name == "N/A":
@@ -164,7 +166,7 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> Dict[str
     }
 
 
-def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> Dict[str, Any]:
+def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     """Create analysis_data.json structure for Packing Tool integration.
 
     This function extracts relevant data from the analysis DataFrame and
@@ -371,13 +373,13 @@ def validate_csv_headers(file_path, required_columns, delimiter=","):
 
 
 def _validate_and_prepare_inputs(
-    stock_file_path: Optional[str],
-    orders_file_path: Optional[str],
+    stock_file_path: str | None,
+    orders_file_path: str | None,
     output_dir_path: str,
-    client_id: Optional[str],
-    session_manager: Optional[Any],
-    session_path: Optional[str],
-) -> Tuple[bool, Optional[str], str, Optional[str]]:
+    client_id: str | None,
+    session_manager: Any | None,
+    session_path: str | None,
+) -> tuple[bool, str | None, str, str | None]:
     """Validates inputs and prepares session/working paths.
 
     Determines whether to use session-based or legacy workflow mode,
@@ -475,12 +477,12 @@ def _validate_and_prepare_inputs(
 
 
 def _load_and_validate_files(
-    stock_file_path: Optional[str],
-    orders_file_path: Optional[str],
+    stock_file_path: str | None,
+    orders_file_path: str | None,
     stock_delimiter: str,
     orders_delimiter: str,
     config: dict,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Loads and validates CSV files.
 
     Loads stock and orders CSV files, applies proper encoding and
@@ -534,15 +536,15 @@ def _load_and_validate_files(
             error_msg = (
                 f"Failed to parse stock file. The file may have incorrect delimiter.\n"
                 f"Current delimiter: '{stock_delimiter}'\n"
-                f"Error: {str(e)}"
+                f"Error: {e!s}"
             )
             logger.error(error_msg, exc_info=True)
             raise
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             error_msg = f"Stock file not found at path: {stock_file_path}"
             logger.error(error_msg, exc_info=True)
             raise
-        except PermissionError as e:
+        except PermissionError:
             error_msg = f"Permission denied reading stock file: {stock_file_path}"
             logger.error(error_msg, exc_info=True)
             raise
@@ -550,7 +552,7 @@ def _load_and_validate_files(
             error_msg = (
                 f"Failed to read stock file due to encoding issue.\n"
                 f"Please ensure file is UTF-8 encoded.\n"
-                f"Error: {str(e)}"
+                f"Error: {e!s}"
             )
             logger.error(error_msg, exc_info=True)
             raise
@@ -583,15 +585,15 @@ def _load_and_validate_files(
             error_msg = (
                 f"Failed to parse orders file. The file may have incorrect delimiter.\n"
                 f"Current delimiter: '{orders_delimiter}'\n"
-                f"Error: {str(e)}"
+                f"Error: {e!s}"
             )
             logger.error(error_msg, exc_info=True)
             raise
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             error_msg = f"Orders file not found at path: {orders_file_path}"
             logger.error(error_msg, exc_info=True)
             raise
-        except PermissionError as e:
+        except PermissionError:
             error_msg = f"Permission denied reading orders file: {orders_file_path}"
             logger.error(error_msg, exc_info=True)
             raise
@@ -599,7 +601,7 @@ def _load_and_validate_files(
             error_msg = (
                 f"Failed to read orders file due to encoding issue.\n"
                 f"Please ensure file is UTF-8 encoded.\n"
-                f"Error: {str(e)}"
+                f"Error: {e!s}"
             )
             logger.error(error_msg, exc_info=True)
             raise
@@ -670,10 +672,10 @@ def _load_and_validate_files(
 
 
 def _load_history_data(
-    stock_file_path: Optional[str],
-    orders_file_path: Optional[str],
-    client_id: Optional[str],
-    profile_manager: Optional[Any],
+    stock_file_path: str | None,
+    orders_file_path: str | None,
+    client_id: str | None,
+    profile_manager: Any | None,
     config: dict,
 ) -> pd.DataFrame:
     """Loads fulfillment history from appropriate storage location.
@@ -758,7 +760,7 @@ def _run_analysis_and_rules(
     stock_df: pd.DataFrame,
     history_df: pd.DataFrame,
     config: dict,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
     """Runs analysis simulation and applies business rules.
 
     Executes the core fulfillment analysis, applies low stock alerts,
@@ -863,15 +865,15 @@ def _save_results_and_reports(
     summary_missing_df: pd.DataFrame,
     stats: dict,
     history_df: pd.DataFrame,
-    stock_file_path: Optional[str],
-    orders_file_path: Optional[str],
+    stock_file_path: str | None,
+    orders_file_path: str | None,
     use_session_mode: bool,
     working_path: str,
     output_dir_path: str,
-    session_manager: Optional[Any],
-    client_id: Optional[str],
-    profile_manager: Optional[Any],
-) -> Tuple[str, Optional[str]]:
+    session_manager: Any | None,
+    client_id: str | None,
+    profile_manager: Any | None,
+) -> tuple[str, str | None]:
     """Saves all analysis results, reports, and updates history.
 
     Saves Excel report with analysis results, creates analysis_data.json
@@ -1141,10 +1143,10 @@ def run_full_analysis(
     stock_delimiter,
     orders_delimiter,
     config,
-    client_id: Optional[str] = None,
-    session_manager: Optional[Any] = None,
-    profile_manager: Optional[Any] = None,
-    session_path: Optional[str] = None,
+    client_id: str | None = None,
+    session_manager: Any | None = None,
+    profile_manager: Any | None = None,
+    session_path: str | None = None,
 ):
     """Orchestrates the entire fulfillment analysis process.
 
@@ -1288,19 +1290,19 @@ def run_full_analysis(
         return True, primary_path, final_df, stats
 
     except FileNotFoundError as e:
-        error_msg = f"File not found: {str(e)}"
+        error_msg = f"File not found: {e!s}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg, None, None
     except ValueError as e:
-        error_msg = f"Validation error: {str(e)}"
+        error_msg = f"Validation error: {e!s}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg, None, None
     except pd.errors.ParserError as e:
-        error_msg = f"CSV parsing error: {str(e)}"
+        error_msg = f"CSV parsing error: {e!s}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg, None, None
     except Exception as e:
-        error_msg = f"Analysis failed: {str(e)}"
+        error_msg = f"Analysis failed: {e!s}"
         logger.error(error_msg, exc_info=True)
         return False, error_msg, None, None
 
@@ -1308,8 +1310,8 @@ def run_full_analysis(
 def create_packing_list_report(
     analysis_df,
     report_config,
-    session_manager: Optional[Any] = None,
-    session_path: Optional[str] = None,
+    session_manager: Any | None = None,
+    session_path: str | None = None,
 ):
     """Generates a single packing list report based on a report configuration.
 
@@ -1427,9 +1429,9 @@ def get_unique_column_values(df, column_name):
 def create_stock_export_report(
     analysis_df,
     report_config,
-    session_manager: Optional[Any] = None,
-    session_path: Optional[str] = None,
-    tag_categories: Optional[Dict] = None,
+    session_manager: Any | None = None,
+    session_path: str | None = None,
+    tag_categories: dict | None = None,
 ):
     """Generates a single stock export report based on a configuration.
 
@@ -1524,11 +1526,11 @@ def create_stock_export_report(
 
 def create_writeoff_report(
     analysis_df: pd.DataFrame,
-    report_config: Dict,
-    tag_categories: Dict,
-    session_manager: Optional[Any] = None,
-    session_path: Optional[str] = None,
-) -> Tuple[bool, str]:
+    report_config: dict,
+    tag_categories: dict,
+    session_manager: Any | None = None,
+    session_path: str | None = None,
+) -> tuple[bool, str]:
     """Generate standalone SKU writeoff report.
 
     Session Mode: When session_manager and session_path are provided, the report

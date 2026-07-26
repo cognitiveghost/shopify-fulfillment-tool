@@ -42,15 +42,14 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any
 
-from shared.file_lock import locked_file, FileLockError
+from shared.file_lock import FileLockError, locked_file
 from shared.metadata_utils import get_current_timestamp, parse_timestamp
 
 
 class StatsManagerError(Exception):
     """Base exception for StatsManager errors."""
-    pass
 
 
 class StatsManager:
@@ -110,7 +109,7 @@ class StatsManager:
 
         self.stats_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def _get_default_stats(self) -> Dict[str, Any]:
+    def _get_default_stats(self) -> dict[str, Any]:
         """Get default statistics structure."""
         return {
             "total_orders_analyzed": 0,
@@ -125,7 +124,7 @@ class StatsManager:
             "version": "2.0",
         }
 
-    def _load_stats(self) -> Dict[str, Any]:
+    def _load_stats(self) -> dict[str, Any]:
         """Load statistics from file with file locking."""
         if not self.stats_file.exists():
             return self._get_default_stats()
@@ -154,14 +153,14 @@ class StatsManager:
 
             except json.JSONDecodeError:
                 return self._get_default_stats()
-            except (IOError, FileLockError) as e:
+            except (OSError, FileLockError) as e:
                 if attempt == self.max_retries - 1:
                     raise StatsManagerError(f"Failed to load stats after {self.max_retries} attempts: {e}")
                 time.sleep(self.retry_delay * (attempt + 1))
 
         return self._get_default_stats()
 
-    def _save_stats(self, stats: Dict[str, Any]) -> None:
+    def _save_stats(self, stats: dict[str, Any]) -> None:
         """Save statistics to file with file locking."""
         stats["last_updated"] = get_current_timestamp()
 
@@ -180,7 +179,7 @@ class StatsManager:
 
                 return
 
-            except (IOError, FileLockError) as e:
+            except (OSError, FileLockError) as e:
                 if attempt == self.max_retries - 1:
                     raise StatsManagerError(f"Failed to save stats after {self.max_retries} attempts: {e}")
                 time.sleep(self.retry_delay * (attempt + 1))
@@ -254,7 +253,7 @@ class StatsManager:
 
                 return  # Success
 
-            except (IOError, FileLockError) as e:
+            except (OSError, FileLockError) as e:
                 if attempt == self.max_retries - 1:
                     raise StatsManagerError(f"Failed to update stats after {self.max_retries} attempts: {e}")
                 time.sleep(self.retry_delay * (attempt + 1))
@@ -264,7 +263,7 @@ class StatsManager:
         client_id: str,
         session_id: str,
         orders_count: int,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None
     ) -> None:
         """Record an analysis completion from Shopify Tool.
 
@@ -309,10 +308,10 @@ class StatsManager:
         self,
         client_id: str,
         session_id: str,
-        worker_id: Optional[str],
+        worker_id: str | None,
         orders_count: int,
         items_count: int,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None
     ) -> None:
         """Record a packing session completion from Packing Tool.
 
@@ -358,7 +357,7 @@ class StatsManager:
 
         self._atomic_update(update)
 
-    def get_global_stats(self) -> Dict[str, Any]:
+    def get_global_stats(self) -> dict[str, Any]:
         """Get global statistics summary."""
         stats = self._load_stats()
         return {
@@ -368,23 +367,23 @@ class StatsManager:
             "last_updated": stats.get("last_updated"),
         }
 
-    def get_client_stats(self, client_id: str) -> Dict[str, Any]:
+    def get_client_stats(self, client_id: str) -> dict[str, Any]:
         """Get statistics for a specific client."""
         stats = self._load_stats()
         if client_id not in stats.get("by_client", {}):
             return {"orders_analyzed": 0, "orders_packed": 0, "sessions": 0}
         return stats["by_client"][client_id].copy()
 
-    def get_all_clients_stats(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_clients_stats(self) -> dict[str, dict[str, Any]]:
         """Get statistics for all clients."""
         stats = self._load_stats()
         return stats.get("by_client", {}).copy()
 
     def get_analysis_history(
         self,
-        client_id: Optional[str] = None,
-        limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+        client_id: str | None = None,
+        limit: int | None = None
+    ) -> list[dict[str, Any]]:
         """Get analysis history with optional filtering (newest first)."""
         stats = self._load_stats()
         history = stats.get("analysis_history", [])
@@ -401,10 +400,10 @@ class StatsManager:
 
     def get_packing_history(
         self,
-        client_id: Optional[str] = None,
-        worker_id: Optional[str] = None,
-        limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+        client_id: str | None = None,
+        worker_id: str | None = None,
+        limit: int | None = None
+    ) -> list[dict[str, Any]]:
         """Get packing history with optional filtering (newest first)."""
         stats = self._load_stats()
         history = stats.get("packing_history", [])
@@ -459,11 +458,11 @@ class StatsManager:
 
     def get_label_print_history(
         self,
-        client_id: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        limit: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        client_id: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Get label print history with optional filtering.
 
         start_date/end_date may be naive or timezone-aware (the GUI builds
@@ -509,12 +508,12 @@ class StatsManager:
 
     def get_label_stats(
         self,
-        client_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        client_id: str | None = None,
+    ) -> dict[str, Any]:
         """Get label printing summary statistics."""
         history = self.get_label_print_history(client_id=client_id)
 
-        sku_counts: Dict[str, int] = {}
+        sku_counts: dict[str, int] = {}
         for record in history:
             sku = record.get("sku", "Unknown")
             sku_counts[sku] = sku_counts.get(sku, 0) + record.get("copies", 1)

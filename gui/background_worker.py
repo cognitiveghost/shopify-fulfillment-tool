@@ -17,9 +17,10 @@ Critical Pattern (prevents crashes from commit #216):
     4. Handle timeout gracefully (terminate if needed)
 """
 
-from PySide6.QtCore import QThread, Signal
 import logging
 import warnings
+
+from PySide6.QtCore import QThread, Signal
 
 logger = logging.getLogger(__name__)
 

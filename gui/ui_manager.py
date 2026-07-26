@@ -1,40 +1,39 @@
 import logging
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QGridLayout,
-    QFormLayout,
-    QPushButton,
-    QLabel,
-    QTabWidget,
-    QGroupBox,
-    QTableView,
-    QPlainTextEdit,
-    QTableWidget,
-    QTableWidgetItem,
-    QLineEdit,
-    QComboBox,
     QCheckBox,
-    QRadioButton,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QFrame,
-    QStyle,
+    QPlainTextEdit,
+    QPushButton,
+    QRadioButton,
     QScrollArea,
     QSplitter,
-    QHeaderView,
+    QStyle,
+    QTableView,
+    QTableWidget,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
-from .pandas_model import PandasModel
-from .wheel_ignore_combobox import WheelIgnoreComboBox
-from .tag_management_panel import TagManagementPanel
-from .bulk_operations_toolbar import BulkOperationsToolbar
-from .selection_helper import SelectionHelper
-from .theme_manager import get_theme_manager
+
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
+
+from .bulk_operations_toolbar import BulkOperationsToolbar
+from .pandas_model import PandasModel
+from .tag_management_panel import TagManagementPanel
+from .theme_manager import get_theme_manager
+from .wheel_ignore_combobox import WheelIgnoreComboBox
 
 
 class UIManager:
@@ -725,8 +724,8 @@ class UIManager:
 
     def _open_session_folder(self):
         """Open session folder in file explorer."""
-        import subprocess
         import platform
+        import subprocess
 
         if not self.mw.session_path:
             from PySide6.QtWidgets import QMessageBox
@@ -748,7 +747,7 @@ class UIManager:
             from PySide6.QtWidgets import QMessageBox
 
             QMessageBox.critical(
-                self.mw, "Error", f"Failed to open session folder:\n{str(e)}"
+                self.mw, "Error", f"Failed to open session folder:\n{e!s}"
             )
 
     def _create_main_actions_group(self):
@@ -1047,7 +1046,7 @@ class UIManager:
             Dict mapping category_label -> list of tags
             Example: {"Packaging": ["BOX", "BAG"], "Priority": ["URGENT"]}
         """
-        from shopify_tool.tag_manager import get_tag_category, _normalize_tag_categories
+        from shopify_tool.tag_manager import _normalize_tag_categories, get_tag_category
 
         categories = _normalize_tag_categories(tag_categories)
         grouped = {}
@@ -1338,8 +1337,8 @@ class UIManager:
         Args:
             position: Position where menu was requested
         """
-        from PySide6.QtWidgets import QMenu
         from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu
 
         # Only show menu if table config manager is available
         if not hasattr(self.mw, "table_config_manager"):
@@ -1554,8 +1553,8 @@ class UIManager:
 
     def _show_hidden_columns_popup(self):
         """Show popup menu listing hidden columns with quick-toggle options."""
-        from PySide6.QtWidgets import QMenu
         from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu
 
         if (
             not hasattr(self.mw, "table_config_manager")

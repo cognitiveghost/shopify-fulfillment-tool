@@ -1,9 +1,19 @@
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QCheckBox,
-    QFrame, QListWidget, QListWidgetItem, QSplitter, QGroupBox, QTextEdit,
-    QWidget
+    QCheckBox,
+    QDialog,
+    QFrame,
+    QGroupBox,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QSplitter,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Signal, Slot, Qt
+
 from gui.theme_manager import get_theme_manager
 
 
@@ -141,7 +151,7 @@ class ReportSelectionDialog(QDialog):
                         tooltip_lines.append(f"• {filter_text}")
             else:
                 # Unknown format - display as string
-                tooltip_lines.append(f"• {str(filters)}")
+                tooltip_lines.append(f"• {filters!s}")
         else:
             tooltip_lines.append("<i>No filters (includes all data)</i>")
 
@@ -295,7 +305,6 @@ class _BaseReportDialog(QDialog):
 
     def _add_extra_sections(self, layout):
         """Override in subclasses to add sections between preview and generate button."""
-        pass
 
     def _populate_list(self):
         """Fill the report list from reports_config."""

@@ -13,7 +13,6 @@ Physical fit check:
 """
 
 import logging
-from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -25,7 +24,7 @@ NO_BOX_FITS = "NO_BOX_FITS"      # items have dimensions but no box is large eno
 UNKNOWN_DIMS = "UNKNOWN_DIMS"     # some SKUs have no dimensions configured
 
 
-def calc_sku_volumetric_weight(sku: str, weight_config: Dict) -> float:
+def calc_sku_volumetric_weight(sku: str, weight_config: dict) -> float:
     """
     Calculate volumetric weight for a single SKU.
 
@@ -55,7 +54,7 @@ def calc_sku_volumetric_weight(sku: str, weight_config: Dict) -> float:
     return (length * width * height) / divisor
 
 
-def calc_order_volumetric_weight(order_df: pd.DataFrame, weight_config: Dict) -> float:
+def calc_order_volumetric_weight(order_df: pd.DataFrame, weight_config: dict) -> float:
     """
     Calculate total volumetric weight for an order group.
 
@@ -80,7 +79,7 @@ def calc_order_volumetric_weight(order_df: pd.DataFrame, weight_config: Dict) ->
     return round(total, 4)
 
 
-def is_all_no_packaging(order_df: pd.DataFrame, weight_config: Dict) -> bool:
+def is_all_no_packaging(order_df: pd.DataFrame, weight_config: dict) -> bool:
     """
     Returns True ONLY if at least one real SKU was found AND all such SKUs
     have no_packaging=True.
@@ -117,8 +116,8 @@ def is_all_no_packaging(order_df: pd.DataFrame, weight_config: Dict) -> bool:
 # Physical fit logic
 # ---------------------------------------------------------------------------
 
-def _item_fits_in_box(item_dims: Tuple[float, float, float],
-                      box_dims: Tuple[float, float, float]) -> bool:
+def _item_fits_in_box(item_dims: tuple[float, float, float],
+                      box_dims: tuple[float, float, float]) -> bool:
     """
     Check if a single item fits in a box, trying all 6 rotations.
 
@@ -131,8 +130,8 @@ def _item_fits_in_box(item_dims: Tuple[float, float, float],
     return si[0] <= sb[0] and si[1] <= sb[1] and si[2] <= sb[2]
 
 
-def _order_fits_in_box(item_list: List[Tuple[float, float, float]],
-                       box_dims: Tuple[float, float, float]) -> bool:
+def _order_fits_in_box(item_list: list[tuple[float, float, float]],
+                       box_dims: tuple[float, float, float]) -> bool:
     """
     Check if a list of items fits in a box using two conditions:
 
@@ -169,7 +168,7 @@ def _order_fits_in_box(item_list: List[Tuple[float, float, float]],
     return total_item_volume <= box_volume
 
 
-def find_min_box_for_order(order_df: pd.DataFrame, weight_config: Dict) -> str:
+def find_min_box_for_order(order_df: pd.DataFrame, weight_config: dict) -> str:
     """
     Find the smallest box (by volume) that physically fits all items in the order.
 
@@ -186,7 +185,7 @@ def find_min_box_for_order(order_df: pd.DataFrame, weight_config: Dict) -> str:
         return UNKNOWN_DIMS
 
     # Collect item dimensions (expanded by quantity, excluding no_packaging items)
-    item_dims_list: List[Tuple[float, float, float]] = []
+    item_dims_list: list[tuple[float, float, float]] = []
     has_packaging_items = False
     has_unknown_dims = False
 
@@ -255,7 +254,7 @@ def find_min_box_for_order(order_df: pd.DataFrame, weight_config: Dict) -> str:
     return NO_BOX_FITS
 
 
-def enrich_dataframe_with_weights(df: pd.DataFrame, weight_config: Dict) -> pd.DataFrame:
+def enrich_dataframe_with_weights(df: pd.DataFrame, weight_config: dict) -> pd.DataFrame:
     """
     Adds volumetric weight and physical box columns to the DataFrame before Rule Engine runs.
 

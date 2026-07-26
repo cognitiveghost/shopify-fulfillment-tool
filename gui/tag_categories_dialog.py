@@ -5,19 +5,38 @@ with support for v2 format including order, colors, and SKU writeoff configurati
 """
 
 import logging
-from typing import Dict, Optional, List
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QListWidget, QListWidgetItem, QWidget, QFormLayout, QSpinBox,
-    QDialogButtonBox, QMessageBox, QColorDialog, QSplitter, QGroupBox,
-    QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QDoubleSpinBox, QComboBox, QInputDialog
-)
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-from shopify_tool.tag_manager import validate_tag_categories_v2
 from gui.theme_manager import get_theme_manager
+from shopify_tool.tag_manager import validate_tag_categories_v2
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +50,7 @@ class TagCategoriesPanel(QWidget):
 
     categories_updated = Signal(dict)
 
-    def __init__(self, tag_categories: Dict, parent=None):
+    def __init__(self, tag_categories: dict, parent=None):
         super().__init__(parent)
 
         self.working_categories = tag_categories.copy()
@@ -43,7 +62,7 @@ class TagCategoriesPanel(QWidget):
                 "categories": self.working_categories
             }
 
-        self.current_category_id: Optional[str] = None
+        self.current_category_id: str | None = None
         self.modified = False
 
         self.theme = get_theme_manager().get_current_theme()
@@ -241,7 +260,7 @@ class TagCategoriesPanel(QWidget):
     # Data management
     # ------------------------------------------------------------------
 
-    def get_categories(self) -> Dict:
+    def get_categories(self) -> dict:
         """Return the current working categories dict (including pending edits)."""
         if self.current_category_id:
             self._save_editor_to_working_copy()
@@ -706,7 +725,7 @@ class TagCategoriesDialog(QDialog):
 
     categories_updated = Signal(dict)
 
-    def __init__(self, tag_categories: Dict, parent=None):
+    def __init__(self, tag_categories: dict, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Tag Categories Management")
         self.setModal(True)
@@ -773,6 +792,6 @@ class TagCategoriesDialog(QDialog):
                 return
         self.reject()
 
-    def get_categories(self) -> Dict:
+    def get_categories(self) -> dict:
         """Get the current categories configuration."""
         return self.panel.get_categories()

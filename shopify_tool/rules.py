@@ -1,9 +1,8 @@
 import copy
-import pandas as pd
 import re
 from functools import lru_cache
-from typing import Optional
 
+import pandas as pd
 
 """Implements a configurable rule engine to process and modify order data.
 
@@ -185,7 +184,7 @@ def _op_is_not_empty(series_val, rule_val):
 # --- Helper Functions for New Operators ---
 
 
-def _parse_date_safe(date_str: str) -> Optional[pd.Timestamp]:
+def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
     """Safely parse date string with multiple format support.
 
     Tries 3 common date formats in sequence:
@@ -229,7 +228,7 @@ def _parse_date_safe(date_str: str) -> Optional[pd.Timestamp]:
 
 
 @lru_cache(maxsize=128)
-def _compile_regex_safe(pattern: str) -> Optional[re.Pattern]:
+def _compile_regex_safe(pattern: str) -> re.Pattern | None:
     """Safely compile regex pattern with caching.
 
     Uses LRU cache to avoid recompiling patterns on repeated calls.
@@ -258,7 +257,7 @@ def _compile_regex_safe(pattern: str) -> Optional[re.Pattern]:
         return None
 
 
-def _parse_range(range_str: str) -> Optional[tuple[float, float]]:
+def _parse_range(range_str: str) -> tuple[float, float] | None:
     """Parse range string in format 'start-end'.
 
     Args:
@@ -415,7 +414,7 @@ def _op_between(series_val, rule_val):
         return (series_numeric >= start) & (series_numeric <= end)
     else:
         # Fallback to string comparison
-        logger.info(f"[RULE ENGINE] Using string comparison for 'between' operator")
+        logger.info("[RULE ENGINE] Using string comparison for 'between' operator")
         series_str = series_val.astype(str)
         return (series_str >= str(start)) & (series_str <= str(end))
 
@@ -903,11 +902,7 @@ class RuleEngine:
                         needed_columns.add("Status_Note")
                     elif action_type == "ADD_INTERNAL_TAG":
                         needed_columns.add("Internal_Tags")
-                    elif action_type == "COPY_FIELD":
-                        target = action.get("target")
-                        if target:
-                            needed_columns.add(target)
-                    elif action_type == "CALCULATE":
+                    elif action_type == "COPY_FIELD" or action_type == "CALCULATE":
                         target = action.get("target")
                         if target:
                             needed_columns.add(target)
@@ -978,7 +973,7 @@ class RuleEngine:
 
             # Log data types and sample values
             logger.info(f"[RULE ENGINE] Field '{field}' dtype: {df[field].dtype}")
-            logger.info(f"[RULE ENGINE] Rule value type: {type(value).__name__}, value: {repr(value)}")
+            logger.info(f"[RULE ENGINE] Rule value type: {type(value).__name__}, value: {value!r}")
             unique_vals = df[field].dropna().unique()[:5]
             logger.info(f"[RULE ENGINE] Sample values in '{field}': {list(unique_vals)}")
 
@@ -1079,7 +1074,7 @@ class RuleEngine:
                 tags_value = action.get("tags") or action.get("value")
 
                 if not tags_value:
-                    logger.warning(f"[RULE ENGINE] SET_MULTI_TAGS missing tags/value")
+                    logger.warning("[RULE ENGINE] SET_MULTI_TAGS missing tags/value")
                     continue
 
                 # Parse: підтримка list або comma-separated string
@@ -1112,7 +1107,7 @@ class RuleEngine:
                 severity = action.get("severity", "info").lower()
 
                 if not message:
-                    logger.warning(f"[RULE ENGINE] ALERT_NOTIFICATION missing message")
+                    logger.warning("[RULE ENGINE] ALERT_NOTIFICATION missing message")
                     continue
 
                 # Валідація severity
@@ -1151,7 +1146,7 @@ class RuleEngine:
                     continue
 
                 if field1 not in df.columns or field2 not in df.columns:
-                    logger.warning(f"[RULE ENGINE] CALCULATE fields not found in DataFrame")
+                    logger.warning("[RULE ENGINE] CALCULATE fields not found in DataFrame")
                     continue
 
                 # Створити target column якщо не існує
@@ -1183,7 +1178,7 @@ class RuleEngine:
                 quantity = action.get("quantity", 1)
 
                 if not sku:
-                    logger.warning(f"[RULE ENGINE] ADD_PRODUCT missing SKU")
+                    logger.warning("[RULE ENGINE] ADD_PRODUCT missing SKU")
                     continue
 
                 try:
@@ -1193,7 +1188,7 @@ class RuleEngine:
                     continue
 
                 if quantity <= 0:
-                    logger.warning(f"[RULE ENGINE] ADD_PRODUCT quantity must be positive")
+                    logger.warning("[RULE ENGINE] ADD_PRODUCT quantity must be positive")
                     continue
 
                 # Знайти цей SKU в DataFrame для отримання product info (з stock файлу)

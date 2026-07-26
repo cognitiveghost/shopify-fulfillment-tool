@@ -1,11 +1,11 @@
-import os
 import logging
+import os
 import tempfile
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+
 import pandas as pd
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QListWidgetItem
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox
 
 from shopify_tool import core
 
@@ -249,7 +249,7 @@ class FileHandler:
             QMessageBox.critical(
                 self.mw,
                 "File Load Error",
-                f"Failed to load stock file:\n{str(e)}\n\n"
+                f"Failed to load stock file:\n{e!s}\n\n"
                 f"Make sure the delimiter is set correctly in Settings.\n"
                 f"Current delimiter: '{delimiter}'",
             )
@@ -528,7 +528,7 @@ class FileHandler:
             )
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Validation Error", f"Error validating files:\n{str(e)}"
+                self.mw, "Validation Error", f"Error validating files:\n{e!s}"
             )
             return
 
@@ -553,7 +553,7 @@ class FileHandler:
             merged_path = self.merge_and_save_files(valid_files, "orders", folder_path)
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Merge Failed", f"Failed to merge files:\n{str(e)}"
+                self.mw, "Merge Failed", f"Failed to merge files:\n{e!s}"
             )
             return
 
@@ -652,7 +652,7 @@ class FileHandler:
             )
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Validation Error", f"Error validating files:\n{str(e)}"
+                self.mw, "Validation Error", f"Error validating files:\n{e!s}"
             )
             return
 
@@ -677,7 +677,7 @@ class FileHandler:
             merged_path = self.merge_and_save_files(valid_files, "stock", folder_path)
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Merge Failed", f"Failed to merge files:\n{str(e)}"
+                self.mw, "Merge Failed", f"Failed to merge files:\n{e!s}"
             )
             return
 
@@ -720,7 +720,7 @@ class FileHandler:
 
     def scan_folder_for_csv(
         self, folder_path: str, recursive: bool = False, pattern: str = "*.csv"
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Scan folder for CSV files.
 
@@ -752,8 +752,8 @@ class FileHandler:
         return result
 
     def validate_multiple_files(
-        self, file_paths: List[str], file_type: str
-    ) -> Tuple[List[str], List[Tuple[str, List[str]]], int]:
+        self, file_paths: list[str], file_type: str
+    ) -> tuple[list[str], list[tuple[str, list[str]]], int]:
         """
         Validate multiple CSV files.
 
@@ -833,7 +833,7 @@ class FileHandler:
                     )
 
             except Exception as e:
-                invalid_files.append((filepath, [f"Error: {str(e)}"]))
+                invalid_files.append((filepath, [f"Error: {e!s}"]))
                 self.log.error(f"  {os.path.basename(filepath)}: {e}", exc_info=True)
 
         return valid_files, invalid_files, total_rows
@@ -841,8 +841,8 @@ class FileHandler:
     def show_file_preview(
         self,
         file_type: str,
-        valid_files: List[str],
-        invalid_files: List[Tuple[str, List[str]]],
+        valid_files: list[str],
+        invalid_files: list[tuple[str, list[str]]],
         total_rows: int,
     ) -> bool:
         """
@@ -895,7 +895,7 @@ class FileHandler:
         return reply == QMessageBox.Yes
 
     def merge_and_save_files(
-        self, file_paths: List[str], file_type: str, original_folder: str
+        self, file_paths: list[str], file_type: str, original_folder: str
     ) -> str:
         """
         Merge CSV files and save to temp location.

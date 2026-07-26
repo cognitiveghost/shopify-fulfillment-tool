@@ -1,5 +1,6 @@
 import sys
 import traceback
+
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 
@@ -42,7 +43,7 @@ class Worker(QRunnable):
             *args: Positional arguments to pass to the function.
             **kwargs: Keyword arguments to pass to the function.
         """
-        super(Worker, self).__init__()
+        super().__init__()
         # Store constructor arguments (re-used for processing)
         self.fn = fn
         self.args = args

@@ -10,24 +10,27 @@ Features:
 - Export to PDF
 """
 
-import os
 import logging
 from pathlib import Path
-from datetime import datetime
 
 import pandas as pd
-
+from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
-    QLabel, QProgressBar, QTableWidget, QComboBox, QCheckBox,
-    QMessageBox, QTableWidgetItem, QHeaderView, QFileDialog
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QThreadPool, Signal
-from PySide6.QtGui import QPixmap, QDesktopServices
-from PySide6.QtCore import QUrl
 
-from gui.worker import Worker
 from gui.theme_manager import get_theme_manager
+from gui.worker import Worker
 
 
 class BarcodeGeneratorWidget(QWidget):
@@ -308,7 +311,7 @@ class BarcodeGeneratorWidget(QWidget):
             self.order_count_label.setText(f"{order_count} orders ready for barcode generation")
 
         except Exception as e:
-            self.order_count_label.setText(f"Error reading packing list: {str(e)}")
+            self.order_count_label.setText(f"Error reading packing list: {e!s}")
             self.log.error(f"Failed to read packing list {packing_list_file}: {e}", exc_info=True)
             return
 
@@ -511,6 +514,7 @@ class BarcodeGeneratorWidget(QWidget):
         """Generate PDF automatically after barcode generation."""
         try:
             from pathlib import Path
+
             from shopify_tool.barcode_processor import generate_barcodes_pdf
 
             # Convert string paths back to Path objects

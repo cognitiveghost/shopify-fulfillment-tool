@@ -1,8 +1,8 @@
 """Custom ItemDelegate for drawing borders between order groups."""
 
+from PySide6.QtGui import QColor, QPen
 from PySide6.QtWidgets import QStyledItemDelegate
-from PySide6.QtGui import QPainter, QPen, QColor
-from PySide6.QtCore import Qt
+
 from gui.theme_manager import get_theme_manager
 
 

@@ -11,16 +11,28 @@ Current sub-tabs:
 import logging
 from datetime import datetime
 
+from PySide6.QtCore import QDate, Qt, QThreadPool
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTabWidget, QDateEdit, QTableWidget, QTableWidgetItem,
-    QSplitter, QHeaderView, QFileDialog, QMessageBox, QFrame,
-    QGroupBox, QSizePolicy,
+    QDateEdit,
+    QFileDialog,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QDate, QThreadPool
 
-from gui.worker import Worker
 from gui.theme_manager import get_theme_manager
+from gui.worker import Worker
 
 logger = logging.getLogger(__name__)
 

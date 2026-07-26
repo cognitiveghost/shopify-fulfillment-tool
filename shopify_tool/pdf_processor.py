@@ -9,18 +9,17 @@ Processes courier label PDFs by:
 5. Saving processed PDF
 """
 
-import re
-import logging
-import time
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, Optional, Callable
 import csv
+import logging
+import re
+import time
+from collections.abc import Callable
+from datetime import datetime
+from io import BytesIO
+from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
-from io import BytesIO
-
 
 logger = logging.getLogger(__name__)
 
@@ -28,30 +27,26 @@ logger = logging.getLogger(__name__)
 # Custom Exceptions
 class PDFProcessorError(Exception):
     """Base exception for PDF processor."""
-    pass
 
 
 class InvalidPDFError(PDFProcessorError):
     """Invalid or corrupted PDF file."""
-    pass
 
 
 class InvalidCSVError(PDFProcessorError):
     """Invalid CSV mapping file."""
-    pass
 
 
 class MappingError(PDFProcessorError):
     """Error matching pages to references."""
-    pass
 
 
 def process_reference_labels(
     pdf_path: str,
     csv_path: str,
     output_dir: str,
-    progress_callback: Optional[Callable[[int, int, str], None]] = None
-) -> Dict:
+    progress_callback: Callable[[int, int, str], None] | None = None
+) -> dict:
     """
     Process PDF with reference labels.
 
@@ -229,7 +224,7 @@ def process_reference_labels(
         raise PDFProcessorError(f"Unexpected error: {e}")
 
 
-def load_csv_mapping(csv_path: str) -> Dict[str, Dict]:
+def load_csv_mapping(csv_path: str) -> dict[str, dict]:
     """
     Load CSV mapping file.
 
@@ -328,7 +323,7 @@ def normalize_text(text: str) -> str:
     return re.sub(r'\s+', ' ', str(text)).strip().lower()
 
 
-def match_reference(page_text: str, mapping: Dict) -> Optional[Dict]:
+def match_reference(page_text: str, mapping: dict) -> dict | None:
     """
     Match page text to reference using 3-step verification:
     1. PostOne ID (R/P + 10 digits)
@@ -398,7 +393,7 @@ def match_reference(page_text: str, mapping: Dict) -> Optional[Dict]:
     return None
 
 
-def extract_postone_number(text: str) -> Optional[str]:
+def extract_postone_number(text: str) -> str | None:
     """
     Extract PostOne number (R or P + 10 digits) from text.
 
@@ -501,7 +496,7 @@ def sort_pages_by_reference(page_data_list: list) -> list:
     return matched_pages + unmatched_pages
 
 
-def create_reference_order_map(sorted_pages: list) -> Dict[str, int]:
+def create_reference_order_map(sorted_pages: list) -> dict[str, int]:
     """
     Create mapping of reference number to order position.
 

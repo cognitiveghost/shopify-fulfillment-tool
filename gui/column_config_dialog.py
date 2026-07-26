@@ -7,26 +7,25 @@ Phase 4 of table customization feature.
 """
 
 import logging
-from typing import Optional, List, Dict
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QListWidget,
-    QListWidgetItem,
-    QLineEdit,
     QCheckBox,
     QComboBox,
-    QLabel,
-    QMessageBox,
-    QInputDialog,
+    QDialog,
     QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QIcon
+
 from gui.theme_manager import get_theme_manager
 
 logger = logging.getLogger(__name__)
@@ -57,10 +56,10 @@ class ColumnConfigPanel(QWidget):
 
         self._original_config = None
         self._original_view_name = None
-        self._current_columns: List[str] = []
+        self._current_columns: list[str] = []
         self._is_loading = False
 
-        self.additional_columns_config: List[dict] = []
+        self.additional_columns_config: list[dict] = []
 
         self._init_ui()
         self._connect_signals()
@@ -421,7 +420,6 @@ class ColumnConfigPanel(QWidget):
 
     def _on_auto_hide_toggled(self, checked: bool):
         """Handle auto-hide toggle."""
-        pass
 
     def _on_view_changed(self, view_name: str):
         """Handle view selection change."""
@@ -486,7 +484,7 @@ class ColumnConfigPanel(QWidget):
             QMessageBox.critical(
                 self,
                 "Save Failed",
-                f"Failed to save view: {str(e)}"
+                f"Failed to save view: {e!s}"
             )
 
     def _on_delete_view(self):
@@ -526,7 +524,7 @@ class ColumnConfigPanel(QWidget):
             QMessageBox.critical(
                 self,
                 "Delete Failed",
-                f"Failed to delete view: {str(e)}"
+                f"Failed to delete view: {e!s}"
             )
 
     def _on_reset(self):
@@ -633,7 +631,7 @@ class ColumnConfigPanel(QWidget):
             QMessageBox.critical(
                 self,
                 "Apply Failed",
-                f"Failed to apply configuration: {str(e)}"
+                f"Failed to apply configuration: {e!s}"
             )
 
     def _get_config_from_ui(self):
@@ -721,7 +719,7 @@ class ColumnConfigPanel(QWidget):
             f"Check the columns you want to include in your analysis, then click Apply."
         )
 
-    def _populate_additional_columns_list(self, columns_config: List[dict]):
+    def _populate_additional_columns_list(self, columns_config: list[dict]):
         """Populate the additional columns list widget."""
         self.additional_columns_list.clear()
 

@@ -1,14 +1,20 @@
 """Tag Management Panel for managing Internal_Tags on selected orders."""
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox,
-    QPushButton, QComboBox, QLineEdit, QListWidget
-)
 from PySide6.QtCore import Signal
-
-from shopify_tool.tag_manager import parse_tags
+from PySide6.QtWidgets import (
+    QComboBox,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui.theme_manager import get_theme_manager
+from shopify_tool.tag_manager import parse_tags
+
 
 class TagManagementPanel(QWidget):
     """

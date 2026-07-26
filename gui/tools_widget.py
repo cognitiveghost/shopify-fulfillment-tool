@@ -7,13 +7,10 @@ Contains sub-tabs:
 - SKU Labels: Barcode-scan-to-print labeling workflow
 """
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTabWidget, QLabel
-)
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 
-from gui.reference_labels_widget import ReferenceLabelsWidget
 from gui.barcode_generator_widget import BarcodeGeneratorWidget
+from gui.reference_labels_widget import ReferenceLabelsWidget
 from gui.sku_label_widget import SKULabelWidget
 
 

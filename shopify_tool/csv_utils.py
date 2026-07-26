@@ -2,10 +2,11 @@
 CSV utility functions for delimiter detection and validation.
 """
 import csv
+import logging
 import os
 import re
-import logging
-from typing import Tuple, Any, List, Optional, Dict
+from typing import Any
+
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ def order_number_sort_key(s) -> int:
     return int(nums[-1]) if nums else 0
 
 
-def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> Tuple[str, str]:
+def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> tuple[str, str]:
     """
     Automatically detect CSV delimiter.
 
@@ -144,7 +145,7 @@ def validate_delimiter(file_path: str, delimiter: str, encoding: str = 'utf-8-si
 
 
 def suggest_delimiter_fix(file_path: str, failed_delimiter: str,
-                         encoding: str = 'utf-8-sig') -> Tuple[str, str]:
+                         encoding: str = 'utf-8-sig') -> tuple[str, str]:
     """
     Suggest alternative delimiter when current one fails.
 
@@ -290,13 +291,13 @@ def normalize_sku_for_matching(sku: Any) -> str:
 
 
 def merge_csv_files(
-    file_paths: List[str],
+    file_paths: list[str],
     delimiter: str,
     encoding: str = 'utf-8-sig',
-    dtype_dict: Optional[Dict] = None,
+    dtype_dict: dict | None = None,
     add_source_column: bool = True,
     remove_duplicates: bool = False,
-    duplicate_keys: Optional[List[str]] = None
+    duplicate_keys: list[str] | None = None
 ) -> pd.DataFrame:
     """
     Merge multiple CSV files into single DataFrame.
@@ -411,8 +412,8 @@ def merge_csv_files(
 def discover_additional_columns(
     orders_df: pd.DataFrame,
     column_mappings: dict,
-    current_additional_columns: List[dict]
-) -> List[dict]:
+    current_additional_columns: list[dict]
+) -> list[dict]:
     """
     Discover available additional columns from orders DataFrame.
 

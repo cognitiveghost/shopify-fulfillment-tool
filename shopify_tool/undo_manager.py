@@ -10,10 +10,9 @@ Manages undo history for DataFrame modifications:
 
 import json
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Any
 
 import pandas as pd
 
@@ -46,7 +45,7 @@ class UndoManager:
         self,
         operation_type: str,
         description: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         affected_rows_before: pd.DataFrame
     ):
         """Record operation AFTER it executes.
@@ -116,7 +115,7 @@ class UndoManager:
         """
         return self.current_position > 0 and len(self.operations) > 0
 
-    def get_undo_description(self) -> Optional[str]:
+    def get_undo_description(self) -> str | None:
         """Get description of operation that would be undone.
 
         Returns:
@@ -126,7 +125,7 @@ class UndoManager:
             return self.operations[self.current_position - 1].get("description", "Unknown operation")
         return None
 
-    def undo(self) -> Tuple[bool, str]:
+    def undo(self) -> tuple[bool, str]:
         """Undo last operation.
 
         Returns:
@@ -215,9 +214,9 @@ class UndoManager:
 
         except Exception as e:
             self.log.error(f"Undo failed: {e}", exc_info=True)
-            return False, f"Undo failed: {str(e)}"
+            return False, f"Undo failed: {e!s}"
 
-    def _undo_toggle_status(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_toggle_status(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo toggle status operation.
 
         Args:
@@ -253,7 +252,7 @@ class UndoManager:
             self.log.error(f"Failed to undo toggle status: {e}", exc_info=True)
             return False
 
-    def _undo_add_tag(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_add_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo add tag operation.
 
         Args:
@@ -291,7 +290,7 @@ class UndoManager:
             self.log.error(f"Failed to undo add tag: {e}", exc_info=True)
             return False
 
-    def _undo_add_internal_tag(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_add_internal_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo add internal tag operation.
 
         Args:
@@ -329,7 +328,7 @@ class UndoManager:
             self.log.error(f"Failed to undo add internal tag: {e}", exc_info=True)
             return False
 
-    def _undo_remove_item(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_remove_item(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo remove item operation.
 
         Args:
@@ -356,7 +355,7 @@ class UndoManager:
             self.log.error(f"Failed to undo remove item: {e}", exc_info=True)
             return False
 
-    def _undo_remove_order(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_remove_order(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo remove order operation.
 
         Args:
@@ -382,7 +381,7 @@ class UndoManager:
             self.log.error(f"Failed to undo remove order: {e}", exc_info=True)
             return False
 
-    def _get_history_path(self) -> Optional[Path]:
+    def _get_history_path(self) -> Path | None:
         """Get path to operations_history.json.
 
         Returns:
@@ -487,7 +486,7 @@ class UndoManager:
     # BULK OPERATION UNDO HANDLERS
     # ============================================================================
 
-    def _undo_bulk_change_status(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_bulk_change_status(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo bulk status change operation.
 
         Args:
@@ -521,7 +520,7 @@ class UndoManager:
             self.log.error(f"Failed to undo bulk status change: {e}", exc_info=True)
             return False
 
-    def _undo_bulk_add_tag(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_bulk_add_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo bulk tag addition.
 
         Args:
@@ -549,7 +548,7 @@ class UndoManager:
             self.log.error(f"Failed to undo bulk add tag: {e}", exc_info=True)
             return False
 
-    def _undo_bulk_remove_tag(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_bulk_remove_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo bulk tag removal with order-level forward-fill.
 
         Args:
@@ -577,7 +576,7 @@ class UndoManager:
             self.log.error(f"Failed to undo bulk remove tag: {e}", exc_info=True)
             return False
 
-    def _undo_bulk_remove_sku(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_bulk_remove_sku(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo bulk SKU removal.
 
         Args:
@@ -608,7 +607,7 @@ class UndoManager:
             self.log.error(f"Failed to undo bulk SKU removal: {e}", exc_info=True)
             return False
 
-    def _undo_bulk_remove_orders_with_sku(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_bulk_remove_orders_with_sku(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo bulk order removal (orders containing SKU).
 
         Args:
@@ -639,7 +638,7 @@ class UndoManager:
             self.log.error(f"Failed to undo bulk order removal: {e}", exc_info=True)
             return False
 
-    def _undo_bulk_delete_orders(self, params: Dict, affected_rows_before: pd.DataFrame) -> bool:
+    def _undo_bulk_delete_orders(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo bulk order deletion.
 
         Args:

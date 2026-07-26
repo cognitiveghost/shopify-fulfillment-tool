@@ -6,10 +6,8 @@ Manages processing history for reference labels in JSON format.
 
 import json
 import logging
-from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Optional
-
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +126,7 @@ class ReferenceLabelsHistory:
 
         logger.info(f"Added history entry: {input_pdf} → {output_pdf}")
 
-    def get_entries(self, limit: Optional[int] = None) -> List[Dict]:
+    def get_entries(self, limit: int | None = None) -> list[dict]:
         """
         Get processing history entries.
 
@@ -154,7 +152,7 @@ class ReferenceLabelsHistory:
         self._save_history()
         logger.info("History cleared")
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """
         Get statistics from history.
 

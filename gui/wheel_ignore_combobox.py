@@ -5,9 +5,10 @@ This prevents users from accidentally changing combo box values when scrolling
 through the window, which is a common UX issue in dense forms.
 """
 
-from PySide6.QtWidgets import QComboBox
-from PySide6.QtCore import QEvent, Qt
 import logging
+
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtWidgets import QComboBox
 
 logger = logging.getLogger(__name__)
 

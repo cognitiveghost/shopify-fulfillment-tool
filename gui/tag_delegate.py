@@ -1,11 +1,10 @@
 """Custom ItemDelegate for rendering Internal_Tags as colored badges."""
 
-import json
-from PySide6.QtWidgets import QStyledItemDelegate, QStyle
-from PySide6.QtCore import Qt, QRect, QSize
-from PySide6.QtGui import QPainter, QColor, QFont, QPen, QFontMetrics
+from PySide6.QtCore import QRect, QSize, Qt
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen
+from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
-from shopify_tool.tag_manager import parse_tags, get_tag_color
+from shopify_tool.tag_manager import get_tag_color, parse_tags
 
 
 class TagDelegate(QStyledItemDelegate):

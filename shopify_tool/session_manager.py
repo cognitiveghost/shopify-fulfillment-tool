@@ -25,14 +25,12 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 logger = logging.getLogger("ShopifyToolLogger")
 
 
 class SessionManagerError(Exception):
     """Base exception for SessionManager errors."""
-    pass
 
 
 class SessionManager:
@@ -208,8 +206,8 @@ class SessionManager:
     def list_client_sessions(
         self,
         client_id: str,
-        status_filter: Optional[str] = None
-    ) -> List[Dict]:
+        status_filter: str | None = None
+    ) -> list[dict]:
         """List all sessions for a client.
 
         Args:
@@ -278,7 +276,7 @@ class SessionManager:
             finally:
                 lock_file.close()
 
-    def get_session_info(self, session_path: str) -> Optional[Dict]:
+    def get_session_info(self, session_path: str) -> dict | None:
         """Load session metadata from session_info.json.
 
         Args:
@@ -361,7 +359,7 @@ class SessionManager:
                 logger.error(f"Failed to update session status: {e}", exc_info=True)
                 raise SessionManagerError(f"Failed to update session status: {e}")
 
-    def update_session_info(self, session_path: str, updates: Dict) -> bool:
+    def update_session_info(self, session_path: str, updates: dict) -> bool:
         """Update session metadata with arbitrary fields.
 
         Args:
@@ -601,7 +599,7 @@ class SessionManager:
             logger.error(f"Failed to delete session: {e}", exc_info=True)
             raise SessionManagerError(f"Failed to delete session: {e}")
 
-    def calculate_session_statistics(self, session_path: str) -> Dict:
+    def calculate_session_statistics(self, session_path: str) -> dict:
         """Calculate session statistics by scanning session directory.
 
         Reads analysis_data.json for orders/items count and scans packing_lists

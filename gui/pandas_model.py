@@ -1,6 +1,7 @@
-from PySide6.QtCore import QAbstractTableModel, QSortFilterProxyModel, Qt, QModelIndex
-from PySide6.QtGui import QColor
 import pandas as pd
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtGui import QColor
+
 from gui.theme_manager import get_theme_manager
 
 

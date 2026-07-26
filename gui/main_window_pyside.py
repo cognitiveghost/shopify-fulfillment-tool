@@ -1,43 +1,36 @@
-import sys
-import os
 import json
-import shutil
-import pickle
 import logging
+import os
+import sys
 from datetime import datetime
 
 import pandas as pd
+from PySide6.QtCore import QModelIndex, QPoint, Qt, QThreadPool, QTimer
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
-    QMessageBox,
     QMenu,
+    QMessageBox,
     QTableWidgetItem,
-    QLabel,
 )
-from PySide6.QtCore import QThreadPool, QPoint, QModelIndex, QTimer, Qt
-from PySide6.QtGui import QAction
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from shopify_tool.analysis import recalculate_statistics
-from shopify_tool.profile_manager import ProfileManager, NetworkError
-from shared.server_connection import prompt_for_recovery_path
-from shopify_tool.session_manager import SessionManager
-from shopify_tool.groups_manager import GroupsManager
-from shopify_tool.undo_manager import UndoManager
-from shopify_tool.tag_manager import _normalize_tag_categories
-from gui.log_handler import QtLogHandler
-from gui.ui_manager import UIManager
-from gui.file_handler import FileHandler
 from gui.actions_handler import ActionsHandler
-from gui.client_settings_dialog import ClientSelectorWidget
-from gui.session_browser_widget import SessionBrowserWidget
-from gui.profile_manager_dialog import ProfileManagerDialog
-from gui.tag_management_panel import TagManagementPanel
-from gui.selection_helper import SelectionHelper
+from gui.file_handler import FileHandler
+from gui.log_handler import QtLogHandler
 from gui.pandas_model import FulfillmentFilterProxy
+from gui.selection_helper import SelectionHelper
 from gui.theme_manager import get_theme_manager
+from gui.ui_manager import UIManager
+from shared.server_connection import prompt_for_recovery_path
+from shopify_tool.analysis import recalculate_statistics
+from shopify_tool.groups_manager import GroupsManager
+from shopify_tool.profile_manager import NetworkError, ProfileManager
+from shopify_tool.session_manager import SessionManager
+from shopify_tool.tag_manager import _normalize_tag_categories
+from shopify_tool.undo_manager import UndoManager
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +140,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(
                     self,
                     "Initialization Error",
-                    f"Failed to initialize profile managers:\n{str(e)}",
+                    f"Failed to initialize profile managers:\n{e!s}",
                 )
                 QApplication.quit()
                 return
@@ -172,7 +165,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Initialization Error",
-                f"Failed to initialize profile managers:\n{str(e)}",
+                f"Failed to initialize profile managers:\n{e!s}",
             )
             QApplication.quit()
             return
@@ -254,7 +247,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logging.error(f"Failed to load client config: {e}", exc_info=True)
             QMessageBox.critical(
-                self, "Error", f"Failed to load client configuration:\n{str(e)}"
+                self, "Error", f"Failed to load client configuration:\n{e!s}"
             )
 
     def setup_logging(self):
@@ -352,7 +345,7 @@ class MainWindow(QMainWindow):
             )
 
         # Add Ctrl+R shortcut for Run Analysis
-        from PySide6.QtGui import QShortcut, QKeySequence
+        from PySide6.QtGui import QKeySequence, QShortcut
 
         QShortcut(
             QKeySequence("Ctrl+R"),
@@ -885,7 +878,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             logging.error(f"Error changing client: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"Failed to change client: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to change client: {e!s}")
 
     def on_sidebar_refresh(self):
         """Handle manual sidebar refresh request."""
@@ -1089,7 +1082,6 @@ class MainWindow(QMainWindow):
         Args:
             session_path: Path to the session directory
         """
-        from pathlib import Path
 
         try:
             # Set as current session
@@ -1139,7 +1131,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             logging.error(f"Failed to load session: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"Failed to load session:\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to load session:\n{e!s}")
 
     def filter_table(self):
         """Applies the current filter settings to the results table view.
@@ -1387,8 +1379,9 @@ class MainWindow(QMainWindow):
             if not order_number:
                 return
 
-            from PySide6.QtWidgets import QStyle
             from functools import partial
+
+            from PySide6.QtWidgets import QStyle
 
             menu = QMenu()
 

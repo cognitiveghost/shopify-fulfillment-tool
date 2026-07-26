@@ -20,7 +20,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -28,7 +28,6 @@ logger = logging.getLogger("ShopifyToolLogger")
 # Custom Exception
 class GroupsManagerError(Exception):
     """Base exception for GroupsManager errors."""
-    pass
 
 
 class GroupsManager:
@@ -67,7 +66,7 @@ class GroupsManager:
         if not self.groups_path.exists():
             self.save_groups(groups_data)
 
-    def _create_default_groups(self) -> Dict[str, Any]:
+    def _create_default_groups(self) -> dict[str, Any]:
         """Create default groups configuration with special groups.
 
         Returns:
@@ -92,7 +91,7 @@ class GroupsManager:
             }
         }
 
-    def load_groups(self) -> Dict[str, Any]:
+    def load_groups(self) -> dict[str, Any]:
         """Load groups configuration with corruption recovery.
 
         Returns:
@@ -134,7 +133,7 @@ class GroupsManager:
             logger.error(f"Unexpected error loading groups: {e}", exc_info=True)
             return self._create_default_groups()
 
-    def save_groups(self, groups_data: Dict[str, Any]) -> bool:
+    def save_groups(self, groups_data: dict[str, Any]) -> bool:
         """Save groups configuration with file locking and backup.
 
         Args:
@@ -176,7 +175,7 @@ class GroupsManager:
                         )
                         time.sleep(retry_delay)
 
-            except (IOError, OSError) as e:
+            except OSError as e:
                 if attempt < max_retries - 1:
                     logger.warning(
                         f"Save failed (attempt {attempt + 1}/{max_retries}), "
@@ -193,7 +192,7 @@ class GroupsManager:
         logger.error(error_msg)
         raise GroupsManagerError(error_msg)
 
-    def _save_with_windows_lock(self, file_path: Path, data: Dict) -> bool:
+    def _save_with_windows_lock(self, file_path: Path, data: dict) -> bool:
         """Save file with Windows file locking (locks entire file).
 
         Args:
@@ -218,7 +217,7 @@ class GroupsManager:
                 try:
                     f.seek(0)
                     msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, file_size)
-                except IOError:
+                except OSError:
                     return False
 
                 try:
@@ -241,7 +240,7 @@ class GroupsManager:
                 temp_path.unlink()
             return False
 
-    def _save_with_unix_lock(self, file_path: Path, data: Dict) -> bool:
+    def _save_with_unix_lock(self, file_path: Path, data: dict) -> bool:
         """Save file with Unix file locking.
 
         Args:
@@ -261,7 +260,7 @@ class GroupsManager:
                 # Try to acquire exclusive lock
                 try:
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except IOError:
+                except OSError:
                     return False
 
                 try:
@@ -337,7 +336,7 @@ class GroupsManager:
                 lock_file.close()
 
     @staticmethod
-    def _name_collides_with_special_group(groups_data: Dict[str, Any], name: str) -> bool:
+    def _name_collides_with_special_group(groups_data: dict[str, Any], name: str) -> bool:
         special_groups = groups_data.get("special_groups", {})
         return any(
             special.get("name", "").lower() == name.lower()
@@ -380,8 +379,7 @@ class GroupsManager:
             max_order = -1
             for group in groups_data.get("groups", []):
                 order = group.get("display_order", 0)
-                if order > max_order:
-                    max_order = order
+                max_order = max(max_order, order)
             display_order = max_order + 1
 
             # Create new group
@@ -505,7 +503,7 @@ class GroupsManager:
 
             return True
 
-    def get_group(self, group_id: str) -> Optional[Dict[str, Any]]:
+    def get_group(self, group_id: str) -> dict[str, Any] | None:
         """Get group by ID.
 
         Args:
@@ -522,7 +520,7 @@ class GroupsManager:
 
         return None
 
-    def list_groups(self) -> List[Dict[str, Any]]:
+    def list_groups(self) -> list[dict[str, Any]]:
         """List all groups sorted by display_order.
 
         Returns:
@@ -536,7 +534,7 @@ class GroupsManager:
 
         return sorted_groups
 
-    def get_clients_in_group(self, group_id: str, profile_manager) -> List[str]:
+    def get_clients_in_group(self, group_id: str, profile_manager) -> list[str]:
         """Get list of client IDs assigned to a group.
 
         Args:

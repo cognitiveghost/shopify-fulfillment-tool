@@ -9,14 +9,20 @@ Allows users to:
 """
 
 import logging
+
 import pandas as pd
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
-    QGroupBox, QTableWidget, QTableWidgetItem,
-    QLabel, QMessageBox, QScrollArea, QWidget
-)
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+)
 
 logger = logging.getLogger(__name__)
 from gui.theme_manager import get_theme_manager
@@ -207,7 +213,7 @@ class RuleTestDialog(QDialog):
             QMessageBox.critical(
                 self,
                 "Test Error",
-                f"Failed to test rule:\n\n{str(e)}\n\nCheck logs for details."
+                f"Failed to test rule:\n\n{e!s}\n\nCheck logs for details."
             )
 
     def _detect_changed_rows(self):
@@ -332,11 +338,11 @@ class RuleTestDialog(QDialog):
                 actions_text += f": <code>{action_value}</code>"
 
             if action_type == "ADD_TAG":
-                actions_text += f" → Appends to Status_Note column"
+                actions_text += " → Appends to Status_Note column"
             elif action_type == "SET_STATUS":
-                actions_text += f" → Sets Order_Fulfillment_Status"
+                actions_text += " → Sets Order_Fulfillment_Status"
             elif action_type == "ADD_INTERNAL_TAG":
-                actions_text += f" → Appends to Internal_Tags (JSON list)"
+                actions_text += " → Appends to Internal_Tags (JSON list)"
             elif action_type == "COPY_FIELD":
                 source = action.get("source", "")
                 target = action.get("target", "")

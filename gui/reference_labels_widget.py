@@ -8,24 +8,32 @@ Features:
 - Error handling
 """
 
-import os
 import logging
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
-    QLabel, QProgressBar, QTableWidget, QFileDialog, QCheckBox,
-    QMessageBox, QTableWidgetItem, QHeaderView
-)
-from PySide6.QtCore import Qt, QThreadPool, Signal
+from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import QUrl
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
+from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 from shopify_tool.reference_labels_history import ReferenceLabelsHistory
 
-from gui.theme_manager import get_theme_manager
 
 class ReferenceLabelsWidget(QWidget):
     """Widget for processing reference labels PDFs."""
@@ -525,7 +533,9 @@ class ReferenceLabelsWidget(QWidget):
 
         # Map errors to user-friendly messages
         from shopify_tool.pdf_processor import (
-            InvalidPDFError, InvalidCSVError, MappingError
+            InvalidCSVError,
+            InvalidPDFError,
+            MappingError,
         )
 
         if isinstance(value, InvalidPDFError):

@@ -5,10 +5,12 @@ badges, and visual indicators for active state.
 """
 
 import logging
-from typing import Dict, Any, Optional
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QMessageBox
-from PySide6.QtCore import Signal, Qt, QPoint
+from typing import Any
+
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+
 from gui.theme_manager import get_theme_manager
 
 logger = logging.getLogger(__name__)
@@ -41,8 +43,8 @@ class ClientCard(QWidget):
         self,
         client_id: str,
         client_name: str,
-        metadata: Dict[str, Any],
-        ui_settings: Dict[str, Any],
+        metadata: dict[str, Any],
+        ui_settings: dict[str, Any],
         is_active: bool = False,
         parent=None
     ):
@@ -205,7 +207,7 @@ class ClientCard(QWidget):
 
         super().mousePressEvent(event)
 
-    def update_metadata(self, metadata: Dict[str, Any]):
+    def update_metadata(self, metadata: dict[str, Any]):
         """Update metadata and refresh display.
 
         Args:
@@ -222,7 +224,7 @@ class ClientCard(QWidget):
         total_sessions = metadata.get("total_sessions", 0)
         self.sessions_label.setText(f"Sessions: {total_sessions}")
 
-    def update_ui_settings(self, ui_settings: Dict[str, Any]):
+    def update_ui_settings(self, ui_settings: dict[str, Any]):
         """Update UI settings and refresh display.
 
         Args:

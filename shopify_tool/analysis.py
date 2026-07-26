@@ -1,20 +1,20 @@
 import copy
-import math
-import re
-import pandas as pd
-import numpy as np
-from typing import Tuple, Dict, List, Optional
-from datetime import date
 import logging
+import math
+from datetime import date
+
+import numpy as np
+import pandas as pd
+
 from shopify_tool.csv_utils import order_number_sort_key
 
 logger = logging.getLogger(__name__)
 
 # Bulgarian ERP CSV column names for lot tracking (Expiry_Date, Batch)
-_LOT_COLUMN_DEFAULTS: Dict[str, str] = {"Годност": "Expiry_Date", "Партида": "Batch"}
+_LOT_COLUMN_DEFAULTS: dict[str, str] = {"Годност": "Expiry_Date", "Партида": "Batch"}
 
 
-def _parse_expiry_date(raw) -> Optional[date]:
+def _parse_expiry_date(raw) -> date | None:
     """Parse a raw expiry string from the stock CSV to a comparable date object.
 
     Handles:
@@ -46,7 +46,7 @@ def _parse_expiry_date(raw) -> Optional[date]:
     return None
 
 
-def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
+def _build_fifo_lots(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
     """Build a FIFO-sorted lot inventory from a multi-row stock DataFrame.
 
     Returns None when neither Expiry_Date nor Batch column is present
@@ -72,7 +72,7 @@ def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
     if not has_expiry and not has_batch:
         return None
 
-    fifo_lots: Dict[str, List[dict]] = {}
+    fifo_lots: dict[str, list[dict]] = {}
     _SENTINEL = date(9999, 12, 31)  # sorts after all real dates
 
     for sku, group in stock_df.groupby("SKU"):
@@ -124,9 +124,9 @@ def _build_fifo_lots(stock_df: pd.DataFrame) -> Optional[Dict[str, List[dict]]]:
 def _clean_and_prepare_data(
     orders_df: pd.DataFrame,
     stock_df: pd.DataFrame,
-    column_mappings: Optional[dict] = None,
-    additional_columns_config: Optional[List[dict]] = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[Dict[str, List[dict]]]]:
+    column_mappings: dict | None = None,
+    additional_columns_config: list[dict] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, list[dict]] | None]:
     """
     Clean and standardize input data for analysis.
 
@@ -494,8 +494,8 @@ def _simulate_stock_allocation(
     orders_df: pd.DataFrame,
     stock_df: pd.DataFrame,
     prioritized_orders: pd.DataFrame,
-    fifo_lots: Optional[Dict[str, List[dict]]] = None,
-) -> Tuple[Dict[str, dict], Dict[str, Dict[str, List[dict]]]]:
+    fifo_lots: dict[str, list[dict]] | None = None,
+) -> tuple[dict[str, dict], dict[str, dict[str, list[dict]]]]:
     """
     Simulate stock allocation across prioritized orders.
 
@@ -536,7 +536,7 @@ def _simulate_stock_allocation(
         orders_for_simulation = orders_df.copy()
 
     # Pre-group required quantities per order — single O(N) pass avoids O(N²) per-order scans
-    order_required_quantities: Dict[str, "pd.Series"] = {
+    order_required_quantities: dict[str, pd.Series] = {
         order_num: grp.groupby("SKU")["Quantity"].sum()
         for order_num, grp in orders_for_simulation.groupby("Order_Number")
     }
@@ -546,7 +546,7 @@ def _simulate_stock_allocation(
     # NaN, so an order whose only line item is invalid would otherwise look
     # like a legitimate zero-quantity order and get marked Fulfillable.
     invalid_qty_rows = orders_for_simulation[orders_for_simulation["Quantity"].isna()]
-    invalid_qty_by_order: Dict[str, List[str]] = (
+    invalid_qty_by_order: dict[str, list[str]] = (
         invalid_qty_rows.groupby("Order_Number")["SKU"].apply(list).to_dict()
         if not invalid_qty_rows.empty
         else {}
@@ -558,7 +558,7 @@ def _simulate_stock_allocation(
         # --- LEGACY PATH (no lot tracking) ---
         # Initialize stock tracking - VECTORIZED dict creation
         live_stock = pd.Series(stock_df.Stock.values, index=stock_df.SKU).to_dict()
-        lot_allocations: Dict[str, Dict[str, List[dict]]] = {}
+        lot_allocations: dict[str, dict[str, list[dict]]] = {}
 
         for order_number in prioritized_orders["Order_Number"]:
             if order_number in invalid_qty_by_order:
@@ -638,10 +638,10 @@ def _simulate_stock_allocation(
 
             # COMMIT PHASE (mutate live_lots only if order is fulfillable)
             if can_fulfill_order:
-                order_alloc: Dict[str, List[dict]] = {}
+                order_alloc: dict[str, list[dict]] = {}
                 for sku, needed in required_quantities.items():
                     remaining = needed
-                    sku_alloc: List[dict] = []
+                    sku_alloc: list[dict] = []
                     for lot in live_lots.get(sku, []):
                         if remaining <= 0:
                             break
@@ -684,7 +684,7 @@ def _simulate_stock_allocation(
 
 
 def _calculate_final_stock(
-    stock_df: pd.DataFrame, fulfillment_results: Dict[str, str], orders_df: pd.DataFrame
+    stock_df: pd.DataFrame, fulfillment_results: dict[str, str], orders_df: pd.DataFrame
 ) -> pd.DataFrame:
     """
     Calculate final stock levels after fulfillment simulation.
@@ -873,12 +873,12 @@ def _merge_results_to_dataframe(
     stock_df: pd.DataFrame,
     order_item_counts: pd.Series,
     final_stock_levels: pd.DataFrame,
-    fulfillment_results: Dict[str, str],
+    fulfillment_results: dict[str, str],
     history_df: pd.DataFrame,
-    courier_mappings: Optional[dict] = None,
+    courier_mappings: dict | None = None,
     repeat_window_days: int = 1,
-    additional_columns_config: Optional[list] = None,
-    lot_allocations: Optional[Dict[str, Dict[str, List[dict]]]] = None,
+    additional_columns_config: list | None = None,
+    lot_allocations: dict[str, dict[str, list[dict]]] | None = None,
 ) -> pd.DataFrame:
     """
     Merge all analysis results into final output DataFrame.
@@ -1138,7 +1138,7 @@ def _merge_results_to_dataframe(
 
 def _generate_summary_reports(
     final_df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generate summary reports for fulfilled and missing items.
 

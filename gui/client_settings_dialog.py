@@ -5,20 +5,34 @@ tabbed interface for Basic Info, Appearance, Statistics, and Advanced settings.
 """
 
 import logging
-from typing import Dict, Any, Optional
-from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox,
-    QDialog, QVBoxLayout, QLineEdit, QDialogButtonBox, QFormLayout,
-    QTabWidget, QCheckBox, QColorDialog, QTextEdit
-)
+
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-from shopify_tool.profile_manager import ProfileManager, ValidationError, ProfileManagerError
-from shopify_tool.groups_manager import GroupsManager
-from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.theme_manager import get_theme_manager
-
+from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from shopify_tool.groups_manager import GroupsManager
+from shopify_tool.profile_manager import (
+    ProfileManager,
+    ProfileManagerError,
+    ValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +43,7 @@ class ClientCreationDialog(QDialog):
     def __init__(
         self,
         profile_manager: ProfileManager,
-        groups_manager: Optional[GroupsManager] = None,
+        groups_manager: GroupsManager | None = None,
         parent=None
     ):
         super().__init__(parent)
@@ -182,14 +196,14 @@ class ClientCreationDialog(QDialog):
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Failed to create client profile:\n{str(e)}"
+                f"Failed to create client profile:\n{e!s}"
             )
         except Exception as e:
             logger.error(f"Unexpected error creating client: {e}", exc_info=True)
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An unexpected error occurred:\n{str(e)}"
+                f"An unexpected error occurred:\n{e!s}"
             )
 
 
@@ -276,7 +290,7 @@ class ClientSelectorWidget(QWidget):
             QMessageBox.warning(
                 self,
                 "Error",
-                f"Failed to load clients from server:\n{str(e)}"
+                f"Failed to load clients from server:\n{e!s}"
             )
 
     def _on_client_changed(self, client_id: str):
@@ -332,7 +346,7 @@ class ClientSettingsDialog(QDialog):
         self,
         client_id: str,
         profile_manager: ProfileManager,
-        groups_manager: Optional[GroupsManager] = None,
+        groups_manager: GroupsManager | None = None,
         parent=None
     ):
         """Initialize ClientSettingsDialog.
@@ -623,5 +637,5 @@ class ClientSettingsDialog(QDialog):
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An error occurred while saving:\n{str(e)}"
+                f"An error occurred while saving:\n{e!s}"
             )

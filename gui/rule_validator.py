@@ -12,12 +12,11 @@ validation and execution.
 """
 
 import logging
-from typing import Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
 
-def validate_regex(pattern: str) -> Tuple[bool, Optional[str]]:
+def validate_regex(pattern: str) -> tuple[bool, str | None]:
     """
     Validate regex pattern using rule engine's safe compiler.
 
@@ -47,7 +46,7 @@ def validate_regex(pattern: str) -> Tuple[bool, Optional[str]]:
     return (True, None)
 
 
-def validate_date(date_str: str) -> Tuple[bool, Optional[str]]:
+def validate_date(date_str: str) -> tuple[bool, str | None]:
     """
     Validate date string using rule engine's safe parser.
 
@@ -83,7 +82,7 @@ def validate_date(date_str: str) -> Tuple[bool, Optional[str]]:
     return (True, None)
 
 
-def validate_range(range_str: str) -> Tuple[bool, Optional[str], Optional[str]]:
+def validate_range(range_str: str) -> tuple[bool, str | None, str | None]:
     """
     Validate range string using rule engine's parser.
 
@@ -127,7 +126,7 @@ def validate_range(range_str: str) -> Tuple[bool, Optional[str], Optional[str]]:
         return (False, "Invalid format. Use: start-end (e.g., 10-100)", None)
 
 
-def validate_list(list_str: str) -> Tuple[bool, int, Optional[str]]:
+def validate_list(list_str: str) -> tuple[bool, int, str | None]:
     """
     Validate and count list items.
 
@@ -165,7 +164,7 @@ def validate_list(list_str: str) -> Tuple[bool, int, Optional[str]]:
     return (True, len(items), None)
 
 
-def validate_numeric(value_str: str) -> Tuple[bool, Optional[str]]:
+def validate_numeric(value_str: str) -> tuple[bool, str | None]:
     """
     Validate that a string can be converted to a number.
 
