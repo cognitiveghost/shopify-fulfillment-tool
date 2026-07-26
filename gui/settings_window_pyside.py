@@ -7,7 +7,9 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QVBoxLayout,
-    QTabWidget,
+    QListWidget,
+    QListWidgetItem,
+    QStackedWidget,
     QWidget,
     QFormLayout,
     QLabel,
@@ -121,6 +123,15 @@ class SettingsWindow(QDialog):
         "ADD_PRODUCT",
     ]
 
+    # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
+    # Group/order chosen to mirror VS Code's own Settings UI grouping.
+    SETTINGS_NAV_GROUPS = [
+        ("Data", ["General", "Mappings", "Column Config"]),
+        ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
+        ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
+        ("Organization", ["Tag Categories"]),
+    ]
+
     def __init__(self, client_id, client_config, profile_manager, analysis_df=None, parent=None):
         """Initializes the SettingsWindow.
 
@@ -183,10 +194,20 @@ class SettingsWindow(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
         main_layout = QVBoxLayout(self)
-        self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
+        content_layout = QHBoxLayout()
+        main_layout.addLayout(content_layout)
 
-        # Create all tabs
+        self._settings_nav = QListWidget()
+        self._settings_nav.setFixedWidth(170)
+        self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        content_layout.addWidget(self._settings_nav)
+
+        self.tab_widget = QStackedWidget()
+        content_layout.addWidget(self.tab_widget, 1)
+
+        self._page_index_by_name = {}
+
+        # Create all tabs (unchanged call order/method names)
         self.create_general_tab()
         self.create_rules_tab()
         self.create_packing_lists_tab()
@@ -198,6 +219,8 @@ class SettingsWindow(QDialog):
         self.create_column_config_tab()  # Column Configuration tab
         self.create_sku_labels_tab()     # SKU Label Printing tab
 
+        self._build_settings_nav()
+
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
@@ -206,6 +229,47 @@ class SettingsWindow(QDialog):
         _screen = parent.screen() if parent else QApplication.primaryScreen()
         _geo = _screen.availableGeometry()
         self.resize(min(1250, _geo.width() - 40), min(820, _geo.height() - 100))
+
+    def _add_settings_page(self, page: QWidget, name: str) -> None:
+        """Register a settings page under `name`.
+
+        Replaces the old `self.tab_widget.addTab(page, name)` calls — the
+        10-tab horizontal strip is replaced by a grouped left-nav
+        (_build_settings_nav) that looks up pages by this same name.
+        """
+        self.tab_widget.addWidget(page)
+        self._page_index_by_name[name] = self.tab_widget.count() - 1
+
+    def _build_settings_nav(self) -> None:
+        """Populate the left-nav list from SETTINGS_NAV_GROUPS with
+        non-selectable section headers, and wire selection to the stack."""
+        for group_name, page_names in self.SETTINGS_NAV_GROUPS:
+            header = QListWidgetItem(group_name.upper())
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            font = header.font()
+            font.setPointSize(max(font.pointSize() - 1, 7))
+            font.setBold(True)
+            header.setFont(font)
+            self._settings_nav.addItem(header)
+            for page_name in page_names:
+                if page_name not in self._page_index_by_name:
+                    continue
+                item = QListWidgetItem(page_name)
+                item.setData(Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name])
+                self._settings_nav.addItem(item)
+        self._settings_nav.currentItemChanged.connect(self._on_settings_nav_changed)
+        # Select the first real (non-header) entry
+        for row in range(self._settings_nav.count()):
+            if self._settings_nav.item(row).flags() & Qt.ItemFlag.ItemIsSelectable:
+                self._settings_nav.setCurrentRow(row)
+                break
+
+    def _on_settings_nav_changed(self, current, _previous):
+        if current is None:
+            return
+        index = current.data(Qt.ItemDataRole.UserRole)
+        if index is not None:
+            self.tab_widget.setCurrentIndex(index)
 
     # Generic helper to delete a widget and its reference from a list
     def _delete_widget_from_list(self, widget_refs, ref_list):
@@ -450,7 +514,7 @@ class SettingsWindow(QDialog):
 
         main_layout.addStretch()
 
-        self.tab_widget.addTab(tab, "General")
+        self._add_settings_page(tab, "General")
 
     def create_rules_tab(self):
         """Creates the 'Rules' tab for dynamically managing automation rules."""
@@ -477,7 +541,7 @@ class SettingsWindow(QDialog):
         self.rules_layout = QVBoxLayout(scroll_content)
         self.rules_layout.setAlignment(Qt.AlignTop)
         scroll_area.setWidget(scroll_content)
-        self.tab_widget.addTab(tab, "Rules")
+        self._add_settings_page(tab, "Rules")
         for rule_config in self.config_data.get("rules", []):
             self.add_rule_widget(rule_config)
         self._update_priority_labels()
@@ -1460,7 +1524,7 @@ class SettingsWindow(QDialog):
         self.packing_lists_layout = QVBoxLayout(scroll_content)
         self.packing_lists_layout.setAlignment(Qt.AlignTop)
         scroll_area.setWidget(scroll_content)
-        self.tab_widget.addTab(tab, "Packing Lists")
+        self._add_settings_page(tab, "Packing Lists")
         for pl_config in self.config_data.get("packing_list_configs", []):
             self.add_packing_list_widget(pl_config)
 
@@ -1620,7 +1684,7 @@ class SettingsWindow(QDialog):
         self.stock_exports_layout = QVBoxLayout(scroll_content)
         self.stock_exports_layout.setAlignment(Qt.AlignTop)
         scroll_area.setWidget(scroll_content)
-        self.tab_widget.addTab(tab, "Stock Exports")
+        self._add_settings_page(tab, "Stock Exports")
         for se_config in self.config_data.get("stock_export_configs", []):
             self.add_stock_export_widget(se_config)
 
@@ -1759,7 +1823,7 @@ class SettingsWindow(QDialog):
         scroll.setWidget(scroll_widget)
         main_layout.addWidget(scroll)
 
-        self.tab_widget.addTab(tab, "Mappings")
+        self._add_settings_page(tab, "Mappings")
 
         # Populate existing courier mappings
         courier_mappings = self.config_data.get("courier_mappings", {})
@@ -1896,7 +1960,7 @@ class SettingsWindow(QDialog):
         tips_label.setWordWrap(True)
         main_layout.addWidget(tips_label)
 
-        self.tab_widget.addTab(tab, "Sets")
+        self._add_settings_page(tab, "Sets")
 
         # Populate table with existing sets
         self._populate_sets_table()
@@ -2271,7 +2335,7 @@ class SettingsWindow(QDialog):
         weight_sub_tabs.addTab(boxes_tab, "Boxes (Packaging Reference)")
 
         main_layout.addWidget(weight_sub_tabs, 1)
-        self.tab_widget.addTab(tab, "Weight")
+        self._add_settings_page(tab, "Weight")
 
         # Populate with existing data
         self._weight_populate_products(weight_cfg.get("products", {}))
@@ -3223,7 +3287,7 @@ class SettingsWindow(QDialog):
         self.tag_categories_panel = TagCategoriesPanel(tag_categories, parent=tab)
         layout.addWidget(self.tag_categories_panel)
 
-        self.tab_widget.addTab(tab, "Tag Categories")
+        self._add_settings_page(tab, "Tag Categories")
 
     # ========================================
     # COLUMN CONFIGURATION TAB
@@ -3237,7 +3301,7 @@ class SettingsWindow(QDialog):
             tab = QWidget()
             layout = QVBoxLayout(tab)
             layout.addWidget(QLabel("Column configuration is not available in this context."))
-            self.tab_widget.addTab(tab, "Column Config")
+            self._add_settings_page(tab, "Column Config")
             return
 
         tab = QWidget()
@@ -3264,7 +3328,7 @@ class SettingsWindow(QDialog):
         )
         layout.addWidget(self.column_config_panel)
 
-        self.tab_widget.addTab(tab, "Column Config")
+        self._add_settings_page(tab, "Column Config")
 
     # ========================================
     # SKU LABELS TAB
@@ -3335,7 +3399,7 @@ class SettingsWindow(QDialog):
 
         main_layout.addWidget(mapping_group, 1)
 
-        self.tab_widget.addTab(tab, "SKU Labels")
+        self._add_settings_page(tab, "SKU Labels")
 
         # Populate from config
         self._sku_populate_table()
