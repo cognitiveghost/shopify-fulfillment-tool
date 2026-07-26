@@ -17,14 +17,31 @@ python gui_main.py
 python run_dev.py
 ```
 
-Tests are being rewritten — no `tests/` directory exists yet. CI runs lint + a headless smoke test instead (see `.github/workflows/build_release.yml`).
+```bash
+# Run test suite
+QT_QPA_PLATFORM=offscreen python -m pytest
+```
 
+CI runs lint + this suite + a headless smoke test (see `.github/workflows/build_release.yml`).
+
+
+---
+
+## Shared Module (`shared/`)
+
+`shared/` (theme, logger, stats, file locking, atomic writes, session IDs) is **not owned by this repo**.
+It's one-way synced from `../packing-tool/shared/`, the canonical source (see `packing-tool/docs/superpowers/specs/2026-07-25-shared-unification-design.md`).
+
+- **Never hand-edit files under `shared/`** — the next sync silently overwrites them.
+- To change shared behavior: edit it in `packing-tool`, then run `python scripts/sync_shared.py` from this repo's root.
+- `packing-tool` must exist as a sibling directory (`../packing-tool`) for the sync script to find it.
 
 ---
 
 ## Theme System
 
-- `gui/theme_manager.py` — dark/light theme via `get_theme_manager()`
+- `gui/theme_manager.py` — thin delegate; `get_theme_manager()` still the public API
+- Actual color/spacing tokens and stylesheet/palette builders live in `shared/theme.py` — see Shared Module above before editing colors
 - Always use theme variables in stylesheets — never hardcode colors
 - Pattern for styled widgets:
 
@@ -122,5 +139,14 @@ Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- **Always run `graphify update .` right after modifying code, not just "eventually"** — a stale graph returns wrong answers about `shared/` ownership and theme delegation silently, with no error. This matters even more here than in a single-repo project because `shared/` changes land via `scripts/sync_shared.py` from `packing-tool`, which graphify has no way to see unless you re-run it.
+
+---
+
+## Tooling
+
+- **Ponytail is active by default in this repo** (see rules above) — don't ask whether to apply it, just climb the ladder before writing code.
+- **Use `superpowers` skills** (brainstorming, systematic-debugging, writing-plans, test-driven-development, etc.) for their matching task shape — e.g. systematic-debugging before proposing a bug fix, brainstorming before new features.
+- **Use the `context7` MCP server** for PySide6/pytest/pandas API questions instead of answering from memory — library APIs drift between versions.
+- **Use the `github` MCP server** for PR/issue/branch operations on this repo instead of shelling out to `gh` when a tool covers it.
 
