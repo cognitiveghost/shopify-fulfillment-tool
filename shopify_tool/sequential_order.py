@@ -156,7 +156,7 @@ def load_sequential_order_map(session_path: Path) -> Dict[str, int]:
         return order_map
 
     except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Failed to load sequential order map: {e}")
+        logger.error(f"Failed to load sequential order map: {e}", exc_info=True)
         return {}
 
 

@@ -33,7 +33,7 @@ def get_persistent_data_path(filename):
         os.makedirs(app_dir, exist_ok=True)
     except OSError as e:
         # Fallback to current directory if AppData is not writable
-        logger.error(f"Could not create AppData directory: {e}. Falling back to local directory.")
+        logger.error(f"Could not create AppData directory: {e}. Falling back to local directory.", exc_info=True)
         app_dir = "."
 
     return os.path.join(app_dir, filename)

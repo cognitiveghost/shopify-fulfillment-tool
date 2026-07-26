@@ -352,7 +352,7 @@ def merge_csv_files(
             logger.info(f"✓ Loaded {len(df)} rows from {os.path.basename(filepath)}")
 
         except Exception as e:
-            logger.error(f"✗ Failed to load {os.path.basename(filepath)}: {e}")
+            logger.error(f"✗ Failed to load {os.path.basename(filepath)}: {e}", exc_info=True)
             raise Exception(f"Failed to load {os.path.basename(filepath)}: {e}")
 
     # Concatenate all DataFrames
@@ -387,7 +387,7 @@ def merge_csv_files(
                         keep='first'
                     )
                 except Exception as e:
-                    logger.error(f"Error removing duplicates with keys {duplicate_keys}: {e}")
+                    logger.error(f"Error removing duplicates with keys {duplicate_keys}: {e}", exc_info=True)
                     raise
             else:
                 logger.warning("No valid duplicate keys found, skipping duplicate removal")

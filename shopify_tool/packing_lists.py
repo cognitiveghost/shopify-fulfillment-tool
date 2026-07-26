@@ -305,4 +305,4 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
         logger.info(f"Report '{report_name}' created successfully.")
 
     except Exception as e:
-        logger.error(f"ERROR while creating packing list: {e}")
+        logger.error(f"ERROR while creating packing list: {e}", exc_info=True)

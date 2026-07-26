@@ -64,13 +64,13 @@ class FileHandler:
                 f"Orders file: detected delimiter '{detected_delimiter}' using {method}"
             )
         except FileNotFoundError as e:
-            self.log.error(f"Orders file not found for delimiter detection: {e}")
+            self.log.error(f"Orders file not found for delimiter detection: {e}", exc_info=True)
             detected_delimiter = ","  # fallback to comma
         except PermissionError as e:
-            self.log.error(f"Permission denied reading orders file: {e}")
+            self.log.error(f"Permission denied reading orders file: {e}", exc_info=True)
             detected_delimiter = ","  # fallback to comma
         except UnicodeDecodeError as e:
-            self.log.error(f"Encoding error in orders file: {e}")
+            self.log.error(f"Encoding error in orders file: {e}", exc_info=True)
             detected_delimiter = ","  # fallback to comma
         except Exception as e:
             self.log.error(
@@ -168,13 +168,13 @@ class FileHandler:
             detected_delimiter, method = detect_csv_delimiter(filepath)
             self.log.info(f"Detected delimiter '{detected_delimiter}' using {method}")
         except FileNotFoundError as e:
-            self.log.error(f"Stock file not found for delimiter detection: {e}")
+            self.log.error(f"Stock file not found for delimiter detection: {e}", exc_info=True)
             detected_delimiter = ";"  # fallback
         except PermissionError as e:
-            self.log.error(f"Permission denied reading stock file: {e}")
+            self.log.error(f"Permission denied reading stock file: {e}", exc_info=True)
             detected_delimiter = ";"  # fallback
         except UnicodeDecodeError as e:
-            self.log.error(f"Encoding error in stock file: {e}")
+            self.log.error(f"Encoding error in stock file: {e}", exc_info=True)
             detected_delimiter = ";"  # fallback
         except Exception as e:
             self.log.error(
@@ -245,7 +245,7 @@ class FileHandler:
             )
 
         except Exception as e:
-            self.log.error(f"Failed to load stock CSV: {e}")
+            self.log.error(f"Failed to load stock CSV: {e}", exc_info=True)
             QMessageBox.critical(
                 self.mw,
                 "File Load Error",
@@ -834,7 +834,7 @@ class FileHandler:
 
             except Exception as e:
                 invalid_files.append((filepath, [f"Error: {str(e)}"]))
-                self.log.error(f"  {os.path.basename(filepath)}: {e}")
+                self.log.error(f"  {os.path.basename(filepath)}: {e}", exc_info=True)
 
         return valid_files, invalid_files, total_rows
 

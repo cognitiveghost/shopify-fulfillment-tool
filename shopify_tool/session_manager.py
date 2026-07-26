@@ -144,7 +144,7 @@ class SessionManager:
             return str(session_path)
 
         except Exception as e:
-            logger.error(f"Failed to create session: {e}")
+            logger.error(f"Failed to create session: {e}", exc_info=True)
             # Cleanup on failure
             if session_path.exists():
                 import shutil
@@ -312,7 +312,7 @@ class SessionManager:
             return session_info
 
         except Exception as e:
-            logger.error(f"Failed to load session info: {e}")
+            logger.error(f"Failed to load session info: {e}", exc_info=True)
             return None
 
     def update_session_status(self, session_path: str, status: str) -> bool:
@@ -358,7 +358,7 @@ class SessionManager:
                 return True
 
             except Exception as e:
-                logger.error(f"Failed to update session status: {e}")
+                logger.error(f"Failed to update session status: {e}", exc_info=True)
                 raise SessionManagerError(f"Failed to update session status: {e}")
 
     def update_session_info(self, session_path: str, updates: Dict) -> bool:
@@ -399,7 +399,7 @@ class SessionManager:
                 return True
 
             except Exception as e:
-                logger.error(f"Failed to update session info: {e}")
+                logger.error(f"Failed to update session info: {e}", exc_info=True)
                 raise SessionManagerError(f"Failed to update session info: {e}")
 
     def append_to_session_list(self, session_path: str, field: str, value) -> bool:
@@ -442,7 +442,7 @@ class SessionManager:
                 return True
 
             except Exception as e:
-                logger.error(f"Failed to update session info: {e}")
+                logger.error(f"Failed to update session info: {e}", exc_info=True)
                 raise SessionManagerError(f"Failed to update session info: {e}")
 
     def get_session_subdirectory(self, session_path: str, subdir_name: str) -> Path:
@@ -598,7 +598,7 @@ class SessionManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to delete session: {e}")
+            logger.error(f"Failed to delete session: {e}", exc_info=True)
             raise SessionManagerError(f"Failed to delete session: {e}")
 
     def calculate_session_statistics(self, session_path: str) -> Dict:

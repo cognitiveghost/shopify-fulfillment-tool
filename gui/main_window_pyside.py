@@ -894,7 +894,7 @@ class MainWindow(QMainWindow):
                 self.client_sidebar.refresh()
                 self.log_activity("UI", "Client sidebar refreshed")
         except Exception as e:
-            logging.error(f"Sidebar refresh failed: {e}")
+            logging.error(f"Sidebar refresh failed: {e}", exc_info=True)
             QMessageBox.warning(self, "Refresh Error", str(e))
 
     def on_session_selected(self, session_path: str):

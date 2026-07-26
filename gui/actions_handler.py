@@ -120,7 +120,7 @@ class ActionsHandler(QObject):
                 self.mw, "Session Error", f"Could not create a new session.\n\n{e}"
             )
         except (OSError, PermissionError) as e:
-            self.log.error(f"File system error creating session: {e}")
+            self.log.error(f"File system error creating session: {e}", exc_info=True)
             QMessageBox.critical(
                 self.mw,
                 "File System Error",
@@ -382,7 +382,7 @@ class ActionsHandler(QObject):
                 self.log.info("Settings updated and files re-validated successfully")
 
             except Exception as e:
-                self.log.error(f"Error updating config after save: {e}")
+                self.log.error(f"Error updating config after save: {e}", exc_info=True)
                 QMessageBox.warning(
                     self.mw,
                     "Warning",
@@ -438,7 +438,7 @@ class ActionsHandler(QObject):
                     self.mw.tag_delegate.tag_categories = updated_categories
 
             except Exception as e:
-                self.log.error(f"Error saving tag categories: {e}")
+                self.log.error(f"Error saving tag categories: {e}", exc_info=True)
                 QMessageBox.critical(
                     self.mw, "Save Error", f"Failed to save tag categories:\n{str(e)}"
                 )
@@ -1416,7 +1416,7 @@ class ActionsHandler(QObject):
                 with open(additions_file, "r", encoding="utf-8") as f:
                     additions = json.load(f)
             except Exception as e:
-                self.log.error(f"Failed to load manual additions: {e}")
+                self.log.error(f"Failed to load manual additions: {e}", exc_info=True)
                 additions = []
         else:
             additions = []
@@ -1438,7 +1438,7 @@ class ActionsHandler(QObject):
                 json.dump(additions, f, indent=2, ensure_ascii=False)
             self.log.info(f"Saved manual addition to {additions_file}")
         except Exception as e:
-            self.log.error(f"Failed to save manual additions: {e}")
+            self.log.error(f"Failed to save manual additions: {e}", exc_info=True)
 
     def _update_undo_button(self):
         """Update undo button state and tooltip."""

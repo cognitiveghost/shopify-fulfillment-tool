@@ -482,7 +482,7 @@ class ColumnConfigPanel(QWidget):
                 f"View '{view_name}' has been saved successfully."
             )
         except Exception as e:
-            logger.error(f"Failed to save view '{view_name}': {e}")
+            logger.error(f"Failed to save view '{view_name}': {e}", exc_info=True)
             QMessageBox.critical(
                 self,
                 "Save Failed",
@@ -522,7 +522,7 @@ class ColumnConfigPanel(QWidget):
                 self.view_combo.setCurrentIndex(index)
 
         except Exception as e:
-            logger.error(f"Failed to delete view '{view_name}': {e}")
+            logger.error(f"Failed to delete view '{view_name}': {e}", exc_info=True)
             QMessageBox.critical(
                 self,
                 "Delete Failed",
@@ -629,7 +629,7 @@ class ColumnConfigPanel(QWidget):
                 )
 
         except Exception as e:
-            logger.error(f"Failed to apply configuration: {e}")
+            logger.error(f"Failed to apply configuration: {e}", exc_info=True)
             QMessageBox.critical(
                 self,
                 "Apply Failed",

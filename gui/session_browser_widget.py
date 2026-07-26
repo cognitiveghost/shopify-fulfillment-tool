@@ -504,7 +504,7 @@ Comments: {comments if comments else "None"}"""
             logger.info(f"Updated session status: {session_path} -> {status}")
 
         except Exception as e:
-            logger.error(f"Failed to update status: {e}")
+            logger.error(f"Failed to update status: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to update status:\n{str(e)}")
             # Revert to previous value
             self.refresh_sessions()
@@ -525,7 +525,7 @@ Comments: {comments if comments else "None"}"""
             logger.info(f"Updated session comments: {session_path}")
 
         except Exception as e:
-            logger.error(f"Failed to update comments: {e}")
+            logger.error(f"Failed to update comments: {e}", exc_info=True)
             # Don't show error dialog for comments (less critical)
             # Just log the error
 

@@ -531,7 +531,7 @@ class BarcodeGeneratorWidget(QWidget):
             QDesktopServices.openUrl(url)
 
         except Exception as e:
-            self.log.error(f"Auto PDF generation failed: {e}")
+            self.log.error(f"Auto PDF generation failed: {e}", exc_info=True)
 
     def _cleanup_png_files(self, results):
         """Remove PNG files after PDF generation (PDF-only mode)."""
@@ -549,7 +549,7 @@ class BarcodeGeneratorWidget(QWidget):
             self.log.info(f"Cleaned up {len(results)} PNG files (PDF-only mode)")
 
         except Exception as e:
-            self.log.error(f"PNG cleanup failed: {e}")
+            self.log.error(f"PNG cleanup failed: {e}", exc_info=True)
 
 
     def _open_barcodes_folder(self):

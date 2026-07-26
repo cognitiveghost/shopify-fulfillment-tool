@@ -125,7 +125,7 @@ class GroupsManager:
             return groups_data
 
         except json.JSONDecodeError as e:
-            logger.error(f"Corrupted JSON in groups.json: {e}")
+            logger.error(f"Corrupted JSON in groups.json: {e}", exc_info=True)
             backup_path = self.groups_path.with_suffix('.corrupted.bak')
             shutil.copy2(self.groups_path, backup_path)
             logger.info(f"Corrupted file backed up to {backup_path}")
@@ -185,7 +185,7 @@ class GroupsManager:
                     time.sleep(retry_delay)
                 else:
                     error_msg = f"Failed to save groups configuration after {max_retries} attempts: {e}"
-                    logger.error(error_msg)
+                    logger.error(error_msg, exc_info=True)
                     raise GroupsManagerError(error_msg)
 
         # If we get here, all retries failed
@@ -493,7 +493,7 @@ class GroupsManager:
                                 profile_manager.save_client_config(client_id, config)
                                 logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
                     except Exception as e:
-                        logger.error(f"Failed to unassign CLIENT_{client_id}: {e}")
+                        logger.error(f"Failed to unassign CLIENT_{client_id}: {e}", exc_info=True)
                         # Continue with other clients
 
             # Remove group from groups.json
