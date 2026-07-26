@@ -72,7 +72,13 @@ class MainWindow(QMainWindow):
         """Initializes the MainWindow, sets up UI, and connects signals."""
         super().__init__()
         self.setWindowTitle("Shopify Fulfillment Tool - New Architecture")
-        self.setGeometry(100, 100, 1100, 900)
+
+        from PySide6.QtCore import QSettings
+
+        from shared.theme import restore_window_geometry
+        self._geometry_settings = QSettings("ShopifyFulfillmentTool", "MainWindowGeometry")
+        if not restore_window_geometry(self, self._geometry_settings):
+            self.setGeometry(100, 100, 1100, 900)
 
         # Core application attributes
         self.session_path = None
@@ -1493,6 +1499,11 @@ class MainWindow(QMainWindow):
         Args:
             event: The close event.
         """
+        from shared.theme import save_window_geometry
+        try:
+            save_window_geometry(self, self._geometry_settings)
+        except Exception as e:
+            logger.warning(f"Failed to save window geometry: {e}")
         # Session data is now managed by SessionManager on the server
         # No need to save local session files
         event.accept()
