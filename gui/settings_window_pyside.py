@@ -1152,13 +1152,13 @@ class SettingsWindow(QDialog):
         # ThemeTokens fields for ~2 call sites; revisit if more validation
         # states are added.
         if status == "error":
-            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_red}; background-color: #ffebee;")
+            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_red}; background-color: #ffebee; color: #1A1A1A;")
             feedback_label.setStyleSheet(f"color: {theme.accent_red}; font-size: 9pt;")
             feedback_label.setText(f"{message}")
             feedback_label.show()
 
         elif status == "warning":
-            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_orange}; background-color: #fff3e0;")
+            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_orange}; background-color: #fff3e0; color: #1A1A1A;")
             feedback_label.setStyleSheet(f"color: {theme.accent_orange}; font-size: 9pt;")
             feedback_label.setText(f"{message}")
             feedback_label.show()
