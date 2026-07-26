@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.profile_manager import ProfileManager, NetworkError
+from shared.server_connection import prompt_for_recovery_path
 from shopify_tool.session_manager import SessionManager
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.undo_manager import UndoManager
@@ -120,12 +121,31 @@ class MainWindow(QMainWindow):
         """Initialize ProfileManager, SessionManager, and GroupsManager for the new architecture."""
         # ProfileManager now auto-detects environment:
         # 1. First checks FULFILLMENT_SERVER_PATH environment variable (dev mode)
-        # 2. Falls back to default production path
+        # 2. Then a path saved via the Server Connection UI
+        # 3. Falls back to default production path
         # This allows seamless switching between dev and production without code changes
 
-        # Initialize ProfileManager with auto-detection (pass None or no argument)
+        # Initialize ProfileManager with auto-detection, offering a
+        # path-recovery prompt on NetworkError instead of exiting immediately.
+        while True:
+            try:
+                self.profile_manager = ProfileManager()  # Auto-detects from environment
+                break
+            except NetworkError as e:
+                if prompt_for_recovery_path(self, str(e), "ShopifyTool"):
+                    continue
+                QApplication.quit()
+                return
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Initialization Error",
+                    f"Failed to initialize profile managers:\n{str(e)}",
+                )
+                QApplication.quit()
+                return
+
         try:
-            self.profile_manager = ProfileManager()  # Auto-detects from environment
             self.session_manager = SessionManager(self.profile_manager)
 
             # Initialize GroupsManager
@@ -141,17 +161,6 @@ class MainWindow(QMainWindow):
             logging.info(
                 "ProfileManager, SessionManager, GroupsManager, and TableConfigManager initialized successfully"
             )
-        except NetworkError as e:
-            QMessageBox.critical(
-                self,
-                "Network Error",
-                f"Cannot connect to file server:\n\n{str(e)}\n\n"
-                f"The application will use offline mode with limited functionality.",
-            )
-            # For now, exit the application if we can't connect
-            # In the future, we could implement an offline mode
-            QApplication.quit()
-            return
         except Exception as e:
             QMessageBox.critical(
                 self,

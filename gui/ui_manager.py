@@ -33,6 +33,8 @@ from .tag_management_panel import TagManagementPanel
 from .bulk_operations_toolbar import BulkOperationsToolbar
 from .selection_helper import SelectionHelper
 from .theme_manager import get_theme_manager
+from shared.server_connection import ConnectionSettingsDialog
+from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 
 class UIManager:
@@ -174,6 +176,12 @@ class UIManager:
 
         toggle_row.addStretch()
 
+        connection_btn = QPushButton("⚙")
+        connection_btn.setMaximumWidth(40)
+        connection_btn.setToolTip("Server Connection settings")
+        connection_btn.clicked.connect(self._open_connection_settings)
+        toggle_row.addWidget(connection_btn)
+
         layout.addLayout(toggle_row)
 
         # Row 2: Session info
@@ -201,6 +209,12 @@ class UIManager:
         layout.addWidget(line)
 
         return header
+
+    def _open_connection_settings(self):
+        """Open the Server Connection settings dialog."""
+        ConnectionSettingsDialog(
+            self.mw, "ShopifyTool", "FULFILLMENT_SERVER_PATH", PROD_SERVER_PATH
+        ).exec()
 
     def _setup_tab_shortcuts(self):
         """Setup keyboard shortcuts for tab switching."""

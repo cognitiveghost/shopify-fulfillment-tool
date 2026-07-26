@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from shared.server_connection import resolve_server_path, test_path_reachable
+
 logger = logging.getLogger("ShopifyToolLogger")
 
 
@@ -42,6 +44,9 @@ class ValidationError(ProfileManagerError):
     """Raised when validation fails."""
 
     pass
+
+
+PROD_SERVER_PATH = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
 
 
 class ProfileManager:
@@ -79,7 +84,8 @@ class ProfileManager:
             base_path: Base path to fulfillment directory.
                        If None, attempts to auto-detect from:
                        1. FULFILLMENT_SERVER_PATH environment variable (dev mode)
-                       2. Default production path (\\\\192.168.88.101\\...)
+                       2. Path saved via the Server Connection UI
+                       3. Default production path (\\\\192.168.88.101\\...)
 
         Raises:
             NetworkError: If file server is not accessible
@@ -123,22 +129,15 @@ class ProfileManager:
 
         Priority:
             1. FULFILLMENT_SERVER_PATH environment variable (for dev)
-            2. Default production path
+            2. Path saved via the Server Connection UI
+            3. Default production path
 
         Returns:
             Base path string
         """
-        # Check for development environment variable
-        env_path = os.environ.get("FULFILLMENT_SERVER_PATH")
-
-        if env_path:
-            logger.info(f"Using server path from environment variable: {env_path}")
-            return env_path
-
-        # Default to production path
-        prod_path = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
-        logger.info(f"Using default production server path: {prod_path}")
-        return prod_path
+        path = resolve_server_path("ShopifyTool", "FULFILLMENT_SERVER_PATH", PROD_SERVER_PATH)
+        logger.info(f"Using server path: {path}")
+        return path
 
     def _is_dev_environment(self) -> bool:
         """Check if running in development environment.
@@ -151,7 +150,8 @@ class ProfileManager:
     def _test_connection(self) -> bool:
         """Test if file server is accessible.
 
-        Creates a test file to verify write access.
+        Creates base directories, then verifies write access via the shared
+        touch-file check.
 
         Returns:
             bool: True if server is accessible, False otherwise
@@ -163,17 +163,6 @@ class ProfileManager:
             self.sessions_dir.mkdir(parents=True, exist_ok=True)
             self.stats_dir.mkdir(parents=True, exist_ok=True)
             self.logs_dir.mkdir(parents=True, exist_ok=True)
-
-            # Test write access
-            test_file = self.base_path / ".connection_test"
-            test_file.touch(exist_ok=True)
-
-            # Verify read access
-            _ = test_file.exists()
-
-            logger.info(f"Network connection OK: {self.base_path}")
-            return True
-
         except PermissionError as e:
             logger.error(f"Network connection FAILED - Permission denied: {e}")
             return False
@@ -185,6 +174,12 @@ class ProfileManager:
                 f"Network connection FAILED - Unexpected error: {e}", exc_info=True
             )
             return False
+
+        if test_path_reachable(str(self.base_path), self.connection_timeout):
+            logger.info(f"Network connection OK: {self.base_path}")
+            return True
+        logger.error(f"Network connection FAILED: {self.base_path}")
+        return False
 
     @staticmethod
     def validate_client_id(client_id: str) -> Tuple[bool, str]:
