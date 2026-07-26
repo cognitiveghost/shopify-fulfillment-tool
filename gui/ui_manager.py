@@ -1454,6 +1454,7 @@ class UIManager:
 
     def _create_summary_bar(self):
         """Create summary bar at bottom of Tab 2."""
+        theme = get_theme_manager().get_current_theme()
         widget = QWidget()
         widget.setMaximumHeight(30)
         layout = QHBoxLayout(widget)
@@ -1469,8 +1470,8 @@ class UIManager:
         self.mw.hidden_columns_indicator = QPushButton("")
         self.mw.hidden_columns_indicator.setFlat(True)
         self.mw.hidden_columns_indicator.setStyleSheet(
-            "QPushButton { color: #4A90D9; text-decoration: underline; border: none; padding: 0 5px; }"
-            "QPushButton:hover { color: #2A70B9; }"
+            f"QPushButton {{ color: {theme.accent_blue}; text-decoration: underline; border: none; padding: 0 5px; }}"
+            f"QPushButton:hover {{ color: {theme.accent_blue}; }}"
         )
         self.mw.hidden_columns_indicator.setToolTip(
             "Click to show/restore hidden columns"
@@ -1647,8 +1648,10 @@ class UIManager:
         card_layout.addWidget(repeated_lbl)
         return card
 
-    def _make_tag_card(self, tag: str, count: str, color: str = "#9E9E9E") -> QFrame:
+    def _make_tag_card(self, tag: str, count: str, color: str | None = None) -> QFrame:
         """Tag card: colored count badge on top, tag name below."""
+        if color is None:
+            color = get_theme_manager().get_current_theme().text_secondary
         card = QFrame()
         card.setFrameShape(QFrame.StyledPanel)
         card.setFrameShadow(QFrame.Raised)

@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from shopify_tool.groups_manager import GroupsManager, GroupsManagerError
+from gui.theme_manager import get_theme_manager
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ class GroupsManagementDialog(QDialog):
 
     def _load_groups(self):
         """Load groups into table."""
+        theme = get_theme_manager().get_current_theme()
         self.groups_table.setRowCount(0)
 
         try:
@@ -111,7 +113,7 @@ class GroupsManagementDialog(QDialog):
             for group in groups:
                 group_id = group.get("id")
                 name = group.get("name", "Unknown")
-                color = group.get("color", "#2196F3")
+                color = group.get("color", theme.accent_blue)
 
                 # Count clients in this group
                 clients_in_group = self.groups_manager.get_clients_in_group(
@@ -174,6 +176,7 @@ class GroupsManagementDialog(QDialog):
 
     def _create_group(self):
         """Create new group."""
+        theme = get_theme_manager().get_current_theme()
         # Get group name
         name, ok = QInputDialog.getText(
             self,
@@ -188,7 +191,7 @@ class GroupsManagementDialog(QDialog):
 
         # Get color
         color = QColorDialog.getColor(
-            QColor("#2196F3"),  # Default blue
+            QColor(theme.accent_blue),  # Default blue
             self,
             "Select Group Color"
         )
@@ -228,6 +231,7 @@ class GroupsManagementDialog(QDialog):
 
     def _edit_group(self):
         """Edit selected group."""
+        theme = get_theme_manager().get_current_theme()
         group_id = self._get_selected_group_id()
         if not group_id:
             return
@@ -239,7 +243,7 @@ class GroupsManagementDialog(QDialog):
             return
 
         current_name = group.get("name", "")
-        current_color = group.get("color", "#2196F3")
+        current_color = group.get("color", theme.accent_blue)
 
         # Get new name
         name, ok = QInputDialog.getText(

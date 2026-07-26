@@ -158,21 +158,22 @@ class BarcodeGeneratorWidget(QWidget):
         # Generate button
         self.generate_btn = QPushButton("Generate Barcode Labels")
         self.generate_btn.setMinimumHeight(50)
-        self.generate_btn.setStyleSheet("""
-            QPushButton {
+        theme = get_theme_manager().get_current_theme()
+        self.generate_btn.setStyleSheet(f"""
+            QPushButton {{
                 font-size: 16px;
                 font-weight: bold;
-                background-color: #4CAF50;
+                background-color: {theme.accent_green};
                 color: white;
                 border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:disabled {
+            }}
+            QPushButton:hover {{
+                background-color: {theme.accent_green};
+            }}
+            QPushButton:disabled {{
                 background-color: {theme.border};
                 color: {theme.text_secondary};
-            }
+            }}
         """)
         self.generate_btn.setEnabled(False)
         self.generate_btn.clicked.connect(self._on_generate_clicked)

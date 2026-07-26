@@ -141,7 +141,7 @@ class TagCategoriesPanel(QWidget):
         color_layout.addWidget(self.color_button)
         color_layout.addStretch()
 
-        self.current_color = "#9E9E9E"
+        self.current_color = self.theme.text_secondary
         form_layout.addRow("Color:", color_layout)
 
         self.order_spin = QSpinBox()
@@ -258,7 +258,7 @@ class TagCategoriesPanel(QWidget):
         for category_id, category_config in sorted_categories:
             item = QListWidgetItem(category_config.get("label", category_id))
             item.setData(Qt.UserRole, category_id)
-            color = category_config.get("color", "#9E9E9E")
+            color = category_config.get("color", self.theme.text_secondary)
             _cat = QColor(color)
             _bg = QColor(get_theme_manager().get_current_theme().background)
             item.setBackground(QColor(
@@ -295,7 +295,7 @@ class TagCategoriesPanel(QWidget):
         self.category_id_input.setReadOnly(True)
 
         self.label_input.setText(category.get("label", ""))
-        self.current_color = category.get("color", "#9E9E9E")
+        self.current_color = category.get("color", self.theme.text_secondary)
         self.color_display.setStyleSheet(f"border: 1px solid {self.theme.border}; background-color: {self.current_color};")
         self.order_spin.setValue(category.get("order", 1))
 
@@ -636,7 +636,7 @@ class TagCategoriesPanel(QWidget):
 
         new_category = {
             "label": category_id.replace("_", " ").title(),
-            "color": "#9E9E9E",
+            "color": self.theme.text_secondary,
             "order": len(categories) + 1,
             "tags": [],
             "sku_writeoff": {

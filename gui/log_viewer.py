@@ -5,6 +5,8 @@ import logging
 from collections import deque
 import time
 
+from gui.theme_manager import get_theme_manager
+
 
 class TreeViewLogHandler(logging.Handler):
     """A custom logging handler that sends records to a deque.
@@ -79,6 +81,7 @@ class LogViewer(ctk.CTkFrame):
 
     def _create_widgets(self):
         """Creates and lays out all the sub-widgets for the log viewer."""
+        theme = get_theme_manager().get_current_theme()
         # --- Controls Frame ---
         controls_frame = ctk.CTkFrame(self, fg_color="transparent")
         controls_frame.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
@@ -120,9 +123,9 @@ class LogViewer(ctk.CTkFrame):
         # --- Tags for color-coding ---
         self.tree.tag_configure("DEBUG", foreground="gray")
         self.tree.tag_configure("INFO", foreground="white")
-        self.tree.tag_configure("WARNING", foreground="#F97316")  # Orange
-        self.tree.tag_configure("ERROR", foreground="#EF4444")  # Red
-        self.tree.tag_configure("CRITICAL", background="#EF4444", foreground="white")
+        self.tree.tag_configure("WARNING", foreground=theme.accent_orange)
+        self.tree.tag_configure("ERROR", foreground=theme.accent_red)
+        self.tree.tag_configure("CRITICAL", background=theme.accent_red, foreground="white")
 
     def _process_log_queue(self):
         """Periodically checks the queue for new log messages.

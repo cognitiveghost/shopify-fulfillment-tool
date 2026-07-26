@@ -18,6 +18,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 import logging
 
+from gui.theme_manager import get_theme_manager
+
 logger = logging.getLogger(__name__)
 
 
@@ -128,20 +130,24 @@ class AddProductDialog(QDialog):
 
     def _create_warning_box(self):
         """Create warning box for low/zero stock."""
+        theme = get_theme_manager().get_current_theme()
         label = QLabel()
         label.setWordWrap(True)
-        label.setStyleSheet("""
-            QLabel {
+        # ponytail: literal validation-tint background, not worth a new
+        # ThemeTokens field for a handful of call sites.
+        label.setStyleSheet(f"""
+            QLabel {{
                 background-color: #FFEBEE;
-                border: 2px solid #F44336;
+                border: 2px solid {theme.accent_red};
                 border-radius: 5px;
                 padding: 10px;
-            }
+            }}
         """)
         return label
 
     def _create_info_box(self):
         """Create info box."""
+        theme = get_theme_manager().get_current_theme()
         text = (
             "ℹ️ INFO\n\n"
             "• Product will be added with Source: 'Manual'\n"
@@ -152,18 +158,21 @@ class AddProductDialog(QDialog):
 
         label = QLabel(text)
         label.setWordWrap(True)
-        label.setStyleSheet("""
-            QLabel {
+        # ponytail: literal info-tint background, not worth a new
+        # ThemeTokens field for a handful of call sites.
+        label.setStyleSheet(f"""
+            QLabel {{
                 background-color: #E3F2FD;
-                border: 2px solid #2196F3;
+                border: 2px solid {theme.accent_blue};
                 border-radius: 5px;
                 padding: 10px;
-            }
+            }}
         """)
         return label
 
     def _create_buttons(self):
         """Create Cancel/Add buttons."""
+        theme = get_theme_manager().get_current_theme()
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.addStretch()
@@ -174,15 +183,15 @@ class AddProductDialog(QDialog):
 
         self.add_btn = QPushButton("Add Product")
         self.add_btn.clicked.connect(self._on_add_clicked)
-        self.add_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
+        self.add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme.accent_blue};
                 color: white;
                 padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {theme.accent_blue};
+            }}
         """)
         layout.addWidget(self.add_btn)
 
@@ -238,6 +247,7 @@ class AddProductDialog(QDialog):
 
     def _on_sku_changed(self, text):
         """Handle SKU input change."""
+        theme = get_theme_manager().get_current_theme()
         if not text:
             self.product_info_label.setText("")
             self.warning_box.setVisible(False)
@@ -271,13 +281,15 @@ class AddProductDialog(QDialog):
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
-            self.warning_box.setStyleSheet("""
-                QLabel {
+            # ponytail: literal validation-tint background, not worth a new
+            # ThemeTokens field for a handful of call sites.
+            self.warning_box.setStyleSheet(f"""
+                QLabel {{
                     background-color: #FFEBEE;
-                    border: 2px solid #F44336;
+                    border: 2px solid {theme.accent_red};
                     border-radius: 5px;
                     padding: 10px;
-                }
+                }}
             """)
         elif current_stock < 5:
             warning_text = (
@@ -286,13 +298,15 @@ class AddProductDialog(QDialog):
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
-            self.warning_box.setStyleSheet("""
-                QLabel {
+            # ponytail: literal validation-tint background, not worth a new
+            # ThemeTokens field for a handful of call sites.
+            self.warning_box.setStyleSheet(f"""
+                QLabel {{
                     background-color: #FFF8E1;
-                    border: 2px solid #FFC107;
+                    border: 2px solid {theme.accent_orange};
                     border-radius: 5px;
                     padding: 10px;
-                }
+                }}
             """)
         else:
             self.warning_box.setVisible(False)

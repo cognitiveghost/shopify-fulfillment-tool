@@ -37,6 +37,7 @@ from gui.profile_manager_dialog import ProfileManagerDialog
 from gui.tag_management_panel import TagManagementPanel
 from gui.selection_helper import SelectionHelper
 from gui.pandas_model import FulfillmentFilterProxy
+from gui.theme_manager import get_theme_manager
 
 logger = logging.getLogger(__name__)
 
@@ -627,6 +628,7 @@ class MainWindow(QMainWindow):
         - Bulk operations toolbar is hidden
         - Selection is cleared
         """
+        theme = get_theme_manager().get_current_theme()
         is_bulk_mode = self.toggle_bulk_mode_btn.isChecked()
 
         # Show/hide bulk toolbar
@@ -644,7 +646,7 @@ class MainWindow(QMainWindow):
         if is_bulk_mode:
             self.toggle_bulk_mode_btn.setText("Exit Bulk Mode")
             self.toggle_bulk_mode_btn.setStyleSheet(
-                "background-color: #4CAF50; color: white;"
+                f"background-color: {theme.accent_green}; color: white;"
             )
             self._update_bulk_toolbar_state()
             logging.info("Bulk mode enabled")

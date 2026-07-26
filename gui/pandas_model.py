@@ -293,6 +293,10 @@ class PandasModel(QAbstractTableModel):
         """
         theme_manager = get_theme_manager()
 
+        # ponytail: literal per-status row-highlight tints (dark/light palettes
+        # for Fulfillable/NotFulfillable/SystemNoteHighlight), not worth 12 new
+        # ThemeTokens fields for this one call site; already theme-aware via the
+        # is_dark_theme() branch below.
         if theme_manager.is_dark_theme():
             # Dark theme: dark tinted backgrounds with white text
             self.colors = {
