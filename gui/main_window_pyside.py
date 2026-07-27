@@ -917,7 +917,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to change client: {e!s}")
 
     def _on_client_data_load_error(self, error):
-        exctype, value, tb = error
+        _exctype, value, tb = error
         logger.error(f"Error loading client data: {value}\n{tb}")
         QMessageBox.critical(self, "Error", f"Failed to change client: {value!s}")
 

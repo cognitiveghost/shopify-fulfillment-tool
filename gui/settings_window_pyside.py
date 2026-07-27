@@ -1,9 +1,10 @@
 import json
+import logging
 import sys
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import QDate, Qt, QTimer
+from PySide6.QtCore import QDate, Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -34,8 +35,11 @@ from PySide6.QtWidgets import (
 
 from gui.column_mapping_widget import ColumnMappingWidget
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from gui.worker import Worker
 from shopify_tool.core import get_unique_column_values
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsWindow(QDialog):
@@ -150,6 +154,7 @@ class SettingsWindow(QDialog):
         self.config_data = json.loads(json.dumps(client_config))
         self.profile_manager = profile_manager
         self.analysis_df = analysis_df if analysis_df is not None else pd.DataFrame()
+        self._save_worker = None  # keeps the in-flight save Worker alive
 
         # Ensure config structure exists
         if not isinstance(self.config_data.get("column_mappings"), dict):
@@ -222,6 +227,7 @@ class SettingsWindow(QDialog):
         self._build_settings_nav()
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.save_button = button_box.button(QDialogButtonBox.Save)
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
@@ -3223,38 +3229,23 @@ class SettingsWindow(QDialog):
                 }
 
             # ========================================
-            # Save to server via ProfileManager
+            # Save to server via ProfileManager (background -- avoids blocking
+            # the GUI thread on the lock-contention retry sleep)
             # ========================================
-            success = self.profile_manager.save_shopify_config(
-                self.client_id,
-                self.config_data
-            )
+            self.save_button.setEnabled(False)
+            self.save_button.setText("Saving...")
 
-            if success:
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    "Settings saved successfully!"
-                )
-                self.accept()  # Close dialog
-            else:
-                # Calculate config size for diagnostic info
-                import json
-                config_size = len(json.dumps(self.config_data, ensure_ascii=False))
-                num_sets = len(self.config_data.get("set_decoders", {}))
-
-                QMessageBox.critical(
-                    self,
-                    "Save Error",
-                    f"Failed to save settings to server.\n\n"
-                    f"Configuration size: {config_size:,} bytes\n"
-                    f"Number of sets: {num_sets}\n\n"
-                    f"Possible causes:\n"
-                    f"• File is locked by another user\n"
-                    f"• Network connection issue\n"
-                    f"• Insufficient permissions\n\n"
-                    f"Please wait a few seconds and try again."
-                )
+            worker = Worker(self.profile_manager.save_shopify_config, self.client_id, self.config_data)
+            worker.signals.result.connect(self._on_save_settings_result)
+            worker.signals.error.connect(self._on_save_settings_error)
+            # Keep a strong reference until the worker finishes -- a bare
+            # local var is garbage-collected the instant this method returns,
+            # which (in this PySide6 build) destroys the QRunnable's
+            # unparented signals object before its queued result reaches the
+            # main thread. See MainWindow._client_load_worker for the
+            # verified repro.
+            self._save_worker = worker
+            QThreadPool.globalInstance().start(worker)
 
         except ValueError as e:
             QMessageBox.critical(
@@ -3269,6 +3260,36 @@ class SettingsWindow(QDialog):
                 "Error",
                 f"Failed to save settings:\n\n{e!s}\n\n{traceback.format_exc()}"
             )
+
+    def _on_save_settings_result(self, success: bool):
+        self.save_button.setEnabled(True)
+        self.save_button.setText("Save")
+        if success:
+            QMessageBox.information(self, "Success", "Settings saved successfully!")
+            self.accept()
+        else:
+            import json
+            config_size = len(json.dumps(self.config_data, ensure_ascii=False))
+            num_sets = len(self.config_data.get("set_decoders", {}))
+            QMessageBox.critical(
+                self,
+                "Save Error",
+                f"Failed to save settings to server.\n\n"
+                f"Configuration size: {config_size:,} bytes\n"
+                f"Number of sets: {num_sets}\n\n"
+                f"Possible causes:\n"
+                f"• File is locked by another user\n"
+                f"• Network connection issue\n"
+                f"• Insufficient permissions\n\n"
+                f"Please wait a few seconds and try again."
+            )
+
+    def _on_save_settings_error(self, error):
+        _exctype, value, tb = error
+        logger.error(f"Failed to save settings: {value}\n{tb}")
+        self.save_button.setEnabled(True)
+        self.save_button.setText("Save")
+        QMessageBox.critical(self, "Error", f"Failed to save settings:\n\n{value!s}")
     # ========================================
     # TAG CATEGORIES TAB
     # ========================================

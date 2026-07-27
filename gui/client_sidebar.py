@@ -20,7 +20,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
-    QApplication,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -345,7 +344,7 @@ class ClientSidebar(QWidget):
         QThreadPool.globalInstance().start(worker)
 
     def _on_refresh_error(self, error):
-        exctype, value, tb = error
+        _exctype, value, tb = error
         logger.error(f"Sidebar refresh failed: {value}\n{tb}")
         self.refresh_btn.setEnabled(True)
         QMessageBox.warning(self, "Refresh Error", f"Failed to refresh sidebar:\n{value!s}")
