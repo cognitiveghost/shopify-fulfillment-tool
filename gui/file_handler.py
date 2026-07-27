@@ -1,11 +1,11 @@
-import os
 import logging
+import os
 import tempfile
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+
 import pandas as pd
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QListWidgetItem
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox
 
 from shopify_tool import core
 
@@ -63,18 +63,18 @@ class FileHandler:
             self.log.info(
                 f"Orders file: detected delimiter '{detected_delimiter}' using {method}"
             )
-        except FileNotFoundError as e:
-            self.log.error(f"Orders file not found for delimiter detection: {e}", exc_info=True)
+        except FileNotFoundError:
+            self.log.exception("Orders file not found for delimiter detection")
             detected_delimiter = ","  # fallback to comma
-        except PermissionError as e:
-            self.log.error(f"Permission denied reading orders file: {e}", exc_info=True)
+        except PermissionError:
+            self.log.exception("Permission denied reading orders file")
             detected_delimiter = ","  # fallback to comma
-        except UnicodeDecodeError as e:
-            self.log.error(f"Encoding error in orders file: {e}", exc_info=True)
+        except UnicodeDecodeError:
+            self.log.exception("Encoding error in orders file")
             detected_delimiter = ","  # fallback to comma
-        except Exception as e:
-            self.log.error(
-                f"Unexpected error detecting delimiter for orders: {e}", exc_info=True
+        except Exception:
+            self.log.exception(
+                "Unexpected error detecting delimiter for orders"
             )
             detected_delimiter = ","  # fallback to comma
 
@@ -167,18 +167,18 @@ class FileHandler:
         try:
             detected_delimiter, method = detect_csv_delimiter(filepath)
             self.log.info(f"Detected delimiter '{detected_delimiter}' using {method}")
-        except FileNotFoundError as e:
-            self.log.error(f"Stock file not found for delimiter detection: {e}", exc_info=True)
+        except FileNotFoundError:
+            self.log.exception("Stock file not found for delimiter detection")
             detected_delimiter = ";"  # fallback
-        except PermissionError as e:
-            self.log.error(f"Permission denied reading stock file: {e}", exc_info=True)
+        except PermissionError:
+            self.log.exception("Permission denied reading stock file")
             detected_delimiter = ";"  # fallback
-        except UnicodeDecodeError as e:
-            self.log.error(f"Encoding error in stock file: {e}", exc_info=True)
+        except UnicodeDecodeError:
+            self.log.exception("Encoding error in stock file")
             detected_delimiter = ";"  # fallback
-        except Exception as e:
-            self.log.error(
-                f"Unexpected error detecting delimiter for stock: {e}", exc_info=True
+        except Exception:
+            self.log.exception(
+                "Unexpected error detecting delimiter for stock"
             )
             detected_delimiter = ";"  # fallback
 
@@ -245,11 +245,11 @@ class FileHandler:
             )
 
         except Exception as e:
-            self.log.error(f"Failed to load stock CSV: {e}", exc_info=True)
+            self.log.exception("Failed to load stock CSV")
             QMessageBox.critical(
                 self.mw,
                 "File Load Error",
-                f"Failed to load stock file:\n{str(e)}\n\n"
+                f"Failed to load stock file:\n{e!s}\n\n"
                 f"Make sure the delimiter is set correctly in Settings.\n"
                 f"Current delimiter: '{delimiter}'",
             )
@@ -528,7 +528,7 @@ class FileHandler:
             )
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Validation Error", f"Error validating files:\n{str(e)}"
+                self.mw, "Validation Error", f"Error validating files:\n{e!s}"
             )
             return
 
@@ -553,7 +553,7 @@ class FileHandler:
             merged_path = self.merge_and_save_files(valid_files, "orders", folder_path)
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Merge Failed", f"Failed to merge files:\n{str(e)}"
+                self.mw, "Merge Failed", f"Failed to merge files:\n{e!s}"
             )
             return
 
@@ -652,7 +652,7 @@ class FileHandler:
             )
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Validation Error", f"Error validating files:\n{str(e)}"
+                self.mw, "Validation Error", f"Error validating files:\n{e!s}"
             )
             return
 
@@ -677,7 +677,7 @@ class FileHandler:
             merged_path = self.merge_and_save_files(valid_files, "stock", folder_path)
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Merge Failed", f"Failed to merge files:\n{str(e)}"
+                self.mw, "Merge Failed", f"Failed to merge files:\n{e!s}"
             )
             return
 
@@ -720,7 +720,7 @@ class FileHandler:
 
     def scan_folder_for_csv(
         self, folder_path: str, recursive: bool = False, pattern: str = "*.csv"
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Scan folder for CSV files.
 
@@ -752,8 +752,8 @@ class FileHandler:
         return result
 
     def validate_multiple_files(
-        self, file_paths: List[str], file_type: str
-    ) -> Tuple[List[str], List[Tuple[str, List[str]]], int]:
+        self, file_paths: list[str], file_type: str
+    ) -> tuple[list[str], list[tuple[str, list[str]]], int]:
         """
         Validate multiple CSV files.
 
@@ -795,7 +795,7 @@ class FileHandler:
         ]
 
         # Get delimiter from config
-        delimiter = config.get("settings", {}).get(delimiter_key, default_delimiter)
+        config.get("settings", {}).get(delimiter_key, default_delimiter)
 
         self.log.info(f"Validating {len(file_paths)} {file_type} files...")
         self.log.info(f"Required columns: {required_csv_cols}")
@@ -833,16 +833,16 @@ class FileHandler:
                     )
 
             except Exception as e:
-                invalid_files.append((filepath, [f"Error: {str(e)}"]))
-                self.log.error(f"  {os.path.basename(filepath)}: {e}", exc_info=True)
+                invalid_files.append((filepath, [f"Error: {e!s}"]))
+                self.log.exception(f"  {os.path.basename(filepath)}")
 
         return valid_files, invalid_files, total_rows
 
     def show_file_preview(
         self,
         file_type: str,
-        valid_files: List[str],
-        invalid_files: List[Tuple[str, List[str]]],
+        valid_files: list[str],
+        invalid_files: list[tuple[str, list[str]]],
         total_rows: int,
     ) -> bool:
         """
@@ -895,7 +895,7 @@ class FileHandler:
         return reply == QMessageBox.Yes
 
     def merge_and_save_files(
-        self, file_paths: List[str], file_type: str, original_folder: str
+        self, file_paths: list[str], file_type: str, original_folder: str
     ) -> str:
         """
         Merge CSV files and save to temp location.

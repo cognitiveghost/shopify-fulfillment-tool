@@ -4,7 +4,6 @@ Column fixtures use internal (post-analysis) column names since RuleEngine
 operates on the final_df produced by shopify_tool.analysis.run_analysis.
 """
 import pandas as pd
-import pytest
 
 from shopify_tool.rules import RuleEngine
 from shopify_tool.tag_manager import parse_tags

@@ -5,7 +5,6 @@ Output columns are positional (Артикул, blank spacer, Мярка, Бро�
 back by column index rather than by header name.
 """
 import pandas as pd
-import pytest
 
 from shopify_tool.stock_export import create_stock_export, merge_session_stock_exports
 

@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def get_current_timestamp() -> str:
     return datetime.now().astimezone().isoformat()
 
 
-def parse_timestamp(timestamp_str: str) -> Optional[datetime]:
+def parse_timestamp(timestamp_str: str) -> datetime | None:
     """Parse ISO timestamp to datetime object
 
     Handles both timezone-aware and timezone-naive timestamps for
@@ -99,7 +99,7 @@ def calculate_duration(start: str, end: str) -> int:
     return int((end_dt - start_dt).total_seconds())
 
 
-def load_session_summary(path: Path) -> Dict[str, Any]:
+def load_session_summary(path: Path) -> dict[str, Any]:
     """Load session summary in v1.3.0 format
 
     Args:
@@ -124,8 +124,8 @@ def load_session_summary(path: Path) -> Dict[str, Any]:
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-    except json.JSONDecodeError as e:
-        logger.error(f"Corrupted session summary at {path}: {e}", exc_info=True)
+    except json.JSONDecodeError:
+        logger.exception(f"Corrupted session summary at {path}")
         raise
 
     # Check version
@@ -140,7 +140,7 @@ def load_session_summary(path: Path) -> Dict[str, Any]:
     return validated
 
 
-def _validate_v1_3_0_format(data: Dict[str, Any]) -> Dict[str, Any]:
+def _validate_v1_3_0_format(data: dict[str, Any]) -> dict[str, Any]:
     """Validate and fill missing fields in v1.3.0 format
 
     Args:

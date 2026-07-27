@@ -1,20 +1,18 @@
-import os
 import logging
+import os
 from datetime import datetime
+
 import pandas as pd
-
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QMessageBox, QInputDialog
+from PySide6.QtWidgets import QInputDialog, QMessageBox
 
-from gui.worker import Worker
-from shopify_tool import core
-from shopify_tool.analysis import toggle_order_fulfillment
-from shopify_tool import packing_lists
-from shopify_tool import stock_export
-from shopify_tool.session_manager import SessionManagerError
 from gui.settings_window_pyside import SettingsWindow
-from gui.report_selection_dialog import ReportSelectionDialog
 from gui.tag_categories_dialog import TagCategoriesDialog
+from gui.worker import Worker
+from shopify_tool import core, packing_lists, stock_export
+from shopify_tool.analysis import toggle_order_fulfillment
+from shopify_tool.profile_manager import ProfileManagerError
+from shopify_tool.session_manager import SessionManagerError
 
 
 class ActionsHandler(QObject):
@@ -67,8 +65,8 @@ class ActionsHandler(QObject):
 
         try:
             # Show progress dialog during session creation (can be slow on UNC paths)
-            from PySide6.QtWidgets import QProgressDialog
             from PySide6.QtCore import Qt
+            from PySide6.QtWidgets import QProgressDialog
 
             progress = QProgressDialog("Creating new session...", None, 0, 0, self.mw)
             progress.setWindowModality(Qt.WindowModal)
@@ -113,21 +111,21 @@ class ActionsHandler(QObject):
             )
 
         except SessionManagerError as e:
-            self.log.error(
-                f"Session manager error creating session: {e}", exc_info=True
+            self.log.exception(
+                "Session manager error creating session"
             )
             QMessageBox.critical(
                 self.mw, "Session Error", f"Could not create a new session.\n\n{e}"
             )
         except (OSError, PermissionError) as e:
-            self.log.error(f"File system error creating session: {e}", exc_info=True)
+            self.log.exception("File system error creating session")
             QMessageBox.critical(
                 self.mw,
                 "File System Error",
                 f"Could not create session due to file system error.\n\n{e}",
             )
         except Exception as e:
-            self.log.error(f"Unexpected error creating new session: {e}", exc_info=True)
+            self.log.exception("Unexpected error creating new session")
             QMessageBox.critical(
                 self.mw,
                 "Unexpected Error",
@@ -222,8 +220,8 @@ class ActionsHandler(QObject):
             # NEW: RECORD STATISTICS TO SERVER
             # ========================================
             try:
-                from shared.stats_manager import StatsManager
                 from shared.session_id import derive_session_id
+                from shared.stats_manager import StatsManager
 
                 self.log.info("Recording analysis statistics to server...")
 
@@ -271,9 +269,9 @@ class ActionsHandler(QObject):
                     f"Statistics recorded: {orders_count} orders, {items_count} items, {fulfillable_orders} fulfillable"
                 )
 
-            except Exception as e:
+            except Exception:
                 # Don't fail the analysis if stats recording fails
-                self.log.error(f"Failed to record statistics: {e}", exc_info=True)
+                self.log.exception("Failed to record statistics")
                 # Continue with normal flow
             # ========================================
             # END STATISTICS RECORDING
@@ -290,8 +288,8 @@ class ActionsHandler(QObject):
             QMessageBox.information(
                 self.mw,
                 "Analysis Complete",
-                f"Analysis completed successfully!\n\n"
-                f"Results are now visible in the Analysis Results tab.",
+                "Analysis completed successfully!\n\n"
+                "Results are now visible in the Analysis Results tab.",
             )
         else:
             self.log.error(f"Analysis failed: {result_msg}")
@@ -310,10 +308,9 @@ class ActionsHandler(QObject):
             error (tuple): A tuple containing the exception type, value, and
                 traceback.
         """
-        exctype, value, tb = error
+        _exctype, value, tb = error
         self.log.error(
             f"An unexpected error occurred in a background task: {value}\n{tb}",
-            exc_info=True,
         )
         msg = f"An unexpected error occurred in a background task:\n{value}\n\nTraceback:\n{tb}"
         QMessageBox.critical(self.mw, "Task Exception", msg)
@@ -333,16 +330,15 @@ class ActionsHandler(QObject):
             )
 
             if not fresh_config:
-                raise Exception("Failed to load configuration")
+                raise ProfileManagerError("Failed to load configuration")
 
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Error", f"Failed to load settings:\n{str(e)}"
+                self.mw, "Error", f"Failed to load settings:\n{e!s}"
             )
             return
 
         # Open settings with fresh data
-        from gui.settings_window_pyside import SettingsWindow
 
         settings_win = SettingsWindow(
             client_id=self.mw.current_client_id,
@@ -382,11 +378,11 @@ class ActionsHandler(QObject):
                 self.log.info("Settings updated and files re-validated successfully")
 
             except Exception as e:
-                self.log.error(f"Error updating config after save: {e}", exc_info=True)
+                self.log.exception("Error updating config after save")
                 QMessageBox.warning(
                     self.mw,
                     "Warning",
-                    f"Settings were saved, but failed to reload configuration:\n{str(e)}\n\n"
+                    f"Settings were saved, but failed to reload configuration:\n{e!s}\n\n"
                     "Please restart the application.",
                 )
 
@@ -438,9 +434,9 @@ class ActionsHandler(QObject):
                     self.mw.tag_delegate.tag_categories = updated_categories
 
             except Exception as e:
-                self.log.error(f"Error saving tag categories: {e}", exc_info=True)
+                self.log.exception("Error saving tag categories")
                 QMessageBox.critical(
-                    self.mw, "Save Error", f"Failed to save tag categories:\n{str(e)}"
+                    self.mw, "Save Error", f"Failed to save tag categories:\n{e!s}"
                 )
 
         dialog.categories_updated.connect(on_categories_updated)
@@ -487,7 +483,7 @@ class ActionsHandler(QObject):
             )
 
             if not fresh_config:
-                raise Exception("Failed to load configuration")
+                raise ProfileManagerError("Failed to load configuration")
 
             # Update main window config
             self.mw.active_profile_config = fresh_config
@@ -496,7 +492,7 @@ class ActionsHandler(QObject):
             QMessageBox.critical(
                 self.mw,
                 "Configuration Error",
-                f"Failed to load client configuration:\n{str(e)}",
+                f"Failed to load client configuration:\n{e!s}",
             )
             return
 
@@ -600,6 +596,7 @@ class ActionsHandler(QObject):
             dict: JSON structure for Packing Tool
         """
         from datetime import datetime
+
         from shopify_tool.core import build_packing_order_data
 
         orders_data = []
@@ -614,7 +611,7 @@ class ActionsHandler(QObject):
 
         return {
             "session_id": session_id,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now().astimezone().isoformat(),
             "total_orders": len(orders_data),
             "total_items": int(df["Quantity"].sum())
             if "Quantity" in df.columns
@@ -630,8 +627,8 @@ class ActionsHandler(QObject):
             report_config (dict): Report configuration with name, filters, etc.
             session_path (Path): Current session directory
         """
-        from pathlib import Path
         import json
+        from pathlib import Path
 
         report_name = report_config.get("name", "Unknown")
         self.log.info(f"Generating {report_type}: {report_name}")
@@ -664,7 +661,7 @@ class ActionsHandler(QObject):
                     base_filename = f"{report_name}.xlsx"
                 else:
                     # Add timestamp for stock exports and writeoff reports
-                    datestamp = datetime.now().strftime("%Y-%m-%d")
+                    datestamp = datetime.now().astimezone().strftime("%Y-%m-%d")
                     base_filename = f"{report_name}_{datestamp}.xls"
 
             # Ensure correct extension
@@ -681,7 +678,7 @@ class ActionsHandler(QObject):
             # GENERATE REPORT USING PROPER MODULES
             # ========================================
             if report_type == "packing_lists":
-                self.log.info(f"Creating packing list using packing_lists module")
+                self.log.info("Creating packing list using packing_lists module")
 
                 # Get exclude_skus from config
                 exclude_skus = report_config.get("exclude_skus", [])
@@ -697,7 +694,7 @@ class ActionsHandler(QObject):
                 elif not isinstance(exclude_skus, list):
                     exclude_skus = []
                     self.log.warning(
-                        f"[EXCLUDE_SKUS] Unexpected type, reset to empty list"
+                        "[EXCLUDE_SKUS] Unexpected type, reset to empty list"
                     )
 
                 self.log.info(
@@ -764,15 +761,15 @@ class ActionsHandler(QObject):
                         )
                     else:
                         self.log.warning(
-                            f"Skipping JSON creation - no data after filtering and exclude_skus"
+                            "Skipping JSON creation - no data after filtering and exclude_skus"
                         )
 
-                except Exception as e:
-                    self.log.error(f"Failed to create JSON: {e}", exc_info=True)
+                except Exception:
+                    self.log.exception("Failed to create JSON")
                     # Don't fail the whole report if JSON fails
 
             elif report_type == "stock_exports":
-                self.log.info(f"Creating stock export using stock_export module")
+                self.log.info("Creating stock export using stock_export module")
 
                 # Get writeoff setting from report_config
                 apply_writeoff = report_config.get("apply_writeoff", False)
@@ -845,19 +842,19 @@ class ActionsHandler(QObject):
                     # Don't fail the report if statistics update fails
 
         except Exception as e:
-            self.log.error(
-                f"Failed to generate report '{report_name}': {e}", exc_info=True
+            self.log.exception(
+                f"Failed to generate report '{report_name}'"
             )
             QMessageBox.critical(
                 self.mw,
                 "Generation Failed",
-                f"Failed to generate report '{report_name}':\n\n{str(e)}",
+                f"Failed to generate report '{report_name}':\n\n{e!s}",
             )
 
     def generate_writeoff_report(self):
         """Generate writeoff report directly (single button, no dialog)."""
-        from pathlib import Path
         from datetime import datetime
+        from pathlib import Path
 
         self.log.info("Generating writeoff report")
 
@@ -885,7 +882,7 @@ class ActionsHandler(QObject):
             writeoff_dir.mkdir(parents=True, exist_ok=True)
 
             # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d")
+            timestamp = datetime.now().astimezone().strftime("%Y-%m-%d")
             output_file = writeoff_dir / f"writeoff_{timestamp}.xls"
 
             # Get tag categories
@@ -907,11 +904,11 @@ class ActionsHandler(QObject):
             self.mw.log_activity("Report", "Generated writeoff report")
 
         except Exception as e:
-            self.log.error(f"Failed to generate writeoff report: {e}", exc_info=True)
+            self.log.exception("Failed to generate writeoff report")
             QMessageBox.critical(
                 self.mw,
                 "Generation Failed",
-                f"Failed to generate writeoff report:\n\n{str(e)}",
+                f"Failed to generate writeoff report:\n\n{e!s}",
             )
 
     def toggle_fulfillment_status_for_order(self, order_number):
@@ -1120,8 +1117,9 @@ class ActionsHandler(QObject):
 
     def show_add_product_dialog(self):
         """Show dialog to add product to order."""
-        from gui.add_product_dialog import AddProductDialog
         from PySide6.QtWidgets import QDialog
+
+        from gui.add_product_dialog import AddProductDialog
 
         # Validate prerequisites
         if (
@@ -1175,7 +1173,7 @@ class ActionsHandler(QObject):
                 stock_df["SKU"] = stock_df["SKU"].apply(normalize_sku)
 
         except Exception as e:
-            self.log.error(f"Failed to load stock file: {e}", exc_info=True)
+            self.log.exception("Failed to load stock file")
             QMessageBox.critical(
                 self.mw,
                 "Error Loading Stock",
@@ -1305,7 +1303,7 @@ class ActionsHandler(QObject):
             [self.mw.analysis_results_df, pd.DataFrame([new_row])], ignore_index=True
         )
 
-        self.log.info(f"Row added to analysis_results_df")
+        self.log.info("Row added to analysis_results_df")
 
         # Step 6: Recalculate fulfillment for THIS ORDER ONLY
         self._recalculate_order_fulfillment(order_num)
@@ -1415,8 +1413,8 @@ class ActionsHandler(QObject):
             try:
                 with open(additions_file, "r", encoding="utf-8") as f:
                     additions = json.load(f)
-            except Exception as e:
-                self.log.error(f"Failed to load manual additions: {e}", exc_info=True)
+            except Exception:
+                self.log.exception("Failed to load manual additions")
                 additions = []
         else:
             additions = []
@@ -1428,7 +1426,7 @@ class ActionsHandler(QObject):
                 "sku": product_data["sku"],
                 "product_name": product_data["product_name"],
                 "quantity": product_data["quantity"],
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now().astimezone().isoformat(),
             }
         )
 
@@ -1437,8 +1435,8 @@ class ActionsHandler(QObject):
             with open(additions_file, "w", encoding="utf-8") as f:
                 json.dump(additions, f, indent=2, ensure_ascii=False)
             self.log.info(f"Saved manual addition to {additions_file}")
-        except Exception as e:
-            self.log.error(f"Failed to save manual additions: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to save manual additions")
 
     def _update_undo_button(self):
         """Update undo button state and tooltip."""
@@ -1679,7 +1677,7 @@ class ActionsHandler(QObject):
             self.mw,
             "Select Tag to Remove",
             "Choose tag to remove from selected orders:",
-            sorted(list(all_tags)),
+            sorted(all_tags),
             0,
             False,
         )
@@ -2005,9 +2003,11 @@ class ActionsHandler(QObject):
         Args:
             session_paths: List of session directory path strings.
         """
-        from PySide6.QtWidgets import QFileDialog, QMessageBox
-        from shopify_tool.stock_export import merge_session_stock_exports
         from pathlib import Path
+
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+        from shopify_tool.stock_export import merge_session_stock_exports
 
         if not self.mw.current_client_id:
             QMessageBox.warning(self.mw, "Error", "No client selected.")
@@ -2065,7 +2065,7 @@ class ActionsHandler(QObject):
             )
         except Exception as e:
             QMessageBox.critical(self.mw, "Save Error", str(e))
-            self.log.error(f"Failed to save combined stock export: {e}", exc_info=True)
+            self.log.exception("Failed to save combined stock export")
 
     def bulk_export_selection(self, format_type: str):
         """Export selected rows to file.
@@ -2073,8 +2073,9 @@ class ActionsHandler(QObject):
         Args:
             format_type: 'xlsx' or 'csv'
         """
-        from PySide6.QtWidgets import QFileDialog
         from pathlib import Path
+
+        from PySide6.QtWidgets import QFileDialog
 
         selected_df = self.mw.selection_helper.get_selected_orders_data()
 
@@ -2128,6 +2129,6 @@ class ActionsHandler(QObject):
 
         except Exception as e:
             QMessageBox.critical(
-                self.mw, "Export Failed", f"Failed to export selection:\n{str(e)}"
+                self.mw, "Export Failed", f"Failed to export selection:\n{e!s}"
             )
-            self.log.error(f"Bulk export failed: {e}", exc_info=True)
+            self.log.exception("Bulk export failed")

@@ -23,20 +23,20 @@ Fields:
 """
 
 import io
-import logging
-from functools import lru_cache
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Callable
-from datetime import datetime
 import json
+import logging
+from collections.abc import Callable
+from datetime import datetime
+from functools import cache
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
-import barcode
 from barcode.codex import Code128
 from barcode.writer import ImageWriter
 from PIL import Image, ImageDraw, ImageFont
-from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import mm
+from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,6 @@ logger = logging.getLogger(__name__)
 # This prevents "cannot open resource" errors when fonts are not available
 def _noop_paint_text(self, *args, **kwargs):
     """No-op replacement for _paint_text to avoid font loading."""
-    pass
 
 ImageWriter._paint_text = _noop_paint_text
 
@@ -71,17 +70,14 @@ FONT_SIZE_LARGE = 16   # For courier name (bold)
 # === EXCEPTIONS ===
 class BarcodeProcessorError(Exception):
     """Base exception for barcode processor."""
-    pass
 
 
 class InvalidOrderNumberError(BarcodeProcessorError):
     """Invalid order number for barcode encoding."""
-    pass
 
 
 class BarcodeGenerationError(BarcodeProcessorError):
     """Error during barcode generation."""
-    pass
 
 
 # === UTILITY FUNCTIONS ===
@@ -115,7 +111,7 @@ def sanitize_order_number(order_number: str) -> str:
     return clean
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     """
     Load font with fallback strategy, cached to avoid repeated disk reads.
@@ -166,7 +162,6 @@ def format_tags_for_barcode(internal_tag: str) -> str:
         return ""
 
     # Try to parse as JSON array (Internal_Tags format)
-    import json
     try:
         if internal_tag.startswith('[') and internal_tag.endswith(']'):
             tags_list = json.loads(internal_tag)
@@ -196,7 +191,7 @@ def generate_barcode_label(
     output_dir: Path,
     label_width_mm: float = LABEL_WIDTH_MM,
     label_height_mm: float = LABEL_HEIGHT_MM
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate single barcode label with complex layout.
 
@@ -242,7 +237,7 @@ def generate_barcode_label(
         # Prepare display values
         country_display = country if country else "N/A"
         tag_display = format_tags_for_barcode(tag) if tag else "N/A"
-        date_str = datetime.now().strftime("%d/%m/%y")
+        date_str = datetime.now().astimezone().strftime("%d/%m/%y")
 
         # Calculate dimensions
         dpi = DPI
@@ -368,9 +363,9 @@ def generate_barcode_label(
 
             # Draw tags with word wrapping
             current_line = ""
-            for tag in tags:
+            for single_tag in tags:
                 # Try to fit tag on current line
-                test_line = current_line + (", " if current_line else "") + tag
+                test_line = current_line + (", " if current_line else "") + single_tag
                 bbox = draw.textbbox((0, 0), test_line, font=font_tag_multiline)
                 line_width = bbox[2] - bbox[0]
 
@@ -381,7 +376,7 @@ def generate_barcode_label(
                     if current_line:
                         draw.text((tag_x, tag_y), current_line, font=font_tag_multiline, fill='black')
                         tag_y += line_height
-                    current_line = tag
+                    current_line = single_tag
 
                 # Check if we're out of vertical space
                 if tag_y + line_height > tag_start_y + available_height:
@@ -455,7 +450,7 @@ def generate_barcode_label(
         }
 
     except InvalidOrderNumberError as e:
-        logger.error(f"Invalid order number '{order_number}': {e}", exc_info=True)
+        logger.exception(f"Invalid order number '{order_number}'")
         return {
             "order_number": order_number,
             "sequential_num": 0,
@@ -470,7 +465,7 @@ def generate_barcode_label(
         }
 
     except Exception as e:
-        logger.error(f"Failed to generate barcode for '{order_number}': {e}", exc_info=True)
+        logger.exception(f"Failed to generate barcode for '{order_number}'")
         return {
             "order_number": order_number,
             "sequential_num": 0,
@@ -488,9 +483,9 @@ def generate_barcode_label(
 def generate_barcodes_batch(
     df: pd.DataFrame,
     output_dir: Path,
-    sequential_map: Optional[Dict[str, int]] = None,
-    progress_callback: Optional[Callable[[int, int, str], None]] = None
-) -> List[Dict[str, Any]]:
+    sequential_map: dict[str, int] | None = None,
+    progress_callback: Callable[[int, int, str], None] | None = None
+) -> list[dict[str, Any]]:
     """
     Generate barcodes for multiple orders with progress tracking.
 
@@ -589,7 +584,7 @@ def generate_barcodes_batch(
             results.append(result)
 
         except Exception as e:
-            logger.error(f"Failed to generate barcode for {order_number}: {e}", exc_info=True)
+            logger.exception(f"Failed to generate barcode for {order_number}")
 
             results.append({
                 "order_number": order_number,
@@ -612,7 +607,7 @@ def generate_barcodes_batch(
 
 
 def generate_barcodes_pdf(
-    barcode_files: List[Path],
+    barcode_files: list[Path],
     output_pdf: Path,
     label_width_mm: float = LABEL_WIDTH_MM,
     label_height_mm: float = LABEL_HEIGHT_MM

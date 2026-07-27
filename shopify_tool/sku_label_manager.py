@@ -205,9 +205,9 @@ class SKULabelManager:
                 logger.warning("pymupdf not installed — falling back to shell backend")
                 return self._print_label_shell(pdf_path, copies, printer_name, sku)
 
+        from PySide6.QtCore import QMarginsF, QSizeF, Qt
+        from PySide6.QtGui import QImage, QPageLayout, QPageSize, QPainter
         from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
-        from PySide6.QtGui import QPainter, QPageSize, QPageLayout, QImage
-        from PySide6.QtCore import QSizeF, QMarginsF, Qt
 
         target_info = None
         for pi in QPrinterInfo.availablePrinters():

@@ -1,43 +1,36 @@
-import sys
-import os
 import json
-import shutil
-import pickle
 import logging
+import os
+import sys
 from datetime import datetime
 
 import pandas as pd
+from PySide6.QtCore import QModelIndex, QPoint, Qt, QThreadPool, QTimer
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
-    QMessageBox,
     QMenu,
+    QMessageBox,
     QTableWidgetItem,
-    QLabel,
 )
-from PySide6.QtCore import QThreadPool, QPoint, QModelIndex, QTimer, Qt
-from PySide6.QtGui import QAction
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from shopify_tool.analysis import recalculate_statistics
-from shopify_tool.profile_manager import ProfileManager, NetworkError
-from shared.server_connection import prompt_for_recovery_path
-from shopify_tool.session_manager import SessionManager
-from shopify_tool.groups_manager import GroupsManager
-from shopify_tool.undo_manager import UndoManager
-from shopify_tool.tag_manager import _normalize_tag_categories
-from gui.log_handler import QtLogHandler
-from gui.ui_manager import UIManager
-from gui.file_handler import FileHandler
 from gui.actions_handler import ActionsHandler
-from gui.client_settings_dialog import ClientSelectorWidget
-from gui.session_browser_widget import SessionBrowserWidget
-from gui.profile_manager_dialog import ProfileManagerDialog
-from gui.tag_management_panel import TagManagementPanel
-from gui.selection_helper import SelectionHelper
+from gui.file_handler import FileHandler
+from gui.log_handler import QtLogHandler
 from gui.pandas_model import FulfillmentFilterProxy
+from gui.selection_helper import SelectionHelper
 from gui.theme_manager import get_theme_manager
+from gui.ui_manager import UIManager
+from shared.server_connection import prompt_for_recovery_path
+from shopify_tool.analysis import recalculate_statistics
+from shopify_tool.groups_manager import GroupsManager
+from shopify_tool.profile_manager import NetworkError, ProfileManager
+from shopify_tool.session_manager import SessionManager
+from shopify_tool.tag_manager import _normalize_tag_categories
+from shopify_tool.undo_manager import UndoManager
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +140,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(
                     self,
                     "Initialization Error",
-                    f"Failed to initialize profile managers:\n{str(e)}",
+                    f"Failed to initialize profile managers:\n{e!s}",
                 )
                 QApplication.quit()
                 return
@@ -165,14 +158,14 @@ class MainWindow(QMainWindow):
 
             self.table_config_manager = TableConfigManager(self, self.profile_manager)
 
-            logging.info(
+            logger.info(
                 "ProfileManager, SessionManager, GroupsManager, and TableConfigManager initialized successfully"
             )
         except Exception as e:
             QMessageBox.critical(
                 self,
                 "Initialization Error",
-                f"Failed to initialize profile managers:\n{str(e)}",
+                f"Failed to initialize profile managers:\n{e!s}",
             )
             QApplication.quit()
             return
@@ -193,7 +186,7 @@ class MainWindow(QMainWindow):
             if config:
                 self.active_profile_config = config
                 self.current_client_id = client_id
-                logging.info(f"Loaded configuration for CLIENT_{client_id}")
+                logger.info(f"Loaded configuration for CLIENT_{client_id}")
 
                 # Sync analysis mode combo (block signals to avoid spurious saves)
                 if hasattr(self, "analysis_mode_combo"):
@@ -252,9 +245,9 @@ class MainWindow(QMainWindow):
                     f"Could not load configuration for CLIENT_{client_id}",
                 )
         except Exception as e:
-            logging.error(f"Failed to load client config: {e}", exc_info=True)
+            logger.exception("Failed to load client config")
             QMessageBox.critical(
-                self, "Error", f"Failed to load client configuration:\n{str(e)}"
+                self, "Error", f"Failed to load client configuration:\n{e!s}"
             )
 
     def setup_logging(self):
@@ -352,7 +345,7 @@ class MainWindow(QMainWindow):
             )
 
         # Add Ctrl+R shortcut for Run Analysis
-        from PySide6.QtGui import QShortcut, QKeySequence
+        from PySide6.QtGui import QKeySequence, QShortcut
 
         QShortcut(
             QKeySequence("Ctrl+R"),
@@ -591,8 +584,8 @@ class MainWindow(QMainWindow):
                     self.tableView.selectionModel().selectionChanged.disconnect(
                         self.on_selection_changed_for_tags
                     )
-                except:
-                    pass  # Not connected yet
+                except Exception as disconnect_exc:
+                    logger.debug(f"selectionChanged not connected yet: {disconnect_exc}")
                 self.tableView.selectionModel().selectionChanged.connect(
                     self.on_selection_changed_for_tags
                 )
@@ -658,11 +651,11 @@ class MainWindow(QMainWindow):
                 f"background-color: {theme.accent_green}; color: white;"
             )
             self._update_bulk_toolbar_state()
-            logging.info("Bulk mode enabled")
+            logger.info("Bulk mode enabled")
         else:
             self.toggle_bulk_mode_btn.setText("Bulk Operations")
             self.toggle_bulk_mode_btn.setStyleSheet("")
-            logging.info("Bulk mode disabled")
+            logger.info("Bulk mode disabled")
 
     def _update_bulk_toolbar_state(self):
         """Update bulk toolbar selection counter and button states."""
@@ -798,14 +791,14 @@ class MainWindow(QMainWindow):
             self.profile_manager.save_shopify_config(
                 self.current_client_id, self.active_profile_config
             )
-            logging.info(
+            logger.info(
                 f"Inventory memory {'enabled' if enabled else 'disabled'} for CLIENT_{self.current_client_id}"
             )
             # Re-evaluate run button (memory mode may unlock it)
             if hasattr(self, "update_ui_state"):
                 self.update_ui_state()
         except Exception as e:
-            logging.warning(f"Failed to save inventory memory toggle: {e}")
+            logger.warning(f"Failed to save inventory memory toggle: {e}")
 
     # --- Client and Session Management (New Architecture) ---
     def on_client_changed(self, client_id: str):
@@ -814,7 +807,7 @@ class MainWindow(QMainWindow):
         Args:
             client_id: Newly selected client ID
         """
-        logging.info(f"Client changed to: {client_id}")
+        logger.info(f"Client changed to: {client_id}")
 
         # Show loading status in status bar
         if hasattr(self, "statusBar"):
@@ -850,7 +843,7 @@ class MainWindow(QMainWindow):
             # Load table configuration for this client
             if hasattr(self, "table_config_manager"):
                 self.table_config_manager.load_config(client_id)
-                logging.info(f"Table configuration loaded for CLIENT_{client_id}")
+                logger.info(f"Table configuration loaded for CLIENT_{client_id}")
 
             # Clear currently loaded files (they're for different client)
             self.orders_file_path = None
@@ -877,15 +870,15 @@ class MainWindow(QMainWindow):
             # Update UI state
             self.update_ui_state()
 
-            logging.info(f"Client {client_id} loaded successfully")
+            logger.info(f"Client {client_id} loaded successfully")
 
             # Update status bar with success message
             if hasattr(self, "statusBar"):
                 self.statusBar().showMessage(f"CLIENT_{client_id} loaded", 2000)
 
         except Exception as e:
-            logging.error(f"Error changing client: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"Failed to change client: {str(e)}")
+            logger.exception("Error changing client")
+            QMessageBox.critical(self, "Error", f"Failed to change client: {e!s}")
 
     def on_sidebar_refresh(self):
         """Handle manual sidebar refresh request."""
@@ -894,7 +887,7 @@ class MainWindow(QMainWindow):
                 self.client_sidebar.refresh()
                 self.log_activity("UI", "Client sidebar refreshed")
         except Exception as e:
-            logging.error(f"Sidebar refresh failed: {e}", exc_info=True)
+            logger.exception("Sidebar refresh failed")
             QMessageBox.warning(self, "Refresh Error", str(e))
 
     def on_session_selected(self, session_path: str):
@@ -903,7 +896,7 @@ class MainWindow(QMainWindow):
         Args:
             session_path: Path to the selected session
         """
-        logging.info(f"Session selected: {session_path}")
+        logger.info(f"Session selected: {session_path}")
 
         reply = QMessageBox.question(
             self,
@@ -929,11 +922,11 @@ class MainWindow(QMainWindow):
 
         # Check prerequisites
         if not self.session_path:
-            logging.debug("No active session - skipping save_session_state")
+            logger.debug("No active session - skipping save_session_state")
             return
 
         if self.analysis_results_df is None or self.analysis_results_df.empty:
-            logging.debug("No analysis data to save - skipping save_session_state")
+            logger.debug("No analysis data to save - skipping save_session_state")
             return
 
         try:
@@ -949,24 +942,24 @@ class MainWindow(QMainWindow):
             stats_path = analysis_dir / "analysis_stats.json"
 
             # Save DataFrame to pickle (fast, primary format)
-            logging.info(f"Saving session state to {pkl_path}")
+            logger.info(f"Saving session state to {pkl_path}")
             self.analysis_results_df.to_pickle(pkl_path)
 
             # Save DataFrame to Excel (backup, human-readable)
-            logging.info(f"Saving session state backup to {xlsx_path}")
+            logger.info(f"Saving session state backup to {xlsx_path}")
             self.analysis_results_df.to_excel(xlsx_path, index=False)
 
             # Save statistics to JSON
             if self.analysis_stats:
-                logging.info(f"Saving statistics to {stats_path}")
+                logger.info(f"Saving statistics to {stats_path}")
                 with open(stats_path, "w", encoding="utf-8") as f:
                     json.dump(self.analysis_stats, f, indent=2, ensure_ascii=False)
 
-            logging.info("Session state saved successfully")
+            logger.info("Session state saved successfully")
 
-        except Exception as e:
+        except Exception:
             # Don't block UI if save fails - just log the error
-            logging.error(f"Failed to save session state: {e}", exc_info=True)
+            logger.exception("Failed to save session state")
 
     def _load_session_analysis(self, session_path):
         """Load analysis data from session directory.
@@ -992,29 +985,29 @@ class MainWindow(QMainWindow):
             pkl_path = analysis_dir / "current_state.pkl"
             if pkl_path.exists():
                 try:
-                    logging.info(f"Loading session state from pickle: {pkl_path}")
+                    logger.info(f"Loading session state from pickle: {pkl_path}")
                     self.analysis_results_df = pd.read_pickle(pkl_path)
 
                     # Load statistics from JSON if available
                     stats_path = analysis_dir / "analysis_stats.json"
                     if stats_path.exists():
-                        logging.info(f"Loading statistics from: {stats_path}")
+                        logger.info(f"Loading statistics from: {stats_path}")
                         with open(stats_path, "r", encoding="utf-8") as f:
                             self.analysis_stats = json.load(f)
                     else:
                         # Recalculate if stats file missing
-                        logging.info("Statistics file not found - recalculating")
+                        logger.info("Statistics file not found - recalculating")
                         self.analysis_stats = recalculate_statistics(
                             self.analysis_results_df
                         )
 
-                    logging.info(
+                    logger.info(
                         f"Loaded {len(self.analysis_results_df)} rows from current_state.pkl"
                     )
                     return True
 
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"Failed to load pickle, trying Excel fallback: {e}"
                     )
                     # Continue to fallback options
@@ -1023,7 +1016,7 @@ class MainWindow(QMainWindow):
             xlsx_path = analysis_dir / "current_state.xlsx"
             if xlsx_path.exists():
                 try:
-                    logging.info(f"Loading session state from Excel: {xlsx_path}")
+                    logger.info(f"Loading session state from Excel: {xlsx_path}")
                     self.analysis_results_df = pd.read_excel(xlsx_path)
 
                     # Load or recalculate statistics
@@ -1036,13 +1029,13 @@ class MainWindow(QMainWindow):
                             self.analysis_results_df
                         )
 
-                    logging.info(
+                    logger.info(
                         f"Loaded {len(self.analysis_results_df)} rows from current_state.xlsx"
                     )
                     return True
 
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"Failed to load current_state.xlsx, trying original report: {e}"
                     )
                     # Continue to fallback
@@ -1052,10 +1045,10 @@ class MainWindow(QMainWindow):
             analysis_data_file = analysis_dir / "analysis_data.json"
 
             if not analysis_data_file.exists():
-                logging.warning(f"Analysis data not found: {analysis_data_file}")
+                logger.warning(f"Analysis data not found: {analysis_data_file}")
                 return False
 
-            logging.info(f"Found analysis data: {analysis_data_file}")
+            logger.info(f"Found analysis data: {analysis_data_file}")
 
             # Load the actual Excel report to get DataFrame
             report_file = analysis_dir / "fulfillment_analysis.xlsx"
@@ -1065,10 +1058,10 @@ class MainWindow(QMainWindow):
                 report_file = analysis_dir / "analysis_report.xlsx"
 
             if not report_file.exists():
-                logging.warning(f"Analysis report not found: {report_file}")
+                logger.warning(f"Analysis report not found: {report_file}")
                 return False
 
-            logging.info(f"Loading analysis from original report: {report_file}")
+            logger.info(f"Loading analysis from original report: {report_file}")
 
             # Load DataFrame from Excel
             self.analysis_results_df = pd.read_excel(report_file)
@@ -1076,11 +1069,11 @@ class MainWindow(QMainWindow):
             # Recalculate statistics (no saved stats for original report)
             self.analysis_stats = recalculate_statistics(self.analysis_results_df)
 
-            logging.info(f"Loaded {len(self.analysis_results_df)} rows from session")
+            logger.info(f"Loaded {len(self.analysis_results_df)} rows from session")
             return True
 
-        except Exception as e:
-            logging.error(f"Failed to load session analysis: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to load session analysis")
             return False
 
     def load_existing_session(self, session_path: str):
@@ -1089,7 +1082,6 @@ class MainWindow(QMainWindow):
         Args:
             session_path: Path to the session directory
         """
-        from pathlib import Path
 
         try:
             # Set as current session
@@ -1138,8 +1130,8 @@ class MainWindow(QMainWindow):
                 self.update_ui_state()
 
         except Exception as e:
-            logging.error(f"Failed to load session: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"Failed to load session:\n{str(e)}")
+            logger.exception("Failed to load session")
+            QMessageBox.critical(self, "Error", f"Failed to load session:\n{e!s}")
 
     def filter_table(self):
         """Applies the current filter settings to the results table view.
@@ -1179,8 +1171,8 @@ class MainWindow(QMainWindow):
                 self.update_statistics_tab()
                 # Update summary bar in Tab 2
                 self.ui_manager.update_summary_bar()
-            except Exception as e:
-                logging.error(f"Failed to recalculate statistics: {e}", exc_info=True)
+            except Exception:
+                logger.exception("Failed to recalculate statistics")
                 self.analysis_stats = None
                 self._clear_statistics_view()
         else:
@@ -1316,11 +1308,11 @@ class MainWindow(QMainWindow):
             self.profile_manager.save_shopify_config(
                 self.current_client_id, self.active_profile_config
             )
-            logging.debug(
+            logger.debug(
                 f"Saved analysis_mode={mode!r} for CLIENT_{self.current_client_id}"
             )
-        except Exception as e:
-            logging.error(f"Failed to save analysis_mode: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save analysis_mode")
 
     def log_activity(self, op_type, desc):
         """Adds a new entry to the 'Activity Log' table in the UI.
@@ -1329,7 +1321,7 @@ class MainWindow(QMainWindow):
             op_type (str): The type of operation (e.g., "Session", "Analysis").
             desc (str): A description of the activity.
         """
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         self.activity_log_table.insertRow(0)
         self.activity_log_table.setItem(0, 0, QTableWidgetItem(current_time))
         self.activity_log_table.setItem(0, 1, QTableWidgetItem(op_type))
@@ -1387,8 +1379,9 @@ class MainWindow(QMainWindow):
             if not order_number:
                 return
 
-            from PySide6.QtWidgets import QStyle
             from functools import partial
+
+            from PySide6.QtWidgets import QStyle
 
             menu = QMenu()
 

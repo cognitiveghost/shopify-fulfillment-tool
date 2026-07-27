@@ -12,12 +12,18 @@ Effective path priority (highest first):
 import os
 import threading
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QFileDialog, QDialogButtonBox, QMessageBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
 )
 
 _SETTINGS_KEY = "server_path"
@@ -52,7 +58,7 @@ def test_path_reachable(path: str, timeout: int = 5) -> bool:
     return result.get("ok", False)
 
 
-def get_saved_server_path(org: str) -> Optional[str]:
+def get_saved_server_path(org: str) -> str | None:
     """Path saved via the UI for `org`, or None if never set."""
     value = QSettings(org, "Connection").value(_SETTINGS_KEY, None)
     return value or None

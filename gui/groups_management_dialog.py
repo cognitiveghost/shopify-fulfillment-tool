@@ -4,16 +4,24 @@ This dialog provides a UI for managing custom client groups with color assignmen
 """
 
 import logging
-from typing import Optional
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QMessageBox, QInputDialog, QColorDialog
-)
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QColorDialog,
+    QDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QInputDialog,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+)
 
-from shopify_tool.groups_manager import GroupsManager, GroupsManagerError
 from gui.theme_manager import get_theme_manager
+from shopify_tool.groups_manager import GroupsManager, GroupsManagerError
 
 logger = logging.getLogger(__name__)
 
@@ -147,11 +155,11 @@ class GroupsManagementDialog(QDialog):
             logger.info(f"Loaded {len(groups)} groups into table")
 
         except Exception as e:
-            logger.error(f"Failed to load groups: {e}", exc_info=True)
+            logger.exception("Failed to load groups")
             QMessageBox.warning(
                 self,
                 "Error",
-                f"Failed to load groups:\n{str(e)}"
+                f"Failed to load groups:\n{e!s}"
             )
 
     def _on_selection_changed(self):
@@ -160,7 +168,7 @@ class GroupsManagementDialog(QDialog):
         self.edit_btn.setEnabled(has_selection)
         self.delete_btn.setEnabled(has_selection)
 
-    def _get_selected_group_id(self) -> Optional[str]:
+    def _get_selected_group_id(self) -> str | None:
         """Get selected group ID.
 
         Returns:
@@ -219,14 +227,14 @@ class GroupsManagementDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Error",
-                f"Failed to create group:\n{str(e)}"
+                f"Failed to create group:\n{e!s}"
             )
         except Exception as e:
-            logger.error(f"Unexpected error creating group: {e}", exc_info=True)
+            logger.exception("Unexpected error creating group")
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An unexpected error occurred:\n{str(e)}"
+                f"An unexpected error occurred:\n{e!s}"
             )
 
     def _edit_group(self):
@@ -294,14 +302,14 @@ class GroupsManagementDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Error",
-                f"Failed to update group:\n{str(e)}"
+                f"Failed to update group:\n{e!s}"
             )
         except Exception as e:
-            logger.error(f"Unexpected error updating group: {e}", exc_info=True)
+            logger.exception("Unexpected error updating group")
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An unexpected error occurred:\n{str(e)}"
+                f"An unexpected error occurred:\n{e!s}"
             )
 
     def _delete_group(self):
@@ -357,12 +365,12 @@ class GroupsManagementDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Error",
-                f"Failed to delete group:\n{str(e)}"
+                f"Failed to delete group:\n{e!s}"
             )
         except Exception as e:
-            logger.error(f"Unexpected error deleting group: {e}", exc_info=True)
+            logger.exception("Unexpected error deleting group")
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An unexpected error occurred:\n{str(e)}"
+                f"An unexpected error occurred:\n{e!s}"
             )

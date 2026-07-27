@@ -1,41 +1,41 @@
-import sys
-import os
 import json
+import sys
+from typing import ClassVar
+
 import pandas as pd
+from PySide6.QtCore import QDate, Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
-    QVBoxLayout,
-    QListWidget,
-    QListWidgetItem,
-    QStackedWidget,
-    QWidget,
+    QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QScrollArea,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
     QPushButton,
-    QComboBox,
-    QTextEdit,
+    QScrollArea,
+    QSpinBox,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
-    QFileDialog,
-    QSpinBox,
-    QDoubleSpinBox,
-    QDateEdit,
-    QCheckBox,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QTimer, QDate
 
-from shopify_tool.core import get_unique_column_values
 from gui.column_mapping_widget import ColumnMappingWidget
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
-from shopify_tool.set_decoder import import_sets_from_csv, export_sets_to_csv
+from shopify_tool.core import get_unique_column_values
+from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
 
 
 class SettingsWindow(QDialog):
@@ -63,7 +63,7 @@ class SettingsWindow(QDialog):
     """
 
     # Constants for builders
-    FILTERABLE_COLUMNS = [
+    FILTERABLE_COLUMNS: ClassVar[list[str]] = [
         "Order_Number",
         "Order_Type",
         "SKU",
@@ -77,9 +77,9 @@ class SettingsWindow(QDialog):
         "Status_Note",
         "Total Price",
     ]
-    FILTER_OPERATORS = ["==", "!=", "in", "not in", "contains"]
+    FILTER_OPERATORS: ClassVar[list[str]] = ["==", "!=", "in", "not in", "contains"]
     # Group order-level fields first for better UX
-    ORDER_LEVEL_FIELDS = [
+    ORDER_LEVEL_FIELDS: ClassVar[list[str]] = [
         "--- ORDER-LEVEL FIELDS ---",
         "item_count",
         "total_quantity",
@@ -87,8 +87,8 @@ class SettingsWindow(QDialog):
         "Has_SKU",
         "--- ARTICLE-LEVEL FIELDS ---",
     ]
-    CONDITION_FIELDS = ORDER_LEVEL_FIELDS + FILTERABLE_COLUMNS
-    CONDITION_OPERATORS = [
+    CONDITION_FIELDS: ClassVar[list[str]] = ORDER_LEVEL_FIELDS + FILTERABLE_COLUMNS
+    CONDITION_OPERATORS: ClassVar[list[str]] = [
         "equals",
         "does not equal",
         "contains",
@@ -111,7 +111,7 @@ class SettingsWindow(QDialog):
         "matches regex",
         "does not match regex",
     ]
-    ACTION_TYPES = [
+    ACTION_TYPES: ClassVar[list[str]] = [
         "ADD_TAG",
         "ADD_ORDER_TAG",
         "ADD_INTERNAL_TAG",
@@ -125,7 +125,7 @@ class SettingsWindow(QDialog):
 
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
-    SETTINGS_NAV_GROUPS = [
+    SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
         ("Data", ["General", "Mappings", "Column Config"]),
         ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
         ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
@@ -813,7 +813,7 @@ class SettingsWindow(QDialog):
         if step_refs not in steps or len(steps) <= 1:
             return
 
-        idx = steps.index(step_refs)
+        steps.index(step_refs)
         steps.remove(step_refs)
 
         # Remove widgets
@@ -971,8 +971,8 @@ class SettingsWindow(QDialog):
 
         # DATE OPERATORS - Use QDateEdit with calendar popup
         elif op in ["date before", "date after", "date equals"]:
-            from PySide6.QtWidgets import QDateEdit
             from PySide6.QtCore import QDate
+            from PySide6.QtWidgets import QDateEdit
 
             new_widget = QDateEdit()
             new_widget.setCalendarPopup(True)  # Enable calendar dropdown
@@ -1030,7 +1030,6 @@ class SettingsWindow(QDialog):
         Args:
             condition_refs (dict): Condition widget references
         """
-        from PySide6.QtCore import QTimer
 
         op = condition_refs["op"].currentText()
 
@@ -1057,11 +1056,10 @@ class SettingsWindow(QDialog):
             condition_refs (dict): Condition widget references
         """
         from gui.rule_validator import (
-            validate_regex,
-            validate_date,
-            validate_range,
             validate_list,
-            validate_numeric
+            validate_numeric,
+            validate_range,
+            validate_regex,
         )
 
         op = condition_refs["op"].currentText()
@@ -1071,7 +1069,7 @@ class SettingsWindow(QDialog):
             return
 
         # Get value based on widget type
-        from PySide6.QtWidgets import QComboBox, QLineEdit, QDateEdit
+        from PySide6.QtWidgets import QComboBox, QLineEdit
         if isinstance(value_widget, QComboBox):
             value = value_widget.currentText()
         elif isinstance(value_widget, QDateEdit):
@@ -1188,7 +1186,6 @@ class SettingsWindow(QDialog):
         Returns:
             QDate object or None if parsing fails
         """
-        from PySide6.QtCore import QDate
         from shopify_tool.rules import _parse_date_safe
 
         pd_timestamp = _parse_date_safe(date_str)
@@ -1210,6 +1207,7 @@ class SettingsWindow(QDialog):
             rule_widget_refs (dict): Rule widget references
         """
         from PySide6.QtWidgets import QMessageBox
+
         from gui.rule_test_dialog import RuleTestDialog
 
         if self.analysis_df is None or self.analysis_df.empty:
@@ -1254,7 +1252,7 @@ class SettingsWindow(QDialog):
         Returns:
             dict: Rule configuration compatible with RuleEngine
         """
-        from PySide6.QtWidgets import QComboBox, QLineEdit, QDateEdit
+        from PySide6.QtWidgets import QComboBox, QLineEdit
 
         steps = []
         for step_refs in rule_widget_refs.get("steps", []):
@@ -2142,7 +2140,7 @@ class SettingsWindow(QDialog):
             QMessageBox.critical(
                 self,
                 "Import Error",
-                f"Failed to import sets from CSV:\n\n{str(e)}"
+                f"Failed to import sets from CSV:\n\n{e!s}"
             )
 
     def _export_sets_to_csv(self):
@@ -2177,7 +2175,7 @@ class SettingsWindow(QDialog):
             QMessageBox.critical(
                 self,
                 "Export Error",
-                f"Failed to export sets to CSV:\n\n{str(e)}"
+                f"Failed to export sets to CSV:\n\n{e!s}"
             )
 
     # ========================================
@@ -2469,7 +2467,7 @@ class SettingsWindow(QDialog):
 
     def _weight_delete_selected(self, table):
         """Delete selected rows from the given table."""
-        selected = sorted(set(idx.row() for idx in table.selectedIndexes()), reverse=True)
+        selected = sorted({idx.row() for idx in table.selectedIndexes()}, reverse=True)
         for row in selected:
             table.removeRow(row)
 
@@ -2554,7 +2552,7 @@ class SettingsWindow(QDialog):
             )
 
         except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import SKUs:\n\n{str(e)}")
+            QMessageBox.critical(self, "Import Error", f"Failed to import SKUs:\n\n{e!s}")
 
     def _weight_import_products_from_csv(self):
         """Import SKU dimensions from an arbitrary CSV into the products table."""
@@ -2605,7 +2603,7 @@ class SettingsWindow(QDialog):
                     existing_skus[item.text().strip()] = r
 
             rows_in_csv = df[sku_col].dropna().astype(str).str.strip().tolist()
-            new_skus = [s for s in rows_in_csv if s and s != "nan" and s not in existing_skus]
+            [s for s in rows_in_csv if s and s != "nan" and s not in existing_skus]
             dup_skus = [s for s in rows_in_csv if s and s != "nan" and s in existing_skus]
 
             update_existing = False
@@ -2624,6 +2622,14 @@ class SettingsWindow(QDialog):
             updated = 0
             skipped = 0
 
+            def _val(row, col):
+                if col and pd.notna(row.get(col)):
+                    try:
+                        return float(str(row[col]).replace(",", ".").strip())
+                    except ValueError:
+                        pass
+                return None
+
             self.weight_products_table.blockSignals(True)
             for _, csv_row in df.iterrows():
                 sku = str(csv_row[sku_col]).strip() if pd.notna(csv_row[sku_col]) else ""
@@ -2632,17 +2638,9 @@ class SettingsWindow(QDialog):
 
                 name = str(csv_row[name_col]).strip() if name_col and pd.notna(csv_row.get(name_col)) else ""
 
-                def _val(col):
-                    if col and pd.notna(csv_row.get(col)):
-                        try:
-                            return float(str(csv_row[col]).replace(",", ".").strip())
-                        except ValueError:
-                            pass
-                    return None
-
-                l = _val(l_col)
-                w = _val(w_col)
-                h = _val(h_col)
+                l = _val(csv_row, l_col)
+                w = _val(csv_row, w_col)
+                h = _val(csv_row, h_col)
                 vol_w = round((l * w * h) / divisor, 4) if (l and w and h and divisor > 0) else 0.0
 
                 no_pkg = False
@@ -2702,7 +2700,7 @@ class SettingsWindow(QDialog):
             QMessageBox.information(self, "Import Complete", " ".join(parts))
 
         except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import dimensions:\n\n{str(e)}")
+            QMessageBox.critical(self, "Import Error", f"Failed to import dimensions:\n\n{e!s}")
 
     def _weight_import_boxes_from_csv(self):
         """Import boxes from an arbitrary CSV into the boxes table."""
@@ -2770,23 +2768,23 @@ class SettingsWindow(QDialog):
             updated = 0
             skipped = 0
 
+            def _val(row, col):
+                if col and pd.notna(row.get(col)):
+                    try:
+                        return float(str(row[col]).replace(",", ".").strip())
+                    except ValueError:
+                        pass
+                return None
+
             self.weight_boxes_table.blockSignals(True)
             for _, csv_row in df.iterrows():
                 name = str(csv_row[name_col]).strip() if pd.notna(csv_row[name_col]) else ""
                 if not name or name == "nan":
                     continue
 
-                def _val(col):
-                    if col and pd.notna(csv_row.get(col)):
-                        try:
-                            return float(str(csv_row[col]).replace(",", ".").strip())
-                        except ValueError:
-                            pass
-                    return None
-
-                l = _val(l_col)
-                w = _val(w_col)
-                h = _val(h_col)
+                l = _val(csv_row, l_col)
+                w = _val(csv_row, w_col)
+                h = _val(csv_row, h_col)
                 vol_w = round((l * w * h) / divisor, 4) if (l and w and h and divisor > 0) else 0.0
 
                 if name in existing_boxes:
@@ -2825,7 +2823,7 @@ class SettingsWindow(QDialog):
             QMessageBox.information(self, "Import Complete", " ".join(parts))
 
         except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import boxes:\n\n{str(e)}")
+            QMessageBox.critical(self, "Import Error", f"Failed to import boxes:\n\n{e!s}")
 
     def _weight_export_products_to_csv(self):
         """Export products table to a CSV file."""
@@ -2868,7 +2866,7 @@ class SettingsWindow(QDialog):
             df.to_csv(file_path, sep=";", index=False, encoding="utf-8-sig")
             QMessageBox.information(self, "Export Complete", f"Exported {len(rows)} product(s) to:\n{file_path}")
         except Exception as e:
-            QMessageBox.critical(self, "Export Error", f"Failed to export products:\n\n{str(e)}")
+            QMessageBox.critical(self, "Export Error", f"Failed to export products:\n\n{e!s}")
 
     def _weight_export_boxes_to_csv(self):
         """Export boxes table to a CSV file."""
@@ -2902,7 +2900,7 @@ class SettingsWindow(QDialog):
             df.to_csv(file_path, sep=";", index=False, encoding="utf-8-sig")
             QMessageBox.information(self, "Export Complete", f"Exported {len(rows)} box(es) to:\n{file_path}")
         except Exception as e:
-            QMessageBox.critical(self, "Export Error", f"Failed to export boxes:\n\n{str(e)}")
+            QMessageBox.critical(self, "Export Error", f"Failed to export boxes:\n\n{e!s}")
 
     def _weight_collect_config(self) -> dict:
         """Collect weight configuration from UI tables."""
@@ -3262,14 +3260,14 @@ class SettingsWindow(QDialog):
             QMessageBox.critical(
                 self,
                 "Validation Error",
-                f"Invalid value entered:\n\n{str(e)}\n\nPlease check your inputs."
+                f"Invalid value entered:\n\n{e!s}\n\nPlease check your inputs."
             )
         except Exception as e:
             import traceback
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Failed to save settings:\n\n{str(e)}\n\n{traceback.format_exc()}"
+                f"Failed to save settings:\n\n{e!s}\n\n{traceback.format_exc()}"
             )
     # ========================================
     # TAG CATEGORIES TAB
@@ -3336,6 +3334,7 @@ class SettingsWindow(QDialog):
     def create_sku_labels_tab(self):
         """Create the SKU Label Printing settings tab."""
         from PySide6.QtPrintSupport import QPrinterInfo
+
         from gui.theme_manager import get_theme_manager
 
         theme = get_theme_manager().get_current_theme()

@@ -40,18 +40,17 @@ Example usage:
 """
 
 import logging
-import os
-import pandas as pd
-from typing import Dict, List
 
-from shopify_tool.tag_manager import parse_tags, _normalize_tag_categories
+import pandas as pd
+
+from shopify_tool.tag_manager import _normalize_tag_categories, parse_tags
 
 logger = logging.getLogger("ShopifyToolLogger")
 
 
 def calculate_writeoff_quantities(
     analysis_df: pd.DataFrame,
-    tag_categories: Dict
+    tag_categories: dict
 ) -> pd.DataFrame:
     """Calculate total writeoff quantities from tags in analysis DataFrame.
 
@@ -190,7 +189,7 @@ def calculate_writeoff_quantities(
         rows.append({
             "SKU": sku,
             "Writeoff_Quantity": round(data["quantity"], 2),
-            "Tags_Applied": sorted(list(data["tags"])),
+            "Tags_Applied": sorted(data["tags"]),
             "Order_Count": len(data["orders"])
         })
 
@@ -313,7 +312,7 @@ def apply_writeoff_to_stock_export(
 
 def generate_writeoff_report(
     analysis_df: pd.DataFrame,
-    tag_categories: Dict,
+    tag_categories: dict,
     output_file: str
 ) -> None:
     """Generate detailed writeoff report as .xls file.
@@ -417,7 +416,7 @@ def generate_writeoff_report(
     )
 
 
-def _extract_writeoff_mappings(tag_categories: Dict) -> Dict[str, List[Dict]]:
+def _extract_writeoff_mappings(tag_categories: dict) -> dict[str, list[dict]]:
     """Extract all writeoff mappings from tag categories config.
 
     Internal helper function that normalizes v1/v2 config formats and extracts

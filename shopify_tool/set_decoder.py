@@ -8,15 +8,16 @@ This module provides functionality to:
 """
 
 import logging
+from typing import Any
+
 import pandas as pd
-from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
 
 def decode_sets_in_orders(
     orders_df: pd.DataFrame,
-    set_decoders: Dict[str, List[Dict[str, Any]]]
+    set_decoders: dict[str, list[dict[str, Any]]]
 ) -> pd.DataFrame:
     """
     Expand set/bundle SKUs into their component SKUs.
@@ -148,7 +149,7 @@ def decode_sets_in_orders(
     return result_df
 
 
-def import_sets_from_csv(csv_path: str) -> Dict[str, List[Dict[str, Any]]]:
+def import_sets_from_csv(csv_path: str) -> dict[str, list[dict[str, Any]]]:
     """
     Import set definitions from CSV file.
 
@@ -234,7 +235,7 @@ def import_sets_from_csv(csv_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def export_sets_to_csv(
-    set_decoders: Dict[str, List[Dict[str, Any]]],
+    set_decoders: dict[str, list[dict[str, Any]]],
     csv_path: str
 ) -> None:
     """
@@ -280,4 +281,4 @@ def export_sets_to_csv(
         df.to_csv(csv_path, index=False, encoding="utf-8")
         logger.info(f"Exported {len(set_decoders)} set definitions to {csv_path}")
     except Exception as e:
-        raise IOError(f"Failed to write CSV file: {e}")
+        raise OSError(f"Failed to write CSV file: {e}")

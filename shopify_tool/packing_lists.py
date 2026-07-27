@@ -1,7 +1,9 @@
-import pandas as pd
-import os
 import logging
+import os
 from datetime import datetime
+
+import pandas as pd
+
 from .csv_utils import normalize_sku_for_matching, order_number_sort_key
 
 logger = logging.getLogger("ShopifyToolLogger")
@@ -217,7 +219,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
 
         print_list = sorted_list[columns_for_print]
 
-        generation_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        generation_timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         output_filename = os.path.basename(output_file)
 
         # Rename columns to embed metadata into the header
@@ -304,5 +306,6 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
 
         logger.info(f"Report '{report_name}' created successfully.")
 
-    except Exception as e:
-        logger.error(f"ERROR while creating packing list: {e}", exc_info=True)
+    except Exception:
+        logger.exception("ERROR while creating packing list")
+        raise

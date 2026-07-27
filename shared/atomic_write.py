@@ -1,9 +1,12 @@
 """Atomic JSON writes (temp file + rename) for files on shared network storage."""
 import json
+import logging
 import os
 import tempfile
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def atomic_write_json(path, data, *, indent=2, ensure_ascii=False, retries=3, retry_delay=0.15):
@@ -36,8 +39,8 @@ def atomic_write_json(path, data, *, indent=2, ensure_ascii=False, retries=3, re
             if tmp_path and tmp_path.exists():
                 try:
                     tmp_path.unlink()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Could not remove temp file {tmp_path}: {e}")
             if attempt < retries - 1:
                 time.sleep(retry_delay)
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Local dev runner: launches the app against a throwaway local dev-server."""
 import os
 from pathlib import Path

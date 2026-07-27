@@ -11,15 +11,25 @@ Workflow:
 
 import logging
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-    QPushButton, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QFormLayout,
-    QMessageBox, QSizePolicy,
-)
 from PySide6.QtCore import Qt, QThreadPool, QTimer
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
-from gui.worker import Worker
 from gui.theme_manager import get_theme_manager
+from gui.worker import Worker
 from shopify_tool.sku_label_manager import SKULabelManager
 
 logger = logging.getLogger(__name__)
@@ -228,7 +238,7 @@ class SKULabelWidget(QWidget):
         backend = config.get("print_backend", "qt")
         idx = self.backend_combo.findData(backend)
         self.backend_combo.blockSignals(True)
-        self.backend_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.backend_combo.setCurrentIndex(max(idx, 0))
         self.backend_combo.blockSignals(False)
 
         # Sync label size override fields

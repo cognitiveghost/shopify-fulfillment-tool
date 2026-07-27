@@ -20,7 +20,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -28,7 +28,6 @@ logger = logging.getLogger("ShopifyToolLogger")
 # Custom Exception
 class GroupsManagerError(Exception):
     """Base exception for GroupsManager errors."""
-    pass
 
 
 class GroupsManager:
@@ -67,7 +66,7 @@ class GroupsManager:
         if not self.groups_path.exists():
             self.save_groups(groups_data)
 
-    def _create_default_groups(self) -> Dict[str, Any]:
+    def _create_default_groups(self) -> dict[str, Any]:
         """Create default groups configuration with special groups.
 
         Returns:
@@ -92,7 +91,7 @@ class GroupsManager:
             }
         }
 
-    def load_groups(self) -> Dict[str, Any]:
+    def load_groups(self) -> dict[str, Any]:
         """Load groups configuration with corruption recovery.
 
         Returns:
@@ -124,17 +123,17 @@ class GroupsManager:
 
             return groups_data
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Corrupted JSON in groups.json: {e}", exc_info=True)
+        except json.JSONDecodeError:
+            logger.exception("Corrupted JSON in groups.json")
             backup_path = self.groups_path.with_suffix('.corrupted.bak')
             shutil.copy2(self.groups_path, backup_path)
             logger.info(f"Corrupted file backed up to {backup_path}")
             return self._create_default_groups()
-        except Exception as e:
-            logger.error(f"Unexpected error loading groups: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Unexpected error loading groups")
             return self._create_default_groups()
 
-    def save_groups(self, groups_data: Dict[str, Any]) -> bool:
+    def save_groups(self, groups_data: dict[str, Any]) -> bool:
         """Save groups configuration with file locking and backup.
 
         Args:
@@ -151,7 +150,7 @@ class GroupsManager:
             self._create_backup()
 
         # Update timestamp
-        groups_data["last_updated"] = datetime.now().isoformat()
+        groups_data["last_updated"] = datetime.now().astimezone().isoformat()
 
         max_retries = 10
         retry_delay = 1.0
@@ -176,7 +175,7 @@ class GroupsManager:
                         )
                         time.sleep(retry_delay)
 
-            except (IOError, OSError) as e:
+            except OSError as e:
                 if attempt < max_retries - 1:
                     logger.warning(
                         f"Save failed (attempt {attempt + 1}/{max_retries}), "
@@ -185,7 +184,7 @@ class GroupsManager:
                     time.sleep(retry_delay)
                 else:
                     error_msg = f"Failed to save groups configuration after {max_retries} attempts: {e}"
-                    logger.error(error_msg, exc_info=True)
+                    logger.exception(error_msg)
                     raise GroupsManagerError(error_msg)
 
         # If we get here, all retries failed
@@ -193,7 +192,7 @@ class GroupsManager:
         logger.error(error_msg)
         raise GroupsManagerError(error_msg)
 
-    def _save_with_windows_lock(self, file_path: Path, data: Dict) -> bool:
+    def _save_with_windows_lock(self, file_path: Path, data: dict) -> bool:
         """Save file with Windows file locking (locks entire file).
 
         Args:
@@ -218,7 +217,7 @@ class GroupsManager:
                 try:
                     f.seek(0)
                     msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, file_size)
-                except IOError:
+                except OSError:
                     return False
 
                 try:
@@ -235,13 +234,13 @@ class GroupsManager:
             shutil.move(str(temp_path), str(file_path))
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Windows lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Windows lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
 
-    def _save_with_unix_lock(self, file_path: Path, data: Dict) -> bool:
+    def _save_with_unix_lock(self, file_path: Path, data: dict) -> bool:
         """Save file with Unix file locking.
 
         Args:
@@ -261,7 +260,7 @@ class GroupsManager:
                 # Try to acquire exclusive lock
                 try:
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except IOError:
+                except OSError:
                     return False
 
                 try:
@@ -273,8 +272,8 @@ class GroupsManager:
             shutil.move(str(temp_path), str(file_path))
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Unix lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Unix lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
@@ -290,7 +289,7 @@ class GroupsManager:
         backups_dir = self.clients_dir / "backups"
         backups_dir.mkdir(exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         backup_path = backups_dir / f"groups_{timestamp}.json"
 
         try:
@@ -315,17 +314,16 @@ class GroupsManager:
         stale snapshot and the second save silently clobbers the first.
         """
         lock_path = self.groups_path.with_suffix(".lock")
-        lock_file = open(lock_path, "a+")
-        try:
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-            yield
-        finally:
+        with open(lock_path, "a+") as lock_file:
             try:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                yield
+            finally:
                 if os.name == "nt":
                     import msvcrt
                     lock_file.seek(0)
@@ -333,11 +331,9 @@ class GroupsManager:
                 else:
                     import fcntl
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-            finally:
-                lock_file.close()
 
     @staticmethod
-    def _name_collides_with_special_group(groups_data: Dict[str, Any], name: str) -> bool:
+    def _name_collides_with_special_group(groups_data: dict[str, Any], name: str) -> bool:
         special_groups = groups_data.get("special_groups", {})
         return any(
             special.get("name", "").lower() == name.lower()
@@ -380,8 +376,7 @@ class GroupsManager:
             max_order = -1
             for group in groups_data.get("groups", []):
                 order = group.get("display_order", 0)
-                if order > max_order:
-                    max_order = order
+                max_order = max(max_order, order)
             display_order = max_order + 1
 
             # Create new group
@@ -390,7 +385,7 @@ class GroupsManager:
                 "name": name,
                 "color": color,
                 "display_order": display_order,
-                "created_at": datetime.now().isoformat()
+                "created_at": datetime.now().astimezone().isoformat()
             }
 
             groups_data["groups"].append(new_group)
@@ -401,7 +396,7 @@ class GroupsManager:
 
             return group_id
 
-    def update_group(self, group_id: str, name: str = None, color: str = None) -> bool:
+    def update_group(self, group_id: str, name: str | None = None, color: str | None = None) -> bool:
         """Update existing group.
 
         Args:
@@ -487,13 +482,16 @@ class GroupsManager:
                 for client_id in clients_in_group:
                     try:
                         config = profile_manager.load_client_config(client_id)
-                        if config and "ui_settings" in config:
-                            if config["ui_settings"].get("group_id") == group_id:
-                                config["ui_settings"]["group_id"] = None
-                                profile_manager.save_client_config(client_id, config)
-                                logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to unassign CLIENT_{client_id}: {e}", exc_info=True)
+                        if (
+                            config
+                            and "ui_settings" in config
+                            and config["ui_settings"].get("group_id") == group_id
+                        ):
+                            config["ui_settings"]["group_id"] = None
+                            profile_manager.save_client_config(client_id, config)
+                            logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
+                    except Exception:
+                        logger.exception(f"Failed to unassign CLIENT_{client_id}")
                         # Continue with other clients
 
             # Remove group from groups.json
@@ -505,7 +503,7 @@ class GroupsManager:
 
             return True
 
-    def get_group(self, group_id: str) -> Optional[Dict[str, Any]]:
+    def get_group(self, group_id: str) -> dict[str, Any] | None:
         """Get group by ID.
 
         Args:
@@ -522,7 +520,7 @@ class GroupsManager:
 
         return None
 
-    def list_groups(self) -> List[Dict[str, Any]]:
+    def list_groups(self) -> list[dict[str, Any]]:
         """List all groups sorted by display_order.
 
         Returns:
@@ -536,7 +534,7 @@ class GroupsManager:
 
         return sorted_groups
 
-    def get_clients_in_group(self, group_id: str, profile_manager) -> List[str]:
+    def get_clients_in_group(self, group_id: str, profile_manager) -> list[str]:
         """Get list of client IDs assigned to a group.
 
         Args:
@@ -552,9 +550,12 @@ class GroupsManager:
         for client_id in all_clients:
             try:
                 config = profile_manager.load_client_config(client_id)
-                if config and "ui_settings" in config:
-                    if config["ui_settings"].get("group_id") == group_id:
-                        clients_in_group.append(client_id)
+                if (
+                    config
+                    and "ui_settings" in config
+                    and config["ui_settings"].get("group_id") == group_id
+                ):
+                    clients_in_group.append(client_id)
             except Exception as e:
                 logger.warning(f"Failed to check group for CLIENT_{client_id}: {e}")
                 continue

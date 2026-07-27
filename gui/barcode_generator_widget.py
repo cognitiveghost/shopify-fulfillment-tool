@@ -10,24 +10,27 @@ Features:
 - Export to PDF
 """
 
-import os
 import logging
 from pathlib import Path
-from datetime import datetime
 
 import pandas as pd
-
+from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
-    QLabel, QProgressBar, QTableWidget, QComboBox, QCheckBox,
-    QMessageBox, QTableWidgetItem, QHeaderView, QFileDialog
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QThreadPool, Signal
-from PySide6.QtGui import QPixmap, QDesktopServices
-from PySide6.QtCore import QUrl
 
-from gui.worker import Worker
 from gui.theme_manager import get_theme_manager
+from gui.worker import Worker
 
 
 class BarcodeGeneratorWidget(QWidget):
@@ -308,8 +311,8 @@ class BarcodeGeneratorWidget(QWidget):
             self.order_count_label.setText(f"{order_count} orders ready for barcode generation")
 
         except Exception as e:
-            self.order_count_label.setText(f"Error reading packing list: {str(e)}")
-            self.log.error(f"Failed to read packing list {packing_list_file}: {e}", exc_info=True)
+            self.order_count_label.setText(f"Error reading packing list: {e!s}")
+            self.log.exception(f"Failed to read packing list {packing_list_file}")
             return
 
         # Setup output directory
@@ -320,7 +323,7 @@ class BarcodeGeneratorWidget(QWidget):
         self.output_dir_label.setText(str(self.barcodes_dir))
 
         # Setup history manager
-        history_file = self.barcodes_dir / "barcode_history.json"        # History removed - using logs only
+        self.barcodes_dir / "barcode_history.json"        # History removed - using logs only
 
         # Enable generation if we have orders
         self.generate_btn.setEnabled(order_count > 0)
@@ -488,7 +491,7 @@ class BarcodeGeneratorWidget(QWidget):
 
     def _on_generation_error(self, error_info):
         """Handle generation error."""
-        exctype, value, traceback_str = error_info
+        _exctype, value, traceback_str = error_info
 
         self.status_label.setText("Generation failed")
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
@@ -511,6 +514,7 @@ class BarcodeGeneratorWidget(QWidget):
         """Generate PDF automatically after barcode generation."""
         try:
             from pathlib import Path
+
             from shopify_tool.barcode_processor import generate_barcodes_pdf
 
             # Convert string paths back to Path objects
@@ -530,8 +534,8 @@ class BarcodeGeneratorWidget(QWidget):
             url = QUrl.fromLocalFile(str(pdf_path))
             QDesktopServices.openUrl(url)
 
-        except Exception as e:
-            self.log.error(f"Auto PDF generation failed: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Auto PDF generation failed")
 
     def _cleanup_png_files(self, results):
         """Remove PNG files after PDF generation (PDF-only mode)."""
@@ -548,8 +552,8 @@ class BarcodeGeneratorWidget(QWidget):
 
             self.log.info(f"Cleaned up {len(results)} PNG files (PDF-only mode)")
 
-        except Exception as e:
-            self.log.error(f"PNG cleanup failed: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("PNG cleanup failed")
 
 
     def _open_barcodes_folder(self):

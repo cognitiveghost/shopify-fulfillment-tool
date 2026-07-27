@@ -2,13 +2,18 @@
 CSV utility functions for delimiter detection and validation.
 """
 import csv
+import logging
 import os
 import re
-import logging
-from typing import Tuple, Any, List, Optional, Dict
+from typing import Any
+
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+class CSVLoadError(Exception):
+    """Raised when a CSV file fails to load or merge."""
 
 
 def order_number_sort_key(s) -> int:
@@ -22,7 +27,7 @@ def order_number_sort_key(s) -> int:
     return int(nums[-1]) if nums else 0
 
 
-def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> Tuple[str, str]:
+def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> tuple[str, str]:
     """
     Automatically detect CSV delimiter.
 
@@ -80,8 +85,8 @@ def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> Tuple[s
 
             # Check consistency across multiple lines
             for line in lines[1:]:
-                for delim in delimiters:
-                    if line.count(delim) != delimiters[delim]:
+                for delim, count in delimiters.items():
+                    if line.count(delim) != count:
                         # Not consistent - reduce confidence
                         delimiters[delim] = 0
 
@@ -144,7 +149,7 @@ def validate_delimiter(file_path: str, delimiter: str, encoding: str = 'utf-8-si
 
 
 def suggest_delimiter_fix(file_path: str, failed_delimiter: str,
-                         encoding: str = 'utf-8-sig') -> Tuple[str, str]:
+                         encoding: str = 'utf-8-sig') -> tuple[str, str]:
     """
     Suggest alternative delimiter when current one fails.
 
@@ -290,13 +295,13 @@ def normalize_sku_for_matching(sku: Any) -> str:
 
 
 def merge_csv_files(
-    file_paths: List[str],
+    file_paths: list[str],
     delimiter: str,
     encoding: str = 'utf-8-sig',
-    dtype_dict: Optional[Dict] = None,
+    dtype_dict: dict | None = None,
     add_source_column: bool = True,
     remove_duplicates: bool = False,
-    duplicate_keys: Optional[List[str]] = None
+    duplicate_keys: list[str] | None = None
 ) -> pd.DataFrame:
     """
     Merge multiple CSV files into single DataFrame.
@@ -315,7 +320,7 @@ def merge_csv_files(
 
     Raises:
         ValueError: If file_paths is empty
-        Exception: If any file fails to load
+        CSVLoadError: If any file fails to load
 
     Example:
         >>> files = ["shop1.csv", "shop2.csv", "shop3.csv"]
@@ -352,8 +357,8 @@ def merge_csv_files(
             logger.info(f"✓ Loaded {len(df)} rows from {os.path.basename(filepath)}")
 
         except Exception as e:
-            logger.error(f"✗ Failed to load {os.path.basename(filepath)}: {e}", exc_info=True)
-            raise Exception(f"Failed to load {os.path.basename(filepath)}: {e}")
+            logger.exception(f"✗ Failed to load {os.path.basename(filepath)}")
+            raise CSVLoadError(f"Failed to load {os.path.basename(filepath)}: {e}") from e
 
     # Concatenate all DataFrames
     merged_df = pd.concat(dataframes, ignore_index=True)
@@ -386,8 +391,8 @@ def merge_csv_files(
                         subset=duplicate_keys,
                         keep='first'
                     )
-                except Exception as e:
-                    logger.error(f"Error removing duplicates with keys {duplicate_keys}: {e}", exc_info=True)
+                except Exception:
+                    logger.exception(f"Error removing duplicates with keys {duplicate_keys}")
                     raise
             else:
                 logger.warning("No valid duplicate keys found, skipping duplicate removal")
@@ -411,8 +416,8 @@ def merge_csv_files(
 def discover_additional_columns(
     orders_df: pd.DataFrame,
     column_mappings: dict,
-    current_additional_columns: List[dict]
-) -> List[dict]:
+    current_additional_columns: list[dict]
+) -> list[dict]:
     """
     Discover available additional columns from orders DataFrame.
 

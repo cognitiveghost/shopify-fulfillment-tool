@@ -1,0 +1,15 @@
+# Project-wide rule decisions, on top of ruff's defaults.
+[lint]
+ignore = [
+    # Codebase idiom: warehouse-floor GUI, so most I/O and Qt-callback sites
+    # deliberately catch broad Exception at a boundary (worker thread, cleanup
+    # handler, best-effort cache read) rather than crash the app. Narrowing
+    # each to a specific exception type would guess at failure modes we can't
+    # verify and would weaken the "must not crash" guarantee these guards exist for.
+    "BLE001",
+]
+
+[lint.flake8-bugbear]
+# QModelIndex() is an immutable value type (Qt's standard "no parent" sentinel),
+# so using it as a default argument is safe despite the general mutable-default footgun.
+extend-immutable-calls = ["PySide6.QtCore.QModelIndex"]

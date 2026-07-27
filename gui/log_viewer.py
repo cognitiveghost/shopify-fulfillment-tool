@@ -1,9 +1,10 @@
-import customtkinter as ctk
-import tkinter as tk
-from tkinter import ttk
 import logging
-from collections import deque
 import time
+import tkinter as tk
+from collections import deque
+from tkinter import ttk
+
+import customtkinter as ctk
 
 from gui.theme_manager import get_theme_manager
 

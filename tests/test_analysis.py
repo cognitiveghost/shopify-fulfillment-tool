@@ -177,7 +177,7 @@ class TestNoSkuHandling:
 class TestRepeatDetection:
     def test_order_executed_yesterday_is_marked_repeat_with_default_window(self):
         import datetime
-        yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday = (datetime.datetime.now().astimezone() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         orders = _orders([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 1}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         history = _history([{"Order_Number": "#1", "Execution_Date": yesterday}])
@@ -186,7 +186,7 @@ class TestRepeatDetection:
 
     def test_order_executed_today_is_not_marked_repeat_with_default_window(self):
         import datetime
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        today = datetime.datetime.now().astimezone().strftime("%Y-%m-%d")
         orders = _orders([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 1}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         history = _history([{"Order_Number": "#1", "Execution_Date": today}])
@@ -195,7 +195,7 @@ class TestRepeatDetection:
 
     def test_unrelated_order_number_not_flagged(self):
         import datetime
-        yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday = (datetime.datetime.now().astimezone() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         orders = _orders([{"Name": "#2", "Lineitem sku": "A1", "Lineitem quantity": 1}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         history = _history([{"Order_Number": "#1", "Execution_Date": yesterday}])

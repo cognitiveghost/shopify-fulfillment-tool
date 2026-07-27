@@ -18,12 +18,11 @@ Usage:
     seq_num = get_sequential_number("ORDER-001", session_path)
 """
 
-import logging
 import json
+import logging
 import re
-from pathlib import Path
-from typing import Dict, Optional
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -39,11 +38,11 @@ def _natural_sort_key(s):
             for text in re.split(r'(\d+)', str(s))]
 
 
-def _write_sequential_order_map(json_path: Path, order_map: Dict[str, int]) -> None:
+def _write_sequential_order_map(json_path: Path, order_map: dict[str, int]) -> None:
     json_path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "version": SEQUENTIAL_ORDER_VERSION,
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": datetime.now().astimezone().isoformat(),
         "total_orders": len(order_map),
         "order_sequence": order_map,
     }
@@ -55,7 +54,7 @@ def generate_sequential_order_map(
     analysis_results_df: pd.DataFrame,
     session_path: Path,
     force_regenerate: bool = False
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """
     Generate sequential order numbers for all Fulfillable orders.
 
@@ -131,7 +130,7 @@ def generate_sequential_order_map(
     return order_map
 
 
-def load_sequential_order_map(session_path: Path) -> Dict[str, int]:
+def load_sequential_order_map(session_path: Path) -> dict[str, int]:
     """
     Load existing sequential order map from session.
 
@@ -155,12 +154,12 @@ def load_sequential_order_map(session_path: Path) -> Dict[str, int]:
         logger.info(f"Loaded sequential order map: {len(order_map)} orders")
         return order_map
 
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Failed to load sequential order map: {e}", exc_info=True)
+    except (json.JSONDecodeError, KeyError):
+        logger.exception("Failed to load sequential order map")
         return {}
 
 
-def get_sequential_number(order_number: str, session_path: Path) -> Optional[int]:
+def get_sequential_number(order_number: str, session_path: Path) -> int | None:
     """
     Get sequential number for specific order.
 
@@ -178,7 +177,7 @@ def get_sequential_number(order_number: str, session_path: Path) -> Optional[int
 def regenerate_sequential_order_map(
     analysis_results_df: pd.DataFrame,
     session_path: Path
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """
     Force regeneration of sequential order map.
 

@@ -6,27 +6,26 @@ with filtering by status and the ability to open existing sessions.
 
 import logging
 from datetime import datetime
+
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QPushButton,
-    QComboBox,
-    QGroupBox,
-    QHeaderView,
-    QMessageBox,
-    QLineEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Signal, Qt, QEvent
 
-from shopify_tool.session_manager import SessionManager
-from gui.wheel_ignore_combobox import WheelIgnoreComboBox
-from gui.theme_manager import get_theme_manager
 from gui.background_worker import BackgroundWorker
-
+from gui.theme_manager import get_theme_manager
+from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from shopify_tool.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,7 @@ class SessionLoaderWorker(BackgroundWorker):
 
         except Exception as e:
             if not self._is_cancelled:
-                logger.error(f"Error loading sessions: {e}", exc_info=True)
+                logger.exception("Error loading sessions")
                 self.error_occurred.emit(str(e))
 
 
@@ -291,8 +290,8 @@ class SessionBrowserWidget(QWidget):
             logger.info(f"Loaded {len(self.sessions_data)} sessions (sync mode)")
 
         except Exception as e:
-            logger.error(f"Failed to load sessions: {e}", exc_info=True)
-            QMessageBox.warning(self, "Error", f"Failed to load sessions:\n{str(e)}")
+            logger.exception("Failed to load sessions")
+            QMessageBox.warning(self, "Error", f"Failed to load sessions:\n{e!s}")
 
     def _on_sessions_loaded(self, sessions_data):
         """Handle loaded data in main thread (safe for UI updates)."""
@@ -344,7 +343,7 @@ class SessionBrowserWidget(QWidget):
                 try:
                     dt = datetime.fromisoformat(created_at)
                     created_str = dt.strftime("%Y-%m-%d %H:%M")
-                except (ValueError, TypeError) as e:
+                except (ValueError, TypeError):
                     # Invalid datetime format, use original string
                     created_str = created_at
             else:
@@ -504,8 +503,8 @@ Comments: {comments if comments else "None"}"""
             logger.info(f"Updated session status: {session_path} -> {status}")
 
         except Exception as e:
-            logger.error(f"Failed to update status: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"Failed to update status:\n{str(e)}")
+            logger.exception("Failed to update status")
+            QMessageBox.critical(self, "Error", f"Failed to update status:\n{e!s}")
             # Revert to previous value
             self.refresh_sessions()
 
@@ -524,8 +523,8 @@ Comments: {comments if comments else "None"}"""
 
             logger.info(f"Updated session comments: {session_path}")
 
-        except Exception as e:
-            logger.error(f"Failed to update comments: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to update comments")
             # Don't show error dialog for comments (less critical)
             # Just log the error
 
@@ -536,9 +535,12 @@ Comments: {comments if comments else "None"}"""
         over sessions without clicking. Only mouseMoveEvent with no button pressed
         is blocked — drag-selection (button held) still works normally.
         """
-        if watched is self.sessions_table.viewport():
-            if event.type() == QEvent.Type.MouseMove and not event.buttons():
-                return True  # consume event — no selection change on hover
+        if (
+            watched is self.sessions_table.viewport()
+            and event.type() == QEvent.Type.MouseMove
+            and not event.buttons()
+        ):
+            return True  # consume event — no selection change on hover
         return super().eventFilter(watched, event)
 
     def showEvent(self, event):

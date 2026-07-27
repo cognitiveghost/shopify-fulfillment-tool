@@ -5,11 +5,18 @@ Users can see the relationship between their CSV columns and the internal proces
 """
 
 import logging
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QLineEdit, QPushButton, QScrollArea, QMessageBox, QGridLayout
-)
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+
 from gui.theme_manager import get_theme_manager
 
 logger = logging.getLogger("ShopifyToolLogger")
@@ -114,7 +121,7 @@ class ColumnMappingWidget(QWidget):
         csv_label.setFixedWidth(120)
 
         csv_input = QLineEdit()
-        csv_input.setPlaceholderText(f"Enter column name...")
+        csv_input.setPlaceholderText("Enter column name...")
         csv_input.setMinimumWidth(200)
 
         # Set current value if exists

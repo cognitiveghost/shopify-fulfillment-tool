@@ -1,9 +1,9 @@
 import copy
-import pandas as pd
 import re
 from functools import lru_cache
-from typing import Optional
+from typing import ClassVar
 
+import pandas as pd
 
 """Implements a configurable rule engine to process and modify order data.
 
@@ -185,7 +185,7 @@ def _op_is_not_empty(series_val, rule_val):
 # --- Helper Functions for New Operators ---
 
 
-def _parse_date_safe(date_str: str) -> Optional[pd.Timestamp]:
+def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
     """Safely parse date string with multiple format support.
 
     Tries 3 common date formats in sequence:
@@ -229,7 +229,7 @@ def _parse_date_safe(date_str: str) -> Optional[pd.Timestamp]:
 
 
 @lru_cache(maxsize=128)
-def _compile_regex_safe(pattern: str) -> Optional[re.Pattern]:
+def _compile_regex_safe(pattern: str) -> re.Pattern | None:
     """Safely compile regex pattern with caching.
 
     Uses LRU cache to avoid recompiling patterns on repeated calls.
@@ -258,7 +258,7 @@ def _compile_regex_safe(pattern: str) -> Optional[re.Pattern]:
         return None
 
 
-def _parse_range(range_str: str) -> Optional[tuple[float, float]]:
+def _parse_range(range_str: str) -> tuple[float, float] | None:
     """Parse range string in format 'start-end'.
 
     Args:
@@ -415,7 +415,7 @@ def _op_between(series_val, rule_val):
         return (series_numeric >= start) & (series_numeric <= end)
     else:
         # Fallback to string comparison
-        logger.info(f"[RULE ENGINE] Using string comparison for 'between' operator")
+        logger.info("[RULE ENGINE] Using string comparison for 'between' operator")
         series_str = series_val.astype(str)
         return (series_str >= str(start)) & (series_str <= str(end))
 
@@ -466,7 +466,7 @@ def _op_date_before(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     rule_date = _parse_date_safe(rule_val)
     if rule_date is None:
@@ -513,7 +513,7 @@ def _op_date_after(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     rule_date = _parse_date_safe(rule_val)
     if rule_date is None:
@@ -560,7 +560,7 @@ def _op_date_equals(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     rule_date = _parse_date_safe(rule_val)
     if rule_date is None:
@@ -606,7 +606,7 @@ def _op_matches_regex(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     compiled_pattern = _compile_regex_safe(rule_val)
     if compiled_pattern is None:
@@ -633,7 +633,7 @@ class RuleEngine:
     """Applies a set of configured rules to a DataFrame of order data."""
 
     # Define order-level fields and their calculation methods
-    ORDER_LEVEL_FIELDS = {
+    ORDER_LEVEL_FIELDS: ClassVar[dict[str, str]] = {
         "item_count": "_calculate_item_count",
         "total_quantity": "_calculate_total_quantity",
         "unique_sku_count": "_calculate_unique_sku_count",
@@ -821,7 +821,7 @@ class RuleEngine:
         if order_rules and "Order_Number" in df.columns:
             for order_number in df["Order_Number"].unique():
                 order_mask = df["Order_Number"] == order_number
-                order_df = df[order_mask]
+                df[order_mask]
 
                 for rule in order_rules:
                     rule_name = rule.get("name", "Unnamed")
@@ -903,11 +903,7 @@ class RuleEngine:
                         needed_columns.add("Status_Note")
                     elif action_type == "ADD_INTERNAL_TAG":
                         needed_columns.add("Internal_Tags")
-                    elif action_type == "COPY_FIELD":
-                        target = action.get("target")
-                        if target:
-                            needed_columns.add(target)
-                    elif action_type == "CALCULATE":
+                    elif action_type == "COPY_FIELD" or action_type == "CALCULATE":
                         target = action.get("target")
                         if target:
                             needed_columns.add(target)
@@ -978,7 +974,7 @@ class RuleEngine:
 
             # Log data types and sample values
             logger.info(f"[RULE ENGINE] Field '{field}' dtype: {df[field].dtype}")
-            logger.info(f"[RULE ENGINE] Rule value type: {type(value).__name__}, value: {repr(value)}")
+            logger.info(f"[RULE ENGINE] Rule value type: {type(value).__name__}, value: {value!r}")
             unique_vals = df[field].dropna().unique()[:5]
             logger.info(f"[RULE ENGINE] Sample values in '{field}': {list(unique_vals)}")
 
@@ -1037,13 +1033,13 @@ class RuleEngine:
             if action_type == "ADD_TAG":
                 # Per user feedback, ADD_TAG should modify Status_Note, not Tags
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
-                new_notes = current_notes.apply(lambda n: _append_to_note(n, value))
+                new_notes = current_notes.apply(lambda n, value=value: _append_to_note(n, value))
                 df.loc[matches, "Status_Note"] = new_notes
 
             elif action_type == "ADD_ORDER_TAG":
                 # Add tag to Status_Note (for order-level tagging)
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
-                new_notes = current_notes.apply(lambda n: _append_to_note(n, value))
+                new_notes = current_notes.apply(lambda n, value=value: _append_to_note(n, value))
                 df.loc[matches, "Status_Note"] = new_notes
 
             elif action_type == "ADD_INTERNAL_TAG":
@@ -1051,7 +1047,7 @@ class RuleEngine:
                 from shopify_tool.tag_manager import add_tag
 
                 current_tags = df.loc[matches, "Internal_Tags"]
-                new_tags = current_tags.apply(lambda t: add_tag(t, value))
+                new_tags = current_tags.apply(lambda t, value=value: add_tag(t, value))
                 df.loc[matches, "Internal_Tags"] = new_tags
 
             elif action_type == "SET_STATUS":
@@ -1079,7 +1075,7 @@ class RuleEngine:
                 tags_value = action.get("tags") or action.get("value")
 
                 if not tags_value:
-                    logger.warning(f"[RULE ENGINE] SET_MULTI_TAGS missing tags/value")
+                    logger.warning("[RULE ENGINE] SET_MULTI_TAGS missing tags/value")
                     continue
 
                 # Parse: підтримка list або comma-separated string
@@ -1097,7 +1093,7 @@ class RuleEngine:
                 # Додати теги без дублікатів
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
 
-                def add_multiple_tags(note):
+                def add_multiple_tags(note, tags_list=tags_list):
                     existing = [t.strip() for t in note.split(", ") if t.strip()]
                     for tag in tags_list:
                         if tag not in existing:
@@ -1112,7 +1108,7 @@ class RuleEngine:
                 severity = action.get("severity", "info").lower()
 
                 if not message:
-                    logger.warning(f"[RULE ENGINE] ALERT_NOTIFICATION missing message")
+                    logger.warning("[RULE ENGINE] ALERT_NOTIFICATION missing message")
                     continue
 
                 # Валідація severity
@@ -1151,7 +1147,7 @@ class RuleEngine:
                     continue
 
                 if field1 not in df.columns or field2 not in df.columns:
-                    logger.warning(f"[RULE ENGINE] CALCULATE fields not found in DataFrame")
+                    logger.warning("[RULE ENGINE] CALCULATE fields not found in DataFrame")
                     continue
 
                 # Створити target column якщо не існує
@@ -1183,7 +1179,7 @@ class RuleEngine:
                 quantity = action.get("quantity", 1)
 
                 if not sku:
-                    logger.warning(f"[RULE ENGINE] ADD_PRODUCT missing SKU")
+                    logger.warning("[RULE ENGINE] ADD_PRODUCT missing SKU")
                     continue
 
                 try:
@@ -1193,7 +1189,7 @@ class RuleEngine:
                     continue
 
                 if quantity <= 0:
-                    logger.warning(f"[RULE ENGINE] ADD_PRODUCT quantity must be positive")
+                    logger.warning("[RULE ENGINE] ADD_PRODUCT quantity must be positive")
                     continue
 
                 # Знайти цей SKU в DataFrame для отримання product info (з stock файлу)

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """One-way sync of the canonical shared/ package from packing-tool into this
 repo. packing-tool/shared/ is the single source of truth (see
 packing-tool/docs/superpowers/specs/2026-07-25-shared-unification-design.md)

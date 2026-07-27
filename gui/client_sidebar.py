@@ -8,20 +8,34 @@ This widget provides a sidebar for client navigation with:
 """
 
 import logging
-from typing import Dict, List, Optional
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QMenu, QMessageBox, QApplication
-)
-from PySide6.QtCore import Signal, Qt, QPropertyAnimation, QEasingCurve, QSettings, QPoint
-from PySide6.QtGui import QPainter, QColor, QPen
 
-from shopify_tool.profile_manager import ProfileManager
-from shopify_tool.groups_manager import GroupsManager
+from PySide6.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QPropertyAnimation,
+    QSettings,
+    Qt,
+    Signal,
+)
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+
 from gui.client_card import ClientCard
+from gui.client_settings_dialog import ClientCreationDialog, ClientSettingsDialog
 from gui.groups_management_dialog import GroupsManagementDialog
-from gui.client_settings_dialog import ClientSettingsDialog, ClientCreationDialog
 from gui.theme_manager import get_theme_manager
+from shopify_tool.groups_manager import GroupsManager
+from shopify_tool.profile_manager import ProfileManager
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +79,7 @@ class CollapsedClientIndicator(QWidget):
 class SectionWidget(QWidget):
     """Widget for a collapsible section (Pinned, Group, All Clients)."""
 
-    def __init__(self, title: str, color: str = None, parent=None):
+    def __init__(self, title: str, color: str | None = None, parent=None):
         """Initialize section widget.
 
         Args:
@@ -172,7 +186,7 @@ class ClientSidebar(QWidget):
         self.active_client_id = None
 
         # Track all ClientCard instances (for highlighting across sections)
-        self.client_cards: Dict[str, List[ClientCard]] = {}
+        self.client_cards: dict[str, list[ClientCard]] = {}
 
         self.setFixedWidth(self.EXPANDED_WIDTH)
 
@@ -278,6 +292,7 @@ class ClientSidebar(QWidget):
     def refresh(self):
         """Refresh client list and rebuild sections with performance logging."""
         import time
+
         from PySide6.QtCore import Qt
 
         theme = get_theme_manager().get_current_theme()
@@ -373,13 +388,13 @@ class ClientSidebar(QWidget):
 
         except Exception as e:
             self.setUpdatesEnabled(True)
-            logger.error(f"Failed to refresh sidebar: {e}", exc_info=True)
-            QMessageBox.warning(self, "Refresh Error", f"Failed to refresh sidebar:\n{str(e)}")
+            logger.exception("Failed to refresh sidebar")
+            QMessageBox.warning(self, "Refresh Error", f"Failed to refresh sidebar:\n{e!s}")
         finally:
             # Restore cursor after refresh completes (success or error)
             QApplication.restoreOverrideCursor()
 
-    def _create_pinned_section(self, all_clients: List[str], config: Dict) -> SectionWidget:
+    def _create_pinned_section(self, all_clients: list[str], config: dict) -> SectionWidget:
         """Create Pinned section.
 
         Args:
@@ -408,7 +423,7 @@ class ClientSidebar(QWidget):
         group_id: str,
         group_name: str,
         group_color: str,
-        all_clients: List[str]
+        all_clients: list[str]
     ) -> SectionWidget:
         """Create custom group section.
 
@@ -432,7 +447,7 @@ class ClientSidebar(QWidget):
 
         return section
 
-    def _create_all_section(self, clients: List[str], config: Dict) -> SectionWidget:
+    def _create_all_section(self, clients: list[str], config: dict) -> SectionWidget:
         """Create All Clients section.
 
         Args:
@@ -493,7 +508,7 @@ class ClientSidebar(QWidget):
 
         return card
 
-    def _get_section_client_ids(self, section: SectionWidget) -> List[str]:
+    def _get_section_client_ids(self, section: SectionWidget) -> list[str]:
         """Get list of client IDs in a section.
 
         Args:
@@ -676,8 +691,8 @@ class ClientSidebar(QWidget):
             self.refresh()
 
         except Exception as e:
-            logger.error(f"Failed to toggle pin: {e}", exc_info=True)
-            QMessageBox.warning(self, "Error", f"Failed to toggle pin:\n{str(e)}")
+            logger.exception("Failed to toggle pin")
+            QMessageBox.warning(self, "Error", f"Failed to toggle pin:\n{e!s}")
 
     def _edit_client(self, client_id: str):
         """Open edit dialog for client.
@@ -696,7 +711,7 @@ class ClientSidebar(QWidget):
             # Refresh sidebar after changes
             self.refresh()
 
-    def _move_to_group(self, client_id: str, group_id: Optional[str]):
+    def _move_to_group(self, client_id: str, group_id: str | None):
         """Move client to a different group.
 
         Args:
@@ -711,8 +726,8 @@ class ClientSidebar(QWidget):
             self.refresh()
 
         except Exception as e:
-            logger.error(f"Failed to move client to group: {e}", exc_info=True)
-            QMessageBox.warning(self, "Error", f"Failed to move client:\n{str(e)}")
+            logger.exception("Failed to move client to group")
+            QMessageBox.warning(self, "Error", f"Failed to move client:\n{e!s}")
 
     def _delete_client(self, client_id: str):
         """Delete client after confirmation.
@@ -741,8 +756,8 @@ class ClientSidebar(QWidget):
                 )
 
             except Exception as e:
-                logger.error(f"Failed to delete client: {e}", exc_info=True)
-                QMessageBox.critical(self, "Error", f"Failed to delete client:\n{str(e)}")
+                logger.exception("Failed to delete client")
+                QMessageBox.critical(self, "Error", f"Failed to delete client:\n{e!s}")
 
     def _open_groups_dialog(self):
         """Open groups management dialog."""

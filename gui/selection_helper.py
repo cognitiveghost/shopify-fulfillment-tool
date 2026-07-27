@@ -4,7 +4,7 @@ This module provides the SelectionHelper class that manages table selection
 and checkbox state for bulk operations on the Analysis Results table.
 """
 
-from typing import List, Tuple, Set
+
 import pandas as pd
 
 
@@ -33,15 +33,15 @@ class SelectionHelper:
         self.table_view = table_view
         self.proxy_model = proxy_model
         self.main_window = main_window
-        self.checked_rows: Set[int] = set()  # Set of source DataFrame indexes
+        self.checked_rows: set[int] = set()  # Set of source DataFrame indexes
 
-    def get_selected_source_rows(self) -> List[int]:
+    def get_selected_source_rows(self) -> list[int]:
         """Get list of source DataFrame indexes for checked rows.
 
         Returns:
             List of integer indexes in analysis_results_df, sorted ascending
         """
-        return sorted(list(self.checked_rows))
+        return sorted(self.checked_rows)
 
     def get_selected_orders_data(self) -> pd.DataFrame:
         """Get DataFrame slice of selected rows.
@@ -63,7 +63,7 @@ class SelectionHelper:
 
         return df.loc[valid_indexes].copy()
 
-    def get_selection_summary(self) -> Tuple[int, int]:
+    def get_selection_summary(self) -> tuple[int, int]:
         """Get summary of selected items.
 
         Returns:

@@ -9,14 +9,22 @@ This dialog allows users to add products to existing orders with:
 - Live stock display
 """
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QSpinBox, QLabel, QPushButton,
-    QGroupBox, QMessageBox, QCompleter, QWidget
-)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
 import logging
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QCompleter,
+    QDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui.theme_manager import get_theme_manager
 

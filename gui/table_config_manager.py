@@ -7,12 +7,12 @@ Author: Claude Code
 Date: 2026-02-03
 """
 
-from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional
 import logging
+from dataclasses import asdict, dataclass, field
+
 import pandas as pd
-from PySide6.QtWidgets import QTableView
 from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QTableView
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +30,11 @@ class TableConfig:
         locked_columns: Columns that cannot be hidden or reordered
     """
     version: int = 1
-    visible_columns: Dict[str, bool] = field(default_factory=dict)
-    column_order: List[str] = field(default_factory=list)
-    column_widths: Dict[str, int] = field(default_factory=dict)
+    visible_columns: dict[str, bool] = field(default_factory=dict)
+    column_order: list[str] = field(default_factory=list)
+    column_widths: dict[str, int] = field(default_factory=dict)
     auto_hide_empty: bool = True
-    locked_columns: List[str] = field(default_factory=lambda: ["Order_Number"])
+    locked_columns: list[str] = field(default_factory=lambda: ["Order_Number"])
 
     def to_dict(self) -> dict:
         """Convert config to dictionary for JSON serialization."""
@@ -83,13 +83,13 @@ class TableConfigManager:
         """
         self.mw = main_window
         self.pm = profile_manager
-        self._current_config: Optional[TableConfig] = None
-        self._current_client_id: Optional[str] = None
+        self._current_config: TableConfig | None = None
+        self._current_client_id: str | None = None
         self._current_view_name: str = "Default"
 
         # Store references for signal handlers
-        self._current_table_view: Optional[QTableView] = None
-        self._current_df: Optional[pd.DataFrame] = None
+        self._current_table_view: QTableView | None = None
+        self._current_df: pd.DataFrame | None = None
 
         # Flag to suppress signal handlers during bulk config application
         self._applying_config = False
@@ -205,11 +205,11 @@ class TableConfigManager:
 
             logger.debug(f"Saved table view '{view_name}' for CLIENT_{client_id}")
 
-        except Exception as e:
-            logger.error(f"Failed to save table config for CLIENT_{client_id}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to save table config for CLIENT_{client_id}")
             raise
 
-    def get_default_config(self, columns: List[str]) -> TableConfig:
+    def get_default_config(self, columns: list[str]) -> TableConfig:
         """Create default configuration for given columns.
 
         Args:
@@ -518,7 +518,7 @@ class TableConfigManager:
 
         logger.info("Auto-fit column widths applied")
 
-    def get_column_name_from_logical_index(self, logical_index: int, df: pd.DataFrame, table_view: QTableView) -> Optional[str]:
+    def get_column_name_from_logical_index(self, logical_index: int, df: pd.DataFrame, table_view: QTableView) -> str | None:
         """Get column name from logical index.
 
         Args:
@@ -555,7 +555,7 @@ class TableConfigManager:
 
         return df_columns[logical_index]
 
-    def detect_empty_columns(self, df: pd.DataFrame) -> List[str]:
+    def detect_empty_columns(self, df: pd.DataFrame) -> list[str]:
         """Detect columns that are completely empty.
 
         A column is considered empty if:
@@ -675,12 +675,11 @@ class TableConfigManager:
         checkbox_offset = 1 if has_checkbox else 0
 
         # Locked columns (Order_Number) must stay at position after checkbox
-        if column_name in self._current_config.locked_columns:
-            if new_visual_index != checkbox_offset:
-                # Revert move
-                header.moveSection(new_visual_index, old_visual_index)
-                logger.warning(f"Cannot move locked column '{column_name}' from position {checkbox_offset}")
-                return
+        if column_name in self._current_config.locked_columns and new_visual_index != checkbox_offset:
+            # Revert move
+            header.moveSection(new_visual_index, old_visual_index)
+            logger.warning(f"Cannot move locked column '{column_name}' from position {checkbox_offset}")
+            return
 
         # Don't allow moving to the locked position (after checkbox)
         if new_visual_index == checkbox_offset and column_name not in self._current_config.locked_columns:
@@ -691,7 +690,7 @@ class TableConfigManager:
 
         # Update column order in config
         # Get current visual order
-        df_columns = self._current_df.columns.tolist()
+        self._current_df.columns.tolist()
         new_order = []
 
         for visual_pos in range(checkbox_offset, header.count()):
@@ -728,8 +727,8 @@ class TableConfigManager:
             )
             self._pending_save = False
             logger.debug("Debounced save completed")
-        except Exception as e:
-            logger.error(f"Failed to perform debounced save: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to perform debounced save")
 
     # Column visibility management methods (Phase 2)
 
@@ -920,7 +919,7 @@ class TableConfigManager:
 
         return self._current_config.visible_columns.get(column_name, True)
 
-    def get_hidden_columns(self, df: pd.DataFrame) -> List[str]:
+    def get_hidden_columns(self, df: pd.DataFrame) -> list[str]:
         """Get list of currently hidden columns.
 
         Args:
@@ -972,7 +971,7 @@ class TableConfigManager:
 
     # Methods for managing named views (Phase 4)
 
-    def get_current_config(self) -> Optional[TableConfig]:
+    def get_current_config(self) -> TableConfig | None:
         """Get the currently loaded configuration.
 
         Returns:
@@ -988,7 +987,7 @@ class TableConfigManager:
         """
         return self._current_view_name
 
-    def list_views(self, client_id: Optional[str] = None) -> List[str]:
+    def list_views(self, client_id: str | None = None) -> list[str]:
         """List all saved view names for a client.
 
         Args:
@@ -1006,7 +1005,7 @@ class TableConfigManager:
 
         return self._list_views_impl(client_id)
 
-    def _list_views_impl(self, client_id: str) -> List[str]:
+    def _list_views_impl(self, client_id: str) -> list[str]:
         """List all saved view names for a client (internal implementation).
 
         Args:
@@ -1021,11 +1020,11 @@ class TableConfigManager:
             table_view_settings = ui_settings.get("table_view", {})
             views = table_view_settings.get("views", {})
             return list(views.keys())
-        except Exception as e:
-            logger.error(f"Failed to list views for CLIENT_{client_id}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to list views for CLIENT_{client_id}")
             return []
 
-    def load_view(self, view_name: str, client_id: Optional[str] = None) -> Optional[TableConfig]:
+    def load_view(self, view_name: str, client_id: str | None = None) -> TableConfig | None:
         """Load a specific named view.
 
         Args:
@@ -1044,7 +1043,7 @@ class TableConfigManager:
 
         return self.load_config(client_id, view_name)
 
-    def _load_view_legacy(self, client_id: str, view_name: str) -> Optional[TableConfig]:
+    def _load_view_legacy(self, client_id: str, view_name: str) -> TableConfig | None:
         """Load a specific named view (legacy method for tests).
 
         Args:
@@ -1056,7 +1055,7 @@ class TableConfigManager:
         """
         return self.load_config(client_id, view_name)
 
-    def save_view(self, view_name: str, config: TableConfig, client_id: Optional[str] = None):
+    def save_view(self, view_name: str, config: TableConfig, client_id: str | None = None):
         """Save a named view.
 
         Args:
@@ -1074,7 +1073,7 @@ class TableConfigManager:
         self.save_config(client_id, config, view_name)
         self._current_view_name = view_name
 
-    def delete_view(self, view_name: str, client_id: Optional[str] = None):
+    def delete_view(self, view_name: str, client_id: str | None = None):
         """Delete a named view.
 
         Args:
@@ -1112,6 +1111,6 @@ class TableConfigManager:
             else:
                 logger.warning(f"View '{view_name}' not found for CLIENT_{client_id}")
 
-        except Exception as e:
-            logger.error(f"Failed to delete view '{view_name}' for CLIENT_{client_id}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to delete view '{view_name}' for CLIENT_{client_id}")
             raise

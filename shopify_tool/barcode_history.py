@@ -5,11 +5,11 @@ Tracks all generated barcodes for audit and statistics.
 History persisted per packing list in barcode_history.json.
 """
 
-import logging
 import json
-from pathlib import Path
-from typing import Dict, Any
+import logging
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class BarcodeHistory:
         self.history_file = history_file
         self.data = self._load_history()
 
-    def _load_history(self) -> Dict:
+    def _load_history(self) -> dict:
         """Load history from JSON file."""
         if not self.history_file.exists():
             logger.info(f"Creating new history file: {self.history_file}")
@@ -44,11 +44,11 @@ class BarcodeHistory:
             logger.info(f"Loaded history: {len(data.get('generated_barcodes', []))} entries")
             return data
 
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to load history: {e}", exc_info=True)
+        except (json.JSONDecodeError, KeyError):
+            logger.exception("Failed to load history")
             return {"generated_barcodes": []}
 
-    def _save_history(self, data: Dict = None):
+    def _save_history(self, data: dict | None = None):
         """Save history to JSON file."""
         if data is None:
             data = self.data
@@ -59,10 +59,10 @@ class BarcodeHistory:
 
             logger.debug(f"Saved history: {len(data.get('generated_barcodes', []))} entries")
 
-        except Exception as e:
-            logger.error(f"Failed to save history: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save history")
 
-    def add_entry(self, entry: Dict[str, Any]):
+    def add_entry(self, entry: dict[str, Any]):
         """
         Add barcode generation entry to history.
 
@@ -71,7 +71,7 @@ class BarcodeHistory:
         """
         # Add timestamp if not present
         if 'generated_at' not in entry:
-            entry['generated_at'] = datetime.now().isoformat()
+            entry['generated_at'] = datetime.now().astimezone().isoformat()
 
         # Convert Path objects to strings for JSON serialization
         if 'file_path' in entry and entry['file_path'] is not None:
@@ -88,7 +88,7 @@ class BarcodeHistory:
         self._save_history()
         logger.info("History cleared")
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """
         Get statistics from history.
 

@@ -2,7 +2,6 @@
 import json
 
 import pandas as pd
-import pytest
 
 from shopify_tool.sequential_order import (
     generate_sequential_order_map,

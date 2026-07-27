@@ -376,7 +376,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
 def build_palette(theme: ThemeTokens):
     """Build a QPalette for one theme. Import is local so this module stays
     importable in a pure-Python (no Qt) context, e.g. under plain pytest."""
-    from PySide6.QtGui import QPalette, QColor
+    from PySide6.QtGui import QColor, QPalette
 
     palette = QPalette()
     palette.setColor(QPalette.ColorRole.Window, QColor(theme.background))

@@ -20,7 +20,7 @@ import shutil
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, ClassVar
 
 from shared.logger import setup_logging
 from shared.server_connection import resolve_server_path, test_path_reachable
@@ -32,19 +32,16 @@ logger = logging.getLogger("ShopifyToolLogger")
 class ProfileManagerError(Exception):
     """Base exception for ProfileManager errors."""
 
-    pass
 
 
 class NetworkError(ProfileManagerError):
     """Raised when file server is not accessible."""
 
-    pass
 
 
 class ValidationError(ProfileManagerError):
     """Raised when validation fails."""
 
-    pass
 
 
 PROD_SERVER_PATH = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
@@ -73,12 +70,12 @@ class ProfileManager:
     # Class-level cache: key → (data, mtime_float). mtime-based invalidation is more
     # correct than TTL — no stale reads after a write, no unnecessary re-reads within a window.
     # Key includes base_path so multiple instances with different roots don't collide.
-    _config_cache: Dict[str, Tuple[Dict, float]] = {}
+    _config_cache: ClassVar[dict[str, tuple[dict, float]]] = {}
 
     # Class-level constants for metadata cache
     METADATA_CACHE_TIMEOUT_SECONDS = 300  # 5 minutes
 
-    def __init__(self, base_path: str = None):
+    def __init__(self, base_path: str | None = None):
         """Initialize ProfileManager with automatic environment detection.
 
         Args:
@@ -118,7 +115,7 @@ class ProfileManager:
         self.logs_dir = self.base_path / "Logs" / "shopify_tool"
 
         # Instance-level metadata cache
-        self._metadata_cache: Dict[str, Tuple[Dict, datetime]] = {}
+        self._metadata_cache: dict[str, tuple[dict, datetime]] = {}
 
         self.connection_timeout = 5
         self.is_network_available = self._test_connection()
@@ -173,15 +170,15 @@ class ProfileManager:
             self.sessions_dir.mkdir(parents=True, exist_ok=True)
             self.stats_dir.mkdir(parents=True, exist_ok=True)
             self.logs_dir.mkdir(parents=True, exist_ok=True)
-        except PermissionError as e:
-            logger.error(f"Network connection FAILED - Permission denied: {e}", exc_info=True)
+        except PermissionError:
+            logger.exception("Network connection FAILED - Permission denied")
             return False
-        except OSError as e:
-            logger.error(f"Network connection FAILED - OS error (network issue?): {e}", exc_info=True)
+        except OSError:
+            logger.exception("Network connection FAILED - OS error (network issue?)")
             return False
-        except Exception as e:
-            logger.error(
-                f"Network connection FAILED - Unexpected error: {e}", exc_info=True
+        except Exception:
+            logger.exception(
+                "Network connection FAILED - Unexpected error"
             )
             return False
 
@@ -192,7 +189,7 @@ class ProfileManager:
         return False
 
     @staticmethod
-    def validate_client_id(client_id: str) -> Tuple[bool, str]:
+    def validate_client_id(client_id: str) -> tuple[bool, str]:
         """Validate client ID format.
 
         Rules:
@@ -245,7 +242,7 @@ class ProfileManager:
 
         return True, ""
 
-    def list_clients(self) -> List[str]:
+    def list_clients(self) -> list[str]:
         """Get list of available client IDs.
 
         Returns:
@@ -265,14 +262,14 @@ class ProfileManager:
 
             return sorted(clients)
 
-        except PermissionError as e:
-            logger.error(f"Permission denied accessing clients directory: {e}", exc_info=True)
+        except PermissionError:
+            logger.exception("Permission denied accessing clients directory")
             return []
-        except OSError as e:
-            logger.error(f"File system error listing clients: {e}", exc_info=True)
+        except OSError:
+            logger.exception("File system error listing clients")
             return []
-        except Exception as e:
-            logger.error(f"Unexpected error listing clients: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Unexpected error listing clients")
             return []
 
     def create_client_profile(self, client_id: str, client_name: str) -> bool:
@@ -317,7 +314,7 @@ class ProfileManager:
             client_config = {
                 "client_id": client_id,
                 "client_name": client_name,
-                "created_at": datetime.now().isoformat(),
+                "created_at": datetime.now().astimezone().isoformat(),
                 "created_by": os.environ.get("COMPUTERNAME", "Unknown"),
             }
 
@@ -340,13 +337,13 @@ class ProfileManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to create client profile: {e}", exc_info=True)
+            logger.exception("Failed to create client profile")
             # Cleanup on failure
             if client_dir.exists():
                 shutil.rmtree(client_dir, ignore_errors=True)
             raise ProfileManagerError(f"Failed to create client profile: {e}")
 
-    def _migrate_column_mappings_v1_to_v2(self, client_id: str, config: Dict) -> bool:
+    def _migrate_column_mappings_v1_to_v2(self, client_id: str, config: dict) -> bool:
         """Migrate column mappings from v1 to v2 format.
 
         V1 format (old):
@@ -436,7 +433,7 @@ class ProfileManager:
 
         # Add migration metadata
         config["_migration_info"] = {
-            "migrated_at": datetime.now().isoformat(),
+            "migrated_at": datetime.now().astimezone().isoformat(),
             "from_version": 1,
             "to_version": 2,
             "migrated_by": os.environ.get("COMPUTERNAME", "Unknown"),
@@ -445,7 +442,7 @@ class ProfileManager:
         logger.info(f"Migration successful for CLIENT_{client_id}")
         return True
 
-    def _migrate_add_tag_categories(self, client_id: str, config: Dict) -> bool:
+    def _migrate_add_tag_categories(self, client_id: str, config: dict) -> bool:
         """Add tag_categories to config if missing (creates v2 format).
 
         Args:
@@ -522,7 +519,7 @@ class ProfileManager:
         logger.info(f"Tag categories (v2) added for CLIENT_{client_id}")
         return True
 
-    def _migrate_tag_categories_v1_to_v2(self, client_id: str, config: Dict) -> bool:
+    def _migrate_tag_categories_v1_to_v2(self, client_id: str, config: dict) -> bool:
         """Migrate tag_categories from v1 to v2 format.
 
         V1 format (old):
@@ -645,7 +642,7 @@ class ProfileManager:
         )
         return True
 
-    def _migrate_delimiter_config_v1_to_v2(self, client_id: str, config: Dict) -> bool:
+    def _migrate_delimiter_config_v1_to_v2(self, client_id: str, config: dict) -> bool:
         """Migrate delimiter configuration from v1 to v2 format.
 
         V1 format (old):
@@ -694,14 +691,14 @@ class ProfileManager:
         # Update config version if migration occurred
         if migrated:
             config["config_version"] = "2.1"
-            config["migrated_at"] = datetime.now().isoformat()
+            config["migrated_at"] = datetime.now().astimezone().isoformat()
             logger.info(
                 f"Delimiter migration successful for CLIENT_{client_id}, version: 2.1"
             )
 
         return migrated
 
-    def _migrate_add_weight_config(self, client_id: str, config: Dict) -> bool:
+    def _migrate_add_weight_config(self, client_id: str, config: dict) -> bool:
         """Add weight_config section if missing (new feature migration).
 
         Returns:
@@ -718,7 +715,7 @@ class ProfileManager:
         logger.info(f"Added default 'weight_config' for CLIENT_{client_id}")
         return True
 
-    def _migrate_add_sku_label_config(self, client_id: str, config: Dict) -> bool:
+    def _migrate_add_sku_label_config(self, client_id: str, config: dict) -> bool:
         """Add sku_label_config section if missing (new feature migration).
 
         Returns:
@@ -731,7 +728,7 @@ class ProfileManager:
         logger.info(f"Added default 'sku_label_config' for CLIENT_{client_id}")
         return True
 
-    def _migrate_add_inventory_memory(self, client_id: str, config: Dict) -> bool:
+    def _migrate_add_inventory_memory(self, client_id: str, config: dict) -> bool:
         """Add inventory_memory section if missing (new feature migration).
 
         Returns:
@@ -757,7 +754,7 @@ class ProfileManager:
         return False
 
     @staticmethod
-    def _create_default_shopify_config(client_id: str, client_name: str) -> Dict:
+    def _create_default_shopify_config(client_id: str, client_name: str) -> dict:
         """Create default Shopify configuration.
 
         Can be called without an instance for dev/test setup scripts.
@@ -772,7 +769,7 @@ class ProfileManager:
         return {
             "client_id": client_id,
             "client_name": client_name,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now().astimezone().isoformat(),
             "column_mappings": {
                 "version": 2,
                 "orders": {
@@ -881,7 +878,7 @@ class ProfileManager:
             },
         }
 
-    def load_client_config(self, client_id: str) -> Optional[Dict]:
+    def load_client_config(self, client_id: str) -> dict | None:
         """Load general configuration for a client.
 
         Automatically migrates old configs to add ui_settings if missing.
@@ -913,22 +910,21 @@ class ProfileManager:
 
             return config
 
-        except PermissionError as e:
-            logger.error(
-                f"Permission denied reading client config for CLIENT_{client_id}: {e}"
-            , exc_info=True)
+        except PermissionError:
+            logger.exception(
+                f"Permission denied reading client config for CLIENT_{client_id}"
+            )
             return None
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in client config for CLIENT_{client_id}: {e}", exc_info=True)
+        except json.JSONDecodeError:
+            logger.exception(f"Invalid JSON in client config for CLIENT_{client_id}")
             return None
-        except Exception as e:
-            logger.error(
-                f"Unexpected error loading client config for CLIENT_{client_id}: {e}",
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                f"Unexpected error loading client config for CLIENT_{client_id}",
             )
             return None
 
-    def load_shopify_config(self, client_id: str) -> Optional[Dict]:
+    def load_shopify_config(self, client_id: str) -> dict | None:
         """Load Shopify configuration for a client with mtime-based caching.
 
         Cache is invalidated by file mtime rather than TTL: no stale reads after
@@ -1001,11 +997,11 @@ class ProfileManager:
 
             return config
 
-        except Exception as e:
-            logger.error(f"Failed to load shopify config: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to load shopify config")
             return None
 
-    def save_shopify_config(self, client_id: str, config: Dict) -> bool:
+    def save_shopify_config(self, client_id: str, config: dict) -> bool:
         """Save Shopify configuration with file locking and backup.
 
         Uses file locking to prevent concurrent write conflicts.
@@ -1035,7 +1031,7 @@ class ProfileManager:
             self._create_backup(client_id, config_path, "shopify_config")
 
         # Update timestamp
-        config["last_updated"] = datetime.now().isoformat()
+        config["last_updated"] = datetime.now().astimezone().isoformat()
         config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
         # Calculate config size and metrics for logging
@@ -1089,7 +1085,7 @@ class ProfileManager:
                         )
                         time.sleep(retry_delay)
 
-            except (IOError, OSError) as e:
+            except OSError as e:
                 if attempt < max_retries - 1:
                     logger.warning(
                         f"Save failed (attempt {attempt + 1}/{max_retries}), "
@@ -1097,12 +1093,12 @@ class ProfileManager:
                     )
                     time.sleep(retry_delay)
                 else:
-                    logger.error(
+                    logger.exception(
                         f"Save failed after {max_retries} attempts, "
                         f"config size: {config_size:,} bytes, {num_sets} sets"
-                    , exc_info=True)
+                    )
                     raise ProfileManagerError(
-                        f"Configuration is locked by another user. Please try again."
+                        "Configuration is locked by another user. Please try again."
                     )
 
         logger.error(
@@ -1114,7 +1110,7 @@ class ProfileManager:
     # --- Set/Bundle Management Methods ---
 
     def save_inventory_memory(
-        self, client_id: str, stock_dict: dict, config: dict = None, names_dict: dict = None
+        self, client_id: str, stock_dict: dict, config: dict | None = None, names_dict: dict | None = None
     ) -> bool:
         """Persist final stock snapshot to shopify_config inventory_memory section.
 
@@ -1144,7 +1140,7 @@ class ProfileManager:
             # Keep zero-qty SKUs: dropping them shrinks old_skus overlap ratio and can
             # trigger a false 'Wrong client file?' anomaly on the next stock load.
             "skus": {normalize_sku(k): float(v) for k, v in stock_dict.items()},
-            "last_updated": datetime.now().isoformat(timespec="seconds"),
+            "last_updated": datetime.now().astimezone().isoformat(timespec="seconds"),
             "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
         }
         if names_dict is not None:
@@ -1157,7 +1153,7 @@ class ProfileManager:
         config = self.load_shopify_config(client_id) or {}
         return config.get("inventory_memory", {})
 
-    def get_set_decoders(self, client_id: str) -> Dict:
+    def get_set_decoders(self, client_id: str) -> dict:
         """Get set/bundle decoder definitions for a client.
 
         Args:
@@ -1174,7 +1170,7 @@ class ProfileManager:
 
         return config.get("set_decoders", {})
 
-    def save_set_decoders(self, client_id: str, set_decoders: Dict) -> bool:
+    def save_set_decoders(self, client_id: str, set_decoders: dict) -> bool:
         """Save set/bundle decoder definitions for a client.
 
         Args:
@@ -1202,7 +1198,7 @@ class ProfileManager:
         return success
 
     def add_set(
-        self, client_id: str, set_sku: str, components: List[Dict[str, any]]
+        self, client_id: str, set_sku: str, components: list[dict[str, Any]]
     ) -> bool:
         """Add or update a set/bundle definition.
 
@@ -1292,7 +1288,7 @@ class ProfileManager:
 
         return success
 
-    def _save_with_windows_lock(self, file_path: Path, data: Dict) -> bool:
+    def _save_with_windows_lock(self, file_path: Path, data: dict) -> bool:
         """Save file with Windows file locking (locks entire file).
 
         Args:
@@ -1321,7 +1317,7 @@ class ProfileManager:
                     f.seek(0)
                     msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, file_size)
                     logger.debug(f"Lock acquired for {file_size:,} bytes")
-                except IOError as e:
+                except OSError as e:
                     logger.warning(f"Lock failed: {e}")
                     return False
 
@@ -1330,12 +1326,12 @@ class ProfileManager:
                     f.write(json_str)
                     f.flush()
                     os.fsync(f.fileno())  # Force write to disk
-                    logger.debug(f"File written and flushed successfully")
+                    logger.debug("File written and flushed successfully")
                 finally:
                     # Unlock with same size - must seek to start first
                     f.seek(0)
                     msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, file_size)
-                    logger.debug(f"Lock released")
+                    logger.debug("Lock released")
 
             # Atomic move
             logger.debug(f"Renaming {temp_path.name} → {file_path.name}")
@@ -1343,13 +1339,13 @@ class ProfileManager:
             logger.debug(f"Config saved successfully: {file_path.name}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Windows lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Windows lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
 
-    def _save_with_unix_lock(self, file_path: Path, data: Dict) -> bool:
+    def _save_with_unix_lock(self, file_path: Path, data: dict) -> bool:
         """Save file with Unix file locking.
 
         Args:
@@ -1369,7 +1365,7 @@ class ProfileManager:
                 # Try to acquire exclusive lock
                 try:
                     fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except IOError:
+                except OSError:
                     return False
 
                 try:
@@ -1381,8 +1377,8 @@ class ProfileManager:
             shutil.move(str(temp_path), str(file_path))
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Unix lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Unix lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
@@ -1401,7 +1397,7 @@ class ProfileManager:
             backup_dir = self.clients_dir / f"CLIENT_{client_id}" / "backups"
             backup_dir.mkdir(exist_ok=True)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
             backup_path = backup_dir / f"{file_type}_{timestamp}.json"
 
             shutil.copy2(file_path, backup_path)
@@ -1417,7 +1413,7 @@ class ProfileManager:
             logger.warning(f"Failed to create backup: {e}")
 
     @staticmethod
-    def _get_default_ui_settings() -> Dict:
+    def _get_default_ui_settings() -> dict:
         """Return default ui_settings including table_view for client_config.
 
         Can be called without an instance for dev/test setup scripts.
@@ -1447,7 +1443,7 @@ class ProfileManager:
             },
         }
 
-    def _migrate_add_ui_settings(self, client_id: str, config: Dict) -> bool:
+    def _migrate_add_ui_settings(self, client_id: str, config: dict) -> bool:
         """Add ui_settings section if missing, including table_view.
 
         Args:
@@ -1478,7 +1474,7 @@ class ProfileManager:
 
         return migrated
 
-    def save_client_config(self, client_id: str, config: Dict) -> bool:
+    def save_client_config(self, client_id: str, config: dict) -> bool:
         """Save client_config.json with file locking and backup.
 
         Similar to save_shopify_config but for client_config.json.
@@ -1509,7 +1505,7 @@ class ProfileManager:
             self._create_backup(client_id, config_path, "client_config")
 
         # Update timestamp
-        config["last_updated"] = datetime.now().isoformat()
+        config["last_updated"] = datetime.now().astimezone().isoformat()
         config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
         max_retries = 5  # Reduced from 10 to minimize UI blocking
@@ -1548,7 +1544,7 @@ class ProfileManager:
                         )
                         time.sleep(retry_delay)
 
-            except (IOError, OSError) as e:
+            except OSError as e:
                 if attempt < max_retries - 1:
                     logger.warning(
                         f"Save failed (attempt {attempt + 1}/{max_retries}), "
@@ -1557,7 +1553,7 @@ class ProfileManager:
                     time.sleep(retry_delay)
                 else:
                     error_msg = f"Failed to save client config after {max_retries} attempts: {e}"
-                    logger.error(error_msg, exc_info=True)
+                    logger.exception(error_msg)
                     raise ProfileManagerError(error_msg)
 
         # If we get here, all retries failed
@@ -1565,7 +1561,7 @@ class ProfileManager:
         logger.error(error_msg)
         raise ProfileManagerError(error_msg)
 
-    def update_ui_settings(self, client_id: str, ui_settings: Dict[str, Any]) -> bool:
+    def update_ui_settings(self, client_id: str, ui_settings: dict[str, Any]) -> bool:
         """Update client UI settings with partial updates support.
 
         Args:
@@ -1608,7 +1604,7 @@ class ProfileManager:
         # Save
         return self.save_client_config(client_id, config)
 
-    def get_ui_settings(self, client_id: str) -> Dict[str, Any]:
+    def get_ui_settings(self, client_id: str) -> dict[str, Any]:
         """Get client UI settings.
 
         Returns default values if not set:
@@ -1652,7 +1648,7 @@ class ProfileManager:
 
     def calculate_metadata(
         self, client_id: str, force_refresh: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Calculate client metadata from filesystem with 5-minute caching.
 
         Args:
@@ -1671,7 +1667,7 @@ class ProfileManager:
         # Check cache (unless force refresh)
         if not force_refresh and cache_key in self._metadata_cache:
             cached_data, cached_time = self._metadata_cache[cache_key]
-            age_seconds = (datetime.now() - cached_time).total_seconds()
+            age_seconds = (datetime.now().astimezone() - cached_time).total_seconds()
 
             if age_seconds < self.METADATA_CACHE_TIMEOUT_SECONDS:
                 logger.debug(
@@ -1688,9 +1684,9 @@ class ProfileManager:
             metadata = {
                 "total_sessions": 0,
                 "last_session_date": None,
-                "last_accessed": datetime.now().isoformat(),
+                "last_accessed": datetime.now().astimezone().isoformat(),
             }
-            self._metadata_cache[cache_key] = (metadata, datetime.now())
+            self._metadata_cache[cache_key] = (metadata, datetime.now().astimezone())
             return metadata
 
         try:
@@ -1704,17 +1700,17 @@ class ProfileManager:
 
             last_session_date = None
             if session_folders:
-                latest = sorted(session_folders, key=lambda d: d.name)[-1]
+                latest = max(session_folders, key=lambda d: d.name)
                 date_part = latest.name.split("_")[0]
                 last_session_date = date_part
 
             metadata = {
                 "total_sessions": total_sessions,
                 "last_session_date": last_session_date,
-                "last_accessed": datetime.now().isoformat(),
+                "last_accessed": datetime.now().astimezone().isoformat(),
             }
 
-            self._metadata_cache[cache_key] = (metadata, datetime.now())
+            self._metadata_cache[cache_key] = (metadata, datetime.now().astimezone())
 
             elapsed_ms = (time.time() - start_time) * 1000
             logger.debug(f"Metadata calculated for {cache_key} in {elapsed_ms:.1f}ms")
@@ -1726,12 +1722,12 @@ class ProfileManager:
             metadata = {
                 "total_sessions": 0,
                 "last_session_date": None,
-                "last_accessed": datetime.now().isoformat(),
+                "last_accessed": datetime.now().astimezone().isoformat(),
             }
-            self._metadata_cache[cache_key] = (metadata, datetime.now())
+            self._metadata_cache[cache_key] = (metadata, datetime.now().astimezone())
             return metadata
 
-    def invalidate_metadata_cache(self, client_id: Optional[str] = None):
+    def invalidate_metadata_cache(self, client_id: str | None = None):
         """Invalidate metadata cache.
 
         Args:
@@ -1765,12 +1761,12 @@ class ProfileManager:
             config["metadata"] = {}
 
         # Update timestamp
-        config["metadata"]["last_accessed"] = datetime.now().isoformat()
+        config["metadata"]["last_accessed"] = datetime.now().astimezone().isoformat()
 
         # Save
         return self.save_client_config(client_id, config)
 
-    def get_client_config_extended(self, client_id: str) -> Dict[str, Any]:
+    def get_client_config_extended(self, client_id: str) -> dict[str, Any]:
         """Load client config with ui_settings and metadata merged.
 
         Automatically adds default ui_settings if missing.

@@ -4,11 +4,16 @@ This module provides the BulkOperationsToolbar widget that contains buttons
 for performing mass operations on selected rows in the Analysis Results table.
 """
 
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget, QLayout, QLabel, QPushButton,
-    QToolButton, QMenu, QFrame
+    QFrame,
+    QLabel,
+    QLayout,
+    QMenu,
+    QPushButton,
+    QToolButton,
+    QWidget,
 )
-from PySide6.QtCore import Signal, Qt, QRect, QSize, QPoint
 
 from gui.theme_manager import get_theme_manager
 

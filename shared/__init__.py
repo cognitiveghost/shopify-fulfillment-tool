@@ -11,9 +11,9 @@ from .file_lock import FileLockError
 from .stats_manager import StatsManager, StatsManagerError
 
 __all__ = [
+    'FileLockError',
     'StatsManager',
     'StatsManagerError',
-    'FileLockError',
 ]
 
 __version__ = '2.0.0'

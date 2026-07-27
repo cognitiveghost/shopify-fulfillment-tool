@@ -7,10 +7,11 @@ token definitions and stylesheet/palette builders.
 
 import logging
 from typing import Optional
-from PySide6.QtCore import QObject, Signal, QSettings
+
+from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication
 
-from shared.theme import ThemeTokens, get_theme, build_stylesheet, build_palette
+from shared.theme import ThemeTokens, build_palette, build_stylesheet, get_theme
 
 logger = logging.getLogger(__name__)
 
@@ -75,20 +76,20 @@ class ThemeManager(QObject):
             settings = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
             settings.setValue("theme", self._current_theme_name)
             settings.sync()
-        except Exception as e:
-            logger.error(f"Failed to save theme preference: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save theme preference")
 
     def _load_theme_preference(self):
         try:
             settings = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
             saved_theme = settings.value("theme", "light")
             self._current_theme_name = saved_theme if saved_theme in ("light", "dark") else "light"
-        except Exception as e:
-            logger.error(f"Failed to load theme preference: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to load theme preference")
             self._current_theme_name = "light"
 
 
-_theme_manager_instance: Optional[ThemeManager] = None
+_theme_manager_instance: ThemeManager | None = None
 
 
 def get_theme_manager() -> ThemeManager:

@@ -1,13 +1,13 @@
 """Tag management utilities for Internal_Tags column."""
 
-import json
 import hashlib
+import json
 from functools import lru_cache
-from typing import List, Optional, Dict, Tuple
+
 import pandas as pd
 
 
-def parse_tags(tags_value) -> List[str]:
+def parse_tags(tags_value) -> list[str]:
     """
     Parse Internal_Tags value to list.
 
@@ -36,7 +36,7 @@ def parse_tags(tags_value) -> List[str]:
     return []
 
 
-def serialize_tags(tags: List[str]) -> str:
+def serialize_tags(tags: list[str]) -> str:
     """
     Serialize tag list to JSON string.
 
@@ -102,7 +102,7 @@ def has_tag(tags_value, tag: str) -> bool:
     return tag in tags
 
 
-def get_tag_category(tag: str, tag_categories: Dict) -> Optional[str]:
+def get_tag_category(tag: str, tag_categories: dict) -> str | None:
     """
     Determine category of a tag.
 
@@ -123,7 +123,7 @@ def get_tag_category(tag: str, tag_categories: Dict) -> Optional[str]:
     return "custom"
 
 
-def get_tag_color(tag: str, tag_categories: Dict) -> str:
+def get_tag_color(tag: str, tag_categories: dict) -> str:
     """
     Get display color for a tag.
 
@@ -146,7 +146,7 @@ def get_tag_color(tag: str, tag_categories: Dict) -> str:
 # ============================================================================
 
 
-def get_config_hash(tag_categories: Dict) -> str:
+def get_config_hash(tag_categories: dict) -> str:
     """
     Generate stable hash of tag_categories config for cache invalidation.
 
@@ -161,7 +161,7 @@ def get_config_hash(tag_categories: Dict) -> str:
     return hashlib.md5(config_str.encode()).hexdigest()
 
 
-def _normalize_tag_categories(tag_categories: Dict) -> Dict:
+def _normalize_tag_categories(tag_categories: dict) -> dict:
     """
     Normalize tag_categories to always return v2 format.
 
@@ -187,7 +187,7 @@ def _normalize_tag_categories(tag_categories: Dict) -> Dict:
 
 
 @lru_cache(maxsize=512)
-def get_tag_category_cached(tag: str, config_hash: str, config_json: str) -> Optional[str]:
+def get_tag_category_cached(tag: str, config_hash: str, config_json: str) -> str | None:
     """
     Cached version of get_tag_category for performance.
 
@@ -210,7 +210,7 @@ def get_tag_category_cached(tag: str, config_hash: str, config_json: str) -> Opt
     return "custom"
 
 
-def get_category_tags(category_id: str, tag_categories: Dict) -> List[str]:
+def get_category_tags(category_id: str, tag_categories: dict) -> list[str]:
     """
     Get list of tags for a specific category.
 
@@ -225,7 +225,7 @@ def get_category_tags(category_id: str, tag_categories: Dict) -> List[str]:
     return categories.get(category_id, {}).get("tags", [])
 
 
-def validate_tag_categories_v2(config: Dict) -> Tuple[bool, List[str]]:
+def validate_tag_categories_v2(config: dict) -> tuple[bool, list[str]]:
     """
     Validate tag_categories v2 structure.
 

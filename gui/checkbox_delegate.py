@@ -4,9 +4,14 @@ This module provides a custom delegate that renders a checkbox in the first
 column of the Analysis Results table for bulk selection functionality.
 """
 
-from PySide6.QtWidgets import QStyledItemDelegate, QStyleOptionButton, QApplication, QStyle
-from PySide6.QtCore import Qt, QRect, QEvent
+from PySide6.QtCore import QEvent, QRect
 from PySide6.QtGui import QPainter
+from PySide6.QtWidgets import (
+    QApplication,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionButton,
+)
 
 
 class CheckboxDelegate(QStyledItemDelegate):
