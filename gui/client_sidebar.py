@@ -185,7 +185,7 @@ class ClientSidebar(QWidget):
         self.groups_manager = groups_manager
         self.is_expanded = True
         self.active_client_id = None
-        self._refresh_worker = None  # keeps the in-flight refresh Worker alive
+        self._refresh_workers = set()  # keeps in-flight refresh Workers alive
 
         # Track all ClientCard instances (for highlighting across sections)
         self.client_cards: dict[str, list[ClientCard]] = {}
@@ -339,8 +339,11 @@ class ClientSidebar(QWidget):
         # var is garbage-collected the instant this method returns, which (in
         # this PySide6 build) destroys the QRunnable's unparented signals
         # object before its queued result reaches the main thread. See
-        # MainWindow._client_load_worker for the verified repro.
-        self._refresh_worker = worker
+        # MainWindow._client_load_worker for the verified repro. Tracked in a
+        # set, not a single slot: a second refresh before this one finishes
+        # must not drop the first worker's reference out from under it.
+        self._refresh_workers.add(worker)
+        worker.signals.finished.connect(lambda: self._refresh_workers.discard(worker))
         QThreadPool.globalInstance().start(worker)
 
     def _on_refresh_error(self, error):

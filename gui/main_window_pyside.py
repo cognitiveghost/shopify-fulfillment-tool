@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
         self.analysis_results_df = None
         self.analysis_stats = None
         self.threadpool = QThreadPool()
-        self._client_load_worker = None  # keeps the in-flight client-switch Worker alive
+        self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
         self._analysis_running = False  # Guard against duplicate analysis runs
 
         # Table display attributes
@@ -848,7 +848,10 @@ class MainWindow(QMainWindow):
         # client switch. Verified via a minimal repro; the existing bare
         # `worker = Worker(...)` pattern elsewhere in this codebase
         # (e.g. barcode_generator_widget.py) has the same latent exposure.
-        self._client_load_worker = worker
+        # Tracked in a set, not a single slot: a second switch before this one
+        # finishes must not drop the first worker's reference out from under it.
+        self._client_load_workers.add(worker)
+        worker.signals.finished.connect(lambda: self._client_load_workers.discard(worker))
         self.threadpool.start(worker)
 
     def _on_client_data_loaded(self, client_id: str, result):

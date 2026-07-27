@@ -363,6 +363,7 @@ class ClientSettingsDialog(QDialog):
         self.profile_manager = profile_manager
         self.groups_manager = groups_manager
         self._save_worker = None  # keeps the in-flight save Worker alive
+        self._is_saving = False
 
         self.setWindowTitle(f"Client Settings - CLIENT_{client_id}")
         self.setModal(True)
@@ -599,6 +600,11 @@ class ClientSettingsDialog(QDialog):
             f"background-color: {color_hex}; border: 1px solid {theme.border_subtle};"
         )
 
+    def reject(self):
+        if self._is_saving:
+            return
+        super().reject()
+
     def _save_and_accept(self):
         """Gather form data on the GUI thread, save in the background."""
         try:
@@ -616,6 +622,7 @@ class ClientSettingsDialog(QDialog):
 
             self.save_button.setEnabled(False)
             self.save_button.setText("Saving...")
+            self._is_saving = True
 
             worker = Worker(self.profile_manager.save_client_config, self.client_id, self.config)
             worker.signals.result.connect(self._on_save_result)
@@ -638,6 +645,7 @@ class ClientSettingsDialog(QDialog):
             )
 
     def _on_save_result(self, success: bool):
+        self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         if success:
@@ -657,6 +665,7 @@ class ClientSettingsDialog(QDialog):
     def _on_save_error(self, error):
         _exctype, value, tb = error
         logger.error(f"Failed to save client settings: {value}\n{tb}")
+        self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         QMessageBox.critical(self, "Error", f"Failed to save client settings:\n{value!s}")

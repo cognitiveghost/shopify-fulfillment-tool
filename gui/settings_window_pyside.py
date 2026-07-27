@@ -155,6 +155,7 @@ class SettingsWindow(QDialog):
         self.profile_manager = profile_manager
         self.analysis_df = analysis_df if analysis_df is not None else pd.DataFrame()
         self._save_worker = None  # keeps the in-flight save Worker alive
+        self._is_saving = False
 
         # Ensure config structure exists
         if not isinstance(self.config_data.get("column_mappings"), dict):
@@ -2978,6 +2979,11 @@ class SettingsWindow(QDialog):
             "boxes": boxes,
         }
 
+    def reject(self):
+        if self._is_saving:
+            return
+        super().reject()
+
     def save_settings(self):
         """Saves all settings from the UI back into the config dictionary."""
         try:
@@ -3234,6 +3240,7 @@ class SettingsWindow(QDialog):
             # ========================================
             self.save_button.setEnabled(False)
             self.save_button.setText("Saving...")
+            self._is_saving = True
 
             worker = Worker(self.profile_manager.save_shopify_config, self.client_id, self.config_data)
             worker.signals.result.connect(self._on_save_settings_result)
@@ -3262,6 +3269,7 @@ class SettingsWindow(QDialog):
             )
 
     def _on_save_settings_result(self, success: bool):
+        self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         if success:
@@ -3269,7 +3277,7 @@ class SettingsWindow(QDialog):
             self.accept()
         else:
             import json
-            config_size = len(json.dumps(self.config_data, ensure_ascii=False))
+            config_size = len(json.dumps(self.config_data, ensure_ascii=False).encode("utf-8"))
             num_sets = len(self.config_data.get("set_decoders", {}))
             QMessageBox.critical(
                 self,
@@ -3287,6 +3295,7 @@ class SettingsWindow(QDialog):
     def _on_save_settings_error(self, error):
         _exctype, value, tb = error
         logger.error(f"Failed to save settings: {value}\n{tb}")
+        self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         QMessageBox.critical(self, "Error", f"Failed to save settings:\n\n{value!s}")

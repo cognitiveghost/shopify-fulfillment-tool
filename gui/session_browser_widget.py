@@ -253,6 +253,7 @@ class SessionBrowserWidget(QWidget):
         """
         if client_id != self.current_client_id:
             self.current_client_id = client_id
+            self._is_dirty = True
             if auto_refresh:
                 self.refresh_sessions()
 
@@ -529,11 +530,11 @@ Comments: {comments if comments else "None"}"""
             str: Session path or empty string if none selected
         """
         current_row = self.sessions_table.currentRow()
-        if current_row < 0 or current_row >= len(self.sessions_data):
+        if current_row < 0:
             return ""
 
-        session_info = self.sessions_data[current_row]
-        return session_info.get("session_path", "")
+        item = self.sessions_table.item(current_row, 0)
+        return item.data(Qt.UserRole) if item else ""
 
     def _on_status_changed(self, session_path: str, new_status: str):
         """Handle status change in table.

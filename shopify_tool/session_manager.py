@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
+from shared.atomic_write import atomic_write_json
+
 logger = logging.getLogger("ShopifyToolLogger")
 
 
@@ -342,8 +344,7 @@ class SessionManager:
 
     def _write_index(self, client_sessions_dir: Path, entries: list[dict]) -> None:
         index_path = client_sessions_dir / self.INDEX_FILENAME
-        with open(index_path, "w", encoding="utf-8") as f:
-            json.dump(entries, f, indent=2)
+        atomic_write_json(index_path, entries)
 
     def _scan_sessions(self, client_sessions_dir: Path) -> list[dict]:
         """Full folder scan (the old list_client_sessions behavior) -- used only

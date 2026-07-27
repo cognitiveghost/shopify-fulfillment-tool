@@ -12,6 +12,7 @@ Key Features:
     - Validation of client IDs and configurations
 """
 
+import copy
 import json
 import logging
 import os
@@ -910,7 +911,7 @@ class ProfileManager:
             cached_data, cached_mtime = self._config_cache[cache_key]
             if cached_mtime == current_mtime:
                 logger.debug(f"Using cached client config for {client_id}")
-                return cached_data.copy()
+                return copy.deepcopy(cached_data)
 
         try:
             with open(config_path, "r", encoding="utf-8") as f:
@@ -931,7 +932,7 @@ class ProfileManager:
                     current_mtime = None
 
             if current_mtime is not None:
-                self._config_cache[cache_key] = (config.copy(), current_mtime)
+                self._config_cache[cache_key] = (copy.deepcopy(config), current_mtime)
 
             return config
 
