@@ -1,4 +1,5 @@
 """Cross-platform advisory file locking for shared JSON files on network storage."""
+import logging
 import time
 from contextlib import contextmanager
 
@@ -13,6 +14,8 @@ try:
     UNIX_LOCKING_AVAILABLE = True
 except ImportError:
     UNIX_LOCKING_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 class FileLockError(Exception):
@@ -68,21 +71,20 @@ def locked_file(file_handle, timeout: float = 5.0, retry_delay: float = 0.1):
                     msvcrt.locking(file_handle.fileno(), msvcrt.LK_UNLCK, 1)
                 elif UNIX_LOCKING_AVAILABLE:
                     fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)
-            except Exception:
-                pass  # Ignore unlock errors
+            except Exception as e:
+                logger.debug(f"Ignoring unlock error: {e}")
 
 
 if __name__ == "__main__":
-    import tempfile
     import os
+    import tempfile
 
     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmp:
         tmp_path = tmp.name
 
     try:
-        with open(tmp_path, 'r+') as f:
-            with locked_file(f):
-                f.write("locked ok")
+        with open(tmp_path, 'r+') as f, locked_file(f):
+            f.write("locked ok")
         with open(tmp_path) as f:
             assert f.read() == "locked ok"
         print("file_lock self-check OK")
