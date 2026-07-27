@@ -220,6 +220,9 @@ class SessionManager:
     ) -> list[dict]:
         """List all sessions for a client.
 
+        Reads the per-client session_index.json cache instead of opening every
+        session's session_info.json (see docs/superpowers/specs/2026-07-27-ui-responsiveness-design.md).
+
         Args:
             client_id (str): Client ID
             status_filter (str, optional): Filter by status ("active", "completed", etc.)
@@ -234,25 +237,23 @@ class SessionManager:
         if not client_sessions_dir.exists():
             return []
 
+        entries = self._read_index(client_sessions_dir)
+        if entries is None:
+            entries = self._rebuild_index(client_sessions_dir)
+        else:
+            actual_count = sum(1 for item in client_sessions_dir.iterdir() if item.is_dir())
+            if actual_count != len(entries):
+                entries = self._rebuild_index(client_sessions_dir)
+
         sessions = []
-        for item in client_sessions_dir.iterdir():
-            if not item.is_dir():
+        for entry in entries:
+            session_info = dict(entry)
+            session_info["session_path"] = str(client_sessions_dir / session_info["session_name"])
+            if status_filter and session_info.get("status") != status_filter:
                 continue
+            sessions.append(session_info)
 
-            session_info = self.get_session_info(str(item))
-            if session_info:
-                # Apply status filter if specified
-                if status_filter and session_info.get("status") != status_filter:
-                    continue
-
-                sessions.append(session_info)
-
-        # Sort by creation date (newest first)
-        sessions.sort(
-            key=lambda x: x.get("created_at", ""),
-            reverse=True
-        )
-
+        sessions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return sessions
 
     @contextlib.contextmanager

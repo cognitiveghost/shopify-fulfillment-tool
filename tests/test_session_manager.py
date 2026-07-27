@@ -221,3 +221,49 @@ class TestSessionIndex:
         assert session_manager.update_session_status(session_path, "completed") is True
         info = session_manager.get_session_info(session_path)
         assert info["status"] == "completed"
+
+
+class TestListClientSessionsUsesIndex:
+    def test_list_matches_previous_full_scan_output(self, session_manager):
+        p1 = Path(session_manager.create_session("M"))
+        session_manager.update_session_status(p1, "completed")
+        p2 = session_manager.create_session("M")
+        sessions = session_manager.list_client_sessions("M")
+        assert len(sessions) == 2
+        names = {s["session_name"] for s in sessions}
+        assert names == {p1.name, Path(p2).name}
+        # sorted newest first
+        assert sessions[0]["created_at"] >= sessions[1]["created_at"]
+
+    def test_status_filter_still_works(self, session_manager):
+        p1 = Path(session_manager.create_session("M"))
+        session_manager.update_session_status(p1, "completed")
+        session_manager.create_session("M")
+        active_only = session_manager.list_client_sessions("M", status_filter="active")
+        assert len(active_only) == 1
+
+    def test_missing_index_is_built_transparently(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+        index_path = session_path.parent / SessionManager.INDEX_FILENAME
+        index_path.unlink()  # simulate a client dir from before this feature
+        sessions = session_manager.list_client_sessions("M")
+        assert len(sessions) == 1
+        assert index_path.exists()  # self-healed
+
+    def test_manually_added_session_folder_triggers_rebuild(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+        # Simulate a session folder restored/copied in without going through
+        # create_session (index has no entry for it).
+        extra = session_path.parent / "2020-01-01_1"
+        extra.mkdir()
+        for subdir in SessionManager.SESSION_SUBDIRS:
+            (extra / subdir).mkdir()
+        (extra / "session_info.json").write_text(json.dumps({
+            "session_name": "2020-01-01_1", "status": "active",
+            "created_at": "2020-01-01T00:00:00", "client_id": "M",
+        }))
+        sessions = session_manager.list_client_sessions("M")
+        assert len(sessions) == 2  # count mismatch caught it, rebuilt
+
+    def test_no_sessions_dir_returns_empty_list(self, session_manager):
+        assert session_manager.list_client_sessions("M") == []
