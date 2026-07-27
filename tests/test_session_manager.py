@@ -205,6 +205,48 @@ class TestSessionIndex:
         assert entries[0]["session_name"] == session_path.name
         assert index_path.exists()
 
+    def test_rebuild_holds_index_lock_across_scan_and_write(self, session_manager):
+        """A rebuild that only locks the write (not the scan) can capture a
+        stale snapshot and then overwrite a concurrent _upsert_index_entry()
+        write with it once the lock is finally taken -- the directory-count
+        staleness guard can't catch that, since an existing session's info
+        changing doesn't change the count. Proven directly: while the scan is
+        in flight, a second lock attempt on the same file must not succeed.
+        """
+        import fcntl
+        import threading
+
+        session_path = Path(session_manager.create_session("M"))
+        client_sessions_dir = session_path.parent
+        index_path = client_sessions_dir / SessionManager.INDEX_FILENAME
+        index_path.unlink()  # force list_client_sessions() to rebuild
+
+        scan_started = threading.Event()
+        release_scan = threading.Event()
+        original_scan = session_manager._scan_sessions
+
+        def blocking_scan(dir_path):
+            entries = original_scan(dir_path)
+            scan_started.set()
+            release_scan.wait(timeout=2)
+            return entries
+
+        session_manager._scan_sessions = blocking_scan
+
+        t1 = threading.Thread(target=lambda: session_manager.list_client_sessions("M"))
+        t1.start()
+        assert scan_started.wait(timeout=2), "rebuild's scan never started"
+
+        lock_path = session_manager._index_lock_path(client_sessions_dir)
+        with open(lock_path, "a+") as probe:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(probe.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(probe.fileno(), fcntl.LOCK_UN)
+
+        release_scan.set()
+        t1.join()
+        session_manager._scan_sessions = original_scan
+
     def test_read_index_returns_none_when_missing(self, session_manager, tmp_path):
         empty_dir = tmp_path / "CLIENT_NOINDEX"
         empty_dir.mkdir()

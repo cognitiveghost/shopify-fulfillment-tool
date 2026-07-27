@@ -361,9 +361,15 @@ class SessionManager:
 
     def _rebuild_index(self, client_sessions_dir: Path) -> list[dict]:
         """Full scan + persist. Called when no index exists yet, or the
-        directory count no longer matches the index (see list_client_sessions)."""
-        entries = self._scan_sessions(client_sessions_dir)
+        directory count no longer matches the index (see list_client_sessions).
+
+        Scan and write both happen under the index lock: an unlocked scan
+        could read a stale snapshot, then overwrite a concurrent
+        _upsert_index_entry() write for an unrelated session with that
+        stale data once the lock is finally taken for the write.
+        """
         with self._exclusive_lock(self._index_lock_path(client_sessions_dir)):
+            entries = self._scan_sessions(client_sessions_dir)
             self._write_index(client_sessions_dir, entries)
         return entries
 
