@@ -1198,7 +1198,7 @@ class ProfileManager:
         return success
 
     def add_set(
-        self, client_id: str, set_sku: str, components: list[dict[str, any]]
+        self, client_id: str, set_sku: str, components: list[dict[str, Any]]
     ) -> bool:
         """Add or update a set/bundle definition.
 

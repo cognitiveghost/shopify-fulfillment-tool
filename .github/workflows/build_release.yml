@@ -46,11 +46,14 @@ jobs:
     steps:
       - name: Check out this repo
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Check out packing-tool (canonical shared/ source)
         uses: actions/checkout@v4
         with:
           repository: cognitiveghost/packing-tool
           path: packing-tool-ref
+          persist-credentials: false
       - name: Diff shared/ against packing-tool/shared/
         run: |
           if ! diff -r shared packing-tool-ref/shared; then

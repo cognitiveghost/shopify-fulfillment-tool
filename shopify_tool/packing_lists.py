@@ -308,3 +308,4 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
 
     except Exception:
         logger.exception("ERROR while creating packing list")
+        raise

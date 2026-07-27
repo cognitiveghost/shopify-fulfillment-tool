@@ -378,7 +378,7 @@ def _validate_and_prepare_inputs(
     client_id: str | None,
     session_manager: Any | None,
     session_path: str | None,
-) -> tuple[bool, str | None, str, str | None]:
+) -> tuple[bool, str, str | None, str | None]:
     """Validates inputs and prepares session/working paths.
 
     Determines whether to use session-based or legacy workflow mode,
@@ -858,7 +858,7 @@ def _save_results_and_reports(
     session_manager: Any | None,
     client_id: str | None,
     profile_manager: Any | None,
-) -> tuple[str, str | None]:
+) -> tuple[str | None, str | None]:
     """Saves all analysis results, reports, and updates history.
 
     Saves Excel report with analysis results, creates analysis_data.json
