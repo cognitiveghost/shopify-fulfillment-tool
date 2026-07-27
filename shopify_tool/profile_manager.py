@@ -12,6 +12,7 @@ Key Features:
     - Validation of client IDs and configurations
 """
 
+import copy
 import json
 import logging
 import os
@@ -879,7 +880,11 @@ class ProfileManager:
         }
 
     def load_client_config(self, client_id: str) -> dict | None:
-        """Load general configuration for a client.
+        """Load general configuration for a client, with mtime-based caching.
+
+        Cache is invalidated by file mtime rather than TTL: no stale reads after
+        another PC saves a change, and no unnecessary re-reads while the file is
+        stable. Mirrors load_shopify_config()'s cache exactly.
 
         Automatically migrates old configs to add ui_settings if missing.
 
@@ -890,11 +895,23 @@ class ProfileManager:
             Optional[Dict]: Configuration dictionary or None if not found
         """
         client_id = client_id.upper()
+        cache_key = f"{self.base_path}::client_{client_id}"
         config_path = self.clients_dir / f"CLIENT_{client_id}" / "client_config.json"
 
         if not config_path.exists():
             logger.warning(f"Client config not found: CLIENT_{client_id}")
             return None
+
+        try:
+            current_mtime = config_path.stat().st_mtime
+        except OSError:
+            current_mtime = None
+
+        if current_mtime is not None and cache_key in self._config_cache:
+            cached_data, cached_mtime = self._config_cache[cache_key]
+            if cached_mtime == current_mtime:
+                logger.debug(f"Using cached client config for {client_id}")
+                return copy.deepcopy(cached_data)
 
         try:
             with open(config_path, "r", encoding="utf-8") as f:
@@ -907,6 +924,15 @@ class ProfileManager:
                 # If config was migrated, save it immediately
                 self.save_client_config(client_id, config)
                 logger.info(f"Config migrations completed for CLIENT_{client_id}")
+                # save_client_config() invalidates cache_key; re-stat so this
+                # call still populates the cache with the post-migration mtime.
+                try:
+                    current_mtime = config_path.stat().st_mtime
+                except OSError:
+                    current_mtime = None
+
+            if current_mtime is not None:
+                self._config_cache[cache_key] = (copy.deepcopy(config), current_mtime)
 
             return config
 
@@ -954,7 +980,7 @@ class ProfileManager:
             cached_data, cached_mtime = self._config_cache[cache_key]
             if cached_mtime == current_mtime:
                 logger.debug(f"Using cached shopify config for {client_id}")
-                return cached_data
+                return copy.deepcopy(cached_data)
 
         try:
             with open(config_path, "r", encoding="utf-8") as f:
@@ -993,7 +1019,7 @@ class ProfileManager:
 
             # Update cache with current mtime
             if current_mtime is not None:
-                self._config_cache[cache_key] = (config, current_mtime)
+                self._config_cache[cache_key] = (copy.deepcopy(config), current_mtime)
 
             return config
 
@@ -1530,6 +1556,10 @@ class ProfileManager:
                     success = self._save_with_unix_lock(config_path, config)
 
                 if success:
+                    # Invalidate cache
+                    cache_key = f"{self.base_path}::client_{client_id}"
+                    self._config_cache.pop(cache_key, None)
+
                     logger.info(
                         f"Client config saved successfully for CLIENT_{client_id} "
                         f"(attempt {attempt + 1}/{max_retries})"

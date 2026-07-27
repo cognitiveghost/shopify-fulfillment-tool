@@ -6,7 +6,7 @@ tabbed interface for Basic Info, Appearance, Statistics, and Advanced settings.
 
 import logging
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QThreadPool, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from gui.theme_manager import get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from gui.worker import Worker
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import (
     ProfileManager,
@@ -361,6 +362,8 @@ class ClientSettingsDialog(QDialog):
         self.client_id = client_id
         self.profile_manager = profile_manager
         self.groups_manager = groups_manager
+        self._save_worker = None  # keeps the in-flight save Worker alive
+        self._is_saving = False
 
         self.setWindowTitle(f"Client Settings - CLIENT_{client_id}")
         self.setModal(True)
@@ -413,6 +416,7 @@ class ClientSettingsDialog(QDialog):
         button_box = QDialogButtonBox(
             QDialogButtonBox.Save | QDialogButtonBox.Cancel
         )
+        self.save_button = button_box.button(QDialogButtonBox.Save)
         button_box.accepted.connect(self._save_and_accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
@@ -596,18 +600,19 @@ class ClientSettingsDialog(QDialog):
             f"background-color: {color_hex}; border: 1px solid {theme.border_subtle};"
         )
 
-    def _save_and_accept(self):
-        """Save changes and close dialog."""
-        try:
-            # Update config
-            self.config["client_name"] = self.client_name_input.text().strip()
+    def reject(self):
+        if self._is_saving:
+            return
+        super().reject()
 
-            # Update ui_settings
+    def _save_and_accept(self):
+        """Gather form data on the GUI thread, save in the background."""
+        try:
+            self.config["client_name"] = self.client_name_input.text().strip()
             self.config["ui_settings"]["is_pinned"] = self.pin_checkbox.isChecked()
             self.config["ui_settings"]["group_id"] = self.group_combo.currentData()
             self.config["ui_settings"]["custom_color"] = self.current_color
 
-            # Parse badges
             badges_text = self.badges_input.text().strip()
             if badges_text:
                 badges = [b.strip() for b in badges_text.split(",") if b.strip()]
@@ -615,27 +620,52 @@ class ClientSettingsDialog(QDialog):
                 badges = []
             self.config["ui_settings"]["custom_badges"] = badges
 
-            # Save config
-            success = self.profile_manager.save_client_config(self.client_id, self.config)
+            self.save_button.setEnabled(False)
+            self.save_button.setText("Saving...")
+            self._is_saving = True
 
-            if success:
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Settings for CLIENT_{self.client_id} saved successfully!"
-                )
-                self.accept()
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Save Failed",
-                    "Failed to save client settings. Please try again."
-                )
+            worker = Worker(self.profile_manager.save_client_config, self.client_id, self.config)
+            worker.signals.result.connect(self._on_save_result)
+            worker.signals.error.connect(self._on_save_error)
+            # Keep a strong reference until the worker finishes -- a bare
+            # local var is garbage-collected the instant this method returns,
+            # which (in this PySide6 build) destroys the QRunnable's
+            # unparented signals object before its queued result reaches the
+            # main thread. See MainWindow._client_load_worker for the
+            # verified repro.
+            self._save_worker = worker
+            QThreadPool.globalInstance().start(worker)
 
         except Exception as e:
             logger.exception("Failed to save client settings")
             QMessageBox.critical(
                 self,
                 "Error",
-                f"An error occurred while saving:\n{e!s}"
+                f"Failed to save client settings:\n{e!s}",
             )
+
+    def _on_save_result(self, success: bool):
+        self._is_saving = False
+        self.save_button.setEnabled(True)
+        self.save_button.setText("Save")
+        if success:
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Settings for CLIENT_{self.client_id} saved successfully!"
+            )
+            self.accept()
+        else:
+            QMessageBox.warning(
+                self,
+                "Save Failed",
+                "Failed to save client settings. Please try again."
+            )
+
+    def _on_save_error(self, error):
+        _exctype, value, tb = error
+        logger.error(f"Failed to save client settings: {value}\n{tb}")
+        self._is_saving = False
+        self.save_button.setEnabled(True)
+        self.save_button.setText("Save")
+        QMessageBox.critical(self, "Error", f"Failed to save client settings:\n{value!s}")

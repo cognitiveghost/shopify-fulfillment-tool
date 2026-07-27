@@ -24,6 +24,7 @@ from gui.pandas_model import FulfillmentFilterProxy
 from gui.selection_helper import SelectionHelper
 from gui.theme_manager import get_theme_manager
 from gui.ui_manager import UIManager
+from gui.worker import Worker
 from shared.server_connection import prompt_for_recovery_path
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
@@ -84,6 +85,7 @@ class MainWindow(QMainWindow):
         self.analysis_results_df = None
         self.analysis_stats = None
         self.threadpool = QThreadPool()
+        self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
         self._analysis_running = False  # Guard against duplicate analysis runs
 
         # Table display attributes
@@ -801,6 +803,19 @@ class MainWindow(QMainWindow):
             logger.warning(f"Failed to save inventory memory toggle: {e}")
 
     # --- Client and Session Management (New Architecture) ---
+    def _load_client_data(self, client_id: str):
+        """Pure IO for a client switch -- no UI calls, safe to run in a Worker.
+
+        Returns (shopify_config, table_config). table_config is None if
+        table_config_manager isn't set up yet (mirrors the existing
+        `hasattr(self, "table_config_manager")` guard).
+        """
+        shopify_config = self.profile_manager.load_shopify_config(client_id)
+        table_config = None
+        if hasattr(self, "table_config_manager"):
+            table_config = self.table_config_manager.load_config(client_id)
+        return shopify_config, table_config
+
     def on_client_changed(self, client_id: str):
         """Handle client selection change.
 
@@ -809,40 +824,68 @@ class MainWindow(QMainWindow):
         """
         logger.info(f"Client changed to: {client_id}")
 
-        # Show loading status in status bar
         if hasattr(self, "statusBar"):
             self.statusBar().showMessage(f"Loading CLIENT_{client_id}...", 5000)
 
-        # Update sidebar active state if sidebar exists
         if hasattr(self, "client_sidebar"):
             self.client_sidebar.set_active_client(client_id)
 
-        # Update header label if it exists
         if hasattr(self, "current_client_label"):
             self.current_client_label.setText(f"CLIENT_{client_id}")
 
-        # Store current client ID
         self.current_client_id = client_id
 
-        # Load configuration for this client
-        try:
-            self.current_client_config = self.profile_manager.load_shopify_config(
-                client_id
-            )
-            if not self.current_client_config:
-                QMessageBox.warning(
-                    self,
-                    "Configuration Error",
-                    f"Failed to load configuration for client {client_id}",
-                )
-                return
+        worker = Worker(self._load_client_data, client_id)
+        worker.signals.result.connect(
+            lambda result, cid=client_id: self._on_client_data_loaded(cid, result)
+        )
+        worker.signals.error.connect(self._on_client_data_load_error)
+        # Keep a strong reference until the worker finishes: a bare local var
+        # gets garbage-collected the instant this method returns, which -- in
+        # this PySide6 build -- destroys the QRunnable's unparented
+        # WorkerSignals object before its already-queued cross-thread result
+        # signal is dispatched to the main thread, silently dropping the
+        # client switch. Verified via a minimal repro; the existing bare
+        # `worker = Worker(...)` pattern elsewhere in this codebase
+        # (e.g. barcode_generator_widget.py) has the same latent exposure.
+        # Tracked in a set, not a single slot: a second switch before this one
+        # finishes must not drop the first worker's reference out from under it.
+        self._client_load_workers.add(worker)
+        worker.signals.finished.connect(lambda: self._client_load_workers.discard(worker))
+        self.threadpool.start(worker)
 
-            # Also load it via the existing method for backward compatibility
+    def _on_client_data_loaded(self, client_id: str, result):
+        """Apply client-switch IO results to the UI (main thread only)."""
+        shopify_config, table_config = result
+
+        if client_id != self.current_client_id:
+            # User switched again before this load finished -- discard stale result.
+            logger.debug(f"Discarding stale client-load result for {client_id}")
+            return
+
+        if not shopify_config:
+            QMessageBox.warning(
+                self,
+                "Configuration Error",
+                f"Failed to load configuration for client {client_id}",
+            )
+            return
+
+        try:
+            self.current_client_config = shopify_config
+
+            # load_client_config() re-reads shopify_config via profile_manager --
+            # now a cache hit, since _load_client_data() already warmed the mtime
+            # cache above -- and applies every widget-facing side effect this
+            # class depends on (active_profile_config, analysis_mode_combo sync,
+            # inventory_memory_checkbox restore, per-client button enable/disable,
+            # _update_all_views()). Dropping it (as a naive port of this method
+            # might) would leave active_profile_config stale after every client
+            # switch -- it's read throughout actions_handler.py/file_handler.py
+            # for delimiters, column mappings, and tag categories.
             self.load_client_config(client_id)
 
-            # Load table configuration for this client
-            if hasattr(self, "table_config_manager"):
-                self.table_config_manager.load_config(client_id)
+            if table_config is not None:
                 logger.info(f"Table configuration loaded for CLIENT_{client_id}")
 
             # Clear currently loaded files (they're for different client)
@@ -855,30 +898,31 @@ class MainWindow(QMainWindow):
 
             # Clear session
             self.session_path = None
-            # Clear undo history when switching clients
             if hasattr(self, "undo_manager"):
                 self.undo_manager.reset_for_session()
             self.update_session_info_label()
 
             # Update session browser to show this client's sessions
-            # Don't auto-refresh here - let the second call handle it
             self.session_browser.set_client(client_id, auto_refresh=False)
 
             # Update the Recent Sessions quick-pick in the right panel (Tab 1)
             self.ui_manager.refresh_recent_sessions(client_id)
 
-            # Update UI state
             self.update_ui_state()
 
             logger.info(f"Client {client_id} loaded successfully")
 
-            # Update status bar with success message
             if hasattr(self, "statusBar"):
                 self.statusBar().showMessage(f"CLIENT_{client_id} loaded", 2000)
 
         except Exception as e:
-            logger.exception("Error changing client")
+            logger.exception("Error applying loaded client data")
             QMessageBox.critical(self, "Error", f"Failed to change client: {e!s}")
+
+    def _on_client_data_load_error(self, error):
+        _exctype, value, tb = error
+        logger.error(f"Error loading client data: {value}\n{tb}")
+        QMessageBox.critical(self, "Error", f"Failed to change client: {value!s}")
 
     def on_sidebar_refresh(self):
         """Handle manual sidebar refresh request."""

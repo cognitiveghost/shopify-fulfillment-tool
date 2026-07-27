@@ -15,11 +15,11 @@ from PySide6.QtCore import (
     QPropertyAnimation,
     QSettings,
     Qt,
+    QThreadPool,
     Signal,
 )
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
-    QApplication,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -34,6 +34,7 @@ from gui.client_card import ClientCard
 from gui.client_settings_dialog import ClientCreationDialog, ClientSettingsDialog
 from gui.groups_management_dialog import GroupsManagementDialog
 from gui.theme_manager import get_theme_manager
+from gui.worker import Worker
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
 
@@ -184,6 +185,7 @@ class ClientSidebar(QWidget):
         self.groups_manager = groups_manager
         self.is_expanded = True
         self.active_client_id = None
+        self._refresh_workers = set()  # keeps in-flight refresh Workers alive
 
         # Track all ClientCard instances (for highlighting across sections)
         self.client_cards: dict[str, list[ClientCard]] = {}
@@ -289,117 +291,139 @@ class ClientSidebar(QWidget):
 
         layout.addWidget(self.header_widget)
 
-    def refresh(self):
-        """Refresh client list and rebuild sections with performance logging."""
-        import time
+    def _gather_refresh_data(self) -> dict:
+        """All the file-server IO refresh() needs, with zero Qt object
+        construction -- safe to run in a background Worker.
+        """
+        groups_data = self.groups_manager.load_groups()
+        special_groups = groups_data.get("special_groups", {})
+        custom_groups = self.groups_manager.list_groups()
+        all_clients = self.profile_manager.list_clients()
 
-        from PySide6.QtCore import Qt
+        pinned_client_ids = set()
+        card_data = {}
+        for client_id in all_clients:
+            ui_settings = self.profile_manager.get_ui_settings(client_id)
+            if ui_settings.get("is_pinned", False):
+                pinned_client_ids.add(client_id)
+            card_data[client_id] = self.profile_manager.get_client_config_extended(client_id)
+
+        group_members = {}
+        for group in custom_groups:
+            group_id = group.get("id")
+            group_members[group_id] = self.groups_manager.get_clients_in_group(
+                group_id, self.profile_manager
+            )
+
+        return {
+            "special_groups": special_groups,
+            "custom_groups": custom_groups,
+            "all_clients": all_clients,
+            "pinned_client_ids": pinned_client_ids,
+            "group_members": group_members,
+            "card_data": card_data,
+        }
+
+    def refresh(self):
+        """Refresh client list and rebuild sections.
+
+        Data gathering runs off the GUI thread (Worker); section/card widget
+        construction stays on the GUI thread (Qt requirement) and happens in
+        _apply_refresh_data() once the data is ready.
+        """
+        self.refresh_btn.setEnabled(False)
+        worker = Worker(self._gather_refresh_data)
+        worker.signals.result.connect(self._apply_refresh_data)
+        worker.signals.error.connect(self._on_refresh_error)
+        # Keep a strong reference until the worker finishes -- a bare local
+        # var is garbage-collected the instant this method returns, which (in
+        # this PySide6 build) destroys the QRunnable's unparented signals
+        # object before its queued result reaches the main thread. See
+        # MainWindow._client_load_worker for the verified repro. Tracked in a
+        # set, not a single slot: a second refresh before this one finishes
+        # must not drop the first worker's reference out from under it.
+        self._refresh_workers.add(worker)
+        worker.signals.finished.connect(lambda: self._refresh_workers.discard(worker))
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_refresh_error(self, error):
+        _exctype, value, tb = error
+        logger.error(f"Sidebar refresh failed: {value}\n{tb}")
+        self.refresh_btn.setEnabled(True)
+        QMessageBox.warning(self, "Refresh Error", f"Failed to refresh sidebar:\n{value!s}")
+
+    def _apply_refresh_data(self, data: dict):
+        """Build section/card widgets from already-fetched data (main thread only)."""
+        import time
 
         theme = get_theme_manager().get_current_theme()
 
-        # Show wait cursor during potentially slow operation
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-
         try:
             overall_start = time.time()
-            logger.info("Starting sidebar refresh")
+            logger.info("Applying sidebar refresh data")
 
-            # Disable updates during rebuild
             self.setUpdatesEnabled(False)
 
-            # Clear existing sections
-            clear_start = time.time()
             while self.sections_layout.count() > 1:
                 item = self.sections_layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
-
             self.client_cards.clear()
-            clear_elapsed = (time.time() - clear_start) * 1000
-            logger.debug(f"Cleared sections in {clear_elapsed:.1f}ms")
 
-            # Load groups
-            groups_start = time.time()
-            groups_data = self.groups_manager.load_groups()
-            special_groups = groups_data.get("special_groups", {})
-            custom_groups = self.groups_manager.list_groups()
-            groups_elapsed = (time.time() - groups_start) * 1000
-            logger.debug(f"Loaded groups in {groups_elapsed:.1f}ms")
-
-            # Get all clients
-            clients_start = time.time()
-            all_clients = self.profile_manager.list_clients()
-            clients_elapsed = (time.time() - clients_start) * 1000
-            logger.debug(f"Listed {len(all_clients)} clients in {clients_elapsed:.1f}ms")
-
-            # Build sections
+            all_clients = data["all_clients"]
+            special_groups = data["special_groups"]
+            custom_groups = data["custom_groups"]
             clients_in_sections = set()
-            sections_start = time.time()
 
             # 1. Pinned section
-            pinned_start = time.time()
             pinned_config = special_groups.get("pinned", {})
-            pinned_section = self._create_pinned_section(all_clients, pinned_config)
+            pinned_section = self._create_pinned_section(all_clients, pinned_config, data)
             if pinned_section.card_count() > 0:
                 self.sections_layout.insertWidget(self.sections_layout.count() - 1, pinned_section)
                 clients_in_sections.update(self._get_section_client_ids(pinned_section))
-            pinned_elapsed = (time.time() - pinned_start) * 1000
-            logger.debug(f"Created pinned section ({pinned_section.card_count()} cards) in {pinned_elapsed:.1f}ms")
 
             # 2. Custom groups
-            groups_section_start = time.time()
             for group in custom_groups:
                 group_id = group.get("id")
                 group_name = group.get("name", "Unknown")
                 group_color = group.get("color", theme.accent_blue)
-
-                group_section = self._create_group_section(group_id, group_name, group_color, all_clients)
+                group_section = self._create_group_section(group_id, group_name, group_color, all_clients, data)
                 if group_section.card_count() > 0:
                     self.sections_layout.insertWidget(self.sections_layout.count() - 1, group_section)
                     clients_in_sections.update(self._get_section_client_ids(group_section))
-            groups_section_elapsed = (time.time() - groups_section_start) * 1000
-            logger.debug(f"Created {len(custom_groups)} group sections in {groups_section_elapsed:.1f}ms")
 
             # 3. All Clients section
-            all_start = time.time()
             all_config = special_groups.get("all", {})
             remaining_clients = [c for c in all_clients if c not in clients_in_sections]
             if remaining_clients:
-                all_section = self._create_all_section(remaining_clients, all_config)
+                all_section = self._create_all_section(remaining_clients, all_config, data)
                 self.sections_layout.insertWidget(self.sections_layout.count() - 1, all_section)
-            all_elapsed = (time.time() - all_start) * 1000
-            logger.debug(f"Created all section ({len(remaining_clients)} cards) in {all_elapsed:.1f}ms")
 
-            sections_elapsed = (time.time() - sections_start) * 1000
-
-            # Re-enable updates
             self.setUpdatesEnabled(True)
 
-            # Re-highlight active client
             if self.active_client_id:
                 self.set_active_client(self.active_client_id)
 
             overall_elapsed = (time.time() - overall_start) * 1000
             logger.info(
-                f"Sidebar refresh complete: {len(all_clients)} clients, "
-                f"{len(custom_groups)} groups in {overall_elapsed:.1f}ms "
-                f"(sections: {sections_elapsed:.1f}ms)"
+                f"Sidebar refresh applied: {len(all_clients)} clients, "
+                f"{len(custom_groups)} groups in {overall_elapsed:.1f}ms"
             )
 
         except Exception as e:
             self.setUpdatesEnabled(True)
-            logger.exception("Failed to refresh sidebar")
+            logger.exception("Failed to apply sidebar refresh data")
             QMessageBox.warning(self, "Refresh Error", f"Failed to refresh sidebar:\n{e!s}")
         finally:
-            # Restore cursor after refresh completes (success or error)
-            QApplication.restoreOverrideCursor()
+            self.refresh_btn.setEnabled(True)
 
-    def _create_pinned_section(self, all_clients: list[str], config: dict) -> SectionWidget:
+    def _create_pinned_section(self, all_clients: list[str], config: dict, data: dict) -> SectionWidget:
         """Create Pinned section.
 
         Args:
             all_clients: List of all client IDs
             config: Pinned section config
+            data: Pre-fetched data from _gather_refresh_data()
 
         Returns:
             SectionWidget with pinned clients
@@ -411,9 +435,8 @@ class ClientSidebar(QWidget):
         )
 
         for client_id in all_clients:
-            ui_settings = self.profile_manager.get_ui_settings(client_id)
-            if ui_settings.get("is_pinned", False):
-                card = self._create_client_card(client_id)
+            if client_id in data["pinned_client_ids"]:
+                card = self._create_client_card(client_id, data)
                 section.add_card(card)
 
         return section
@@ -423,7 +446,8 @@ class ClientSidebar(QWidget):
         group_id: str,
         group_name: str,
         group_color: str,
-        all_clients: list[str]
+        all_clients: list[str],
+        data: dict,
     ) -> SectionWidget:
         """Create custom group section.
 
@@ -432,27 +456,29 @@ class ClientSidebar(QWidget):
             group_name: Group display name
             group_color: Group color (hex)
             all_clients: List of all client IDs
+            data: Pre-fetched data from _gather_refresh_data()
 
         Returns:
             SectionWidget with group clients
         """
         section = SectionWidget(group_name, group_color)
 
-        clients_in_group = self.groups_manager.get_clients_in_group(group_id, self.profile_manager)
+        clients_in_group = data["group_members"].get(group_id, [])
 
         for client_id in clients_in_group:
             if client_id in all_clients:
-                card = self._create_client_card(client_id)
+                card = self._create_client_card(client_id, data)
                 section.add_card(card)
 
         return section
 
-    def _create_all_section(self, clients: list[str], config: dict) -> SectionWidget:
+    def _create_all_section(self, clients: list[str], config: dict, data: dict) -> SectionWidget:
         """Create All Clients section.
 
         Args:
             clients: List of client IDs to include
             config: All section config
+            data: Pre-fetched data from _gather_refresh_data()
 
         Returns:
             SectionWidget with all clients
@@ -467,21 +493,22 @@ class ClientSidebar(QWidget):
         )
 
         for client_id in clients:
-            card = self._create_client_card(client_id)
+            card = self._create_client_card(client_id, data)
             section.add_card(card)
 
         return section
 
-    def _create_client_card(self, client_id: str) -> ClientCard:
+    def _create_client_card(self, client_id: str, data: dict) -> ClientCard:
         """Create ClientCard for a client.
 
         Args:
             client_id: Client ID
+            data: Pre-fetched data from _gather_refresh_data()
 
         Returns:
             ClientCard instance
         """
-        config = self.profile_manager.get_client_config_extended(client_id)
+        config = data["card_data"][client_id]
 
         client_name = config.get("client_name", f"CLIENT_{client_id}")
         metadata = config.get("metadata", {})

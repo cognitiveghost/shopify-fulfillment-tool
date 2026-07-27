@@ -833,6 +833,8 @@ class ActionsHandler(QObject):
                             self.mw.session_manager.update_session_info(
                                 str(session_path), {"statistics": current_stats}
                             )
+                            if hasattr(self.mw, "session_browser"):
+                                self.mw.session_browser.mark_dirty()
 
                             self.log.info(
                                 f"Updated session statistics: {len(packing_lists_files)} packing lists"

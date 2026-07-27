@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
+from shared.atomic_write import atomic_write_json
+
 logger = logging.getLogger("ShopifyToolLogger")
 
 
@@ -60,6 +62,9 @@ class SessionManager:
 
     # Valid session statuses
     VALID_STATUSES: ClassVar[list[str]] = ["active", "completed", "abandoned", "archived"]
+
+    # Per-client session index cache filename (see docs/superpowers/specs/2026-07-27-ui-responsiveness-design.md)
+    INDEX_FILENAME: ClassVar[str] = "session_index.json"
 
     def __init__(self, profile_manager):
         """Initialize SessionManager with ProfileManager.
@@ -139,6 +144,12 @@ class SessionManager:
             with open(session_info_path, 'w', encoding='utf-8') as f:
                 json.dump(session_info, f, indent=2)
 
+            try:
+                self._upsert_index_entry(session_path, session_info)
+            except Exception:
+                logger.exception(f"Failed to update session index for {session_path}")
+            self.profile_manager.invalidate_metadata_cache(client_id)
+
             logger.info(f"Session created: CLIENT_{client_id}/{session_name}")
             return str(session_path)
 
@@ -211,6 +222,9 @@ class SessionManager:
     ) -> list[dict]:
         """List all sessions for a client.
 
+        Reads the per-client session_index.json cache instead of opening every
+        session's session_info.json (see docs/superpowers/specs/2026-07-27-ui-responsiveness-design.md).
+
         Args:
             client_id (str): Client ID
             status_filter (str, optional): Filter by status ("active", "completed", etc.)
@@ -225,37 +239,33 @@ class SessionManager:
         if not client_sessions_dir.exists():
             return []
 
+        entries = self._read_index(client_sessions_dir)
+        if entries is None:
+            entries = self._rebuild_index(client_sessions_dir)
+        else:
+            actual_count = sum(1 for item in client_sessions_dir.iterdir() if item.is_dir())
+            if actual_count != len(entries):
+                entries = self._rebuild_index(client_sessions_dir)
+
         sessions = []
-        for item in client_sessions_dir.iterdir():
-            if not item.is_dir():
+        for entry in entries:
+            session_info = dict(entry)
+            session_info["session_path"] = str(client_sessions_dir / session_info["session_name"])
+            if status_filter and session_info.get("status") != status_filter:
                 continue
+            sessions.append(session_info)
 
-            session_info = self.get_session_info(str(item))
-            if session_info:
-                # Apply status filter if specified
-                if status_filter and session_info.get("status") != status_filter:
-                    continue
-
-                sessions.append(session_info)
-
-        # Sort by creation date (newest first)
-        sessions.sort(
-            key=lambda x: x.get("created_at", ""),
-            reverse=True
-        )
-
+        sessions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return sessions
 
     @contextlib.contextmanager
-    def _locked_session_info(self, session_path_obj: Path):
-        """Blocking exclusive lock spanning a session_info.json read-modify-write.
+    def _exclusive_lock(self, lock_path: Path):
+        """Blocking exclusive lock on an arbitrary sidecar `.lock` file.
 
-        Without this, two near-simultaneous updates (e.g. packing list and
-        stock export generation both appending to their own list field) each
-        read the same on-disk snapshot before either writes back, and one
-        update silently loses the other's change.
+        Without this, two near-simultaneous read-modify-write cycles on the
+        file `lock_path` guards each read the same on-disk snapshot before
+        either writes back, and one update silently loses the other's change.
         """
-        lock_path = session_path_obj / "session_info.json.lock"
         with open(lock_path, "a+") as lock_file:
             try:
                 if os.name == "nt":
@@ -273,6 +283,12 @@ class SessionManager:
                 else:
                     import fcntl
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+    @contextlib.contextmanager
+    def _locked_session_info(self, session_path_obj: Path):
+        """Blocking exclusive lock spanning a session_info.json read-modify-write."""
+        with self._exclusive_lock(session_path_obj / "session_info.json.lock"):
+            yield
 
     def get_session_info(self, session_path: str) -> dict | None:
         """Load session metadata from session_info.json.
@@ -310,6 +326,72 @@ class SessionManager:
         except Exception:
             logger.exception("Failed to load session info")
             return None
+
+    def _index_lock_path(self, client_sessions_dir: Path) -> Path:
+        return client_sessions_dir / f"{self.INDEX_FILENAME}.lock"
+
+    def _read_index(self, client_sessions_dir: Path) -> list[dict] | None:
+        """Read the raw index file, or None if it doesn't exist / is unreadable."""
+        index_path = client_sessions_dir / self.INDEX_FILENAME
+        if not index_path.exists():
+            return None
+        try:
+            with open(index_path, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            logger.exception("Failed to read session index, treating as missing")
+            return None
+
+    def _write_index(self, client_sessions_dir: Path, entries: list[dict]) -> None:
+        index_path = client_sessions_dir / self.INDEX_FILENAME
+        atomic_write_json(index_path, entries)
+
+    def _scan_sessions(self, client_sessions_dir: Path) -> list[dict]:
+        """Full folder scan (the old list_client_sessions behavior) -- used only
+        to build/rebuild the index, never on the normal read path."""
+        entries = []
+        for item in client_sessions_dir.iterdir():
+            if not item.is_dir():
+                continue
+            info = self.get_session_info(str(item))
+            if info:
+                info.pop("session_path", None)
+                entries.append(info)
+        return entries
+
+    def _rebuild_index(self, client_sessions_dir: Path) -> list[dict]:
+        """Full scan + persist. Called when no index exists yet, or the
+        directory count no longer matches the index (see list_client_sessions).
+
+        Scan and write both happen under the index lock: an unlocked scan
+        could read a stale snapshot, then overwrite a concurrent
+        _upsert_index_entry() write for an unrelated session with that
+        stale data once the lock is finally taken for the write.
+        """
+        with self._exclusive_lock(self._index_lock_path(client_sessions_dir)):
+            entries = self._scan_sessions(client_sessions_dir)
+            self._write_index(client_sessions_dir, entries)
+        return entries
+
+    def _upsert_index_entry(self, session_path_obj: Path, session_info: dict) -> None:
+        """Insert or replace one session's entry in its client's index.
+
+        Best-effort: index-write failures are logged, not raised, since the
+        index is a read-side cache and must never block the session_info.json
+        write it mirrors.
+        """
+        try:
+            client_sessions_dir = session_path_obj.parent
+            entry = dict(session_info)
+            entry.pop("session_path", None)
+            session_name = session_path_obj.name
+            with self._exclusive_lock(self._index_lock_path(client_sessions_dir)):
+                entries = self._read_index(client_sessions_dir) or []
+                entries = [e for e in entries if e.get("session_name") != session_name]
+                entries.append(entry)
+                self._write_index(client_sessions_dir, entries)
+        except Exception:
+            logger.exception(f"Failed to update session index for {session_path_obj}")
 
     def update_session_status(self, session_path: str, status: str) -> bool:
         """Update session status in session_info.json.
@@ -350,6 +432,10 @@ class SessionManager:
                 with open(session_info_path, 'w', encoding='utf-8') as f:
                     json.dump(session_info, f, indent=2)
 
+                try:
+                    self._upsert_index_entry(session_path_obj, session_info)
+                except Exception:
+                    logger.exception(f"Failed to update session index for {session_path_obj}")
                 logger.info(f"Session status updated to '{status}': {session_path}")
                 return True
 
@@ -391,6 +477,10 @@ class SessionManager:
                 with open(session_info_path, 'w', encoding='utf-8') as f:
                     json.dump(session_info, f, indent=2)
 
+                try:
+                    self._upsert_index_entry(session_path_obj, session_info)
+                except Exception:
+                    logger.exception(f"Failed to update session index for {session_path_obj}")
                 logger.info(f"Session info updated: {session_path}")
                 return True
 
@@ -434,6 +524,10 @@ class SessionManager:
                 with open(session_info_path, 'w', encoding='utf-8') as f:
                     json.dump(session_info, f, indent=2)
 
+                try:
+                    self._upsert_index_entry(session_path_obj, session_info)
+                except Exception:
+                    logger.exception(f"Failed to update session index for {session_path_obj}")
                 logger.info(f"Session info updated: appended '{value}' to '{field}'")
                 return True
 

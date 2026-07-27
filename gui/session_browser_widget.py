@@ -5,7 +5,7 @@ with filtering by status and the ability to open existing sessions.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
@@ -28,6 +28,30 @@ from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_SESSION_AGE_CUTOFF_DAYS = 30
+
+
+def filter_sessions_by_age(sessions: list, cutoff_days: int | None, now: datetime) -> list:
+    """Keep sessions created within the last `cutoff_days`. `cutoff_days=None`
+    disables filtering (the "Show older" state). Sessions with an unparsable
+    or missing created_at are kept -- never hide real data because of a
+    formatting issue in a single record.
+    """
+    if cutoff_days is None:
+        return list(sessions)
+    cutoff = now - timedelta(days=cutoff_days)
+    kept = []
+    for session in sessions:
+        created_at = session.get("created_at", "")
+        try:
+            created = datetime.fromisoformat(created_at)
+        except (ValueError, TypeError):
+            kept.append(session)
+            continue
+        if created >= cutoff:
+            kept.append(session)
+    return kept
 
 
 class SessionLoaderWorker(BackgroundWorker):
@@ -105,6 +129,8 @@ class SessionBrowserWidget(QWidget):
         self.current_client_id = None
         self.sessions_data = []
         self.worker = None  # Track active background worker
+        self._show_older = False
+        self._is_dirty = True  # forces one load on first show
 
         self._init_ui()
         logger.info("SessionBrowserWidget initialized")
@@ -136,6 +162,12 @@ class SessionBrowserWidget(QWidget):
         self.refresh_btn.setToolTip("Reload sessions from server")
         self.refresh_btn.clicked.connect(self.refresh_sessions)
         filter_layout.addWidget(self.refresh_btn)
+
+        self.show_older_btn = QPushButton("Show Older (30+ days)")
+        self.show_older_btn.setCheckable(True)
+        self.show_older_btn.setToolTip("Show sessions older than 30 days")
+        self.show_older_btn.toggled.connect(self._on_show_older_toggled)
+        filter_layout.addWidget(self.show_older_btn)
 
         group_layout.addLayout(filter_layout)
 
@@ -221,11 +253,13 @@ class SessionBrowserWidget(QWidget):
         """
         if client_id != self.current_client_id:
             self.current_client_id = client_id
+            self._is_dirty = True
             if auto_refresh:
                 self.refresh_sessions()
 
     def refresh_sessions(self):
         """Reload sessions from the session manager."""
+        self._is_dirty = False
         if not self.current_client_id:
             self.sessions_table.setRowCount(0)
             logger.debug("No client selected, clearing sessions table")
@@ -325,10 +359,14 @@ class SessionBrowserWidget(QWidget):
 
     def _populate_table(self):
         """Populate the table with sessions data."""
+        cutoff_days = None if self._show_older else DEFAULT_SESSION_AGE_CUTOFF_DAYS
+        visible_sessions = filter_sessions_by_age(
+            self.sessions_data, cutoff_days, datetime.now().astimezone()
+        )
         self.sessions_table.setSortingEnabled(False)
-        self.sessions_table.setRowCount(len(self.sessions_data))
+        self.sessions_table.setRowCount(len(visible_sessions))
 
-        for row, session_info in enumerate(self.sessions_data):
+        for row, session_info in enumerate(visible_sessions):
             session_path = session_info.get("session_path", "")
             stats = session_info.get("statistics", {})
 
@@ -431,6 +469,18 @@ Comments: {comments if comments else "None"}"""
         """Apply the status filter."""
         self.refresh_sessions()
 
+    def _on_show_older_toggled(self, checked: bool):
+        """Toggling this only re-filters the already-loaded self.sessions_data --
+        no new file-server call, since the whole index is already in memory."""
+        self._show_older = checked
+        self._populate_table()
+
+    def mark_dirty(self):
+        """Call this whenever a session is created/updated for the client this
+        widget is currently showing, so the next showEvent() actually refreshes
+        instead of reusing a stale table."""
+        self._is_dirty = True
+
     def _on_selection_changed(self, current=None, previous=None):
         """Handle table selection change (fires on click/keyboard, not hover)."""
         has_selection = self.sessions_table.currentRow() >= 0
@@ -480,11 +530,11 @@ Comments: {comments if comments else "None"}"""
             str: Session path or empty string if none selected
         """
         current_row = self.sessions_table.currentRow()
-        if current_row < 0 or current_row >= len(self.sessions_data):
+        if current_row < 0:
             return ""
 
-        session_info = self.sessions_data[current_row]
-        return session_info.get("session_path", "")
+        item = self.sessions_table.item(current_row, 0)
+        return item.data(Qt.UserRole) if item else ""
 
     def _on_status_changed(self, session_path: str, new_status: str):
         """Handle status change in table.
@@ -544,13 +594,12 @@ Comments: {comments if comments else "None"}"""
         return super().eventFilter(watched, event)
 
     def showEvent(self, event):
-        """Refresh sessions when widget becomes visible.
-
-        Args:
-            event: Show event
+        """Refresh only if something changed since the last load -- avoids
+        re-fetching from the file server every time this widget becomes
+        visible with nothing new to show.
         """
         super().showEvent(event)
-        if self.current_client_id:
+        if self._is_dirty and self.current_client_id:
             self.refresh_sessions()
 
     def closeEvent(self, event):

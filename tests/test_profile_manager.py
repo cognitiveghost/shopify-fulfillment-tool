@@ -138,3 +138,67 @@ class TestColumnMappingsMigrationBug:
 
         reloaded = profile_manager.load_shopify_config("M")
         assert reloaded["column_mappings"]["orders"] == {"MyCol": "SKU"}
+
+
+class TestLoadClientConfigCaching:
+    def test_second_load_is_served_from_cache(self, profile_manager, monkeypatch):
+        profile_manager.create_client_profile("M", "Client")
+        first = profile_manager.load_client_config("M")
+        call_count = {"n": 0}
+        original_open = open
+
+        def counting_open(*args, **kwargs):
+            if "client_config.json" in str(args[0]):
+                call_count["n"] += 1
+            return original_open(*args, **kwargs)
+
+        monkeypatch.setattr("builtins.open", counting_open)
+        second = profile_manager.load_client_config("M")
+        assert second == first
+        assert call_count["n"] == 0  # served from cache, file not reopened
+
+    def test_cache_invalidated_after_save(self, profile_manager):
+        profile_manager.create_client_profile("M", "Client")
+        config = profile_manager.load_client_config("M")
+        config["client_name"] = "Renamed"
+        profile_manager.save_client_config("M", config)
+        reloaded = profile_manager.load_client_config("M")
+        assert reloaded["client_name"] == "Renamed"
+
+    def test_cache_reflects_external_mtime_change(self, profile_manager):
+        # Simulates another PC on the file server saving a change: same
+        # mtime-based invalidation load_shopify_config already relies on.
+        profile_manager.create_client_profile("M", "Client")
+        profile_manager.load_client_config("M")  # warm the cache
+        config_path = profile_manager.get_client_directory("M") / "client_config.json"
+        data = json.loads(config_path.read_text())
+        data["client_name"] = "Changed Externally"
+        config_path.write_text(json.dumps(data))
+        import os
+        # Ensure a distinct mtime on filesystems with coarse mtime resolution.
+        newer = os.path.getmtime(config_path) + 1
+        os.utime(config_path, (newer, newer))
+        reloaded = profile_manager.load_client_config("M")
+        assert reloaded["client_name"] == "Changed Externally"
+
+    def test_mutating_returned_config_does_not_corrupt_cache(self, profile_manager):
+        # ui_settings is a nested dict; a shallow cache copy would share it
+        # across calls, so mutating one caller's copy would corrupt the next.
+        profile_manager.create_client_profile("M", "Client")
+        first = profile_manager.load_client_config("M")
+        first["ui_settings"]["is_pinned"] = True
+
+        second = profile_manager.load_client_config("M")
+        assert second["ui_settings"]["is_pinned"] is False
+
+
+class TestLoadShopifyConfigCaching:
+    def test_mutating_returned_config_does_not_corrupt_cache(self, profile_manager):
+        # Same shallow-copy-cache hazard as load_client_config(), on the
+        # nested inventory_memory dict.
+        profile_manager.create_client_profile("M", "Client")
+        first = profile_manager.load_shopify_config("M")
+        first["inventory_memory"]["enabled"] = True
+
+        second = profile_manager.load_shopify_config("M")
+        assert second["inventory_memory"]["enabled"] is False
