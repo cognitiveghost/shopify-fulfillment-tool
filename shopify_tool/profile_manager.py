@@ -980,7 +980,7 @@ class ProfileManager:
             cached_data, cached_mtime = self._config_cache[cache_key]
             if cached_mtime == current_mtime:
                 logger.debug(f"Using cached shopify config for {client_id}")
-                return cached_data
+                return copy.deepcopy(cached_data)
 
         try:
             with open(config_path, "r", encoding="utf-8") as f:
@@ -1019,7 +1019,7 @@ class ProfileManager:
 
             # Update cache with current mtime
             if current_mtime is not None:
-                self._config_cache[cache_key] = (config, current_mtime)
+                self._config_cache[cache_key] = (copy.deepcopy(config), current_mtime)
 
             return config
 

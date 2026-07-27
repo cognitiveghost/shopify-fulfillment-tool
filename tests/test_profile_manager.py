@@ -180,3 +180,25 @@ class TestLoadClientConfigCaching:
         os.utime(config_path, (newer, newer))
         reloaded = profile_manager.load_client_config("M")
         assert reloaded["client_name"] == "Changed Externally"
+
+    def test_mutating_returned_config_does_not_corrupt_cache(self, profile_manager):
+        # ui_settings is a nested dict; a shallow cache copy would share it
+        # across calls, so mutating one caller's copy would corrupt the next.
+        profile_manager.create_client_profile("M", "Client")
+        first = profile_manager.load_client_config("M")
+        first["ui_settings"]["is_pinned"] = True
+
+        second = profile_manager.load_client_config("M")
+        assert second["ui_settings"]["is_pinned"] is False
+
+
+class TestLoadShopifyConfigCaching:
+    def test_mutating_returned_config_does_not_corrupt_cache(self, profile_manager):
+        # Same shallow-copy-cache hazard as load_client_config(), on the
+        # nested inventory_memory dict.
+        profile_manager.create_client_profile("M", "Client")
+        first = profile_manager.load_shopify_config("M")
+        first["inventory_memory"]["enabled"] = True
+
+        second = profile_manager.load_shopify_config("M")
+        assert second["inventory_memory"]["enabled"] is False
