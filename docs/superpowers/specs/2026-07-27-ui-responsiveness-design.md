@@ -84,36 +84,52 @@ documented, designed-for scenario per `packing-tool/README.md`).
 
 ## Workstream 1 — Session index
 
-Add `Sessions/CLIENT_{ID}/session_index.json`: a JSON array of small per-session summaries
-(`session_name`, `created_at`, `status`) maintained incrementally instead of rebuilt from a
-folder scan on every read. `session_info.json` has no separate `session_id` field —
-`shared/session_id.py::derive_session_id()` defines the session id as the folder name, i.e.
-`session_name` — so the index uses `session_name` as its key, matching directory iteration.
+Add `Sessions/CLIENT_{ID}/session_index.json`: a JSON array where each entry **mirrors the full
+per-session dict `get_session_info()` already returns** (`session_name`, `status`, `created_at`,
+`statistics`, `comments`, `pc_name`, etc. — everything except the synthetic `session_path`,
+which is derived as `client_sessions_dir / session_name`), keyed by `session_name`.
+`session_info.json` has no separate `session_id` field — `shared/session_id.py::derive_session_id()`
+defines the session id as the folder name, i.e. `session_name` — so the index uses that as its key.
 
-- **Write path**: hook index maintenance into the three functions in
-  `shopify_tool/session_manager.py` that already own writes to `session_info.json`'s top-level
-  fields under the existing `_locked_session_info()` lock — `create_session()` (append an
-  entry), `update_session_status()` (update the entry keyed by `session_name`),
-  `update_session_info()` (update the entry keyed by `session_name`, only if the update touches
-  `status`). Because these are the *only* writers of the fields the index tracks (confirmed
-  above), the index can't drift from normal operation. The index file itself gets its own
-  sidecar lock (`session_index.json.lock`), following the exact pattern
-  `_locked_session_info()` already uses, to stay correct under concurrent writes from multiple
-  PCs.
+A smaller summary (just `session_name`/`created_at`/`status`) was considered first, but the
+session browser table's Orders/Items/Packing Lists/Comments columns are populated from
+`statistics`/`comments`, which change on their own schedule — a packing-list report regenerates
+`statistics.packing_lists_count` (`gui/actions_handler.py:834`), analysis completion sets
+`statistics.total_orders`/`total_items` (`shopify_tool/core.py:1009`), and inline edits set
+`comments` (`gui/session_browser_widget.py:520`) — a summary-only index would go stale on the
+columns users look at most. Mirroring the full record avoids that: every one of those writers
+already goes through `update_session_info()`/`append_to_session_list()`, so the index entry can
+be refreshed with the exact dict just written, by construction, not re-derived from partial data.
+
+- **Write path**: hook index maintenance into the four functions in
+  `shopify_tool/session_manager.py` that already own every write to `session_info.json`'s
+  top-level fields — `create_session()` (append), and, under the existing
+  `_locked_session_info()` lock, `update_session_status()`, `update_session_info()`,
+  `append_to_session_list()` (replace the entry keyed by `session_name` with the dict just
+  written). Because these are confirmed to be the *only* writers of the fields the index
+  carries, the index can't drift from normal operation. The index file gets its own sidecar
+  lock (`session_index.json.lock`), reusing the same lock primitive `_locked_session_info()`
+  already uses (generalized into a small shared `_exclusive_lock(path)` helper), to stay correct
+  under concurrent writes from multiple PCs. An index-write failure is logged and swallowed, not
+  raised — the index is a cache, and a failed cache update must not fail the underlying
+  `session_info.json` write it's mirroring.
 - **Read path**: `list_client_sessions()` reads `session_index.json` directly instead of
   iterating the directory and opening every session's JSON. If the index file doesn't exist
   (first run against existing data), do the current full scan once, write the index, and use it
   from then on — self-healing, no explicit migration script.
 - **Staleness guard**: before trusting the index, compare its entry count against a cheap
   `iterdir()` directory count (no JSON opens). On mismatch (manual folder add/delete/restore),
-  rebuild the index via the full scan. This keeps the guard itself cheap.
+  rebuild the index via the full scan. This keeps the guard itself cheap. (A count match doesn't
+  prove per-entry freshness, but per-entry freshness is already guaranteed by the write-path
+  argument above — the count check only catches folders added/removed outside this code, e.g.
+  manual copy or delete.)
 - **Default view / "archive" behavior**: `SessionBrowserWidget` filters the loaded index to the
   last 30 days client-side by default; a "Show older" control lifts the filter over the same
   already-loaded list — no additional file-server round trip, since the whole index is cheap to
   read at this scale.
-- Full `statistics` (computed via `calculate_session_statistics()`,
-  `shopify_tool/session_manager.py:600-654`) stays lazy — computed only when a session is
-  actually opened, not stored in the index, so the index stays small.
+- Legacy sessions predating this feature (or the `statistics` field) get their `statistics`
+  filled in the usual way — `get_session_info()`'s existing backward-compat computation
+  (`shopify_tool/session_manager.py:301-302`) — once, at index-build time, not per read.
 
 ## Workstream 2 — Consistent worker usage, caching, dedup
 
@@ -134,9 +150,18 @@ main thread.
   `result` signal. Drop the redundant second `load_client_config()` call currently marked
   "backward compatibility" — with `load_shopify_config()`'s result already available, that
   second load is fetching data already in hand.
-- **`ClientSidebar.refresh()`**: move the group/client/pin-status/metadata gathering into a
-  `Worker`; apply the built sidebar model to the UI from its `result` signal, replacing the
-  wait-cursor.
+- **`ClientSidebar.refresh()`**: per this repo's "no UI calls from background threads" rule,
+  `_create_pinned_section()`/`_create_group_section()`/`_create_all_section()`/
+  `_create_client_card()` (which construct `SectionWidget`/`ClientCard` QWidgets) must stay on
+  the GUI thread — only the data they read (`groups_manager.load_groups()`,
+  `profile_manager.list_clients()`, per-client `get_ui_settings()`, per-group
+  `get_clients_in_group()`, per-client `get_client_config_extended()`) can move off it. Split
+  `refresh()` into a new data-only method (no Qt objects, safe to run in a `Worker`) that
+  prefetches all of the above into plain dicts, and change the four `_create_*` methods to take
+  that prefetched data as a parameter instead of calling `profile_manager`/`groups_manager`
+  themselves. `refresh()` becomes: start the `Worker`, and on its `result` signal, run the
+  existing widget-clearing + `_create_*` calls (now reading from the passed-in data) on the main
+  thread, replacing the wait-cursor.
 - **Config save**: wrap `save_client_config()`/`save_shopify_config()` calls in a `Worker`;
   disable the Save button and show a small "Saving…" state until the `finished` signal fires.
   This also removes the up-to-2.5s retry-sleep block as a side effect, since the sleep now
