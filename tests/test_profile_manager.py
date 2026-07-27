@@ -175,7 +175,6 @@ class TestLoadClientConfigCaching:
         data["client_name"] = "Changed Externally"
         config_path.write_text(json.dumps(data))
         import os
-        import time
         # Ensure a distinct mtime on filesystems with coarse mtime resolution.
         newer = os.path.getmtime(config_path) + 1
         os.utime(config_path, (newer, newer))
