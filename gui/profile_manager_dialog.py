@@ -91,10 +91,9 @@ class ProfileManagerDialog(QDialog):
         old_name = current_item.text()
         new_name, ok = QInputDialog.getText(self, "Rename Profile", f"Enter new name for '{old_name}':", text=old_name)
 
-        if ok and new_name and new_name != old_name:
-            if self.parent.rename_profile(old_name, new_name):
-                self.populate_profiles()
-                self.parent.update_profile_combo()
+        if ok and new_name and new_name != old_name and self.parent.rename_profile(old_name, new_name):
+            self.populate_profiles()
+            self.parent.update_profile_combo()
 
     def delete_profile(self):
         """Handles the 'Delete' button click.
@@ -116,7 +115,6 @@ class ProfileManagerDialog(QDialog):
             QMessageBox.No
         )
 
-        if reply == QMessageBox.Yes:
-            if self.parent.delete_profile(name_to_delete):
-                self.populate_profiles()
-                self.parent.update_profile_combo()
+        if reply == QMessageBox.Yes and self.parent.delete_profile(name_to_delete):
+            self.populate_profiles()
+            self.parent.update_profile_combo()

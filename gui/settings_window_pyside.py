@@ -1,5 +1,6 @@
 import json
 import sys
+from typing import ClassVar
 
 import pandas as pd
 from PySide6.QtCore import QDate, Qt, QTimer
@@ -62,7 +63,7 @@ class SettingsWindow(QDialog):
     """
 
     # Constants for builders
-    FILTERABLE_COLUMNS = [
+    FILTERABLE_COLUMNS: ClassVar[list[str]] = [
         "Order_Number",
         "Order_Type",
         "SKU",
@@ -76,9 +77,9 @@ class SettingsWindow(QDialog):
         "Status_Note",
         "Total Price",
     ]
-    FILTER_OPERATORS = ["==", "!=", "in", "not in", "contains"]
+    FILTER_OPERATORS: ClassVar[list[str]] = ["==", "!=", "in", "not in", "contains"]
     # Group order-level fields first for better UX
-    ORDER_LEVEL_FIELDS = [
+    ORDER_LEVEL_FIELDS: ClassVar[list[str]] = [
         "--- ORDER-LEVEL FIELDS ---",
         "item_count",
         "total_quantity",
@@ -86,8 +87,8 @@ class SettingsWindow(QDialog):
         "Has_SKU",
         "--- ARTICLE-LEVEL FIELDS ---",
     ]
-    CONDITION_FIELDS = ORDER_LEVEL_FIELDS + FILTERABLE_COLUMNS
-    CONDITION_OPERATORS = [
+    CONDITION_FIELDS: ClassVar[list[str]] = ORDER_LEVEL_FIELDS + FILTERABLE_COLUMNS
+    CONDITION_OPERATORS: ClassVar[list[str]] = [
         "equals",
         "does not equal",
         "contains",
@@ -110,7 +111,7 @@ class SettingsWindow(QDialog):
         "matches regex",
         "does not match regex",
     ]
-    ACTION_TYPES = [
+    ACTION_TYPES: ClassVar[list[str]] = [
         "ADD_TAG",
         "ADD_ORDER_TAG",
         "ADD_INTERNAL_TAG",
@@ -124,7 +125,7 @@ class SettingsWindow(QDialog):
 
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
-    SETTINGS_NAV_GROUPS = [
+    SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
         ("Data", ["General", "Mappings", "Column Config"]),
         ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
         ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
@@ -812,7 +813,7 @@ class SettingsWindow(QDialog):
         if step_refs not in steps or len(steps) <= 1:
             return
 
-        idx = steps.index(step_refs)
+        steps.index(step_refs)
         steps.remove(step_refs)
 
         # Remove widgets
@@ -2466,7 +2467,7 @@ class SettingsWindow(QDialog):
 
     def _weight_delete_selected(self, table):
         """Delete selected rows from the given table."""
-        selected = sorted(set(idx.row() for idx in table.selectedIndexes()), reverse=True)
+        selected = sorted({idx.row() for idx in table.selectedIndexes()}, reverse=True)
         for row in selected:
             table.removeRow(row)
 
@@ -2602,7 +2603,7 @@ class SettingsWindow(QDialog):
                     existing_skus[item.text().strip()] = r
 
             rows_in_csv = df[sku_col].dropna().astype(str).str.strip().tolist()
-            new_skus = [s for s in rows_in_csv if s and s != "nan" and s not in existing_skus]
+            [s for s in rows_in_csv if s and s != "nan" and s not in existing_skus]
             dup_skus = [s for s in rows_in_csv if s and s != "nan" and s in existing_skus]
 
             update_existing = False
@@ -2621,6 +2622,14 @@ class SettingsWindow(QDialog):
             updated = 0
             skipped = 0
 
+            def _val(row, col):
+                if col and pd.notna(row.get(col)):
+                    try:
+                        return float(str(row[col]).replace(",", ".").strip())
+                    except ValueError:
+                        pass
+                return None
+
             self.weight_products_table.blockSignals(True)
             for _, csv_row in df.iterrows():
                 sku = str(csv_row[sku_col]).strip() if pd.notna(csv_row[sku_col]) else ""
@@ -2629,17 +2638,9 @@ class SettingsWindow(QDialog):
 
                 name = str(csv_row[name_col]).strip() if name_col and pd.notna(csv_row.get(name_col)) else ""
 
-                def _val(col):
-                    if col and pd.notna(csv_row.get(col)):
-                        try:
-                            return float(str(csv_row[col]).replace(",", ".").strip())
-                        except ValueError:
-                            pass
-                    return None
-
-                l = _val(l_col)
-                w = _val(w_col)
-                h = _val(h_col)
+                l = _val(csv_row, l_col)
+                w = _val(csv_row, w_col)
+                h = _val(csv_row, h_col)
                 vol_w = round((l * w * h) / divisor, 4) if (l and w and h and divisor > 0) else 0.0
 
                 no_pkg = False
@@ -2767,23 +2768,23 @@ class SettingsWindow(QDialog):
             updated = 0
             skipped = 0
 
+            def _val(row, col):
+                if col and pd.notna(row.get(col)):
+                    try:
+                        return float(str(row[col]).replace(",", ".").strip())
+                    except ValueError:
+                        pass
+                return None
+
             self.weight_boxes_table.blockSignals(True)
             for _, csv_row in df.iterrows():
                 name = str(csv_row[name_col]).strip() if pd.notna(csv_row[name_col]) else ""
                 if not name or name == "nan":
                     continue
 
-                def _val(col):
-                    if col and pd.notna(csv_row.get(col)):
-                        try:
-                            return float(str(csv_row[col]).replace(",", ".").strip())
-                        except ValueError:
-                            pass
-                    return None
-
-                l = _val(l_col)
-                w = _val(w_col)
-                h = _val(h_col)
+                l = _val(csv_row, l_col)
+                w = _val(csv_row, w_col)
+                h = _val(csv_row, h_col)
                 vol_w = round((l * w * h) / divisor, 4) if (l and w and h and divisor > 0) else 0.0
 
                 if name in existing_boxes:

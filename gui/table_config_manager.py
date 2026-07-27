@@ -205,8 +205,8 @@ class TableConfigManager:
 
             logger.debug(f"Saved table view '{view_name}' for CLIENT_{client_id}")
 
-        except Exception as e:
-            logger.error(f"Failed to save table config for CLIENT_{client_id}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to save table config for CLIENT_{client_id}")
             raise
 
     def get_default_config(self, columns: list[str]) -> TableConfig:
@@ -675,12 +675,11 @@ class TableConfigManager:
         checkbox_offset = 1 if has_checkbox else 0
 
         # Locked columns (Order_Number) must stay at position after checkbox
-        if column_name in self._current_config.locked_columns:
-            if new_visual_index != checkbox_offset:
-                # Revert move
-                header.moveSection(new_visual_index, old_visual_index)
-                logger.warning(f"Cannot move locked column '{column_name}' from position {checkbox_offset}")
-                return
+        if column_name in self._current_config.locked_columns and new_visual_index != checkbox_offset:
+            # Revert move
+            header.moveSection(new_visual_index, old_visual_index)
+            logger.warning(f"Cannot move locked column '{column_name}' from position {checkbox_offset}")
+            return
 
         # Don't allow moving to the locked position (after checkbox)
         if new_visual_index == checkbox_offset and column_name not in self._current_config.locked_columns:
@@ -691,7 +690,7 @@ class TableConfigManager:
 
         # Update column order in config
         # Get current visual order
-        df_columns = self._current_df.columns.tolist()
+        self._current_df.columns.tolist()
         new_order = []
 
         for visual_pos in range(checkbox_offset, header.count()):
@@ -728,8 +727,8 @@ class TableConfigManager:
             )
             self._pending_save = False
             logger.debug("Debounced save completed")
-        except Exception as e:
-            logger.error(f"Failed to perform debounced save: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to perform debounced save")
 
     # Column visibility management methods (Phase 2)
 
@@ -1021,8 +1020,8 @@ class TableConfigManager:
             table_view_settings = ui_settings.get("table_view", {})
             views = table_view_settings.get("views", {})
             return list(views.keys())
-        except Exception as e:
-            logger.error(f"Failed to list views for CLIENT_{client_id}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to list views for CLIENT_{client_id}")
             return []
 
     def load_view(self, view_name: str, client_id: str | None = None) -> TableConfig | None:
@@ -1112,6 +1111,6 @@ class TableConfigManager:
             else:
                 logger.warning(f"View '{view_name}' not found for CLIENT_{client_id}")
 
-        except Exception as e:
-            logger.error(f"Failed to delete view '{view_name}' for CLIENT_{client_id}: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"Failed to delete view '{view_name}' for CLIENT_{client_id}")
             raise

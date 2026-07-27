@@ -199,7 +199,7 @@ class ClientCreationDialog(QDialog):
                 f"Failed to create client profile:\n{e!s}"
             )
         except Exception as e:
-            logger.error(f"Unexpected error creating client: {e}", exc_info=True)
+            logger.exception("Unexpected error creating client")
             QMessageBox.critical(
                 self,
                 "Error",
@@ -286,7 +286,7 @@ class ClientSelectorWidget(QWidget):
                 self._on_client_changed(self.client_combo.currentText())
 
         except Exception as e:
-            logger.error(f"Failed to refresh clients: {e}", exc_info=True)
+            logger.exception("Failed to refresh clients")
             QMessageBox.warning(
                 self,
                 "Error",
@@ -633,7 +633,7 @@ class ClientSettingsDialog(QDialog):
                 )
 
         except Exception as e:
-            logger.error(f"Failed to save client settings: {e}", exc_info=True)
+            logger.exception("Failed to save client settings")
             QMessageBox.critical(
                 self,
                 "Error",

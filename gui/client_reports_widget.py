@@ -266,8 +266,10 @@ class LabelPrintingTab(QWidget):
 
         qdate_from = self._date_from.date()
         qdate_to = self._date_to.date()
-        start_dt = datetime(qdate_from.year(), qdate_from.month(), qdate_from.day())
-        end_dt = datetime(qdate_to.year(), qdate_to.month(), qdate_to.day())
+        # Deliberately naive: date-only picker input, StatsManager.get_label_print_history
+        # is built to accept naive dates alongside its aware stored timestamps.
+        start_dt = datetime(qdate_from.year(), qdate_from.month(), qdate_from.day())  # noqa: DTZ001
+        end_dt = datetime(qdate_to.year(), qdate_to.month(), qdate_to.day())  # noqa: DTZ001
 
         def _load():
             from shared.stats_manager import StatsManager
@@ -360,7 +362,7 @@ class LabelPrintingTab(QWidget):
             return
 
         from datetime import date as _date
-        default_name = f"label_report_{client_id}_{_date.today().isoformat()}.xlsx"
+        default_name = f"label_report_{client_id}_{_date.today().isoformat()}.xlsx"  # noqa: DTZ011 -- local calendar day for a filename, not an instant
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export Label Report", default_name, "Excel Files (*.xlsx)"
         )

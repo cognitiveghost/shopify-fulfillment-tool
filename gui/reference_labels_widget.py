@@ -344,8 +344,8 @@ class ReferenceLabelsWidget(QWidget):
 
             self.log.info(f"Output directory set: {self.output_dir}")
 
-        except Exception as e:
-            self.log.error(f"Failed to set output directory: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to set output directory")
             self.output_dir = None
             self.output_dir_label.setText("Error accessing session directory")
             self.output_dir_label.setStyleSheet("color: red;")
@@ -366,7 +366,7 @@ class ReferenceLabelsWidget(QWidget):
             errors.append("PDF file not selected")
         elif not Path(self.pdf_path).exists():
             errors.append(f"PDF file not found: {self.pdf_path}")
-        elif not Path(self.pdf_path).suffix.lower() == '.pdf':
+        elif Path(self.pdf_path).suffix.lower() != '.pdf':
             errors.append("Selected file is not a PDF")
 
         # Validate CSV
@@ -374,7 +374,7 @@ class ReferenceLabelsWidget(QWidget):
             errors.append("CSV file not selected")
         elif not Path(self.csv_path).exists():
             errors.append(f"CSV file not found: {self.csv_path}")
-        elif not Path(self.csv_path).suffix.lower() == '.csv':
+        elif Path(self.csv_path).suffix.lower() != '.csv':
             errors.append("Selected file is not a CSV")
 
         # Validate output directory
@@ -524,7 +524,7 @@ class ReferenceLabelsWidget(QWidget):
         Args:
             error_info: Tuple of (exc_type, exc_value, traceback_str)
         """
-        exctype, value, traceback_str = error_info
+        _exctype, value, traceback_str = error_info
 
         self.status_label.setText("Processing failed")
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
@@ -636,11 +636,10 @@ class ReferenceLabelsWidget(QWidget):
             QMessageBox.No
         )
 
-        if reply == QMessageBox.Yes:
-            if self.history:
-                self.history.clear()
-                self._load_history()
-                self.log.info("History cleared")
+        if reply == QMessageBox.Yes and self.history:
+            self.history.clear()
+            self._load_history()
+            self.log.info("History cleared")
 
     def _open_history_item(self, index):
         """

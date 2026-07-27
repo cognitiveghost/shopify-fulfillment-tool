@@ -12,6 +12,10 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+class CSVLoadError(Exception):
+    """Raised when a CSV file fails to load or merge."""
+
+
 def order_number_sort_key(s) -> int:
     """Return a numeric sort key for an order-number string.
 
@@ -81,8 +85,8 @@ def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> tuple[s
 
             # Check consistency across multiple lines
             for line in lines[1:]:
-                for delim in delimiters:
-                    if line.count(delim) != delimiters[delim]:
+                for delim, count in delimiters.items():
+                    if line.count(delim) != count:
                         # Not consistent - reduce confidence
                         delimiters[delim] = 0
 
@@ -316,7 +320,7 @@ def merge_csv_files(
 
     Raises:
         ValueError: If file_paths is empty
-        Exception: If any file fails to load
+        CSVLoadError: If any file fails to load
 
     Example:
         >>> files = ["shop1.csv", "shop2.csv", "shop3.csv"]
@@ -353,8 +357,8 @@ def merge_csv_files(
             logger.info(f"✓ Loaded {len(df)} rows from {os.path.basename(filepath)}")
 
         except Exception as e:
-            logger.error(f"✗ Failed to load {os.path.basename(filepath)}: {e}", exc_info=True)
-            raise Exception(f"Failed to load {os.path.basename(filepath)}: {e}")
+            logger.exception(f"✗ Failed to load {os.path.basename(filepath)}")
+            raise CSVLoadError(f"Failed to load {os.path.basename(filepath)}: {e}") from e
 
     # Concatenate all DataFrames
     merged_df = pd.concat(dataframes, ignore_index=True)
@@ -387,8 +391,8 @@ def merge_csv_files(
                         subset=duplicate_keys,
                         keep='first'
                     )
-                except Exception as e:
-                    logger.error(f"Error removing duplicates with keys {duplicate_keys}: {e}", exc_info=True)
+                except Exception:
+                    logger.exception(f"Error removing duplicates with keys {duplicate_keys}")
                     raise
             else:
                 logger.warning("No valid duplicate keys found, skipping duplicate removal")

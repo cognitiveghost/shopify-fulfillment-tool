@@ -79,7 +79,7 @@ class CollapsedClientIndicator(QWidget):
 class SectionWidget(QWidget):
     """Widget for a collapsible section (Pinned, Group, All Clients)."""
 
-    def __init__(self, title: str, color: str = None, parent=None):
+    def __init__(self, title: str, color: str | None = None, parent=None):
         """Initialize section widget.
 
         Args:
@@ -388,7 +388,7 @@ class ClientSidebar(QWidget):
 
         except Exception as e:
             self.setUpdatesEnabled(True)
-            logger.error(f"Failed to refresh sidebar: {e}", exc_info=True)
+            logger.exception("Failed to refresh sidebar")
             QMessageBox.warning(self, "Refresh Error", f"Failed to refresh sidebar:\n{e!s}")
         finally:
             # Restore cursor after refresh completes (success or error)
@@ -691,7 +691,7 @@ class ClientSidebar(QWidget):
             self.refresh()
 
         except Exception as e:
-            logger.error(f"Failed to toggle pin: {e}", exc_info=True)
+            logger.exception("Failed to toggle pin")
             QMessageBox.warning(self, "Error", f"Failed to toggle pin:\n{e!s}")
 
     def _edit_client(self, client_id: str):
@@ -726,7 +726,7 @@ class ClientSidebar(QWidget):
             self.refresh()
 
         except Exception as e:
-            logger.error(f"Failed to move client to group: {e}", exc_info=True)
+            logger.exception("Failed to move client to group")
             QMessageBox.warning(self, "Error", f"Failed to move client:\n{e!s}")
 
     def _delete_client(self, client_id: str):
@@ -756,7 +756,7 @@ class ClientSidebar(QWidget):
                 )
 
             except Exception as e:
-                logger.error(f"Failed to delete client: {e}", exc_info=True)
+                logger.exception("Failed to delete client")
                 QMessageBox.critical(self, "Error", f"Failed to delete client:\n{e!s}")
 
     def _open_groups_dialog(self):

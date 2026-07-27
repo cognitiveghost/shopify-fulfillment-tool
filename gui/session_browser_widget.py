@@ -71,7 +71,7 @@ class SessionLoaderWorker(BackgroundWorker):
 
         except Exception as e:
             if not self._is_cancelled:
-                logger.error(f"Error loading sessions: {e}", exc_info=True)
+                logger.exception("Error loading sessions")
                 self.error_occurred.emit(str(e))
 
 
@@ -290,7 +290,7 @@ class SessionBrowserWidget(QWidget):
             logger.info(f"Loaded {len(self.sessions_data)} sessions (sync mode)")
 
         except Exception as e:
-            logger.error(f"Failed to load sessions: {e}", exc_info=True)
+            logger.exception("Failed to load sessions")
             QMessageBox.warning(self, "Error", f"Failed to load sessions:\n{e!s}")
 
     def _on_sessions_loaded(self, sessions_data):
@@ -503,7 +503,7 @@ Comments: {comments if comments else "None"}"""
             logger.info(f"Updated session status: {session_path} -> {status}")
 
         except Exception as e:
-            logger.error(f"Failed to update status: {e}", exc_info=True)
+            logger.exception("Failed to update status")
             QMessageBox.critical(self, "Error", f"Failed to update status:\n{e!s}")
             # Revert to previous value
             self.refresh_sessions()
@@ -523,8 +523,8 @@ Comments: {comments if comments else "None"}"""
 
             logger.info(f"Updated session comments: {session_path}")
 
-        except Exception as e:
-            logger.error(f"Failed to update comments: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to update comments")
             # Don't show error dialog for comments (less critical)
             # Just log the error
 
@@ -535,9 +535,12 @@ Comments: {comments if comments else "None"}"""
         over sessions without clicking. Only mouseMoveEvent with no button pressed
         is blocked — drag-selection (button held) still works normally.
         """
-        if watched is self.sessions_table.viewport():
-            if event.type() == QEvent.Type.MouseMove and not event.buttons():
-                return True  # consume event — no selection change on hover
+        if (
+            watched is self.sessions_table.viewport()
+            and event.type() == QEvent.Type.MouseMove
+            and not event.buttons()
+        ):
+            return True  # consume event — no selection change on hover
         return super().eventFilter(watched, event)
 
     def showEvent(self, event):

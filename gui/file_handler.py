@@ -63,18 +63,18 @@ class FileHandler:
             self.log.info(
                 f"Orders file: detected delimiter '{detected_delimiter}' using {method}"
             )
-        except FileNotFoundError as e:
-            self.log.error(f"Orders file not found for delimiter detection: {e}", exc_info=True)
+        except FileNotFoundError:
+            self.log.exception("Orders file not found for delimiter detection")
             detected_delimiter = ","  # fallback to comma
-        except PermissionError as e:
-            self.log.error(f"Permission denied reading orders file: {e}", exc_info=True)
+        except PermissionError:
+            self.log.exception("Permission denied reading orders file")
             detected_delimiter = ","  # fallback to comma
-        except UnicodeDecodeError as e:
-            self.log.error(f"Encoding error in orders file: {e}", exc_info=True)
+        except UnicodeDecodeError:
+            self.log.exception("Encoding error in orders file")
             detected_delimiter = ","  # fallback to comma
-        except Exception as e:
-            self.log.error(
-                f"Unexpected error detecting delimiter for orders: {e}", exc_info=True
+        except Exception:
+            self.log.exception(
+                "Unexpected error detecting delimiter for orders"
             )
             detected_delimiter = ","  # fallback to comma
 
@@ -167,18 +167,18 @@ class FileHandler:
         try:
             detected_delimiter, method = detect_csv_delimiter(filepath)
             self.log.info(f"Detected delimiter '{detected_delimiter}' using {method}")
-        except FileNotFoundError as e:
-            self.log.error(f"Stock file not found for delimiter detection: {e}", exc_info=True)
+        except FileNotFoundError:
+            self.log.exception("Stock file not found for delimiter detection")
             detected_delimiter = ";"  # fallback
-        except PermissionError as e:
-            self.log.error(f"Permission denied reading stock file: {e}", exc_info=True)
+        except PermissionError:
+            self.log.exception("Permission denied reading stock file")
             detected_delimiter = ";"  # fallback
-        except UnicodeDecodeError as e:
-            self.log.error(f"Encoding error in stock file: {e}", exc_info=True)
+        except UnicodeDecodeError:
+            self.log.exception("Encoding error in stock file")
             detected_delimiter = ";"  # fallback
-        except Exception as e:
-            self.log.error(
-                f"Unexpected error detecting delimiter for stock: {e}", exc_info=True
+        except Exception:
+            self.log.exception(
+                "Unexpected error detecting delimiter for stock"
             )
             detected_delimiter = ";"  # fallback
 
@@ -245,7 +245,7 @@ class FileHandler:
             )
 
         except Exception as e:
-            self.log.error(f"Failed to load stock CSV: {e}", exc_info=True)
+            self.log.exception("Failed to load stock CSV")
             QMessageBox.critical(
                 self.mw,
                 "File Load Error",
@@ -795,7 +795,7 @@ class FileHandler:
         ]
 
         # Get delimiter from config
-        delimiter = config.get("settings", {}).get(delimiter_key, default_delimiter)
+        config.get("settings", {}).get(delimiter_key, default_delimiter)
 
         self.log.info(f"Validating {len(file_paths)} {file_type} files...")
         self.log.info(f"Required columns: {required_csv_cols}")
@@ -834,7 +834,7 @@ class FileHandler:
 
             except Exception as e:
                 invalid_files.append((filepath, [f"Error: {e!s}"]))
-                self.log.error(f"  {os.path.basename(filepath)}: {e}", exc_info=True)
+                self.log.exception(f"  {os.path.basename(filepath)}")
 
         return valid_files, invalid_files, total_rows
 

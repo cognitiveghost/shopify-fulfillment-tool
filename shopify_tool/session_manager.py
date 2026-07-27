@@ -25,6 +25,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import ClassVar
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -48,7 +49,7 @@ class SessionManager:
     """
 
     # Session subdirectories
-    SESSION_SUBDIRS = [
+    SESSION_SUBDIRS: ClassVar[list[str]] = [
         "input",
         "analysis",
         "packing_lists",
@@ -58,7 +59,7 @@ class SessionManager:
     ]
 
     # Valid session statuses
-    VALID_STATUSES = ["active", "completed", "abandoned", "archived"]
+    VALID_STATUSES: ClassVar[list[str]] = ["active", "completed", "abandoned", "archived"]
 
     def __init__(self, profile_manager):
         """Initialize SessionManager with ProfileManager.
@@ -114,7 +115,7 @@ class SessionManager:
             # Create session_info.json
             session_info = {
                 "created_by_tool": "shopify",
-                "created_at": datetime.now().isoformat(),
+                "created_at": datetime.now().astimezone().isoformat(),
                 "client_id": client_id,
                 "session_name": session_name,
                 "status": "active",
@@ -131,7 +132,7 @@ class SessionManager:
                     "packing_lists": []
                 },
                 "comments": "",
-                "last_modified": datetime.now().isoformat()
+                "last_modified": datetime.now().astimezone().isoformat()
             }
 
             session_info_path = session_path / "session_info.json"
@@ -142,7 +143,7 @@ class SessionManager:
             return str(session_path)
 
         except Exception as e:
-            logger.error(f"Failed to create session: {e}", exc_info=True)
+            logger.exception("Failed to create session")
             # Cleanup on failure
             if session_path.exists():
                 import shutil
@@ -160,7 +161,7 @@ class SessionManager:
         Returns:
             str: Unique session name (e.g., "2025-11-05_1")
         """
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now().astimezone().strftime("%Y-%m-%d")
 
         # Find existing sessions for today
         existing_sessions = []
@@ -255,17 +256,16 @@ class SessionManager:
         update silently loses the other's change.
         """
         lock_path = session_path_obj / "session_info.json.lock"
-        lock_file = open(lock_path, "a+")
-        try:
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-            yield
-        finally:
+        with open(lock_path, "a+") as lock_file:
             try:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                yield
+            finally:
                 if os.name == "nt":
                     import msvcrt
                     lock_file.seek(0)
@@ -273,8 +273,6 @@ class SessionManager:
                 else:
                     import fcntl
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-            finally:
-                lock_file.close()
 
     def get_session_info(self, session_path: str) -> dict | None:
         """Load session metadata from session_info.json.
@@ -309,8 +307,8 @@ class SessionManager:
 
             return session_info
 
-        except Exception as e:
-            logger.error(f"Failed to load session info: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to load session info")
             return None
 
     def update_session_status(self, session_path: str, status: str) -> bool:
@@ -340,7 +338,7 @@ class SessionManager:
 
             # Update status
             session_info["status"] = status
-            session_info["status_updated_at"] = datetime.now().isoformat()
+            session_info["status_updated_at"] = datetime.now().astimezone().isoformat()
 
             # Save back
             session_info_path = session_path_obj / "session_info.json"
@@ -356,7 +354,7 @@ class SessionManager:
                 return True
 
             except Exception as e:
-                logger.error(f"Failed to update session status: {e}", exc_info=True)
+                logger.exception("Failed to update session status")
                 raise SessionManagerError(f"Failed to update session status: {e}")
 
     def update_session_info(self, session_path: str, updates: dict) -> bool:
@@ -381,7 +379,7 @@ class SessionManager:
 
             # Apply updates
             session_info.update(updates)
-            session_info["last_updated"] = datetime.now().isoformat()
+            session_info["last_updated"] = datetime.now().astimezone().isoformat()
 
             # Save back
             session_info_path = session_path_obj / "session_info.json"
@@ -397,7 +395,7 @@ class SessionManager:
                 return True
 
             except Exception as e:
-                logger.error(f"Failed to update session info: {e}", exc_info=True)
+                logger.exception("Failed to update session info")
                 raise SessionManagerError(f"Failed to update session info: {e}")
 
     def append_to_session_list(self, session_path: str, field: str, value) -> bool:
@@ -427,7 +425,7 @@ class SessionManager:
                 return False
 
             session_info[field] = current_list + [value]
-            session_info["last_updated"] = datetime.now().isoformat()
+            session_info["last_updated"] = datetime.now().astimezone().isoformat()
 
             session_info_path = session_path_obj / "session_info.json"
             try:
@@ -440,7 +438,7 @@ class SessionManager:
                 return True
 
             except Exception as e:
-                logger.error(f"Failed to update session info: {e}", exc_info=True)
+                logger.exception("Failed to update session info")
                 raise SessionManagerError(f"Failed to update session info: {e}")
 
     def get_session_subdirectory(self, session_path: str, subdir_name: str) -> Path:
@@ -596,7 +594,7 @@ class SessionManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to delete session: {e}", exc_info=True)
+            logger.exception("Failed to delete session")
             raise SessionManagerError(f"Failed to delete session: {e}")
 
     def calculate_session_statistics(self, session_path: str) -> dict:

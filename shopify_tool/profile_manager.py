@@ -20,7 +20,7 @@ import shutil
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from shared.logger import setup_logging
 from shared.server_connection import resolve_server_path, test_path_reachable
@@ -70,12 +70,12 @@ class ProfileManager:
     # Class-level cache: key → (data, mtime_float). mtime-based invalidation is more
     # correct than TTL — no stale reads after a write, no unnecessary re-reads within a window.
     # Key includes base_path so multiple instances with different roots don't collide.
-    _config_cache: dict[str, tuple[dict, float]] = {}
+    _config_cache: ClassVar[dict[str, tuple[dict, float]]] = {}
 
     # Class-level constants for metadata cache
     METADATA_CACHE_TIMEOUT_SECONDS = 300  # 5 minutes
 
-    def __init__(self, base_path: str = None):
+    def __init__(self, base_path: str | None = None):
         """Initialize ProfileManager with automatic environment detection.
 
         Args:
@@ -170,15 +170,15 @@ class ProfileManager:
             self.sessions_dir.mkdir(parents=True, exist_ok=True)
             self.stats_dir.mkdir(parents=True, exist_ok=True)
             self.logs_dir.mkdir(parents=True, exist_ok=True)
-        except PermissionError as e:
-            logger.error(f"Network connection FAILED - Permission denied: {e}", exc_info=True)
+        except PermissionError:
+            logger.exception("Network connection FAILED - Permission denied")
             return False
-        except OSError as e:
-            logger.error(f"Network connection FAILED - OS error (network issue?): {e}", exc_info=True)
+        except OSError:
+            logger.exception("Network connection FAILED - OS error (network issue?)")
             return False
-        except Exception as e:
-            logger.error(
-                f"Network connection FAILED - Unexpected error: {e}", exc_info=True
+        except Exception:
+            logger.exception(
+                "Network connection FAILED - Unexpected error"
             )
             return False
 
@@ -262,14 +262,14 @@ class ProfileManager:
 
             return sorted(clients)
 
-        except PermissionError as e:
-            logger.error(f"Permission denied accessing clients directory: {e}", exc_info=True)
+        except PermissionError:
+            logger.exception("Permission denied accessing clients directory")
             return []
-        except OSError as e:
-            logger.error(f"File system error listing clients: {e}", exc_info=True)
+        except OSError:
+            logger.exception("File system error listing clients")
             return []
-        except Exception as e:
-            logger.error(f"Unexpected error listing clients: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Unexpected error listing clients")
             return []
 
     def create_client_profile(self, client_id: str, client_name: str) -> bool:
@@ -314,7 +314,7 @@ class ProfileManager:
             client_config = {
                 "client_id": client_id,
                 "client_name": client_name,
-                "created_at": datetime.now().isoformat(),
+                "created_at": datetime.now().astimezone().isoformat(),
                 "created_by": os.environ.get("COMPUTERNAME", "Unknown"),
             }
 
@@ -337,7 +337,7 @@ class ProfileManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to create client profile: {e}", exc_info=True)
+            logger.exception("Failed to create client profile")
             # Cleanup on failure
             if client_dir.exists():
                 shutil.rmtree(client_dir, ignore_errors=True)
@@ -433,7 +433,7 @@ class ProfileManager:
 
         # Add migration metadata
         config["_migration_info"] = {
-            "migrated_at": datetime.now().isoformat(),
+            "migrated_at": datetime.now().astimezone().isoformat(),
             "from_version": 1,
             "to_version": 2,
             "migrated_by": os.environ.get("COMPUTERNAME", "Unknown"),
@@ -691,7 +691,7 @@ class ProfileManager:
         # Update config version if migration occurred
         if migrated:
             config["config_version"] = "2.1"
-            config["migrated_at"] = datetime.now().isoformat()
+            config["migrated_at"] = datetime.now().astimezone().isoformat()
             logger.info(
                 f"Delimiter migration successful for CLIENT_{client_id}, version: 2.1"
             )
@@ -769,7 +769,7 @@ class ProfileManager:
         return {
             "client_id": client_id,
             "client_name": client_name,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now().astimezone().isoformat(),
             "column_mappings": {
                 "version": 2,
                 "orders": {
@@ -910,18 +910,17 @@ class ProfileManager:
 
             return config
 
-        except PermissionError as e:
-            logger.error(
-                f"Permission denied reading client config for CLIENT_{client_id}: {e}"
-            , exc_info=True)
+        except PermissionError:
+            logger.exception(
+                f"Permission denied reading client config for CLIENT_{client_id}"
+            )
             return None
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in client config for CLIENT_{client_id}: {e}", exc_info=True)
+        except json.JSONDecodeError:
+            logger.exception(f"Invalid JSON in client config for CLIENT_{client_id}")
             return None
-        except Exception as e:
-            logger.error(
-                f"Unexpected error loading client config for CLIENT_{client_id}: {e}",
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                f"Unexpected error loading client config for CLIENT_{client_id}",
             )
             return None
 
@@ -998,8 +997,8 @@ class ProfileManager:
 
             return config
 
-        except Exception as e:
-            logger.error(f"Failed to load shopify config: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to load shopify config")
             return None
 
     def save_shopify_config(self, client_id: str, config: dict) -> bool:
@@ -1032,7 +1031,7 @@ class ProfileManager:
             self._create_backup(client_id, config_path, "shopify_config")
 
         # Update timestamp
-        config["last_updated"] = datetime.now().isoformat()
+        config["last_updated"] = datetime.now().astimezone().isoformat()
         config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
         # Calculate config size and metrics for logging
@@ -1094,10 +1093,10 @@ class ProfileManager:
                     )
                     time.sleep(retry_delay)
                 else:
-                    logger.error(
+                    logger.exception(
                         f"Save failed after {max_retries} attempts, "
                         f"config size: {config_size:,} bytes, {num_sets} sets"
-                    , exc_info=True)
+                    )
                     raise ProfileManagerError(
                         "Configuration is locked by another user. Please try again."
                     )
@@ -1111,7 +1110,7 @@ class ProfileManager:
     # --- Set/Bundle Management Methods ---
 
     def save_inventory_memory(
-        self, client_id: str, stock_dict: dict, config: dict = None, names_dict: dict = None
+        self, client_id: str, stock_dict: dict, config: dict | None = None, names_dict: dict | None = None
     ) -> bool:
         """Persist final stock snapshot to shopify_config inventory_memory section.
 
@@ -1141,7 +1140,7 @@ class ProfileManager:
             # Keep zero-qty SKUs: dropping them shrinks old_skus overlap ratio and can
             # trigger a false 'Wrong client file?' anomaly on the next stock load.
             "skus": {normalize_sku(k): float(v) for k, v in stock_dict.items()},
-            "last_updated": datetime.now().isoformat(timespec="seconds"),
+            "last_updated": datetime.now().astimezone().isoformat(timespec="seconds"),
             "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
         }
         if names_dict is not None:
@@ -1340,8 +1339,8 @@ class ProfileManager:
             logger.debug(f"Config saved successfully: {file_path.name}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Windows lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Windows lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
@@ -1378,8 +1377,8 @@ class ProfileManager:
             shutil.move(str(temp_path), str(file_path))
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Unix lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Unix lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
@@ -1398,7 +1397,7 @@ class ProfileManager:
             backup_dir = self.clients_dir / f"CLIENT_{client_id}" / "backups"
             backup_dir.mkdir(exist_ok=True)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
             backup_path = backup_dir / f"{file_type}_{timestamp}.json"
 
             shutil.copy2(file_path, backup_path)
@@ -1506,7 +1505,7 @@ class ProfileManager:
             self._create_backup(client_id, config_path, "client_config")
 
         # Update timestamp
-        config["last_updated"] = datetime.now().isoformat()
+        config["last_updated"] = datetime.now().astimezone().isoformat()
         config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
         max_retries = 5  # Reduced from 10 to minimize UI blocking
@@ -1554,7 +1553,7 @@ class ProfileManager:
                     time.sleep(retry_delay)
                 else:
                     error_msg = f"Failed to save client config after {max_retries} attempts: {e}"
-                    logger.error(error_msg, exc_info=True)
+                    logger.exception(error_msg)
                     raise ProfileManagerError(error_msg)
 
         # If we get here, all retries failed
@@ -1668,7 +1667,7 @@ class ProfileManager:
         # Check cache (unless force refresh)
         if not force_refresh and cache_key in self._metadata_cache:
             cached_data, cached_time = self._metadata_cache[cache_key]
-            age_seconds = (datetime.now() - cached_time).total_seconds()
+            age_seconds = (datetime.now().astimezone() - cached_time).total_seconds()
 
             if age_seconds < self.METADATA_CACHE_TIMEOUT_SECONDS:
                 logger.debug(
@@ -1685,9 +1684,9 @@ class ProfileManager:
             metadata = {
                 "total_sessions": 0,
                 "last_session_date": None,
-                "last_accessed": datetime.now().isoformat(),
+                "last_accessed": datetime.now().astimezone().isoformat(),
             }
-            self._metadata_cache[cache_key] = (metadata, datetime.now())
+            self._metadata_cache[cache_key] = (metadata, datetime.now().astimezone())
             return metadata
 
         try:
@@ -1701,17 +1700,17 @@ class ProfileManager:
 
             last_session_date = None
             if session_folders:
-                latest = sorted(session_folders, key=lambda d: d.name)[-1]
+                latest = max(session_folders, key=lambda d: d.name)
                 date_part = latest.name.split("_")[0]
                 last_session_date = date_part
 
             metadata = {
                 "total_sessions": total_sessions,
                 "last_session_date": last_session_date,
-                "last_accessed": datetime.now().isoformat(),
+                "last_accessed": datetime.now().astimezone().isoformat(),
             }
 
-            self._metadata_cache[cache_key] = (metadata, datetime.now())
+            self._metadata_cache[cache_key] = (metadata, datetime.now().astimezone())
 
             elapsed_ms = (time.time() - start_time) * 1000
             logger.debug(f"Metadata calculated for {cache_key} in {elapsed_ms:.1f}ms")
@@ -1723,9 +1722,9 @@ class ProfileManager:
             metadata = {
                 "total_sessions": 0,
                 "last_session_date": None,
-                "last_accessed": datetime.now().isoformat(),
+                "last_accessed": datetime.now().astimezone().isoformat(),
             }
-            self._metadata_cache[cache_key] = (metadata, datetime.now())
+            self._metadata_cache[cache_key] = (metadata, datetime.now().astimezone())
             return metadata
 
     def invalidate_metadata_cache(self, client_id: str | None = None):
@@ -1762,7 +1761,7 @@ class ProfileManager:
             config["metadata"] = {}
 
         # Update timestamp
-        config["metadata"]["last_accessed"] = datetime.now().isoformat()
+        config["metadata"]["last_accessed"] = datetime.now().astimezone().isoformat()
 
         # Save
         return self.save_client_config(client_id, config)

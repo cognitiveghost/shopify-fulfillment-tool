@@ -123,14 +123,14 @@ class GroupsManager:
 
             return groups_data
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Corrupted JSON in groups.json: {e}", exc_info=True)
+        except json.JSONDecodeError:
+            logger.exception("Corrupted JSON in groups.json")
             backup_path = self.groups_path.with_suffix('.corrupted.bak')
             shutil.copy2(self.groups_path, backup_path)
             logger.info(f"Corrupted file backed up to {backup_path}")
             return self._create_default_groups()
-        except Exception as e:
-            logger.error(f"Unexpected error loading groups: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Unexpected error loading groups")
             return self._create_default_groups()
 
     def save_groups(self, groups_data: dict[str, Any]) -> bool:
@@ -150,7 +150,7 @@ class GroupsManager:
             self._create_backup()
 
         # Update timestamp
-        groups_data["last_updated"] = datetime.now().isoformat()
+        groups_data["last_updated"] = datetime.now().astimezone().isoformat()
 
         max_retries = 10
         retry_delay = 1.0
@@ -184,7 +184,7 @@ class GroupsManager:
                     time.sleep(retry_delay)
                 else:
                     error_msg = f"Failed to save groups configuration after {max_retries} attempts: {e}"
-                    logger.error(error_msg, exc_info=True)
+                    logger.exception(error_msg)
                     raise GroupsManagerError(error_msg)
 
         # If we get here, all retries failed
@@ -234,8 +234,8 @@ class GroupsManager:
             shutil.move(str(temp_path), str(file_path))
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Windows lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Windows lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
@@ -272,8 +272,8 @@ class GroupsManager:
             shutil.move(str(temp_path), str(file_path))
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to save with Unix lock: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save with Unix lock")
             if temp_path.exists():
                 temp_path.unlink()
             return False
@@ -289,7 +289,7 @@ class GroupsManager:
         backups_dir = self.clients_dir / "backups"
         backups_dir.mkdir(exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         backup_path = backups_dir / f"groups_{timestamp}.json"
 
         try:
@@ -314,17 +314,16 @@ class GroupsManager:
         stale snapshot and the second save silently clobbers the first.
         """
         lock_path = self.groups_path.with_suffix(".lock")
-        lock_file = open(lock_path, "a+")
-        try:
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-            yield
-        finally:
+        with open(lock_path, "a+") as lock_file:
             try:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                yield
+            finally:
                 if os.name == "nt":
                     import msvcrt
                     lock_file.seek(0)
@@ -332,8 +331,6 @@ class GroupsManager:
                 else:
                     import fcntl
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-            finally:
-                lock_file.close()
 
     @staticmethod
     def _name_collides_with_special_group(groups_data: dict[str, Any], name: str) -> bool:
@@ -388,7 +385,7 @@ class GroupsManager:
                 "name": name,
                 "color": color,
                 "display_order": display_order,
-                "created_at": datetime.now().isoformat()
+                "created_at": datetime.now().astimezone().isoformat()
             }
 
             groups_data["groups"].append(new_group)
@@ -399,7 +396,7 @@ class GroupsManager:
 
             return group_id
 
-    def update_group(self, group_id: str, name: str = None, color: str = None) -> bool:
+    def update_group(self, group_id: str, name: str | None = None, color: str | None = None) -> bool:
         """Update existing group.
 
         Args:
@@ -485,13 +482,16 @@ class GroupsManager:
                 for client_id in clients_in_group:
                     try:
                         config = profile_manager.load_client_config(client_id)
-                        if config and "ui_settings" in config:
-                            if config["ui_settings"].get("group_id") == group_id:
-                                config["ui_settings"]["group_id"] = None
-                                profile_manager.save_client_config(client_id, config)
-                                logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to unassign CLIENT_{client_id}: {e}", exc_info=True)
+                        if (
+                            config
+                            and "ui_settings" in config
+                            and config["ui_settings"].get("group_id") == group_id
+                        ):
+                            config["ui_settings"]["group_id"] = None
+                            profile_manager.save_client_config(client_id, config)
+                            logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
+                    except Exception:
+                        logger.exception(f"Failed to unassign CLIENT_{client_id}")
                         # Continue with other clients
 
             # Remove group from groups.json
@@ -550,9 +550,12 @@ class GroupsManager:
         for client_id in all_clients:
             try:
                 config = profile_manager.load_client_config(client_id)
-                if config and "ui_settings" in config:
-                    if config["ui_settings"].get("group_id") == group_id:
-                        clients_in_group.append(client_id)
+                if (
+                    config
+                    and "ui_settings" in config
+                    and config["ui_settings"].get("group_id") == group_id
+                ):
+                    clients_in_group.append(client_id)
             except Exception as e:
                 logger.warning(f"Failed to check group for CLIENT_{client_id}: {e}")
                 continue

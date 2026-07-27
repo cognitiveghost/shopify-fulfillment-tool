@@ -1,6 +1,7 @@
 import copy
 import re
 from functools import lru_cache
+from typing import ClassVar
 
 import pandas as pd
 
@@ -465,7 +466,7 @@ def _op_date_before(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     rule_date = _parse_date_safe(rule_val)
     if rule_date is None:
@@ -512,7 +513,7 @@ def _op_date_after(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     rule_date = _parse_date_safe(rule_val)
     if rule_date is None:
@@ -559,7 +560,7 @@ def _op_date_equals(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     rule_date = _parse_date_safe(rule_val)
     if rule_date is None:
@@ -605,7 +606,7 @@ def _op_matches_regex(series_val, rule_val):
         dtype: bool
     """
     import logging
-    logger = logging.getLogger(__name__)
+    logging.getLogger(__name__)
 
     compiled_pattern = _compile_regex_safe(rule_val)
     if compiled_pattern is None:
@@ -632,7 +633,7 @@ class RuleEngine:
     """Applies a set of configured rules to a DataFrame of order data."""
 
     # Define order-level fields and their calculation methods
-    ORDER_LEVEL_FIELDS = {
+    ORDER_LEVEL_FIELDS: ClassVar[dict[str, str]] = {
         "item_count": "_calculate_item_count",
         "total_quantity": "_calculate_total_quantity",
         "unique_sku_count": "_calculate_unique_sku_count",
@@ -820,7 +821,7 @@ class RuleEngine:
         if order_rules and "Order_Number" in df.columns:
             for order_number in df["Order_Number"].unique():
                 order_mask = df["Order_Number"] == order_number
-                order_df = df[order_mask]
+                df[order_mask]
 
                 for rule in order_rules:
                     rule_name = rule.get("name", "Unnamed")
@@ -1032,13 +1033,13 @@ class RuleEngine:
             if action_type == "ADD_TAG":
                 # Per user feedback, ADD_TAG should modify Status_Note, not Tags
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
-                new_notes = current_notes.apply(lambda n: _append_to_note(n, value))
+                new_notes = current_notes.apply(lambda n, value=value: _append_to_note(n, value))
                 df.loc[matches, "Status_Note"] = new_notes
 
             elif action_type == "ADD_ORDER_TAG":
                 # Add tag to Status_Note (for order-level tagging)
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
-                new_notes = current_notes.apply(lambda n: _append_to_note(n, value))
+                new_notes = current_notes.apply(lambda n, value=value: _append_to_note(n, value))
                 df.loc[matches, "Status_Note"] = new_notes
 
             elif action_type == "ADD_INTERNAL_TAG":
@@ -1046,7 +1047,7 @@ class RuleEngine:
                 from shopify_tool.tag_manager import add_tag
 
                 current_tags = df.loc[matches, "Internal_Tags"]
-                new_tags = current_tags.apply(lambda t: add_tag(t, value))
+                new_tags = current_tags.apply(lambda t, value=value: add_tag(t, value))
                 df.loc[matches, "Internal_Tags"] = new_tags
 
             elif action_type == "SET_STATUS":
@@ -1092,7 +1093,7 @@ class RuleEngine:
                 # Додати теги без дублікатів
                 current_notes = df.loc[matches, "Status_Note"].fillna("").astype(str)
 
-                def add_multiple_tags(note):
+                def add_multiple_tags(note, tags_list=tags_list):
                     existing = [t.strip() for t in note.split(", ") if t.strip()]
                     for tag in tags_list:
                         if tag not in existing:

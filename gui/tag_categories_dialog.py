@@ -618,7 +618,7 @@ class TagCategoriesPanel(QWidget):
 
     def _on_remove_mapping(self):
         """Remove selected writeoff mapping."""
-        selected_rows = set(index.row() for index in self.writeoff_mappings_table.selectedIndexes())
+        selected_rows = {index.row() for index in self.writeoff_mappings_table.selectedIndexes()}
 
         if not selected_rows:
             return

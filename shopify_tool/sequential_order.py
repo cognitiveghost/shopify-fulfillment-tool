@@ -42,7 +42,7 @@ def _write_sequential_order_map(json_path: Path, order_map: dict[str, int]) -> N
     json_path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "version": SEQUENTIAL_ORDER_VERSION,
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": datetime.now().astimezone().isoformat(),
         "total_orders": len(order_map),
         "order_sequence": order_map,
     }
@@ -154,8 +154,8 @@ def load_sequential_order_map(session_path: Path) -> dict[str, int]:
         logger.info(f"Loaded sequential order map: {len(order_map)} orders")
         return order_map
 
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Failed to load sequential order map: {e}", exc_info=True)
+    except (json.JSONDecodeError, KeyError):
+        logger.exception("Failed to load sequential order map")
         return {}
 
 

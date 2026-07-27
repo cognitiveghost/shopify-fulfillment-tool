@@ -799,7 +799,9 @@ def _detect_repeated_orders(
                 # Example: if repeat_window_days=1 and today=2026-01-16:
                 #   - cutoff = 2026-01-16 (today)
                 #   - We want: Execution_Date < 2026-01-16 (i.e., 2026-01-15 and earlier)
-                today = datetime.now().replace(
+                # Deliberately naive: must compare against Execution_Date_Parsed,
+                # which pd.to_datetime() above produces as tz-naive.
+                today = datetime.now().replace(  # noqa: DTZ005
                     hour=0, minute=0, second=0, microsecond=0
                 )
                 cutoff_date = today - timedelta(days=repeat_window_days - 1)
@@ -815,8 +817,8 @@ def _detect_repeated_orders(
                     f"Using {len(old_history)} old history records (>= {repeat_window_days} days ago) "
                     f"(total: {len(history_df)}, cutoff: < {cutoff_date.strftime('%Y-%m-%d')})"
                 )
-        except Exception as e:
-            logger.error(f"Failed to parse history dates: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to parse history dates")
             # Fallback to full history
             repeated_orders = history_df["Order_Number"].unique()
             logger.warning("Falling back to full history due to date parsing error")
@@ -1467,14 +1469,14 @@ def run_analysis(
 
         return final_df, summary_present_df, summary_missing_df, stats
 
-    except ValueError as e:
-        logger.error(f"Validation error during analysis: {e}", exc_info=True)
+    except ValueError:
+        logger.exception("Validation error during analysis")
         raise
-    except KeyError as e:
-        logger.error(f"Missing required column: {e}", exc_info=True)
+    except KeyError:
+        logger.exception("Missing required column")
         raise
-    except Exception as e:
-        logger.error(f"Unexpected error during analysis: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Unexpected error during analysis")
         raise
 
 
@@ -1601,8 +1603,8 @@ def recalculate_statistics(df):
                 f"{len(tags_breakdown_not_fulfillable)} not-fulfillable unique tags"
             )
 
-        except Exception as e:
-            logger.error(f"Failed to calculate tags breakdown: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to calculate tags breakdown")
 
     # === NEW: SKU Summary ===
     sku_summary = None
@@ -1652,8 +1654,8 @@ def recalculate_statistics(df):
 
         logger.info(f"SKU summary calculated: {len(sku_summary)} unique SKUs")
 
-    except Exception as e:
-        logger.error(f"Failed to calculate SKU summary: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Failed to calculate SKU summary")
         sku_summary = None
 
     stats["tags_breakdown"] = tags_breakdown

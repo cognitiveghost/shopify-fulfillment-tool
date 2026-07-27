@@ -41,7 +41,7 @@ class SelectionHelper:
         Returns:
             List of integer indexes in analysis_results_df, sorted ascending
         """
-        return sorted(list(self.checked_rows))
+        return sorted(self.checked_rows)
 
     def get_selected_orders_data(self) -> pd.DataFrame:
         """Get DataFrame slice of selected rows.

@@ -155,7 +155,7 @@ class GroupsManagementDialog(QDialog):
             logger.info(f"Loaded {len(groups)} groups into table")
 
         except Exception as e:
-            logger.error(f"Failed to load groups: {e}", exc_info=True)
+            logger.exception("Failed to load groups")
             QMessageBox.warning(
                 self,
                 "Error",
@@ -230,7 +230,7 @@ class GroupsManagementDialog(QDialog):
                 f"Failed to create group:\n{e!s}"
             )
         except Exception as e:
-            logger.error(f"Unexpected error creating group: {e}", exc_info=True)
+            logger.exception("Unexpected error creating group")
             QMessageBox.critical(
                 self,
                 "Error",
@@ -305,7 +305,7 @@ class GroupsManagementDialog(QDialog):
                 f"Failed to update group:\n{e!s}"
             )
         except Exception as e:
-            logger.error(f"Unexpected error updating group: {e}", exc_info=True)
+            logger.exception("Unexpected error updating group")
             QMessageBox.critical(
                 self,
                 "Error",
@@ -368,7 +368,7 @@ class GroupsManagementDialog(QDialog):
                 f"Failed to delete group:\n{e!s}"
             )
         except Exception as e:
-            logger.error(f"Unexpected error deleting group: {e}", exc_info=True)
+            logger.exception("Unexpected error deleting group")
             QMessageBox.critical(
                 self,
                 "Error",

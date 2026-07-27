@@ -128,16 +128,16 @@ class BackgroundWorker(QThread):
             warnings.simplefilter("ignore")
             try:
                 self.finished_with_data.disconnect()
-            except Exception:
-                pass
+            except Exception as disconnect_exc:
+                logger.debug(f"finished_with_data already disconnected: {disconnect_exc}")
             try:
                 self.error_occurred.disconnect()
-            except Exception:
-                pass
+            except Exception as disconnect_exc:
+                logger.debug(f"error_occurred already disconnected: {disconnect_exc}")
             try:
                 self.progress_updated.disconnect()
-            except Exception:
-                pass
+            except Exception as disconnect_exc:
+                logger.debug(f"progress_updated already disconnected: {disconnect_exc}")
 
         # 2. Only shut down the thread if it's actually running
         if self.isRunning():

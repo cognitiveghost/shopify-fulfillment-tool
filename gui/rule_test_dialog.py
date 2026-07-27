@@ -209,7 +209,7 @@ class RuleTestDialog(QDialog):
             self._populate_after_actions_table()
 
         except Exception as e:
-            logger.error(f"[RULE TEST] Error testing rule: {e}", exc_info=True)
+            logger.exception("[RULE TEST] Error testing rule")
             QMessageBox.critical(
                 self,
                 "Test Error",

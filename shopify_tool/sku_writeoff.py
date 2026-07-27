@@ -189,7 +189,7 @@ def calculate_writeoff_quantities(
         rows.append({
             "SKU": sku,
             "Writeoff_Quantity": round(data["quantity"], 2),
-            "Tags_Applied": sorted(list(data["tags"])),
+            "Tags_Applied": sorted(data["tags"]),
             "Order_Count": len(data["orders"])
         })
 

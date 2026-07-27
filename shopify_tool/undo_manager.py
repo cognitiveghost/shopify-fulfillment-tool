@@ -78,7 +78,7 @@ class UndoManager:
             operation_id = len(self.operations) + 1
             operation = {
                 "id": operation_id,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now().astimezone().isoformat(),
                 "type": operation_type,
                 "description": description,
                 "params": params,
@@ -104,8 +104,8 @@ class UndoManager:
 
             self.log.info(f"Recorded operation #{operation_id}: {description}")
 
-        except Exception as e:
-            self.log.error(f"Failed to record operation: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to record operation")
 
     def can_undo(self) -> bool:
         """Check if undo is possible.
@@ -213,7 +213,7 @@ class UndoManager:
                 return False, f"Failed to undo: {operation['description']}"
 
         except Exception as e:
-            self.log.error(f"Undo failed: {e}", exc_info=True)
+            self.log.exception("Undo failed")
             return False, f"Undo failed: {e!s}"
 
     def _undo_toggle_status(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -248,8 +248,8 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo toggle status: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo toggle status")
             return False
 
     def _undo_add_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -286,8 +286,8 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo add tag: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo add tag")
             return False
 
     def _undo_add_internal_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -324,8 +324,8 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo add internal tag: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo add internal tag")
             return False
 
     def _undo_remove_item(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -351,8 +351,8 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo remove item: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo remove item")
             return False
 
     def _undo_remove_order(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -377,8 +377,8 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo remove order: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo remove order")
             return False
 
     def _get_history_path(self) -> Path | None:
@@ -416,8 +416,8 @@ class UndoManager:
 
             self.log.debug(f"Saved history to {history_path}")
 
-        except Exception as e:
-            self.log.error(f"Failed to save history: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to save history")
 
     def _load_history(self):
         """Load history from operations_history.json."""
@@ -441,8 +441,8 @@ class UndoManager:
             self.log.warning(f"Corrupted history file, starting fresh: {e}")
             self.operations = []
             self.current_position = 0
-        except Exception as e:
-            self.log.error(f"Failed to load history: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to load history")
             self.operations = []
             self.current_position = 0
 
@@ -497,7 +497,7 @@ class UndoManager:
             True if successful
         """
         try:
-            affected_indexes = params.get("affected_indexes", [])
+            params.get("affected_indexes", [])
 
             if affected_rows_before.empty:
                 self.log.warning("No affected rows to restore")
@@ -507,17 +507,16 @@ class UndoManager:
             # We need to restore Order_Fulfillment_Status from before state
             for idx, row in affected_rows_before.iterrows():
                 original_status = row.get("Order_Fulfillment_Status")
-                if pd.notna(original_status):
-                    # Find matching row in current DataFrame
-                    # After reset_index, we need to find by other criteria or use iloc
-                    if idx in self.main_window.analysis_results_df.index:
-                        self.main_window.analysis_results_df.loc[idx, "Order_Fulfillment_Status"] = original_status
+                # Find matching row in current DataFrame
+                # After reset_index, we need to find by other criteria or use iloc
+                if pd.notna(original_status) and idx in self.main_window.analysis_results_df.index:
+                    self.main_window.analysis_results_df.loc[idx, "Order_Fulfillment_Status"] = original_status
 
             self.log.info(f"Undid bulk status change for {len(affected_rows_before)} rows")
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo bulk status change: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo bulk status change")
             return False
 
     def _undo_bulk_add_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -544,8 +543,8 @@ class UndoManager:
             self.log.info(f"Undid bulk add tag for {len(affected_rows_before)} orders")
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo bulk add tag: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo bulk add tag")
             return False
 
     def _undo_bulk_remove_tag(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -572,8 +571,8 @@ class UndoManager:
             self.log.info(f"Undid bulk remove tag for {len(affected_rows_before)} orders")
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo bulk remove tag: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo bulk remove tag")
             return False
 
     def _undo_bulk_remove_sku(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -603,8 +602,8 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo bulk SKU removal: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo bulk SKU removal")
             return False
 
     def _undo_bulk_remove_orders_with_sku(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -634,8 +633,8 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo bulk order removal: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo bulk order removal")
             return False
 
     def _undo_bulk_delete_orders(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
@@ -665,6 +664,6 @@ class UndoManager:
 
             return True
 
-        except Exception as e:
-            self.log.error(f"Failed to undo bulk delete: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Failed to undo bulk delete")
             return False

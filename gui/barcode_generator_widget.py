@@ -312,7 +312,7 @@ class BarcodeGeneratorWidget(QWidget):
 
         except Exception as e:
             self.order_count_label.setText(f"Error reading packing list: {e!s}")
-            self.log.error(f"Failed to read packing list {packing_list_file}: {e}", exc_info=True)
+            self.log.exception(f"Failed to read packing list {packing_list_file}")
             return
 
         # Setup output directory
@@ -323,7 +323,7 @@ class BarcodeGeneratorWidget(QWidget):
         self.output_dir_label.setText(str(self.barcodes_dir))
 
         # Setup history manager
-        history_file = self.barcodes_dir / "barcode_history.json"        # History removed - using logs only
+        self.barcodes_dir / "barcode_history.json"        # History removed - using logs only
 
         # Enable generation if we have orders
         self.generate_btn.setEnabled(order_count > 0)
@@ -491,7 +491,7 @@ class BarcodeGeneratorWidget(QWidget):
 
     def _on_generation_error(self, error_info):
         """Handle generation error."""
-        exctype, value, traceback_str = error_info
+        _exctype, value, traceback_str = error_info
 
         self.status_label.setText("Generation failed")
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
@@ -534,8 +534,8 @@ class BarcodeGeneratorWidget(QWidget):
             url = QUrl.fromLocalFile(str(pdf_path))
             QDesktopServices.openUrl(url)
 
-        except Exception as e:
-            self.log.error(f"Auto PDF generation failed: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("Auto PDF generation failed")
 
     def _cleanup_png_files(self, results):
         """Remove PNG files after PDF generation (PDF-only mode)."""
@@ -552,8 +552,8 @@ class BarcodeGeneratorWidget(QWidget):
 
             self.log.info(f"Cleaned up {len(results)} PNG files (PDF-only mode)")
 
-        except Exception as e:
-            self.log.error(f"PNG cleanup failed: {e}", exc_info=True)
+        except Exception:
+            self.log.exception("PNG cleanup failed")
 
 
     def _open_barcodes_folder(self):

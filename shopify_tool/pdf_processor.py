@@ -183,8 +183,8 @@ def process_reference_labels(
                     )
                     page.merge_page(PdfReader(overlay).pages[0])
 
-                except Exception as e:
-                    logger.error(f"Failed to add overlay for ref {ref}: {e}", exc_info=True)
+                except Exception:
+                    logger.exception(f"Failed to add overlay for ref {ref}")
 
             writer.add_page(page)
 
@@ -220,7 +220,7 @@ def process_reference_labels(
         raise
     except Exception as e:
         # Catch all other errors
-        logger.error(f"Unexpected error during PDF processing: {e}", exc_info=True)
+        logger.exception("Unexpected error during PDF processing")
         raise PDFProcessorError(f"Unexpected error: {e}")
 
 
@@ -576,5 +576,5 @@ def generate_output_filename() -> str:
     Returns:
         str: Filename like "labels_20250115_143022_processed.pdf"
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     return f"labels_{timestamp}_processed.pdf"

@@ -194,7 +194,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
         not_fulfillable_orders = total_orders - fulfillable_orders
 
         analysis_data = {
-            "analyzed_at": datetime.now().isoformat(),
+            "analyzed_at": datetime.now().astimezone().isoformat(),
             "total_orders": total_orders,
             "fulfillable_orders": fulfillable_orders,
             "not_fulfillable_orders": not_fulfillable_orders,
@@ -204,9 +204,9 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
         return analysis_data
 
     except KeyError as e:
-        logger.error(f"Missing required column in DataFrame for packing analysis: {e}", exc_info=True)
+        logger.exception("Missing required column in DataFrame for packing analysis")
         return {
-            "analyzed_at": datetime.now().isoformat(),
+            "analyzed_at": datetime.now().astimezone().isoformat(),
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -214,9 +214,9 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
             "error": f"Missing required column: {e}",
         }
     except (ValueError, TypeError) as e:
-        logger.error(f"Invalid data type in DataFrame for packing analysis: {e}", exc_info=True)
+        logger.exception("Invalid data type in DataFrame for packing analysis")
         return {
-            "analyzed_at": datetime.now().isoformat(),
+            "analyzed_at": datetime.now().astimezone().isoformat(),
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -224,9 +224,9 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
             "error": f"Invalid data type: {e}",
         }
     except AttributeError as e:
-        logger.error(f"Invalid DataFrame object for packing analysis: {e}", exc_info=True)
+        logger.exception("Invalid DataFrame object for packing analysis")
         return {
-            "analyzed_at": datetime.now().isoformat(),
+            "analyzed_at": datetime.now().astimezone().isoformat(),
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -234,11 +234,11 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
             "error": f"Invalid DataFrame: {e}",
         }
     except Exception as e:
-        logger.error(
-            f"Unexpected error creating analysis data for packing: {e}", exc_info=True
+        logger.exception(
+            "Unexpected error creating analysis data for packing"
         )
         return {
-            "analyzed_at": datetime.now().isoformat(),
+            "analyzed_at": datetime.now().astimezone().isoformat(),
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -360,14 +360,13 @@ def validate_csv_headers(file_path, required_columns, delimiter=","):
     except FileNotFoundError:
         return False, [f"File not found at path: {file_path}"]
     except pd.errors.ParserError as e:
-        logger.error(f"Parser error validating CSV '{file_path}': {e}", exc_info=True)
+        logger.exception(f"Parser error validating CSV '{file_path}'")
         return False, [
             f"Could not parse file. It might be corrupt or not a valid CSV. Error: {e}"
         ]
     except Exception as e:
-        logger.error(
-            f"Unexpected error validating CSV headers for {file_path}: {e}",
-            exc_info=True,
+        logger.exception(
+            f"Unexpected error validating CSV headers for {file_path}",
         )
         return False, [f"An unexpected error occurred: {e}"]
 
@@ -416,13 +415,13 @@ def _validate_and_prepare_inputs(
                 logger.info(f"Session created at: {session_path}")
             except SessionManagerError as e:
                 error_msg = f"Failed to create session for client {client_id}: {e}"
-                logger.error(error_msg, exc_info=True)
+                logger.exception(error_msg)
                 raise ValueError(error_msg)
             except (OSError, PermissionError) as e:
                 error_msg = (
                     f"File system error creating session for client {client_id}: {e}"
                 )
-                logger.error(error_msg, exc_info=True)
+                logger.exception(error_msg)
                 raise ValueError(error_msg)
 
         working_path = session_path
@@ -458,19 +457,19 @@ def _validate_and_prepare_inputs(
             logger.info("Input files copied to session directory")
         except FileNotFoundError as e:
             error_msg = f"Input file not found during session setup: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise ValueError(error_msg)
         except PermissionError as e:
             error_msg = f"Permission denied copying files to session directory: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise ValueError(error_msg)
         except SessionManagerError as e:
             error_msg = f"Session manager error during setup: {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise ValueError(error_msg)
         except OSError as e:
             error_msg = f"File system error during session setup (disk full or invalid path?): {e}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise ValueError(error_msg)
 
     return use_session_mode, working_path, None, session_path
@@ -538,15 +537,15 @@ def _load_and_validate_files(
                 f"Current delimiter: '{stock_delimiter}'\n"
                 f"Error: {e!s}"
             )
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
         except FileNotFoundError:
             error_msg = f"Stock file not found at path: {stock_file_path}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
         except PermissionError:
             error_msg = f"Permission denied reading stock file: {stock_file_path}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
         except UnicodeDecodeError as e:
             error_msg = (
@@ -554,18 +553,11 @@ def _load_and_validate_files(
                 f"Please ensure file is UTF-8 encoded.\n"
                 f"Error: {e!s}"
             )
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
-        except pd.errors.ParserError as e:
-            error_msg = (
-                f"Failed to parse stock CSV file (corrupted or invalid format): {e}"
-            )
-            logger.error(error_msg, exc_info=True)
-            raise
-        except Exception as e:
-            logger.error(
-                f"Unexpected error loading stock file {stock_file_path}: {e}",
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                f"Unexpected error loading stock file {stock_file_path}",
             )
             raise
 
@@ -587,15 +579,15 @@ def _load_and_validate_files(
                 f"Current delimiter: '{orders_delimiter}'\n"
                 f"Error: {e!s}"
             )
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
         except FileNotFoundError:
             error_msg = f"Orders file not found at path: {orders_file_path}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
         except PermissionError:
             error_msg = f"Permission denied reading orders file: {orders_file_path}"
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
         except UnicodeDecodeError as e:
             error_msg = (
@@ -603,18 +595,11 @@ def _load_and_validate_files(
                 f"Please ensure file is UTF-8 encoded.\n"
                 f"Error: {e!s}"
             )
-            logger.error(error_msg, exc_info=True)
+            logger.exception(error_msg)
             raise
-        except pd.errors.ParserError as e:
-            error_msg = (
-                f"Failed to parse orders CSV file (corrupted or invalid format): {e}"
-            )
-            logger.error(error_msg, exc_info=True)
-            raise
-        except Exception as e:
-            logger.error(
-                f"Unexpected error loading orders file {orders_file_path}: {e}",
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                f"Unexpected error loading orders file {orders_file_path}",
             )
             raise
     else:
@@ -931,7 +916,7 @@ def _save_results_and_reports(
 
         workbook = writer.book
         report_info_sheet = workbook.add_worksheet("Report Info")
-        generation_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        generation_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         report_info_sheet.write("A1", "Report Generated On:")
         report_info_sheet.write("B1", generation_time)
         report_info_sheet.set_column("A:B", 25)
@@ -984,17 +969,17 @@ def _save_results_and_reports(
 
             logger.info("Initial session state files saved successfully")
 
-        except PermissionError as e:
-            logger.error(f"Permission denied saving session state files: {e}", exc_info=True)
+        except PermissionError:
+            logger.exception("Permission denied saving session state files")
             # Continue with the workflow even if initial state save fails
-        except OSError as e:
-            logger.error(
-                f"File system error saving session state (disk full or invalid path?): {e}"
-            , exc_info=True)
+        except OSError:
+            logger.exception(
+                "File system error saving session state (disk full or invalid path?)"
+            )
             # Continue with the workflow even if initial state save fails
-        except Exception as e:
-            logger.error(
-                f"Unexpected error saving initial session state: {e}", exc_info=True
+        except Exception:
+            logger.exception(
+                "Unexpected error saving initial session state"
             )
             # Continue with the workflow even if initial state save fails
 
@@ -1016,7 +1001,7 @@ def _save_results_and_reports(
                 working_path,
                 {
                     "analysis_completed": True,
-                    "analysis_completed_at": datetime.now().isoformat(),
+                    "analysis_completed_at": datetime.now().astimezone().isoformat(),
                     "total_orders": analysis_data["total_orders"],
                     "fulfillable_orders": analysis_data["fulfillable_orders"],
                     "not_fulfillable_orders": analysis_data["not_fulfillable_orders"],
@@ -1032,22 +1017,22 @@ def _save_results_and_reports(
 
             logger.info("Session info updated with analysis results and statistics")
 
-        except PermissionError as e:
-            logger.error(f"Permission denied exporting analysis data: {e}", exc_info=True)
+        except PermissionError:
+            logger.exception("Permission denied exporting analysis data")
             # Continue with the workflow even if export fails
-        except OSError as e:
-            logger.error(
-                f"File system error exporting analysis data (disk full or invalid path?): {e}"
-            , exc_info=True)
-            # Continue with the workflow even if export fails
-        except SessionManagerError as e:
-            logger.error(
-                f"Session manager error updating session info: {e}", exc_info=True
+        except OSError:
+            logger.exception(
+                "File system error exporting analysis data (disk full or invalid path?)"
             )
             # Continue with the workflow even if export fails
-        except Exception as e:
-            logger.error(
-                f"Unexpected error exporting analysis data: {e}", exc_info=True
+        except SessionManagerError:
+            logger.exception(
+                "Session manager error updating session info"
+            )
+            # Continue with the workflow even if export fails
+        except Exception:
+            logger.exception(
+                "Unexpected error exporting analysis data"
             )
             # Continue with the workflow even if export fails
 
@@ -1058,7 +1043,7 @@ def _save_results_and_reports(
     ].drop_duplicates()
 
     if not newly_fulfilled.empty:
-        newly_fulfilled["Execution_Date"] = datetime.now().strftime("%Y-%m-%d")
+        newly_fulfilled["Execution_Date"] = datetime.now().astimezone().strftime("%Y-%m-%d")
         updated_history = pd.concat([history_df, newly_fulfilled]).drop_duplicates(
             subset=["Order_Number"], keep="last"
         )
@@ -1086,8 +1071,8 @@ def _save_results_and_reports(
             logger.info(
                 f"History updated and saved to: {history_path} ({len(newly_fulfilled)} new records)"
             )
-        except Exception as e:
-            logger.error(f"Failed to save history: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save history")
             # Don't fail the entire analysis if history save fails
 
     # Persist inventory memory if enabled (or unconditionally update the SKU snapshot)
@@ -1291,19 +1276,19 @@ def run_full_analysis(
 
     except FileNotFoundError as e:
         error_msg = f"File not found: {e!s}"
-        logger.error(error_msg, exc_info=True)
+        logger.exception(error_msg)
         return False, error_msg, None, None
     except ValueError as e:
         error_msg = f"Validation error: {e!s}"
-        logger.error(error_msg, exc_info=True)
+        logger.exception(error_msg)
         return False, error_msg, None, None
     except pd.errors.ParserError as e:
         error_msg = f"CSV parsing error: {e!s}"
-        logger.error(error_msg, exc_info=True)
+        logger.exception(error_msg)
         return False, error_msg, None, None
     except Exception as e:
         error_msg = f"Analysis failed: {e!s}"
-        logger.error(error_msg, exc_info=True)
+        logger.exception(error_msg)
         return False, error_msg, None, None
 
 
@@ -1386,8 +1371,8 @@ def create_packing_list_report(
         error_message = (
             f"Configuration error for report '{report_name}': Missing key {e}."
         )
-        logger.error(
-            f"Config error for packing list '{report_name}': {e}", exc_info=True
+        logger.exception(
+            f"Config error for packing list '{report_name}'"
         )
         return False, error_message
     except PermissionError:
@@ -1395,14 +1380,13 @@ def create_packing_list_report(
         error_message = (
             f"Permission denied. Could not write report to '{output_filename}'."
         )
-        logger.error(
+        logger.exception(
             f"Permission error creating packing list '{report_name}' at '{output_filename}'",
-            exc_info=True,
         )
         return False, error_message
-    except Exception as e:
+    except Exception:
         error_message = f"Failed to create report '{report_name}'. See logs/app_errors.log for details."
-        logger.error(f"Error creating packing list '{report_name}': {e}", exc_info=True)
+        logger.exception(f"Error creating packing list '{report_name}'")
         return False, error_message
 
 
@@ -1506,21 +1490,21 @@ def create_stock_export_report(
         error_message = (
             f"Configuration error for stock export '{report_name}': Missing key {e}."
         )
-        logger.error(
-            f"Config error for stock export '{report_name}': {e}", exc_info=True
+        logger.exception(
+            f"Config error for stock export '{report_name}'"
         )
         return False, error_message
     except PermissionError:
         error_message = "Permission denied. Could not write stock export."
-        logger.error(
-            f"Permission error creating stock export '{report_name}'", exc_info=True
+        logger.exception(
+            f"Permission error creating stock export '{report_name}'"
         )
         return False, error_message
-    except Exception as e:
+    except Exception:
         error_message = (
             f"Failed to create stock export '{report_name}'. See logs for details."
         )
-        logger.error(f"Error creating stock export '{report_name}': {e}", exc_info=True)
+        logger.exception(f"Error creating stock export '{report_name}'")
         return False, error_message
 
 
@@ -1595,21 +1579,21 @@ def create_writeoff_report(
         error_message = (
             f"Configuration error for writeoff report '{report_name}': Missing key {e}."
         )
-        logger.error(
-            f"Config error for writeoff report '{report_name}': {e}", exc_info=True
+        logger.exception(
+            f"Config error for writeoff report '{report_name}'"
         )
         return False, error_message
     except PermissionError:
         error_message = "Permission denied. Could not write writeoff report."
-        logger.error(
-            f"Permission error creating writeoff report '{report_name}'", exc_info=True
+        logger.exception(
+            f"Permission error creating writeoff report '{report_name}'"
         )
         return False, error_message
-    except Exception as e:
+    except Exception:
         error_message = (
             f"Failed to create writeoff report '{report_name}'. See logs for details."
         )
-        logger.error(
-            f"Error creating writeoff report '{report_name}': {e}", exc_info=True
+        logger.exception(
+            f"Error creating writeoff report '{report_name}'"
         )
         return False, error_message

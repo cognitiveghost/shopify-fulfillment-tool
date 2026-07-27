@@ -53,8 +53,8 @@ class ReferenceLabelsHistory:
                 f"History loaded: {len(self.data['processed_files'])} entries"
             )
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse history JSON: {e}", exc_info=True)
+        except json.JSONDecodeError:
+            logger.exception("Failed to parse history JSON")
             # Create backup of corrupt file
             backup_file = self.history_file.with_suffix('.json.backup')
             self.history_file.rename(backup_file)
@@ -63,8 +63,8 @@ class ReferenceLabelsHistory:
             # Start fresh
             self.data = {'processed_files': []}
 
-        except Exception as e:
-            logger.error(f"Failed to load history: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to load history")
             self.data = {'processed_files': []}
 
     def _save_history(self):
@@ -81,8 +81,8 @@ class ReferenceLabelsHistory:
 
             logger.debug(f"History saved: {len(self.data['processed_files'])} entries")
 
-        except Exception as e:
-            logger.error(f"Failed to save history: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Failed to save history")
             raise
 
     def add_entry(
@@ -110,7 +110,7 @@ class ReferenceLabelsHistory:
             status: Processing status (success/failed)
         """
         entry = {
-            'processed_at': datetime.now().isoformat(),
+            'processed_at': datetime.now().astimezone().isoformat(),
             'input_pdf': input_pdf,
             'input_csv': input_csv,
             'output_pdf': output_pdf,

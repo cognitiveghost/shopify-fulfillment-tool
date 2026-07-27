@@ -237,7 +237,7 @@ def generate_barcode_label(
         # Prepare display values
         country_display = country if country else "N/A"
         tag_display = format_tags_for_barcode(tag) if tag else "N/A"
-        date_str = datetime.now().strftime("%d/%m/%y")
+        date_str = datetime.now().astimezone().strftime("%d/%m/%y")
 
         # Calculate dimensions
         dpi = DPI
@@ -363,9 +363,9 @@ def generate_barcode_label(
 
             # Draw tags with word wrapping
             current_line = ""
-            for tag in tags:
+            for single_tag in tags:
                 # Try to fit tag on current line
-                test_line = current_line + (", " if current_line else "") + tag
+                test_line = current_line + (", " if current_line else "") + single_tag
                 bbox = draw.textbbox((0, 0), test_line, font=font_tag_multiline)
                 line_width = bbox[2] - bbox[0]
 
@@ -376,7 +376,7 @@ def generate_barcode_label(
                     if current_line:
                         draw.text((tag_x, tag_y), current_line, font=font_tag_multiline, fill='black')
                         tag_y += line_height
-                    current_line = tag
+                    current_line = single_tag
 
                 # Check if we're out of vertical space
                 if tag_y + line_height > tag_start_y + available_height:
@@ -450,7 +450,7 @@ def generate_barcode_label(
         }
 
     except InvalidOrderNumberError as e:
-        logger.error(f"Invalid order number '{order_number}': {e}", exc_info=True)
+        logger.exception(f"Invalid order number '{order_number}'")
         return {
             "order_number": order_number,
             "sequential_num": 0,
@@ -465,7 +465,7 @@ def generate_barcode_label(
         }
 
     except Exception as e:
-        logger.error(f"Failed to generate barcode for '{order_number}': {e}", exc_info=True)
+        logger.exception(f"Failed to generate barcode for '{order_number}'")
         return {
             "order_number": order_number,
             "sequential_num": 0,
@@ -584,7 +584,7 @@ def generate_barcodes_batch(
             results.append(result)
 
         except Exception as e:
-            logger.error(f"Failed to generate barcode for {order_number}: {e}", exc_info=True)
+            logger.exception(f"Failed to generate barcode for {order_number}")
 
             results.append({
                 "order_number": order_number,
