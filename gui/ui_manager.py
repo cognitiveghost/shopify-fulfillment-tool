@@ -288,9 +288,24 @@ class UIManager:
         return tab
 
     def _create_session_setup_panel(self):
-        """Create left panel with Session Setup content."""
+        """Create left panel with Session Setup content.
+
+        Wrapped in a QScrollArea (same pattern as _create_statistics_subtab)
+        because switching Orders/Stock 'Load Mode' to Folder reveals extra
+        widgets that were previously hidden. Without a scroll area to absorb
+        that growth, the panel's minimum height jumps and forces the whole
+        top-level window to resize/reflow instead of just this panel.
+        """
         panel = QWidget()
-        layout = QVBoxLayout(panel)
+        outer_layout = QVBoxLayout(panel)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+
+        scroll_widget = QWidget()
+        layout = QVBoxLayout(scroll_widget)
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
 
@@ -300,6 +315,9 @@ class UIManager:
         layout.addWidget(self._create_main_actions_group())
         layout.addWidget(self._create_reports_group())
         layout.addStretch()
+
+        scroll.setWidget(scroll_widget)
+        outer_layout.addWidget(scroll)
 
         return panel
 
