@@ -405,18 +405,18 @@ class BarcodeGeneratorWidget(QWidget):
         # Add item_count column to unique_orders (total quantity of products)
         unique_orders['item_count'] = unique_orders['Order_Number'].map(item_counts)
 
-        # Merge tags from ALL rows of each order (not just the first row)
+        # Merge tags from ALL rows of each order (not just the first row).
+        # Internal_Tags is a serialized list (JSON string or native list),
+        # not flat comma-separated text -- use tag_manager's parser/merger
+        # rather than splitting the string ourselves, which corrupts
+        # multi-tag/multi-row values into something format_tags_for_barcode
+        # can't parse and leaks the raw literal onto the printed label.
         if 'Internal_Tags' in self.filtered_orders_df.columns:
+            from shopify_tool.tag_manager import merge_tags
+
             merged_tags = {}
             for order_num, group in self.filtered_orders_df.groupby('Order_Number', sort=False):
-                seen, result = set(), []
-                for val in group['Internal_Tags'].dropna():
-                    for t in str(val).split(','):
-                        t = t.strip()
-                        if t and t not in seen:
-                            seen.add(t)
-                            result.append(t)
-                merged_tags[order_num] = ', '.join(result)
+                merged_tags[order_num] = merge_tags(group['Internal_Tags'].dropna().tolist())
             unique_orders['Internal_Tags'] = unique_orders['Order_Number'].map(merged_tags)
 
         # Sort by natural order so sequential numbering (idx+1) matches numeric order

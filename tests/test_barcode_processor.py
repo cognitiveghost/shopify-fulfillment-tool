@@ -7,12 +7,15 @@ that must be byte-accurate: the Code-128 payload and the info-panel fields.
 import pandas as pd
 import pytest
 from barcode.codex import Code128
+from PIL import Image, ImageDraw
 
 from shopify_tool.barcode_processor import (
     InvalidOrderNumberError,
+    _clamp_text_to_width,
     format_tags_for_barcode,
     generate_barcode_label,
     generate_barcodes_batch,
+    load_font,
     sanitize_order_number,
 )
 
@@ -87,6 +90,31 @@ class TestFormatTagsForBarcode:
         # falling through to the plain-string path and leaking the bracketed
         # literal onto the label instead of parsing it.
         assert format_tags_for_barcode(' ["A"] ') == "A"
+
+
+class TestClampTextToWidth:
+    """Regression for tag text drawing straight into the barcode section
+    ("getting into barcode territory"): the TAG line-wrapping loop only
+    checked combined-line width, never a single tag/line on its own, so one
+    oversized element (a long tag name, or a raw literal leaked by the bug
+    above) drew unclamped past the info column boundary."""
+
+    def _draw(self):
+        return ImageDraw.Draw(Image.new('RGB', (10, 10)))
+
+    def test_short_text_passes_through_unchanged(self):
+        draw = self._draw()
+        font = load_font(18, bold=True)
+        assert _clamp_text_to_width(draw, "TAG", font, 123) == "TAG"
+
+    def test_oversized_single_line_is_truncated_to_fit(self):
+        draw = self._draw()
+        font = load_font(18, bold=True)
+        long_text = "MASK+BOX_ORDER, REGULAR_BOX, EXTRA_LONG_TAG_NAME"
+        clamped = _clamp_text_to_width(draw, long_text, font, 123)
+        width = draw.textbbox((0, 0), clamped, font=font)[2]
+        assert width <= 123
+        assert clamped != long_text
 
 
 class TestItemCountZeroFalsyBug:

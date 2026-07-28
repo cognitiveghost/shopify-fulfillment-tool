@@ -141,6 +141,28 @@ def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
+def _clamp_text_to_width(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> str:
+    """
+    Truncate text with an ellipsis so it never renders wider than max_width.
+
+    Args:
+        draw: ImageDraw instance used to measure text
+        text: Text to clamp
+        font: Font the text will be drawn with
+        max_width: Maximum width in pixels
+
+    Returns:
+        text unchanged if it already fits, otherwise a truncated "...ellipsis" version
+    """
+    if draw.textbbox((0, 0), text, font=font)[2] <= max_width:
+        return text
+
+    while text and draw.textbbox((0, 0), text + "...", font=font)[2] > max_width:
+        text = text[:-1]
+
+    return text + "..." if text else ""
+
+
 def format_tags_for_barcode(internal_tag) -> str:
     """
     Format internal tags for barcode label display.
@@ -392,7 +414,10 @@ def generate_barcode_label(
                     if current_line:
                         draw.text((tag_x, tag_y), current_line, font=font_tag_multiline, fill='black')
                         tag_y += line_height
-                    current_line = single_tag
+                    # A single tag can itself be wider than available_width (e.g. a
+                    # long tag name) -- clamp it so it never draws past the barcode
+                    # section boundary, since nothing after this checks its width.
+                    current_line = _clamp_text_to_width(draw, single_tag, font_tag_multiline, available_width)
 
                 # Check if we're out of vertical space
                 if tag_y + line_height > tag_start_y + available_height:
