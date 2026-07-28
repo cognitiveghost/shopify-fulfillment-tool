@@ -92,6 +92,7 @@ class CheckboxDelegate(QStyledItemDelegate):
         checkbox_rect = self._get_checkbox_rect(option.rect)
         checkbox_option = QStyleOptionButton()
         checkbox_option.rect = checkbox_rect
+        checkbox_option.palette = option.palette
         checkbox_option.state = QStyle.State_Enabled
 
         if is_checked:
@@ -99,11 +100,18 @@ class CheckboxDelegate(QStyledItemDelegate):
         else:
             checkbox_option.state |= QStyle.State_Off
 
-        # Draw checkbox
-        QApplication.style().drawControl(
+        # Draw checkbox. Pass the view's widget through so Qt's
+        # QStyleSheetStyle (active once the app has a stylesheet, which this
+        # app's theme system always applies) can resolve the themed
+        # QTableView::indicator QSS rule -- without a widget it silently
+        # falls back to the base style's unthemed default checkbox, which
+        # rendered as a plain white box against the app's dark theme.
+        style = option.widget.style() if option.widget else QApplication.style()
+        style.drawControl(
             QStyle.CE_CheckBox,
             checkbox_option,
-            painter
+            painter,
+            option.widget,
         )
 
     def editorEvent(self, event, model, option, index):
