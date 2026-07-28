@@ -1487,7 +1487,12 @@ class MainWindow(QMainWindow):
                 self,
             )
             remove_item_action.triggered.connect(
-                partial(self.actions_handler.remove_item_from_order, order_number, sku)
+                partial(
+                    self.actions_handler.remove_item_from_order,
+                    order_number,
+                    sku,
+                    source_index.row(),
+                )
             )
             menu.addAction(remove_item_action)
 
