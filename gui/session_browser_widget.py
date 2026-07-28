@@ -329,9 +329,14 @@ class SessionBrowserWidget(QWidget):
 
     def _on_sessions_loaded(self, sessions_data):
         """Handle loaded data in main thread (safe for UI updates)."""
-        # Guard: widget may have been closed while worker was still running
+        # Guard: widget may have been closed, or merely hidden (e.g. the user
+        # switched tabs while the file-server load was in flight).
         if not self.isVisible() or self.sessions_table is None:
-            logger.debug("Widget closed before sessions loaded — ignoring result")
+            logger.debug("Widget not visible when sessions loaded — will retry on next show")
+            # refresh_sessions() already cleared _is_dirty when the load started;
+            # re-mark it so the next showEvent() retries instead of leaving the
+            # table/button stuck in the "Loading..." state forever.
+            self._is_dirty = True
             return
 
         logger.debug(f"Received {len(sessions_data)} sessions from worker")
