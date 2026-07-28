@@ -1020,7 +1020,7 @@ class ActionsHandler(QObject):
                 "Manual Tag", f"Added note '{tag_to_add}' to order {order_number}."
             )
 
-    def remove_item_from_order(self, order_number, sku, row_position):
+    def remove_item_from_order(self, order_number, sku, row_position, row_snapshot=None):
         """Removes a single item (a row) from the analysis DataFrame.
 
         Args:
@@ -1031,6 +1031,12 @@ class ActionsHandler(QObject):
                 Orders can contain multiple lines sharing the same SKU, so
                 matching on (order_number, sku) alone would remove every such
                 line instead of just the one the user targeted.
+            row_snapshot (dict, optional): Full row values captured at the
+                same time as row_position. If the row at row_position no
+                longer matches this snapshot exactly, the table changed
+                (e.g. another duplicate-SKU line now sits at that position)
+                and the removal is aborted rather than risk deleting the
+                wrong line.
         """
         reply = QMessageBox.question(
             self.mw,
@@ -1042,7 +1048,8 @@ class ActionsHandler(QObject):
         if reply == QMessageBox.Yes:
             df = self.mw.analysis_results_df
             if not (0 <= row_position < len(df)):
-                return  # table changed since the menu was opened
+                self.log.warning("Aborted item removal: clicked row is no longer valid")
+                return
 
             row_label = df.index[row_position]
             order_number_str = str(order_number).strip()
@@ -1051,7 +1058,19 @@ class ActionsHandler(QObject):
                 str(df.loc[row_label, "Order_Number"]).strip() != order_number_str
                 or str(df.loc[row_label, "SKU"]).strip() != sku_str
             ):
-                return  # table changed since the menu was opened
+                self.log.warning("Aborted item removal: clicked row no longer matches")
+                return
+
+            if row_snapshot is not None:
+                current_row = df.loc[row_label]
+                if any(
+                    str(current_row.get(col)) != str(value)
+                    for col, value in row_snapshot.items()
+                ):
+                    self.log.warning(
+                        "Aborted item removal: clicked row no longer matches its snapshot"
+                    )
+                    return
 
             mask = df.index == row_label
 

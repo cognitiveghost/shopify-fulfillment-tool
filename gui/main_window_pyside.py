@@ -1423,6 +1423,11 @@ class MainWindow(QMainWindow):
             if not order_number:
                 return
 
+            # Full-row snapshot so remove_item_from_order can detect if the
+            # table changed between menu-open and click, even when another
+            # duplicate-SKU line has since taken this same row position.
+            row_snapshot = self.analysis_results_df.iloc[source_index.row()].to_dict()
+
             from functools import partial
 
             from PySide6.QtWidgets import QStyle
@@ -1492,6 +1497,7 @@ class MainWindow(QMainWindow):
                     order_number,
                     sku,
                     source_index.row(),
+                    row_snapshot,
                 )
             )
             menu.addAction(remove_item_action)

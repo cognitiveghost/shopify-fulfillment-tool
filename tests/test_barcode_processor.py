@@ -76,6 +76,18 @@ class TestFormatTagsForBarcode:
         # as a raw list literal onto the printed label.
         assert format_tags_for_barcode(str(["BAG", "TEST"])) == "BAG|TEST"
 
+    def test_native_list_with_blank_element_has_no_stray_pipe(self):
+        # A whitespace-only element used to survive the truthiness filter
+        # (checked before stripping), then strip to "" and still get joined,
+        # producing a leading "|A" instead of "A".
+        assert format_tags_for_barcode([" ", "A"]) == "A"
+
+    def test_padded_json_array_string_is_parsed_not_leaked_raw(self):
+        # Surrounding whitespace used to make the '['/']' bounds check fail,
+        # falling through to the plain-string path and leaking the bracketed
+        # literal onto the label instead of parsing it.
+        assert format_tags_for_barcode(' ["A"] ') == "A"
+
 
 class TestItemCountZeroFalsyBug:
     def test_zero_item_count_is_not_coerced_to_one(self, tmp_path, monkeypatch):

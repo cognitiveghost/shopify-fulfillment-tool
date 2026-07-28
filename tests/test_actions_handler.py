@@ -53,3 +53,23 @@ def test_remove_item_aborts_if_row_no_longer_matches(mw, monkeypatch):
     handler.remove_item_from_order("1001", "SKU-A", row_position=2)
 
     assert len(mw.analysis_results_df) == 3
+
+
+def test_remove_item_aborts_if_snapshot_no_longer_matches(mw, monkeypatch):
+    """A same-position row can still match (Order_Number, SKU) after the table
+    changes if another duplicate-SKU line has taken that slot. The row
+    snapshot, captured in full when the menu opened, must catch this even
+    when order/SKU alone would pass.
+    """
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    handler = ActionsHandler(mw)
+
+    stale_snapshot = {"Order_Number": "1001", "SKU": "SKU-A", "Lineitem_Quantity": 2}
+
+    # row_position 0 is still Order 1001 / SKU-A, but with Lineitem_Quantity=1
+    # now -- a different duplicate-SKU line than the one the snapshot captured.
+    handler.remove_item_from_order(
+        "1001", "SKU-A", row_position=0, row_snapshot=stale_snapshot
+    )
+
+    assert len(mw.analysis_results_df) == 3

@@ -161,7 +161,11 @@ def format_tags_for_barcode(internal_tag) -> str:
         "Priority"
     """
     if isinstance(internal_tag, list):
-        return '|'.join(str(tag).strip() for tag in internal_tag if tag)
+        tags = [str(tag).strip() for tag in internal_tag if tag]
+        return '|'.join(tag for tag in tags if tag)
+
+    if isinstance(internal_tag, str):
+        internal_tag = internal_tag.strip()
 
     if not internal_tag or internal_tag == 'nan' or internal_tag == 'None':
         return ""
