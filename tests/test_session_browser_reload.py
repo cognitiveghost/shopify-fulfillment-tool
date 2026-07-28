@@ -51,3 +51,40 @@ def test_becoming_visible_again_retries_the_load(widget, monkeypatch):
     widget.showEvent(QShowEvent())
 
     refreshed.assert_called_once()
+
+
+def test_client_switch_refreshes_immediately_when_tab_already_visible(qapp, monkeypatch):
+    """set_client(..., auto_refresh=False) is called on every client switch
+    (gui/main_window_pyside.py) on the assumption that the next showEvent()
+    will pick up the resulting dirty flag. But if the Session Browser tab is
+    already the active/visible tab -- e.g. the user switches clients from the
+    sidebar while already browsing sessions -- no showEvent() fires, since
+    visibility never changes. Without this, the table would keep showing the
+    previous client's sessions until some unrelated action (Refresh click, or
+    a tab switch away and back) happened to trigger a reload.
+    """
+    widget = SessionBrowserWidget(Mock(), parent=None)
+    widget.current_client_id = "CLIENT_1"
+    monkeypatch.setattr(widget, "isVisible", lambda: True)
+    refreshed = Mock()
+    monkeypatch.setattr(widget, "refresh_sessions", refreshed)
+
+    widget.set_client("CLIENT_2", auto_refresh=False)
+
+    refreshed.assert_called_once()
+
+
+def test_client_switch_defers_to_showevent_when_tab_hidden(qapp, monkeypatch):
+    """Unchanged behavior: when the widget isn't visible, auto_refresh=False
+    still defers the reload to the next showEvent() instead of doing a
+    network round trip for a tab nobody is looking at."""
+    widget = SessionBrowserWidget(Mock(), parent=None)
+    widget.current_client_id = "CLIENT_1"
+    monkeypatch.setattr(widget, "isVisible", lambda: False)
+    refreshed = Mock()
+    monkeypatch.setattr(widget, "refresh_sessions", refreshed)
+
+    widget.set_client("CLIENT_2", auto_refresh=False)
+
+    refreshed.assert_not_called()
+    assert widget._is_dirty is True

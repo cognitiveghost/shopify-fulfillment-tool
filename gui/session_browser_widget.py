@@ -36,7 +36,10 @@ def filter_sessions_by_age(sessions: list, cutoff_days: int | None, now: datetim
     """Keep sessions created within the last `cutoff_days`. `cutoff_days=None`
     disables filtering (the "Show older" state). Sessions with an unparsable
     or missing created_at are kept -- never hide real data because of a
-    formatting issue in a single record.
+    formatting issue in a single record. This includes legacy/naive
+    created_at values (no UTC offset) that can't be compared against `now`
+    (always offset-aware) -- that comparison raises TypeError, not
+    ValueError, and is just as much a formatting issue as a bad string.
     """
     if cutoff_days is None:
         return list(sessions)
@@ -46,10 +49,11 @@ def filter_sessions_by_age(sessions: list, cutoff_days: int | None, now: datetim
         created_at = session.get("created_at", "")
         try:
             created = datetime.fromisoformat(created_at)
+            keep = created >= cutoff
         except (ValueError, TypeError):
             kept.append(session)
             continue
-        if created >= cutoff:
+        if keep:
             kept.append(session)
     return kept
 
@@ -249,12 +253,17 @@ class SessionBrowserWidget(QWidget):
 
         Args:
             client_id: Client ID to load sessions for
-            auto_refresh: If False, skip automatic refresh (caller will handle it)
+            auto_refresh: If False, skip the immediate refresh and let the next
+                showEvent() pick up the dirty flag instead -- unless the widget
+                is already visible right now, in which case there's no future
+                showEvent to rescue it (the tab isn't changing), so it must
+                refresh immediately or the table is left showing the previous
+                client's sessions indefinitely.
         """
         if client_id != self.current_client_id:
             self.current_client_id = client_id
             self._is_dirty = True
-            if auto_refresh:
+            if auto_refresh or self.isVisible():
                 self.refresh_sessions()
 
     def refresh_sessions(self):
