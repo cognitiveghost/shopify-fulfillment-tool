@@ -63,6 +63,19 @@ class TestFormatTagsForBarcode:
     def test_empty_json_array_returns_blank_not_literal_brackets(self):
         assert format_tags_for_barcode("[]") == ""
 
+    def test_native_list_input_is_joined_not_stringified(self):
+        # Internal_Tags is sometimes a native Python list rather than its
+        # serialized JSON string (see tag_manager.parse_tags -- "Check list
+        # first"). The formatter must handle that directly.
+        assert format_tags_for_barcode(["BAG", "TEST"]) == "BAG|TEST"
+
+    def test_python_repr_style_list_string_is_parsed_not_leaked_raw(self):
+        # Reproduces the reported bug: a caller stringified a Python list
+        # (str(["BAG", "TEST"])) instead of JSON-serializing it, producing a
+        # single-quoted, non-JSON string that used to leak straight through
+        # as a raw list literal onto the printed label.
+        assert format_tags_for_barcode(str(["BAG", "TEST"])) == "BAG|TEST"
+
 
 class TestItemCountZeroFalsyBug:
     def test_zero_item_count_is_not_coerced_to_one(self, tmp_path, monkeypatch):
