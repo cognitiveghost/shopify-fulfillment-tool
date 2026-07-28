@@ -716,19 +716,6 @@ class ProfileManager:
         logger.info(f"Added default 'weight_config' for CLIENT_{client_id}")
         return True
 
-    def _migrate_add_sku_label_config(self, client_id: str, config: dict) -> bool:
-        """Add sku_label_config section if missing (new feature migration).
-
-        Returns:
-            bool: True if migration was performed, False if already present
-        """
-        if "sku_label_config" in config:
-            return False
-
-        config["sku_label_config"] = {"sku_to_label": {}, "default_printer": ""}
-        logger.info(f"Added default 'sku_label_config' for CLIENT_{client_id}")
-        return True
-
     def _migrate_add_inventory_memory(self, client_id: str, config: dict) -> bool:
         """Add inventory_memory section if missing (new feature migration).
 
@@ -869,7 +856,6 @@ class ProfileManager:
                     },
                 },
             },
-            "sku_label_config": {"sku_to_label": {}, "default_printer": ""},
             "inventory_memory": {
                 "enabled": False,
                 "skus": {},
@@ -1000,7 +986,6 @@ class ProfileManager:
                 client_id, config
             )
             migrated_weight = self._migrate_add_weight_config(client_id, config)
-            migrated_sku_labels = self._migrate_add_sku_label_config(client_id, config)
             migrated_inv_memory = self._migrate_add_inventory_memory(client_id, config)
 
             if (
@@ -1009,7 +994,6 @@ class ProfileManager:
                 or migrated_tag_categories
                 or migrated_tag_categories_v2
                 or migrated_weight
-                or migrated_sku_labels
                 or migrated_inv_memory
             ):
                 # If config was migrated, save it immediately (cache is invalidated by save)

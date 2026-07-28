@@ -22,6 +22,7 @@ Fields:
 - Code-128 barcode
 """
 
+import ast
 import io
 import json
 import logging
@@ -140,14 +141,37 @@ def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
-def format_tags_for_barcode(internal_tag: str) -> str:
+def _clamp_text_to_width(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> str:
+    """
+    Truncate text with an ellipsis so it never renders wider than max_width.
+
+    Args:
+        draw: ImageDraw instance used to measure text
+        text: Text to clamp
+        font: Font the text will be drawn with
+        max_width: Maximum width in pixels
+
+    Returns:
+        text unchanged if it already fits, otherwise a truncated "...ellipsis" version
+    """
+    if draw.textbbox((0, 0), text, font=font)[2] <= max_width:
+        return text
+
+    while text and draw.textbbox((0, 0), text + "...", font=font)[2] > max_width:
+        text = text[:-1]
+
+    return text + "..." if text else ""
+
+
+def format_tags_for_barcode(internal_tag) -> str:
     """
     Format internal tags for barcode label display.
 
     Parses JSON array format and returns all tags pipe-separated.
 
     Args:
-        internal_tag: Internal tag string (JSON array format: '["GIFT+1", "GIFT+2"]')
+        internal_tag: Internal tag string (JSON array format: '["GIFT+1", "GIFT+2"]'),
+            or a native list (Internal_Tags is sometimes stored unserialized).
 
     Returns:
         Formatted tag string with all tags pipe-separated
@@ -158,18 +182,32 @@ def format_tags_for_barcode(internal_tag: str) -> str:
         >>> format_tags_for_barcode("Priority")
         "Priority"
     """
+    if isinstance(internal_tag, list):
+        tags = [str(tag).strip() for tag in internal_tag if tag]
+        return '|'.join(tag for tag in tags if tag)
+
+    if isinstance(internal_tag, str):
+        internal_tag = internal_tag.strip()
+
     if not internal_tag or internal_tag == 'nan' or internal_tag == 'None':
         return ""
 
     # Try to parse as JSON array (Internal_Tags format)
-    try:
-        if internal_tag.startswith('[') and internal_tag.endswith(']'):
+    if internal_tag.startswith('[') and internal_tag.endswith(']'):
+        tags_list = None
+        try:
             tags_list = json.loads(internal_tag)
-            if isinstance(tags_list, list):
-                # Join all tags with pipe separator (empty list -> "")
-                return '|'.join(str(tag).strip() for tag in tags_list if tag)
-    except (json.JSONDecodeError, ValueError):
-        pass
+        except (json.JSONDecodeError, ValueError):
+            try:
+                # A caller stringified a Python list (str(["GIFT+1"])) rather
+                # than JSON-serializing it, producing a single-quoted,
+                # non-JSON string. ast.literal_eval parses that safely so it
+                # doesn't leak onto the label as a raw list literal.
+                tags_list = ast.literal_eval(internal_tag)
+            except (ValueError, SyntaxError):
+                pass
+        if isinstance(tags_list, list):
+            return '|'.join(str(tag).strip() for tag in tags_list if tag)
 
     # Fallback: treat as plain string or pipe-separated
     if '|' in internal_tag:
@@ -376,7 +414,10 @@ def generate_barcode_label(
                     if current_line:
                         draw.text((tag_x, tag_y), current_line, font=font_tag_multiline, fill='black')
                         tag_y += line_height
-                    current_line = single_tag
+                    # A single tag can itself be wider than available_width (e.g. a
+                    # long tag name) -- clamp it so it never draws past the barcode
+                    # section boundary, since nothing after this checks its width.
+                    current_line = _clamp_text_to_width(draw, single_tag, font_tag_multiline, available_width)
 
                 # Check if we're out of vertical space
                 if tag_y + line_height > tag_start_y + available_height:

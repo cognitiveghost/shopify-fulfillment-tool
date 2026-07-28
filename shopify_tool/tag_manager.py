@@ -58,6 +58,30 @@ def serialize_tags(tags: list[str]) -> str:
     return json.dumps(unique_tags)
 
 
+def merge_tags(tags_values: list) -> str:
+    """
+    Merge Internal_Tags values from multiple rows (e.g. an order's line
+    items) into one deduped JSON string.
+
+    Each value may be anything parse_tags() accepts (native list or JSON
+    string) -- callers must not hand-roll string splitting on these values,
+    since they're serialized lists, not flat comma-separated text.
+
+    Args:
+        tags_values: Internal_Tags values from the rows to merge
+
+    Returns:
+        JSON string representation (see serialize_tags)
+    """
+    merged = []
+    for value in tags_values:
+        for tag in parse_tags(value):
+            if tag not in merged:
+                merged.append(tag)
+
+    return serialize_tags(merged)
+
+
 def add_tag(current_tags_value, new_tag: str) -> str:
     """
     Add tag to existing tags (prevents duplicates).

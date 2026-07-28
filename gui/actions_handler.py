@@ -1020,12 +1020,23 @@ class ActionsHandler(QObject):
                 "Manual Tag", f"Added note '{tag_to_add}' to order {order_number}."
             )
 
-    def remove_item_from_order(self, order_number, sku):
+    def remove_item_from_order(self, order_number, sku, row_position, row_snapshot=None):
         """Removes a single item (a row) from the analysis DataFrame.
 
         Args:
             order_number (str): The order number.
             sku (str): The SKU of the item to remove.
+            row_position (int): The positional row index of the specific line
+                the user clicked, as captured when the context menu opened.
+                Orders can contain multiple lines sharing the same SKU, so
+                matching on (order_number, sku) alone would remove every such
+                line instead of just the one the user targeted.
+            row_snapshot (dict, optional): Full row values captured at the
+                same time as row_position. If the row at row_position no
+                longer matches this snapshot exactly, the table changed
+                (e.g. another duplicate-SKU line now sits at that position)
+                and the removal is aborted rather than risk deleting the
+                wrong line.
         """
         reply = QMessageBox.question(
             self.mw,
@@ -1035,25 +1046,38 @@ class ActionsHandler(QObject):
             QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
-            # Find and remove the specific row by order number and SKU
-            # Convert to string for comparison to handle int/float order numbers
+            df = self.mw.analysis_results_df
+            if not (0 <= row_position < len(df)):
+                self.log.warning("Aborted item removal: clicked row is no longer valid")
+                return
+
+            row_label = df.index[row_position]
             order_number_str = str(order_number).strip()
             sku_str = str(sku).strip()
-            order_mask = (
-                self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-                == order_number_str
-            )
-            sku_mask = (
-                self.mw.analysis_results_df["SKU"].astype(str).str.strip() == sku_str
-            )
-            mask = order_mask & sku_mask
+            if (
+                str(df.loc[row_label, "Order_Number"]).strip() != order_number_str
+                or str(df.loc[row_label, "SKU"]).strip() != sku_str
+            ):
+                self.log.warning("Aborted item removal: clicked row no longer matches")
+                return
+
+            if row_snapshot is not None:
+                current_row = df.loc[row_label]
+                if any(
+                    str(current_row.get(col)) != str(value)
+                    for col, value in row_snapshot.items()
+                ):
+                    self.log.warning(
+                        "Aborted item removal: clicked row no longer matches its snapshot"
+                    )
+                    return
+
+            mask = df.index == row_label
 
             # Get affected rows BEFORE operation
-            affected_rows = self.mw.analysis_results_df[mask].copy()
+            affected_rows = df[mask].copy()
 
-            self.mw.analysis_results_df = self.mw.analysis_results_df[
-                ~mask
-            ].reset_index(drop=True)
+            self.mw.analysis_results_df = df[~mask].reset_index(drop=True)
 
             # Record for undo
             self.mw.undo_manager.record_operation(

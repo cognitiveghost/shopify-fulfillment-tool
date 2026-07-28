@@ -36,7 +36,10 @@ def filter_sessions_by_age(sessions: list, cutoff_days: int | None, now: datetim
     """Keep sessions created within the last `cutoff_days`. `cutoff_days=None`
     disables filtering (the "Show older" state). Sessions with an unparsable
     or missing created_at are kept -- never hide real data because of a
-    formatting issue in a single record.
+    formatting issue in a single record. This includes legacy/naive
+    created_at values (no UTC offset) that can't be compared against `now`
+    (always offset-aware) -- that comparison raises TypeError, not
+    ValueError, and is just as much a formatting issue as a bad string.
     """
     if cutoff_days is None:
         return list(sessions)
@@ -46,10 +49,11 @@ def filter_sessions_by_age(sessions: list, cutoff_days: int | None, now: datetim
         created_at = session.get("created_at", "")
         try:
             created = datetime.fromisoformat(created_at)
+            keep = created >= cutoff
         except (ValueError, TypeError):
             kept.append(session)
             continue
-        if created >= cutoff:
+        if keep:
             kept.append(session)
     return kept
 
@@ -249,12 +253,17 @@ class SessionBrowserWidget(QWidget):
 
         Args:
             client_id: Client ID to load sessions for
-            auto_refresh: If False, skip automatic refresh (caller will handle it)
+            auto_refresh: If False, skip the immediate refresh and let the next
+                showEvent() pick up the dirty flag instead -- unless the widget
+                is already visible right now, in which case there's no future
+                showEvent to rescue it (the tab isn't changing), so it must
+                refresh immediately or the table is left showing the previous
+                client's sessions indefinitely.
         """
         if client_id != self.current_client_id:
             self.current_client_id = client_id
             self._is_dirty = True
-            if auto_refresh:
+            if auto_refresh or self.isVisible():
                 self.refresh_sessions()
 
     def refresh_sessions(self):
@@ -329,9 +338,14 @@ class SessionBrowserWidget(QWidget):
 
     def _on_sessions_loaded(self, sessions_data):
         """Handle loaded data in main thread (safe for UI updates)."""
-        # Guard: widget may have been closed while worker was still running
+        # Guard: widget may have been closed, or merely hidden (e.g. the user
+        # switched tabs while the file-server load was in flight).
         if not self.isVisible() or self.sessions_table is None:
-            logger.debug("Widget closed before sessions loaded — ignoring result")
+            logger.debug("Widget not visible when sessions loaded — will retry on next show")
+            # refresh_sessions() already cleared _is_dirty when the load started;
+            # re-mark it so the next showEvent() retries instead of leaving the
+            # table/button stuck in the "Loading..." state forever.
+            self._is_dirty = True
             return
 
         logger.debug(f"Received {len(sessions_data)} sessions from worker")

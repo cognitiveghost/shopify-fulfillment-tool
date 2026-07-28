@@ -32,3 +32,15 @@ class TestFilterSessionsByAge:
         sessions = [_session(5), _session(400)]
         result = filter_sessions_by_age(sessions, cutoff_days=None, now=datetime.now().astimezone())
         assert len(result) == 2
+
+    def test_naive_created_at_is_kept_not_crashed(self):
+        # Legacy/naive created_at (no UTC offset) can't be compared against
+        # `now`, which is always offset-aware -- that raises TypeError, not
+        # ValueError. A single such record used to crash the whole refresh
+        # (uncaught in _populate_table -> stuck on "Loading..." forever).
+        sessions = [
+            {"session_name": "naive", "created_at": "2026-07-20T10:00:00"},
+            _session(5),
+        ]
+        result = filter_sessions_by_age(sessions, cutoff_days=30, now=datetime.now().astimezone())
+        assert {s["session_name"] for s in result} == {"naive", "session_5d"}
