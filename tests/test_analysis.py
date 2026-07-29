@@ -3,6 +3,8 @@
 Uses the REAL default Shopify/Bulgarian-ERP column names (column_mappings=None)
 so these tests exercise exactly the code path production traffic takes.
 """
+from datetime import date
+
 import pandas as pd
 import pytest
 
@@ -381,6 +383,45 @@ class TestFifoLotAllocation:
         ])
         final_df, *_ = _run(orders, stock)
         assert final_df.iloc[0]["Stock"] == 10
+
+
+class TestParseExpiryDate:
+    """_parse_expiry_date tries YYMMDD, then DDMMYY (6-digit), YYYYMMDD
+    (8-digit), MMYY (4-digit) in that priority order, keeping the first
+    calendar-valid candidate. See the ponytail comment on the function for
+    why priority order (not per-client config) resolves 6-digit ambiguity."""
+
+    def test_yymmdd_6_digit(self):
+        assert analysis._parse_expiry_date("261230") == date(2026, 12, 30)
+
+    def test_yyyymmdd_8_digit(self):
+        assert analysis._parse_expiry_date("20270131") == date(2027, 1, 31)
+
+    def test_ddmmyy_used_when_yymmdd_is_calendar_invalid(self):
+        # As YYMMDD: yy=31, mm=12, dd=99 -> invalid (day 99).
+        # As DDMMYY: dd=31, mm=12, yy=99 -> valid: 2099-12-31.
+        assert analysis._parse_expiry_date("311299") == date(2099, 12, 31)
+
+    def test_mmyy_4_digit_defaults_to_day_1(self):
+        assert analysis._parse_expiry_date("0528") == date(2028, 5, 1)
+
+    def test_ambiguous_6_digit_prefers_yymmdd(self, caplog):
+        # Valid as both YYMMDD (2026-12-30) and DDMMYY (2030-12-26) -- priority picks YYMMDD.
+        with caplog.at_level("WARNING", logger="shopify_tool.analysis"):
+            result = analysis._parse_expiry_date("261230")
+        assert result == date(2026, 12, 30)
+        assert any("Ambiguous expiry" in r.message for r in caplog.records)
+
+    def test_unparseable_value_returns_none_and_logs_warning(self, caplog):
+        with caplog.at_level("WARNING", logger="shopify_tool.analysis"):
+            result = analysis._parse_expiry_date("2805")  # month 28 invalid under MMYY too
+        assert result is None
+        assert any("Could not parse expiry date" in r.message for r in caplog.records)
+
+    def test_sentinel_and_none_and_blank(self):
+        assert analysis._parse_expiry_date("1") is None
+        assert analysis._parse_expiry_date(None) is None
+        assert analysis._parse_expiry_date("") is None
 
 
 class TestQuantityRobustness:

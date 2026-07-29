@@ -17,11 +17,22 @@ _LOT_COLUMN_DEFAULTS: dict[str, str] = {"Годност": "Expiry_Date", "Пар
 def _parse_expiry_date(raw) -> date | None:
     """Parse a raw expiry string from the stock CSV to a comparable date object.
 
-    Handles:
-    - "1" or None or NaN or "" → None  (sentinel for "no expiry info")
-    - 6-digit YYMMDD  e.g. "261230" → date(2026, 12, 30)
-    - 8-digit YYYYMMDD e.g. "20270131" → date(2027, 1, 31)
-    - Anything else unparseable → None (logged at debug level, no exception)
+    Tries candidate formats in priority order, keeping the first
+    calendar-valid one:
+    - "1" or None or NaN or "" -> None  (sentinel for "no expiry info")
+    - 6-digit: YYMMDD, then DDMMYY
+    - 8-digit: YYYYMMDD
+    - 4-digit: MMYY (day defaults to 1)
+    - No valid candidate -> None (logged as a warning)
+
+    If more than one candidate format is calendar-valid for the same raw
+    value (e.g. "261230" is valid as both YYMMDD and DDMMYY), this is logged
+    as ambiguous and the higher-priority format's result is used.
+
+    ponytail: format priority is a heuristic, not a guaranteed-correct
+    disambiguation for 6-digit values valid under more than one format --
+    add a per-client date-format setting if that turns out to be common in
+    practice.
     """
     if raw is None:
         return None
@@ -33,17 +44,32 @@ def _parse_expiry_date(raw) -> date | None:
     s = str(raw).strip()
     if not s or s == "1":
         return None
-    try:
-        if len(s) == 6:
-            yy, mm, dd = int(s[0:2]), int(s[2:4]), int(s[4:6])
-            return date(2000 + yy, mm, dd)
-        elif len(s) == 8:
-            yyyy, mm, dd = int(s[0:4]), int(s[4:6]), int(s[6:8])
-            return date(yyyy, mm, dd)
-    except (ValueError, OverflowError):
-        pass
-    logger.debug(f"Could not parse expiry date: {s!r}")
-    return None
+
+    if len(s) == 6:
+        candidate_specs = [("YYMMDD", s[0:2], s[2:4], s[4:6]), ("DDMMYY", s[4:6], s[2:4], s[0:2])]
+    elif len(s) == 8:
+        candidate_specs = [("YYYYMMDD", s[0:4], s[4:6], s[6:8])]
+    elif len(s) == 4:
+        candidate_specs = [("MMYY", s[2:4], s[0:2], "01")]
+    else:
+        candidate_specs = []
+
+    valid: list[tuple[str, date]] = []
+    for fmt, y_s, m_s, d_s in candidate_specs:
+        try:
+            year = int(y_s) if len(y_s) == 4 else 2000 + int(y_s)
+            valid.append((fmt, date(year, int(m_s), int(d_s))))
+        except (ValueError, OverflowError):
+            continue
+
+    if not valid:
+        logger.warning(f"Could not parse expiry date: {s!r}")
+        return None
+    if len(valid) > 1:
+        logger.warning(
+            f"Ambiguous expiry {s!r}: valid as {[v[0] for v in valid]}, using {valid[0][0]}"
+        )
+    return valid[0][1]
 
 
 def _build_fifo_lots(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
@@ -652,6 +678,7 @@ def _simulate_stock_allocation(
                             sku_alloc.append(
                                 {
                                     "expiry": lot["expiry"],
+                                    "expiry_dt": lot["expiry_dt"],
                                     "batch": lot["batch"],
                                     "qty_allocated": take,
                                 }
