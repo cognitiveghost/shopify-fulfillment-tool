@@ -10,9 +10,10 @@ Uses a SimpleNamespace fake with the real MainWindow methods bound onto it
 instantiating the real MainWindow in tests (see test_selection_helper.py's
 _FakeMainWindow, test_actions_handler.py's SimpleNamespace fixture).
 """
+import json
 import types
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pandas as pd
 import pytest
@@ -47,3 +48,28 @@ def test_add_internal_tag_from_right_click_tags_every_line_of_the_order(mw):
     assert '"GIFT"' in tags.loc["A1"]  # the clicked line
     assert '"GIFT"' in tags.loc["A2"]  # the order's other line -- must ALSO be tagged
     assert '"GIFT"' not in tags.loc["B1"]  # different order, untouched
+
+
+def test_selection_changed_shows_merged_tags_across_the_orders_lines(mw):
+    mw.on_selection_changed_for_tags = types.MethodType(
+        MainWindow.on_selection_changed_for_tags, mw
+    )
+    mw.analysis_results_df.loc[0, "Internal_Tags"] = '["A"]'  # order 1001, line 1
+    mw.analysis_results_df.loc[1, "Internal_Tags"] = '["B"]'  # order 1001, line 2 (different tag)
+
+    mw.tag_management_panel = MagicMock()
+    mw.tag_management_panel.isVisible.return_value = True
+
+    # Select row 1 (the line carrying only "B") in the table
+    fake_index = MagicMock()
+    fake_index.row.return_value = 1
+    mw.proxy_model = MagicMock()
+    mw.proxy_model.mapToSource.return_value = fake_index
+    mw.tableView = MagicMock()
+    mw.tableView.selectionModel.return_value.selectedRows.return_value = [MagicMock()]
+
+    mw.on_selection_changed_for_tags()
+
+    order_number, current_tags = mw.tag_management_panel.set_selected_order.call_args[0]
+    assert order_number == "1001"
+    assert set(json.loads(current_tags)) == {"A", "B"}  # merged, not just line 2's "B"

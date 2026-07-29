@@ -30,7 +30,7 @@ from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import NetworkError, ProfileManager
 from shopify_tool.session_manager import SessionManager
-from shopify_tool.tag_manager import _normalize_tag_categories
+from shopify_tool.tag_manager import _normalize_tag_categories, merge_tags
 from shopify_tool.undo_manager import UndoManager
 
 logger = logging.getLogger(__name__)
@@ -562,9 +562,14 @@ class MainWindow(QMainWindow):
             self.tag_management_panel.set_selected_order(None, "[]")
             return
 
-        # Get order number and current tags
+        # Get order number, then merge Internal_Tags across every row of that
+        # order (Internal_Tags is order-level -- a single selected line may
+        # not carry the order's full tag set).
         order_number = self.analysis_results_df.iloc[row]["Order_Number"]
-        current_tags = self.analysis_results_df.iloc[row].get("Internal_Tags", "[]")
+        order_mask = self.analysis_results_df["Order_Number"] == order_number
+        current_tags = merge_tags(
+            self.analysis_results_df.loc[order_mask, "Internal_Tags"].tolist()
+        )
 
         self.tag_management_panel.set_selected_order(order_number, current_tags)
 
