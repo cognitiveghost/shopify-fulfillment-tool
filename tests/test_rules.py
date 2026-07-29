@@ -104,12 +104,28 @@ class TestRulePriorityAndAccumulation:
         assert out.loc[0, "Order_Fulfillment_Status"] == "B"
 
     def test_add_internal_tag_deduplicates_via_tag_manager(self):
-        df = _df({"Quantity": [1], "Internal_Tags": ["[]"]})
+        df = _df({"Order_Number": ["X"], "Quantity": [1], "Internal_Tags": ["[]"]})
         rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 1}],
                         [{"type": "ADD_INTERNAL_TAG", "value": "GIFT"}])]
         out = RuleEngine(RuleEngine(rules).rules).apply(df.copy())  # apply twice via re-run
         out = RuleEngine(rules).apply(out)
         assert parse_tags(out.loc[0, "Internal_Tags"]) == ["GIFT"]
+
+    def test_add_internal_tag_applies_to_every_line_of_the_matched_order(self):
+        # Rule matches only the line with Quantity == 5 (row 0), but
+        # Internal_Tags is order-level -- both of order "1001"'s lines must
+        # get the tag, not just the matched line.
+        df = _df({
+            "Order_Number": ["1001", "1001", "1002"],
+            "Quantity": [5, 1, 5],
+            "Internal_Tags": ["[]", "[]", "[]"],
+        })
+        rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 5}],
+                        [{"type": "ADD_INTERNAL_TAG", "value": "GIFT"}])]
+        out = RuleEngine(rules).apply(df.copy())
+        assert parse_tags(out.loc[0, "Internal_Tags"]) == ["GIFT"]
+        assert parse_tags(out.loc[1, "Internal_Tags"]) == ["GIFT"]  # order 1001's other line
+        assert parse_tags(out.loc[2, "Internal_Tags"]) == ["GIFT"]  # order 1002, matched directly
 
     def test_empty_rules_list_is_noop(self):
         df = _df({"Quantity": [1, 2]})

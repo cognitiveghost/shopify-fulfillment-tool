@@ -1043,12 +1043,15 @@ class RuleEngine:
                 df.loc[matches, "Status_Note"] = new_notes
 
             elif action_type == "ADD_INTERNAL_TAG":
-                # Add tag to Internal_Tags column using tag_manager
-                from shopify_tool.tag_manager import add_tag
+                # Internal_Tags is order-level -- expand the rule's line-level
+                # match to every row of each matched order before writing
+                # (see tag_manager.expand_to_order_rows).
+                from shopify_tool.tag_manager import add_tag, expand_to_order_rows
 
-                current_tags = df.loc[matches, "Internal_Tags"]
+                order_mask = expand_to_order_rows(df, matches)
+                current_tags = df.loc[order_mask, "Internal_Tags"]
                 new_tags = current_tags.apply(lambda t, value=value: add_tag(t, value))
-                df.loc[matches, "Internal_Tags"] = new_tags
+                df.loc[order_mask, "Internal_Tags"] = new_tags
 
             elif action_type == "SET_STATUS":
                 df.loc[matches, "Order_Fulfillment_Status"] = value

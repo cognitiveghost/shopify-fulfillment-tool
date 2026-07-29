@@ -1616,44 +1616,30 @@ class ActionsHandler(QObject):
 
         selected_indexes = self.mw.selection_helper.get_selected_source_rows()
 
-        # Get unique orders and their first row (order-level operation)
+        # Get unique orders, then mask every row of every selected order
+        # (Internal_Tags is order-level -- see tag_manager.expand_to_order_rows)
         selected_df = self.mw.analysis_results_df.loc[selected_indexes]
         unique_orders = selected_df["Order_Number"].unique()
+        mask = self.mw.analysis_results_df["Order_Number"].isin(unique_orders)
 
-        # Get first row index for each unique order (representative row)
-        representative_indexes = []
-        for order_num in unique_orders:
-            order_rows = self.mw.analysis_results_df[
-                self.mw.analysis_results_df["Order_Number"] == order_num
-            ].index.tolist()
-            if order_rows:
-                representative_indexes.append(order_rows[0])
-
-        # Store affected rows BEFORE modification (only representatives)
-        affected_rows_before = self.mw.analysis_results_df.loc[
-            representative_indexes
-        ].copy()
+        # Store affected rows BEFORE modification (every row of every selected order)
+        affected_rows_before = self.mw.analysis_results_df[mask].copy()
 
         # Ensure Internal_Tags column exists
         if "Internal_Tags" not in self.mw.analysis_results_df.columns:
             self.mw.analysis_results_df["Internal_Tags"] = "[]"
 
-        # Apply tag to representative rows only (first row of each order)
-        current_tags = self.mw.analysis_results_df.loc[
-            representative_indexes, "Internal_Tags"
-        ]
+        # Apply tag to every row of every selected order
+        current_tags = self.mw.analysis_results_df.loc[mask, "Internal_Tags"]
         new_tags = current_tags.apply(lambda t: add_tag(t, tag_value))
-        self.mw.analysis_results_df.loc[representative_indexes, "Internal_Tags"] = (
-            new_tags
-        )
+        self.mw.analysis_results_df.loc[mask, "Internal_Tags"] = new_tags
 
-        # Record undo operation (with representative indexes)
+        # Record undo operation
         self.mw.undo_manager.record_operation(
             operation_type="bulk_add_tag",
             description=f"Bulk Add Tag: '{tag_value}' to {orders_count} orders",
             params={
                 "tag": tag_value,
-                "affected_indexes": representative_indexes,
                 "order_numbers": unique_orders.tolist(),
             },
             affected_rows_before=affected_rows_before,
@@ -1731,40 +1717,25 @@ class ActionsHandler(QObject):
         # Get affected rows BEFORE modification
         selected_indexes = self.mw.selection_helper.get_selected_source_rows()
 
-        # Get unique orders and their first row (order-level operation)
+        # Get unique orders, then mask every row of every selected order
         selected_df_full = self.mw.analysis_results_df.loc[selected_indexes]
         unique_orders = selected_df_full["Order_Number"].unique()
+        mask = self.mw.analysis_results_df["Order_Number"].isin(unique_orders)
 
-        # Get first row index for each unique order (representative row)
-        representative_indexes = []
-        for order_num in unique_orders:
-            order_rows = self.mw.analysis_results_df[
-                self.mw.analysis_results_df["Order_Number"] == order_num
-            ].index.tolist()
-            if order_rows:
-                representative_indexes.append(order_rows[0])
+        # Store affected rows BEFORE modification (every row of every selected order)
+        affected_rows_before = self.mw.analysis_results_df[mask].copy()
 
-        # Store affected rows BEFORE modification (only representatives)
-        affected_rows_before = self.mw.analysis_results_df.loc[
-            representative_indexes
-        ].copy()
-
-        # Apply tag removal to representative rows only (first row of each order)
-        current_tags = self.mw.analysis_results_df.loc[
-            representative_indexes, "Internal_Tags"
-        ]
+        # Apply tag removal to every row of every selected order
+        current_tags = self.mw.analysis_results_df.loc[mask, "Internal_Tags"]
         new_tags = current_tags.apply(lambda t: remove_tag(t, tag))
-        self.mw.analysis_results_df.loc[representative_indexes, "Internal_Tags"] = (
-            new_tags
-        )
+        self.mw.analysis_results_df.loc[mask, "Internal_Tags"] = new_tags
 
-        # Record undo operation (with representative indexes)
+        # Record undo operation
         self.mw.undo_manager.record_operation(
             operation_type="bulk_remove_tag",
             description=f"Bulk Remove Tag: '{tag}' from {orders_count} orders",
             params={
                 "tag": tag,
-                "affected_indexes": representative_indexes,
                 "order_numbers": unique_orders.tolist(),
             },
             affected_rows_before=affected_rows_before,

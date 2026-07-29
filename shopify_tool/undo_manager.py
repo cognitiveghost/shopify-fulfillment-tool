@@ -549,11 +549,15 @@ class UndoManager:
             df = self.main_window.analysis_results_df
             restored = 0
             for order_number, group in affected_rows_before.groupby("Order_Number"):
-                original_tags = group["Internal_Tags"].iloc[0] if "Internal_Tags" in group.columns else "[]"
-                order_rows = df.index[df["Order_Number"] == order_number]
-                if len(order_rows):
-                    df.loc[order_rows[0], "Internal_Tags"] = original_tags
-                    restored += 1
+                order_mask = df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
+                order_rows = df.index[order_mask]
+                if not len(order_rows):
+                    continue
+                if "Internal_Tags" in group.columns:
+                    for idx, original_idx in enumerate(order_rows):
+                        if idx < len(group):
+                            df.loc[original_idx, "Internal_Tags"] = group["Internal_Tags"].iloc[idx]
+                restored += 1
 
             self.main_window.analysis_results_df = df
             self.log.info(f"Undid bulk add tag for {restored} orders")
@@ -583,11 +587,15 @@ class UndoManager:
             df = self.main_window.analysis_results_df
             restored = 0
             for order_number, group in affected_rows_before.groupby("Order_Number"):
-                original_tags = group["Internal_Tags"].iloc[0] if "Internal_Tags" in group.columns else "[]"
-                order_rows = df.index[df["Order_Number"] == order_number]
-                if len(order_rows):
-                    df.loc[order_rows[0], "Internal_Tags"] = original_tags
-                    restored += 1
+                order_mask = df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
+                order_rows = df.index[order_mask]
+                if not len(order_rows):
+                    continue
+                if "Internal_Tags" in group.columns:
+                    for idx, original_idx in enumerate(order_rows):
+                        if idx < len(group):
+                            df.loc[original_idx, "Internal_Tags"] = group["Internal_Tags"].iloc[idx]
+                restored += 1
 
             self.main_window.analysis_results_df = df
             self.log.info(f"Undid bulk remove tag for {restored} orders")

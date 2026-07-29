@@ -75,3 +75,38 @@ def test_undo_bulk_add_tag_restores_the_selected_orders(mw):
     assert by_order.loc["C"] == "[]"
     assert by_order.loc["D"] == "[]"
     assert by_order.loc["A"] == "[]"  # untouched
+
+
+@pytest.fixture
+def mw_multiline():
+    df = pd.DataFrame(
+        {
+            "Order_Number": ["A", "A", "B"],
+            "SKU": ["S1", "S2", "S1"],
+            "Internal_Tags": ["[]", "[]", "[]"],
+        }
+    )
+    return SimpleNamespace(
+        analysis_results_df=df,
+        analysis_stats=None,
+        current_client_id="1",
+        session_path=None,
+    )
+
+
+def test_undo_bulk_add_tag_restores_every_line_of_a_multiline_order(mw_multiline):
+    um = UndoManager(mw_multiline)
+    mask = mw_multiline.analysis_results_df["Order_Number"] == "A"
+    affected_before = mw_multiline.analysis_results_df[mask].copy()
+    mw_multiline.analysis_results_df.loc[mask, "Internal_Tags"] = '["fragile"]'
+    um.record_operation(
+        "bulk_add_tag", "Bulk add tag", {"order_numbers": ["A"]}, affected_before
+    )
+
+    ok, _ = um.undo()
+
+    tags = mw_multiline.analysis_results_df.set_index("SKU")["Internal_Tags"]
+    assert ok is True
+    assert tags.loc["S2"] == "[]"  # order A, line 2 -- must ALSO be restored
+    assert mw_multiline.analysis_results_df.iloc[0]["Internal_Tags"] == "[]"  # order A, line 1 -- restored
+    assert mw_multiline.analysis_results_df.iloc[2]["Internal_Tags"] == "[]"  # order B untouched

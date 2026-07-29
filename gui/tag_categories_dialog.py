@@ -4,6 +4,7 @@ This module provides UI for creating, editing, and managing tag categories
 with support for v2 format including order, colors, and SKU writeoff configuration.
 """
 
+import copy
 import logging
 
 from PySide6.QtCore import Qt, Signal
@@ -53,7 +54,7 @@ class TagCategoriesPanel(QWidget):
     def __init__(self, tag_categories: dict, parent=None):
         super().__init__(parent)
 
-        self.working_categories = tag_categories.copy()
+        self.working_categories = copy.deepcopy(tag_categories)
 
         # Ensure v2 format
         if "version" not in self.working_categories:
