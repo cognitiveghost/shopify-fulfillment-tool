@@ -77,6 +77,17 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
         return False
 
 
+def _format_lot(lot: dict) -> str:
+    """Render one Lot_Details entry as a human-readable line for the tooltip."""
+    qty = lot.get("qty_allocated", lot.get("qty", 0))
+    qty_str = f"{qty:g}" if isinstance(qty, float) else str(qty)
+    expiry_dt = lot.get("expiry_dt")
+    expiry_str = f"exp {expiry_dt.isoformat()}" if expiry_dt is not None else f"exp unparsed ({lot.get('expiry')!r})"
+    batch = lot.get("batch")
+    batch_str = f", Batch {batch}" if batch else ""
+    return f"{qty_str}x, {expiry_str}{batch_str}"
+
+
 class PandasModel(QAbstractTableModel):
     """A Qt model to interface a pandas DataFrame with a QTableView.
 
@@ -162,14 +173,25 @@ class PandasModel(QAbstractTableModel):
         if self.enable_checkboxes:
             col_index = index.column() - 1
 
-        if role == Qt.ItemDataRole.DisplayRole:
+        if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
             try:
                 value = self._dataframe.iloc[row, col_index]
-                if pd.isna(value):
-                    return ""
-                return str(value)
             except IndexError:
                 return None
+
+            if isinstance(value, list):
+                if not value:
+                    return "" if role == Qt.ItemDataRole.DisplayRole else None
+                if role == Qt.ItemDataRole.DisplayRole:
+                    return f"{len(value)} lot{'s' if len(value) != 1 else ''}"
+                return "\n".join(_format_lot(lot) for lot in value)
+
+            if role == Qt.ItemDataRole.ToolTipRole:
+                return None  # no tooltip for plain scalar cells
+
+            if pd.isna(value):
+                return ""
+            return str(value)
 
         if role == Qt.ItemDataRole.BackgroundRole:
             return self._row_bg_cache[row]
