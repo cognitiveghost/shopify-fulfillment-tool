@@ -2615,22 +2615,7 @@ class SettingsWindow(QDialog):
             for sku in skus_in_csv:
                 if sku in existing_skus:
                     continue
-                row = self.weight_products_table.rowCount()
-                self.weight_products_table.insertRow(row)
-                self.weight_products_table.setItem(row, 0, QTableWidgetItem(sku))
-                self.weight_products_table.setItem(row, 1, QTableWidgetItem(sku_to_name.get(sku, "")))
-                for col in range(2, 6):
-                    self.weight_products_table.setItem(row, col, QTableWidgetItem(""))
-                vol_item = QTableWidgetItem("0.0")
-                vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.weight_products_table.setItem(row, 5, vol_item)
-                chk_widget = QWidget()
-                chk_layout = QHBoxLayout(chk_widget)
-                chk_layout.setContentsMargins(8, 2, 8, 2)
-                chk = QCheckBox()
-                chk_layout.addWidget(chk)
-                chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.weight_products_table.setCellWidget(row, 6, chk_widget)
+                self._weight_append_product_row(sku=sku, name=sku_to_name.get(sku, ""))
                 added += 1
             self.weight_products_table.blockSignals(False)
 
@@ -2759,24 +2744,7 @@ class SettingsWindow(QDialog):
                             chk.setChecked(no_pkg)
                     updated += 1
                 else:
-                    row = self.weight_products_table.rowCount()
-                    self.weight_products_table.insertRow(row)
-                    self.weight_products_table.setItem(row, 0, QTableWidgetItem(sku))
-                    self.weight_products_table.setItem(row, 1, QTableWidgetItem(name))
-                    self.weight_products_table.setItem(row, 2, QTableWidgetItem(str(l) if l is not None else ""))
-                    self.weight_products_table.setItem(row, 3, QTableWidgetItem(str(w) if w is not None else ""))
-                    self.weight_products_table.setItem(row, 4, QTableWidgetItem(str(h) if h is not None else ""))
-                    vol_item = QTableWidgetItem(str(vol_w))
-                    vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    self.weight_products_table.setItem(row, 5, vol_item)
-                    chk_widget = QWidget()
-                    chk_layout = QHBoxLayout(chk_widget)
-                    chk_layout.setContentsMargins(8, 2, 8, 2)
-                    chk = QCheckBox()
-                    chk.setChecked(no_pkg)
-                    chk_layout.addWidget(chk)
-                    chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    self.weight_products_table.setCellWidget(row, 6, chk_widget)
+                    self._weight_append_product_row(sku=sku, name=name, l=l, w=w, h=h, no_pkg=no_pkg)
                     added += 1
             self.weight_products_table.blockSignals(False)
 

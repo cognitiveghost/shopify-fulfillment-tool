@@ -549,7 +549,7 @@ class UndoManager:
             df = self.main_window.analysis_results_df
             restored = 0
             for order_number, group in affected_rows_before.groupby("Order_Number"):
-                order_mask = df["Order_Number"] == order_number
+                order_mask = df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
                 order_rows = df.index[order_mask]
                 if not len(order_rows):
                     continue
@@ -587,7 +587,7 @@ class UndoManager:
             df = self.main_window.analysis_results_df
             restored = 0
             for order_number, group in affected_rows_before.groupby("Order_Number"):
-                order_mask = df["Order_Number"] == order_number
+                order_mask = df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
                 order_rows = df.index[order_mask]
                 if not len(order_rows):
                     continue
