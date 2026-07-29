@@ -1,5 +1,7 @@
+import pandas as pd
+
 from shopify_tool.barcode_processor import format_tags_for_barcode
-from shopify_tool.tag_manager import merge_tags
+from shopify_tool.tag_manager import expand_to_order_rows, merge_tags
 
 
 class TestMergeTags:
@@ -24,3 +26,29 @@ class TestMergeTags:
         # label. merge_tags must hand back a single clean JSON array instead.
         merged = merge_tags([["MASK+BOX_ORDER"], ["REGULAR_BOX"]])
         assert format_tags_for_barcode(merged) == "MASK+BOX_ORDER|REGULAR_BOX"
+
+
+class TestExpandToOrderRows:
+    def _df(self):
+        return pd.DataFrame({
+            "Order_Number": ["A", "A", "B", "C", "C"],
+            "SKU": ["S1", "S2", "S1", "S1", "S2"],
+        })
+
+    def test_single_line_mask_expands_to_all_lines_of_that_order(self):
+        df = self._df()
+        mask = (df["Order_Number"] == "A") & (df["SKU"] == "S1")  # matches only row 0
+        result = expand_to_order_rows(df, mask)
+        assert result.tolist() == [True, True, False, False, False]
+
+    def test_multi_order_mask_expands_each_order_independently(self):
+        df = self._df()
+        mask = df.index.isin([0, 3])  # row 0 (order A), row 3 (order C)
+        result = expand_to_order_rows(df, pd.Series(mask, index=df.index))
+        assert result.tolist() == [True, True, False, True, True]
+
+    def test_mask_matching_zero_rows_returns_all_false(self):
+        df = self._df()
+        mask = df["Order_Number"] == "DOES-NOT-EXIST"
+        result = expand_to_order_rows(df, mask)
+        assert not result.any()

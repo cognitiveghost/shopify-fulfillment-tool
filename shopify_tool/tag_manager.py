@@ -126,6 +126,27 @@ def has_tag(tags_value, tag: str) -> bool:
     return tag in tags
 
 
+def expand_to_order_rows(df: pd.DataFrame, mask: pd.Series) -> pd.Series:
+    """Expand a row mask to cover every row of every order it touches.
+
+    Internal_Tags is order-level, not line-level, but ``df`` has one row per
+    order line -- callers that only know about a subset of an order's rows
+    (a single clicked SKU line, a rule match on one line, etc.) must expand
+    to the full order before writing Internal_Tags, or different lines of
+    the same order end up with inconsistent tags.
+
+    Args:
+        df: DataFrame with an "Order_Number" column.
+        mask: Boolean row mask (any subset of df's rows).
+
+    Returns:
+        Boolean mask covering every row whose Order_Number matches at least
+        one row in the input mask.
+    """
+    order_numbers = df.loc[mask, "Order_Number"].unique()
+    return df["Order_Number"].isin(order_numbers)
+
+
 def get_tag_category(tag: str, tag_categories: dict) -> str | None:
     """
     Determine category of a tag.
