@@ -21,7 +21,8 @@ class UndoManager:
     """Manages undo history for DataFrame operations.
 
     Only stores affected rows (not full DataFrame) for memory efficiency.
-    Supports single-level undo (can undo last operation only).
+    Supports multi-level undo (up to max_history operations back), not just
+    the last operation.
     """
 
     def __init__(self, main_window):
@@ -497,23 +498,30 @@ class UndoManager:
             True if successful
         """
         try:
-            params.get("affected_indexes", [])
-
             if affected_rows_before.empty:
                 self.log.warning("No affected rows to restore")
                 return False
 
-            # The affected_rows_before DataFrame has the original indexes as its index
-            # We need to restore Order_Fulfillment_Status from before state
-            for idx, row in affected_rows_before.iterrows():
-                original_status = row.get("Order_Fulfillment_Status")
-                # Find matching row in current DataFrame
-                # After reset_index, we need to find by other criteria or use iloc
-                if pd.notna(original_status) and idx in self.main_window.analysis_results_df.index:
-                    self.main_window.analysis_results_df.loc[idx, "Order_Fulfillment_Status"] = original_status
+            # affected_rows_before round-trips through JSON (to_dict('records') /
+            # pd.DataFrame(...)) between record and undo, which discards its original
+            # pandas index and replaces it with a fresh 0..n-1 range. That range does
+            # NOT correspond to positions in the live DataFrame, so restoring by index
+            # label silently writes into unrelated rows. Match by Order_Number instead
+            # (same approach as _undo_toggle_status), since status is order-level.
+            df = self.main_window.analysis_results_df
+            restored = 0
+            for order_number, group in affected_rows_before.groupby("Order_Number"):
+                original_status = group["Order_Fulfillment_Status"].iloc[0]
+                if pd.isna(original_status):
+                    continue
+                mask = df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
+                if mask.any():
+                    df.loc[mask, "Order_Fulfillment_Status"] = original_status
+                    restored += 1
 
-            self.log.info(f"Undid bulk status change for {len(affected_rows_before)} rows")
-            return True
+            self.main_window.analysis_results_df = df
+            self.log.info(f"Undid bulk status change for {restored} orders")
+            return restored > 0
 
         except Exception:
             self.log.exception("Failed to undo bulk status change")
@@ -534,14 +542,22 @@ class UndoManager:
                 self.log.warning("No affected rows to restore")
                 return False
 
-            # Restore Internal_Tags from before state (representative rows only)
-            for idx, row in affected_rows_before.iterrows():
-                original_tags = row.get("Internal_Tags", "[]")
-                if idx in self.main_window.analysis_results_df.index:
-                    self.main_window.analysis_results_df.loc[idx, "Internal_Tags"] = original_tags
+            # See _undo_bulk_change_status: affected_rows_before's index is not
+            # meaningful after the record/undo JSON round-trip. Match by
+            # Order_Number and restore the order's first current row (mirrors
+            # which row the original bulk_add_tag/bulk_remove_tag wrote to).
+            df = self.main_window.analysis_results_df
+            restored = 0
+            for order_number, group in affected_rows_before.groupby("Order_Number"):
+                original_tags = group["Internal_Tags"].iloc[0] if "Internal_Tags" in group.columns else "[]"
+                order_rows = df.index[df["Order_Number"] == order_number]
+                if len(order_rows):
+                    df.loc[order_rows[0], "Internal_Tags"] = original_tags
+                    restored += 1
 
-            self.log.info(f"Undid bulk add tag for {len(affected_rows_before)} orders")
-            return True
+            self.main_window.analysis_results_df = df
+            self.log.info(f"Undid bulk add tag for {restored} orders")
+            return restored > 0
 
         except Exception:
             self.log.exception("Failed to undo bulk add tag")
@@ -562,14 +578,20 @@ class UndoManager:
                 self.log.warning("No affected rows to restore")
                 return False
 
-            # Restore Internal_Tags from before state (representative rows only)
-            for idx, row in affected_rows_before.iterrows():
-                original_tags = row.get("Internal_Tags", "[]")
-                if idx in self.main_window.analysis_results_df.index:
-                    self.main_window.analysis_results_df.loc[idx, "Internal_Tags"] = original_tags
+            # See _undo_bulk_change_status: match by Order_Number, not the
+            # (JSON-round-trip-reset) DataFrame index.
+            df = self.main_window.analysis_results_df
+            restored = 0
+            for order_number, group in affected_rows_before.groupby("Order_Number"):
+                original_tags = group["Internal_Tags"].iloc[0] if "Internal_Tags" in group.columns else "[]"
+                order_rows = df.index[df["Order_Number"] == order_number]
+                if len(order_rows):
+                    df.loc[order_rows[0], "Internal_Tags"] = original_tags
+                    restored += 1
 
-            self.log.info(f"Undid bulk remove tag for {len(affected_rows_before)} orders")
-            return True
+            self.main_window.analysis_results_df = df
+            self.log.info(f"Undid bulk remove tag for {restored} orders")
+            return restored > 0
 
         except Exception:
             self.log.exception("Failed to undo bulk remove tag")

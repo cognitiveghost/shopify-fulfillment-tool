@@ -288,20 +288,19 @@ def enrich_dataframe_with_weights(df: pd.DataFrame, weight_config: dict) -> pd.D
     order_all_no_pkg = {}
     order_min_box = {}
 
-    boxes = weight_config.get("boxes", [])
-
     for order_num, order_group in df.groupby("Order_Number"):
         order_vol_weights[order_num] = calc_order_volumetric_weight(order_group, weight_config)
         order_all_no_pkg[order_num] = is_all_no_packaging(order_group, weight_config)
-        if boxes:
-            order_min_box[order_num] = find_min_box_for_order(order_group, weight_config)
+        # find_min_box_for_order already returns the correct sentinel (NO_BOX_NEEDED /
+        # NO_BOX_FITS / UNKNOWN_DIMS) when weight_config["boxes"] is empty -- skipping
+        # the call here used to force every order to UNKNOWN_DIMS even when it plainly
+        # needed no box at all, which is wrong (and misleads Rule Engine conditions on
+        # Order_Min_Box).
+        order_min_box[order_num] = find_min_box_for_order(order_group, weight_config)
 
     df["Order_Volumetric_Weight"] = df["Order_Number"].map(order_vol_weights).fillna(0.0)
     df["All_No_Packaging"] = df["Order_Number"].map(order_all_no_pkg).fillna(False)
-    if boxes:
-        df["Order_Min_Box"] = df["Order_Number"].map(order_min_box).fillna(UNKNOWN_DIMS)
-    else:
-        df["Order_Min_Box"] = UNKNOWN_DIMS
+    df["Order_Min_Box"] = df["Order_Number"].map(order_min_box).fillna(UNKNOWN_DIMS)
 
     logger.info(
         f"[WeightCalc] Enriched {len(df)} rows with volumetric weights. "
