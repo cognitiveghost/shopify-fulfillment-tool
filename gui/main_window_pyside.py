@@ -453,13 +453,21 @@ class MainWindow(QMainWindow):
             self.undo_button.setToolTip(f"Undo: {description} (Ctrl+Z)")
 
     def _add_internal_tag(self, order_number: str, sku: str, tag: str):
-        """Add internal tag to the specific row identified by order_number + sku."""
-        mask = (self.analysis_results_df["Order_Number"] == order_number) & (
+        """Add internal tag to the whole order containing the clicked SKU line.
+
+        Internal_Tags is order-level -- the click identifies which order via
+        its SKU line, but the tag applies to every row of that order (see
+        tag_manager.expand_to_order_rows).
+        """
+        from shopify_tool.tag_manager import expand_to_order_rows
+
+        clicked_mask = (self.analysis_results_df["Order_Number"] == order_number) & (
             self.analysis_results_df["SKU"] == sku
         )
+        mask = expand_to_order_rows(self.analysis_results_df, clicked_mask)
         self._apply_tag_operation(
             mask,
-            description=f"Add Internal Tag: {tag} to order {order_number} / {sku}",
+            description=f"Add Internal Tag: {tag} to order {order_number}",
             params={"order_number": order_number, "sku": sku, "tag": tag},
             tag=tag,
         )
