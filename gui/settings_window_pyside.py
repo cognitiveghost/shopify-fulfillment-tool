@@ -2251,6 +2251,44 @@ class SettingsWindow(QDialog):
         prod_toolbar.addStretch()
         products_layout.addLayout(prod_toolbar)
 
+        # ---- Quick Add (fast one-at-a-time entry) ----
+        quick_add_box = QGroupBox("Quick Add")
+        quick_add_row = QHBoxLayout(quick_add_box)
+        quick_add_row.setContentsMargins(8, 4, 8, 4)
+
+        self.weight_quick_sku = QLineEdit()
+        self.weight_quick_sku.setPlaceholderText("SKU")
+        self.weight_quick_sku.setMaximumWidth(140)
+        quick_add_row.addWidget(self.weight_quick_sku)
+
+        self.weight_quick_name = QLineEdit()
+        self.weight_quick_name.setPlaceholderText("Name (optional)")
+        quick_add_row.addWidget(self.weight_quick_name, 1)
+
+        self.weight_quick_l = QDoubleSpinBox()
+        self.weight_quick_w = QDoubleSpinBox()
+        self.weight_quick_h = QDoubleSpinBox()
+        for label_text, spin in (("L:", self.weight_quick_l), ("W:", self.weight_quick_w), ("H:", self.weight_quick_h)):
+            quick_add_row.addWidget(QLabel(label_text))
+            spin.setRange(0, 1000)
+            spin.setDecimals(1)
+            spin.setSuffix(" cm")
+            spin.setMaximumWidth(90)
+            quick_add_row.addWidget(spin)
+
+        self.weight_quick_no_pkg = QCheckBox("No Packaging")
+        quick_add_row.addWidget(self.weight_quick_no_pkg)
+
+        quick_add_btn = QPushButton("Add")
+        quick_add_btn.setToolTip("Add this SKU and keep the form open for the next one (Enter also works)")
+        quick_add_btn.clicked.connect(self._weight_quick_add_product)
+        quick_add_row.addWidget(quick_add_btn)
+
+        self.weight_quick_sku.returnPressed.connect(self._weight_quick_add_product)
+        self.weight_quick_name.returnPressed.connect(self._weight_quick_add_product)
+
+        products_layout.addWidget(quick_add_box)
+
         self.products_search = QLineEdit()
         self.products_search.setPlaceholderText("Search by SKU or name...")
         self.products_search.setClearButtonEnabled(True)
@@ -2438,22 +2476,72 @@ class SettingsWindow(QDialog):
             visible = not text or text in name_text
             self.weight_boxes_table.setRowHidden(row, not visible)
 
-    def _weight_add_product_row(self):
-        """Add a blank product row to the products table."""
+    def _weight_append_product_row(self, sku="", name="", l="", w="", h="", no_pkg=False):
+        """Append one product row to the products table, filled with the given values."""
+        divisor = float(self.weight_divisor_spin.value() or 6000)
         row = self.weight_products_table.rowCount()
         self.weight_products_table.insertRow(row)
-        for col in range(6):
-            self.weight_products_table.setItem(row, col, QTableWidgetItem(""))
-        vol_item = QTableWidgetItem("0.0")
+        self.weight_products_table.setItem(row, 0, QTableWidgetItem(sku))
+        self.weight_products_table.setItem(row, 1, QTableWidgetItem(name))
+        self.weight_products_table.setItem(row, 2, QTableWidgetItem(str(l) if l else ""))
+        self.weight_products_table.setItem(row, 3, QTableWidgetItem(str(w) if w else ""))
+        self.weight_products_table.setItem(row, 4, QTableWidgetItem(str(h) if h else ""))
+        try:
+            vol_w = round((float(l or 0) * float(w or 0) * float(h or 0)) / divisor, 4) if divisor > 0 else 0.0
+        except ValueError:
+            vol_w = 0.0
+        vol_item = QTableWidgetItem(str(vol_w))
         vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.weight_products_table.setItem(row, 5, vol_item)
         chk_widget = QWidget()
         chk_layout = QHBoxLayout(chk_widget)
         chk_layout.setContentsMargins(8, 2, 8, 2)
         chk = QCheckBox()
+        chk.setChecked(no_pkg)
         chk_layout.addWidget(chk)
         chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.weight_products_table.setCellWidget(row, 6, chk_widget)
+        return row
+
+    def _weight_add_product_row(self):
+        """Add a blank product row to the products table."""
+        self._weight_append_product_row()
+
+    def _weight_quick_add_product(self):
+        """Add one product from the Quick Add form and reset it for the next entry."""
+        sku = self.weight_quick_sku.text().strip()
+        if not sku:
+            self.weight_quick_sku.setFocus()
+            return
+
+        existing_skus = {
+            self.weight_products_table.item(r, 0).text().strip()
+            for r in range(self.weight_products_table.rowCount())
+            if self.weight_products_table.item(r, 0)
+        }
+        if sku in existing_skus:
+            QMessageBox.warning(
+                self, "Duplicate SKU",
+                f"SKU '{sku}' is already in the table. Edit it there instead."
+            )
+            return
+
+        self._weight_append_product_row(
+            sku=sku,
+            name=self.weight_quick_name.text().strip(),
+            l=self.weight_quick_l.value(),
+            w=self.weight_quick_w.value(),
+            h=self.weight_quick_h.value(),
+            no_pkg=self.weight_quick_no_pkg.isChecked(),
+        )
+
+        self.weight_quick_sku.clear()
+        self.weight_quick_name.clear()
+        self.weight_quick_l.setValue(0)
+        self.weight_quick_w.setValue(0)
+        self.weight_quick_h.setValue(0)
+        self.weight_quick_no_pkg.setChecked(False)
+        self.weight_quick_sku.setFocus()
 
     def _weight_add_box_row(self):
         """Add a blank box row to the boxes table."""
