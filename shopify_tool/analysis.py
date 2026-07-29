@@ -245,6 +245,8 @@ def _clean_and_prepare_data(
         orders_df["Total_Price"] = orders_df["Total_Price"].ffill()
     if "Subtotal" in orders_df.columns:
         orders_df["Subtotal"] = orders_df["Subtotal"].ffill()
+    if "Tags" in orders_df.columns:
+        orders_df["Tags"] = orders_df["Tags"].ffill()
 
     # Forward-fill additional order-level columns from config
     if additional_columns_config:

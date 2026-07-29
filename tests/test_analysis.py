@@ -77,6 +77,20 @@ class TestBasicFulfillment:
         assert final_df[final_df["SKU"] == "A1"].iloc[0]["Final_Stock"] == 10
 
 
+class TestTagsForwardFill:
+    def test_tags_survive_ffill_across_a_multiline_order(self):
+        orders = _orders([
+            {"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 1, "Tags": "vip, fragile"},
+            {"Name": "#1", "Lineitem sku": "A2", "Lineitem quantity": 1},  # blank Tags, like real Shopify exports (NaN)
+        ])
+        stock = _stock([
+            {"Артикул": "A1", "Наличност": 10},
+            {"Артикул": "A2", "Наличност": 10},
+        ])
+        final_df, *_ = _run(orders, stock)
+        assert (final_df["Tags"] == "vip, fragile").all()
+
+
 class TestPrioritization:
     def test_multi_first_favors_multi_item_order_over_earlier_single_item_order(self):
         # Only 5 units of A1 exist. #1001 (single item, needs 5) is numerically first,
