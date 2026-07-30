@@ -162,9 +162,13 @@ large/prominent underneath, unchanged in that regard.
 **New QR label** — new function in `barcode_processor.py`:
 
 ```python
-def generate_qr_label(order_number: str, sku_qty_lines: list[tuple[str, int]], output_dir: Path) -> dict[str, Any]:
-    """Generate a QR-only label (order number + QR of SKU/qty contents), same page size
-    (LABEL_WIDTH_MM x LABEL_HEIGHT_MM) as the Code-128 label, for the same label stock."""
+def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Path:
+    """Generate a QR-only labels PDF, one page per order (order number + QR of
+    SKU/qty contents, nothing else), same page size (LABEL_WIDTH_MM x
+    LABEL_HEIGHT_MM) as the Code-128 label, for the same label stock.
+
+    Each order dict: {"order_number": str, "sku_qty_lines": list[tuple[str, int]]}.
+    """
 ```
 
 Content: order number as large text, QR code below it, nothing else. QR payload is plain
@@ -172,12 +176,22 @@ text: order number followed by one `SKU x QTY` line per line item, built via
 `reportlab.graphics.barcode.qr.QrCodeWidget` (already available through the existing
 `reportlab` dependency — no new library).
 
+**Implementation note:** unlike the Code-128 path, this does *not* go through a PNG
+intermediate. `reportlab`'s raster backend (`renderPM`) needs an extra backend package
+(`rlPyCairo`, or a compiled C extension) that isn't installed and would be a new
+dependency to add just for this. `QrCodeWidget` is a vector `reportlab.graphics` widget,
+so `generate_qr_labels_pdf()` draws it straight onto a `reportlab.pdfgen.canvas.Canvas`
+page via `reportlab.graphics.renderPDF.draw(drawing, canvas, x, y)` — one `canvas.Canvas`
+with one page per order (`drawCentredString` for the order number, `renderPDF.draw` for
+the QR, `showPage()` between orders), building the whole PDF directly. No PNG files, no
+reuse of `generate_barcodes_pdf()` (that function specifically composites existing PNG
+files, which don't exist in this path).
+
 **Wiring** (`gui/barcode_generator_widget.py`, `_generate_barcodes_worker`): when "Add QR
 labels" is checked, also collect each order's `(SKU, Quantity)` rows from
 `filtered_orders_df` (grouped by `Order_Number`, before the existing collapse to
-`unique_orders` loses line-item detail), call `generate_qr_label()` once per order, and
-combine the results into `{packing_list}_qr_labels.pdf` via the same
-`generate_barcodes_pdf()` used for the Code-128 batch. Both PDFs land in
+`unique_orders` loses line-item detail), and call `generate_qr_labels_pdf()` once with the
+full list of orders to produce `{packing_list}_qr_labels.pdf` in one pass. Both PDFs land in
 `barcodes/<packing_list>/`, independently printable via D-1.
 
 ## Testing
@@ -188,10 +202,10 @@ Per `AGENTS.md`: `QT_QPA_PLATFORM=offscreen python -m pytest` and
 - `tests/test_barcode_processor.py` (existing): extend for `render_code128_barcode()`
   (extracted helper produces the same image `generate_barcode_label()` did before, no
   behavior change), the redesigned label layout (smoke test — generates without error,
-  correct output dimensions), and new `generate_qr_label()` (valid PNG output, QR payload
-  round-trips via a QR decode of the generated image if a decode path is easily available
-  in test deps, otherwise assert the encoded text passed to `QrCodeWidget` matches
-  expected `SKU x QTY` formatting).
+  correct output dimensions), and new `generate_qr_labels_pdf()` (valid multi-page PDF
+  output, page count matches order count; no QR-decode library is available in this
+  repo's dependencies, so payload correctness is asserted via `QrCodeWidget.value`
+  matching the expected `SKU x QTY` formatting, not a round-trip decode).
 - `tests/test_pdf_processor.py` (new — no existing coverage of this module): overlay
   barcode is present and decodable on a generated overlay page; page-content scaling
   doesn't crash across a couple of representative page sizes; existing REF-text-position
@@ -217,7 +231,7 @@ Per `AGENTS.md`: `QT_QPA_PLATFORM=offscreen python -m pytest` and
 - `gui/barcode_generator_widget.py` — remove clutter, add auto-open/QR/Print controls
 - `shopify_tool/pdf_processor.py` — `create_reference_overlay()` barcode + page scaling
 - `shopify_tool/barcode_processor.py` — extract `render_code128_barcode()`, redesign
-  `generate_barcode_label()` layout, new `generate_qr_label()`
+  `generate_barcode_label()` layout, new `generate_qr_labels_pdf()`
 - `shopify_tool/reference_labels_history.py` — deleted
 - `shopify_tool/barcode_history.py` — deleted
 - `shopify_tool/session_manager.py` — remove `get_barcode_history_file()`
