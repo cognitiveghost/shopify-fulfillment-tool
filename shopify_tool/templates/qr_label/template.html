@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <div class="label">
+    <div class="order-number">{{ order_number }}</div>
+    <img class="qr" src="{{ label_tools.qr_code(qr_payload) }}"/>
+  </div>
+</body>
+</html>

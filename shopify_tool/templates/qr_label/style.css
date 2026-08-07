@@ -1,0 +1,14 @@
+@page { size: 68mm 38mm; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { width: 68mm; height: 38mm; font-family: "JetBrains Mono", monospace; }
+.label {
+  width: 68mm;
+  height: 38mm;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2mm;
+}
+.order-number { font-size: 5mm; line-height: 5.5mm; font-weight: bold; margin-bottom: 1mm; }
+.qr { width: 26mm; height: 26mm; }
