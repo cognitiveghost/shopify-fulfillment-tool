@@ -34,10 +34,16 @@ def test_fontconfig_env_prefers_bundled_frozen_candidate(monkeypatch, tmp_path):
     bundled = tmp_path / "gtk-dlls" / "etc" / "fonts"
     bundled.mkdir(parents=True)
     (bundled / "fonts.conf").write_text("")
+    # A valid fallback candidate too, so picking `bundled` actually proves
+    # precedence rather than just being the only valid option available.
+    fallback = tmp_path / "fallback"
+    fallback.mkdir()
+    (fallback / "fonts.conf").write_text("")
 
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "App.exe"), raising=False)
+    monkeypatch.setattr(gui_main, "_WINDOWS_GTK3_FONTCONFIG_CANDIDATES", (str(fallback),))
     monkeypatch.delenv("FONTCONFIG_PATH", raising=False)
 
     gui_main.configure_windows_fontconfig_env()
@@ -46,16 +52,22 @@ def test_fontconfig_env_prefers_bundled_frozen_candidate(monkeypatch, tmp_path):
 
 
 def test_fontconfig_env_skips_candidates_missing_fonts_conf(monkeypatch, tmp_path):
+    valid = tmp_path / "valid"
+    valid.mkdir()
+    (valid / "fonts.conf").write_text("")
+
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(sys, "frozen", False, raising=False)
     monkeypatch.setattr(
-        gui_main, "_WINDOWS_GTK3_FONTCONFIG_CANDIDATES", (str(tmp_path / "nowhere"),)
+        gui_main,
+        "_WINDOWS_GTK3_FONTCONFIG_CANDIDATES",
+        (str(tmp_path / "nowhere"), str(valid)),
     )
     monkeypatch.delenv("FONTCONFIG_PATH", raising=False)
 
     gui_main.configure_windows_fontconfig_env()
 
-    assert "FONTCONFIG_PATH" not in os.environ
+    assert os.environ["FONTCONFIG_PATH"] == str(valid)
 
 
 def test_fontconfig_env_never_overrides_existing_value(monkeypatch):
