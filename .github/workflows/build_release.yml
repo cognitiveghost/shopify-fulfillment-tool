@@ -95,6 +95,7 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item -Recurse -Path "C:\msys64\mingw64\bin" -Destination "dist\ShopifyFulfillmentTool\gtk-dlls"
+          Copy-Item -Recurse -Path "C:\msys64\mingw64\etc\fonts" -Destination "dist\ShopifyFulfillmentTool\gtk-dlls\etc\fonts"
       - name: Zip artifact
         shell: pwsh
         run: |

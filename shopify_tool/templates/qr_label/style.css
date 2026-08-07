@@ -10,5 +10,5 @@ body { width: 68mm; height: 38mm; font-family: "JetBrains Mono", monospace; }
   justify-content: center;
   padding: 2mm;
 }
-.order-number { font-size: 7mm; font-weight: bold; margin-bottom: 2mm; }
-.qr { width: 30mm; height: 30mm; }
+.order-number { font-size: 5mm; line-height: 5.5mm; font-weight: bold; margin-bottom: 1mm; }
+.qr { width: 26mm; height: 26mm; }

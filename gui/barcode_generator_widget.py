@@ -419,18 +419,25 @@ class BarcodeGeneratorWidget(QWidget):
             f"{len(failed)} failed"
         )
 
-        if successful:
-            self._generate_pdf_from_results(successful)
+        pdf_generated = self._generate_pdf_from_results(successful) if successful else False
 
-        message = f"Successfully generated {len(successful)} barcode labels as a PDF document."
+        if successful and not pdf_generated:
+            QMessageBox.critical(
+                self,
+                "PDF Generation Failed",
+                f"{len(successful)} barcodes were validated, but rendering the "
+                "PDF failed.\n\nSee execution log for details."
+            )
+        else:
+            message = f"Successfully generated {len(successful)} barcode labels as a PDF document."
 
-        if failed:
-            message += f"\n\n{len(failed)} barcodes failed to generate."
+            if failed:
+                message += f"\n\n{len(failed)} barcodes failed to generate."
 
-        QMessageBox.information(self, "Generation Complete", message)
+            QMessageBox.information(self, "Generation Complete", message)
 
         # Auto-open folder if enabled
-        if self.auto_open_folder_checkbox.isChecked():
+        if pdf_generated and self.auto_open_folder_checkbox.isChecked():
             self._open_barcodes_folder()
 
         # Emit signal
@@ -463,7 +470,10 @@ class BarcodeGeneratorWidget(QWidget):
         self.generate_btn.setEnabled(True)
 
     def _generate_pdf_from_results(self, results):
-        """Generate the barcode labels PDF from prepared order records."""
+        """Generate the barcode labels PDF from prepared order records.
+
+        Returns True on success, False if rendering failed.
+        """
         try:
             from shopify_tool.barcode_processor import generate_code128_labels_pdf
 
@@ -476,9 +486,11 @@ class BarcodeGeneratorWidget(QWidget):
 
             url = QUrl.fromLocalFile(str(pdf_path))
             QDesktopServices.openUrl(url)
+            return True
 
         except Exception:
             self.log.exception("PDF generation failed")
+            return False
 
 
     def _open_barcodes_folder(self):

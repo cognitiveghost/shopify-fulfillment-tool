@@ -10,6 +10,7 @@ import pypdf
 import pytest
 from barcode.codex import Code128
 
+from shopify_tool import label_tools
 from shopify_tool.barcode_processor import (
     InvalidOrderNumberError,
     format_tags_for_barcode,
@@ -106,6 +107,13 @@ class TestGenerateBarcodesBatch:
         assert results[0]["safe_order_number"] is None
         assert results[0]["error"]
 
+    @pytest.mark.parametrize("missing", [float("nan"), None, pd.NA])
+    def test_missing_order_number_reports_failure_not_nan_string(self, missing):
+        results = generate_barcodes_batch(self._df(Order_Number=missing))
+        assert results[0]["success"] is False
+        assert results[0]["safe_order_number"] is None
+        assert results[0]["error"]
+
     def test_sequential_numbering_defaults_to_row_index_plus_one(self):
         df = pd.concat([self._df(Order_Number="#1"), self._df(Order_Number="#2")], ignore_index=True)
         results = generate_barcodes_batch(df)
@@ -160,3 +168,21 @@ class TestGenerateQrLabelsPdfIntegration:
     def test_empty_orders_raises_value_error(self, tmp_path):
         with pytest.raises(ValueError):
             generate_qr_labels_pdf([], tmp_path / "qr_labels.pdf")
+
+    def test_qr_payload_uses_sku_x_qty_format(self, tmp_path, monkeypatch):
+        captured = {}
+        original_qr_code = label_tools.qr_code
+
+        def spy_qr_code(data, *args, **kwargs):
+            captured["data"] = data
+            return original_qr_code(data, *args, **kwargs)
+
+        monkeypatch.setattr(label_tools, "qr_code", spy_qr_code)
+
+        orders = [{
+            "order_number": "#1029392",
+            "sku_qty_lines": [("WIDGET", 2), ("GADGET", 1)],
+        }]
+        generate_qr_labels_pdf(orders, tmp_path / "qr_labels.pdf")
+
+        assert captured["data"] == "#1029392\nWIDGET x 2\nGADGET x 1"

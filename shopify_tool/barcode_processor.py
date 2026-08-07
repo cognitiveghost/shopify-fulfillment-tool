@@ -161,7 +161,7 @@ def generate_barcodes_batch(
         logger.info("Using independent packing list numbering (1, 2, 3...)")
 
     for idx, row in df.iterrows():
-        order_number = str(row['Order_Number'])
+        order_number = "" if pd.isna(row['Order_Number']) else str(row['Order_Number'])
         if sequential_map:
             sequential_num = sequential_map.get(order_number, idx + 1)
         else:
@@ -301,7 +301,7 @@ def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Pa
 
     records = []
     for order in orders:
-        lines = [f"{sku} x{qty}" for sku, qty in order["sku_qty_lines"]]
+        lines = [f"{sku} x {qty}" for sku, qty in order["sku_qty_lines"]]
         qr_payload = "\n".join([order["order_number"], *lines])
         records.append({
             "order_number": order["order_number"],
