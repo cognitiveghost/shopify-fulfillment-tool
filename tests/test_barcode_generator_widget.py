@@ -25,15 +25,17 @@ class _FakeWidget:
         self.current_packing_list = "PL1"
         self.generation_complete = Mock()
         self.opened_folder = False
+        self.pdf_render_calls = 0
 
     def _generate_pdf_from_results(self, results):
+        self.pdf_render_calls += 1
         return self._pdf_ok
 
     def _open_barcodes_folder(self):
         self.opened_folder = True
 
 
-def _run(monkeypatch, pdf_ok, auto_open=True):
+def _run(monkeypatch, pdf_ok, results=None, auto_open=True):
     info = Mock()
     critical = Mock()
     monkeypatch.setattr(QMessageBox, "information", info)
@@ -41,7 +43,8 @@ def _run(monkeypatch, pdf_ok, auto_open=True):
 
     widget = _FakeWidget(pdf_ok)
     widget.auto_open_folder_checkbox.isChecked.return_value = auto_open
-    results = [{"success": True, "order_number": "#1"}]
+    if results is None:
+        results = [{"success": True, "order_number": "#1"}]
 
     BarcodeGeneratorWidget._on_generation_complete(widget, results)
     return widget, info, critical
@@ -59,3 +62,11 @@ def test_pdf_render_success_shows_completion_message(monkeypatch):
     assert info.called
     assert not critical.called
     assert widget.opened_folder
+
+
+def test_all_orders_failed_skips_pdf_render_and_shows_completion_message(monkeypatch):
+    widget, info, critical = _run(monkeypatch, pdf_ok=True, results=[{"success": False, "order_number": "#1"}])
+    assert widget.pdf_render_calls == 0
+    assert info.called
+    assert not critical.called
+    assert not widget.opened_folder
