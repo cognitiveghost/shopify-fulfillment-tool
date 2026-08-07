@@ -173,21 +173,58 @@ default) is what makes each PDF page one label.
 **Wiring** (`gui/barcode_generator_widget.py`, `_generate_barcodes_worker`): builds the
 `orders` list (already collects this data today; currently feeds it into per-order PIL
 calls) and calls the two functions above instead of the old per-order-then-composite flow.
-No change to D-3's UI decisions (PDF-only, no PNG checkbox) — this implementation has no PNG
-step to clean up at all, which is simpler than D-3 assumed ("PNGs remain an internal
-implementation detail... always cleaned up after the PDF is built").
+With no PNG artifact ever produced, `generate_png_checkbox` and `generate_pdf_checkbox`
+(currently letting the user choose PNG-only/PDF-only/both) become structurally meaningless —
+this patch removes both, PDF becomes the unconditional output. This mechanically implements
+the narrow "no PNG, PDF isn't optional" slice of D-3's already-decided end state for just
+these two controls; D-3's other UI changes (info label removal, auto-open-folder→Print button
+swap, "Add QR labels" checkbox, Print buttons themselves) are untouched — still D-3's job.
 
 ### P-4: Font bundling
 
 JetBrains Mono, matching `barcode_tool` exactly — same font, same `fit_font_block()`
 character-width math (`_MONO_CHAR_WIDTH = 0.6`), no new measurement logic needed. Font files
-live under `shopify_tool/templates/assets/fonts/` and must be added to the PyInstaller spec's
-data files alongside the templates themselves (both are new categories of bundled non-Python
-assets this app didn't have before).
+live under `shopify_tool/templates/assets/fonts/`.
 
 <!-- ponytail: a missing bundled font or WeasyPrint native dep doesn't always crash — a
 missing @font-face file falls back to a default font silently. Mitigated by the CI check in
-Testing below, not by runtime error handling (there's nothing to catch). -->
+P-5/Testing below, not by runtime error handling (there's nothing to catch). -->
+
+### P-5: Windows packaging (verified against `barcode_tool`'s proven, shipping recipe)
+
+This app's actual current release build (`.github/workflows/build_release.yml`) is
+`pyinstaller --onefile --windowed gui_main.py`, shipping a single `.exe`. That is **not**
+sufficient for WeasyPrint — `barcode_tool`'s working Windows build needed all of the
+following, verified by reading its actual `release.yml` and `app/main.py` (not assumed):
+
+1. **Runtime DLL-path setup** (`gui_main.py`, before `from gui.main_window_pyside import
+   MainWindow` — that import chain reaches `barcode_processor.py`, which imports `blabel`):
+   port `barcode_tool`'s `configure_frozen_weasyprint_env()` (calls
+   `os.add_dll_directory(...)` pointing at a `gtk-dlls/` folder next to the frozen exe, only
+   when `sys.frozen`) and `configure_windows_fontconfig_env()` (best-effort `FONTCONFIG_PATH`,
+   never overrides an existing value).
+2. **CI `verify` job** (Linux, already runs `pytest`): add the Pango/Cairo/GDK-Pixbuf system
+   packages WeasyPrint needs to import at all
+   (`libpango-1.0-0 libcairo2 libgdk-pixbuf-2.0-0`, alongside the `libegl1` this job already
+   installs for Qt).
+3. **CI `build` job rewrite**: `--onefile` → `--onedir --noconfirm`, add
+   `--add-data "shopify_tool/templates;shopify_tool/templates"` and `--collect-data blabel`
+   (blabel ships its own package data — needed regardless of our custom templates). Add an
+   MSYS2 step (`C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed
+   mingw-w64-x86_64-pango`) — GitHub's `windows-latest` runner image ships MSYS2
+   pre-installed at `C:\msys64`, confirmed by `barcode_tool`'s workflow using it with no
+   separate MSYS2-install step. Then copy `C:\msys64\mingw64\bin` into
+   `dist\<name>\gtk-dlls\` before packaging.
+4. **Release artifact changes shape**: a `.zip` of the onedir folder, not a single `.exe`.
+   This is a real, user-facing change to how warehouse PCs receive updates — extract-and-run
+   instead of download-and-run-one-file. Flagged explicitly; not treated as an internal-only
+   CI detail.
+5. **Known WeasyPrint/pytest gotcha** (`barcode_tool` hit this in production CI): Pango's
+   font-map cache carries state across renders within the same process. A test asserting the
+   bundled font is actually applied can pass in isolation but segfault the process once
+   enough prior WeasyPrint renders have accumulated state in the same `pytest` run. Mitigation
+   (matching `barcode_tool`): run any such font-identity-asserting test in its own `pytest -k`
+   invocation, separate from the rest of the suite.
 
 ## Testing
 
@@ -202,16 +239,19 @@ shared` must pass before merge.
 - New `tests/test_label_tools.py`: `barcode()` / `qr_code()` return well-formed SVG data-URI
   strings without raising, for typical order numbers and edge cases (very long order number,
   special characters surviving `sanitize_order_number()`). `fit_font_block()` returns a value
-  within `[min_mm, max_mm]` and actually shrinks for longer text.
-- **CI**: extend the existing headless smoke test in `.github/workflows/build_release.yml` to
-  render one real label PDF from the **PyInstaller-built** package, not just the dev
-  environment — this is the check that actually catches "works on my machine, breaks in the
-  packaged `.zip`," the exact risk class that made WeasyPrint-on-Windows a concern in the
-  first place. A missing bundled font also only shows up this way (see P-4's ponytail note),
-  not via any runtime exception.
+  within `[min_mm, max_mm]` and actually shrinks for longer text. Any test asserting the
+  bundled font was actually used (not a fallback) is isolated per P-5 point 5.
+- **CI**: the `build` job (P-5) now produces a real onedir Windows package with the bundled
+  templates/fonts/GTK DLLs — that build succeeding *is* the check that catches "works on my
+  machine, breaks in the packaged build," the risk class that made WeasyPrint-on-Windows a
+  concern in the first place. A missing bundled font doesn't crash (falls back silently, see
+  P-4's ponytail note) — only a real print/render smoke test on the built package would catch
+  that; not added here (no Windows runner available for an interactive smoke test beyond what
+  PyInstaller itself already validates at build time), tracked as a Follow-up.
 - **Manual QA** (unautomatable, matches D-4's existing testing section): print a real batch
   to the physical Citizen CL-E300; confirm the scanner reads the new vector Code-128 as
-  reliably as today's raster one.
+  reliably as today's raster one. Also confirm the new `.zip` distribution extracts and runs
+  correctly on a real warehouse PC.
 
 ## Files touched
 
@@ -221,10 +261,14 @@ shared` must pass before merge.
 - `shopify_tool/templates/assets/fonts/{fonts.css,*.ttf}` — new
 - `shopify_tool/barcode_processor.py` — delete PIL/reportlab rendering code, add
   `generate_code128_labels_pdf()` / `generate_qr_labels_pdf()`
-- `gui/barcode_generator_widget.py` — `_generate_barcodes_worker` calls the new functions
+- `gui/barcode_generator_widget.py` — `_generate_barcodes_worker` calls the new functions,
+  `generate_png_checkbox`/`generate_pdf_checkbox` removed
+- `gui_main.py` — add `configure_frozen_weasyprint_env()` /
+  `configure_windows_fontconfig_env()`, called before `MainWindow` import
 - `requirements.txt` — add `blabel`, `qrcode`
-- PyInstaller spec — add templates dir + font files as bundled data
-- `.github/workflows/build_release.yml` — extend smoke test to render a label post-build
+- `.github/workflows/build_release.yml` — `verify` job gets WeasyPrint's Linux system deps;
+  `build` job rewritten: `--onefile`→`--onedir`, MSYS2 Pango install, `--add-data`/
+  `--collect-data blabel`, GTK DLL bundling, `.zip` artifact instead of renamed `.exe`
 - `tests/test_barcode_processor.py` — extended
 - `tests/test_label_tools.py` — new
 
@@ -245,3 +289,9 @@ the surrounding window/workflow changes D-1–D-3 already specified.
   revisit if that need actually materializes.
 - If a future courier or label size needs different dimensions, the `@page` rule in each
   template's `style.css` is now the single place to change it.
+- An actual print/render smoke test against the built Windows package (beyond PyInstaller
+  succeeding) needs a Windows runner exercising the frozen exe — not added here.
+- `barcode_tool`'s Windows build bundles the *entire* MSYS2 `mingw64/bin` tree rather than a
+  hand-picked minimal DLL set (their own documented known limitation — bigger artifact than
+  strictly necessary, but correct without manually tracing the dependency graph). Same
+  trade-off adopted here for the same reason; revisit if artifact size becomes a problem.
