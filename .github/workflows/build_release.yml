@@ -81,14 +81,27 @@ jobs:
           pip install -r requirements.txt
           # PyInstaller is in dev requirements
           pip install -r requirements-dev.txt
-      - name: Build executable with PyInstaller
-        run: pyinstaller --onefile --windowed gui_main.py
-      - name: Rename executable
-        shell: bash
-        run: mv dist/gui_main.exe "dist/ShopifyFulfillmentTool-v${{ github.ref_name }}.exe"
+      - name: Install Pango/GTK runtime (MSYS2)
+        shell: cmd
+        run: |
+          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-pango
+      - name: Build with PyInstaller
+        run: >
+          pyinstaller --name ShopifyFulfillmentTool --onedir --windowed --noconfirm
+          --add-data "shopify_tool/templates;shopify_tool/templates"
+          --collect-data blabel
+          gui_main.py
+      - name: Bundle GTK DLLs
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse -Path "C:\msys64\mingw64\bin" -Destination "dist\ShopifyFulfillmentTool\gtk-dlls"
+      - name: Zip artifact
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\ShopifyFulfillmentTool\*" -DestinationPath "ShopifyFulfillmentTool-v${{ github.ref_name }}.zip"
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ShopifyFulfillmentTool-v${{ github.ref_name }}.exe
+          files: ShopifyFulfillmentTool-v${{ github.ref_name }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
