@@ -1,0 +1,56 @@
+@page { size: 68mm 38mm; margin: 0; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { width: 68mm; height: 38mm; font-family: "JetBrains Mono", monospace; }
+
+.label {
+  width: 68mm;
+  height: 38mm;
+  display: flex;
+  flex-direction: row;
+  padding: 1mm;
+}
+
+.info {
+  width: 24mm;
+  display: flex;
+  flex-direction: column;
+  padding-right: 1mm;
+}
+
+.seq { font-size: 5.5mm; font-weight: bold; }
+.courier {
+  font-size: 5mm;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.date { font-size: 3mm; }
+
+hr { border: none; border-top: 0.5mm solid black; margin: 0.5mm 0; }
+hr.thin { border-top-width: 0.3mm; }
+
+.field { display: flex; font-size: 3mm; font-weight: bold; margin: 0.3mm 0; }
+.field-label { width: 8mm; }
+.field-value { flex: 1; }
+
+.tag-field { flex: 1; align-items: flex-start; }
+
+.barcode-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.barcode { width: 41mm; height: 20mm; margin-top: 1mm; }
+
+.order-number {
+  font-size: 6mm;
+  font-weight: bold;
+  margin-top: 1mm;
+  text-align: center;
+}
