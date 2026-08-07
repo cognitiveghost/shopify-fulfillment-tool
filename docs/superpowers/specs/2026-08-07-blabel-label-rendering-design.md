@@ -78,7 +78,12 @@ label types need:
 ```python
 def barcode(data: str, **writer_options) -> str:
     """Vector Code-128 barcode as an <img src=...> SVG data URI, no human-readable
-    text (the label prints its own caption), via python-barcode's SVG writer."""
+    text (the label prints its own caption). Thin wrapper around blabel's own
+    built-in blabel.label_tools.barcode(data, fmt="svg", write_text=False,
+    **writer_options) — verified working for alphanumeric Code-128 data
+    (order numbers containing '#'/'-' render correctly; the function's
+    internal .zfill(constructor.digits) call is a no-op for Code128, whose
+    `digits` class attribute is 0)."""
 
 def qr_code(data: str, border: int = 2, **qr_code_params) -> str:
     """Vector QR code as an <img src=...> SVG data URI, via qrcode's SvgPathImage."""
@@ -109,15 +114,19 @@ shopify_tool/templates/assets/fonts/{JetBrains Mono files, fonts.css}
 
 - `barcode_label/`: Jinja2 template laying out the label as a CSS grid — the same fields the
   current PIL code draws (seq#, courier, date, item count, country, tag, order number) as
-  label:value rows, calling `{{ label_tools.barcode(item.order_number) }}` for the code and
-  `{{ label_tools.fit_font_block(item.tag, ...) }}` for the tag field instead of the current
-  manual pixel positions, six graduated font sizes, and truncate-with-ellipsis. Note: `blabel`
-  passes each page's records to the template as an `items` list (length `items_per_page`,
-  which P-3 sets to 1) — fields are `item.field`, not flat top-level variables, even though
-  each page holds exactly one label.
-- `qr_label/`: order number as large text, `{{ label_tools.qr_code(item.qr_payload) }}` below
-  it — same content D-4 already specified, now rendered via template instead of Python
-  `QrCodeWidget` drawing calls. Same `items`-list convention as above.
+  label:value rows, calling `{{ label_tools.barcode(order_number) }}` for the code and
+  `{{ label_tools.fit_font_block(tag, ...) }}` for the tag field instead of the current
+  manual pixel positions, six graduated font sizes, and truncate-with-ellipsis. Verified
+  against the installed `blabel==0.1.7`: `LabelWriter.record_to_html()` renders the item
+  template **once per record**, passing each record's dict keys as flat top-level template
+  variables (`context.update(record)` before `.render(**context)`) — so fields are
+  `{{ order_number }}` directly, not wrapped in an `items` list, regardless of
+  `items_per_page`. (An earlier draft of this spec claimed the opposite; corrected after
+  actually running `LabelWriter.write_labels()` against a 2-record batch during
+  implementation-plan verification.)
+- `qr_label/`: order number as large text, `{{ label_tools.qr_code(qr_payload) }}` below it —
+  same content D-4 already specified, now rendered via template instead of Python
+  `QrCodeWidget` drawing calls. Same flat-field convention as above.
 - Both `style.css` files set `@page { size: 68mm 38mm; margin: 0 }` (page size lives here
   now, not in Python — see Non-goals).
 - `fonts.css` declares `@font-face` for JetBrains Mono, referenced by both label stylesheets.
@@ -158,8 +167,8 @@ def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Pa
 Both build a `list[dict]` of records (sanitizing/formatting via the kept functions above),
 then a single `blabel.LabelWriter(template_path, default_stylesheets=(fonts_css, style_css),
 items_per_page=1, label_tools=label_tools).write_labels(records, target=str(output_pdf))`
-call — no per-order Python loop, no PNG files ever created. `items_per_page=1` is what makes
-each PDF page one label (see P-2's `items`-list note).
+call — no per-order Python loop, no PNG files ever created. `items_per_page=1` (blabel's own
+default) is what makes each PDF page one label.
 
 **Wiring** (`gui/barcode_generator_widget.py`, `_generate_barcodes_worker`): builds the
 `orders` list (already collects this data today; currently feeds it into per-order PIL
