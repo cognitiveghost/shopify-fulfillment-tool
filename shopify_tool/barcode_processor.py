@@ -285,8 +285,10 @@ def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Pa
     Render one QR label per order as a single multi-page PDF.
 
     Args:
-        orders: List of dicts: order_number (str), sku_qty_lines
-            (list[tuple[str, int]] -- (SKU, quantity) pairs for that order).
+        orders: List of dicts as produced by generate_barcodes_batch()'s
+            successful results -- same shape generate_code128_labels_pdf()
+            takes: safe_order_number, sequential_num, courier, country, tag,
+            item_count. The QR code encodes the order number only.
         output_pdf: Output PDF path.
 
     Returns:
@@ -299,14 +301,19 @@ def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Pa
     if not orders:
         raise ValueError("Cannot generate PDF: no orders provided")
 
-    records = []
-    for order in orders:
-        lines = [f"{sku} x {qty}" for sku, qty in order["sku_qty_lines"]]
-        qr_payload = "\n".join([order["order_number"], *lines])
-        records.append({
-            "order_number": order["order_number"],
-            "qr_payload": qr_payload,
-        })
+    date_str = datetime.now().astimezone().strftime("%d/%m/%y")
+    records = [
+        {
+            "order_number": order["safe_order_number"],
+            "sequential_num": order["sequential_num"],
+            "courier": order["courier"],
+            "country": order["country"],
+            "tag": order["tag"],
+            "item_count": order["item_count"],
+            "date_str": date_str,
+        }
+        for order in orders
+    ]
 
     try:
         writer = LabelWriter(

@@ -3,7 +3,7 @@
 <body>
   <div class="label">
     <div class="order-number">{{ order_number }}</div>
-    <img class="qr" src="{{ label_tools.qr_code(qr_payload) }}"/>
+    <img class="qr" src="{{ label_tools.qr_code(order_number) }}"/>
   </div>
 </body>
 </html>

@@ -154,22 +154,30 @@ class TestGenerateCode128LabelsPdfIntegration:
 
 
 class TestGenerateQrLabelsPdfIntegration:
+    def _order(self, **overrides):
+        order = {
+            "safe_order_number": "#1029392",
+            "sequential_num": 7, "courier": "DHL", "country": "DE",
+            "tag": "N/A", "item_count": 3,
+        }
+        order.update(overrides)
+        return order
+
     def test_generates_pdf_with_one_page_per_order(self, tmp_path):
         output_pdf = tmp_path / "qr_labels.pdf"
-        orders = [{
-            "order_number": "#1029392",
-            "sku_qty_lines": [("WIDGET", 2), ("GADGET", 1)],
-        }]
-        result = generate_qr_labels_pdf(orders, output_pdf)
+        result = generate_qr_labels_pdf(
+            [self._order(safe_order_number="#1"), self._order(safe_order_number="#2")],
+            output_pdf,
+        )
         assert result == output_pdf
         reader = pypdf.PdfReader(str(output_pdf))
-        assert len(reader.pages) == 1
+        assert len(reader.pages) == 2
 
     def test_empty_orders_raises_value_error(self, tmp_path):
         with pytest.raises(ValueError):
             generate_qr_labels_pdf([], tmp_path / "qr_labels.pdf")
 
-    def test_qr_payload_uses_sku_x_qty_format(self, tmp_path, monkeypatch):
+    def test_qr_payload_is_order_number_only(self, tmp_path, monkeypatch):
         captured = {}
         original_qr_code = label_tools.qr_code
 
@@ -179,10 +187,8 @@ class TestGenerateQrLabelsPdfIntegration:
 
         monkeypatch.setattr(label_tools, "qr_code", spy_qr_code)
 
-        orders = [{
-            "order_number": "#1029392",
-            "sku_qty_lines": [("WIDGET", 2), ("GADGET", 1)],
-        }]
-        generate_qr_labels_pdf(orders, tmp_path / "qr_labels.pdf")
+        generate_qr_labels_pdf(
+            [self._order(safe_order_number="#1029392")], tmp_path / "qr_labels.pdf"
+        )
 
-        assert captured["data"] == "#1029392\nWIDGET x 2\nGADGET x 1"
+        assert captured["data"] == "#1029392"
