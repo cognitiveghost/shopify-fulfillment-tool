@@ -8,12 +8,19 @@ body { width: 68mm; height: 38mm; font-family: "JetBrains Mono", monospace; }
   width: 68mm;
   height: 38mm;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   padding: 1mm;
 }
 
+.top-row {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+
 .info {
-  width: 24mm;
+  width: 22mm;
   display: flex;
   flex-direction: column;
   padding-right: 1mm;
@@ -36,8 +43,6 @@ hr.thin { border-top-width: 0.3mm; }
 .field-label { width: 8mm; }
 .field-value { flex: 1; }
 
-.tag-field { flex: 1; align-items: flex-start; }
-
 .barcode-section {
   flex: 1;
   display: flex;
@@ -53,4 +58,23 @@ hr.thin { border-top-width: 0.3mm; }
   font-weight: bold;
   margin-top: 1mm;
   text-align: center;
+}
+
+.tag-row {
+  height: 8mm;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  border-top: 0.3mm solid black;
+  padding-top: 0.5mm;
+  margin-top: 0.5mm;
+  overflow: hidden;
+}
+
+.tag-row .field-label { width: 9mm; font-size: 3mm; font-weight: bold; }
+.tag-row .field-value {
+  font-weight: bold;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
 }
