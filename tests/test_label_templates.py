@@ -24,6 +24,14 @@ class TestBarcodeLabelLayout:
         assert "box_width_mm=14" not in html
         assert "fit_font_block" in html
 
+    def test_courier_and_info_column_have_min_width_guard(self):
+        """Regression guard: a long courier name previously pushed .info (and the
+        barcode/order-number next to it) off the printable page edge, because
+        WeasyPrint's flexbox gives nested flex items an implicit min-width:auto
+        that ignores white-space:nowrap/overflow:hidden unless overridden."""
+        css = (_TEMPLATES_DIR / "barcode_label" / "style.css").read_text()
+        assert "min-width: 0" in css
+
 
 class TestQrLabelLayout:
     def test_mirrors_barcode_label_info_column_and_tag_row(self):
