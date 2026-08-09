@@ -44,3 +44,11 @@ class TestQrLabelLayout:
     def test_qr_code_encodes_order_number_not_multiline_payload(self):
         html = (_TEMPLATES_DIR / "qr_label" / "template.html").read_text()
         assert "label_tools.qr_code(order_number)" in html
+
+    def test_courier_and_info_column_have_min_width_guard(self):
+        """Same regression guard as the Code-128 label (see
+        TestBarcodeLabelLayout.test_courier_and_info_column_have_min_width_guard)
+        -- the QR label shares the same .info/.courier structure and needs the
+        same fix."""
+        css = (_TEMPLATES_DIR / "qr_label" / "style.css").read_text()
+        assert "min-width: 0" in css
