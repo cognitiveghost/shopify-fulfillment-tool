@@ -152,6 +152,27 @@ class TestGenerateCode128LabelsPdfIntegration:
         with pytest.raises(ValueError):
             generate_code128_labels_pdf([], tmp_path / "labels.pdf")
 
+    def test_long_courier_and_multi_tag_order_renders_without_crash(self, tmp_path):
+        """Coverage for the input shape that surfaced the flex min-width overflow
+        bug during the 2026-08-09 layout redesign (see
+        docs/superpowers/specs/2026-08-09-barcode-label-layout-redesign-design.md):
+        a long courier name and a multi-segment tag value. The bug itself doesn't
+        raise or change page count -- the real regression guard is the CSS
+        min-width:0 marker test in test_label_templates.py -- this just confirms
+        the template still renders end-to-end for this input shape."""
+        output_pdf = tmp_path / "stress.pdf"
+        result = generate_code128_labels_pdf(
+            [self._order(
+                courier="DHL Express International",
+                tag="GIFT+1|GIFT+2|PRIORITY|FRAGILE",
+                item_count=15,
+            )],
+            output_pdf,
+        )
+        assert result == output_pdf
+        reader = pypdf.PdfReader(str(output_pdf))
+        assert len(reader.pages) == 1
+
 
 class TestGenerateQrLabelsPdfIntegration:
     def _order(self, **overrides):
@@ -192,3 +213,19 @@ class TestGenerateQrLabelsPdfIntegration:
         )
 
         assert captured["data"] == "#1029392"
+
+    def test_long_courier_and_multi_tag_order_renders_without_crash(self, tmp_path):
+        """See TestGenerateCode128LabelsPdfIntegration's test of the same name --
+        same stress-case input, same rationale, applied to the QR label path."""
+        output_pdf = tmp_path / "qr_stress.pdf"
+        result = generate_qr_labels_pdf(
+            [self._order(
+                courier="DHL Express International",
+                tag="GIFT+1|GIFT+2|PRIORITY|FRAGILE",
+                item_count=15,
+            )],
+            output_pdf,
+        )
+        assert result == output_pdf
+        reader = pypdf.PdfReader(str(output_pdf))
+        assert len(reader.pages) == 1
