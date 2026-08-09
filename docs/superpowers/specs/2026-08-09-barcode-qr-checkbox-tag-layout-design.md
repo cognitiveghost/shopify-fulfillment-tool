@@ -222,6 +222,9 @@ Per `AGENTS.md`: `QT_QPA_PLATFORM=offscreen python -m pytest` and
 - `tests/test_barcode_processor.py` — `TestGenerateQrLabelsPdfIntegration` updated
 - `tests/test_barcode_generator_widget.py` — `_FakeWidget` and assertions updated, QR
   scenarios added
+- `tests/test_label_templates.py` — new; structural regression tests reading the template
+  files directly (tag-row present, hard overflow guard present) so the fix can't silently
+  regress even though visual correctness itself stays manual QA
 
 ## Follow-ups (not in this patch's scope)
 
