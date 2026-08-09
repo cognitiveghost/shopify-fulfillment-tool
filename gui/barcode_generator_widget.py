@@ -121,25 +121,15 @@ class BarcodeGeneratorWidget(QWidget):
         group = QGroupBox("Options")
         layout = QVBoxLayout(group)
 
-        # Auto-open folder checkbox
-        self.auto_open_folder_checkbox = QCheckBox("Auto-open barcodes folder after generation")
-        self.auto_open_folder_checkbox.setChecked(True)
-        layout.addWidget(self.auto_open_folder_checkbox)
+        # Add QR labels checkbox
+        self.add_qr_checkbox = QCheckBox("Add QR labels (order number)")
+        self.add_qr_checkbox.setChecked(False)
+        layout.addWidget(self.add_qr_checkbox)
 
-        # Output format options
-        format_label = QLabel("Output Format:")
-        format_label.setStyleSheet("font-weight: bold; margin-top: 5px;")
-        layout.addWidget(format_label)
-
-        # Generate PNG checkbox
-        self.generate_png_checkbox = QCheckBox("Generate PNG files (individual barcode images)")
-        self.generate_png_checkbox.setChecked(False)  # Optional, off by default
-        layout.addWidget(self.generate_png_checkbox)
-
-        # Generate PDF checkbox
-        self.generate_pdf_checkbox = QCheckBox("Generate PDF file (all barcodes in one document)")
-        self.generate_pdf_checkbox.setChecked(True)  # Default option
-        layout.addWidget(self.generate_pdf_checkbox)
+        # Auto-open PDF checkbox
+        self.auto_open_pdf_checkbox = QCheckBox("Auto-open PDF after generation")
+        self.auto_open_pdf_checkbox.setChecked(True)
+        layout.addWidget(self.auto_open_pdf_checkbox)
 
         # Output directory label
         output_row = QHBoxLayout()
@@ -340,32 +330,14 @@ class BarcodeGeneratorWidget(QWidget):
             )
             return
 
-        # Validate format selection
-        if not self.generate_png_checkbox.isChecked() and not self.generate_pdf_checkbox.isChecked():
-            QMessageBox.warning(
-                self,
-                "No Format Selected",
-                "Please select at least one output format (PNG or PDF)."
-            )
-            return
-
         # Confirm generation
         order_count = self.filtered_orders_df['Order_Number'].nunique()
-
-        # Build format string
-        formats = []
-        if self.generate_png_checkbox.isChecked():
-            formats.append("PNG")
-        if self.generate_pdf_checkbox.isChecked():
-            formats.append("PDF")
-        format_str = " + ".join(formats)
 
         reply = QMessageBox.question(
             self,
             "Confirm Generation",
             f"Generate barcodes for {order_count} orders?\n\n"
             f"Packing List: {self.current_packing_list}\n"
-            f"Output Format: {format_str}\n"
             f"Output: {self.barcodes_dir}",
             QMessageBox.Yes | QMessageBox.No
         )
@@ -425,10 +397,9 @@ class BarcodeGeneratorWidget(QWidget):
 
         self.log.info("Using independent sequential numbering (1, 2, 3...) in natural order")
 
-        # Generate barcodes with independent numbering per packing list (sequential_map=None)
+        # Prepare barcode records with independent numbering per packing list
         results = generate_barcodes_batch(
             df=unique_orders,
-            output_dir=self.barcodes_dir,
             sequential_map=None,  # Independent per-generation numbering
             progress_callback=None  # No progress updates from worker thread
         )
@@ -453,33 +424,38 @@ class BarcodeGeneratorWidget(QWidget):
             f"{len(failed)} failed"
         )
 
-        # Generate PDF if requested
-        if self.generate_pdf_checkbox.isChecked() and successful:
-            self._generate_pdf_from_results(successful)
+        pdf_generated = self._generate_pdf_from_results(successful) if successful else False
 
-        # Delete PNG files if user only wants PDF
-        if self.generate_pdf_checkbox.isChecked() and not self.generate_png_checkbox.isChecked() and successful:
-            self._cleanup_png_files(successful)
-            self.log.info(f"Cleaned up {len(successful)} PNG files (PDF-only mode)")
+        want_qr = bool(successful) and self.add_qr_checkbox.isChecked()
+        qr_pdf_generated = self._generate_qr_pdf_from_results(successful) if want_qr else False
 
-        # Show summary
-        formats_generated = []
-        if self.generate_png_checkbox.isChecked():
-            formats_generated.append("PNG files")
-        if self.generate_pdf_checkbox.isChecked():
-            formats_generated.append("PDF document")
-        format_msg = " and ".join(formats_generated)
+        if successful and not pdf_generated:
+            QMessageBox.critical(
+                self,
+                "PDF Generation Failed",
+                f"{len(successful)} barcodes were validated, but rendering the "
+                "PDF failed.\n\nSee execution log for details."
+            )
+        else:
+            message = f"Successfully generated {len(successful)} barcode labels as a PDF document."
 
-        message = f"Successfully generated {len(successful)} barcode labels as {format_msg}."
+            if want_qr:
+                if qr_pdf_generated:
+                    message += "\n\nAlso generated QR labels as a PDF document."
+                else:
+                    message += "\n\nQR labels PDF failed to generate. See execution log for details."
 
-        if failed:
-            message += f"\n\n{len(failed)} barcodes failed to generate."
+            if failed:
+                message += f"\n\n{len(failed)} barcodes failed to generate."
 
-        QMessageBox.information(self, "Generation Complete", message)
+            QMessageBox.information(self, "Generation Complete", message)
 
-        # Auto-open folder if enabled
-        if self.auto_open_folder_checkbox.isChecked():
-            self._open_barcodes_folder()
+        # Auto-open generated PDFs if enabled
+        if self.auto_open_pdf_checkbox.isChecked():
+            if pdf_generated:
+                self._open_pdf(self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf")
+            if qr_pdf_generated:
+                self._open_pdf(self.barcodes_dir / f"{self.current_packing_list}_qr_labels.pdf")
 
         # Emit signal
         self.generation_complete.emit({
@@ -511,63 +487,47 @@ class BarcodeGeneratorWidget(QWidget):
         self.generate_btn.setEnabled(True)
 
     def _generate_pdf_from_results(self, results):
-        """Generate PDF automatically after barcode generation."""
+        """Generate the barcode labels PDF from prepared order records.
+
+        Returns True on success, False if rendering failed.
+        """
         try:
-            from pathlib import Path
-
-            from shopify_tool.barcode_processor import generate_barcodes_pdf
-
-            # Convert string paths back to Path objects
-            barcode_files = [Path(r['file_path']) for r in results if r.get('file_path')]
-
-            if not barcode_files:
-                return
+            from shopify_tool.barcode_processor import generate_code128_labels_pdf
 
             pdf_filename = f"{self.current_packing_list}_barcodes.pdf"
             pdf_path = self.barcodes_dir / pdf_filename
 
-            generate_barcodes_pdf(barcode_files, pdf_path)
+            generate_code128_labels_pdf(results, pdf_path)
 
-            self.log.info(f"Auto-generated PDF: {pdf_path}")
-
-            # Open PDF
-            url = QUrl.fromLocalFile(str(pdf_path))
-            QDesktopServices.openUrl(url)
+            self.log.info(f"Generated PDF: {pdf_path}")
+            return True
 
         except Exception:
-            self.log.exception("Auto PDF generation failed")
+            self.log.exception("PDF generation failed")
+            return False
 
-    def _cleanup_png_files(self, results):
-        """Remove PNG files after PDF generation (PDF-only mode)."""
+    def _generate_qr_pdf_from_results(self, results):
+        """Generate the QR labels PDF from prepared order records.
+
+        Returns True on success, False if rendering failed.
+        """
         try:
-            from pathlib import Path
+            from shopify_tool.barcode_processor import generate_qr_labels_pdf
 
-            # Delete all PNG files from results
-            for result in results:
-                file_path = result.get('file_path')
-                if file_path:
-                    png_file = Path(file_path)
-                    if png_file.exists() and png_file.suffix == '.png':
-                        png_file.unlink()
+            pdf_filename = f"{self.current_packing_list}_qr_labels.pdf"
+            pdf_path = self.barcodes_dir / pdf_filename
 
-            self.log.info(f"Cleaned up {len(results)} PNG files (PDF-only mode)")
+            generate_qr_labels_pdf(results, pdf_path)
+
+            self.log.info(f"Generated QR labels PDF: {pdf_path}")
+            return True
 
         except Exception:
-            self.log.exception("PNG cleanup failed")
+            self.log.exception("QR labels PDF generation failed")
+            return False
 
-
-    def _open_barcodes_folder(self):
-        """Open barcodes folder in file explorer."""
-        if not self.barcodes_dir or not self.barcodes_dir.exists():
-            QMessageBox.warning(
-                self,
-                "Folder Not Found",
-                "Barcodes folder not found."
-            )
-            return
-
-        url = QUrl.fromLocalFile(str(self.barcodes_dir))
+    def _open_pdf(self, pdf_path):
+        """Open a generated PDF in the OS default viewer."""
+        url = QUrl.fromLocalFile(str(pdf_path))
         QDesktopServices.openUrl(url)
-
-        self.log.info(f"Opened barcodes folder: {self.barcodes_dir}")
 

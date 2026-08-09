@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <div class="label">
+    <div class="top-row">
+      <div class="info">
+        <div class="seq">#{{ sequential_num }}</div>
+        <div class="courier">{{ courier }}</div>
+        <div class="date">{{ date_str }}</div>
+        <div class="divider"></div>
+        <div class="field"><span class="field-label">SUM:</span><span class="field-value">{{ item_count }}</span></div>
+        <div class="field"><span class="field-label">COU:</span><span class="field-value">{{ country }}</span></div>
+      </div>
+      <div class="qr-section">
+        <img class="qr" src="{{ label_tools.qr_code(order_number) }}"/>
+        <div class="order-number">{{ order_number }}</div>
+      </div>
+    </div>
+    <div class="tag-row">
+      <span class="field-label">TAG:</span>
+      <span class="field-value" style="font-size: {{ label_tools.fit_font_block(tag, box_width_mm=55, box_height_mm=8.5, max_mm=4.2, min_mm=2.0) }}mm;">{{ tag }}</span>
+    </div>
+  </div>
+</body>
+</html>

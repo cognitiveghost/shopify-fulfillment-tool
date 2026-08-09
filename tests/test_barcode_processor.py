@@ -1,21 +1,22 @@
 """Barcode content accuracy (priority: barcode generation accuracy).
 
-generate_barcode_label() itself renders a PNG image (not asserted pixel-by-pixel
-here); what's tested is the text/data that ends up ON the label -- the part
-that must be byte-accurate: the Code-128 payload and the info-panel fields.
+generate_code128_labels_pdf()/generate_qr_labels_pdf() render real PDFs via
+blabel/WeasyPrint (not asserted pixel-by-pixel here); what's tested is the
+data that ends up ON the label -- the Code-128 payload, and that the batch
+builder produces correctly-shaped, correctly-validated records.
 """
 import pandas as pd
+import pypdf
 import pytest
 from barcode.codex import Code128
-from PIL import Image, ImageDraw
 
+from shopify_tool import label_tools
 from shopify_tool.barcode_processor import (
     InvalidOrderNumberError,
-    _clamp_text_to_width,
     format_tags_for_barcode,
-    generate_barcode_label,
     generate_barcodes_batch,
-    load_font,
+    generate_code128_labels_pdf,
+    generate_qr_labels_pdf,
     sanitize_order_number,
 )
 
@@ -67,104 +68,164 @@ class TestFormatTagsForBarcode:
         assert format_tags_for_barcode("[]") == ""
 
     def test_native_list_input_is_joined_not_stringified(self):
-        # Internal_Tags is sometimes a native Python list rather than its
-        # serialized JSON string (see tag_manager.parse_tags -- "Check list
-        # first"). The formatter must handle that directly.
         assert format_tags_for_barcode(["BAG", "TEST"]) == "BAG|TEST"
 
     def test_python_repr_style_list_string_is_parsed_not_leaked_raw(self):
-        # Reproduces the reported bug: a caller stringified a Python list
-        # (str(["BAG", "TEST"])) instead of JSON-serializing it, producing a
-        # single-quoted, non-JSON string that used to leak straight through
-        # as a raw list literal onto the printed label.
         assert format_tags_for_barcode(str(["BAG", "TEST"])) == "BAG|TEST"
 
     def test_native_list_with_blank_element_has_no_stray_pipe(self):
-        # A whitespace-only element used to survive the truthiness filter
-        # (checked before stripping), then strip to "" and still get joined,
-        # producing a leading "|A" instead of "A".
         assert format_tags_for_barcode([" ", "A"]) == "A"
 
     def test_padded_json_array_string_is_parsed_not_leaked_raw(self):
-        # Surrounding whitespace used to make the '['/']' bounds check fail,
-        # falling through to the plain-string path and leaking the bracketed
-        # literal onto the label instead of parsing it.
         assert format_tags_for_barcode(' ["A"] ') == "A"
 
 
-class TestClampTextToWidth:
-    """Regression for tag text drawing straight into the barcode section
-    ("getting into barcode territory"): the TAG line-wrapping loop only
-    checked combined-line width, never a single tag/line on its own, so one
-    oversized element (a long tag name, or a raw literal leaked by the bug
-    above) drew unclamped past the info column boundary."""
+class TestGenerateBarcodesBatch:
+    """generate_barcodes_batch() now only builds/validates records -- no
+    rendering, no output_dir. Rendering is generate_code128_labels_pdf()."""
 
-    def _draw(self):
-        return ImageDraw.Draw(Image.new('RGB', (10, 10)))
+    def _df(self, **overrides):
+        row = {
+            "Order_Number": "#1029392", "Shipping_Provider": "DHL",
+            "Destination_Country": "DE", "Internal_Tags": "[]", "item_count": 3,
+        }
+        row.update(overrides)
+        return pd.DataFrame([row])
 
-    def test_short_text_passes_through_unchanged(self):
-        draw = self._draw()
-        font = load_font(18, bold=True)
-        assert _clamp_text_to_width(draw, "TAG", font, 123) == "TAG"
+    def test_zero_item_count_is_not_coerced_to_one(self):
+        results = generate_barcodes_batch(self._df(item_count=0))
+        assert results[0]["item_count"] == 0
 
-    def test_oversized_single_line_is_truncated_to_fit(self):
-        draw = self._draw()
-        font = load_font(18, bold=True)
-        long_text = "MASK+BOX_ORDER, REGULAR_BOX, EXTRA_LONG_TAG_NAME"
-        clamped = _clamp_text_to_width(draw, long_text, font, 123)
-        width = draw.textbbox((0, 0), clamped, font=font)[2]
-        assert width <= 123
-        assert clamped != long_text
+    def test_successful_row_has_safe_order_number(self):
+        results = generate_barcodes_batch(self._df(Order_Number="#1029392!!"))
+        assert results[0]["success"] is True
+        assert results[0]["safe_order_number"] == "#1029392"
+
+    def test_invalid_order_number_reports_failure_not_exception(self):
+        results = generate_barcodes_batch(self._df(Order_Number="!!!"))
+        assert results[0]["success"] is False
+        assert results[0]["safe_order_number"] is None
+        assert results[0]["error"]
+
+    @pytest.mark.parametrize("missing", [float("nan"), None, pd.NA])
+    def test_missing_order_number_reports_failure_not_nan_string(self, missing):
+        results = generate_barcodes_batch(self._df(Order_Number=missing))
+        assert results[0]["success"] is False
+        assert results[0]["safe_order_number"] is None
+        assert results[0]["error"]
+
+    def test_sequential_numbering_defaults_to_row_index_plus_one(self):
+        df = pd.concat([self._df(Order_Number="#1"), self._df(Order_Number="#2")], ignore_index=True)
+        results = generate_barcodes_batch(df)
+        assert [r["sequential_num"] for r in results] == [1, 2]
+
+    def test_sequential_map_overrides_default_numbering(self):
+        results = generate_barcodes_batch(self._df(), sequential_map={"#1029392": 42})
+        assert results[0]["sequential_num"] == 42
 
 
-class TestItemCountZeroFalsyBug:
-    def test_zero_item_count_is_not_coerced_to_one(self, tmp_path, monkeypatch):
+class TestGenerateCode128LabelsPdfIntegration:
+    """Smoke test the real blabel/WeasyPrint rendering path (no pixel
+    assertions -- does it run, correct page count)."""
+
+    def _order(self, **overrides):
+        order = {
+            "order_number": "#1029392", "safe_order_number": "#1029392",
+            "sequential_num": 7, "courier": "DHL", "country": "DE",
+            "tag": "N/A", "item_count": 3,
+        }
+        order.update(overrides)
+        return order
+
+    def test_generates_pdf_with_one_page_per_order(self, tmp_path):
+        output_pdf = tmp_path / "labels.pdf"
+        result = generate_code128_labels_pdf(
+            [self._order(safe_order_number="#1"), self._order(safe_order_number="#2")],
+            output_pdf,
+        )
+        assert result == output_pdf
+        assert output_pdf.exists()
+        reader = pypdf.PdfReader(str(output_pdf))
+        assert len(reader.pages) == 2
+
+    def test_empty_orders_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            generate_code128_labels_pdf([], tmp_path / "labels.pdf")
+
+    def test_long_courier_and_multi_tag_order_renders_without_crash(self, tmp_path):
+        """Coverage for the input shape that surfaced the flex min-width overflow
+        bug during the 2026-08-09 layout redesign (see
+        docs/superpowers/specs/2026-08-09-barcode-label-layout-redesign-design.md):
+        a long courier name and a multi-segment tag value. The bug itself doesn't
+        raise or change page count -- the real regression guard is the CSS
+        min-width:0 marker test in test_label_templates.py -- this just confirms
+        the template still renders end-to-end for this input shape."""
+        output_pdf = tmp_path / "stress.pdf"
+        result = generate_code128_labels_pdf(
+            [self._order(
+                courier="DHL Express International",
+                tag="GIFT+1|GIFT+2|PRIORITY|FRAGILE",
+                item_count=15,
+            )],
+            output_pdf,
+        )
+        assert result == output_pdf
+        reader = pypdf.PdfReader(str(output_pdf))
+        assert len(reader.pages) == 1
+
+
+class TestGenerateQrLabelsPdfIntegration:
+    def _order(self, **overrides):
+        order = {
+            "safe_order_number": "#1029392",
+            "sequential_num": 7, "courier": "DHL", "country": "DE",
+            "tag": "N/A", "item_count": 3,
+        }
+        order.update(overrides)
+        return order
+
+    def test_generates_pdf_with_one_page_per_order(self, tmp_path):
+        output_pdf = tmp_path / "qr_labels.pdf"
+        result = generate_qr_labels_pdf(
+            [self._order(safe_order_number="#1"), self._order(safe_order_number="#2")],
+            output_pdf,
+        )
+        assert result == output_pdf
+        reader = pypdf.PdfReader(str(output_pdf))
+        assert len(reader.pages) == 2
+
+    def test_empty_orders_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            generate_qr_labels_pdf([], tmp_path / "qr_labels.pdf")
+
+    def test_qr_payload_is_order_number_only(self, tmp_path, monkeypatch):
         captured = {}
+        original_qr_code = label_tools.qr_code
 
-        def fake_generate_barcode_label(*, item_count, **kwargs):
-            captured["item_count"] = item_count
-            return {"success": True, "error": None}
+        def spy_qr_code(data, *args, **kwargs):
+            captured["data"] = data
+            return original_qr_code(data, *args, **kwargs)
 
-        monkeypatch.setattr(
-            "shopify_tool.barcode_processor.generate_barcode_label",
-            fake_generate_barcode_label,
+        monkeypatch.setattr(label_tools, "qr_code", spy_qr_code)
+
+        generate_qr_labels_pdf(
+            [self._order(safe_order_number="#1029392")], tmp_path / "qr_labels.pdf"
         )
-        df = pd.DataFrame([{
-            "Order_Number": "#1", "Shipping_Provider": "DHL",
-            "Destination_Country": "DE", "Internal_Tags": "[]", "item_count": 0,
-        }])
-        generate_barcodes_batch(df, tmp_path)
-        assert captured["item_count"] == 0
 
+        assert captured["data"] == "#1029392"
 
-class TestGenerateBarcodeLabelIntegration:
-    """Smoke test the real PNG generation path (no image-content assertions,
-    just: does it run, and does the returned metadata match input)."""
-
-    def test_generates_png_and_reports_success(self, tmp_path):
-        result = generate_barcode_label(
-            order_number="#1029392",
-            sequential_num=7,
-            courier="DHL",
-            country="DE",
-            tag="",
-            item_count=3,
-            output_dir=tmp_path,
+    def test_long_courier_and_multi_tag_order_renders_without_crash(self, tmp_path):
+        """See TestGenerateCode128LabelsPdfIntegration's test of the same name --
+        same stress-case input, same rationale, applied to the QR label path."""
+        output_pdf = tmp_path / "qr_stress.pdf"
+        result = generate_qr_labels_pdf(
+            [self._order(
+                courier="DHL Express International",
+                tag="GIFT+1|GIFT+2|PRIORITY|FRAGILE",
+                item_count=15,
+            )],
+            output_pdf,
         )
-        assert result["success"] is True
-        assert result["file_path"].exists()
-        assert result["sequential_num"] == 7
-        assert result["item_count"] == 3
-
-    def test_invalid_order_number_reports_failure_not_exception(self, tmp_path):
-        result = generate_barcode_label(
-            order_number="!!!",
-            sequential_num=1,
-            courier="DHL",
-            country="DE",
-            tag="",
-            item_count=1,
-            output_dir=tmp_path,
-        )
-        assert result["success"] is False
-        assert result["file_path"] is None
+        assert result == output_pdf
+        reader = pypdf.PdfReader(str(output_pdf))
+        assert len(reader.pages) == 1

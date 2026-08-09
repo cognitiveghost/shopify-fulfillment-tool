@@ -38,3 +38,8 @@ reportlab>=4.0.0       # PDF generation and text overlay
 # ----------------------------------------------------
 python-barcode>=0.15.1 # Code-128 barcode generation for warehouse labels
 Pillow>=10.0.0         # Image processing for barcode label composition
+
+# Label Rendering (blabel HTML/Jinja2 templates - barcode + QR labels)
+# -----------------------------------------------------------------
+blabel>=0.1.7           # HTML/Jinja2 template-based label rendering (WeasyPrint backend)
+qrcode>=7.4              # QR code generation (SVG vector output via blabel templates)
