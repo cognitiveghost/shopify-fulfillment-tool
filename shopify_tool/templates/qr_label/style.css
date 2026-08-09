@@ -1,14 +1,80 @@
 @page { size: 68mm 38mm; margin: 0; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
 body { width: 68mm; height: 38mm; font-family: "JetBrains Mono", monospace; }
+
 .label {
   width: 68mm;
   height: 38mm;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2mm;
+  padding: 1mm;
 }
-.order-number { font-size: 5mm; line-height: 5.5mm; font-weight: bold; margin-bottom: 1mm; }
-.qr { width: 26mm; height: 26mm; }
+
+.top-row {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.info {
+  width: 22mm;
+  display: flex;
+  flex-direction: column;
+  padding-right: 1mm;
+}
+
+.seq { font-size: 5.5mm; font-weight: bold; }
+.courier {
+  font-size: 5mm;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.date { font-size: 3mm; }
+
+hr { border: none; border-top: 0.5mm solid black; margin: 0.5mm 0; }
+hr.thin { border-top-width: 0.3mm; }
+
+.field { display: flex; font-size: 3mm; font-weight: bold; margin: 0.3mm 0; }
+.field-label { width: 8mm; }
+.field-value { flex: 1; }
+
+.qr-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.qr { width: 20mm; height: 20mm; margin-top: 1mm; }
+
+.order-number {
+  font-size: 6mm;
+  font-weight: bold;
+  margin-top: 1mm;
+  text-align: center;
+}
+
+.tag-row {
+  height: 8mm;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  border-top: 0.3mm solid black;
+  padding-top: 0.5mm;
+  margin-top: 0.5mm;
+  overflow: hidden;
+}
+
+.tag-row .field-label { width: 9mm; font-size: 3mm; font-weight: bold; }
+.tag-row .field-value {
+  font-weight: bold;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
+}

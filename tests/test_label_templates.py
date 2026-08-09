@@ -23,3 +23,16 @@ class TestBarcodeLabelLayout:
         html = (_TEMPLATES_DIR / "barcode_label" / "template.html").read_text()
         assert "box_width_mm=14" not in html
         assert "fit_font_block" in html
+
+
+class TestQrLabelLayout:
+    def test_mirrors_barcode_label_info_column_and_tag_row(self):
+        html = (_TEMPLATES_DIR / "qr_label" / "template.html").read_text()
+        css = (_TEMPLATES_DIR / "qr_label" / "style.css").read_text()
+        for marker in ("sequential_num", "courier", "date_str", "tag-row"):
+            assert marker in html
+        assert "overflow: hidden" in css
+
+    def test_qr_code_encodes_order_number_not_multiline_payload(self):
+        html = (_TEMPLATES_DIR / "qr_label" / "template.html").read_text()
+        assert "label_tools.qr_code(order_number)" in html
