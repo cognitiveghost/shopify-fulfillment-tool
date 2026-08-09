@@ -121,10 +121,15 @@ class BarcodeGeneratorWidget(QWidget):
         group = QGroupBox("Options")
         layout = QVBoxLayout(group)
 
-        # Auto-open folder checkbox
-        self.auto_open_folder_checkbox = QCheckBox("Auto-open barcodes folder after generation")
-        self.auto_open_folder_checkbox.setChecked(True)
-        layout.addWidget(self.auto_open_folder_checkbox)
+        # Add QR labels checkbox
+        self.add_qr_checkbox = QCheckBox("Add QR labels (order number)")
+        self.add_qr_checkbox.setChecked(False)
+        layout.addWidget(self.add_qr_checkbox)
+
+        # Auto-open PDF checkbox
+        self.auto_open_pdf_checkbox = QCheckBox("Auto-open PDF after generation")
+        self.auto_open_pdf_checkbox.setChecked(True)
+        layout.addWidget(self.auto_open_pdf_checkbox)
 
         # Output directory label
         output_row = QHBoxLayout()
@@ -421,6 +426,9 @@ class BarcodeGeneratorWidget(QWidget):
 
         pdf_generated = self._generate_pdf_from_results(successful) if successful else False
 
+        want_qr = bool(successful) and self.add_qr_checkbox.isChecked()
+        qr_pdf_generated = self._generate_qr_pdf_from_results(successful) if want_qr else False
+
         if successful and not pdf_generated:
             QMessageBox.critical(
                 self,
@@ -431,14 +439,23 @@ class BarcodeGeneratorWidget(QWidget):
         else:
             message = f"Successfully generated {len(successful)} barcode labels as a PDF document."
 
+            if want_qr:
+                if qr_pdf_generated:
+                    message += "\n\nAlso generated QR labels as a PDF document."
+                else:
+                    message += "\n\nQR labels PDF failed to generate. See execution log for details."
+
             if failed:
                 message += f"\n\n{len(failed)} barcodes failed to generate."
 
             QMessageBox.information(self, "Generation Complete", message)
 
-        # Auto-open folder if enabled
-        if pdf_generated and self.auto_open_folder_checkbox.isChecked():
-            self._open_barcodes_folder()
+        # Auto-open generated PDFs if enabled
+        if self.auto_open_pdf_checkbox.isChecked():
+            if pdf_generated:
+                self._open_pdf(self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf")
+            if qr_pdf_generated:
+                self._open_pdf(self.barcodes_dir / f"{self.current_packing_list}_qr_labels.pdf")
 
         # Emit signal
         self.generation_complete.emit({
@@ -483,28 +500,34 @@ class BarcodeGeneratorWidget(QWidget):
             generate_code128_labels_pdf(results, pdf_path)
 
             self.log.info(f"Generated PDF: {pdf_path}")
-
-            url = QUrl.fromLocalFile(str(pdf_path))
-            QDesktopServices.openUrl(url)
             return True
 
         except Exception:
             self.log.exception("PDF generation failed")
             return False
 
+    def _generate_qr_pdf_from_results(self, results):
+        """Generate the QR labels PDF from prepared order records.
 
-    def _open_barcodes_folder(self):
-        """Open barcodes folder in file explorer."""
-        if not self.barcodes_dir or not self.barcodes_dir.exists():
-            QMessageBox.warning(
-                self,
-                "Folder Not Found",
-                "Barcodes folder not found."
-            )
-            return
+        Returns True on success, False if rendering failed.
+        """
+        try:
+            from shopify_tool.barcode_processor import generate_qr_labels_pdf
 
-        url = QUrl.fromLocalFile(str(self.barcodes_dir))
+            pdf_filename = f"{self.current_packing_list}_qr_labels.pdf"
+            pdf_path = self.barcodes_dir / pdf_filename
+
+            generate_qr_labels_pdf(results, pdf_path)
+
+            self.log.info(f"Generated QR labels PDF: {pdf_path}")
+            return True
+
+        except Exception:
+            self.log.exception("QR labels PDF generation failed")
+            return False
+
+    def _open_pdf(self, pdf_path):
+        """Open a generated PDF in the OS default viewer."""
+        url = QUrl.fromLocalFile(str(pdf_path))
         QDesktopServices.openUrl(url)
-
-        self.log.info(f"Opened barcodes folder: {self.barcodes_dir}")
 
