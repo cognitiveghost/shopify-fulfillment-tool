@@ -86,13 +86,13 @@ def test_all_orders_failed_skips_pdf_render_and_shows_completion_message(monkeyp
 
 
 def test_auto_open_off_renders_but_does_not_open(monkeypatch):
-    widget, info, critical = _run(monkeypatch, pdf_ok=True, auto_open=False)
+    widget, _info, _critical = _run(monkeypatch, pdf_ok=True, auto_open=False)
     assert widget.pdf_render_calls == 1
     assert not widget.opened_pdfs
 
 
 def test_qr_checkbox_off_skips_qr_generation(monkeypatch):
-    widget, info, critical = _run(monkeypatch, pdf_ok=True, add_qr=False)
+    widget, _info, _critical = _run(monkeypatch, pdf_ok=True, add_qr=False)
     assert widget.qr_pdf_render_calls == 0
     assert widget.opened_pdfs == [Path("/fake/barcodes/PL1_barcodes.pdf")]
 
