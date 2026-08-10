@@ -32,6 +32,10 @@ class _FakeWidget:
         self.opened_pdfs = []
         self.pdf_render_calls = 0
         self.qr_pdf_render_calls = 0
+        self.print_btn = Mock()
+        self.print_qr_btn = Mock()
+        self.last_barcode_pdf = None
+        self.last_qr_pdf = None
 
     def _generate_pdf_from_results(self, results):
         self.pdf_render_calls += 1
@@ -117,3 +121,27 @@ def test_qr_generation_failure_does_not_block_primary_success_dialog(monkeypatch
     message = info.call_args[0][2]
     assert "QR labels PDF failed" in message
     assert widget.opened_pdfs == [Path("/fake/barcodes/PL1_barcodes.pdf")]
+
+
+def test_successful_generation_enables_print_button_and_sets_last_pdf(monkeypatch):
+    widget, _info, _critical = _run(monkeypatch, pdf_ok=True)
+    assert widget.last_barcode_pdf == Path("/fake/barcodes/PL1_barcodes.pdf")
+    widget.print_btn.setEnabled.assert_called_with(True)
+
+
+def test_pdf_render_failure_leaves_print_button_disabled(monkeypatch):
+    widget, _info, _critical = _run(monkeypatch, pdf_ok=False)
+    assert widget.last_barcode_pdf is None
+    widget.print_btn.setEnabled.assert_called_with(False)
+
+
+def test_qr_checkbox_on_enables_print_qr_button(monkeypatch):
+    widget, _info, _critical = _run(monkeypatch, pdf_ok=True, add_qr=True, qr_pdf_ok=True)
+    assert widget.last_qr_pdf == Path("/fake/barcodes/PL1_qr_labels.pdf")
+    widget.print_qr_btn.setEnabled.assert_called_with(True)
+
+
+def test_qr_checkbox_off_leaves_print_qr_button_disabled(monkeypatch):
+    widget, _info, _critical = _run(monkeypatch, pdf_ok=True, add_qr=False)
+    assert widget.last_qr_pdf is None
+    widget.print_qr_btn.setEnabled.assert_called_with(False)
