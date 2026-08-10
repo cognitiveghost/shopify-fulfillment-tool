@@ -100,6 +100,10 @@ Version string must be updated in **3 places simultaneously**:
 - **No hardcoded colors** in stylesheets — use `theme_manager` variables
 - **No `pyproject.toml`** — project uses `requirements.txt` intentionally
 - **No `permutations`/unused typing imports** — keep imports clean
+- **No direct commits to `main`** — this repo is PR-only, with no exception for "trivial"
+  docs-only changes. A cleanup commit that lands directly on local `main` never reaches
+  `origin` and has to be un-done later (happened to `packing-tool`'s `main` — see
+  `packing-tool` PR #158). Always branch + PR, even for a one-file docs change.
 
 ---
 

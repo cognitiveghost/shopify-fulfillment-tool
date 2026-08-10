@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -29,6 +30,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.pdf_printing import (
+    load_print_settings,
+    print_pdf,
+    refresh_print_controls,
+    save_print_settings,
+)
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 
@@ -55,6 +62,8 @@ class BarcodeGeneratorWidget(QWidget):
         self.current_packing_list = None
         self.filtered_orders_df = None
         self.barcodes_dir = None
+        self.last_barcode_pdf = None
+        self.last_qr_pdf = None
 
         self._init_ui()
         self._connect_signals()
@@ -141,6 +150,44 @@ class BarcodeGeneratorWidget(QWidget):
         output_row.addWidget(self.output_dir_label, 1)
         layout.addLayout(output_row)
 
+        # Printing (raw ZPL target/rotate only relevant when that mode is selected)
+        print_settings = load_print_settings()
+
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Print mode:"))
+        self.print_mode_combo = QComboBox()
+        self.print_mode_combo.addItem("OS driver (print dialog)", "driver")
+        self.print_mode_combo.addItem("Raw ZPL (direct)", "raw_zpl")
+        mode_index = self.print_mode_combo.findData(print_settings["print_mode"])
+        if mode_index >= 0:
+            self.print_mode_combo.setCurrentIndex(mode_index)
+        mode_row.addWidget(self.print_mode_combo, 1)
+        layout.addLayout(mode_row)
+
+        target_row = QHBoxLayout()
+        target_row.addWidget(QLabel("Raw ZPL target:"))
+        self.raw_zpl_target_edit = QLineEdit(print_settings["raw_zpl_target"])
+        self.raw_zpl_target_edit.setPlaceholderText(
+            "e.g. ZPL-RAW-Printer (Windows) or /dev/usb/lp0 (Linux)"
+        )
+        target_row.addWidget(self.raw_zpl_target_edit, 1)
+        layout.addLayout(target_row)
+
+        self.raw_zpl_rotate_check = QCheckBox("Rotate labels 90° for raw ZPL")
+        self.raw_zpl_rotate_check.setChecked(print_settings["raw_zpl_rotate"])
+        layout.addWidget(self.raw_zpl_rotate_check)
+
+        def _update_zpl_controls_enabled():
+            is_zpl = self.print_mode_combo.currentData() == "raw_zpl"
+            self.raw_zpl_target_edit.setEnabled(is_zpl)
+            self.raw_zpl_rotate_check.setEnabled(is_zpl)
+
+        _update_zpl_controls_enabled()
+        self.print_mode_combo.currentIndexChanged.connect(_update_zpl_controls_enabled)
+        self.print_mode_combo.currentIndexChanged.connect(self._save_print_settings)
+        self.raw_zpl_target_edit.editingFinished.connect(self._save_print_settings)
+        self.raw_zpl_rotate_check.toggled.connect(self._save_print_settings)
+
         return group
 
     def _create_generation_section(self):
@@ -172,6 +219,14 @@ class BarcodeGeneratorWidget(QWidget):
         self.generate_btn.clicked.connect(self._on_generate_clicked)
         layout.addWidget(self.generate_btn)
 
+        self.print_btn = QPushButton("Print...")
+        self.print_btn.setEnabled(False)
+        layout.addWidget(self.print_btn)
+
+        self.print_qr_btn = QPushButton("Print QR labels...")
+        self.print_qr_btn.setEnabled(False)
+        layout.addWidget(self.print_qr_btn)
+
         # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -194,10 +249,13 @@ class BarcodeGeneratorWidget(QWidget):
         if self.mw.session_path:
             self._refresh_packing_lists()
             self.log.debug("Auto-refreshed packing lists on tab switch")
+        refresh_print_controls(self.print_mode_combo, self.raw_zpl_target_edit, self.raw_zpl_rotate_check)
 
     def _connect_signals(self):
         """Connect signals and slots."""
         self.packing_list_combo.currentIndexChanged.connect(self._on_packing_list_changed)
+        self.print_btn.clicked.connect(self._on_print_clicked)
+        self.print_qr_btn.clicked.connect(self._on_print_qr_clicked)
 
     def _update_state(self):
         """Update widget state based on current session."""
@@ -426,8 +484,18 @@ class BarcodeGeneratorWidget(QWidget):
 
         pdf_generated = self._generate_pdf_from_results(successful) if successful else False
 
+        self.last_barcode_pdf = (
+            self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf" if pdf_generated else None
+        )
+        self.print_btn.setEnabled(bool(self.last_barcode_pdf))
+
         want_qr = bool(successful) and self.add_qr_checkbox.isChecked()
         qr_pdf_generated = self._generate_qr_pdf_from_results(successful) if want_qr else False
+
+        self.last_qr_pdf = (
+            self.barcodes_dir / f"{self.current_packing_list}_qr_labels.pdf" if qr_pdf_generated else None
+        )
+        self.print_qr_btn.setEnabled(bool(self.last_qr_pdf))
 
         if successful and not pdf_generated:
             QMessageBox.critical(
@@ -530,4 +598,17 @@ class BarcodeGeneratorWidget(QWidget):
         """Open a generated PDF in the OS default viewer."""
         url = QUrl.fromLocalFile(str(pdf_path))
         QDesktopServices.openUrl(url)
+
+    def _save_print_settings(self):
+        save_print_settings({
+            "print_mode": self.print_mode_combo.currentData(),
+            "raw_zpl_target": self.raw_zpl_target_edit.text(),
+            "raw_zpl_rotate": self.raw_zpl_rotate_check.isChecked(),
+        })
+
+    def _on_print_clicked(self):
+        print_pdf(self, self.last_barcode_pdf, load_print_settings())
+
+    def _on_print_qr_clicked(self):
+        print_pdf(self, self.last_qr_pdf, load_print_settings())
 

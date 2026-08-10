@@ -4,35 +4,37 @@ Reference Labels Widget - PDF processing for reference numbers.
 Features:
 - File selection (PDF + CSV)
 - Background processing with progress tracking
-- Processing history display
 - Error handling
 """
 
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from gui.pdf_printing import (
+    load_print_settings,
+    print_pdf,
+    refresh_print_controls,
+    save_print_settings,
+)
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
-from shopify_tool.reference_labels_history import ReferenceLabelsHistory
 
 
 class ReferenceLabelsWidget(QWidget):
@@ -60,9 +62,7 @@ class ReferenceLabelsWidget(QWidget):
         self.pdf_path = None
         self.csv_path = None
         self.output_dir = None
-
-        # History manager
-        self.history = None
+        self.last_output_pdf = None
 
         self._init_ui()
         self._connect_signals()
@@ -86,8 +86,7 @@ class ReferenceLabelsWidget(QWidget):
         # Section 3: Processing
         layout.addWidget(self._create_processing_group())
 
-        # Section 4: History
-        layout.addWidget(self._create_history_group(), 1)  # Stretch
+        layout.addStretch()
 
     def _create_file_selection_group(self):
         """Create file selection section."""
@@ -148,6 +147,44 @@ class ReferenceLabelsWidget(QWidget):
         self.auto_open_checkbox.setChecked(True)
         layout.addWidget(self.auto_open_checkbox)
 
+        # Printing (raw ZPL target/rotate only relevant when that mode is selected)
+        print_settings = load_print_settings()
+
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(QLabel("Print mode:"))
+        self.print_mode_combo = QComboBox()
+        self.print_mode_combo.addItem("OS driver (print dialog)", "driver")
+        self.print_mode_combo.addItem("Raw ZPL (direct)", "raw_zpl")
+        mode_index = self.print_mode_combo.findData(print_settings["print_mode"])
+        if mode_index >= 0:
+            self.print_mode_combo.setCurrentIndex(mode_index)
+        mode_row.addWidget(self.print_mode_combo, 1)
+        layout.addLayout(mode_row)
+
+        target_row = QHBoxLayout()
+        target_row.addWidget(QLabel("Raw ZPL target:"))
+        self.raw_zpl_target_edit = QLineEdit(print_settings["raw_zpl_target"])
+        self.raw_zpl_target_edit.setPlaceholderText(
+            "e.g. ZPL-RAW-Printer (Windows) or /dev/usb/lp0 (Linux)"
+        )
+        target_row.addWidget(self.raw_zpl_target_edit, 1)
+        layout.addLayout(target_row)
+
+        self.raw_zpl_rotate_check = QCheckBox("Rotate labels 90° for raw ZPL")
+        self.raw_zpl_rotate_check.setChecked(print_settings["raw_zpl_rotate"])
+        layout.addWidget(self.raw_zpl_rotate_check)
+
+        def _update_zpl_controls_enabled():
+            is_zpl = self.print_mode_combo.currentData() == "raw_zpl"
+            self.raw_zpl_target_edit.setEnabled(is_zpl)
+            self.raw_zpl_rotate_check.setEnabled(is_zpl)
+
+        _update_zpl_controls_enabled()
+        self.print_mode_combo.currentIndexChanged.connect(_update_zpl_controls_enabled)
+        self.print_mode_combo.currentIndexChanged.connect(self._save_print_settings)
+        self.raw_zpl_target_edit.editingFinished.connect(self._save_print_settings)
+        self.raw_zpl_rotate_check.toggled.connect(self._save_print_settings)
+
         return group
 
     def _create_processing_group(self):
@@ -174,60 +211,9 @@ class ReferenceLabelsWidget(QWidget):
         self.status_label.setStyleSheet("padding: 5px;")
         layout.addWidget(self.status_label)
 
-        return group
-
-    def _create_history_group(self):
-        """Create history section."""
-        group = QGroupBox("Processing History")
-        layout = QVBoxLayout(group)
-
-        # History table
-        self.history_table = QTableWidget()
-        self.history_table.setColumnCount(6)
-        self.history_table.setHorizontalHeaderLabels([
-            "Date/Time",
-            "Input PDF",
-            "Pages",
-            "Matched",
-            "Unmatched",
-            "Status"
-        ])
-        self.history_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.history_table.setSelectionMode(QTableWidget.SingleSelection)
-        self.history_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.history_table.setAlternatingRowColors(True)
-
-        # Set column widths
-        header = self.history_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Fixed)
-        header.resizeSection(0, 150)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.Fixed)
-        header.resizeSection(2, 70)
-        header.setSectionResizeMode(3, QHeaderView.Fixed)
-        header.resizeSection(3, 80)
-        header.setSectionResizeMode(4, QHeaderView.Fixed)
-        header.resizeSection(4, 90)
-        header.setSectionResizeMode(5, QHeaderView.Fixed)
-        header.resizeSection(5, 100)
-
-        layout.addWidget(self.history_table)
-
-        # Button row
-        button_row = QHBoxLayout()
-        button_row.addStretch()
-
-        clear_history_btn = QPushButton("Clear History")
-        clear_history_btn.setToolTip("Clear all history entries")
-        clear_history_btn.clicked.connect(self._clear_history)
-        button_row.addWidget(clear_history_btn)
-
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.setToolTip("Reload history from file")
-        refresh_btn.clicked.connect(self._load_history)
-        button_row.addWidget(refresh_btn)
-
-        layout.addLayout(button_row)
+        self.print_btn = QPushButton("Print...")
+        self.print_btn.setEnabled(False)
+        layout.addWidget(self.print_btn)
 
         return group
 
@@ -237,7 +223,7 @@ class ReferenceLabelsWidget(QWidget):
         self.select_csv_btn.clicked.connect(self._select_csv)
         self.process_btn.clicked.connect(self._process_pdf)
         self.change_dir_btn.clicked.connect(self._change_output_dir)
-        self.history_table.doubleClicked.connect(self._open_history_item)
+        self.print_btn.clicked.connect(self._on_print_clicked)
 
         # Connect to MainWindow session change
         # Note: session_changed might not exist yet, so we'll also check in showEvent
@@ -337,10 +323,6 @@ class ReferenceLabelsWidget(QWidget):
             self.output_dir_label.setText(str(self.output_dir))
             theme = get_theme_manager().get_current_theme()
             self.output_dir_label.setStyleSheet(f"color: {theme.text};")
-
-            # Initialize history manager
-            self.history = ReferenceLabelsHistory(self.output_dir)
-            self._load_history()
 
             self.log.info(f"Output directory set: {self.output_dir}")
 
@@ -480,23 +462,13 @@ class ReferenceLabelsWidget(QWidget):
         self.status_label.setText("Processing complete!")
         self.status_label.setStyleSheet("color: green; font-weight: bold;")
 
+        self.last_output_pdf = Path(result['output_file'])
+        self.print_btn.setEnabled(True)
+
         self.log.info(
             f"PDF processing complete: {result['matched']} matched, "
             f"{result['unmatched']} unmatched"
         )
-
-        # Add to history
-        if self.history:
-            self.history.add_entry(
-                input_pdf=Path(self.pdf_path).name,
-                input_csv=Path(self.csv_path).name,
-                output_pdf=Path(result['output_file']).name,
-                pages_processed=result['pages_processed'],
-                matched=result['matched'],
-                unmatched=result['unmatched'],
-                processing_time=result['processing_time']
-            )
-            self._load_history()
 
         # Show success message
         QMessageBox.information(
@@ -573,102 +545,6 @@ class ReferenceLabelsWidget(QWidget):
         self.progress_bar.setVisible(False)
         self.progress_bar.setValue(0)
 
-    def _load_history(self):
-        """Load processing history from file."""
-        if not self.history:
-            self.history_table.setRowCount(0)
-            return
-
-        entries = self.history.get_entries()
-
-        self.history_table.setRowCount(len(entries))
-
-        for row, entry in enumerate(entries):
-            # Date/Time
-            dt = datetime.fromisoformat(entry['processed_at'])
-            date_item = QTableWidgetItem(dt.strftime("%Y-%m-%d %H:%M:%S"))
-            self.history_table.setItem(row, 0, date_item)
-
-            # Input PDF
-            pdf_item = QTableWidgetItem(entry['input_pdf'])
-            pdf_item.setToolTip(entry['output_pdf'])
-            self.history_table.setItem(row, 1, pdf_item)
-
-            # Pages
-            pages_item = QTableWidgetItem(str(entry['pages_processed']))
-            pages_item.setTextAlignment(Qt.AlignCenter)
-            self.history_table.setItem(row, 2, pages_item)
-
-            # Matched
-            matched_item = QTableWidgetItem(str(entry['matched']))
-            matched_item.setTextAlignment(Qt.AlignCenter)
-            self.history_table.setItem(row, 3, matched_item)
-
-            # Unmatched
-            unmatched_item = QTableWidgetItem(str(entry['unmatched']))
-            unmatched_item.setTextAlignment(Qt.AlignCenter)
-            self.history_table.setItem(row, 4, unmatched_item)
-
-            # Status
-            status = entry.get('status', 'success')
-            status_item = QTableWidgetItem(status.upper())
-            status_item.setTextAlignment(Qt.AlignCenter)
-
-            if status == 'success':
-                from PySide6.QtGui import QColor
-                status_item.setForeground(QColor("green"))
-            else:
-                from PySide6.QtGui import QColor
-                status_item.setForeground(QColor("red"))
-
-            self.history_table.setItem(row, 5, status_item)
-
-        self.log.debug(f"Loaded {len(entries)} history entries")
-
-    def _clear_history(self):
-        """Clear processing history."""
-        reply = QMessageBox.question(
-            self,
-            "Clear History",
-            "Are you sure you want to clear all processing history?\n\n"
-            "This will not delete the processed PDF files.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply == QMessageBox.Yes and self.history:
-            self.history.clear()
-            self._load_history()
-            self.log.info("History cleared")
-
-    def _open_history_item(self, index):
-        """
-        Open processed PDF when history item is double-clicked.
-
-        Args:
-            index: QModelIndex of clicked item
-        """
-        row = index.row()
-
-        if not self.history:
-            return
-
-        entries = self.history.get_entries()
-        if row >= len(entries):
-            return
-
-        entry = entries[row]
-        output_file = self.output_dir / entry['output_pdf']
-
-        if output_file.exists():
-            self._open_pdf(str(output_file))
-        else:
-            QMessageBox.warning(
-                self,
-                "File Not Found",
-                f"Output PDF not found:\n{output_file}"
-            )
-
     def _open_pdf(self, file_path):
         """
         Open PDF file with default application.
@@ -687,6 +563,16 @@ class ReferenceLabelsWidget(QWidget):
         else:
             self.log.info(f"Opened PDF: {file_path}")
 
+    def _save_print_settings(self):
+        save_print_settings({
+            "print_mode": self.print_mode_combo.currentData(),
+            "raw_zpl_target": self.raw_zpl_target_edit.text(),
+            "raw_zpl_rotate": self.raw_zpl_rotate_check.isChecked(),
+        })
+
+    def _on_print_clicked(self):
+        print_pdf(self, self.last_output_pdf, load_print_settings())
+
     def _on_session_changed(self):
         """Handle session change event."""
         self._update_output_dir()
@@ -697,3 +583,4 @@ class ReferenceLabelsWidget(QWidget):
         # Update output directory when tab becomes visible
         # This ensures we pick up the current session even if it was set before widget creation
         self._update_output_dir()
+        refresh_print_controls(self.print_mode_combo, self.raw_zpl_target_edit, self.raw_zpl_rotate_check)
