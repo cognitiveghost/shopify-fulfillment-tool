@@ -59,7 +59,7 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
     if not target.strip():
         QMessageBox.warning(
             parent, "No Printer Configured",
-            "Set the raw ZPL printer target in Barcode Generator's Options section first."
+            "Set the raw ZPL printer target in this window's Output/Options section first."
         )
         return False
     try:

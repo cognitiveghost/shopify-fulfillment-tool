@@ -13,7 +13,6 @@ class _FakeWidget:
         self.log = Mock()
         self.progress_bar = Mock()
         self.status_label = Mock()
-        self.history = None
         self.pdf_path = "in.pdf"
         self.csv_path = "in.csv"
         self.auto_open_checkbox = Mock(isChecked=Mock(return_value=False))
