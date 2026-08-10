@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLineEdit, QMessageBox
 
 from gui import pdf_printing
 
@@ -41,6 +41,52 @@ class TestPrintSettingsRoundTrip:
             "print_mode": "raw_zpl",
             "raw_zpl_target": "ZPL-RAW-Printer",
             "raw_zpl_rotate": True,
+        }
+
+
+class TestRefreshPrintControls:
+    """Reference Labels and Barcode Generator each keep their own copy of
+    these controls; refresh_print_controls() is what stops one window's
+    stale controls from clobbering a change just made in the other (see
+    PR #261 review, Important #2)."""
+
+    @staticmethod
+    def _make_controls():
+        combo = QComboBox()
+        combo.addItem("OS driver (print dialog)", "driver")
+        combo.addItem("Raw ZPL (direct)", "raw_zpl")
+        return combo, QLineEdit(), QCheckBox()
+
+    def test_pulls_current_settings_into_controls(self, isolated_settings):
+        pdf_printing.save_print_settings(
+            {"print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": True}
+        )
+        combo, target_edit, rotate_check = self._make_controls()
+
+        pdf_printing.refresh_print_controls(combo, target_edit, rotate_check)
+
+        assert combo.currentData() == "raw_zpl"
+        assert target_edit.text() == "ZPL-RAW-Printer"
+        assert rotate_check.isChecked() is True
+        assert target_edit.isEnabled() and rotate_check.isEnabled()
+
+    def test_reload_does_not_resave_and_clobber_other_window(self, isolated_settings):
+        # Simulates: Barcode Generator sets raw_zpl + a target...
+        pdf_printing.save_print_settings(
+            {"print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False}
+        )
+        # ...operator switches to Reference Labels, whose controls were built
+        # earlier and still show the stale "driver" default.
+        combo, target_edit, rotate_check = self._make_controls()
+        save_spy = Mock(wraps=pdf_printing.save_print_settings)
+        combo.currentIndexChanged.connect(lambda _: save_spy(pdf_printing.load_print_settings()))
+        rotate_check.toggled.connect(lambda _: save_spy(pdf_printing.load_print_settings()))
+
+        pdf_printing.refresh_print_controls(combo, target_edit, rotate_check)
+
+        assert not save_spy.called
+        assert pdf_printing.load_print_settings() == {
+            "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False,
         }
 
 
@@ -90,6 +136,15 @@ class TestPrintPdfRawZplMode:
 
 
 class TestPrintPdfDriverMode:
+    def test_missing_pdf_shows_critical_and_returns_false(self, monkeypatch, tmp_path):
+        critical = Mock()
+        monkeypatch.setattr(QMessageBox, "critical", critical)
+
+        result = pdf_printing._print_pdf_driver_mode(None, tmp_path / "does_not_exist.pdf")
+
+        assert result is False
+        assert critical.called
+
     def test_renders_expected_page_count_to_pdf_output(self, tmp_path):
         """No real OS printer needed: point QPrinter at PdfFormat output
         instead of a live printer, matching the original D-1 testing note."""

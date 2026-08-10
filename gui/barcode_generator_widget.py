@@ -30,7 +30,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.pdf_printing import load_print_settings, print_pdf, save_print_settings
+from gui.pdf_printing import (
+    load_print_settings,
+    print_pdf,
+    refresh_print_controls,
+    save_print_settings,
+)
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 
@@ -244,6 +249,7 @@ class BarcodeGeneratorWidget(QWidget):
         if self.mw.session_path:
             self._refresh_packing_lists()
             self.log.debug("Auto-refreshed packing lists on tab switch")
+        refresh_print_controls(self.print_mode_combo, self.raw_zpl_target_edit, self.raw_zpl_rotate_check)
 
     def _connect_signals(self):
         """Connect signals and slots."""

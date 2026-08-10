@@ -16,7 +16,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QPainter
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
-from PySide6.QtWidgets import QMessageBox, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QMessageBox, QWidget
 
 from shopify_tool import label_printing
 
@@ -39,6 +39,36 @@ def save_print_settings(settings: dict) -> None:
     qs.setValue("print_mode", settings["print_mode"])
     qs.setValue("raw_zpl_target", settings["raw_zpl_target"])
     qs.setValue("raw_zpl_rotate", settings["raw_zpl_rotate"])
+
+
+def refresh_print_controls(combo: QComboBox, target_edit: QLineEdit, rotate_check: QCheckBox) -> None:
+    """Resync a window's print-mode/target/rotate controls from QSettings.
+
+    Reference Labels and Barcode Generator each have their own copy of these
+    controls (by design, per the spec -- same settings, different windows,
+    so the operator never has to leave the window they're printing from).
+    Both windows stay alive as sibling tabs once built, so without this,
+    switching tabs shows a stale snapshot from whenever the widget was
+    constructed; toggling any control there then saves that stale snapshot
+    and silently clobbers a change just made in the other window. Call this
+    from each window's showEvent() so its controls are always current
+    before the operator can touch them.
+    """
+    settings = load_print_settings()
+    for widget in (combo, target_edit, rotate_check):
+        widget.blockSignals(True)
+    try:
+        mode_index = combo.findData(settings["print_mode"])
+        if mode_index >= 0:
+            combo.setCurrentIndex(mode_index)
+        target_edit.setText(settings["raw_zpl_target"])
+        rotate_check.setChecked(settings["raw_zpl_rotate"])
+    finally:
+        for widget in (combo, target_edit, rotate_check):
+            widget.blockSignals(False)
+    is_zpl = combo.currentData() == "raw_zpl"
+    target_edit.setEnabled(is_zpl)
+    rotate_check.setEnabled(is_zpl)
 
 
 def print_pdf(parent: QWidget | None, pdf_path: Path, settings: dict) -> bool:
@@ -73,7 +103,10 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
 
 def _print_pdf_driver_mode(parent, pdf_path: Path, output_path: Path | None = None) -> bool:
     document = QPdfDocument()
-    document.load(str(pdf_path))
+    load_error = document.load(str(pdf_path))
+    if load_error != QPdfDocument.Error.None_:
+        QMessageBox.critical(parent, "Print Failed", f"Could not open PDF for printing:\n\n{pdf_path}\n\n{load_error}")
+        return False
 
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
 

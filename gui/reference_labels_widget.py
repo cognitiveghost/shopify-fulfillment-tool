@@ -27,7 +27,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.pdf_printing import load_print_settings, print_pdf, save_print_settings
+from gui.pdf_printing import (
+    load_print_settings,
+    print_pdf,
+    refresh_print_controls,
+    save_print_settings,
+)
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 
@@ -578,3 +583,4 @@ class ReferenceLabelsWidget(QWidget):
         # Update output directory when tab becomes visible
         # This ensures we pick up the current session even if it was set before widget creation
         self._update_output_dir()
+        refresh_print_controls(self.print_mode_combo, self.raw_zpl_target_edit, self.raw_zpl_rotate_check)
