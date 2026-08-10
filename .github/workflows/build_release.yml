@@ -86,10 +86,15 @@ jobs:
         run: |
           C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-pango
       - name: Build with PyInstaller
+        # reportlab.graphics.barcode registers each barcode type (code93,
+        # code39, ...) via exec()'d import strings, invisible to PyInstaller's
+        # static analysis -- omitting this crashes any frozen build on first
+        # barcode import with "ModuleNotFoundError: reportlab.graphics.barcode.code93".
         run: >
           pyinstaller --name ShopifyFulfillmentTool --onedir --windowed --noconfirm
           --add-data "shopify_tool/templates;shopify_tool/templates"
           --collect-data blabel
+          --collect-submodules reportlab.graphics.barcode
           gui_main.py
       - name: Bundle GTK DLLs
         shell: pwsh
