@@ -43,3 +43,9 @@ Pillow>=10.0.0         # Image processing for barcode label composition
 # -----------------------------------------------------------------
 blabel>=0.1.7           # HTML/Jinja2 template-based label rendering (WeasyPrint backend)
 qrcode>=7.4              # QR code generation (SVG vector output via blabel templates)
+
+# Direct Label Printing (raw ZPL for Citizen CL-E300, matches barcode_tool)
+# ---------------------------------------------------------------------
+pypdfium2>=4.0          # PDF rasterization for raw ZPL printing
+zebrafy>=1.2             # PIL Image -> ZPL conversion for raw ZPL printing
+pywin32>=306; sys_platform == "win32"  # win32print RAW spooling (Windows only)
