@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 from shopify_tool.reference_labels_history import ReferenceLabelsHistory
@@ -60,6 +61,7 @@ class ReferenceLabelsWidget(QWidget):
         self.pdf_path = None
         self.csv_path = None
         self.output_dir = None
+        self.last_output_pdf = None
 
         # History manager
         self.history = None
@@ -174,6 +176,10 @@ class ReferenceLabelsWidget(QWidget):
         self.status_label.setStyleSheet("padding: 5px;")
         layout.addWidget(self.status_label)
 
+        self.print_btn = QPushButton("Print...")
+        self.print_btn.setEnabled(False)
+        layout.addWidget(self.print_btn)
+
         return group
 
     def _create_history_group(self):
@@ -238,6 +244,7 @@ class ReferenceLabelsWidget(QWidget):
         self.process_btn.clicked.connect(self._process_pdf)
         self.change_dir_btn.clicked.connect(self._change_output_dir)
         self.history_table.doubleClicked.connect(self._open_history_item)
+        self.print_btn.clicked.connect(self._on_print_clicked)
 
         # Connect to MainWindow session change
         # Note: session_changed might not exist yet, so we'll also check in showEvent
@@ -480,6 +487,9 @@ class ReferenceLabelsWidget(QWidget):
         self.status_label.setText("Processing complete!")
         self.status_label.setStyleSheet("color: green; font-weight: bold;")
 
+        self.last_output_pdf = Path(result['output_file'])
+        self.print_btn.setEnabled(True)
+
         self.log.info(
             f"PDF processing complete: {result['matched']} matched, "
             f"{result['unmatched']} unmatched"
@@ -686,6 +696,9 @@ class ReferenceLabelsWidget(QWidget):
             )
         else:
             self.log.info(f"Opened PDF: {file_path}")
+
+    def _on_print_clicked(self):
+        print_pdf(self, self.last_output_pdf, load_print_settings())
 
     def _on_session_changed(self):
         """Handle session change event."""
