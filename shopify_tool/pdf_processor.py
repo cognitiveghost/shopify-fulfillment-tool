@@ -174,6 +174,14 @@ def process_reference_labels(
 
             if ref:
                 try:
+                    # Courier PDFs set wildly different page /Rotate values (some
+                    # ship pre-rotated 90/270 label stock instead of authoring
+                    # content upright). Bake rotation into content first so
+                    # mediabox always reflects the true visual page -- otherwise
+                    # the "bottom" strip below lands on a different physical edge
+                    # (top/left/right) depending on which courier produced the PDF.
+                    page.transfer_rotation_to_content()
+
                     page_width = float(page.mediabox.width)
                     page_height = float(page.mediabox.height)
 
@@ -506,8 +514,9 @@ def create_reference_overlay(
 ) -> BytesIO:
     """
     Create PDF overlay with the Reference Number and a horizontal Code-128
-    barcode encoding it, positioned in the bottom strip freed up by
-    process_reference_labels()'s content-shrink transform.
+    barcode encoding it, centered as one block in the bottom-middle of the
+    strip freed up by process_reference_labels()'s content-shrink transform,
+    with a separator line marking the strip off from the original content.
 
     Args:
         reference_number: Reference number to display and encode
@@ -523,15 +532,26 @@ def create_reference_overlay(
     strip_height = page_height * (1 - _CONTENT_SCALE)
     margin = 8
 
+    # Separator: marks the boundary between the shrunk courier content above
+    # and the added reference strip below, so the two are never mistaken for
+    # one continuous original label.
+    can.setLineWidth(0.75)
+    can.line(margin, strip_height, page_width - margin, strip_height)
+
     can.setFont("Helvetica-Bold", 10)
     text = f"REF: {reference_number}"
-    text_y = strip_height / 2 - 3
-    can.drawString(margin, text_y, text)
     text_width = can.stringWidth(text, "Helvetica-Bold", 10)
 
     bar_height = strip_height * 0.6
     barcode = code128.Code128(reference_number, barHeight=bar_height, barWidth=0.8)
-    barcode.drawOn(can, margin + text_width + 12, (strip_height - bar_height) / 2)
+
+    gap = 12
+    block_width = text_width + gap + barcode.width
+    block_x = (page_width - block_width) / 2
+
+    text_y = strip_height / 2 - 3
+    can.drawString(block_x, text_y, text)
+    barcode.drawOn(can, block_x + text_width + gap, (strip_height - bar_height) / 2)
 
     can.save()
     packet.seek(0)
