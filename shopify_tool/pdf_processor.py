@@ -18,10 +18,13 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter, Transformation
+from reportlab.graphics.barcode import code128
 from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
+
+_CONTENT_SCALE = 0.88
 
 
 # Custom Exceptions
@@ -164,23 +167,23 @@ def process_reference_labels(
             progress_callback(85, 100, "Adding reference labels...")
 
         writer = PdfWriter()
-        ref_order_map = create_reference_order_map(sorted_pages)
 
         for page_data in sorted_pages:
             page = page_data['page']
             ref = page_data['ref']
 
             if ref:
-                ref_order_num = ref_order_map[ref]
-
                 try:
-                    # Add reference overlay
-                    overlay = create_reference_overlay(
-                        ref,
-                        ref_order_num,
-                        float(page.mediabox.width),
-                        float(page.mediabox.height)
+                    page_width = float(page.mediabox.width)
+                    page_height = float(page.mediabox.height)
+
+                    transform = Transformation().scale(_CONTENT_SCALE, _CONTENT_SCALE).translate(
+                        tx=page_width * (1 - _CONTENT_SCALE) / 2,
+                        ty=page_height * (1 - _CONTENT_SCALE),
                     )
+                    page.add_transformation(transform)
+
+                    overlay = create_reference_overlay(ref, page_width, page_height)
                     page.merge_page(PdfReader(overlay).pages[0])
 
                 except Exception:
@@ -496,47 +499,18 @@ def sort_pages_by_reference(page_data_list: list) -> list:
     return matched_pages + unmatched_pages
 
 
-def create_reference_order_map(sorted_pages: list) -> dict[str, int]:
-    """
-    Create mapping of reference number to order position.
-
-    Args:
-        sorted_pages: List of sorted page data
-
-    Returns:
-        Dict: {ref_number: order_number}
-    """
-    ref_order_map = {}
-    order_counter = 0
-    last_ref = None
-
-    for page_data in sorted_pages:
-        ref = page_data['ref']
-        if ref and ref != last_ref:
-            order_counter += 1
-            ref_order_map[ref] = order_counter
-            last_ref = ref
-
-    logger.debug(f"Created reference order map: {len(ref_order_map)} unique refs")
-
-    return ref_order_map
-
-
 def create_reference_overlay(
     reference_number: str,
-    order_number: int,
     page_width: float,
     page_height: float
 ) -> BytesIO:
     """
-    Create PDF overlay with reference number and order number.
-
-    Format: "[order_number]. REF: [reference_number]"
-    Position: Bottom left, 3 units from bottom
+    Create PDF overlay with the Reference Number and a horizontal Code-128
+    barcode encoding it, positioned in the bottom strip freed up by
+    process_reference_labels()'s content-shrink transform.
 
     Args:
-        reference_number: Reference number to display
-        order_number: Order number to display
+        reference_number: Reference number to display and encode
         page_width: Page width in points
         page_height: Page height in points
 
@@ -546,22 +520,18 @@ def create_reference_overlay(
     packet = BytesIO()
     can = canvas.Canvas(packet, pagesize=(page_width, page_height))
 
-    # Fixed position for REF (never moves)
-    x_ref = 200
-    y_bottom = 3
+    strip_height = page_height * (1 - _CONTENT_SCALE)
+    margin = 8
+
     can.setFont("Helvetica-Bold", 10)
+    text = f"REF: {reference_number}"
+    text_y = strip_height / 2 - 3
+    can.drawString(margin, text_y, text)
+    text_width = can.stringWidth(text, "Helvetica-Bold", 10)
 
-    # Draw REF text
-    ref_text = f"REF: {reference_number}"
-    can.drawString(x_ref, y_bottom, ref_text)
-
-    # Calculate order number position (to the LEFT of REF)
-    order_text = f"{order_number}."
-    order_width = can.stringWidth(order_text, "Helvetica-Bold", 10)
-
-    # Position order number to the left of REF (with 5 units spacing)
-    x_order = x_ref - order_width - 5
-    can.drawString(x_order, y_bottom, order_text)
+    bar_height = strip_height * 0.6
+    barcode = code128.Code128(reference_number, barHeight=bar_height, barWidth=0.8)
+    barcode.drawOn(can, margin + text_width + 12, (strip_height - bar_height) / 2)
 
     can.save()
     packet.seek(0)

@@ -12,11 +12,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings
-from PySide6.QtGui import QPainter
+from PySide6.QtCore import QSettings, QSizeF
+from PySide6.QtGui import QPageSize, QPainter
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
-from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QMessageBox, QWidget
+from PySide6.QtWidgets import QMessageBox, QWidget
 
 from shopify_tool import label_printing
 
@@ -25,50 +25,22 @@ logger = logging.getLogger(__name__)
 _SETTINGS = ("ShopifyFulfillmentTool", "Printing")
 
 
-def load_print_settings() -> dict:
+def load_print_settings(scope: str) -> dict:
     qs = QSettings(*_SETTINGS)
     return {
-        "print_mode": qs.value("print_mode", "driver"),
-        "raw_zpl_target": qs.value("raw_zpl_target", ""),
-        "raw_zpl_rotate": qs.value("raw_zpl_rotate", False, type=bool),
+        "print_mode": qs.value(f"{scope}/print_mode", "driver"),
+        "raw_zpl_target": qs.value(f"{scope}/raw_zpl_target", ""),
+        "raw_zpl_rotate": qs.value(f"{scope}/raw_zpl_rotate", False, type=bool),
+        "driver_printer_name": qs.value(f"{scope}/driver_printer_name", ""),
     }
 
 
-def save_print_settings(settings: dict) -> None:
+def save_print_settings(scope: str, settings: dict) -> None:
     qs = QSettings(*_SETTINGS)
-    qs.setValue("print_mode", settings["print_mode"])
-    qs.setValue("raw_zpl_target", settings["raw_zpl_target"])
-    qs.setValue("raw_zpl_rotate", settings["raw_zpl_rotate"])
-
-
-def refresh_print_controls(combo: QComboBox, target_edit: QLineEdit, rotate_check: QCheckBox) -> None:
-    """Resync a window's print-mode/target/rotate controls from QSettings.
-
-    Reference Labels and Barcode Generator each have their own copy of these
-    controls (by design, per the spec -- same settings, different windows,
-    so the operator never has to leave the window they're printing from).
-    Both windows stay alive as sibling tabs once built, so without this,
-    switching tabs shows a stale snapshot from whenever the widget was
-    constructed; toggling any control there then saves that stale snapshot
-    and silently clobbers a change just made in the other window. Call this
-    from each window's showEvent() so its controls are always current
-    before the operator can touch them.
-    """
-    settings = load_print_settings()
-    for widget in (combo, target_edit, rotate_check):
-        widget.blockSignals(True)
-    try:
-        mode_index = combo.findData(settings["print_mode"])
-        if mode_index >= 0:
-            combo.setCurrentIndex(mode_index)
-        target_edit.setText(settings["raw_zpl_target"])
-        rotate_check.setChecked(settings["raw_zpl_rotate"])
-    finally:
-        for widget in (combo, target_edit, rotate_check):
-            widget.blockSignals(False)
-    is_zpl = combo.currentData() == "raw_zpl"
-    target_edit.setEnabled(is_zpl)
-    rotate_check.setEnabled(is_zpl)
+    qs.setValue(f"{scope}/print_mode", settings["print_mode"])
+    qs.setValue(f"{scope}/raw_zpl_target", settings["raw_zpl_target"])
+    qs.setValue(f"{scope}/raw_zpl_rotate", settings["raw_zpl_rotate"])
+    qs.setValue(f"{scope}/driver_printer_name", settings["driver_printer_name"])
 
 
 def print_pdf(parent: QWidget | None, pdf_path: Path, settings: dict) -> bool:
@@ -81,7 +53,7 @@ def print_pdf(parent: QWidget | None, pdf_path: Path, settings: dict) -> bool:
     """
     if settings.get("print_mode") == "raw_zpl":
         return _print_pdf_raw_zpl_mode(parent, pdf_path, settings)
-    return _print_pdf_driver_mode(parent, pdf_path)
+    return _print_pdf_driver_mode(parent, pdf_path, driver_printer_name=settings.get("driver_printer_name", ""))
 
 
 def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
@@ -101,7 +73,31 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
         return False
 
 
-def _print_pdf_driver_mode(parent, pdf_path: Path, output_path: Path | None = None) -> bool:
+def _resolve_page_range(printer: QPrinter, page_count: int) -> tuple[int, int]:
+    """0-indexed [first, last] page range from the print dialog's page-range
+    selection, or the full document if the operator left it on "All"."""
+    if printer.printRange() == QPrinter.PrintRange.PageRange:
+        from_page = printer.fromPage() or 1
+        to_page = printer.toPage() or page_count
+        return from_page - 1, min(to_page, page_count) - 1
+    return 0, page_count - 1
+
+
+def _apply_default_page_size(printer: QPrinter, document: QPdfDocument) -> None:
+    """Set the printer's page size to match the PDF's own first-page
+    dimensions, so the print dialog opens already matching the label size
+    instead of the operator manually re-entering it each time. Still
+    overridable by the operator inside the dialog."""
+    size_pt = document.pagePointSize(0)
+    if size_pt.isEmpty():
+        return
+    size_mm = QSizeF(size_pt.width() / 72 * 25.4, size_pt.height() / 72 * 25.4)
+    printer.setPageSize(QPageSize(size_mm, QPageSize.Unit.Millimeter))
+
+
+def _print_pdf_driver_mode(
+    parent, pdf_path: Path, output_path: Path | None = None, driver_printer_name: str = ""
+) -> bool:
     document = QPdfDocument()
     load_error = document.load(str(pdf_path))
     if load_error != QPdfDocument.Error.None_:
@@ -109,6 +105,9 @@ def _print_pdf_driver_mode(parent, pdf_path: Path, output_path: Path | None = No
         return False
 
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+    if driver_printer_name:
+        printer.setPrinterName(driver_printer_name)
+    _apply_default_page_size(printer, document)
 
     if output_path is not None:
         # Test-only escape hatch: PDF output needs no OS printer and no
@@ -122,14 +121,16 @@ def _print_pdf_driver_mode(parent, pdf_path: Path, output_path: Path | None = No
         if dialog.exec() != QPrintDialog.DialogCode.Accepted:
             return False
 
+    first_page, last_page = _resolve_page_range(printer, document.pageCount())
+
     try:
         painter = QPainter(printer)
-        for page in range(document.pageCount()):
-            if page > 0:
+        page_rect = printer.pageRect(QPrinter.Unit.DevicePixel).toRect()
+        for page in range(first_page, last_page + 1):
+            if page > first_page:
                 printer.newPage()
-            size = document.pagePointSize(page)
-            image = document.render(page, size.toSize())
-            painter.drawImage(0, 0, image)
+            image = document.render(page, page_rect.size())
+            painter.drawImage(page_rect, image)
         painter.end()
         return True
     except Exception as error:

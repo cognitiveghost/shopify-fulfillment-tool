@@ -5,7 +5,10 @@ from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QLineEdit, QMessageBox
+from PySide6.QtGui import QPageSize
+from PySide6.QtPdf import QPdfDocument
+from PySide6.QtPrintSupport import QPrinter
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from gui import pdf_printing
 
@@ -30,64 +33,47 @@ def isolated_settings(monkeypatch):
 
 class TestPrintSettingsRoundTrip:
     def test_defaults_when_nothing_saved(self, isolated_settings):
-        settings = pdf_printing.load_print_settings()
-        assert settings == {"print_mode": "driver", "raw_zpl_target": "", "raw_zpl_rotate": False}
+        settings = pdf_printing.load_print_settings("reference_labels")
+        assert settings == {
+            "print_mode": "driver", "raw_zpl_target": "", "raw_zpl_rotate": False,
+            "driver_printer_name": "",
+        }
 
     def test_save_then_load_roundtrip(self, isolated_settings):
         pdf_printing.save_print_settings(
-            {"print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": True}
+            "reference_labels",
+            {
+                "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer",
+                "raw_zpl_rotate": True, "driver_printer_name": "Labels 6x4",
+            },
         )
-        assert pdf_printing.load_print_settings() == {
+        assert pdf_printing.load_print_settings("reference_labels") == {
             "print_mode": "raw_zpl",
             "raw_zpl_target": "ZPL-RAW-Printer",
             "raw_zpl_rotate": True,
+            "driver_printer_name": "Labels 6x4",
         }
 
-
-class TestRefreshPrintControls:
-    """Reference Labels and Barcode Generator each keep their own copy of
-    these controls; refresh_print_controls() is what stops one window's
-    stale controls from clobbering a change just made in the other (see
-    PR #261 review, Important #2)."""
-
-    @staticmethod
-    def _make_controls():
-        combo = QComboBox()
-        combo.addItem("OS driver (print dialog)", "driver")
-        combo.addItem("Raw ZPL (direct)", "raw_zpl")
-        return combo, QLineEdit(), QCheckBox()
-
-    def test_pulls_current_settings_into_controls(self, isolated_settings):
+    def test_different_scopes_do_not_collide(self, isolated_settings):
         pdf_printing.save_print_settings(
-            {"print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": True}
+            "reference_labels",
+            {
+                "print_mode": "raw_zpl", "raw_zpl_target": "Labels 6x4",
+                "raw_zpl_rotate": False, "driver_printer_name": "Labels 6x4",
+            },
         )
-        combo, target_edit, rotate_check = self._make_controls()
-
-        pdf_printing.refresh_print_controls(combo, target_edit, rotate_check)
-
-        assert combo.currentData() == "raw_zpl"
-        assert target_edit.text() == "ZPL-RAW-Printer"
-        assert rotate_check.isChecked() is True
-        assert target_edit.isEnabled() and rotate_check.isEnabled()
-
-    def test_reload_does_not_resave_and_clobber_other_window(self, isolated_settings):
-        # Simulates: Barcode Generator sets raw_zpl + a target...
         pdf_printing.save_print_settings(
-            {"print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False}
+            "barcode_generator",
+            {
+                "print_mode": "driver", "raw_zpl_target": "Barcodes",
+                "raw_zpl_rotate": True, "driver_printer_name": "Barcodes",
+            },
         )
-        # ...operator switches to Reference Labels, whose controls were built
-        # earlier and still show the stale "driver" default.
-        combo, target_edit, rotate_check = self._make_controls()
-        save_spy = Mock(wraps=pdf_printing.save_print_settings)
-        combo.currentIndexChanged.connect(lambda _: save_spy(pdf_printing.load_print_settings()))
-        rotate_check.toggled.connect(lambda _: save_spy(pdf_printing.load_print_settings()))
 
-        pdf_printing.refresh_print_controls(combo, target_edit, rotate_check)
-
-        assert not save_spy.called
-        assert pdf_printing.load_print_settings() == {
-            "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False,
-        }
+        ref_settings = pdf_printing.load_print_settings("reference_labels")
+        barcode_settings = pdf_printing.load_print_settings("barcode_generator")
+        assert ref_settings["driver_printer_name"] == "Labels 6x4"
+        assert barcode_settings["driver_printer_name"] == "Barcodes"
 
 
 class TestPrintPdfRawZplMode:
@@ -165,3 +151,147 @@ class TestPrintPdfDriverMode:
         assert out_pdf.exists()
         import pypdf
         assert len(pypdf.PdfReader(str(out_pdf)).pages) == 2
+
+
+class TestResolvePageRange:
+    def test_all_pages_when_range_unset(self):
+        printer = QPrinter()
+        assert pdf_printing._resolve_page_range(printer, page_count=5) == (0, 4)
+
+    def test_honors_page_range_selection(self):
+        printer = QPrinter()
+        printer.setPrintRange(QPrinter.PrintRange.PageRange)
+        printer.setFromTo(2, 3)
+        assert pdf_printing._resolve_page_range(printer, page_count=5) == (1, 2)
+
+    def test_page_range_clamped_to_document_length(self):
+        printer = QPrinter()
+        printer.setPrintRange(QPrinter.PrintRange.PageRange)
+        printer.setFromTo(2, 99)
+        assert pdf_printing._resolve_page_range(printer, page_count=5) == (1, 4)
+
+
+class TestApplyDefaultPageSize:
+    def test_sets_page_size_from_pdf_dimensions(self, tmp_path):
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+
+        src_pdf = tmp_path / "label.pdf"
+        c = canvas.Canvas(str(src_pdf), pagesize=(68 * mm, 38 * mm))
+        c.drawString(5 * mm, 5 * mm, "TEST")
+        c.showPage()
+        c.save()
+
+        document = QPdfDocument()
+        document.load(str(src_pdf))
+        printer = QPrinter()
+
+        pdf_printing._apply_default_page_size(printer, document)
+
+        page_size = printer.pageLayout().pageSize().size(QPageSize.Unit.Millimeter)
+        assert page_size.width() == pytest.approx(68, abs=0.5)
+        assert page_size.height() == pytest.approx(38, abs=0.5)
+
+
+class TestPrintPdfDriverModeRendersAtCorrectSize:
+    def test_renders_larger_than_the_old_point_size_bug(self, monkeypatch, tmp_path):
+        """Regression test for the tiny-corner-stamp bug: the old code called
+        document.render(page, document.pagePointSize(page).toSize()) -- a
+        68x38mm label's *point* size (~193x108) used directly as *pixel*
+        dimensions, then drawn 1:1 onto the printer's high-res canvas. The
+        fix renders at the printer's actual device-pixel page rect instead,
+        which is always larger than the raw point size once a real printer
+        resolution (HighResolution mode) is applied."""
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+
+        src_pdf = tmp_path / "labels.pdf"
+        c = canvas.Canvas(str(src_pdf), pagesize=(68 * mm, 38 * mm))
+        c.drawString(5 * mm, 5 * mm, "TEST")
+        c.showPage()
+        c.save()
+
+        render_calls = []
+        original_render = QPdfDocument.render
+
+        def spy_render(self, page, size):
+            render_calls.append(size)
+            return original_render(self, page, size)
+
+        monkeypatch.setattr(QPdfDocument, "render", spy_render)
+
+        out_pdf = tmp_path / "out.pdf"
+        result = pdf_printing._print_pdf_driver_mode(None, src_pdf, output_path=out_pdf)
+        assert result is True
+
+        probe = QPdfDocument()
+        probe.load(str(src_pdf))
+        point_size = probe.pagePointSize(0).toSize()
+
+        assert len(render_calls) == 1
+        rendered_size = render_calls[0]
+        assert rendered_size.width() > point_size.width()
+        assert rendered_size.height() > point_size.height()
+
+
+class TestPrintPdfDriverModeDefaultPrinter:
+    def test_applies_stored_default_printer_name(self, monkeypatch, tmp_path):
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+
+        src_pdf = tmp_path / "labels.pdf"
+        c = canvas.Canvas(str(src_pdf), pagesize=(68 * mm, 38 * mm))
+        c.drawString(5 * mm, 5 * mm, "TEST")
+        c.showPage()
+        c.save()
+
+        calls = []
+        original_set_name = QPrinter.setPrinterName
+
+        def spy_set_name(self, name):
+            calls.append(name)
+            return original_set_name(self, name)
+
+        monkeypatch.setattr(QPrinter, "setPrinterName", spy_set_name)
+
+        out_pdf = tmp_path / "out.pdf"
+        result = pdf_printing._print_pdf_driver_mode(
+            None, src_pdf, output_path=out_pdf, driver_printer_name="Labels 6x4"
+        )
+
+        assert result is True
+        assert calls == ["Labels 6x4"]
+
+    def test_blank_default_printer_name_does_not_set_printer_name(self, monkeypatch, tmp_path):
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+
+        src_pdf = tmp_path / "labels.pdf"
+        c = canvas.Canvas(str(src_pdf), pagesize=(68 * mm, 38 * mm))
+        c.drawString(5 * mm, 5 * mm, "TEST")
+        c.showPage()
+        c.save()
+
+        calls = []
+        monkeypatch.setattr(QPrinter, "setPrinterName", lambda self, name: calls.append(name))
+
+        out_pdf = tmp_path / "out.pdf"
+        pdf_printing._print_pdf_driver_mode(None, src_pdf, output_path=out_pdf)
+
+        assert calls == []
+
+
+class TestPrintPdfDispatchesDriverPrinterName:
+    def test_print_pdf_forwards_stored_printer_name(self, monkeypatch, tmp_path):
+        called = Mock()
+        monkeypatch.setattr(pdf_printing, "_print_pdf_driver_mode", called)
+
+        pdf_printing.print_pdf(
+            None, tmp_path / "x.pdf",
+            {
+                "print_mode": "driver", "raw_zpl_target": "", "raw_zpl_rotate": False,
+                "driver_printer_name": "Labels 6x4",
+            },
+        )
+
+        called.assert_called_once_with(None, tmp_path / "x.pdf", driver_printer_name="Labels 6x4")

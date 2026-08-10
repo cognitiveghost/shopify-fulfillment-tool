@@ -12,6 +12,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
+from PySide6.QtPrintSupport import QPrinterInfo
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -30,7 +31,6 @@ from PySide6.QtWidgets import (
 from gui.pdf_printing import (
     load_print_settings,
     print_pdf,
-    refresh_print_controls,
     save_print_settings,
 )
 from gui.theme_manager import get_theme_manager
@@ -148,7 +148,7 @@ class ReferenceLabelsWidget(QWidget):
         layout.addWidget(self.auto_open_checkbox)
 
         # Printing (raw ZPL target/rotate only relevant when that mode is selected)
-        print_settings = load_print_settings()
+        print_settings = load_print_settings("reference_labels")
 
         mode_row = QHBoxLayout()
         mode_row.addWidget(QLabel("Print mode:"))
@@ -174,16 +174,30 @@ class ReferenceLabelsWidget(QWidget):
         self.raw_zpl_rotate_check.setChecked(print_settings["raw_zpl_rotate"])
         layout.addWidget(self.raw_zpl_rotate_check)
 
+        printer_row = QHBoxLayout()
+        printer_row.addWidget(QLabel("Default printer (driver mode):"))
+        self.driver_printer_combo = QComboBox()
+        self.driver_printer_combo.addItem("(Windows default)", "")
+        for info in QPrinterInfo.availablePrinters():
+            self.driver_printer_combo.addItem(info.printerName(), info.printerName())
+        printer_index = self.driver_printer_combo.findData(print_settings["driver_printer_name"])
+        if printer_index >= 0:
+            self.driver_printer_combo.setCurrentIndex(printer_index)
+        printer_row.addWidget(self.driver_printer_combo, 1)
+        layout.addLayout(printer_row)
+
         def _update_zpl_controls_enabled():
             is_zpl = self.print_mode_combo.currentData() == "raw_zpl"
             self.raw_zpl_target_edit.setEnabled(is_zpl)
             self.raw_zpl_rotate_check.setEnabled(is_zpl)
+            self.driver_printer_combo.setEnabled(not is_zpl)
 
         _update_zpl_controls_enabled()
         self.print_mode_combo.currentIndexChanged.connect(_update_zpl_controls_enabled)
         self.print_mode_combo.currentIndexChanged.connect(self._save_print_settings)
         self.raw_zpl_target_edit.editingFinished.connect(self._save_print_settings)
         self.raw_zpl_rotate_check.toggled.connect(self._save_print_settings)
+        self.driver_printer_combo.currentIndexChanged.connect(self._save_print_settings)
 
         return group
 
@@ -564,14 +578,15 @@ class ReferenceLabelsWidget(QWidget):
             self.log.info(f"Opened PDF: {file_path}")
 
     def _save_print_settings(self):
-        save_print_settings({
+        save_print_settings("reference_labels", {
             "print_mode": self.print_mode_combo.currentData(),
             "raw_zpl_target": self.raw_zpl_target_edit.text(),
             "raw_zpl_rotate": self.raw_zpl_rotate_check.isChecked(),
+            "driver_printer_name": self.driver_printer_combo.currentData(),
         })
 
     def _on_print_clicked(self):
-        print_pdf(self, self.last_output_pdf, load_print_settings())
+        print_pdf(self, self.last_output_pdf, load_print_settings("reference_labels"))
 
     def _on_session_changed(self):
         """Handle session change event."""
@@ -583,4 +598,3 @@ class ReferenceLabelsWidget(QWidget):
         # Update output directory when tab becomes visible
         # This ensures we pick up the current session even if it was set before widget creation
         self._update_output_dir()
-        refresh_print_controls(self.print_mode_combo, self.raw_zpl_target_edit, self.raw_zpl_rotate_check)
