@@ -27,6 +27,28 @@ CI runs lint + this suite + a headless smoke test (see `.github/workflows/build_
 
 ---
 
+## Session Resource Check
+
+Roadmap work on this repo runs on a Claude Pro subscription — token budget is scarcer
+than on Max/API plans. Before starting multi-step work (a `brainstorming`/`writing-plans`
+pass, a large implementation, anything spanning many tool calls), check current usage:
+
+```bash
+claude-monitor --once --output json --plan pro
+```
+
+Key fields: `limits.five_hour.used_percentage` / `.resets_at` (rolling 5-hour window — the
+binding day-to-day constraint), `status.label` (`"limit_hit"` means stop and wait for
+`resets_at`). If usage is already high, prefer smaller/shorter-scoped work this session.
+
+An unattended runner using this same check lives outside this repo at
+`~/automation/claude-roadmap-runner/` (usage-gated cron dispatcher + a fixed orienting
+prompt for overnight roadmap work across this repo and `packing-tool`) — see its
+`prompt.md` for the stage-detection convention it uses when resuming work it left
+mid-flight.
+
+---
+
 ## Shared Module (`shared/`)
 
 `shared/` (theme, logger, stats, file locking, atomic writes, session IDs) is **not owned by this repo**.
