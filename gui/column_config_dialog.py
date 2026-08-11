@@ -716,31 +716,27 @@ class ColumnConfigPanel(QWidget):
             if hasattr(self.parent_window, 'current_client_id') and self.parent_window.current_client_id:
                 client_id = self.parent_window.current_client_id
                 view_name = self.view_combo.currentText() or "Default"
-                self.table_config_manager.save_config(client_id, config, view_name)
 
-                if hasattr(self, 'additional_columns_config'):
-                    if self.additional_columns_config:
-                        logger.debug("Syncing UI checkbox states to config before saving...")
-                        self._sync_ui_to_config()
+                additional_columns = None
+                if hasattr(self, 'additional_columns_config') and self.additional_columns_config:
+                    logger.debug("Syncing UI checkbox states to config before saving...")
+                    self._sync_ui_to_config()
+                    additional_columns = self.additional_columns_config
 
-                    enabled_cols = [col for col in self.additional_columns_config if col.get('enabled', False)]
-                    disabled_cols = [col for col in self.additional_columns_config if not col.get('enabled', False)]
+                self.table_config_manager.save_config(
+                    client_id, config, view_name, additional_columns=additional_columns
+                )
 
-                    logger.debug(f"Saving additional columns config: {len(self.additional_columns_config)} columns")
+                if additional_columns is not None:
+                    enabled_cols = [col for col in additional_columns if col.get('enabled', False)]
+                    disabled_cols = [col for col in additional_columns if not col.get('enabled', False)]
+                    logger.debug(f"Saved additional columns config: {len(additional_columns)} columns")
                     logger.debug(f"  Enabled: {len(enabled_cols)} - {[col['csv_name'] for col in enabled_cols]}")
                     logger.debug(f"  Disabled: {len(disabled_cols)}")
-
-                    client_config = self.table_config_manager.pm.load_client_config(client_id)
-
-                    if "ui_settings" not in client_config:
-                        client_config["ui_settings"] = {}
-                    if "table_view" not in client_config["ui_settings"]:
-                        client_config["ui_settings"]["table_view"] = {}
-
-                    client_config["ui_settings"]["table_view"]["additional_columns"] = self.additional_columns_config
-
-                    self.table_config_manager.pm.save_client_config(client_id, client_config)
-                    logger.info(f"Saved additional columns: {len(enabled_cols)} enabled ({', '.join([col['csv_name'] for col in enabled_cols])})")
+                    logger.info(
+                        f"Saved additional columns: {len(enabled_cols)} enabled "
+                        f"({', '.join([col['csv_name'] for col in enabled_cols])})"
+                    )
 
                 if hasattr(self.parent_window, 'tableView') and \
                    hasattr(self.parent_window, 'analysis_results_df') and \
@@ -752,7 +748,7 @@ class ColumnConfigPanel(QWidget):
 
                 logger.info("Column configuration applied successfully")
 
-                if hasattr(self, 'additional_columns_config') and any(col.get('enabled', False) for col in self.additional_columns_config):
+                if additional_columns and any(col.get('enabled', False) for col in additional_columns):
                     QMessageBox.information(
                         self,
                         "Configuration Saved",
