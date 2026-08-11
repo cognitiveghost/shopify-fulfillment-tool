@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
-    QGroupBox,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -61,80 +61,43 @@ class AddProductDialog(QDialog):
         """Setup dialog UI components."""
         self.setWindowTitle("Add Product to Order")
         self.setModal(True)
-        self.resize(500, 500)
+        self.setMinimumWidth(420)
 
         layout = QVBoxLayout(self)
 
-        # Section 1: Order Number Input
-        layout.addWidget(self._create_order_section())
+        form_layout = QFormLayout()
+        self._build_form(form_layout)
+        layout.addLayout(form_layout)
 
-        # Section 2: Product/SKU Input
-        layout.addWidget(self._create_product_section())
-
-        # Section 3: Quantity
-        layout.addWidget(self._create_quantity_section())
-
-        # Section 4: Info/Warning
         self.warning_box = self._create_warning_box()
         self.warning_box.setVisible(False)
         layout.addWidget(self.warning_box)
 
-        self.info_box = self._create_info_box()
-        layout.addWidget(self.info_box)
-
-        # Section 5: Buttons
         layout.addWidget(self._create_buttons())
 
-    def _create_order_section(self):
-        """Create order number input section."""
-        group = QGroupBox("ORDER NUMBER")
-        layout = QVBoxLayout(group)
-
-        layout.addWidget(QLabel("Enter order number:"))
-
+    def _build_form(self, form_layout: QFormLayout):
+        """Populate the order/SKU/quantity form rows."""
         self.order_input = QLineEdit()
         self.order_input.setPlaceholderText("Type order number... (e.g., 1001)")
         self.order_input.textChanged.connect(self._on_order_changed)
-        layout.addWidget(self.order_input)
+        form_layout.addRow("Order Number:", self.order_input)
 
-        # Status label (shows if order found)
         self.order_status_label = QLabel("")
-        layout.addWidget(self.order_status_label)
-
-        return group
-
-    def _create_product_section(self):
-        """Create SKU input section."""
-        group = QGroupBox("PRODUCT SKU")
-        layout = QVBoxLayout(group)
-
-        layout.addWidget(QLabel("Enter product SKU:"))
+        form_layout.addRow("", self.order_status_label)
 
         self.sku_input = QLineEdit()
         self.sku_input.setPlaceholderText("Type SKU... (e.g., SKU-HAT)")
         self.sku_input.textChanged.connect(self._on_sku_changed)
-        layout.addWidget(self.sku_input)
+        form_layout.addRow("Product SKU:", self.sku_input)
 
-        # Product info label (shows name + stock)
         self.product_info_label = QLabel("")
-        layout.addWidget(self.product_info_label)
-
-        return group
-
-    def _create_quantity_section(self):
-        """Create quantity input section."""
-        group = QGroupBox("QUANTITY")
-        layout = QVBoxLayout(group)
-
-        layout.addWidget(QLabel("Quantity to add:"))
+        form_layout.addRow("", self.product_info_label)
 
         self.quantity_spin = QSpinBox()
         self.quantity_spin.setMinimum(1)
         self.quantity_spin.setMaximum(9999)
         self.quantity_spin.setValue(1)
-        layout.addWidget(self.quantity_spin)
-
-        return group
+        form_layout.addRow("Quantity:", self.quantity_spin)
 
     def _create_warning_box(self):
         """Create warning box for low/zero stock."""
@@ -148,32 +111,6 @@ class AddProductDialog(QDialog):
                 background-color: #FFEBEE;
                 color: #1A1A1A;
                 border: 2px solid {theme.accent_red};
-                border-radius: 5px;
-                padding: 10px;
-            }}
-        """)
-        return label
-
-    def _create_info_box(self):
-        """Create info box."""
-        theme = get_theme_manager().get_current_theme()
-        text = (
-            "INFO\n\n"
-            "• Product will be added with Source: 'Manual'\n"
-            "• Fulfillment will be recalculated for this order\n"
-            "• Manual addition will be saved in session\n"
-            "• NO full re-analysis needed"
-        )
-
-        label = QLabel(text)
-        label.setWordWrap(True)
-        # ponytail: literal info-tint background, not worth a new
-        # ThemeTokens field for a handful of call sites.
-        label.setStyleSheet(f"""
-            QLabel {{
-                background-color: #E3F2FD;
-                color: #1A1A1A;
-                border: 2px solid {theme.accent_blue};
                 border-radius: 5px;
                 padding: 10px;
             }}
