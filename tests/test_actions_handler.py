@@ -5,11 +5,13 @@ order with two lines sharing the same SKU would have both lines deleted when
 the user only meant to remove one. The fix threads the clicked row's position
 through from the context menu and removes exactly that row.
 """
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
+from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from gui.actions_handler import ActionsHandler
@@ -133,3 +135,64 @@ def test_bulk_remove_tag_removes_from_every_row_of_a_multi_line_order(mw_with_ta
     assert tags.loc["A1"] == "[]"
     assert tags.loc["A2"] == "[]"  # order 1001's other line, not just the checked one
     assert tags.loc["B1"] == '["URGENT"]'  # different order, untouched
+
+
+def test_on_analysis_complete_does_not_block_ui_thread_on_stats_recording(
+    monkeypatch, tmp_path
+):
+    """Regression test for the analysis-run freeze (Todoist Track A).
+
+    Root cause: StatsManager.record_analysis() performs blocking network I/O
+    (file lock, read/write, fsync) over the UNC file share. on_analysis_complete
+    is a Qt result-signal slot, so it always executes on the GUI thread --
+    running that I/O inline froze the whole UI on every analysis run,
+    regardless of batch size (the network round-trips are a fixed cost, not
+    proportional to the data). The fix hands the stats write off to the
+    existing background QThreadPool instead of calling it inline.
+    """
+    df = pd.DataFrame(
+        [
+            {"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"},
+            {"Order_Number": "1002", "Order_Fulfillment_Status": "Fulfillable"},
+            {"Order_Number": "1003", "Order_Fulfillment_Status": "Unfulfillable"},
+        ]
+    )
+
+    calls = []
+
+    def slow_record_analysis(self, **kwargs):
+        time.sleep(0.3)  # stand-in for slow/contended UNC network I/O
+        calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "shared.stats_manager.StatsManager.record_analysis", slow_record_analysis
+    )
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+
+    mw = SimpleNamespace(
+        session_path=str(tmp_path / "session_1"),
+        current_client_id="M",
+        profile_manager=SimpleNamespace(base_path=tmp_path),
+        threadpool=QThreadPool(),
+        log_activity=Mock(),
+        update_ui_state=Mock(),
+    )
+    handler = ActionsHandler(mw)
+
+    start = time.perf_counter()
+    handler.on_analysis_complete((True, "report.csv", df, {}))
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 0.2, (
+        f"on_analysis_complete blocked the calling thread for {elapsed:.3f}s -- "
+        "statistics recording must be handed off to a background thread, not "
+        "run inline in this Qt result-signal slot"
+    )
+
+    assert mw.threadpool.waitForDone(2000), "background stats worker never finished"
+    assert len(calls) == 1
+    assert calls[0]["client_id"] == "M"
+    assert calls[0]["session_id"] == "session_1"
+    assert calls[0]["orders_count"] == 3
+    assert calls[0]["metadata"]["items_count"] == 3
+    assert calls[0]["metadata"]["fulfillable_orders"] == 2
