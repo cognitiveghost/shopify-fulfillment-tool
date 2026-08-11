@@ -56,9 +56,12 @@ display-name map for known columns, raw name in a tooltip. Category assignment f
 known analysis columns needs a lookup table (doesn't exist yet — build it from
 `shopify_tool/core.py`'s output columns, next task's job, not this doc's).
 
-**Decision needed from user**: (a) vs (b) above — (a) is the more "properly grouped" result the
-screenshot implies; (b) is the lazier, smaller, still-correct fix. Recommend (b) first pass,
-upgrade to (a) later only if users still report it's hard to navigate.
+**Decision (made autonomously — no user present to ask, per runner guardrails):** going with
+**(b)** — keep `QListWidget`, insert non-checkable bold category header rows. Smaller diff, same
+widget/reorder/search logic, still resolves the "no grouping" complaint. Upgrade to (a)
+(`QTreeWidget`) later only if users report it's still hard to navigate once grouped. This was the
+doc's own first-pass recommendation, so taking it rather than blocking on a question nobody's
+here to answer.
 
 ## Item 2 — Statistics tab
 
