@@ -1786,6 +1786,11 @@ class UIManager:
         sku_layout = QVBoxLayout(sku_group)
         sku_layout.setContentsMargins(8, 8, 8, 8)
 
+        self.mw.sku_search_input = QLineEdit()
+        self.mw.sku_search_input.setPlaceholderText("Filter by SKU or product...")
+        self.mw.sku_search_input.textChanged.connect(self.mw._on_sku_search_changed)
+        sku_layout.addWidget(self.mw.sku_search_input)
+
         self.mw.sku_table = QTableWidget()
         self.mw.sku_table.setColumnCount(6)
         self.mw.sku_table.setHorizontalHeaderLabels(
@@ -1799,6 +1804,7 @@ class UIManager:
         self.mw.sku_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.mw.sku_table.setAlternatingRowColors(True)
         self.mw.sku_table.verticalHeader().setVisible(False)
+        self.mw.sku_table.setSortingEnabled(True)
         self.mw.sku_table.setMinimumHeight(200)
         sku_layout.addWidget(self.mw.sku_table)
         layout.addWidget(sku_group, 1)

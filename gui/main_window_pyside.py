@@ -1303,6 +1303,7 @@ class MainWindow(QMainWindow):
 
         # === 4. SKU table ===
         if hasattr(self, "sku_table"):
+            self.sku_table.setSortingEnabled(False)
             self.sku_table.setRowCount(0)
             sku_summary = self.analysis_stats.get("sku_summary") or []
             for row_idx, sku_data in enumerate(sku_summary):
@@ -1331,6 +1332,20 @@ class MainWindow(QMainWindow):
 
             self.sku_table.resizeColumnToContents(0)
             self.sku_table.resizeColumnToContents(1)
+            self.sku_table.setSortingEnabled(True)
+            if hasattr(self, "sku_search_input"):
+                self.sku_search_input.clear()
+
+    def _on_sku_search_changed(self, text: str):
+        """Filter the SKU Summary table by SKU/product substring."""
+        text = text.strip().lower()
+        for row in range(self.sku_table.rowCount()):
+            sku_item = self.sku_table.item(row, 1)
+            product_item = self.sku_table.item(row, 2)
+            sku_text = sku_item.text().lower() if sku_item else ""
+            product_text = product_item.text().lower() if product_item else ""
+            matches = not text or text in sku_text or text in product_text
+            self.sku_table.setRowHidden(row, not matches)
 
     def _clear_statistics_view(self):
         """Clear statistics display when no analysis results."""
