@@ -129,6 +129,31 @@ class TestCreateReferenceOverlayBarcode:
         reader = PdfReader(overlay_pdf)
         assert len(reader.pages) == 1
 
+    def test_barcode_module_width_is_whole_dots_at_print_dpi(self, monkeypatch):
+        # 0.8pt (the old value) is 2.26 dots at 203 DPI -- a fractional dot
+        # count where rasterization rounds bars inconsistently, blurring
+        # the barcode into a near-solid block. barWidth must land on a
+        # clean whole-dot count.
+        from reportlab.graphics.barcode import code128
+
+        from shopify_tool.label_printing import PRINT_DPI
+
+        calls = []
+        original_init = code128.Code128.__init__
+
+        def spy_init(self, value, **kwargs):
+            calls.append(kwargs.get("barWidth"))
+            return original_init(self, value, **kwargs)
+
+        monkeypatch.setattr(code128.Code128, "__init__", spy_init)
+
+        pdf_processor.create_reference_overlay("REF-001", 288, 432)
+
+        assert len(calls) == 1
+        module_dots = calls[0] * PRINT_DPI / 72
+        assert module_dots == pytest.approx(round(module_dots))
+        assert module_dots >= 3
+
 
 class TestCreateReferenceOverlayLayout:
     def test_ref_and_barcode_block_is_horizontally_centered(self, monkeypatch):

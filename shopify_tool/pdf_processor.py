@@ -22,9 +22,20 @@ from pypdf import PdfReader, PdfWriter, Transformation
 from reportlab.graphics.barcode import code128
 from reportlab.pdfgen import canvas
 
+from shopify_tool.label_printing import PRINT_DPI
+
 logger = logging.getLogger(__name__)
 
 _CONTENT_SCALE = 0.88
+
+# Code-128 module (narrowest bar) width, sized in whole dots at the raw-ZPL
+# print resolution rather than a bare point value. The previous 0.8pt
+# landed at 0.8 * 203/72 = 2.26 dots -- a fractional dot count where
+# adjacent bars round inconsistently during rasterization and thermal dot
+# gain, blurring the barcode into a near-solid block. 4 whole dots gives
+# each bar a clean, consistent edge.
+_BARCODE_MODULE_DOTS = 4
+_BARCODE_BAR_WIDTH = _BARCODE_MODULE_DOTS * 72 / PRINT_DPI
 
 
 # Custom Exceptions
@@ -543,7 +554,7 @@ def create_reference_overlay(
     text_width = can.stringWidth(text, "Helvetica-Bold", 10)
 
     bar_height = strip_height * 0.6
-    barcode = code128.Code128(reference_number, barHeight=bar_height, barWidth=0.8)
+    barcode = code128.Code128(reference_number, barHeight=bar_height, barWidth=_BARCODE_BAR_WIDTH)
 
     gap = 12
     block_width = text_width + gap + barcode.width
