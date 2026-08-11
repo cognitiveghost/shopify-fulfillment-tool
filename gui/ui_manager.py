@@ -5,7 +5,6 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -821,38 +820,6 @@ class UIManager:
         main_layout.addLayout(settings_layout)
 
         return group
-
-    def create_statistics_tab(self, tab_widget):
-        """Creates and lays out the UI elements for the 'Statistics' tab.
-
-        Args:
-            tab_widget (QWidget): The parent widget (the tab) to populate.
-        """
-        layout = QGridLayout(tab_widget)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.mw.stats_labels = {}
-        stat_keys = {
-            "total_orders_completed": "Total Orders Completed:",
-            "total_orders_not_completed": "Total Orders Not Completed:",
-            "total_items_to_write_off": "Total Items to Write Off:",
-            "total_items_not_to_write_off": "Total Items Not to Write Off:",
-        }
-        row_counter = 0
-        for key, text in stat_keys.items():
-            label = QLabel(text)
-            value_label = QLabel("-")
-            self.mw.stats_labels[key] = value_label
-            layout.addWidget(label, row_counter, 0)
-            layout.addWidget(value_label, row_counter, 1)
-            row_counter += 1
-
-        courier_header = QLabel("Couriers Stats:")
-        courier_header.setStyleSheet("font-weight: bold; margin-top: 15px;")
-        layout.addWidget(courier_header, row_counter, 0, 1, 2)
-        row_counter += 1
-        self.mw.courier_stats_layout = QGridLayout()
-        layout.addLayout(self.mw.courier_stats_layout, row_counter, 0, 1, 2)
-        self.log.info("Statistics tab created.")
 
     def set_ui_busy(self, is_busy):
         """Enables or disables key UI elements based on application state.
