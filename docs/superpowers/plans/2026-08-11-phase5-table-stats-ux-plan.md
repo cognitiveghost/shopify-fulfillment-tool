@@ -1,6 +1,6 @@
 # Phase 5 — Table & Stats UX Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Ship the three independent Phase 5 UI cleanups (Todoist `6h8v49wj4M3cFxJV`) scoped in `docs/superpowers/specs/2026-08-11-phase5-table-stats-ux-design.md`: a grouped Manage Table Columns list, two small Statistics-tab fixes, and a simplified Add Product to Order dialog.
 
@@ -29,7 +29,7 @@
 
 Currently `ColumnConfigPanel._load_columns` (`gui/column_config_dialog.py:255-292`) builds a flat, ungrouped `QListWidget` where each item's `text()` *is* the raw DataFrame column name (e.g. `Order_Fulfillment_Status`), and every other method in the class (`_on_item_changed`, `_on_move_up`, `_on_move_down`, `_get_config_from_ui`) reads that same `item.text()` back out as the column name. This task inserts non-checkable, bold category header rows between groups and swaps the checkable items' visible text for a friendlier display name — which means `item.text()` can no longer double as the raw column name. Every one of those call sites must switch to `item.data(Qt.UserRole)` in the same change, or they'll silently start writing display-name strings into `TableConfig.column_order`/`visible_columns` instead of real column names.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_column_config_dialog.py`:
 
@@ -129,12 +129,12 @@ def test_locked_column_tooltip_still_shows_raw_name():
     assert "Order_Number" in item.toolTip()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_column_config_dialog.py -v`
 Expected: FAIL — `ImportError: cannot import name '_CATEGORY_HEADER_MARKER'` (module constant doesn't exist yet).
 
-- [ ] **Step 3: Add the category/display-name lookup and import**
+- [x] **Step 3: Add the category/display-name lookup and import**
 
 In `gui/column_config_dialog.py`, add the import and module-level constants right after `logger = logging.getLogger(__name__)` (line 31):
 
@@ -231,7 +231,7 @@ def _column_category(col_name: str) -> str:
     return COLUMN_CATEGORIES.get(col_name, "Other")
 ```
 
-- [ ] **Step 4: Rewrite `_load_columns` to group by category**
+- [x] **Step 4: Rewrite `_load_columns` to group by category**
 
 Replace `ColumnConfigPanel._load_columns` (`gui/column_config_dialog.py:255-292`) with:
 
@@ -299,7 +299,7 @@ Replace `ColumnConfigPanel._load_columns` (`gui/column_config_dialog.py:255-292`
         self._update_button_states()
 ```
 
-- [ ] **Step 5: Update `_on_search_changed` to read raw names and hide headers while filtering**
+- [x] **Step 5: Update `_on_search_changed` to read raw names and hide headers while filtering**
 
 Replace `_on_search_changed` (`gui/column_config_dialog.py:294-305`) with:
 
@@ -323,7 +323,7 @@ Replace `_on_search_changed` (`gui/column_config_dialog.py:294-305`) with:
             item.setHidden(text not in column_name.lower())
 ```
 
-- [ ] **Step 6: Update `_on_item_changed` to skip headers and read raw names**
+- [x] **Step 6: Update `_on_item_changed` to skip headers and read raw names**
 
 Replace the body of `_on_item_changed` (`gui/column_config_dialog.py:307-324`) — add a header guard right after the `_is_loading` check, and switch `item.text()` to `item.data(Qt.UserRole)`:
 
@@ -351,7 +351,7 @@ Replace the body of `_on_item_changed` (`gui/column_config_dialog.py:307-324`) �
             )
 ```
 
-- [ ] **Step 7: Rewrite `_on_move_up`/`_on_move_down` to respect group boundaries and read raw names**
+- [x] **Step 7: Rewrite `_on_move_up`/`_on_move_down` to respect group boundaries and read raw names**
 
 Replace `_on_move_up` (`gui/column_config_dialog.py:326-358`) with:
 
@@ -443,7 +443,7 @@ Replace `_on_move_down` (`gui/column_config_dialog.py:360-390`) with:
 
 This drops the old hardcoded `current_row == 1`/`current_row == 0` special cases (which assumed `Order_Number` always sat at literal row 0 — no longer true once a header row precedes it) in favor of a general "can't swap across a locked column" rule that works regardless of row offsets.
 
-- [ ] **Step 8: Update `_on_show_all`/`_on_hide_all` to skip headers and read raw names**
+- [x] **Step 8: Update `_on_show_all`/`_on_hide_all` to skip headers and read raw names**
 
 Replace `_on_show_all` (`gui/column_config_dialog.py:392-402`) with:
 
@@ -486,7 +486,7 @@ Replace `_on_hide_all` (`gui/column_config_dialog.py:404-419`) with:
             self._is_loading = False
 ```
 
-- [ ] **Step 9: Update `_get_config_from_ui` to skip headers and read raw names**
+- [x] **Step 9: Update `_get_config_from_ui` to skip headers and read raw names**
 
 Replace the item-iteration loop in `_get_config_from_ui` (`gui/column_config_dialog.py:637-665`, the `for i in range(self.column_list.count()):` block) with:
 
@@ -504,12 +504,12 @@ Replace the item-iteration loop in `_get_config_from_ui` (`gui/column_config_dia
 
 (the rest of the method — building and returning the `TableConfig` — is unchanged)
 
-- [ ] **Step 10: Run the test to verify it passes**
+- [x] **Step 10: Run the test to verify it passes**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_column_config_dialog.py -v`
 Expected: PASS (5 tests)
 
-- [ ] **Step 11: Run the full suite and lint, then commit**
+- [x] **Step 11: Run the full suite and lint, then commit**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest` — expect all pre-existing tests still pass (no other file reads `column_list` internals — confirmed via `grep -rn "\.column_list\b" gui/ --include="*.py"` returning only `column_config_dialog.py` itself).
 Run: `ruff check gui/column_config_dialog.py tests/test_column_config_dialog.py`
@@ -534,7 +534,7 @@ git commit -m "Group Manage Table Columns list by category with display names"
 
 Today, `ColumnConfigPanel.apply_config()` (`gui/column_config_dialog.py:567-635`) calls `table_config_manager.save_config()` (one read-modify-write of `client_config.json`), then — if there's any additional-columns state — does a **second**, independent `self.table_config_manager.pm.load_client_config(...)` / `.save_client_config(...)` pair for the `additional_columns` key. Over a UNC file share that's two network round trips on every "Apply" click instead of one. This task moves the `additional_columns` write inside `TableConfigManager.save_config`'s existing read-modify-write.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_table_config_manager.py`:
 
@@ -590,12 +590,12 @@ def test_save_config_without_additional_columns_leaves_existing_value_untouched(
     assert saved["ui_settings"]["table_view"]["additional_columns"] == seed
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_table_config_manager.py -v`
 Expected: FAIL — `TypeError: save_config() got an unexpected keyword argument 'additional_columns'`
 
-- [ ] **Step 3: Add the `additional_columns` parameter to `save_config`**
+- [x] **Step 3: Add the `additional_columns` parameter to `save_config`**
 
 Replace `TableConfigManager.save_config` (`gui/table_config_manager.py:161-210`) with:
 
@@ -665,12 +665,12 @@ Replace `TableConfigManager.save_config` (`gui/table_config_manager.py:161-210`)
             raise
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_table_config_manager.py -v`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Update `apply_config` to use the single-write call and drop the second read-modify-write**
+- [x] **Step 5: Update `apply_config` to use the single-write call and drop the second read-modify-write**
 
 Replace `ColumnConfigPanel.apply_config` (`gui/column_config_dialog.py:567-635`) with:
 
@@ -742,7 +742,7 @@ Replace `ColumnConfigPanel.apply_config` (`gui/column_config_dialog.py:567-635`)
             )
 ```
 
-- [ ] **Step 6: Run the full suite and lint, then commit**
+- [x] **Step 6: Run the full suite and lint, then commit**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest`
 Run: `ruff check gui/table_config_manager.py gui/column_config_dialog.py tests/test_table_config_manager.py`
@@ -765,16 +765,16 @@ git commit -m "Fold column-config Apply into a single client_config.json write"
 
 `UIManager.create_statistics_tab` (`gui/ui_manager.py:825-856`) is a superseded, older `QGridLayout`-based statistics-tab builder with zero call sites anywhere in the codebase — confirmed by `grep -rn "create_statistics_tab\b" --include="*.py" .` matching only its own `def` line. It was replaced by `_create_statistics_subtab` back in PR #221 and never deleted. No test is needed for a pure dead-code deletion (nothing calls it, so nothing can regress) — the full suite passing is the verification.
 
-- [ ] **Step 1: Confirm zero call sites**
+- [x] **Step 1: Confirm zero call sites**
 
 Run: `grep -rn "create_statistics_tab\b" --include="*.py" .`
 Expected: exactly one match — `gui/ui_manager.py:825:    def create_statistics_tab(self, tab_widget):` (the definition itself, no callers).
 
-- [ ] **Step 2: Delete the method**
+- [x] **Step 2: Delete the method**
 
 Delete lines 825-856 of `gui/ui_manager.py` (the entire `def create_statistics_tab(self, tab_widget):` method, from its `def` line up to and including the blank line right before `def set_ui_busy(self, is_busy):`).
 
-- [ ] **Step 3: Confirm it's gone and the suite still passes**
+- [x] **Step 3: Confirm it's gone and the suite still passes**
 
 Run: `grep -rn "create_statistics_tab\b" --include="*.py" .`
 Expected: no matches.
@@ -784,7 +784,7 @@ Expected: same pass count as before this task (no test referenced the deleted me
 
 Run: `ruff check gui/ui_manager.py`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add gui/ui_manager.py
@@ -808,7 +808,7 @@ The SKU Summary `QTableWidget` (`gui/ui_manager.py:1817-1837`) has no sorting an
 
 **Gotcha this task must handle:** once `setSortingEnabled(True)` is set, Qt re-sorts the table after every `insertRow`/`setItem` call, so `update_statistics_tab`'s populate loop (which uses a running `row_idx` counter to address rows) would silently write values into the wrong (just-resorted) row. Sorting must be disabled for the duration of the populate loop and re-enabled after.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_main_window_statistics.py`:
 
@@ -872,12 +872,12 @@ def test_empty_search_shows_all_rows():
     assert table.isRowHidden(1) is False
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_main_window_statistics.py -v`
 Expected: FAIL — `AttributeError: type object 'MainWindow' has no attribute '_on_sku_search_changed'`
 
-- [ ] **Step 3: Add the search box and enable sorting in `_create_statistics_subtab`**
+- [x] **Step 3: Add the search box and enable sorting in `_create_statistics_subtab`**
 
 In `gui/ui_manager.py`, replace the "SKU Summary" block (`gui/ui_manager.py:1817-1837`) with:
 
@@ -913,7 +913,7 @@ In `gui/ui_manager.py`, replace the "SKU Summary" block (`gui/ui_manager.py:1817
 
 (`QLineEdit` and `QHeaderView` are already imported at the top of `gui/ui_manager.py` — no import changes needed there.)
 
-- [ ] **Step 4: Guard the populate loop against sorting, and add the filter handler**
+- [x] **Step 4: Guard the populate loop against sorting, and add the filter handler**
 
 In `gui/main_window_pyside.py`, replace the "SKU table" block inside `update_statistics_tab` (`gui/main_window_pyside.py:1304-1333`) with:
 
@@ -969,12 +969,12 @@ In `gui/main_window_pyside.py`, replace the "SKU table" block inside `update_sta
 
 Also add `self.sku_table.setRowCount(0)` staying as-is in `_clear_statistics_view` (`gui/main_window_pyside.py:1355-1356`) — no change needed there, clearing rows with sorting left enabled is harmless (no populate loop involved).
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_main_window_statistics.py -v`
 Expected: PASS (3 tests)
 
-- [ ] **Step 6: Run the full suite and lint, then commit**
+- [x] **Step 6: Run the full suite and lint, then commit**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest`
 Run: `ruff check gui/ui_manager.py gui/main_window_pyside.py tests/test_main_window_statistics.py`
@@ -998,7 +998,7 @@ git commit -m "Add sort + SKU/product filter to the Statistics SKU Summary table
 
 The design doc's backend trace confirmed the info box's claims are accurate but redundant with the method's own docstring — safe to remove. The three `QGroupBox` sections collapse into one `QFormLayout`, dropping ~120 lines of repeated `QGroupBox`/`QVBoxLayout`/label-repeating-the-groupbox-title boilerplate. The hardcoded `resize(500, 500)` is dropped in favor of `setMinimumWidth(420)` plus Qt's own layout-driven `sizeHint()` — with the info box and two extra group boxes gone, the dialog needs meaningfully less vertical space, and there's no principled fixed number to replace 500 with (this is a judgment call, not the design doc calling out a specific replacement value).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_add_product_dialog.py`:
 
@@ -1048,12 +1048,12 @@ def test_low_stock_warning_still_shows(dialog):
     assert "low stock" in dialog.warning_box.text().lower()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_add_product_dialog.py -v`
 Expected: FAIL — `test_info_box_and_group_boxes_are_gone` fails (`hasattr(dialog, "info_box")` is `True`, and `findChildren(QGroupBox)` returns 3 group boxes).
 
-- [ ] **Step 3: Rewrite `setup_ui` around a single `QFormLayout`, and drop the removed helpers**
+- [x] **Step 3: Rewrite `setup_ui` around a single `QFormLayout`, and drop the removed helpers**
 
 In `gui/add_product_dialog.py`, change the import block (lines 15-27) — remove `QGroupBox`, add `QFormLayout`:
 
@@ -1127,12 +1127,12 @@ Delete `_create_info_box` (`gui/add_product_dialog.py:157-181`) entirely — not
 
 `_create_warning_box`, `_create_buttons`, `setup_autocompleters`, `_on_order_changed`, `_on_sku_changed`, `_on_add_clicked`, `_validate`, and `get_result` are all unchanged — they only reference `order_input`, `sku_input`, `quantity_spin`, `order_status_label`, `product_info_label`, and `warning_box`, all of which still exist with the same names.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest tests/test_add_product_dialog.py -v`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Run the full suite and lint, then commit**
+- [x] **Step 5: Run the full suite and lint, then commit**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m pytest`
 Run: `ruff check gui/add_product_dialog.py tests/test_add_product_dialog.py`
