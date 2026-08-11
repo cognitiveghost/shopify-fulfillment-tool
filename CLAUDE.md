@@ -34,8 +34,15 @@ than on Max/API plans. Before starting multi-step work (a `brainstorming`/`writi
 pass, a large implementation, anything spanning many tool calls), check current usage:
 
 ```bash
-claude-monitor --once --output json --plan pro
+claude-monitor --once --output json
 ```
+
+**Don't add `--plan pro`** — it forces a hardcoded, badly-miscalibrated generic ceiling
+(verified ~15-30x too conservative against Claude Code's own official in-app usage panel).
+Omitting `--plan` lets `claude-monitor` auto-calibrate a `custom` limit from this account's
+real historical usage instead, which tracks much closer to reality. It's still a local
+estimate, not an official number — there's no offline source for Anthropic's true usage
+percentage on this machine.
 
 Key fields: `limits.five_hour.used_percentage` / `.resets_at` (rolling 5-hour window — the
 binding day-to-day constraint), `status.label` (`"limit_hit"` means stop and wait for
