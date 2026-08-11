@@ -23,13 +23,37 @@ from zebrafy import ZebrafyImage
 PRINT_DPI = 203
 
 
-def rasterize_pdf(pdf_path: Path, dpi: int = PRINT_DPI) -> list[Image.Image]:
-    """Rasterize every page of pdf_path into a 1-bit PIL Image, one per label."""
+def rasterize_pdf(
+    pdf_path: Path, dpi: int = PRINT_DPI, target_size_mm: tuple[float, float] | None = None
+) -> list[Image.Image]:
+    """Rasterize every page of pdf_path into a 1-bit PIL Image, one per label.
+
+    Raw ZPL has no driver in the loop to reconcile a source page's own size
+    against the physical label loaded in the printer -- ^PW/^LL just mirror
+    whatever pixel dimensions we hand it (see image_to_zpl). Reference
+    Labels source PDFs come from couriers and their page size is not
+    trustworthy: the same batch PDF can mix pages from 98x147mm up to
+    152x102mm. Left alone, a page smaller than the loaded media prints
+    shrunk with blank margin instead of filling the label -- pass
+    target_size_mm (the operator-configured physical label size) to resize
+    every page to it, matching what OS print drivers already do implicitly
+    when scaling a page to the selected paper size.
+    """
     pdf = pdfium.PdfDocument(str(pdf_path))
     images = []
     for page in pdf:
         bitmap = page.render(scale=dpi / 72, grayscale=True)
-        images.append(bitmap.to_pil().convert("1", dither=Image.Dither.NONE))
+        image = bitmap.to_pil()
+        if target_size_mm is not None:
+            width_mm, height_mm = target_size_mm
+            target_px = (round(width_mm / 25.4 * dpi), round(height_mm / 25.4 * dpi))
+            # Resize while still greyscale (LANCZOS) rather than after the
+            # bilevel threshold below -- resizing a already-bilevel image
+            # can only pick whole existing pixels (aliased jagged edges on
+            # thin barcode bars), while resizing greyscale first blends
+            # edges smoothly and *then* thresholds them to clean dots.
+            image = image.resize(target_px, Image.Resampling.LANCZOS)
+        images.append(image.convert("1", dither=Image.Dither.NONE))
     return images
 
 
@@ -67,10 +91,17 @@ def send_raw_linux(device_path: str, data: bytes) -> None:
     Path(device_path).write_bytes(data)
 
 
-def print_pdf_raw_zpl(pdf_path: Path, target: str, rotate: bool = False) -> None:
+def print_pdf_raw_zpl(
+    pdf_path: Path,
+    target: str,
+    rotate: bool = False,
+    target_size_mm: tuple[float, float] | None = None,
+) -> None:
     """Rasterize pdf_path and send each page as its own raw ZPL job to target
-    (a Windows print-queue name, or a device path on Linux dev machines)."""
-    for image in rasterize_pdf(pdf_path):
+    (a Windows print-queue name, or a device path on Linux dev machines).
+    target_size_mm, if given, fits every page to that physical label size
+    (see rasterize_pdf) before rotate is applied."""
+    for image in rasterize_pdf(pdf_path, target_size_mm=target_size_mm):
         data = image_to_zpl(image, rotate=rotate).encode("ascii")
         if sys.platform == "win32":
             send_raw_windows(target, data)

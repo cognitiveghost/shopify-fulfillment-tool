@@ -20,6 +20,7 @@ from PySide6.QtPrintSupport import QPrinterInfo
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -177,6 +178,34 @@ class BarcodeGeneratorWidget(QWidget):
         self.raw_zpl_rotate_check.setChecked(print_settings["raw_zpl_rotate"])
         layout.addWidget(self.raw_zpl_rotate_check)
 
+        # This flow's own template is always authored at 68x38mm, so fitting
+        # is mostly a safety net here (unlike Reference Labels, where the
+        # source PDF's page size is a courier's and can't be trusted) -- set
+        # it to match whatever label stock is actually loaded if it ever
+        # changes. 0 (default) keeps using the template's own page size.
+        label_size_row = QHBoxLayout()
+        label_size_row.addWidget(QLabel("Fit to label size (mm):"))
+        self.raw_zpl_label_width_spin = QDoubleSpinBox()
+        self.raw_zpl_label_width_spin.setRange(0.0, 500.0)
+        self.raw_zpl_label_width_spin.setDecimals(1)
+        self.raw_zpl_label_width_spin.setSpecialValueText("(use PDF page size)")
+        self.raw_zpl_label_width_spin.setValue(print_settings["raw_zpl_label_width_mm"])
+        self.raw_zpl_label_width_spin.setToolTip(
+            "Physical label width as loaded in the printer, e.g. 68 for this "
+            "flow's default label stock. 0 disables fitting and uses the "
+            "generated PDF's own page size."
+        )
+        label_size_row.addWidget(self.raw_zpl_label_width_spin)
+        label_size_row.addWidget(QLabel("x"))
+        self.raw_zpl_label_height_spin = QDoubleSpinBox()
+        self.raw_zpl_label_height_spin.setRange(0.0, 500.0)
+        self.raw_zpl_label_height_spin.setDecimals(1)
+        self.raw_zpl_label_height_spin.setSpecialValueText("(use PDF page size)")
+        self.raw_zpl_label_height_spin.setValue(print_settings["raw_zpl_label_height_mm"])
+        self.raw_zpl_label_height_spin.setToolTip(self.raw_zpl_label_width_spin.toolTip())
+        label_size_row.addWidget(self.raw_zpl_label_height_spin)
+        layout.addLayout(label_size_row)
+
         printer_row = QHBoxLayout()
         printer_row.addWidget(QLabel("Default printer (driver mode):"))
         self.driver_printer_combo = QComboBox()
@@ -193,6 +222,8 @@ class BarcodeGeneratorWidget(QWidget):
             is_zpl = self.print_mode_combo.currentData() == "raw_zpl"
             self.raw_zpl_target_edit.setEnabled(is_zpl)
             self.raw_zpl_rotate_check.setEnabled(is_zpl)
+            self.raw_zpl_label_width_spin.setEnabled(is_zpl)
+            self.raw_zpl_label_height_spin.setEnabled(is_zpl)
             self.driver_printer_combo.setEnabled(not is_zpl)
 
         _update_zpl_controls_enabled()
@@ -200,6 +231,8 @@ class BarcodeGeneratorWidget(QWidget):
         self.print_mode_combo.currentIndexChanged.connect(self._save_print_settings)
         self.raw_zpl_target_edit.editingFinished.connect(self._save_print_settings)
         self.raw_zpl_rotate_check.toggled.connect(self._save_print_settings)
+        self.raw_zpl_label_width_spin.editingFinished.connect(self._save_print_settings)
+        self.raw_zpl_label_height_spin.editingFinished.connect(self._save_print_settings)
         self.driver_printer_combo.currentIndexChanged.connect(self._save_print_settings)
 
         return group
@@ -617,6 +650,8 @@ class BarcodeGeneratorWidget(QWidget):
             "print_mode": self.print_mode_combo.currentData(),
             "raw_zpl_target": self.raw_zpl_target_edit.text(),
             "raw_zpl_rotate": self.raw_zpl_rotate_check.isChecked(),
+            "raw_zpl_label_width_mm": self.raw_zpl_label_width_spin.value(),
+            "raw_zpl_label_height_mm": self.raw_zpl_label_height_spin.value(),
             "driver_printer_name": self.driver_printer_combo.currentData(),
         })
 

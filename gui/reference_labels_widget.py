@@ -16,6 +16,7 @@ from PySide6.QtPrintSupport import QPrinterInfo
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -174,6 +175,34 @@ class ReferenceLabelsWidget(QWidget):
         self.raw_zpl_rotate_check.setChecked(print_settings["raw_zpl_rotate"])
         layout.addWidget(self.raw_zpl_rotate_check)
 
+        # Courier PDFs' own page size can't be trusted (the same batch mixes
+        # pages from ~98x147mm up to 152x102mm depending on courier) -- raw
+        # ZPL has no driver to fit that to the physical label, so it prints
+        # shrunk with blank margin instead of filling it. Set both to the
+        # loaded label's real size to fit every page to it; 0 (default)
+        # keeps the old behavior of using each page's own size as-is.
+        label_size_row = QHBoxLayout()
+        label_size_row.addWidget(QLabel("Fit to label size (mm):"))
+        self.raw_zpl_label_width_spin = QDoubleSpinBox()
+        self.raw_zpl_label_width_spin.setRange(0.0, 500.0)
+        self.raw_zpl_label_width_spin.setDecimals(1)
+        self.raw_zpl_label_width_spin.setSpecialValueText("(use PDF page size)")
+        self.raw_zpl_label_width_spin.setValue(print_settings["raw_zpl_label_width_mm"])
+        self.raw_zpl_label_width_spin.setToolTip(
+            "Physical label width as loaded in the printer, e.g. 152.4 for 6x4in "
+            "shipping labels. 0 disables fitting and uses each page's own PDF size."
+        )
+        label_size_row.addWidget(self.raw_zpl_label_width_spin)
+        label_size_row.addWidget(QLabel("x"))
+        self.raw_zpl_label_height_spin = QDoubleSpinBox()
+        self.raw_zpl_label_height_spin.setRange(0.0, 500.0)
+        self.raw_zpl_label_height_spin.setDecimals(1)
+        self.raw_zpl_label_height_spin.setSpecialValueText("(use PDF page size)")
+        self.raw_zpl_label_height_spin.setValue(print_settings["raw_zpl_label_height_mm"])
+        self.raw_zpl_label_height_spin.setToolTip(self.raw_zpl_label_width_spin.toolTip())
+        label_size_row.addWidget(self.raw_zpl_label_height_spin)
+        layout.addLayout(label_size_row)
+
         printer_row = QHBoxLayout()
         printer_row.addWidget(QLabel("Default printer (driver mode):"))
         self.driver_printer_combo = QComboBox()
@@ -190,6 +219,8 @@ class ReferenceLabelsWidget(QWidget):
             is_zpl = self.print_mode_combo.currentData() == "raw_zpl"
             self.raw_zpl_target_edit.setEnabled(is_zpl)
             self.raw_zpl_rotate_check.setEnabled(is_zpl)
+            self.raw_zpl_label_width_spin.setEnabled(is_zpl)
+            self.raw_zpl_label_height_spin.setEnabled(is_zpl)
             self.driver_printer_combo.setEnabled(not is_zpl)
 
         _update_zpl_controls_enabled()
@@ -197,6 +228,8 @@ class ReferenceLabelsWidget(QWidget):
         self.print_mode_combo.currentIndexChanged.connect(self._save_print_settings)
         self.raw_zpl_target_edit.editingFinished.connect(self._save_print_settings)
         self.raw_zpl_rotate_check.toggled.connect(self._save_print_settings)
+        self.raw_zpl_label_width_spin.editingFinished.connect(self._save_print_settings)
+        self.raw_zpl_label_height_spin.editingFinished.connect(self._save_print_settings)
         self.driver_printer_combo.currentIndexChanged.connect(self._save_print_settings)
 
         return group
@@ -582,6 +615,8 @@ class ReferenceLabelsWidget(QWidget):
             "print_mode": self.print_mode_combo.currentData(),
             "raw_zpl_target": self.raw_zpl_target_edit.text(),
             "raw_zpl_rotate": self.raw_zpl_rotate_check.isChecked(),
+            "raw_zpl_label_width_mm": self.raw_zpl_label_width_spin.value(),
+            "raw_zpl_label_height_mm": self.raw_zpl_label_height_spin.value(),
             "driver_printer_name": self.driver_printer_combo.currentData(),
         })
 

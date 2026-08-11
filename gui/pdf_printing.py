@@ -31,6 +31,8 @@ def load_print_settings(scope: str) -> dict:
         "print_mode": qs.value(f"{scope}/print_mode", "driver"),
         "raw_zpl_target": qs.value(f"{scope}/raw_zpl_target", ""),
         "raw_zpl_rotate": qs.value(f"{scope}/raw_zpl_rotate", False, type=bool),
+        "raw_zpl_label_width_mm": qs.value(f"{scope}/raw_zpl_label_width_mm", 0.0, type=float),
+        "raw_zpl_label_height_mm": qs.value(f"{scope}/raw_zpl_label_height_mm", 0.0, type=float),
         "driver_printer_name": qs.value(f"{scope}/driver_printer_name", ""),
     }
 
@@ -40,6 +42,8 @@ def save_print_settings(scope: str, settings: dict) -> None:
     qs.setValue(f"{scope}/print_mode", settings["print_mode"])
     qs.setValue(f"{scope}/raw_zpl_target", settings["raw_zpl_target"])
     qs.setValue(f"{scope}/raw_zpl_rotate", settings["raw_zpl_rotate"])
+    qs.setValue(f"{scope}/raw_zpl_label_width_mm", settings["raw_zpl_label_width_mm"])
+    qs.setValue(f"{scope}/raw_zpl_label_height_mm", settings["raw_zpl_label_height_mm"])
     qs.setValue(f"{scope}/driver_printer_name", settings["driver_printer_name"])
 
 
@@ -64,8 +68,16 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
             "Set the raw ZPL printer target in this window's Output/Options section first."
         )
         return False
+    width_mm = settings.get("raw_zpl_label_width_mm", 0.0)
+    height_mm = settings.get("raw_zpl_label_height_mm", 0.0)
+    target_size_mm = (width_mm, height_mm) if width_mm > 0 and height_mm > 0 else None
     try:
-        label_printing.print_pdf_raw_zpl(pdf_path, target, rotate=settings.get("raw_zpl_rotate", False))
+        label_printing.print_pdf_raw_zpl(
+            pdf_path,
+            target,
+            rotate=settings.get("raw_zpl_rotate", False),
+            target_size_mm=target_size_mm,
+        )
         return True
     except (OSError, *label_printing.windows_print_errors()) as error:
         logger.exception("Raw ZPL print failed")

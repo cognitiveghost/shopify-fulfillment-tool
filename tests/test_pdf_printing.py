@@ -36,6 +36,7 @@ class TestPrintSettingsRoundTrip:
         settings = pdf_printing.load_print_settings("reference_labels")
         assert settings == {
             "print_mode": "driver", "raw_zpl_target": "", "raw_zpl_rotate": False,
+            "raw_zpl_label_width_mm": 0.0, "raw_zpl_label_height_mm": 0.0,
             "driver_printer_name": "",
         }
 
@@ -44,13 +45,17 @@ class TestPrintSettingsRoundTrip:
             "reference_labels",
             {
                 "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer",
-                "raw_zpl_rotate": True, "driver_printer_name": "Labels 6x4",
+                "raw_zpl_rotate": True,
+                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 101.6,
+                "driver_printer_name": "Labels 6x4",
             },
         )
         assert pdf_printing.load_print_settings("reference_labels") == {
             "print_mode": "raw_zpl",
             "raw_zpl_target": "ZPL-RAW-Printer",
             "raw_zpl_rotate": True,
+            "raw_zpl_label_width_mm": 152.4,
+            "raw_zpl_label_height_mm": 101.6,
             "driver_printer_name": "Labels 6x4",
         }
 
@@ -59,14 +64,18 @@ class TestPrintSettingsRoundTrip:
             "reference_labels",
             {
                 "print_mode": "raw_zpl", "raw_zpl_target": "Labels 6x4",
-                "raw_zpl_rotate": False, "driver_printer_name": "Labels 6x4",
+                "raw_zpl_rotate": False,
+                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 101.6,
+                "driver_printer_name": "Labels 6x4",
             },
         )
         pdf_printing.save_print_settings(
             "barcode_generator",
             {
                 "print_mode": "driver", "raw_zpl_target": "Barcodes",
-                "raw_zpl_rotate": True, "driver_printer_name": "Barcodes",
+                "raw_zpl_rotate": True,
+                "raw_zpl_label_width_mm": 68.0, "raw_zpl_label_height_mm": 38.0,
+                "driver_printer_name": "Barcodes",
             },
         )
 
@@ -102,7 +111,39 @@ class TestPrintPdfRawZplMode:
         )
 
         assert result is True
-        called.assert_called_once_with(pdf_path, "ZPL-RAW-Printer", rotate=True)
+        called.assert_called_once_with(pdf_path, "ZPL-RAW-Printer", rotate=True, target_size_mm=None)
+
+    def test_omits_target_size_when_width_or_height_is_zero(self, monkeypatch, tmp_path):
+        called = Mock()
+        monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
+        pdf_path = tmp_path / "x.pdf"
+
+        pdf_printing.print_pdf(
+            None, pdf_path,
+            {
+                "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False,
+                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 0.0,
+            },
+        )
+
+        called.assert_called_once_with(pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=None)
+
+    def test_passes_target_size_when_both_dimensions_configured(self, monkeypatch, tmp_path):
+        called = Mock()
+        monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
+        pdf_path = tmp_path / "x.pdf"
+
+        pdf_printing.print_pdf(
+            None, pdf_path,
+            {
+                "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False,
+                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 101.6,
+            },
+        )
+
+        called.assert_called_once_with(
+            pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=(152.4, 101.6)
+        )
 
     def test_exception_shows_critical_and_returns_false(self, monkeypatch, tmp_path):
         critical = Mock()
