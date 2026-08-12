@@ -44,6 +44,7 @@ from gui.settings.fields import (
     ORDER_LEVEL_FIELDS,
 )
 from gui.settings.general import GeneralPage
+from gui.settings.stock_exports import StockExportsPage
 from gui.theme_manager import apply_font, font_css
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
@@ -74,7 +75,6 @@ class SettingsWindow(QDialog):
         rule_widgets (list): A list of dictionaries, each holding references
             to the UI widgets for a single rule.
         packing_list_widgets (list): References to packing list UI widgets.
-        stock_export_widgets (list): References to stock export UI widgets.
     """
 
     # Constants for builders
@@ -143,7 +143,6 @@ class SettingsWindow(QDialog):
         # Widget lists
         self.rule_widgets = []
         self.packing_list_widgets = []
-        self.stock_export_widgets = []
         self.courier_mapping_widgets = []
 
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
@@ -170,7 +169,10 @@ class SettingsWindow(QDialog):
         self._add_page(GeneralPage(self.config_data.get("settings", {})), "General")
         self.create_rules_tab()
         self.create_packing_lists_tab()
-        self.create_stock_exports_tab()
+        self._add_page(
+            StockExportsPage(self.config_data.get("stock_export_configs", []), self.analysis_df),
+            "Stock Exports",
+        )
         self.create_mappings_tab()
         self.create_sets_tab()  # Sets/Bundles tab
         self.create_weight_tab()  # Volumetric Weight tab
@@ -1545,66 +1547,6 @@ class SettingsWindow(QDialog):
 
         filter_refs["value_layout"].insertWidget(2, new_widget, 1)
         filter_refs["value_widget"] = new_widget
-
-    def create_stock_exports_tab(self):
-        """Creates the 'Stock Exports' tab for managing report configurations."""
-        tab = QWidget()
-        main_layout = QVBoxLayout(tab)
-        add_btn = QPushButton("Add New Stock Export")
-        add_btn.clicked.connect(self.add_stock_export_widget)
-        main_layout.addWidget(add_btn, 0, Qt.AlignLeft)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        main_layout.addWidget(scroll_area)
-        scroll_content = QWidget()
-        self.stock_exports_layout = QVBoxLayout(scroll_content)
-        self.stock_exports_layout.setAlignment(Qt.AlignTop)
-        scroll_area.setWidget(scroll_content)
-        self._add_settings_page(tab, "Stock Exports")
-        for se_config in self.config_data.get("stock_export_configs", []):
-            self.add_stock_export_widget(se_config)
-
-    def add_stock_export_widget(self, config=None):
-        """Adds a new group of widgets for a single stock export configuration.
-
-        Args:
-            config (dict, optional): The configuration for a pre-existing
-                stock export. If None, creates a new, blank one.
-        """
-        if not isinstance(config, dict):
-            config = {"name": "", "output_filename": "", "filters": []}
-        se_box = QGroupBox()
-        se_layout = QVBoxLayout(se_box)
-        form_layout = QFormLayout()
-        name_edit = QLineEdit(config.get("name", ""))
-        filename_edit = QLineEdit(config.get("output_filename", ""))
-        form_layout.addRow("Name:", name_edit)
-        form_layout.addRow("Output Filename:", filename_edit)
-        se_layout.addLayout(form_layout)
-        filters_box = QGroupBox("Filters")
-        filters_layout = QVBoxLayout(filters_box)
-        filters_rows_layout = QVBoxLayout()
-        filters_layout.addLayout(filters_rows_layout)
-        add_filter_btn = QPushButton("Add Filter")
-        filters_layout.addWidget(add_filter_btn, 0, Qt.AlignLeft)
-        se_layout.addWidget(filters_box)
-        delete_btn = QPushButton("Delete Stock Export")
-        se_layout.addWidget(delete_btn, 0, Qt.AlignRight)
-        self.stock_exports_layout.addWidget(se_box)
-        widget_refs = {
-            "group_box": se_box,
-            "name": name_edit,
-            "filename": filename_edit,
-            "filters_layout": filters_rows_layout,
-            "filters": [],
-        }
-        self.stock_export_widgets.append(widget_refs)
-        add_filter_btn.clicked.connect(
-            lambda: self.add_filter_row(widget_refs, self.FILTERABLE_COLUMNS, self.FILTER_OPERATORS)
-        )
-        delete_btn.clicked.connect(lambda: self._delete_widget_from_list(widget_refs, self.stock_export_widgets))
-        for f_config in config.get("filters", []):
-            self.add_filter_row(widget_refs, self.FILTERABLE_COLUMNS, self.FILTER_OPERATORS, f_config)
 
     def create_mappings_tab(self):
         """Creates the 'Mappings' tab for column mappings and courier mappings."""
@@ -3035,35 +2977,6 @@ class SettingsWindow(QDialog):
                 })
 
             self.config_data["packing_list_configs"] = new_packing_lists
-
-            # ========================================
-            # Stock Exports Tab
-            # ========================================
-            new_stock_exports = []
-            for se_w in self.stock_export_widgets:
-                filters = []
-                for f in se_w["filters"]:
-                    value_widget = f.get("value_widget")
-                    val = ""
-                    if value_widget:
-                        if isinstance(value_widget, QComboBox):
-                            val = value_widget.currentText()
-                        else:
-                            val = value_widget.text()
-
-                    filters.append({
-                        "field": f["field"].currentText(),
-                        "operator": f["op"].currentText(),
-                        "value": val,
-                    })
-
-                new_stock_exports.append({
-                    "name": se_w["name"].text(),
-                    "output_filename": se_w["filename"].text(),
-                    "filters": filters,
-                })
-
-            self.config_data["stock_export_configs"] = new_stock_exports
 
             # ========================================
             # Mappings Tab - Column Mappings (v2 format)
