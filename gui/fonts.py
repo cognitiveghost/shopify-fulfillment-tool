@@ -11,7 +11,7 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QFontDatabase, QGuiApplication
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,24 @@ FAMILY = "Inter"
 _FONT_FILES = ("Inter-Regular.ttf", "Inter-Bold.ttf")
 
 
-@lru_cache(maxsize=1)
 def load_bundled_fonts() -> str | None:
     """Register the bundled faces and return the family name, or None.
 
     Idempotent and cached -- ThemeManager.get_current_theme() calls this, and
     that runs on roughly 180 call sites across gui/*.py.
+
+    The pre-QApplication miss is deliberately *not* cached. QFontDatabase
+    segfaults rather than raising without a live Qt app, so the guard has to
+    come first -- and caching that miss would pin the whole process to the
+    fallback font just because something touched the theme early.
     """
+    if QGuiApplication.instance() is None:
+        return None
+    return _register_fonts()
+
+
+@lru_cache(maxsize=1)
+def _register_fonts() -> str | None:
     families: set[str] = set()
     for filename in _FONT_FILES:
         path = FONTS_DIR / filename
@@ -46,3 +57,7 @@ def load_bundled_fonts() -> str | None:
         logger.warning("Bundled fonts registered as %s, expected %s", families, FAMILY)
         return None
     return FAMILY
+
+
+# The cache lives on the inner function now; keep the public handle tests use.
+load_bundled_fonts.cache_clear = _register_fonts.cache_clear

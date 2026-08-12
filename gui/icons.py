@@ -33,10 +33,10 @@ def _source(name: str) -> str:
 
 
 @cache
-def _render(name: str, color: str) -> QIcon:
+def _render(name: str, color: str, sizes: tuple[int, ...]) -> QIcon:
     data = QByteArray(_source(name).replace("currentColor", color).encode())
     result = QIcon()
-    for size in _RENDER_SIZES:
+    for size in sizes:
         # One renderer per size: QSvgRenderer keeps view state across render()
         # calls, and reusing it across sizes skews the later ones.
         renderer = QSvgRenderer(data)
@@ -50,20 +50,26 @@ def _render(name: str, color: str) -> QIcon:
     return result
 
 
-def icon(name: str, color: str | None = None) -> QIcon:
+def icon(
+    name: str, color: str | None = None, sizes: tuple[int, ...] = _RENDER_SIZES
+) -> QIcon:
     """A themed icon by Lucide glyph name, e.g. icon("trash-2").
 
     Defaults to the active theme's text colour. Pass `color` only where the
     icon has to read against something that is not this app's background --
     the window/taskbar icon, which sits on the OS shell's own surface.
 
+    Pass `sizes` only where the widget sizes above are not the whole story;
+    the window icon needs 256px for Alt+Tab and Explorer's largest view, and
+    these are pixmaps, so anything not rendered can only be upscaled.
+
     Raises KeyError on an unknown name, matching font_css()'s rule: a typo
     must fail during development rather than render invisible in production.
 
-    Cached on (name, colour). A theme toggle needs no invalidation -- the
-    colour is part of the key, so it simply misses into a second set of
+    Cached on (name, colour, sizes). A theme toggle needs no invalidation --
+    the colour is part of the key, so it simply misses into a second set of
     entries, and two themes times fifteen glyphs is the ceiling.
     """
     if color is None:
         color = get_theme_manager().get_current_theme().text
-    return _render(name, color)
+    return _render(name, color, sizes)

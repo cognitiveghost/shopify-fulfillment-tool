@@ -1,7 +1,7 @@
 import logging
 from typing import ClassVar
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -1874,7 +1874,11 @@ class UIManager:
                 widget.setIcon(icon(name))
         label = getattr(self.mw, "session_folder_icon_label", None)
         if label is not None:
-            label.setPixmap(icon("folder").pixmap(16, 16))
+            # The one place an icon becomes a bare pixmap, so it is also the
+            # one place Qt will not pick the right resolution for us.
+            label.setPixmap(
+                icon("folder").pixmap(QSize(16, 16), label.devicePixelRatioF())
+            )
 
     def _update_theme_button_text(self):
         """Update theme toggle button text based on current theme."""

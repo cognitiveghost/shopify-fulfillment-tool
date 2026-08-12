@@ -64,8 +64,16 @@ def build_app_icon():
     Coloured with accent_blue rather than the theme's text colour, and never
     re-themed: this icon is drawn on the OS shell's own surface, whose
     background has nothing to do with which theme the app is running.
+
+    Carries 256px, which no in-app widget needs: Windows asks for it in
+    Alt+Tab and Explorer's "Extra large icons", and upscaling a 48px pixmap
+    is worst exactly where the icon is seen biggest.
     """
-    return icon("package", color=get_theme_manager().get_current_theme().accent_blue)
+    return icon(
+        "package",
+        color=get_theme_manager().get_current_theme().accent_blue,
+        sizes=(16, 32, 48, 256),
+    )
 
 
 def main():

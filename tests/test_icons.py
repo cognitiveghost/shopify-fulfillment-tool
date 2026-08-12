@@ -17,11 +17,15 @@ def qapp():
 
 def _opaque_colors(qicon: QIcon, size: int = 32) -> set[str]:
     image = qicon.pixmap(size, size).toImage()
+    # Fully-covered pixels only. Qt's antialiased edges are premultiplied, and
+    # unpremultiplying drifts each RGB channel by +/-1 -- invisible for colours
+    # whose channels are all 0 or 255, but the light theme's #1A1A1A is not one
+    # of those, so a looser threshold makes the exact-colour asserts flaky.
     return {
         image.pixelColor(x, y).name()
         for y in range(image.height())
         for x in range(image.width())
-        if image.pixelColor(x, y).alpha() > 200
+        if image.pixelColor(x, y).alpha() == 255
     }
 
 

@@ -72,6 +72,51 @@ def test_theme_tokens_are_untouched_when_fonts_are_unavailable(monkeypatch, tmp_
         theme_manager._themed_tokens.cache_clear()
 
 
+def test_theme_is_readable_before_a_qapplication_exists():
+    """QFontDatabase segfaults -- not raises -- without a live Qt app, so
+    routing get_current_theme() through font loading turned a pure-data call
+    into one that crashes the interpreter with no traceback. Subprocess
+    because the in-process QApplication cannot be un-created.
+    """
+    import subprocess
+    import sys
+
+    script = (
+        "from gui.theme_manager import get_theme_manager;"
+        "print(get_theme_manager().get_current_theme().font_family)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, f"exit {result.returncode}: {result.stderr}"
+    assert "Segoe UI" in result.stdout
+
+
+def test_a_pre_qapplication_call_does_not_pin_the_app_to_the_fallback_font():
+    """Both layers are lru_cached. If the fontless result were cached, one
+    early theme read would leave every later call fontless for the life of
+    the process -- with only a log line as evidence."""
+    from gui import theme_manager
+
+    fonts.load_bundled_fonts.cache_clear()
+    theme_manager._themed_tokens.cache_clear()
+
+    # Fake "no Qt app yet" rather than tearing down the real QApplication,
+    # which cannot be un-created within a process.
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(fonts.QGuiApplication, "instance", staticmethod(lambda: None))
+    assert fonts.load_bundled_fonts() is None
+    assert theme_manager.get_theme_manager().get_current_theme().font_family == (
+        "Segoe UI, sans-serif"
+    )
+    monkeypatch.undo()
+
+    assert fonts.load_bundled_fonts() == "Inter"
+    assert theme_manager.get_theme_manager().get_current_theme().font_family == (
+        "'Inter', Segoe UI, sans-serif"
+    )
+
+
 def test_tokens_are_memoized_not_rebuilt_per_call():
     """get_current_theme() runs on ~180 call sites; dataclasses.replace()
     allocates a fresh ThemeTokens every time without this."""

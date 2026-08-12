@@ -117,3 +117,20 @@ def test_app_icon_is_built_in_a_fixed_accent_color():
         if image.pixelColor(x, y).alpha() == 255
     }
     assert opaque == {get_theme_manager().get_current_theme().accent_blue.lower()}
+
+
+def test_app_icon_carries_the_256px_windows_asks_for():
+    """Alt+Tab and Explorer's "Extra large icons" request 256px. These are
+    pixmaps, not an SVG engine, so a missing 256 can only be upscaled -- the
+    icon would look worst exactly where it is seen biggest."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+
+    import gui_main
+
+    sizes = {size.width() for size in gui_main.build_app_icon().availableSizes()}
+    assert 256 in sizes

@@ -103,7 +103,6 @@ def get_theme_manager() -> ThemeManager:
     return _theme_manager_instance
 
 
-@lru_cache(maxsize=2)
 def _themed_tokens(theme_name: str) -> ThemeTokens:
     """shared.theme's tokens with the bundled font family layered on top.
 
@@ -111,12 +110,24 @@ def _themed_tokens(theme_name: str) -> ThemeTokens:
     so the override happens here -- dataclasses.replace() on the frozen
     ThemeTokens it hands back. Memoized because get_current_theme() runs on
     roughly 180 call sites and replace() allocates.
+
+    Only the success path is memoized. load_bundled_fonts() returns None
+    before a QApplication exists, and caching that would leave the app on the
+    fallback font for the rest of the process over one early call.
     """
-    theme = get_theme(theme_name)
     family = load_bundled_fonts()
     if family is None:
-        return theme
+        return get_theme(theme_name)
+    return _tokens_with_font(theme_name, family)
+
+
+@lru_cache(maxsize=2)
+def _tokens_with_font(theme_name: str, family: str) -> ThemeTokens:
+    theme = get_theme(theme_name)
     return replace(theme, font_family=f"'{family}', {theme.font_family}")
+
+
+_themed_tokens.cache_clear = _tokens_with_font.cache_clear
 
 
 @dataclass(frozen=True)
