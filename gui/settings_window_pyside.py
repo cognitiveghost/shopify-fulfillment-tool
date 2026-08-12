@@ -34,6 +34,14 @@ from PySide6.QtWidgets import (
 )
 
 from gui.column_mapping_widget import ColumnMappingWidget
+from gui.settings.fields import (
+    ACTION_TYPES,
+    CONDITION_FIELDS,
+    CONDITION_OPERATORS,
+    FILTER_OPERATORS,
+    FILTERABLE_COLUMNS,
+    ORDER_LEVEL_FIELDS,
+)
 from gui.theme_manager import apply_font, font_css
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
@@ -68,65 +76,12 @@ class SettingsWindow(QDialog):
     """
 
     # Constants for builders
-    FILTERABLE_COLUMNS: ClassVar[list[str]] = [
-        "Order_Number",
-        "Order_Type",
-        "SKU",
-        "Product_Name",
-        "Stock_Alert",
-        "Order_Fulfillment_Status",
-        "Shipping_Provider",
-        "Destination_Country",
-        "Tags",
-        "System_note",
-        "Status_Note",
-        "Total Price",
-    ]
-    FILTER_OPERATORS: ClassVar[list[str]] = ["==", "!=", "in", "not in", "contains"]
-    # Group order-level fields first for better UX
-    ORDER_LEVEL_FIELDS: ClassVar[list[str]] = [
-        "--- ORDER-LEVEL FIELDS ---",
-        "item_count",
-        "total_quantity",
-        "has_sku",
-        "Has_SKU",
-        "--- ARTICLE-LEVEL FIELDS ---",
-    ]
-    CONDITION_FIELDS: ClassVar[list[str]] = ORDER_LEVEL_FIELDS + FILTERABLE_COLUMNS
-    CONDITION_OPERATORS: ClassVar[list[str]] = [
-        "equals",
-        "does not equal",
-        "contains",
-        "does not contain",
-        "is greater than",
-        "is less than",
-        "is greater than or equal",
-        "is less than or equal",
-        "starts with",
-        "ends with",
-        "is empty",
-        "is not empty",
-        "in list",
-        "not in list",
-        "between",
-        "not between",
-        "date before",
-        "date after",
-        "date equals",
-        "matches regex",
-        "does not match regex",
-    ]
-    ACTION_TYPES: ClassVar[list[str]] = [
-        "ADD_TAG",
-        "ADD_ORDER_TAG",
-        "ADD_INTERNAL_TAG",
-        "SET_STATUS",
-        "COPY_FIELD",
-        "CALCULATE",
-        "SET_MULTI_TAGS",
-        "ALERT_NOTIFICATION",
-        "ADD_PRODUCT",
-    ]
+    FILTERABLE_COLUMNS: ClassVar[list[str]] = FILTERABLE_COLUMNS
+    FILTER_OPERATORS: ClassVar[list[str]] = FILTER_OPERATORS
+    ORDER_LEVEL_FIELDS: ClassVar[list[str]] = ORDER_LEVEL_FIELDS
+    CONDITION_FIELDS: ClassVar[list[str]] = CONDITION_FIELDS
+    CONDITION_OPERATORS: ClassVar[list[str]] = CONDITION_OPERATORS
+    ACTION_TYPES: ClassVar[list[str]] = ACTION_TYPES
 
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
