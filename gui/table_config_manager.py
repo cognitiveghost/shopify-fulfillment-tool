@@ -158,13 +158,22 @@ class TableConfigManager:
             self._current_config = TableConfig()
             return self._current_config
 
-    def save_config(self, client_id: str, config: TableConfig, view_name: str = "Default"):
+    def save_config(
+        self,
+        client_id: str,
+        config: TableConfig,
+        view_name: str = "Default",
+        additional_columns: list[dict] | None = None,
+    ):
         """Save table configuration for a client.
 
         Args:
             client_id: Client ID to save config for
             config: TableConfig to save
             view_name: Name of the view to save (default: "Default")
+            additional_columns: Optional "Additional CSV Columns" config to
+                persist in the same write. Pass None to leave whatever's
+                already stored untouched.
 
         Raises:
             Exception: If config saving fails (logs error)
@@ -195,7 +204,11 @@ class TableConfigManager:
             # Update active view
             table_view_settings["active_view"] = view_name
 
-            # Persist to file
+            if additional_columns is not None:
+                table_view_settings["additional_columns"] = additional_columns
+
+            # Persist to file (single read-modify-write for both view and
+            # additional_columns, instead of a second round trip)
             self.pm.save_client_config(client_id, client_config)
 
             # Update cached config if this is the current client

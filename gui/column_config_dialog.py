@@ -9,6 +9,7 @@ Phase 4 of table customization feature.
 import logging
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -29,6 +30,92 @@ from PySide6.QtWidgets import (
 from gui.theme_manager import get_theme_manager
 
 logger = logging.getLogger(__name__)
+
+_CATEGORY_HEADER_MARKER = "__category_header__"
+
+# Category assignment for known analysis-output columns (see
+# shopify_tool/core.py and shopify_tool/analysis.py for the full
+# output-column list). Columns not listed here fall into "Other" rather
+# than being dropped from the list.
+COLUMN_CATEGORIES: dict[str, str] = {
+    "Order_Number": "Order Info",
+    "Name": "Order Info",
+    "Order_Type": "Order Info",
+    "Destination_Country": "Order Info",
+    "Shipping_Method": "Order Info",
+    "Shipping_Provider": "Order Info",
+    "Priority": "Order Info",
+    "Order_Min_Box": "Order Info",
+    "Execution_Date": "Order Info",
+    "Repeat": "Order Info",
+    "SKU": "Product Info",
+    "Product_Name": "Product Info",
+    "Warehouse_Name": "Product Info",
+    "Quantity": "Product Info",
+    "Has_SKU": "Product Info",
+    "Order_Fulfillment_Status": "Fulfillment",
+    "Fulfillable": "Fulfillment",
+    "Stock": "Fulfillment",
+    "Final_Stock": "Fulfillment",
+    "Stock_Alert": "Fulfillment",
+    "Summary_Missing": "Fulfillment",
+    "Summary_Present": "Fulfillment",
+    "Status_Note": "Fulfillment",
+    "Error": "Fulfillment",
+    "System_note": "Fulfillment",
+    "Notes": "Fulfillment",
+    "Tags": "Tags & Lot",
+    "Internal_Tags": "Tags & Lot",
+    "Lot_Details": "Tags & Lot",
+    "Lot_Batch": "Tags & Lot",
+    "Lot_Expiry": "Tags & Lot",
+    "Expiry_Date": "Tags & Lot",
+}
+
+CATEGORY_ORDER: list[str] = ["Order Info", "Product Info", "Fulfillment", "Tags & Lot", "Other"]
+
+COLUMN_DISPLAY_NAMES: dict[str, str] = {
+    "Order_Number": "Order Number",
+    "Name": "Order Name",
+    "Order_Type": "Order Type",
+    "Destination_Country": "Destination Country",
+    "Shipping_Method": "Shipping Method",
+    "Shipping_Provider": "Shipping Provider",
+    "Priority": "Priority",
+    "Order_Min_Box": "Min Box",
+    "Execution_Date": "Execution Date",
+    "Repeat": "Repeat Order",
+    "SKU": "SKU",
+    "Product_Name": "Product Name",
+    "Warehouse_Name": "Warehouse Name",
+    "Quantity": "Quantity",
+    "Has_SKU": "Has SKU",
+    "Order_Fulfillment_Status": "Fulfillment Status",
+    "Fulfillable": "Fulfillable",
+    "Stock": "Stock",
+    "Final_Stock": "Final Stock",
+    "Stock_Alert": "Stock Alert",
+    "Summary_Missing": "Missing Summary",
+    "Summary_Present": "Present Summary",
+    "Status_Note": "Status Note",
+    "Error": "Error",
+    "System_note": "System Note",
+    "Notes": "Notes",
+    "Tags": "Tags",
+    "Internal_Tags": "Internal Tags",
+    "Lot_Details": "Lot Details",
+    "Lot_Batch": "Lot Batch",
+    "Lot_Expiry": "Lot Expiry",
+    "Expiry_Date": "Expiry Date",
+}
+
+
+def _column_display_name(col_name: str) -> str:
+    return COLUMN_DISPLAY_NAMES.get(col_name, col_name)
+
+
+def _column_category(col_name: str) -> str:
+    return COLUMN_CATEGORIES.get(col_name, "Other")
 
 
 class ColumnConfigPanel(QWidget):
@@ -253,7 +340,7 @@ class ColumnConfigPanel(QWidget):
             self._is_loading = False
 
     def _load_columns(self, config):
-        """Load columns into the list widget."""
+        """Load columns into the list widget, grouped under category headers."""
         self.column_list.clear()
         self._current_columns = []
 
@@ -273,21 +360,44 @@ class ColumnConfigPanel(QWidget):
         else:
             columns = all_columns
 
+        grouped: dict[str, list[str]] = {category: [] for category in CATEGORY_ORDER}
         for col_name in columns:
-            item = QListWidgetItem(col_name)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            grouped[_column_category(col_name)].append(col_name)
 
-            is_visible = config.visible_columns.get(col_name, True)
-            item.setCheckState(Qt.Checked if is_visible else Qt.Unchecked)
+        theme = get_theme_manager().get_current_theme()
 
-            if col_name in config.locked_columns:
-                item.setToolTip("Locked column (always visible and first)")
-                font = item.font()
-                font.setBold(True)
-                item.setFont(font)
+        for category in CATEGORY_ORDER:
+            cols_in_category = grouped[category]
+            if not cols_in_category:
+                continue
 
-            self.column_list.addItem(item)
-            self._current_columns.append(col_name)
+            header_item = QListWidgetItem(category)
+            header_item.setFlags(Qt.NoItemFlags)
+            header_item.setData(Qt.UserRole, _CATEGORY_HEADER_MARKER)
+            header_font = header_item.font()
+            header_font.setBold(True)
+            header_item.setFont(header_font)
+            header_item.setForeground(QColor(theme.text_secondary))
+            self.column_list.addItem(header_item)
+
+            for col_name in cols_in_category:
+                item = QListWidgetItem(_column_display_name(col_name))
+                item.setData(Qt.UserRole, col_name)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+
+                is_visible = config.visible_columns.get(col_name, True)
+                item.setCheckState(Qt.Checked if is_visible else Qt.Unchecked)
+
+                if col_name in config.locked_columns:
+                    item.setToolTip(f"{col_name} (locked column, always visible and first)")
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
+                else:
+                    item.setToolTip(col_name)
+
+                self.column_list.addItem(item)
+                self._current_columns.append(col_name)
 
         self._update_button_states()
 
@@ -297,19 +407,30 @@ class ColumnConfigPanel(QWidget):
 
         for i in range(self.column_list.count()):
             item = self.column_list.item(i)
-            column_name = item.text()
 
-            if text in column_name.lower():
-                item.setHidden(False)
-            else:
-                item.setHidden(True)
+            if item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+                # ponytail: headers just hide/show with any active filter
+                # rather than tracking per-group match counts -- upgrade to
+                # "hide only if the whole group is filtered out" if a user
+                # reports it's confusing to lose the grouping while typing.
+                item.setHidden(bool(text))
+                continue
+
+            # Match the display name too -- the row shows the friendly label,
+            # so typing what you see ("Order Name") has to find it.
+            column_name = item.data(Qt.UserRole)
+            haystack = f"{column_name} {item.text()}".lower()
+            item.setHidden(text not in haystack)
 
     def _on_item_changed(self, item: QListWidgetItem):
         """Handle item check state change."""
         if self._is_loading:
             return
 
-        column_name = item.text()
+        if item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+            return
+
+        column_name = item.data(Qt.UserRole)
         config = self.table_config_manager.get_current_config()
 
         if column_name in config.locked_columns and item.checkState() == Qt.Unchecked:
@@ -324,14 +445,21 @@ class ColumnConfigPanel(QWidget):
             )
 
     def _on_move_up(self):
-        """Move selected column up in the order."""
+        """Move selected column up in the order (within its category group)."""
         current_row = self.column_list.currentRow()
         if current_row <= 0:
             return
 
-        config = self.table_config_manager.get_current_config()
         item = self.column_list.currentItem()
-        column_name = item.text()
+        if item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+            return
+
+        above_item = self.column_list.item(current_row - 1)
+        if above_item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+            return  # already first in its category group
+
+        config = self.table_config_manager.get_current_config()
+        column_name = item.data(Qt.UserRole)
 
         if column_name in config.locked_columns:
             QMessageBox.warning(
@@ -341,31 +469,41 @@ class ColumnConfigPanel(QWidget):
             )
             return
 
-        if current_row == 1 and "Order_Number" in config.locked_columns:
-            target_col = self.column_list.item(0).text()
-            if target_col == "Order_Number":
-                QMessageBox.warning(
-                    self,
-                    "Cannot Move Column",
-                    "Cannot move column before locked 'Order_Number' column."
-                )
-                return
+        above_column_name = above_item.data(Qt.UserRole)
+        if above_column_name in config.locked_columns:
+            QMessageBox.warning(
+                self,
+                "Cannot Move Column",
+                f"Cannot move above locked column '{above_column_name}'."
+            )
+            return
 
         item = self.column_list.takeItem(current_row)
         self.column_list.insertItem(current_row - 1, item)
         self.column_list.setCurrentRow(current_row - 1)
 
-        self._current_columns.insert(current_row - 1, self._current_columns.pop(current_row))
+        self._current_columns = [
+            self.column_list.item(i).data(Qt.UserRole)
+            for i in range(self.column_list.count())
+            if self.column_list.item(i).data(Qt.UserRole) != _CATEGORY_HEADER_MARKER
+        ]
 
     def _on_move_down(self):
-        """Move selected column down in the order."""
+        """Move selected column down in the order (within its category group)."""
         current_row = self.column_list.currentRow()
         if current_row < 0 or current_row >= self.column_list.count() - 1:
             return
 
-        config = self.table_config_manager.get_current_config()
         item = self.column_list.currentItem()
-        column_name = item.text()
+        if item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+            return
+
+        below_item = self.column_list.item(current_row + 1)
+        if below_item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+            return  # already last in its category group
+
+        config = self.table_config_manager.get_current_config()
+        column_name = item.data(Qt.UserRole)
 
         if column_name in config.locked_columns:
             QMessageBox.warning(
@@ -375,11 +513,12 @@ class ColumnConfigPanel(QWidget):
             )
             return
 
-        if current_row == 0 and "Order_Number" in config.locked_columns:
+        below_column_name = below_item.data(Qt.UserRole)
+        if below_column_name in config.locked_columns:
             QMessageBox.warning(
                 self,
                 "Cannot Move Column",
-                "Cannot move locked column."
+                f"Cannot move below locked column '{below_column_name}'."
             )
             return
 
@@ -387,7 +526,11 @@ class ColumnConfigPanel(QWidget):
         self.column_list.insertItem(current_row + 1, item)
         self.column_list.setCurrentRow(current_row + 1)
 
-        self._current_columns.insert(current_row + 1, self._current_columns.pop(current_row))
+        self._current_columns = [
+            self.column_list.item(i).data(Qt.UserRole)
+            for i in range(self.column_list.count())
+            if self.column_list.item(i).data(Qt.UserRole) != _CATEGORY_HEADER_MARKER
+        ]
 
     def _on_show_all(self):
         """Show all columns and disable auto-hide."""
@@ -395,6 +538,8 @@ class ColumnConfigPanel(QWidget):
         try:
             for i in range(self.column_list.count()):
                 item = self.column_list.item(i)
+                if item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+                    continue
                 item.setCheckState(Qt.Checked)
         finally:
             self._is_loading = False
@@ -409,7 +554,9 @@ class ColumnConfigPanel(QWidget):
         try:
             for i in range(self.column_list.count()):
                 item = self.column_list.item(i)
-                column_name = item.text()
+                if item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+                    continue
+                column_name = item.data(Qt.UserRole)
 
                 if column_name in config.locked_columns:
                     continue
@@ -572,31 +719,27 @@ class ColumnConfigPanel(QWidget):
             if hasattr(self.parent_window, 'current_client_id') and self.parent_window.current_client_id:
                 client_id = self.parent_window.current_client_id
                 view_name = self.view_combo.currentText() or "Default"
-                self.table_config_manager.save_config(client_id, config, view_name)
 
-                if hasattr(self, 'additional_columns_config'):
-                    if self.additional_columns_config:
-                        logger.debug("Syncing UI checkbox states to config before saving...")
-                        self._sync_ui_to_config()
+                additional_columns = None
+                if hasattr(self, 'additional_columns_config') and self.additional_columns_config:
+                    logger.debug("Syncing UI checkbox states to config before saving...")
+                    self._sync_ui_to_config()
+                    additional_columns = self.additional_columns_config
 
-                    enabled_cols = [col for col in self.additional_columns_config if col.get('enabled', False)]
-                    disabled_cols = [col for col in self.additional_columns_config if not col.get('enabled', False)]
+                self.table_config_manager.save_config(
+                    client_id, config, view_name, additional_columns=additional_columns
+                )
 
-                    logger.debug(f"Saving additional columns config: {len(self.additional_columns_config)} columns")
+                if additional_columns is not None:
+                    enabled_cols = [col for col in additional_columns if col.get('enabled', False)]
+                    disabled_cols = [col for col in additional_columns if not col.get('enabled', False)]
+                    logger.debug(f"Saved additional columns config: {len(additional_columns)} columns")
                     logger.debug(f"  Enabled: {len(enabled_cols)} - {[col['csv_name'] for col in enabled_cols]}")
                     logger.debug(f"  Disabled: {len(disabled_cols)}")
-
-                    client_config = self.table_config_manager.pm.load_client_config(client_id)
-
-                    if "ui_settings" not in client_config:
-                        client_config["ui_settings"] = {}
-                    if "table_view" not in client_config["ui_settings"]:
-                        client_config["ui_settings"]["table_view"] = {}
-
-                    client_config["ui_settings"]["table_view"]["additional_columns"] = self.additional_columns_config
-
-                    self.table_config_manager.pm.save_client_config(client_id, client_config)
-                    logger.info(f"Saved additional columns: {len(enabled_cols)} enabled ({', '.join([col['csv_name'] for col in enabled_cols])})")
+                    logger.info(
+                        f"Saved additional columns: {len(enabled_cols)} enabled "
+                        f"({', '.join([col['csv_name'] for col in enabled_cols])})"
+                    )
 
                 if hasattr(self.parent_window, 'tableView') and \
                    hasattr(self.parent_window, 'analysis_results_df') and \
@@ -608,7 +751,7 @@ class ColumnConfigPanel(QWidget):
 
                 logger.info("Column configuration applied successfully")
 
-                if hasattr(self, 'additional_columns_config') and any(col.get('enabled', False) for col in self.additional_columns_config):
+                if additional_columns and any(col.get('enabled', False) for col in additional_columns):
                     QMessageBox.information(
                         self,
                         "Configuration Saved",
@@ -635,7 +778,14 @@ class ColumnConfigPanel(QWidget):
             )
 
     def _get_config_from_ui(self):
-        """Create TableConfig from current UI state."""
+        """Create TableConfig from current UI state.
+
+        Note: `column_order` is read off the grouped list, so Apply rewrites
+        the saved order into category order and confines reordering to within
+        a category. That is the grouped-list model, not a bug -- but it does
+        overwrite an order the user built by dragging headers in the main
+        table (table_config_manager.on_column_moved writes the same field).
+        """
         from gui.table_config_manager import TableConfig
 
         visible_columns = {}
@@ -643,7 +793,9 @@ class ColumnConfigPanel(QWidget):
 
         for i in range(self.column_list.count()):
             item = self.column_list.item(i)
-            column_name = item.text()
+            if item.data(Qt.UserRole) == _CATEGORY_HEADER_MARKER:
+                continue
+            column_name = item.data(Qt.UserRole)
             is_visible = item.checkState() == Qt.Checked
 
             visible_columns[column_name] = is_visible
