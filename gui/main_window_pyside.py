@@ -1591,6 +1591,11 @@ class MainWindow(QMainWindow):
             logger.warning(f"Failed to save window geometry: {e}")
         # Session data is now managed by SessionManager on the server
         # No need to save local session files
+        # Give background workers (e.g. stats recording) a bounded window to
+        # finish their network I/O so closing right after an analysis run
+        # doesn't kill a write mid-flight -- bounded so a hung write can't
+        # hang shutdown.
+        self.threadpool.waitForDone(2000)
         event.accept()
 
 

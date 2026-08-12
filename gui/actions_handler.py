@@ -48,6 +48,7 @@ class ActionsHandler(QObject):
         super().__init__()
         self.mw = main_window
         self.log = logging.getLogger(__name__)
+        self._stats_workers = set()  # keeps in-flight stats-recording Workers alive
 
     def create_new_session(self):
         """Creates a new session using SessionManager.
@@ -217,62 +218,35 @@ class ActionsHandler(QObject):
             # pre-depletion stock and over-promise fulfillment on the next run.
 
             # ========================================
-            # NEW: RECORD STATISTICS TO SERVER
+            # RECORD STATISTICS TO SERVER
             # ========================================
-            try:
-                from shared.session_id import derive_session_id
-                from shared.stats_manager import StatsManager
+            # StatsManager.record_analysis() performs blocking network I/O
+            # (file lock, read/write, fsync) over the UNC file share -- a
+            # fixed cost per call, independent of batch size. This method is
+            # a Qt result-signal slot, so it always runs on the GUI thread;
+            # doing that I/O inline here froze the UI on every analysis run.
+            # See docs/superpowers/specs/2026-08-09-packaging-unlock-and-perf-audit-design.md
+            # (Track A). The cheap in-memory counts below stay inline (not
+            # the freeze source); only the network write is backgrounded.
+            orders_count = (
+                len(df["Order_Number"].unique())
+                if "Order_Number" in df.columns
+                else 0
+            )
+            items_count = len(df)
 
-                self.log.info("Recording analysis statistics to server...")
-
-                stats_mgr = StatsManager(
-                    base_path=str(self.mw.profile_manager.base_path)
-                )
-
-                # Get session info
-                session_name = (
-                    derive_session_id(self.mw.session_path)
-                    if self.mw.session_path
-                    else "unknown"
-                )
-
-                # Count unique orders and items
-                orders_count = (
-                    len(df["Order_Number"].unique())
-                    if "Order_Number" in df.columns
+            fulfillable_orders = 0
+            if "Order_Fulfillment_Status" in df.columns:
+                fulfillable_df = df[df["Order_Fulfillment_Status"] == "Fulfillable"]
+                fulfillable_orders = (
+                    len(fulfillable_df["Order_Number"].unique())
+                    if not fulfillable_df.empty
                     else 0
                 )
-                items_count = len(df)
 
-                # Calculate fulfillable orders for metadata
-                fulfillable_orders = 0
-                if "Order_Fulfillment_Status" in df.columns:
-                    fulfillable_df = df[df["Order_Fulfillment_Status"] == "Fulfillable"]
-                    fulfillable_orders = (
-                        len(fulfillable_df["Order_Number"].unique())
-                        if not fulfillable_df.empty
-                        else 0
-                    )
-
-                # Record to stats
-                stats_mgr.record_analysis(
-                    client_id=self.mw.current_client_id,
-                    session_id=session_name,
-                    orders_count=orders_count,
-                    metadata={
-                        "items_count": items_count,
-                        "fulfillable_orders": fulfillable_orders,
-                    },
-                )
-
-                self.log.info(
-                    f"Statistics recorded: {orders_count} orders, {items_count} items, {fulfillable_orders} fulfillable"
-                )
-
-            except Exception:
-                # Don't fail the analysis if stats recording fails
-                self.log.exception("Failed to record statistics")
-                # Continue with normal flow
+            self._record_analysis_stats_async(
+                orders_count, items_count, fulfillable_orders
+            )
             # ========================================
             # END STATISTICS RECORDING
             # ========================================
@@ -298,6 +272,72 @@ class ActionsHandler(QObject):
                 "Analysis Error",
                 f"An error occurred during analysis:\n{result_msg}",
             )
+
+    def _record_analysis_stats_async(self, orders_count, items_count, fulfillable_orders):
+        """Fires off StatsManager.record_analysis() on a background thread.
+
+        StatsManager performs blocking network I/O over the UNC file share --
+        see on_analysis_complete for why this must never run inline on the Qt
+        main thread.
+        """
+        base_path = str(self.mw.profile_manager.base_path)
+        session_path = self.mw.session_path
+        client_id = self.mw.current_client_id
+
+        worker = Worker(
+            self._record_analysis_stats_job,
+            base_path,
+            session_path,
+            client_id,
+            orders_count,
+            items_count,
+            fulfillable_orders,
+        )
+        # Keep a strong reference until the worker finishes -- a bare local
+        # var would let the unparented WorkerSignals object get garbage
+        # collected before Qt dispatches its queued signals (same failure
+        # mode documented on _client_load_workers in main_window_pyside.py).
+        self._stats_workers.add(worker)
+        worker.signals.finished.connect(lambda: self._stats_workers.discard(worker))
+        self.mw.threadpool.start(worker)
+
+    def _record_analysis_stats_job(
+        self,
+        base_path,
+        session_path,
+        client_id,
+        orders_count,
+        items_count,
+        fulfillable_orders,
+    ):
+        """Background-thread body: writes analysis stats to the shared server file."""
+        try:
+            from shared.session_id import derive_session_id
+            from shared.stats_manager import StatsManager
+
+            self.log.info("Recording analysis statistics to server...")
+
+            stats_mgr = StatsManager(base_path=base_path)
+            session_name = (
+                derive_session_id(session_path) if session_path else "unknown"
+            )
+
+            stats_mgr.record_analysis(
+                client_id=client_id,
+                session_id=session_name,
+                orders_count=orders_count,
+                metadata={
+                    "items_count": items_count,
+                    "fulfillable_orders": fulfillable_orders,
+                },
+            )
+
+            self.log.info(
+                f"Statistics recorded: {orders_count} orders, {items_count} items, {fulfillable_orders} fulfillable"
+            )
+        except Exception:
+            # Don't fail the analysis if stats recording fails
+            self.log.exception("Failed to record statistics")
 
     def on_task_error(self, error):
         """Handles the 'error' signal from any worker thread.
