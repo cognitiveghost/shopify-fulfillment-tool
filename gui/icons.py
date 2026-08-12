@@ -7,7 +7,7 @@ rasterized pixmap with CompositionMode_SourceIn. It also means we never load
 an .svg through QIcon, so the frozen build does not depend on Qt's qsvg
 imageformats plugin being collected.
 """
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, Qt
@@ -24,7 +24,7 @@ ICONS_DIR = Path(__file__).resolve().parent / "assets" / "icons"
 _RENDER_SIZES = (16, 24, 32, 48)
 
 
-@lru_cache(maxsize=None)
+@cache
 def _source(name: str) -> str:
     path = ICONS_DIR / f"{name}.svg"
     if not path.is_file():
@@ -32,7 +32,7 @@ def _source(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-@lru_cache(maxsize=None)
+@cache
 def _render(name: str, color: str) -> QIcon:
     data = QByteArray(_source(name).replace("currentColor", color).encode())
     result = QIcon()

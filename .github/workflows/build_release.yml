@@ -93,6 +93,7 @@ jobs:
         run: >
           pyinstaller --name ShopifyFulfillmentTool --onedir --windowed --noconfirm
           --add-data "shopify_tool/templates;shopify_tool/templates"
+          --add-data "gui/assets;gui/assets"
           --collect-data blabel
           --collect-submodules reportlab.graphics.barcode
           gui_main.py

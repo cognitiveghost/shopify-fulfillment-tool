@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -55,7 +56,7 @@ class UIManager:
     # menu in main_window_pyside.py is rebuilt on every right-click, so its
     # icons pick up the new colour for free.
     _TAB_ICONS = ("clipboard-list", "table", "folder-open", "info", "wrench")
-    _BUTTON_ICONS = {
+    _BUTTON_ICONS: ClassVar[dict[str, str]] = {
         "open_session_folder_button": "folder-open",
         "new_session_btn": "folder-plus",
         "clear_filter_button": "funnel-x",
