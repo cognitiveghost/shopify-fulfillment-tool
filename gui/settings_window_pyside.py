@@ -33,7 +33,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.column_mapping_widget import ColumnMappingWidget
 from gui.settings.base import SettingsPage
 from gui.settings.fields import (
     ACTION_TYPES,
@@ -44,6 +43,7 @@ from gui.settings.fields import (
     ORDER_LEVEL_FIELDS,
 )
 from gui.settings.general import GeneralPage
+from gui.settings.mappings import MappingsPage
 from gui.settings.packing_lists import PackingListsPage
 from gui.settings.stock_exports import StockExportsPage
 from gui.theme_manager import apply_font, font_css
@@ -142,7 +142,6 @@ class SettingsWindow(QDialog):
 
         # Widget lists
         self.rule_widgets = []
-        self.courier_mapping_widgets = []
 
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
         self.setMinimumSize(1100, 600)
@@ -175,7 +174,13 @@ class SettingsWindow(QDialog):
             StockExportsPage(self.config_data.get("stock_export_configs", []), self.analysis_df),
             "Stock Exports",
         )
-        self.create_mappings_tab()
+        self._add_page(
+            MappingsPage(
+                self.config_data.get("column_mappings", {}),
+                self.config_data.get("courier_mappings", {}),
+            ),
+            "Mappings",
+        )
         self.create_sets_tab()  # Sets/Bundles tab
         self.create_weight_tab()  # Volumetric Weight tab
         self.create_tag_categories_tab()  # Tag Categories tab
@@ -1389,166 +1394,6 @@ class SettingsWindow(QDialog):
 
             action_refs["param_widgets"]["sku"] = sku_edit
             action_refs["param_widgets"]["quantity"] = qty_spin
-
-    def create_mappings_tab(self):
-        """Creates the 'Mappings' tab for column mappings and courier mappings."""
-        tab = QWidget()
-        main_layout = QVBoxLayout(tab)
-
-        # Add scroll area for the entire tab
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
-
-        # ========================================
-        # COLUMN MAPPINGS - Orders
-        # ========================================
-        orders_box = QGroupBox("Orders CSV Column Mapping")
-        orders_layout = QVBoxLayout(orders_box)
-
-        # Define required and optional fields for orders
-        orders_required = ["Order_Number", "SKU", "Quantity", "Shipping_Method"]
-        orders_optional = ["Product_Name", "Shipping_Country", "Tags", "Notes", "Total_Price", "Subtotal"]
-
-        # Get current mappings (v2 format)
-        column_mappings = self.config_data.get("column_mappings", {})
-        orders_mappings = column_mappings.get("orders", {})
-
-        # Create widget
-        self.orders_mapping_widget = ColumnMappingWidget(
-            mapping_type="orders",
-            current_mappings=orders_mappings,
-            required_fields=orders_required,
-            optional_fields=orders_optional
-        )
-
-        orders_layout.addWidget(self.orders_mapping_widget)
-        scroll_layout.addWidget(orders_box)
-
-        # ========================================
-        # COLUMN MAPPINGS - Stock
-        # ========================================
-        stock_box = QGroupBox("Stock CSV Column Mapping")
-        stock_layout = QVBoxLayout(stock_box)
-
-        # Define required and optional fields for stock
-        stock_required = ["SKU", "Stock"]
-        stock_optional = ["Product_Name"]
-
-        # Get current mappings (v2 format)
-        stock_mappings = column_mappings.get("stock", {})
-
-        # Create widget
-        self.stock_mapping_widget = ColumnMappingWidget(
-            mapping_type="stock",
-            current_mappings=stock_mappings,
-            required_fields=stock_required,
-            optional_fields=stock_optional
-        )
-
-        stock_layout.addWidget(self.stock_mapping_widget)
-        scroll_layout.addWidget(stock_box)
-
-        # ========================================
-        # COURIER MAPPINGS
-        # ========================================
-        courier_mappings_box = QGroupBox("Courier Mappings")
-        courier_main_layout = QVBoxLayout(courier_mappings_box)
-
-        instructions2 = QLabel(
-            "Map different shipping provider names to standardized courier codes.\n"
-            "You can specify multiple patterns (comma-separated) for each courier."
-        )
-        instructions2.setWordWrap(True)
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
-        instructions2.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('body')}")
-        courier_main_layout.addWidget(instructions2)
-
-        # Container for courier mapping rows
-        self.courier_mappings_container = QWidget()
-        self.courier_mappings_layout = QVBoxLayout(self.courier_mappings_container)
-        self.courier_mappings_layout.setContentsMargins(0, 0, 0, 0)
-
-        courier_main_layout.addWidget(self.courier_mappings_container)
-
-        add_courier_btn = QPushButton("+ Add Courier Mapping")
-        add_courier_btn.clicked.connect(lambda: self.add_courier_mapping_row())
-        courier_main_layout.addWidget(add_courier_btn, 0, Qt.AlignLeft)
-
-        scroll_layout.addWidget(courier_mappings_box)
-        scroll_layout.addStretch()
-
-        scroll.setWidget(scroll_widget)
-        main_layout.addWidget(scroll)
-
-        self._add_settings_page(tab, "Mappings")
-
-        # Populate existing courier mappings
-        courier_mappings = self.config_data.get("courier_mappings", {})
-        if isinstance(courier_mappings, dict):
-            for courier_code, mapping_data in courier_mappings.items():
-                if isinstance(mapping_data, dict):
-                    patterns = mapping_data.get("patterns", [])
-                    patterns_str = ", ".join(patterns) if patterns else ""
-                    self.add_courier_mapping_row(courier_code, patterns_str)
-
-        # Add at least one empty row if no mappings exist
-        if not courier_mappings:
-            self.add_courier_mapping_row()
-
-    def add_courier_mapping_row(self, courier_code="", patterns_str=""):
-        """Adds a new row for a single courier mapping.
-
-        Args:
-            courier_code: Standardized courier code (e.g., "DHL", "DPD", "Speedy")
-            patterns_str: Comma-separated patterns (e.g., "dhl, dhl express, dhl_express")
-        """
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 5, 0, 5)
-
-        # Courier Code
-        code_label = QLabel("Code:")
-        code_label.setFixedWidth(50)
-        courier_edit = QLineEdit(courier_code)
-        courier_edit.setPlaceholderText("DHL, DPD, Speedy...")
-        courier_edit.setMinimumWidth(100)
-        courier_edit.setMaximumWidth(150)
-
-        # Patterns
-        patterns_label = QLabel("Patterns:")
-        patterns_label.setFixedWidth(70)
-        patterns_edit = QLineEdit(patterns_str)
-        patterns_edit.setPlaceholderText("dhl, dhl express, dhl_express")
-        patterns_edit.setMinimumWidth(300)
-
-        # Delete button
-        delete_btn = QPushButton("✕")
-        delete_btn.setFixedWidth(30)
-        delete_btn.setStyleSheet("color: red; font-weight: bold;")
-        delete_btn.setToolTip("Remove this courier mapping")
-
-        row_layout.addWidget(code_label)
-        row_layout.addWidget(courier_edit, 1)
-        row_layout.addWidget(patterns_label)
-        row_layout.addWidget(patterns_edit, 3)
-        row_layout.addWidget(delete_btn)
-        row_layout.addStretch()
-
-        self.courier_mappings_layout.addWidget(row_widget)
-
-        row_refs = {
-            "widget": row_widget,
-            "courier_code": courier_edit,
-            "patterns": patterns_edit,
-        }
-        self.courier_mapping_widgets.append(row_refs)
-
-        delete_btn.clicked.connect(
-            lambda: self._delete_row_from_list(row_widget, self.courier_mapping_widgets, row_refs)
-        )
 
     # ========================================
     # SETS/BUNDLES TAB
@@ -2783,61 +2628,6 @@ class SettingsWindow(QDialog):
                 })
 
             self.config_data["rules"] = new_rules
-
-            # ========================================
-            # Mappings Tab - Column Mappings (v2 format)
-            # ========================================
-            # Validate mappings before saving
-            orders_valid, orders_error = self.orders_mapping_widget.validate_mappings()
-            if not orders_valid:
-                QMessageBox.warning(
-                    self,
-                    "Invalid Orders Mapping",
-                    f"Orders column mapping is invalid:\n{orders_error}"
-                )
-                return
-
-            stock_valid, stock_error = self.stock_mapping_widget.validate_mappings()
-            if not stock_valid:
-                QMessageBox.warning(
-                    self,
-                    "Invalid Stock Mapping",
-                    f"Stock column mapping is invalid:\n{stock_error}"
-                )
-                return
-
-            # Get mappings from widgets
-            orders_mappings = self.orders_mapping_widget.get_mappings()
-            stock_mappings = self.stock_mapping_widget.get_mappings()
-
-            # Save in v2 format
-            self.config_data["column_mappings"] = {
-                "version": 2,
-                "orders": orders_mappings,
-                "stock": stock_mappings
-            }
-
-            # ========================================
-            # Mappings Tab - Courier Mappings
-            # ========================================
-            self.config_data["courier_mappings"] = {}
-
-            for row_refs in self.courier_mapping_widgets:
-                courier_code = row_refs["courier_code"].text().strip()
-                patterns_str = row_refs["patterns"].text().strip()
-
-                if courier_code and patterns_str:
-                    # Parse comma-separated patterns
-                    patterns = [
-                        p.strip()
-                        for p in patterns_str.split(',')
-                        if p.strip()
-                    ]
-
-                    self.config_data["courier_mappings"][courier_code] = {
-                        "patterns": patterns,
-                        "case_sensitive": False
-                    }
 
             # ========================================
             # Weight Tab
