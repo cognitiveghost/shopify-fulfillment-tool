@@ -83,3 +83,16 @@ def test_every_long_lived_icon_name_resolves():
         assert not icon(name).isNull()
     for name in UIManager._BUTTON_ICONS.values():
         assert not icon(name).isNull()
+
+
+def test_context_menu_no_longer_reaches_for_stock_icons():
+    """Three separate menu actions shared SP_FileDialogDetailedView, which is
+    why the app's icons carried no meaning. Each gets its own glyph now."""
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parent.parent / "gui" / "main_window_pyside.py"
+    ).read_text(encoding="utf-8")
+    assert "QStyle.SP_" not in source
+    for name in ("refresh-cw", "tag", "tags", "circle-minus", "trash-2", "copy"):
+        assert f'icon("{name}")' in source
