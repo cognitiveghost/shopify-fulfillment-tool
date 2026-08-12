@@ -149,6 +149,7 @@ class ColumnMappingWidget(QWidget):
         # Required indicator
         if required:
             required_indicator = QLabel("*")
+            # Track 3 moves the literal red onto a theme token; only the size is in scope here.
             required_indicator.setStyleSheet(f"color: red; {font_css('heading')}")
             required_indicator.setFixedWidth(15)
             required_indicator.setToolTip("This field is required")

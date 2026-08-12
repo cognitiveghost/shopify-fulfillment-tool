@@ -44,14 +44,15 @@ class TagDelegate(QStyledItemDelegate):
         padding = 8
         spacing = 4
 
+        apply_font(painter, "caption")
+        metrics = painter.fontMetrics()
+
         for tag in tags:
             # Get tag color
             color_hex = get_tag_color(tag, self.tag_categories)
             color = QColor(color_hex)
 
             # Measure text width
-            apply_font(painter, "caption")
-            metrics = painter.fontMetrics()
             text_width = metrics.horizontalAdvance(tag)
 
             badge_width = text_width + padding * 2

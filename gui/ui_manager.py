@@ -325,7 +325,7 @@ class UIManager:
         layout.setContentsMargins(10, 10, 10, 10)
 
         title = QLabel("Recent Sessions")
-        title.setStyleSheet(f"{font_css('label')}")
+        title.setStyleSheet(font_css("label"))
         layout.addWidget(title)
 
         self.mw.recent_sessions_list = QListWidget()

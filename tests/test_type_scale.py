@@ -103,11 +103,11 @@ def test_no_hardcoded_font_sizes_outside_theme_manager():
     """The scale is only worth having if it cannot be bypassed. A new dialog
     that hardcodes a size turns this red instead of quietly drifting."""
     offenders = []
-    for path in sorted(GUI_DIR.glob("*.py")):
+    for path in sorted(GUI_DIR.rglob("*.py")):
         if path.name == "theme_manager.py":
             continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if "font-size:" in line or "setPointSize" in line:
+            if "font-size:" in line or "setPointSize" in line or "setPixelSize" in line:
                 offenders.append(f"{path.name}:{lineno}: {line.strip()}")
     assert not offenders, (
         "Use theme_manager.font_css()/apply_font() instead of hardcoding sizes:\n"
