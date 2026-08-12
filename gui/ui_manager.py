@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSplitter,
-    QStyle,
     QTableView,
     QTableWidget,
     QTabWidget,
@@ -29,6 +28,7 @@ from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .bulk_operations_toolbar import BulkOperationsToolbar
+from .icons import icon
 from .pandas_model import PandasModel
 from .tag_management_panel import TagManagementPanel
 from .theme_manager import font_css, get_theme_manager
@@ -50,6 +50,16 @@ class UIManager:
         mw (MainWindow): A reference to the main window instance.
         log (logging.Logger): A logger for this class.
     """
+
+    # Only long-lived icons need re-theming on a theme toggle. The context
+    # menu in main_window_pyside.py is rebuilt on every right-click, so its
+    # icons pick up the new colour for free.
+    _TAB_ICONS = ("clipboard-list", "table", "folder-open", "info", "wrench")
+    _BUTTON_ICONS = {
+        "open_session_folder_button": "folder-open",
+        "new_session_btn": "folder-plus",
+        "clear_filter_button": "funnel-x",
+    }
 
     def __init__(self, main_window):
         """Initializes the UIManager.
@@ -104,6 +114,10 @@ class UIManager:
         # Add right side to horizontal layout
         main_horizontal.addWidget(right_side, 1)  # Stretch tabs
 
+        # Every widget exists by now, so one pass sets every long-lived icon.
+        self._refresh_icons()
+        get_theme_manager().theme_changed.connect(self._refresh_icons)
+
         # Setup status bar
         self.mw.statusBar().showMessage("Ready")
 
@@ -125,18 +139,11 @@ class UIManager:
         tab4 = self._create_tab4_information()
         tab5 = self._create_tab5_tools()
 
-        # Add tabs with icons (using QStyle built-in icons)
-        file_icon = self.mw.style().standardIcon(QStyle.SP_FileIcon)
-        table_icon = self.mw.style().standardIcon(QStyle.SP_FileDialogDetailedView)
-        folder_icon = self.mw.style().standardIcon(QStyle.SP_DirIcon)
-        info_icon = self.mw.style().standardIcon(QStyle.SP_MessageBoxInformation)
-        tools_icon = self.mw.style().standardIcon(QStyle.SP_FileDialogContentsView)
-
-        self.mw.main_tabs.addTab(tab1, file_icon, "Session Setup")
-        self.mw.main_tabs.addTab(tab2, table_icon, "Analysis Results")
-        self.mw.main_tabs.addTab(tab3, folder_icon, "Session Browser")
-        self.mw.main_tabs.addTab(tab4, info_icon, "Information")
-        self.mw.main_tabs.addTab(tab5, tools_icon, "Tools")
+        self.mw.main_tabs.addTab(tab1, "Session Setup")
+        self.mw.main_tabs.addTab(tab2, "Analysis Results")
+        self.mw.main_tabs.addTab(tab3, "Session Browser")
+        self.mw.main_tabs.addTab(tab4, "Information")
+        self.mw.main_tabs.addTab(tab5, "Tools")
 
         # Add keyboard shortcuts for tab switching
         self._setup_tab_shortcuts()
@@ -182,10 +189,8 @@ class UIManager:
         # Row 2: Session info
         session_row = QHBoxLayout()
 
-        folder_icon = self.mw.style().standardIcon(QStyle.SP_DirIcon)
-        session_icon_label = QLabel()
-        session_icon_label.setPixmap(folder_icon.pixmap(16, 16))
-        session_row.addWidget(session_icon_label)
+        self.mw.session_folder_icon_label = QLabel()
+        session_row.addWidget(self.mw.session_folder_icon_label)
 
         session_row.addWidget(QLabel("Session:"))
 
@@ -717,9 +722,6 @@ class UIManager:
 
         # Add "Open Session Folder" button
         self.mw.open_session_folder_button = QPushButton("Open Session Folder")
-        self.mw.open_session_folder_button.setIcon(
-            self.mw.style().standardIcon(QStyle.SP_DirOpenIcon)
-        )
         self.mw.open_session_folder_button.setEnabled(False)
         self.mw.open_session_folder_button.setToolTip(
             "Open the current session folder in file explorer"
@@ -1051,9 +1053,6 @@ class UIManager:
 
         # Create new session button
         self.mw.new_session_btn = QPushButton("Create New Session")
-        self.mw.new_session_btn.setIcon(
-            self.mw.style().standardIcon(QStyle.SP_FileDialogNewFolder)
-        )
         self.mw.new_session_btn.setToolTip(
             "Create a new analysis session for the selected client"
         )
@@ -1094,9 +1093,6 @@ class UIManager:
 
         # Clear button
         self.mw.clear_filter_button = QPushButton("Clear")
-        self.mw.clear_filter_button.setIcon(
-            self.mw.style().standardIcon(QStyle.SP_DialogResetButton)
-        )
         layout.addWidget(self.mw.clear_filter_button)
 
         # Separator
@@ -1861,6 +1857,23 @@ class UIManager:
 
         self.mw.tools_widget = ToolsWidget(self.mw)
         return self.mw.tools_widget
+
+    def _refresh_icons(self):
+        """Re-render every long-lived icon in the app's current theme colour.
+
+        A QIcon handed to addTab()/setIcon() is a snapshot -- it does not
+        follow a theme toggle, and a dark-grey glyph on the dark theme's
+        background is invisible.
+        """
+        for index, name in enumerate(self._TAB_ICONS):
+            self.mw.main_tabs.setTabIcon(index, icon(name))
+        for attr, name in self._BUTTON_ICONS.items():
+            widget = getattr(self.mw, attr, None)
+            if widget is not None:
+                widget.setIcon(icon(name))
+        label = getattr(self.mw, "session_folder_icon_label", None)
+        if label is not None:
+            label.setPixmap(icon("folder").pixmap(16, 16))
 
     def _update_theme_button_text(self):
         """Update theme toggle button text based on current theme."""

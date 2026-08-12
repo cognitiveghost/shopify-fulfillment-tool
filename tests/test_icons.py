@@ -68,3 +68,18 @@ def test_icon_carries_several_resolutions_for_hidpi():
 
 def test_repeated_calls_reuse_the_cached_render():
     assert icon("copy") is icon("copy")
+
+
+def test_every_long_lived_icon_name_resolves():
+    """The five tab icons are the app's most-seen chrome, and with the three
+    buttons they are the only icons that outlive a theme change -- everything
+    in the context menu is rebuilt on each right-click."""
+    from gui.ui_manager import UIManager
+
+    assert UIManager._TAB_ICONS == (
+        "clipboard-list", "table", "folder-open", "info", "wrench",
+    )
+    for name in UIManager._TAB_ICONS:
+        assert not icon(name).isNull()
+    for name in UIManager._BUTTON_ICONS.values():
+        assert not icon(name).isNull()
