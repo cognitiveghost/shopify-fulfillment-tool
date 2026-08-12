@@ -44,6 +44,7 @@ from gui.settings.fields import (
     ORDER_LEVEL_FIELDS,
 )
 from gui.settings.general import GeneralPage
+from gui.settings.packing_lists import PackingListsPage
 from gui.settings.stock_exports import StockExportsPage
 from gui.theme_manager import apply_font, font_css
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
@@ -74,7 +75,6 @@ class SettingsWindow(QDialog):
             populate dynamic dropdowns for filter values.
         rule_widgets (list): A list of dictionaries, each holding references
             to the UI widgets for a single rule.
-        packing_list_widgets (list): References to packing list UI widgets.
     """
 
     # Constants for builders
@@ -142,7 +142,6 @@ class SettingsWindow(QDialog):
 
         # Widget lists
         self.rule_widgets = []
-        self.packing_list_widgets = []
         self.courier_mapping_widgets = []
 
         self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
@@ -168,7 +167,10 @@ class SettingsWindow(QDialog):
         # Create all tabs (unchanged call order/method names)
         self._add_page(GeneralPage(self.config_data.get("settings", {})), "General")
         self.create_rules_tab()
-        self.create_packing_lists_tab()
+        self._add_page(
+            PackingListsPage(self.config_data.get("packing_list_configs", []), self.analysis_df),
+            "Packing Lists",
+        )
         self._add_page(
             StockExportsPage(self.config_data.get("stock_export_configs", []), self.analysis_df),
             "Stock Exports",
@@ -1387,166 +1389,6 @@ class SettingsWindow(QDialog):
 
             action_refs["param_widgets"]["sku"] = sku_edit
             action_refs["param_widgets"]["quantity"] = qty_spin
-
-    def create_packing_lists_tab(self):
-        """Creates the 'Packing Lists' tab for managing report configurations."""
-        tab = QWidget()
-        main_layout = QVBoxLayout(tab)
-        add_btn = QPushButton("Add New Packing List")
-        add_btn.clicked.connect(self.add_packing_list_widget)
-        main_layout.addWidget(add_btn, 0, Qt.AlignLeft)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        main_layout.addWidget(scroll_area)
-        scroll_content = QWidget()
-        self.packing_lists_layout = QVBoxLayout(scroll_content)
-        self.packing_lists_layout.setAlignment(Qt.AlignTop)
-        scroll_area.setWidget(scroll_content)
-        self._add_settings_page(tab, "Packing Lists")
-        for pl_config in self.config_data.get("packing_list_configs", []):
-            self.add_packing_list_widget(pl_config)
-
-    def add_packing_list_widget(self, config=None):
-        """Adds a new group of widgets for a single packing list configuration.
-
-        Args:
-            config (dict, optional): The configuration for a pre-existing
-                packing list. If None, creates a new, blank one.
-        """
-        if not isinstance(config, dict):
-            config = {"name": "", "output_filename": "", "filters": [], "exclude_skus": []}
-        pl_box = QGroupBox()
-        pl_layout = QVBoxLayout(pl_box)
-        form_layout = QFormLayout()
-        name_edit = QLineEdit(config.get("name", ""))
-        filename_edit = QLineEdit(config.get("output_filename", ""))
-        exclude_skus_edit = QLineEdit(",".join(config.get("exclude_skus", [])))
-        form_layout.addRow("Name:", name_edit)
-        form_layout.addRow("Output Filename:", filename_edit)
-        form_layout.addRow("Exclude SKUs (comma-separated):", exclude_skus_edit)
-        pl_layout.addLayout(form_layout)
-        filters_box = QGroupBox("Filters")
-        filters_layout = QVBoxLayout(filters_box)
-        filters_rows_layout = QVBoxLayout()
-        filters_layout.addLayout(filters_rows_layout)
-        add_filter_btn = QPushButton("Add Filter")
-        filters_layout.addWidget(add_filter_btn, 0, Qt.AlignLeft)
-        pl_layout.addWidget(filters_box)
-        delete_btn = QPushButton("Delete Packing List")
-        pl_layout.addWidget(delete_btn, 0, Qt.AlignRight)
-        self.packing_lists_layout.addWidget(pl_box)
-        widget_refs = {
-            "group_box": pl_box,
-            "name": name_edit,
-            "filename": filename_edit,
-            "exclude_skus": exclude_skus_edit,
-            "filters_layout": filters_rows_layout,
-            "filters": [],
-        }
-        self.packing_list_widgets.append(widget_refs)
-        add_filter_btn.clicked.connect(
-            lambda: self.add_filter_row(widget_refs, self.FILTERABLE_COLUMNS, self.FILTER_OPERATORS)
-        )
-        delete_btn.clicked.connect(lambda: self._delete_widget_from_list(widget_refs, self.packing_list_widgets))
-        for f_config in config.get("filters", []):
-            self.add_filter_row(widget_refs, self.FILTERABLE_COLUMNS, self.FILTER_OPERATORS, f_config)
-
-    def add_filter_row(self, parent_widget_refs, fields, operators, config=None):
-        """Adds a new row of widgets for a single filter criterion.
-
-        This is a generic helper used by both packing list and stock export tabs.
-
-        Args:
-            parent_widget_refs (dict): Widget references for the parent report.
-            fields (list[str]): The list of columns to show in the field dropdown.
-            operators (list[str]): The list of operators to show.
-            config (dict, optional): The configuration for a pre-existing
-                filter. If None, creates a new, blank filter.
-        """
-        if not isinstance(config, dict):
-            config = {}
-        row_layout = QHBoxLayout()
-        field_combo = WheelIgnoreComboBox()
-        field_combo.addItems(fields)
-        op_combo = WheelIgnoreComboBox()
-        op_combo.addItems(operators)
-        value_edit = QLineEdit()
-        delete_btn = QPushButton("X")
-
-        row_layout.addWidget(field_combo)
-        row_layout.addWidget(op_combo)
-        row_layout.addWidget(value_edit, 1)
-
-        field_combo.setCurrentText(config.get("field", fields[0]))
-        op_combo.setCurrentText(config.get("operator", operators[0]))
-        val = config.get("value", "")
-
-        row_widget = QWidget()
-        row_widget.setLayout(row_layout)
-
-        filter_refs = {
-            "widget": row_widget,
-            "field": field_combo,
-            "op": op_combo,
-            "value_widget": None,
-            "value_layout": row_layout,
-        }
-
-        # Connect signals before setting initial value to trigger the handler
-        field_combo.currentTextChanged.connect(lambda: self._on_filter_criteria_changed(filter_refs))
-        op_combo.currentTextChanged.connect(lambda: self._on_filter_criteria_changed(filter_refs))
-
-        self._on_filter_criteria_changed(filter_refs, initial_value=val)  # Set initial widget and value
-
-        row_layout.addWidget(delete_btn)
-        parent_widget_refs["filters_layout"].addWidget(row_widget)
-        parent_widget_refs["filters"].append(filter_refs)
-        delete_btn.clicked.connect(
-            lambda: self._delete_row_from_list(row_widget, parent_widget_refs["filters"], filter_refs)
-        )
-
-    def _on_filter_criteria_changed(self, filter_refs, initial_value=None):
-        """Dynamically changes the filter's value widget based on other selections.
-
-        For example, if the operator is '==' and the field is 'Order_Type',
-        this method will create a QComboBox with unique values from the
-        DataFrame ('Single', 'Multi') instead of a plain QLineEdit.
-
-        Args:
-            filter_refs (dict): A dictionary of widget references for the filter row.
-            initial_value (any, optional): The value to set in the newly
-                created widget. Defaults to None.
-        """
-        field = filter_refs["field"].currentText()
-        op = filter_refs["op"].currentText()
-
-        if filter_refs["value_widget"]:
-            filter_refs["value_widget"].deleteLater()
-
-        use_combobox = op in ["==", "!="] and not self.analysis_df.empty and field in self.analysis_df.columns
-
-        if use_combobox:
-            try:
-                unique_values = self.analysis_df[field].dropna().unique().tolist()
-                unique_values = sorted([str(v) for v in unique_values])
-                new_widget = WheelIgnoreComboBox()
-                new_widget.addItems(unique_values)
-                if initial_value and str(initial_value) in unique_values:
-                    new_widget.setCurrentText(str(initial_value))
-            except Exception:
-                new_widget = QLineEdit()
-                new_widget.setText(str(initial_value) if initial_value else "")
-        else:
-            new_widget = QLineEdit()
-            placeholder = "Value"
-            if op in ["in", "not in"]:
-                placeholder = "Values, comma-separated"
-            new_widget.setPlaceholderText(placeholder)
-            text_value = ",".join(initial_value) if isinstance(initial_value, list) else (initial_value or "")
-            new_widget.setText(str(text_value))
-
-        filter_refs["value_layout"].insertWidget(2, new_widget, 1)
-        filter_refs["value_widget"] = new_widget
 
     def create_mappings_tab(self):
         """Creates the 'Mappings' tab for column mappings and courier mappings."""
@@ -2941,42 +2783,6 @@ class SettingsWindow(QDialog):
                 })
 
             self.config_data["rules"] = new_rules
-
-            # ========================================
-            # Packing Lists Tab
-            # ========================================
-            new_packing_lists = []
-            for pl_w in self.packing_list_widgets:
-                filters = []
-                for f in pl_w["filters"]:
-                    value_widget = f.get("value_widget")
-                    val = ""
-                    if value_widget:
-                        if isinstance(value_widget, QComboBox):
-                            val = value_widget.currentText()
-                        else:
-                            val = value_widget.text()
-
-                    filters.append({
-                        "field": f["field"].currentText(),
-                        "operator": f["op"].currentText(),
-                        "value": val,
-                    })
-
-                # Parse exclude_skus from comma-separated string
-                exclude_skus_text = pl_w["exclude_skus"].text().strip()
-                exclude_skus = []
-                if exclude_skus_text:
-                    exclude_skus = [s.strip() for s in exclude_skus_text.split(',') if s.strip()]
-
-                new_packing_lists.append({
-                    "name": pl_w["name"].text(),
-                    "output_filename": pl_w["filename"].text(),
-                    "filters": filters,
-                    "exclude_skus": exclude_skus,
-                })
-
-            self.config_data["packing_list_configs"] = new_packing_lists
 
             # ========================================
             # Mappings Tab - Column Mappings (v2 format)
