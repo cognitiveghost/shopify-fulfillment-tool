@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components.card import Card
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
@@ -1587,82 +1588,35 @@ class UIManager:
 
     def _make_stat_card(self, value: str, label: str) -> tuple:
         """Stat card: large value on top, small label below. Returns (widget, value_label)."""
-        card = QFrame()
-        card.setFrameShape(QFrame.StyledPanel)
-        card.setFrameShadow(QFrame.Raised)
-        card_layout = QVBoxLayout(card)
-        card_layout.setSpacing(2)
-        card_layout.setContentsMargins(12, 8, 12, 8)
-
-        value_lbl = QLabel(value)
-        value_lbl.setAlignment(Qt.AlignCenter)
-        value_lbl.setStyleSheet(font_css("display"))
-
-        text_lbl = QLabel(label)
-        text_lbl.setAlignment(Qt.AlignCenter)
-        text_lbl.setWordWrap(True)
-        text_lbl.setStyleSheet(font_css("caption"))
-
-        card_layout.addWidget(value_lbl)
-        card_layout.addWidget(text_lbl)
+        card = Card()
+        value_lbl = card.add_text(value, "display")
+        card.add_text(label, "caption", wrap=True)
         return card, value_lbl
 
-    def _make_courier_card(self, courier_id: str, orders: str, repeated: str) -> QFrame:
+    def _make_courier_card(self, courier_id: str, orders: str, repeated: str) -> Card:
         """Courier card: orders count on top, courier name in middle, repeated below."""
-        card = QFrame()
-        card.setFrameShape(QFrame.StyledPanel)
-        card.setFrameShadow(QFrame.Raised)
-        card.setMinimumWidth(100)
-        card_layout = QVBoxLayout(card)
-        card_layout.setSpacing(1)
-        card_layout.setContentsMargins(12, 8, 12, 8)
-
-        orders_lbl = QLabel(orders)
-        orders_lbl.setAlignment(Qt.AlignCenter)
-        orders_lbl.setStyleSheet(font_css("display"))
-
-        name_lbl = QLabel(courier_id)
-        name_lbl.setAlignment(Qt.AlignCenter)
-        name_lbl.setStyleSheet(font_css("caption"))
-
-        repeated_lbl = QLabel(f"{repeated} repeated")
-        repeated_lbl.setAlignment(Qt.AlignCenter)
-        repeated_lbl.setStyleSheet(font_css("caption"))
-
-        card_layout.addWidget(orders_lbl)
-        card_layout.addWidget(name_lbl)
-        card_layout.addWidget(repeated_lbl)
+        card = Card(min_width=100)
+        card.add_text(orders, "display")
+        card.add_text(courier_id, "caption")
+        card.add_text(f"{repeated} repeated", "caption")
         return card
 
-    def _make_tag_card(self, tag: str, count: str, color: str | None = None) -> QFrame:
+    def _make_tag_card(self, tag: str, count: str, color: str | None = None) -> Card:
         """Tag card: colored count badge on top, tag name below."""
         if color is None:
             # ponytail: literal neutral badge-fill default, not a text color —
             # theme.text_secondary differs per theme; this is a background
             # fill, and no theme-invariant neutral-gray token exists.
             color = "#9E9E9E"
-        card = QFrame()
-        card.setFrameShape(QFrame.StyledPanel)
-        card.setFrameShadow(QFrame.Raised)
-        card.setMinimumWidth(60)
-        card_layout = QVBoxLayout(card)
-        card_layout.setSpacing(2)
-        card_layout.setContentsMargins(6, 4, 6, 4)
-
-        count_lbl = QLabel(count)
-        count_lbl.setAlignment(Qt.AlignCenter)
-        count_lbl.setStyleSheet(
-            f"{font_css('label')} color: white; "
-            f"background-color: {color}; border-radius: 8px; padding: 2px 6px;"
+        # Denser than the default on purpose: these sit 60px wide in a
+        # horizontal scroll strip.
+        card = Card(min_width=60, margins=(6, 4, 6, 4))
+        card.add_text(
+            count,
+            "label",
+            css=f"color: white; background-color: {color}; border-radius: 8px; padding: 2px 6px;",
         )
-
-        tag_lbl = QLabel(tag)
-        tag_lbl.setAlignment(Qt.AlignCenter)
-        tag_lbl.setWordWrap(True)
-        tag_lbl.setStyleSheet(font_css("caption"))
-
-        card_layout.addWidget(count_lbl)
-        card_layout.addWidget(tag_lbl)
+        card.add_text(tag, "caption", wrap=True)
         return card
 
     def _create_statistics_subtab(self):
