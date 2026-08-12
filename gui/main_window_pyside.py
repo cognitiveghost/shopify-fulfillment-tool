@@ -1309,7 +1309,11 @@ class MainWindow(QMainWindow):
             for row_idx, sku_data in enumerate(sku_summary):
                 self.sku_table.insertRow(row_idx)
 
-                num_item = QTableWidgetItem(str(row_idx + 1))
+                # Numeric columns store real ints, not strings -- a
+                # QTableWidgetItem built from str() sorts lexicographically,
+                # which orders 10 before 2.
+                num_item = QTableWidgetItem()
+                num_item.setData(Qt.DisplayRole, row_idx + 1)
                 num_item.setTextAlignment(Qt.AlignCenter)
                 self.sku_table.setItem(row_idx, 0, num_item)
 
@@ -1326,7 +1330,11 @@ class MainWindow(QMainWindow):
                     ["Total_Quantity", "Fulfillable_Items", "Not_Fulfillable_Items"],
                     start=3,
                 ):
-                    val_item = QTableWidgetItem(str(sku_data.get(key, 0)))
+                    raw = sku_data.get(key, 0)
+                    if raw is None or (hasattr(pd, "isna") and pd.isna(raw)):
+                        raw = 0
+                    val_item = QTableWidgetItem()
+                    val_item.setData(Qt.DisplayRole, int(raw))
                     val_item.setTextAlignment(Qt.AlignCenter)
                     self.sku_table.setItem(row_idx, col_idx, val_item)
 

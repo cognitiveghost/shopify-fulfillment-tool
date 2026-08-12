@@ -91,3 +91,24 @@ def test_locked_column_tooltip_still_shows_raw_name():
     item = panel.column_list.item(1)  # row 0 = "Order Info" header
     assert item.data(Qt.UserRole) == "Order_Number"
     assert "Order_Number" in item.toolTip()
+
+
+def test_search_matches_the_display_name_the_user_can_see():
+    """"Name" renders as "Order Name" -- searching the visible label has to
+    find it, or the box no longer matches what the list shows.
+    """
+    panel = _make_panel(["Order_Number", "Name"])
+
+    panel._on_search_changed("order name")
+
+    # row 0 = "Order Info" header, row 1 = Order_Number, row 2 = Name.
+    assert panel.column_list.item(2).isHidden() is False
+
+
+def test_search_still_matches_the_raw_column_name():
+    panel = _make_panel(["Order_Number", "Name"])
+
+    panel._on_search_changed("order_number")
+
+    assert panel.column_list.item(1).isHidden() is False
+    assert panel.column_list.item(2).isHidden() is True

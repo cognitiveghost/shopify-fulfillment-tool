@@ -416,8 +416,11 @@ class ColumnConfigPanel(QWidget):
                 item.setHidden(bool(text))
                 continue
 
+            # Match the display name too -- the row shows the friendly label,
+            # so typing what you see ("Order Name") has to find it.
             column_name = item.data(Qt.UserRole)
-            item.setHidden(text not in column_name.lower())
+            haystack = f"{column_name} {item.text()}".lower()
+            item.setHidden(text not in haystack)
 
     def _on_item_changed(self, item: QListWidgetItem):
         """Handle item check state change."""
@@ -775,7 +778,14 @@ class ColumnConfigPanel(QWidget):
             )
 
     def _get_config_from_ui(self):
-        """Create TableConfig from current UI state."""
+        """Create TableConfig from current UI state.
+
+        Note: `column_order` is read off the grouped list, so Apply rewrites
+        the saved order into category order and confines reordering to within
+        a category. That is the grouped-list model, not a bug -- but it does
+        overwrite an order the user built by dragging headers in the main
+        table (table_config_manager.on_column_moved writes the same field).
+        """
         from gui.table_config_manager import TableConfig
 
         visible_columns = {}
