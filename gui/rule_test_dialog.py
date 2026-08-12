@@ -14,11 +14,10 @@ import pandas as pd
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDialog,
+    QDialogButtonBox,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QMessageBox,
-    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -88,14 +87,11 @@ class RuleTestDialog(QDialog):
         self.after_section = self._create_after_actions_section()
         layout.addWidget(self.after_section)
 
-        # Close button
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.accept)
-        close_btn.setMinimumWidth(100)
-        button_layout.addWidget(close_btn)
-        layout.addLayout(button_layout)
+        # Close button. Same accept()-not-reject() preservation as
+        # groups_management_dialog: this dialog has always closed via accept().
+        button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        button_box.rejected.connect(self.accept)
+        layout.addWidget(button_box)
 
     def _create_conditions_section(self):
         """Create section showing condition evaluation results."""
