@@ -61,6 +61,8 @@ class UIManager:
         "open_session_folder_button": "folder-open",
         "new_session_btn": "folder-plus",
         "clear_filter_button": "funnel-x",
+        "sidebar_toggle_btn": "menu",
+        "connection_btn": "settings",
     }
 
     def __init__(self, main_window):
@@ -164,7 +166,10 @@ class UIManager:
         # Row 1: Sidebar toggle + current client label
         toggle_row = QHBoxLayout()
 
-        self.mw.sidebar_toggle_btn = QPushButton("☰")
+        # No text: _refresh_icons() sets the icon here and again on every theme
+        # toggle, which is why connection_btn has to live on self.mw rather than
+        # stay a local -- _BUTTON_ICONS looks its widgets up by attribute name.
+        self.mw.sidebar_toggle_btn = QPushButton()
         self.mw.sidebar_toggle_btn.setMaximumWidth(40)
         self.mw.sidebar_toggle_btn.setToolTip("Toggle client sidebar")
         self.mw.sidebar_toggle_btn.clicked.connect(
@@ -180,11 +185,11 @@ class UIManager:
 
         toggle_row.addStretch()
 
-        connection_btn = QPushButton("⚙")
-        connection_btn.setMaximumWidth(40)
-        connection_btn.setToolTip("Server Connection settings")
-        connection_btn.clicked.connect(self._open_connection_settings)
-        toggle_row.addWidget(connection_btn)
+        self.mw.connection_btn = QPushButton()
+        self.mw.connection_btn.setMaximumWidth(40)
+        self.mw.connection_btn.setToolTip("Server Connection settings")
+        self.mw.connection_btn.clicked.connect(self._open_connection_settings)
+        toggle_row.addWidget(self.mw.connection_btn)
 
         layout.addLayout(toggle_row)
 
