@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 from gui.client_card import ClientCard
 from gui.client_settings_dialog import ClientCreationDialog, ClientSettingsDialog
 from gui.groups_management_dialog import GroupsManagementDialog
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import apply_font, font_css, get_theme_manager
 from gui.worker import Worker
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
@@ -69,11 +69,7 @@ class CollapsedClientIndicator(QWidget):
 
         # Draw initial
         painter.setPen(QColor(Qt.white))
-        painter.setFont(painter.font())
-        font = painter.font()
-        font.setPointSize(14)
-        font.setBold(True)
-        painter.setFont(font)
+        apply_font(painter, "heading")
         painter.drawText(5, 5, 30, 30, Qt.AlignCenter, self.client_id[0].upper())
 
 
@@ -107,9 +103,8 @@ class SectionWidget(QWidget):
             QLabel {{
                 background-color: {color};
                 color: white;
-                font-weight: bold;
                 padding: 6px 8px;
-                font-size: 10pt;
+                {font_css('body', bold=True)}
             }}
         """)
         layout.addWidget(header)
@@ -833,7 +828,7 @@ class ClientSidebar(QWidget):
 
         # Update title label
         if hasattr(self, 'title_label'):
-            self.title_label.setStyleSheet(f"font-weight: bold; font-size: 11pt; color: {theme.text};")
+            self.title_label.setStyleSheet(f"{font_css('label')} color: {theme.text};")
 
         # Update header buttons with explicit theme-aware styling
         button_style = f"""
@@ -843,7 +838,7 @@ class ClientSidebar(QWidget):
                 border: 1px solid {theme.border};
                 border-radius: 6px;
                 padding: 4px 8px;
-                font-size: 10pt;
+                {font_css('body')}
             }}
             QPushButton:hover {{
                 background-color: {button_hover};
