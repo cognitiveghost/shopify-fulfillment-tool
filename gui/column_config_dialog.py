@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -1043,25 +1044,23 @@ class ColumnConfigDialog(QDialog):
         self.panel.reset_button.hide()
         main_layout.addWidget(self.panel)
 
-        # Dialog-level buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        self.reset_button = QPushButton("Reset to Default")
+        # Dialog-level buttons. Reset and Apply carry ResetRole/ApplyRole, which
+        # emit neither accepted nor rejected -- they are wired via clicked.
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Reset | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
+        )
+        self.reset_button = button_box.button(QDialogButtonBox.Reset)
         self.reset_button.setToolTip("Reset all columns to default visibility and order")
         self.reset_button.clicked.connect(self.panel._on_reset)
-        button_layout.addWidget(self.reset_button)
 
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self._on_cancel)
-        button_layout.addWidget(self.cancel_button)
+        self.cancel_button = button_box.button(QDialogButtonBox.Cancel)
 
-        self.apply_button = QPushButton("Apply")
+        self.apply_button = button_box.button(QDialogButtonBox.Apply)
         self.apply_button.setDefault(True)
         self.apply_button.clicked.connect(self._on_apply)
-        button_layout.addWidget(self.apply_button)
 
-        main_layout.addLayout(button_layout)
+        button_box.rejected.connect(self.reject)
+        main_layout.addWidget(button_box)
 
         # Close dialog when panel successfully applies
         self.panel.config_applied.connect(self._on_panel_applied)
@@ -1082,7 +1081,11 @@ class ColumnConfigDialog(QDialog):
         """Trigger panel apply (dialog will close via signal)."""
         self.panel.apply_config()
 
-    def _on_cancel(self):
-        """Cancel changes and restore original view."""
+    def reject(self):
+        """Revert on Esc as well as on Cancel.
+
+        Previously only the Cancel button reverted; Esc went straight to
+        QDialog.reject() and left the table's live view mutated.
+        """
         self.panel.revert_config()
-        self.reject()
+        super().reject()
