@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.column_mapping_widget import ColumnMappingWidget
+from gui.settings.base import SettingsPage
 from gui.settings.fields import (
     ACTION_TYPES,
     CONDITION_FIELDS,
@@ -42,6 +43,7 @@ from gui.settings.fields import (
     FILTERABLE_COLUMNS,
     ORDER_LEVEL_FIELDS,
 )
+from gui.settings.general import GeneralPage
 from gui.theme_manager import apply_font, font_css
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
@@ -162,9 +164,10 @@ class SettingsWindow(QDialog):
         content_layout.addWidget(self.tab_widget, 1)
 
         self._page_index_by_name = {}
+        self._pages: list[SettingsPage] = []
 
         # Create all tabs (unchanged call order/method names)
-        self.create_general_tab()
+        self._add_page(GeneralPage(self.config_data.get("settings", {})), "General")
         self.create_rules_tab()
         self.create_packing_lists_tab()
         self.create_stock_exports_tab()
@@ -195,6 +198,13 @@ class SettingsWindow(QDialog):
         """
         self.tab_widget.addWidget(page)
         self._page_index_by_name[name] = self.tab_widget.count() - 1
+
+    def _add_page(self, page: SettingsPage, name: str) -> None:
+        """Register an extracted SettingsPage. Tracked in _pages so save_settings
+        validates and collects from it; _add_settings_page still handles the
+        not-yet-extracted create_*_tab pages."""
+        self._pages.append(page)
+        self._add_settings_page(page, name)
 
     def _build_settings_nav(self) -> None:
         """Populate the left-nav list from SETTINGS_NAV_GROUPS with
@@ -383,91 +393,6 @@ class SettingsWindow(QDialog):
             logger.warning(f"[RULE ENGINE] No analysis_df available (is None: {self.analysis_df is None})")
 
         return order_level_fields + common_fields  # Fallback to order-level + common only
-
-    def create_general_tab(self):
-        """Creates the 'General Settings' tab."""
-        tab = QWidget()
-        main_layout = QVBoxLayout(tab)
-
-        # Settings GroupBox
-        settings_box = QGroupBox("General Settings")
-        settings_layout = QFormLayout(settings_box)
-
-        # Stock CSV delimiter with improved tooltip
-        delimiter_label = QLabel("Stock CSV Delimiter:")
-        self.stock_delimiter_edit = QLineEdit(
-            self.config_data.get("settings", {}).get("stock_csv_delimiter", ";")
-        )
-        self.stock_delimiter_edit.setMaximumWidth(100)
-
-        # Add informative tooltip
-        self.stock_delimiter_edit.setToolTip(
-            "Character used to separate columns in stock CSV file.\n\n"
-            "Common values:\n"
-            "  • Semicolon (;) - for exports from local warehouse\n"
-            "  • Comma (,) - for Shopify exports\n\n"
-            "Make sure this matches your stock CSV file format."
-        )
-
-        settings_layout.addRow(delimiter_label, self.stock_delimiter_edit)
-
-        # Orders CSV Delimiter
-        orders_delimiter_label = QLabel("Orders CSV Delimiter:")
-        self.orders_delimiter_edit = QLineEdit(
-            self.config_data.get("settings", {}).get("orders_csv_delimiter", ",")
-        )
-        self.orders_delimiter_edit.setMaximumWidth(100)
-        self.orders_delimiter_edit.setPlaceholderText(",")
-
-        # Add informative tooltip
-        self.orders_delimiter_edit.setToolTip(
-            "Character used to separate columns in orders CSV file.\n\n"
-            "Common values:\n"
-            "  • Comma (,) - standard Shopify exports\n"
-            "  • Semicolon (;) - European Excel exports\n"
-            "  • Tab (\\t) - tab-separated files\n\n"
-            "The tool will auto-detect delimiter when you select a file,\n"
-            "but you can override it here if needed."
-        )
-
-        settings_layout.addRow(orders_delimiter_label, self.orders_delimiter_edit)
-
-        # Low stock threshold with improved tooltip
-        threshold_label = QLabel("Low Stock Threshold:")
-        self.low_stock_edit = QLineEdit(
-            str(self.config_data.get("settings", {}).get("low_stock_threshold", 5))
-        )
-        self.low_stock_edit.setMaximumWidth(100)
-
-        # Add informative tooltip
-        self.low_stock_edit.setToolTip(
-            "Trigger stock alerts when quantity falls below this number.\n\n"
-            "Items with stock below this threshold will be marked in analysis."
-        )
-
-        settings_layout.addRow(threshold_label, self.low_stock_edit)
-
-        # Repeat Detection Window
-        repeat_days_label = QLabel("Repeat Detection Window (days):")
-        self.repeat_days_input = QSpinBox()
-        self.repeat_days_input.setMinimum(1)
-        self.repeat_days_input.setMaximum(365)
-        self.repeat_days_input.setValue(
-            self.config_data.get("settings", {}).get("repeat_detection_days", 1)
-        )
-        self.repeat_days_input.setToolTip(
-            "Orders fulfilled within this many days are marked as 'Repeat'.\n"
-            "Default: 1 day (only yesterday's fulfillments)\n"
-            "Increase for longer detection window (e.g., 7 days, 30 days)"
-        )
-
-        settings_layout.addRow(repeat_days_label, self.repeat_days_input)
-
-        main_layout.addWidget(settings_box)
-
-        main_layout.addStretch()
-
-        self._add_settings_page(tab, "General")
 
     def create_rules_tab(self):
         """Creates the 'Rules' tab for dynamically managing automation rules."""
@@ -2989,13 +2914,21 @@ class SettingsWindow(QDialog):
     def save_settings(self):
         """Saves all settings from the UI back into the config dictionary."""
         try:
-            # ========================================
-            # General Tab - Settings ONLY
-            # ========================================
-            self.config_data["settings"]["stock_csv_delimiter"] = self.stock_delimiter_edit.text()
-            self.config_data["settings"]["orders_csv_delimiter"] = self.orders_delimiter_edit.text()
-            self.config_data["settings"]["low_stock_threshold"] = int(self.low_stock_edit.text())
-            self.config_data["settings"]["repeat_detection_days"] = self.repeat_days_input.value()
+            # Extracted pages: validate first, then collect. Pages still
+            # living in create_*_tab methods are handled by the inline
+            # blocks below until they are moved out.
+            for page in self._pages:
+                ok, errors = page.validate()
+                if not ok:
+                    QMessageBox.warning(self, "Invalid Settings", "\n".join(errors))
+                    return
+
+            for page in self._pages:
+                for key, value in page.collect().items():
+                    if isinstance(value, dict) and isinstance(self.config_data.get(key), dict):
+                        self.config_data[key].update(value)
+                    else:
+                        self.config_data[key] = value
 
             # ========================================
             # Rules Tab - Line Item Rules
