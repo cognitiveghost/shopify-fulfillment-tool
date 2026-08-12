@@ -9,6 +9,20 @@ Current version: **1.9.9.1** (pre-release).
 
 ## Run & Test Commands
 
+**First thing in a fresh clone or a fresh worktree:**
+
+```bash
+./scripts/setup_venv.sh
+```
+
+Provides `.venv` (worktrees symlink the main checkout's — no re-download) and writes the
+gitignored `.vscode/` config, so VS Code's F5 and Testing panel work with no manual setup.
+Safe to re-run.
+
+Note `python` is **not** on `PATH` on the Linux dev machine, and bare `python3` may resolve
+to an interpreter whose `venv` produces no `pip` — always go through `.venv/bin/python` or
+the `scripts/` wrappers (`run_app.sh`, `run_tests.sh`).
+
 ```bash
 # Run application (production server or FULFILLMENT_SERVER_PATH if set)
 python gui_main.py
