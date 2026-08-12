@@ -1,6 +1,5 @@
 import json
 import logging
-import sys
 from typing import ClassVar
 
 import pandas as pd
@@ -16,18 +15,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QStackedWidget,
     QVBoxLayout,
-    QWidget,
 )
 
 from gui.settings.base import SettingsPage
-from gui.settings.fields import (
-    ACTION_TYPES,
-    CONDITION_FIELDS,
-    CONDITION_OPERATORS,
-    FILTER_OPERATORS,
-    FILTERABLE_COLUMNS,
-    ORDER_LEVEL_FIELDS,
-)
 from gui.settings.general import GeneralPage
 from gui.settings.mappings import MappingsPage
 from gui.settings.packing_lists import PackingListsPage
@@ -60,14 +50,6 @@ class SettingsWindow(QDialog):
         analysis_df (pd.DataFrame): The main analysis DataFrame, used to
             populate dynamic dropdowns for filter values.
     """
-
-    # Constants for builders
-    FILTERABLE_COLUMNS: ClassVar[list[str]] = FILTERABLE_COLUMNS
-    FILTER_OPERATORS: ClassVar[list[str]] = FILTER_OPERATORS
-    ORDER_LEVEL_FIELDS: ClassVar[list[str]] = ORDER_LEVEL_FIELDS
-    CONDITION_FIELDS: ClassVar[list[str]] = CONDITION_FIELDS
-    CONDITION_OPERATORS: ClassVar[list[str]] = CONDITION_OPERATORS
-    ACTION_TYPES: ClassVar[list[str]] = ACTION_TYPES
 
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
@@ -174,8 +156,11 @@ class SettingsWindow(QDialog):
             ),
             "Weight",
         )
-        self.create_tag_categories_tab()  # Tag Categories tab
-        self.create_column_config_tab()  # Column Configuration tab
+        self._add_page(
+            _TagCategoriesPage(self.config_data.get("tag_categories", {"version": 2, "categories": {}})),
+            "Tag Categories",
+        )
+        self._add_page(_ColumnConfigPage(self.parent()), "Column Config")
 
         self._build_settings_nav()
 
@@ -189,22 +174,17 @@ class SettingsWindow(QDialog):
         _geo = _screen.availableGeometry()
         self.resize(min(1250, _geo.width() - 40), min(820, _geo.height() - 100))
 
-    def _add_settings_page(self, page: QWidget, name: str) -> None:
-        """Register a settings page under `name`.
+    def _add_page(self, page: SettingsPage, name: str) -> None:
+        """Register a settings page under `name`. Tracked in _pages so
+        save_settings validates and collects from it.
 
         Replaces the old `self.tab_widget.addTab(page, name)` calls — the
         10-tab horizontal strip is replaced by a grouped left-nav
         (_build_settings_nav) that looks up pages by this same name.
         """
+        self._pages.append(page)
         self.tab_widget.addWidget(page)
         self._page_index_by_name[name] = self.tab_widget.count() - 1
-
-    def _add_page(self, page: SettingsPage, name: str) -> None:
-        """Register an extracted SettingsPage. Tracked in _pages so save_settings
-        validates and collects from it; _add_settings_page still handles the
-        not-yet-extracted create_*_tab pages."""
-        self._pages.append(page)
-        self._add_settings_page(page, name)
 
     def _build_settings_nav(self) -> None:
         """Populate the left-nav list from SETTINGS_NAV_GROUPS with
@@ -242,9 +222,6 @@ class SettingsWindow(QDialog):
     def save_settings(self):
         """Saves all settings from the UI back into the config dictionary."""
         try:
-            # Extracted pages: validate first, then collect. Pages still
-            # living in create_*_tab methods are handled by the inline
-            # blocks below until they are moved out.
             for page in self._pages:
                 ok, errors = page.validate()
                 if not ok:
@@ -257,17 +234,6 @@ class SettingsWindow(QDialog):
                         self.config_data[key].update(value)
                     else:
                         self.config_data[key] = value
-
-            # ========================================
-            # Tag Categories Tab
-            # ========================================
-            if hasattr(self, 'tag_categories_panel'):
-                is_valid, errors = self.tag_categories_panel.validate_categories()
-                if not is_valid:
-                    error_msg = "Tag Categories validation errors:\n\n" + "\n".join(f"- {err}" for err in errors)
-                    QMessageBox.warning(self, "Tag Categories Invalid", error_msg)
-                    return
-                self.config_data["tag_categories"] = self.tag_categories_panel.get_categories()
 
             # ========================================
             # Save to server via ProfileManager (background -- avoids blocking
@@ -334,43 +300,47 @@ class SettingsWindow(QDialog):
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         QMessageBox.critical(self, "Error", f"Failed to save settings:\n\n{value!s}")
-    # ========================================
-    # TAG CATEGORIES TAB
-    # ========================================
-    def create_tag_categories_tab(self):
-        """Create the Tag Categories management tab."""
+
+
+class _TagCategoriesPage(SettingsPage):
+    """Adapter: TagCategoriesPanel already has the right shape under
+    different method names, and is used standalone elsewhere -- so wrap it
+    rather than rename its public API."""
+
+    def __init__(self, tag_categories: dict, parent=None):
+        super().__init__(parent)
         from gui.tag_categories_dialog import TagCategoriesPanel
 
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(0)
+        self.panel = TagCategoriesPanel(tag_categories, parent=self)
+        layout.addWidget(self.panel)
 
-        tag_categories = self.config_data.get("tag_categories", {"version": 2, "categories": {}})
-        self.tag_categories_panel = TagCategoriesPanel(tag_categories, parent=tab)
-        layout.addWidget(self.tag_categories_panel)
+    def collect(self) -> dict:
+        return {"tag_categories": self.panel.get_categories()}
 
-        self._add_settings_page(tab, "Tag Categories")
+    def validate(self) -> tuple[bool, list[str]]:
+        ok, errors = self.panel.validate_categories()
+        if ok:
+            return True, []
+        return False, ["Tag Categories validation errors:", *[f"- {e}" for e in errors]]
 
-    # ========================================
-    # COLUMN CONFIGURATION TAB
-    # ========================================
-    def create_column_config_tab(self):
-        """Create the Column Configuration tab (embedded ColumnConfigPanel)."""
-        from gui.column_config_dialog import ColumnConfigPanel
 
-        main_window = self.parent()
-        if main_window is None or not hasattr(main_window, 'table_config_manager'):
-            tab = QWidget()
-            layout = QVBoxLayout(tab)
+class _ColumnConfigPage(SettingsPage):
+    """Adapter: ColumnConfigPanel self-saves through table_config_manager
+    and contributes nothing to save_settings()'s collect loop."""
+
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        if main_window is None or not hasattr(main_window, "table_config_manager"):
             layout.addWidget(QLabel("Column configuration is not available in this context."))
-            self._add_settings_page(tab, "Column Config")
             return
 
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(10, 10, 10, 10)
+        from gui.column_config_dialog import ColumnConfigPanel
 
+        layout.setContentsMargins(10, 10, 10, 10)
         header_label = QLabel("Column Configuration")
         header_label.setStyleSheet(font_css("heading"))
         layout.addWidget(header_label)
@@ -378,55 +348,16 @@ class SettingsWindow(QDialog):
         from gui.theme_manager import get_theme_manager
         theme = get_theme_manager().get_current_theme()
         help_text = QLabel(
-            "Configure which columns are visible in the analysis table, their order, and saved views."
+            "Configure which columns are visible in the analysis table, "
+            "their order, and saved views."
         )
         help_text.setWordWrap(True)
-        help_text.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 6px;")
+        help_text.setStyleSheet(
+            f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 6px;"
+        )
         layout.addWidget(help_text)
 
-        self.column_config_panel = ColumnConfigPanel(
-            main_window.table_config_manager,
-            main_window=main_window,
-            parent=tab
+        self.panel = ColumnConfigPanel(
+            main_window.table_config_manager, main_window=main_window, parent=self
         )
-        layout.addWidget(self.column_config_panel)
-
-        self._add_settings_page(tab, "Column Config")
-
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    dummy_config = {
-        "settings": {"stock_csv_delimiter": ";", "low_stock_threshold": 5},
-        "paths": {"templates": "/tmp/fake_templates", "output_dir_stock": "/tmp/fake_output"},
-        "rules": [
-            {
-                "name": "Test Rule",
-                "match": "ANY",
-                "conditions": [{"field": "SKU", "operator": "contains", "value": "TEST"}],
-                "actions": [{"type": "ADD_TAG", "value": "auto_tagged"}],
-            }
-        ],
-        "packing_lists": [
-            {
-                "name": "Test PL",
-                "output_filename": "test.xlsx",
-                "filters": [{"field": "Order_Type", "operator": "==", "value": "Single"}],
-                "exclude_skus": ["SKU1"],
-            }
-        ],
-        "stock_exports": [
-            {
-                "name": "Test SE",
-                "template": "template.xls",
-                "filters": [{"field": "Shipping_Provider", "operator": "==", "value": "DHL"}],
-            }
-        ],
-    }
-    dialog = SettingsWindow(None, dummy_config)
-    if dialog.exec():
-        print("Settings saved:", json.dumps(dialog.config_data, indent=2))
-    else:
-        print("Cancelled.")
-    sys.exit(0)
+        layout.addWidget(self.panel)

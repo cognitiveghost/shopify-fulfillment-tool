@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pytest
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from gui.settings_window_pyside import SettingsWindow
+from gui.settings.window import SettingsWindow
 
 
 @pytest.fixture(scope="module")
@@ -124,9 +124,8 @@ def started_workers(monkeypatch):
     worker keeps the test deterministic and still proves the save was reached.
     """
     started = []
-    # NOTE: after Task 10 this target becomes "gui.settings.window.QThreadPool".
     monkeypatch.setattr(
-        "gui.settings_window_pyside.QThreadPool",
+        "gui.settings.window.QThreadPool",
         type("Pool", (), {
             "globalInstance": staticmethod(
                 lambda: type("P", (), {"start": staticmethod(started.append)})()
