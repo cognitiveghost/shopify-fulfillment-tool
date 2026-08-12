@@ -10,6 +10,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QColorDialog,
     QDialog,
+    QDialogButtonBox,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -100,12 +101,15 @@ class GroupsManagementDialog(QDialog):
         buttons_layout.addWidget(self.delete_btn)
 
         buttons_layout.addStretch()
-
-        self.close_btn = QPushButton("Close")
-        self.close_btn.clicked.connect(self.accept)
-        buttons_layout.addWidget(self.close_btn)
-
         layout.addLayout(buttons_layout)
+
+        # Close carries RejectRole, so it emits `rejected` -- but this dialog
+        # has always closed via accept(), and callers may read exec()'s result.
+        # Preserving accept() keeps that contract; changing it is out of scope.
+        button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        self.close_btn = button_box.button(QDialogButtonBox.Close)
+        button_box.rejected.connect(self.accept)
+        layout.addWidget(button_box)
 
         # Connect table selection changed
         self.groups_table.itemSelectionChanged.connect(self._on_selection_changed)

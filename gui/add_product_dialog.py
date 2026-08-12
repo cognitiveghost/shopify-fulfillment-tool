@@ -15,15 +15,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
+    QDialogButtonBox,
     QFormLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
-    QWidget,
 )
 
 from gui.theme_manager import get_theme_manager
@@ -118,31 +116,19 @@ class AddProductDialog(QDialog):
         return label
 
     def _create_buttons(self):
-        """Create Cancel/Add buttons."""
-        theme = get_theme_manager().get_current_theme()
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.addStretch()
+        """Footer: QDialogButtonBox places the buttons per platform and wires
+        Esc->reject for free.
 
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        layout.addWidget(cancel_btn)
-
-        self.add_btn = QPushButton("Add Product")
-        self.add_btn.clicked.connect(self._on_add_clicked)
-        self.add_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {theme.accent_blue};
-                color: white;
-                padding: 8px 16px;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.accent_blue};
-            }}
-        """)
-        layout.addWidget(self.add_btn)
-
-        return widget
+        `accepted` is connected to the validator rather than to accept(), so a
+        failed validation keeps the dialog open -- _on_add_clicked calls
+        accept() itself once the input is good.
+        """
+        box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.add_btn = box.button(QDialogButtonBox.Ok)
+        self.add_btn.setText("Add Product")
+        box.accepted.connect(self._on_add_clicked)
+        box.rejected.connect(self.reject)
+        return box
 
     def setup_autocompleters(self):
         """Setup autocomplete for order and SKU inputs."""
