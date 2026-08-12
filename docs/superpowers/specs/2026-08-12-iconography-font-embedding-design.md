@@ -71,7 +71,9 @@ def icon(name: str) -> QIcon
   pixel ratio, so the icons stay sharp on the 125%/150%-scaled displays common on
   Windows warehouse PCs. This avoids querying `devicePixelRatio` ourselves, which is
   per-screen and wrong on multi-monitor setups.
-- Caches on `(name, color)`. The cache is cleared on theme change.
+- Caches on `(name, color)`. No invalidation is needed on theme change: the colour
+  *is* part of the key, so a toggle simply misses into a second set of entries. Two
+  themes × 15 icons is the ceiling.
 
 Notably this depends on `PySide6.QtSvg` (the module) but **not** on Qt's `qsvg`
 imageformats plugin, because we drive `QSvgRenderer` directly rather than letting
