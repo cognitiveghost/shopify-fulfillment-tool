@@ -53,8 +53,19 @@ def configure_windows_fontconfig_env() -> None:
 configure_frozen_weasyprint_env()
 configure_windows_fontconfig_env()
 
+from gui.icons import icon
 from gui.main_window_pyside import MainWindow
 from gui.theme_manager import get_theme_manager
+
+
+def build_app_icon():
+    """The window/taskbar icon. The app has never had one.
+
+    Coloured with accent_blue rather than the theme's text colour, and never
+    re-themed: this icon is drawn on the OS shell's own surface, whose
+    background has nothing to do with which theme the app is running.
+    """
+    return icon("package", color=get_theme_manager().get_current_theme().accent_blue)
 
 
 def main():
@@ -75,6 +86,7 @@ def main():
     # Initialize and apply theme
     theme_manager = get_theme_manager()
     theme_manager.apply_theme()
+    app.setWindowIcon(build_app_icon())
 
     window = MainWindow()
 
