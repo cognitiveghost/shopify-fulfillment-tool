@@ -365,7 +365,7 @@ class ClientSettingsDialog(QDialog):
         self._save_worker = None  # keeps the in-flight save Worker alive
         self._is_saving = False
 
-        self.setWindowTitle(f"Client Settings - CLIENT_{client_id}")
+        self.setWindowTitle(f"Client Profile - CLIENT_{client_id}")
         self.setModal(True)
         self.setMinimumSize(600, 500)
 
@@ -405,10 +405,6 @@ class ClientSettingsDialog(QDialog):
         # Tab 3: Statistics
         self.statistics_tab = self._create_statistics_tab()
         self.tabs.addTab(self.statistics_tab, "Statistics")
-
-        # Tab 4: Advanced (placeholder)
-        self.advanced_tab = self._create_advanced_tab()
-        self.tabs.addTab(self.advanced_tab, "Advanced")
 
         layout.addWidget(self.tabs)
 
@@ -518,23 +514,6 @@ class ClientSettingsDialog(QDialog):
         info_label.setWordWrap(True)
         info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;")
         layout.addRow(info_label)
-
-        return widget
-
-    def _create_advanced_tab(self) -> QWidget:
-        """Create Advanced tab (placeholder)."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        info_label = QLabel(
-            "Advanced settings (column mappings, rules) will be available here in future updates.\n\n"
-            "For now, use the main Settings window to configure these options."
-        )
-        info_label.setWordWrap(True)
-        theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('body')} padding: 20px;")
-        layout.addWidget(info_label)
-        layout.addStretch()
 
         return widget
 
