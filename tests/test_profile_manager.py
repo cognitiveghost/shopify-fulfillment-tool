@@ -202,3 +202,25 @@ class TestLoadShopifyConfigCaching:
 
         second = profile_manager.load_shopify_config("M")
         assert second["inventory_memory"]["enabled"] is False
+
+    def test_shopify_config_is_cached_after_a_migration(self, profile_manager, monkeypatch):
+        """A migrating load must leave the cache warm, like load_client_config does."""
+        profile_manager.create_client_profile("M", "Client")
+        config_path = profile_manager.get_client_directory("M") / "shopify_config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        del config["weight_config"]  # stale key -- forces migrate_add_weight_config to fire
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        profile_manager.load_shopify_config("M")  # runs migrations, caches (or not)
+
+        reads = []
+        real_open = open
+
+        def counting_open(path, *a, **k):
+            if str(path).endswith("shopify_config.json"):
+                reads.append(path)
+            return real_open(path, *a, **k)
+
+        monkeypatch.setattr("builtins.open", counting_open)
+        profile_manager.load_shopify_config("M")
+        assert reads == [], "second load re-read the file instead of using the cache"

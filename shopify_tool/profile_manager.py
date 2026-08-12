@@ -601,12 +601,15 @@ class ProfileManager:
                 or migrated_weight
                 or migrated_inv_memory
             ):
-                # If config was migrated, save it immediately (cache is invalidated by save)
                 self.save_shopify_config(client_id, config)
                 logger.info(f"Config migrations completed for CLIENT_{client_id}")
-                return config
+                # save_shopify_config() invalidates cache_key; re-stat so this
+                # call still populates the cache with the post-migration mtime.
+                try:
+                    current_mtime = config_path.stat().st_mtime
+                except OSError:
+                    current_mtime = None
 
-            # Update cache with current mtime
             if current_mtime is not None:
                 self._config_cache[cache_key] = (copy.deepcopy(config), current_mtime)
 
