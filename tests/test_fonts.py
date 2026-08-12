@@ -45,3 +45,38 @@ def test_returns_none_without_raising_when_a_face_is_corrupt(monkeypatch, tmp_pa
         (tmp_path / name).write_bytes(b"not a font")
     monkeypatch.setattr(fonts, "FONTS_DIR", tmp_path)
     assert fonts.load_bundled_fonts() is None
+
+
+def test_theme_tokens_lead_with_inter_and_keep_segoe_as_fallback():
+    """Keeping the original family on the tail is free insurance: a machine
+    where Inter fails to register falls back to Segoe UI rather than to Qt's
+    generic default."""
+    from gui import theme_manager
+
+    theme_manager._themed_tokens.cache_clear()
+    family = theme_manager.get_theme_manager().get_current_theme().font_family
+    assert family == "'Inter', Segoe UI, sans-serif"
+
+
+def test_theme_tokens_are_untouched_when_fonts_are_unavailable(monkeypatch, tmp_path):
+    from gui import theme_manager
+
+    monkeypatch.setattr(fonts, "FONTS_DIR", tmp_path)
+    fonts.load_bundled_fonts.cache_clear()
+    theme_manager._themed_tokens.cache_clear()
+    try:
+        family = theme_manager.get_theme_manager().get_current_theme().font_family
+        assert family == "Segoe UI, sans-serif"
+    finally:
+        fonts.load_bundled_fonts.cache_clear()
+        theme_manager._themed_tokens.cache_clear()
+
+
+def test_tokens_are_memoized_not_rebuilt_per_call():
+    """get_current_theme() runs on ~180 call sites; dataclasses.replace()
+    allocates a fresh ThemeTokens every time without this."""
+    from gui import theme_manager
+
+    theme_manager._themed_tokens.cache_clear()
+    manager = theme_manager.get_theme_manager()
+    assert manager.get_current_theme() is manager.get_current_theme()
