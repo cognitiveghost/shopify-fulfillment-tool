@@ -269,7 +269,7 @@ Run:
 ```bash
 QT_QPA_PLATFORM=offscreen /home/cognitiveghost/Desktop/Projects/shopify-fulfillment-tool/.venv/bin/python -m pytest tests/test_main_window_statistics.py -v
 ```
-Expected: PASS. This is the check that matters — it drives `update_statistics_tab` through `stat_card_labels`, so it fails if `_make_stat_card` stopped returning a live label handle.
+Expected: PASS. Note this is a regression check only — it does *not* cover the migrated builders: `_FakeStatsWindow` has no `stat_card_labels`, so `update_statistics_tab` skips that block. The builders are covered directly in `tests/test_components_card.py`, which calls them unbound.
 
 - [ ] **Step 4: Run the full suite**
 

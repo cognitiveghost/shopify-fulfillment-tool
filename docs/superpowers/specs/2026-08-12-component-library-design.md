@@ -85,18 +85,26 @@ Six `QDialog` subclasses lack `QDialogButtonBox`. Four have a real footer and co
 | `groups_management_dialog` | single Close (`:105`) | `QDialogButtonBox.Close` |
 | `rule_test_dialog` | single Close (`:95`) | `QDialogButtonBox.Close` |
 
-Two do **not** convert, because they have no footer — their buttons are in-body actions,
-not commit buttons: `report_selection_dialog` (Generate Report / Generate Writeoff Report
-Only, each inside its own content section) and `profile_manager_dialog` (Add New… /
-Rename… / Delete, a list toolbar). `column_config_dialog.ColumnConfigPanel:264-268` is
+Two do **not** convert, because they have no footer row to convert — the distinction is
+placement, not role: `report_selection_dialog` (Generate Report / Generate Writeoff Report
+Only sit at the bottom of their own content sections in a two-column layout; they *do*
+call `accept()`, so they are commit buttons, just not footer ones) and
+`profile_manager_dialog` (Add New… / Rename… / Delete, a list toolbar — the dialog has no
+Close button at all). `column_config_dialog.ColumnConfigPanel:264-268` is
 likewise a panel body inside a `QWidget`, not a dialog footer, and is left alone.
 
 The conversion also drops `AddProductDialog`'s inline override on its primary button
-(`background-color: {theme.accent_blue}; color: white; padding: 8px 16px`). A button box's
-default button already carries the style's own emphasis, and `color: white` is a hardcoded
-colour of the kind `CLAUDE.md` forbids.
+(`background-color: {theme.accent_blue}; color: white; padding: 8px 16px`). The override was
+almost entirely redundant: `shared/theme.py` already styles *every* `QPushButton`
+`accent_blue` on white, so only the padding actually changed (8/16 → 6/12), and Cancel
+already rendered identically to Add. Note for Track 4: there is no `:default` rule
+anywhere yet, so real primary/secondary differentiation still has to be built, not
+merely re-enabled. `color: white` is also a hardcoded colour of the kind `CLAUDE.md`
+forbids.
 
-**The convention is enforced by a guard, not by documentation.** A new
+**The convention is enforced by a guard, not by documentation** — for the literal, common
+form. The guard matches a direct `clicked.connect(self.accept)`; a footer routed through a
+one-line `_on_*` handler still slips past it. Tightening that is a Track 4 item. A new
 `tests/test_dialog_button_guard.py` fails when any file defining a `QDialog` subclass
 wires a `QPushButton` straight to `self.accept`/`self.reject`. This mirrors
 `tests/test_icon_usage_guard.py`, which exists for the same reason: without it the next
@@ -128,9 +136,12 @@ Both buttons keep their tooltips and lose their text.
   `KeyError`. No window needed.
 - `tests/test_dialog_button_guard.py` — the source guard above, plus its
   can-actually-see-call-sites assertion.
-- `tests/test_main_window_statistics.py` already drives `update_statistics_tab` through
-  `stat_card_labels`; it must still pass unchanged, which is what proves the three
-  migrated builders kept their label handles.
+- `tests/test_components_card.py` also calls the three migrated builders unbound
+  (`UIManager._make_stat_card(None, …)` — none of them touch `self`) and asserts the row
+  order and the returned live label handle. This is the safety net for the migration.
+  `tests/test_main_window_statistics.py` is *not*: its `_FakeStatsWindow` has no
+  `stat_card_labels`, so the block guarded by `hasattr(self, "stat_card_labels")` in
+  `update_statistics_tab` is skipped there entirely.
 - Existing `tests/test_add_product_dialog.py` covers the converted dialog's behaviour and
   must pass without modification beyond whatever the button lookup requires.
 

@@ -56,3 +56,32 @@ def test_an_unknown_role_raises_rather_than_rendering_at_some_default():
     card = Card()
     with pytest.raises(KeyError):
         card.add_text("x", "headline")
+
+
+# The three builders Card replaced. None of them touch `self`, so they run
+# unbound -- no MainWindow needed. This is the safety net for the migration:
+# it fails if a builder loses a row or stops handing back the live label.
+def test_the_migrated_stat_card_keeps_its_live_value_label():
+    from gui.ui_manager import UIManager
+
+    card, value_lbl = UIManager._make_stat_card(None, "42", "Total orders")
+    assert card.layout().count() == 2
+    assert card.layout().itemAt(0).widget() is value_lbl
+    assert value_lbl.text() == "42"
+
+
+def test_the_migrated_courier_card_keeps_its_three_rows_in_order():
+    from gui.ui_manager import UIManager
+
+    card = UIManager._make_courier_card(None, "DHL", "12", "3")
+    rows = [card.layout().itemAt(i).widget().text() for i in range(card.layout().count())]
+    assert rows == ["12", "DHL", "3 repeated"]
+
+
+def test_the_migrated_tag_card_defaults_its_badge_fill():
+    from gui.ui_manager import UIManager
+
+    card = UIManager._make_tag_card(None, "fragile", "7")
+    badge, name = (card.layout().itemAt(i).widget() for i in range(2))
+    assert "background-color: #9E9E9E" in badge.styleSheet()
+    assert (badge.text(), name.text()) == ("7", "fragile")
