@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.column_mapping_widget import ColumnMappingWidget
+from gui.theme_manager import apply_font, font_css
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
 from shopify_tool.core import get_unique_column_values
@@ -246,10 +247,7 @@ class SettingsWindow(QDialog):
         for group_name, page_names in self.SETTINGS_NAV_GROUPS:
             header = QListWidgetItem(group_name.upper())
             header.setFlags(Qt.ItemFlag.NoItemFlags)
-            font = header.font()
-            font.setPointSize(max(font.pointSize() - 1, 7))
-            font.setBold(True)
-            header.setFont(font)
+            apply_font(header, "caption", bold=True)
             self._settings_nav.addItem(header)
             for page_name in page_names:
                 if page_name not in self._page_index_by_name:
@@ -530,7 +528,7 @@ class SettingsWindow(QDialog):
         self.rules_count_label = QLabel("")
         from gui.theme_manager import get_theme_manager
         theme = get_theme_manager().get_current_theme()
-        self.rules_count_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt;")
+        self.rules_count_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
         header_row.addWidget(self.rules_count_label)
         main_layout.addLayout(header_row)
 
@@ -591,7 +589,7 @@ class SettingsWindow(QDialog):
         # Priority label (e.g., "Article #1", "Order #2")
         priority_label = QLabel("")
         priority_label.setMinimumWidth(70)
-        priority_label.setStyleSheet(f"font-weight: bold; color: {theme.accent_blue}; font-size: 11pt;")
+        priority_label.setStyleSheet(f"{font_css('label')} color: {theme.accent_blue};")
         header_layout.addWidget(priority_label)
 
         # Up button
@@ -734,7 +732,7 @@ class SettingsWindow(QDialog):
             separator_label = QLabel("   ↓ THEN CHECK ↓")
             separator_label.setAlignment(Qt.AlignCenter)
             separator_label.setStyleSheet(
-                f"color: {theme.accent_orange}; font-weight: bold; font-size: 11pt; "
+                f"color: {theme.accent_orange}; {font_css('label')} "
                 "padding: 4px; margin: 2px 0;"
             )
             steps_container.addWidget(separator_label)
@@ -1140,7 +1138,7 @@ class SettingsWindow(QDialog):
         if "feedback_label" not in condition_refs:
             feedback_label = QLabel()
             feedback_label.setWordWrap(True)
-            feedback_label.setStyleSheet("font-size: 9pt; margin-top: 2px;")
+            feedback_label.setStyleSheet(f"{font_css('caption')} margin-top: 2px;")
             condition_refs["value_layout"].addWidget(feedback_label)
             condition_refs["feedback_label"] = feedback_label
 
@@ -1151,19 +1149,19 @@ class SettingsWindow(QDialog):
         # states are added.
         if status == "error":
             value_widget.setStyleSheet(f"border: 1px solid {theme.accent_red}; background-color: #ffebee; color: #1A1A1A;")
-            feedback_label.setStyleSheet(f"color: {theme.accent_red}; font-size: 9pt;")
+            feedback_label.setStyleSheet(f"color: {theme.accent_red}; {font_css('caption')}")
             feedback_label.setText(f"{message}")
             feedback_label.show()
 
         elif status == "warning":
             value_widget.setStyleSheet(f"border: 1px solid {theme.accent_orange}; background-color: #fff3e0; color: #1A1A1A;")
-            feedback_label.setStyleSheet(f"color: {theme.accent_orange}; font-size: 9pt;")
+            feedback_label.setStyleSheet(f"color: {theme.accent_orange}; {font_css('caption')}")
             feedback_label.setText(f"{message}")
             feedback_label.show()
 
         elif status == "success":
             value_widget.setStyleSheet(f"border: 1px solid {theme.accent_green};")
-            feedback_label.setStyleSheet(f"color: {theme.accent_green}; font-size: 9pt;")
+            feedback_label.setStyleSheet(f"color: {theme.accent_green}; {font_css('caption')}")
             feedback_label.setText(f"{message}")
             feedback_label.show()
 
@@ -1801,7 +1799,7 @@ class SettingsWindow(QDialog):
         instructions2.setWordWrap(True)
         from gui.theme_manager import get_theme_manager
         theme = get_theme_manager().get_current_theme()
-        instructions2.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; font-size: 10pt;")
+        instructions2.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('body')}")
         courier_main_layout.addWidget(instructions2)
 
         # Container for courier mapping rows
@@ -1899,7 +1897,7 @@ class SettingsWindow(QDialog):
 
         # Header
         header_label = QLabel("Set/Bundle Definitions")
-        header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
+        header_label.setStyleSheet(font_css("heading"))
         main_layout.addWidget(header_label)
 
         # Search box
@@ -1954,7 +1952,7 @@ class SettingsWindow(QDialog):
         )
         from gui.theme_manager import get_theme_manager
         theme = get_theme_manager().get_current_theme()
-        tips_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; margin-top: 10px;")
+        tips_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} margin-top: 10px;")
         tips_label.setWordWrap(True)
         main_layout.addWidget(tips_label)
 
@@ -2212,7 +2210,7 @@ class SettingsWindow(QDialog):
             "5000 = DHL/FedEx standard"
         )
         hint = QLabel("(6000 = DPD/Speedy · 5000 = DHL/FedEx)")
-        hint.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
         global_row.addWidget(div_label)
         global_row.addWidget(self.weight_divisor_spin)
         global_row.addWidget(hint)
@@ -2364,7 +2362,7 @@ class SettingsWindow(QDialog):
             "No Packaging skips box selection · "
             "Values: box name / NO_BOX_NEEDED / NO_BOX_FITS / UNKNOWN_DIMS"
         )
-        tips_box.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt;")
+        tips_box.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
         tips_box.setWordWrap(True)
         boxes_layout.addWidget(tips_box)
 
@@ -3353,7 +3351,7 @@ class SettingsWindow(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
 
         header_label = QLabel("Column Configuration")
-        header_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
+        header_label.setStyleSheet(font_css("heading"))
         layout.addWidget(header_label)
 
         from gui.theme_manager import get_theme_manager
@@ -3445,7 +3443,7 @@ class SetEditorDialog(QDialog):
         )
         from gui.theme_manager import get_theme_manager
         theme = get_theme_manager().get_current_theme()
-        tips_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; font-size: 9pt; margin-top: 10px;")
+        tips_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('caption')} margin-top: 10px;")
         tips_label.setWordWrap(True)
         layout.addWidget(tips_label)
 

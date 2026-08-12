@@ -1,9 +1,10 @@
 """Custom ItemDelegate for rendering Internal_Tags as colored badges."""
 
 from PySide6.QtCore import QRect, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPen
+from PySide6.QtGui import QColor, QFontMetrics, QPen
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
+from gui.theme_manager import apply_font
 from shopify_tool.tag_manager import get_tag_color, parse_tags
 
 
@@ -43,16 +44,15 @@ class TagDelegate(QStyledItemDelegate):
         padding = 8
         spacing = 4
 
+        apply_font(painter, "caption")
+        metrics = painter.fontMetrics()
+
         for tag in tags:
             # Get tag color
             color_hex = get_tag_color(tag, self.tag_categories)
             color = QColor(color_hex)
 
             # Measure text width
-            font = QFont()
-            font.setPointSize(8)
-            painter.setFont(font)
-            metrics = painter.fontMetrics()
             text_width = metrics.horizontalAdvance(tag)
 
             badge_width = text_width + padding * 2

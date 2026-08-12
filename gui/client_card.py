@@ -11,7 +11,7 @@ from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager
 
 logger = logging.getLogger(__name__)
 
@@ -149,18 +149,18 @@ class ClientCard(QWidget):
                 }}
             """
             self.setStyleSheet(base_style + active_style)
-            self.name_label.setStyleSheet(f"font-size: 12pt; font-weight: bold; color: {theme.text};")
+            self.name_label.setStyleSheet(f"{font_css('label')} color: {theme.text};")
         else:
             self.setStyleSheet(base_style)
-            self.name_label.setStyleSheet(f"font-size: 12pt; color: {theme.text};")
+            self.name_label.setStyleSheet(f"{font_css('label', bold=False)} color: {theme.text};")
 
         # Update secondary text colors
-        self.last_session_label.setStyleSheet(f"font-size: 9pt; color: {theme.text_secondary};")
-        self.sessions_label.setStyleSheet(f"font-size: 9pt; color: {theme.text_secondary};")
+        self.last_session_label.setStyleSheet(f"{font_css('caption')} color: {theme.text_secondary};")
+        self.sessions_label.setStyleSheet(f"{font_css('caption')} color: {theme.text_secondary};")
 
         # Update badge color (always orange accent)
         if self.badges_label:
-            self.badges_label.setStyleSheet(f"font-size: 9pt; color: {theme.accent_orange}; font-weight: bold;")
+            self.badges_label.setStyleSheet(f"{font_css('caption', bold=True)} color: {theme.accent_orange};")
 
     def set_active(self, is_active: bool):
         """Set active state.
@@ -242,7 +242,7 @@ class ClientCard(QWidget):
                 # Create badges label if it didn't exist
                 theme = get_theme_manager().get_current_theme()
                 self.badges_label = QLabel(badges_text)
-                self.badges_label.setStyleSheet(f"font-size: 9pt; color: {theme.accent_orange}; font-weight: bold;")
+                self.badges_label.setStyleSheet(f"{font_css('caption', bold=True)} color: {theme.accent_orange};")
                 # Add to stats layout (last child of content layout)
                 content_layout = self.layout().itemAt(0).layout()
                 stats_layout = content_layout.itemAt(2).layout()

@@ -6,6 +6,7 @@ token definitions and stylesheet/palette builders.
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
@@ -97,3 +98,48 @@ def get_theme_manager() -> ThemeManager:
     if _theme_manager_instance is None:
         _theme_manager_instance = ThemeManager()
     return _theme_manager_instance
+
+
+@dataclass(frozen=True)
+class TypeStyle:
+    """One rung of the type scale: a point size and a default weight."""
+    size_pt: int
+    bold: bool
+
+
+# 1.20 modular ratio anchored on a 10pt body: 10 -> 12 -> 14.4 -> 17.28,
+# rounded to integers because Qt's QSS parser is unreliable on fractional pt.
+# `caption` is 9pt rather than the geometric 8.33pt -- a deliberate legibility
+# floor for warehouse-floor use. See the 2026-08-12 design spec.
+TYPE_SCALE: dict[str, TypeStyle] = {
+    "caption": TypeStyle(9, False),   # hints, tips, feedback, dense card labels
+    "body": TypeStyle(10, False),     # default text and button labels
+    "label": TypeStyle(12, True),     # emphasis, sub-headers, count badges
+    "heading": TypeStyle(14, True),   # dialog and section headers
+    "display": TypeStyle(17, True),   # stat-card numbers
+}
+
+
+def font_css(role: str, bold: bool | None = None) -> str:
+    """QSS fragment for f-string stylesheets, e.g. 'font-size: 12pt; font-weight: bold;'.
+
+    Raises KeyError on an unknown role -- a typo must fail during development
+    rather than silently render at some default size in production.
+    """
+    style = TYPE_SCALE[role]
+    weight = "bold" if (style.bold if bold is None else bold) else "normal"
+    return f"font-size: {style.size_pt}pt; font-weight: {weight};"
+
+
+def apply_font(target, role: str, bold: bool | None = None) -> None:
+    """Apply a scale role to anything exposing .font()/.setFont().
+
+    Covers QWidget, QListWidgetItem and QPainter with one helper. Reads the
+    target's existing font so the inherited family survives -- building a bare
+    QFont() instead would silently drop it.
+    """
+    style = TYPE_SCALE[role]
+    font = target.font()
+    font.setPointSize(style.size_pt)
+    font.setBold(style.bold if bold is None else bold)
+    target.setFont(font)

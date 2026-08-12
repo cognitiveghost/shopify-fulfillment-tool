@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
 from shopify_tool.groups_manager import GroupsManager
@@ -111,7 +111,7 @@ class ClientCreationDialog(QDialog):
             "You can customize it later in Profile Settings."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 10pt; padding: 10px;")
+        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('body')} padding: 10px;")
         layout.addWidget(info_label)
 
         # Button box
@@ -442,7 +442,7 @@ class ClientSettingsDialog(QDialog):
         )
         info_label.setWordWrap(True)
         theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; padding: 10px;")
+        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;")
         layout.addRow(info_label)
 
         return widget
@@ -487,7 +487,7 @@ class ClientSettingsDialog(QDialog):
             "Badges are displayed next to the client name."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; padding: 10px;")
+        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;")
         layout.addRow(info_label)
 
         return widget
@@ -516,7 +516,7 @@ class ClientSettingsDialog(QDialog):
             "These values are read-only and update automatically."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; padding: 10px;")
+        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;")
         layout.addRow(info_label)
 
         return widget
@@ -532,7 +532,7 @@ class ClientSettingsDialog(QDialog):
         )
         info_label.setWordWrap(True)
         theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 10pt; padding: 20px;")
+        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('body')} padding: 20px;")
         layout.addWidget(info_label)
         layout.addStretch()
 

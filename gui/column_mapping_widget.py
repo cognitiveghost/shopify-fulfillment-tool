@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -137,7 +137,7 @@ class ColumnMappingWidget(QWidget):
 
         # Arrow
         arrow_label = QLabel("→")
-        arrow_label.setStyleSheet("font-size: 14pt; font-weight: bold;")
+        arrow_label.setStyleSheet(font_css("heading"))
         arrow_label.setFixedWidth(30)
         arrow_label.setAlignment(Qt.AlignCenter)
 
@@ -149,7 +149,8 @@ class ColumnMappingWidget(QWidget):
         # Required indicator
         if required:
             required_indicator = QLabel("*")
-            required_indicator.setStyleSheet("color: red; font-size: 16pt; font-weight: bold;")
+            # Track 3 moves the literal red onto a theme token; only the size is in scope here.
+            required_indicator.setStyleSheet(f"color: red; {font_css('heading')}")
             required_indicator.setFixedWidth(15)
             required_indicator.setToolTip("This field is required")
         else:

@@ -31,7 +31,7 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 from .bulk_operations_toolbar import BulkOperationsToolbar
 from .pandas_model import PandasModel
 from .tag_management_panel import TagManagementPanel
-from .theme_manager import get_theme_manager
+from .theme_manager import font_css, get_theme_manager
 from .wheel_ignore_combobox import WheelIgnoreComboBox
 
 
@@ -165,7 +165,7 @@ class UIManager:
 
         self.mw.current_client_label = QLabel("No client selected")
         self.mw.current_client_label.setStyleSheet(
-            "font-weight: bold; font-size: 11pt;"
+            font_css("label")
         )
         toggle_row.addWidget(self.mw.current_client_label)
 
@@ -325,7 +325,7 @@ class UIManager:
         layout.setContentsMargins(10, 10, 10, 10)
 
         title = QLabel("Recent Sessions")
-        title.setStyleSheet("font-size: 11pt; font-weight: bold;")
+        title.setStyleSheet(font_css("label"))
         layout.addWidget(title)
 
         self.mw.recent_sessions_list = QListWidget()
@@ -772,11 +772,10 @@ class UIManager:
         self.mw.run_analysis_button.setMinimumWidth(180)
         self.mw.run_analysis_button.setEnabled(False)
         self.mw.run_analysis_button.setToolTip("Start the fulfillment analysis")
-        self.mw.run_analysis_button.setStyleSheet("""
-            QPushButton {
-                font-size: 11pt;
-                font-weight: bold;
-            }
+        self.mw.run_analysis_button.setStyleSheet(f"""
+            QPushButton {{
+                {font_css('label')}
+            }}
         """)
         primary_layout.addWidget(self.mw.run_analysis_button, 2)
 
@@ -1600,12 +1599,12 @@ class UIManager:
 
         value_lbl = QLabel(value)
         value_lbl.setAlignment(Qt.AlignCenter)
-        value_lbl.setStyleSheet("font-size: 20px; font-weight: bold;")
+        value_lbl.setStyleSheet(font_css("display"))
 
         text_lbl = QLabel(label)
         text_lbl.setAlignment(Qt.AlignCenter)
         text_lbl.setWordWrap(True)
-        text_lbl.setStyleSheet("font-size: 10px;")
+        text_lbl.setStyleSheet(font_css("caption"))
 
         card_layout.addWidget(value_lbl)
         card_layout.addWidget(text_lbl)
@@ -1623,15 +1622,15 @@ class UIManager:
 
         orders_lbl = QLabel(orders)
         orders_lbl.setAlignment(Qt.AlignCenter)
-        orders_lbl.setStyleSheet("font-size: 20px; font-weight: bold;")
+        orders_lbl.setStyleSheet(font_css("display"))
 
         name_lbl = QLabel(courier_id)
         name_lbl.setAlignment(Qt.AlignCenter)
-        name_lbl.setStyleSheet("font-size: 11px;")
+        name_lbl.setStyleSheet(font_css("caption"))
 
         repeated_lbl = QLabel(f"{repeated} repeated")
         repeated_lbl.setAlignment(Qt.AlignCenter)
-        repeated_lbl.setStyleSheet("font-size: 10px;")
+        repeated_lbl.setStyleSheet(font_css("caption"))
 
         card_layout.addWidget(orders_lbl)
         card_layout.addWidget(name_lbl)
@@ -1656,14 +1655,14 @@ class UIManager:
         count_lbl = QLabel(count)
         count_lbl.setAlignment(Qt.AlignCenter)
         count_lbl.setStyleSheet(
-            f"font-size: 14px; font-weight: bold; color: white; "
+            f"{font_css('label')} color: white; "
             f"background-color: {color}; border-radius: 8px; padding: 2px 6px;"
         )
 
         tag_lbl = QLabel(tag)
         tag_lbl.setAlignment(Qt.AlignCenter)
         tag_lbl.setWordWrap(True)
-        tag_lbl.setStyleSheet("font-size: 10px;")
+        tag_lbl.setStyleSheet(font_css("caption"))
 
         card_layout.addWidget(count_lbl)
         card_layout.addWidget(tag_lbl)
