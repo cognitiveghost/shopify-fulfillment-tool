@@ -86,3 +86,51 @@ def test_fontconfig_env_noop_off_windows(monkeypatch):
     gui_main.configure_windows_fontconfig_env()
 
     assert "FONTCONFIG_PATH" not in os.environ
+
+
+def test_app_icon_is_built_in_a_fixed_accent_color():
+    """The taskbar icon sits on the OS shell's surface, which has nothing to
+    do with this app's theme -- so it is deliberately not re-themed."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+
+    import gui_main
+    from gui.theme_manager import get_theme_manager
+
+    app_icon = gui_main.build_app_icon()
+    assert not app_icon.isNull()
+
+    image = app_icon.pixmap(48, 48).toImage()
+    # alpha == 255 (fully covered), not just "mostly opaque": Qt's
+    # antialiased edge pixels are alpha-blended against transparent and
+    # unpremultiply with a +/-1 per-channel rounding drift for any color
+    # whose channels aren't all 0 or 255 -- accent_blue (#007ACC) is exactly
+    # such a color, so a >200 threshold picks up near-misses like #0079cc.
+    opaque = {
+        image.pixelColor(x, y).name()
+        for y in range(image.height())
+        for x in range(image.width())
+        if image.pixelColor(x, y).alpha() == 255
+    }
+    assert opaque == {get_theme_manager().get_current_theme().accent_blue.lower()}
+
+
+def test_app_icon_carries_the_256px_windows_asks_for():
+    """Alt+Tab and Explorer's "Extra large icons" request 256px. These are
+    pixmaps, not an SVG engine, so a missing 256 can only be upscaled -- the
+    icon would look worst exactly where it is seen biggest."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+
+    import gui_main
+
+    sizes = {size.width() for size in gui_main.build_app_icon().availableSizes()}
+    assert 256 in sizes

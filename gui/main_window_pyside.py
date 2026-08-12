@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from gui.actions_handler import ActionsHandler
 from gui.file_handler import FileHandler
+from gui.icons import icon
 from gui.log_handler import QtLogHandler
 from gui.pandas_model import FulfillmentFilterProxy
 from gui.selection_helper import SelectionHelper
@@ -1466,14 +1467,11 @@ class MainWindow(QMainWindow):
 
             from functools import partial
 
-            from PySide6.QtWidgets import QStyle
-
             menu = QMenu()
 
-            # Add actions with icons from QStyle
             # Change Status
             change_status_action = QAction(
-                self.style().standardIcon(QStyle.SP_BrowserReload),
+                icon("refresh-cw"),
                 "Change Status",
                 self,
             )
@@ -1487,7 +1485,7 @@ class MainWindow(QMainWindow):
 
             # Add Tag
             add_tag_action = QAction(
-                self.style().standardIcon(QStyle.SP_FileDialogDetailedView),
+                icon("tag"),
                 "Add Tag Manually...",
                 self,
             )
@@ -1498,9 +1496,7 @@ class MainWindow(QMainWindow):
 
             # Internal Tags submenu
             tags_menu = menu.addMenu("Internal Tags")
-            tags_menu.setIcon(
-                self.style().standardIcon(QStyle.SP_FileDialogDetailedView)
-            )
+            tags_menu.setIcon(icon("tags"))
 
             # Get tag categories from config
             tag_categories = self.active_profile_config.get("tag_categories", {})
@@ -1523,7 +1519,7 @@ class MainWindow(QMainWindow):
 
             # Remove Item
             remove_item_action = QAction(
-                self.style().standardIcon(QStyle.SP_DialogCancelButton),
+                icon("circle-minus"),
                 f"Remove Item {sku} from Order",
                 self,
             )
@@ -1540,7 +1536,7 @@ class MainWindow(QMainWindow):
 
             # Remove Order
             remove_order_action = QAction(
-                self.style().standardIcon(QStyle.SP_TrashIcon),
+                icon("trash-2"),
                 f"Remove Entire Order {order_number}",
                 self,
             )
@@ -1553,7 +1549,7 @@ class MainWindow(QMainWindow):
 
             # Copy Order Number
             copy_order_action = QAction(
-                self.style().standardIcon(QStyle.SP_FileDialogDetailedView),
+                icon("copy"),
                 "Copy Order Number",
                 self,
             )
@@ -1564,7 +1560,7 @@ class MainWindow(QMainWindow):
 
             # Copy SKU
             copy_sku_action = QAction(
-                self.style().standardIcon(QStyle.SP_FileDialogDetailedView),
+                icon("copy"),
                 "Copy SKU",
                 self,
             )

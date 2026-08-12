@@ -6,13 +6,16 @@ token definitions and stylesheet/palette builders.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication
 
 from shared.theme import ThemeTokens, build_palette, build_stylesheet, get_theme
+
+from .fonts import load_bundled_fonts
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +42,7 @@ class ThemeManager(QObject):
         logger.info(f"ThemeManager initialized with theme: {self._current_theme_name}")
 
     def get_current_theme(self) -> ThemeTokens:
-        return get_theme(self._current_theme_name)
+        return _themed_tokens(self._current_theme_name)
 
     def is_dark_theme(self) -> bool:
         return self._current_theme_name == "dark"
@@ -98,6 +101,33 @@ def get_theme_manager() -> ThemeManager:
     if _theme_manager_instance is None:
         _theme_manager_instance = ThemeManager()
     return _theme_manager_instance
+
+
+def _themed_tokens(theme_name: str) -> ThemeTokens:
+    """shared.theme's tokens with the bundled font family layered on top.
+
+    shared/theme.py is sync-owned by packing-tool and must not be hand-edited,
+    so the override happens here -- dataclasses.replace() on the frozen
+    ThemeTokens it hands back. Memoized because get_current_theme() runs on
+    roughly 180 call sites and replace() allocates.
+
+    Only the success path is memoized. load_bundled_fonts() returns None
+    before a QApplication exists, and caching that would leave the app on the
+    fallback font for the rest of the process over one early call.
+    """
+    family = load_bundled_fonts()
+    if family is None:
+        return get_theme(theme_name)
+    return _tokens_with_font(theme_name, family)
+
+
+@lru_cache(maxsize=2)
+def _tokens_with_font(theme_name: str, family: str) -> ThemeTokens:
+    theme = get_theme(theme_name)
+    return replace(theme, font_family=f"'{family}', {theme.font_family}")
+
+
+_themed_tokens.cache_clear = _tokens_with_font.cache_clear
 
 
 @dataclass(frozen=True)
