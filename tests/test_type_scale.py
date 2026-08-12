@@ -94,3 +94,22 @@ def test_body_role_matches_shared_button_size():
     match = re.search(r"QPushButton\s*\{[^}]*font-size:\s*(\d+)pt", sheet)
     assert match, "shared/theme.py no longer sets a pt font-size on QPushButton"
     assert int(match.group(1)) == TYPE_SCALE["body"].size_pt
+
+
+GUI_DIR = Path(__file__).resolve().parent.parent / "gui"
+
+
+def test_no_hardcoded_font_sizes_outside_theme_manager():
+    """The scale is only worth having if it cannot be bypassed. A new dialog
+    that hardcodes a size turns this red instead of quietly drifting."""
+    offenders = []
+    for path in sorted(GUI_DIR.glob("*.py")):
+        if path.name == "theme_manager.py":
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "font-size:" in line or "setPointSize" in line:
+                offenders.append(f"{path.name}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "Use theme_manager.font_css()/apply_font() instead of hardcoding sizes:\n"
+        + "\n".join(offenders)
+    )
