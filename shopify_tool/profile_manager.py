@@ -1223,6 +1223,43 @@ class ProfileManager:
         # Save
         return self.save_client_config(client_id, config)
 
+    def update_client_profile(
+        self,
+        client_id: str,
+        name: str | None = None,
+        ui_settings: dict[str, Any] | None = None,
+    ) -> bool:
+        """Update only the client-profile fields the caller owns.
+
+        Loads fresh, merges the supplied keys, saves once. Callers holding a
+        config they read minutes ago must go through this rather than writing
+        that config back wholesale -- otherwise a pin toggle or group move made
+        in between is silently reverted.
+
+        Args:
+            client_id: Client ID
+            name: New client_name, or None to leave it alone
+            ui_settings: Partial ui_settings to merge, or None
+
+        Returns:
+            bool: True if saved successfully
+
+        Raises:
+            ProfileManagerError: If the client doesn't exist or the save fails
+        """
+        config = self.load_client_config(client_id)
+        if config is None:
+            raise ProfileManagerError(f"Client profile not found: CLIENT_{client_id}")
+
+        if name is not None:
+            config["client_name"] = name
+
+        if ui_settings:
+            config.setdefault("ui_settings", self._get_default_ui_settings())
+            config["ui_settings"].update(ui_settings)
+
+        return self.save_client_config(client_id, config)
+
     def get_ui_settings(self, client_id: str) -> dict[str, Any]:
         """Get client UI settings.
 

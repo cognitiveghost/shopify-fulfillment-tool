@@ -380,7 +380,6 @@ class ClientSettingsDialog(QDialog):
             self.reject()
             return
 
-        self.shopify_config = self.profile_manager.load_shopify_config(client_id)
         self.ui_settings = self.config.get("ui_settings", {})
         self.metadata = self.profile_manager.calculate_metadata(client_id)
 
@@ -587,23 +586,24 @@ class ClientSettingsDialog(QDialog):
     def _save_and_accept(self):
         """Gather form data on the GUI thread, save in the background."""
         try:
-            self.config["client_name"] = self.client_name_input.text().strip()
-            self.config["ui_settings"]["is_pinned"] = self.pin_checkbox.isChecked()
-            self.config["ui_settings"]["group_id"] = self.group_combo.currentData()
-            self.config["ui_settings"]["custom_color"] = self.current_color
-
             badges_text = self.badges_input.text().strip()
-            if badges_text:
-                badges = [b.strip() for b in badges_text.split(",") if b.strip()]
-            else:
-                badges = []
-            self.config["ui_settings"]["custom_badges"] = badges
+            badges = [b.strip() for b in badges_text.split(",") if b.strip()] if badges_text else []
 
             self.save_button.setEnabled(False)
             self.save_button.setText("Saving...")
             self._is_saving = True
 
-            worker = Worker(self.profile_manager.save_client_config, self.client_id, self.config)
+            worker = Worker(
+                self.profile_manager.update_client_profile,
+                self.client_id,
+                self.client_name_input.text().strip(),
+                {
+                    "is_pinned": self.pin_checkbox.isChecked(),
+                    "group_id": self.group_combo.currentData(),
+                    "custom_color": self.current_color,
+                    "custom_badges": badges,
+                },
+            )
             worker.signals.result.connect(self._on_save_result)
             worker.signals.error.connect(self._on_save_error)
             # Keep a strong reference until the worker finishes -- a bare
