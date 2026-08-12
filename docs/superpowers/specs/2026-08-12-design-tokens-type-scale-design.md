@@ -96,6 +96,12 @@ notably the uppercase nav overline at `settings_window_pyside.py:250`
 (`apply_font(header, "caption", bold=True)`). This is one parameter instead of bold/regular
 twin roles for every tier.
 
+`font_css` always emits an explicit weight — `font-weight: normal;` for the regular roles,
+not just `font-weight: bold;` for the bold ones. That is one unconditional format string
+rather than a branch, and it stops an ancestor QSS rule from bleeding boldness into a role
+that is meant to be regular. The `client_card.py` selection indicator below depends on
+exactly that.
+
 `role` is looked up directly in `TYPE_SCALE`; an unknown role raises `KeyError` at the call
 site. No silent fallback — a typo'd role must fail loudly during development rather than
 render at a default size in production.
