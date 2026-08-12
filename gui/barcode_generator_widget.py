@@ -37,7 +37,7 @@ from gui.pdf_printing import (
     print_pdf,
     save_print_settings,
 )
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager
 from gui.worker import Worker
 
 
@@ -120,7 +120,7 @@ class BarcodeGeneratorWidget(QWidget):
             "Barcodes will be generated for all Fulfillable orders in the selected packing list.\n"
             "Each packing list has its own barcode folder for organization."
         )
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; padding: 5px;")
+        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 5px;")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
@@ -248,8 +248,7 @@ class BarcodeGeneratorWidget(QWidget):
         theme = get_theme_manager().get_current_theme()
         self.generate_btn.setStyleSheet(f"""
             QPushButton {{
-                font-size: 16px;
-                font-weight: bold;
+                {font_css('label')}
                 background-color: {theme.accent_green};
                 color: white;
                 border-radius: 5px;

@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 logger = logging.getLogger(__name__)
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager
 
 
 class RuleTestDialog(QDialog):
@@ -116,7 +116,7 @@ class RuleTestDialog(QDialog):
 
         # Summary label
         self.match_summary_label = QLabel()
-        self.match_summary_label.setStyleSheet("font-weight: bold; font-size: 11pt; margin-top: 10px;")
+        self.match_summary_label.setStyleSheet(f"{font_css('label')} margin-top: 10px;")
         layout.addWidget(self.match_summary_label)
 
         return group
@@ -129,7 +129,7 @@ class RuleTestDialog(QDialog):
         # Info label
         info_label = QLabel("Showing first 5 matched rows (limited to 100 for performance)")
         theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; font-size: 9pt;")
+        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('caption')}")
         layout.addWidget(info_label)
 
         # Preview table
@@ -149,7 +149,7 @@ class RuleTestDialog(QDialog):
         # Actions list label
         self.actions_label = QLabel()
         self.actions_label.setWordWrap(True)
-        self.actions_label.setStyleSheet("font-size: 10pt;")
+        self.actions_label.setStyleSheet(font_css("body"))
         layout.addWidget(self.actions_label)
 
         return group
@@ -170,7 +170,7 @@ class RuleTestDialog(QDialog):
         # Legend for highlights
         legend = QLabel("Yellow highlight = Modified by rule actions")
         theme = get_theme_manager().get_current_theme()
-        legend.setStyleSheet(f"color: {theme.text_secondary}; font-size: 9pt; margin-top: 5px;")
+        legend.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} margin-top: 5px;")
         layout.addWidget(legend)
 
         return group
@@ -272,7 +272,7 @@ class RuleTestDialog(QDialog):
         step_info = f"{len(steps)} step(s)" if len(steps) > 1 else "1 step"
 
         summary = f"Final Result ({step_info}, narrowing): "
-        summary += f"<span style='color: {theme.accent_green}; font-size: 14pt;'>{self.matched_count}</span> rows affected "
+        summary += f"<span style='color: {theme.accent_green}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
         summary += f"({percentage:.1f}% of {total_rows} total rows)"
 
         self.match_summary_label.setText(summary)

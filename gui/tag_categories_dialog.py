@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager
 from shopify_tool.tag_manager import validate_tag_categories_v2
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class TagCategoriesPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         header_label = QLabel("Categories")
-        header_label.setStyleSheet("font-weight: bold; font-size: 11pt; padding: 5px;")
+        header_label.setStyleSheet(f"{font_css('label')} padding: 5px;")
         layout.addWidget(header_label)
 
         self.categories_list = QListWidget()
@@ -130,7 +130,7 @@ class TagCategoriesPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.editor_header_label = QLabel("Category Editor")
-        self.editor_header_label.setStyleSheet("font-weight: bold; font-size: 11pt; padding: 5px;")
+        self.editor_header_label.setStyleSheet(f"{font_css('label')} padding: 5px;")
         layout.addWidget(self.editor_header_label)
 
         form_layout = QFormLayout()
@@ -735,7 +735,7 @@ class TagCategoriesDialog(QDialog):
         layout = QVBoxLayout(self)
 
         title_label = QLabel("Manage Tag Categories")
-        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; padding: 10px;")
+        title_label.setStyleSheet(f"{font_css('heading')} padding: 10px;")
         layout.addWidget(title_label)
 
         self.panel = TagCategoriesPanel(tag_categories, parent=self)

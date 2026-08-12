@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager
 
 
 class ReportSelectionDialog(QDialog):
@@ -108,8 +108,7 @@ class ReportSelectionDialog(QDialog):
                 background-color: {theme.accent_blue};
                 color: white;
                 padding: 10px;
-                font-size: 13px;
-                font-weight: bold;
+                {font_css('body', bold=True)}
                 text-align: left;
                 border: none;
                 border-radius: 4px;
@@ -235,7 +234,7 @@ class _BaseReportDialog(QDialog):
         left_layout.setContentsMargins(0, 0, 6, 0)
 
         list_label = QLabel("Available Reports")
-        list_label.setStyleSheet("font-weight: bold; font-size: 11pt; padding-bottom: 4px;")
+        list_label.setStyleSheet(f"{font_css('label')} padding-bottom: 4px;")
         left_layout.addWidget(list_label)
 
         self.report_list = QListWidget()
@@ -262,7 +261,7 @@ class _BaseReportDialog(QDialog):
         preview_layout = QVBoxLayout(preview_group)
 
         self.preview_orders_label = QLabel("Select a report to see preview")
-        self.preview_orders_label.setStyleSheet("font-size: 10pt; padding: 2px;")
+        self.preview_orders_label.setStyleSheet(f"{font_css('body')} padding: 2px;")
         preview_layout.addWidget(self.preview_orders_label)
 
         self.preview_filters_text = QTextEdit()
@@ -270,7 +269,7 @@ class _BaseReportDialog(QDialog):
         self.preview_filters_text.setMaximumHeight(120)
         self.preview_filters_text.setStyleSheet(
             f"background-color: {self.theme.background}; "
-            f"color: {self.theme.text_secondary}; font-size: 9pt;"
+            f"color: {self.theme.text_secondary}; {font_css('caption')}"
         )
         preview_layout.addWidget(self.preview_filters_text)
 
@@ -289,8 +288,7 @@ class _BaseReportDialog(QDialog):
             QPushButton {{
                 background-color: {self.theme.accent_blue};
                 color: white;
-                font-size: 13px;
-                font-weight: bold;
+                {font_css('body', bold=True)}
                 border: none;
                 border-radius: 4px;
             }}
