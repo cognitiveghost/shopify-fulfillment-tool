@@ -915,6 +915,45 @@ class RuleEngine:
         if "Internal_Tags" in needed_columns and "Internal_Tags" not in df.columns:
             df["Internal_Tags"] = "[]"
 
+    def _resolve_condition(self, cond, columns, allow_order_fields):
+        """Resolves a condition to (field, operator, value, error).
+
+        A condition the engine cannot evaluate is an error, not something to
+        skip. Skipping one drops it out of an ALL-match, which makes the rule
+        fire on its remaining conditions and match more rows than written.
+
+        Args:
+            cond (dict): The condition, with 'field', 'operator' and 'value'.
+            columns: The DataFrame columns available to this condition.
+            allow_order_fields (bool): True on the order-level path, where
+                ORDER_LEVEL_FIELDS names are computed rather than looked up.
+
+        Returns:
+            tuple: (field, operator, value, error). error is None when the
+                condition is usable; otherwise it explains why not and the
+                other three values must not be used.
+        """
+        field = cond.get("field")
+        operator = cond.get("operator")
+        value = cond.get("value")
+
+        if not field:
+            return None, None, None, "condition has no field"
+        if field.startswith("---"):
+            return None, None, None, f"'{field}' is a dropdown separator, not a field"
+        if not operator:
+            return None, None, None, f"condition on '{field}' has no operator"
+        if operator not in OPERATOR_MAP:
+            return None, None, None, f"unknown operator '{operator}'"
+
+        if allow_order_fields and field in self.ORDER_LEVEL_FIELDS:
+            return field, operator, value, None
+        if field not in columns:
+            hint = "" if allow_order_fields else " (order-level fields need level: order)"
+            return None, None, None, f"field '{field}' is not a column{hint}"
+
+        return field, operator, value, None
+
     def _get_matching_rows(self, df, rule):
         """Evaluates a rule's conditions and finds all matching rows.
 
@@ -944,44 +983,23 @@ class RuleEngine:
         # Get a boolean Series for each individual condition
         condition_results = []
         for cond in conditions:
-            field = cond.get("field")
-            operator = cond.get("operator")
-            value = cond.get("value")
-
-            # Skip separator fields (from UI)
-            if field and field.startswith("---"):
-                logger.info(f"[RULE ENGINE] Skipping separator field: {field}")
+            field, operator, value, error = self._resolve_condition(
+                cond, df.columns, allow_order_fields=False
+            )
+            if error:
+                logger.warning(
+                    f"[RULE ENGINE] Condition cannot be evaluated and is treated "
+                    f"as no-match: {error}"
+                )
+                condition_results.append(pd.Series(False, index=df.index))
                 continue
 
-            # Check conditions
-            if not field:
-                logger.warning(f"[RULE ENGINE] Condition missing field: {cond}")
-                continue
-            if not operator:
-                logger.warning(f"[RULE ENGINE] Condition missing operator: {cond}")
-                continue
-            if field not in df.columns:
-                logger.warning(f"[RULE ENGINE] Field '{field}' not in DataFrame columns: {list(df.columns)}")
-                continue
-            if operator not in OPERATOR_MAP:
-                logger.warning(f"[RULE ENGINE] Operator '{operator}' not in OPERATOR_MAP: {list(OPERATOR_MAP.keys())}")
-                continue
-
-            op_func_name = OPERATOR_MAP[operator]
-            op_func = globals()[op_func_name]
-
-            logger.info(f"[RULE ENGINE] Evaluating condition: {field} {operator} {value}")
-
-            # Log data types and sample values
-            logger.info(f"[RULE ENGINE] Field '{field}' dtype: {df[field].dtype}")
-            logger.info(f"[RULE ENGINE] Rule value type: {type(value).__name__}, value: {value!r}")
-            unique_vals = df[field].dropna().unique()[:5]
-            logger.info(f"[RULE ENGINE] Sample values in '{field}': {list(unique_vals)}")
-
+            op_func = globals()[OPERATOR_MAP[operator]]
+            logger.debug(
+                f"[RULE ENGINE] {field} {operator} {value!r} "
+                f"(dtype {df[field].dtype})"
+            )
             result = op_func(df[field], value)
-            matches_count = result.sum()
-            logger.info(f"[RULE ENGINE] Condition matched {matches_count} rows")
-
             condition_results.append(result)
 
         if not condition_results:
@@ -1255,18 +1273,21 @@ class RuleEngine:
         Returns:
             bool: True if conditions met
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         results = []
 
         for condition in conditions:
-            field = condition.get("field")
-            operator = condition.get("operator")
-            value = condition.get("value")
-
-            if not all([field, operator]):
-                continue
-
-            # Skip separator fields (from UI)
-            if field and field.startswith("---"):
+            field, operator, value, error = self._resolve_condition(
+                condition, order_df.columns, allow_order_fields=True
+            )
+            if error:
+                logger.warning(
+                    f"[RULE ENGINE] Order condition cannot be evaluated and is "
+                    f"treated as no-match: {error}"
+                )
+                results.append(False)
                 continue
 
             # Check if this is an order-level field
@@ -1291,12 +1312,9 @@ class RuleEngine:
 
             else:
                 # Regular article-level field - check if ANY row matches
-                if field not in order_df.columns or operator not in OPERATOR_MAP:
-                    result = False
-                else:
-                    op_func = globals()[OPERATOR_MAP[operator]]
-                    series_result = op_func(order_df[field], value)
-                    result = series_result.any()  # At least one row matches
+                op_func = globals()[OPERATOR_MAP[operator]]
+                series_result = op_func(order_df[field], value)
+                result = series_result.any()  # At least one row matches
 
             results.append(result)
 
