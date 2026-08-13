@@ -365,7 +365,7 @@ class ClientSettingsDialog(QDialog):
         self._save_worker = None  # keeps the in-flight save Worker alive
         self._is_saving = False
 
-        self.setWindowTitle(f"Client Settings - CLIENT_{client_id}")
+        self.setWindowTitle(f"Client Profile - CLIENT_{client_id}")
         self.setModal(True)
         self.setMinimumSize(600, 500)
 
@@ -380,7 +380,6 @@ class ClientSettingsDialog(QDialog):
             self.reject()
             return
 
-        self.shopify_config = self.profile_manager.load_shopify_config(client_id)
         self.ui_settings = self.config.get("ui_settings", {})
         self.metadata = self.profile_manager.calculate_metadata(client_id)
 
@@ -405,10 +404,6 @@ class ClientSettingsDialog(QDialog):
         # Tab 3: Statistics
         self.statistics_tab = self._create_statistics_tab()
         self.tabs.addTab(self.statistics_tab, "Statistics")
-
-        # Tab 4: Advanced (placeholder)
-        self.advanced_tab = self._create_advanced_tab()
-        self.tabs.addTab(self.advanced_tab, "Advanced")
 
         layout.addWidget(self.tabs)
 
@@ -521,23 +516,6 @@ class ClientSettingsDialog(QDialog):
 
         return widget
 
-    def _create_advanced_tab(self) -> QWidget:
-        """Create Advanced tab (placeholder)."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        info_label = QLabel(
-            "Advanced settings (column mappings, rules) will be available here in future updates.\n\n"
-            "For now, use the main Settings window to configure these options."
-        )
-        info_label.setWordWrap(True)
-        theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('body')} padding: 20px;")
-        layout.addWidget(info_label)
-        layout.addStretch()
-
-        return widget
-
     def _load_data(self):
         """Load data into form fields."""
         theme = get_theme_manager().get_current_theme()
@@ -608,23 +586,24 @@ class ClientSettingsDialog(QDialog):
     def _save_and_accept(self):
         """Gather form data on the GUI thread, save in the background."""
         try:
-            self.config["client_name"] = self.client_name_input.text().strip()
-            self.config["ui_settings"]["is_pinned"] = self.pin_checkbox.isChecked()
-            self.config["ui_settings"]["group_id"] = self.group_combo.currentData()
-            self.config["ui_settings"]["custom_color"] = self.current_color
-
             badges_text = self.badges_input.text().strip()
-            if badges_text:
-                badges = [b.strip() for b in badges_text.split(",") if b.strip()]
-            else:
-                badges = []
-            self.config["ui_settings"]["custom_badges"] = badges
+            badges = [b.strip() for b in badges_text.split(",") if b.strip()] if badges_text else []
 
             self.save_button.setEnabled(False)
             self.save_button.setText("Saving...")
             self._is_saving = True
 
-            worker = Worker(self.profile_manager.save_client_config, self.client_id, self.config)
+            worker = Worker(
+                self.profile_manager.update_client_profile,
+                self.client_id,
+                self.client_name_input.text().strip(),
+                {
+                    "is_pinned": self.pin_checkbox.isChecked(),
+                    "group_id": self.group_combo.currentData(),
+                    "custom_color": self.current_color,
+                    "custom_badges": badges,
+                },
+            )
             worker.signals.result.connect(self._on_save_result)
             worker.signals.error.connect(self._on_save_error)
             # Keep a strong reference until the worker finishes -- a bare

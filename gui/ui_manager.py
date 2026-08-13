@@ -818,8 +818,8 @@ class UIManager:
         settings_layout = QHBoxLayout()
 
         # Client Settings
-        self.mw.settings_button = QPushButton("Client Settings")
-        self.mw.settings_button.setToolTip("Open the settings window")
+        self.mw.settings_button = QPushButton("Settings")
+        self.mw.settings_button.setToolTip("Open settings for the active client")
         self.mw.settings_button.setEnabled(False)
         settings_layout.addWidget(self.mw.settings_button)
 
@@ -1174,10 +1174,10 @@ class UIManager:
         layout.addWidget(self.mw.stock_export_button_tab2)
 
         # Settings button (Tab 2 version)
-        self.mw.settings_button_tab2 = QPushButton("Client Settings")
+        self.mw.settings_button_tab2 = QPushButton("Settings")
         self.mw.settings_button_tab2.setEnabled(False)
         self.mw.settings_button_tab2.setToolTip(
-            "Open the settings window for the active client"
+            "Open settings for the active client"
         )
         self.mw.settings_button_tab2.clicked.connect(
             lambda: self.mw.actions_handler.open_settings_window()

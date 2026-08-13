@@ -6,7 +6,7 @@ import pandas as pd
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
-from gui.settings_window_pyside import SettingsWindow
+from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
 from shopify_tool import core, packing_lists, stock_export
