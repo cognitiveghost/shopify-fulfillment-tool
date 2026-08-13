@@ -1,8 +1,6 @@
 """Column mappings (orders/stock) and courier-name mappings."""
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -13,8 +11,8 @@ from PySide6.QtWidgets import (
 )
 
 from gui.column_mapping_widget import ColumnMappingWidget
+from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
-from gui.theme_manager import font_css, get_theme_manager
 
 
 class MappingsPage(SettingsPage):
@@ -40,8 +38,7 @@ class MappingsPage(SettingsPage):
         # ========================================
         # COLUMN MAPPINGS - Orders
         # ========================================
-        orders_box = QGroupBox("Orders CSV Column Mapping")
-        orders_layout = QVBoxLayout(orders_box)
+        orders_box = FormSection("Orders CSV Column Mapping")
 
         # Define required and optional fields for orders
         orders_required = ["Order_Number", "SKU", "Quantity", "Shipping_Method"]
@@ -56,14 +53,13 @@ class MappingsPage(SettingsPage):
             optional_fields=orders_optional
         )
 
-        orders_layout.addWidget(self.orders_mapping_widget)
+        orders_box.add_widget(self.orders_mapping_widget)
         scroll_layout.addWidget(orders_box)
 
         # ========================================
         # COLUMN MAPPINGS - Stock
         # ========================================
-        stock_box = QGroupBox("Stock CSV Column Mapping")
-        stock_layout = QVBoxLayout(stock_box)
+        stock_box = FormSection("Stock CSV Column Mapping")
 
         # Define required and optional fields for stock
         stock_required = ["SKU", "Stock"]
@@ -78,34 +74,29 @@ class MappingsPage(SettingsPage):
             optional_fields=stock_optional
         )
 
-        stock_layout.addWidget(self.stock_mapping_widget)
+        stock_box.add_widget(self.stock_mapping_widget)
         scroll_layout.addWidget(stock_box)
 
         # ========================================
         # COURIER MAPPINGS
         # ========================================
-        courier_mappings_box = QGroupBox("Courier Mappings")
-        courier_main_layout = QVBoxLayout(courier_mappings_box)
-
-        instructions2 = QLabel(
-            "Map different shipping provider names to standardized courier codes.\n"
-            "You can specify multiple patterns (comma-separated) for each courier."
+        courier_mappings_box = FormSection(
+            "Courier Mappings",
+            "Map different shipping provider names to standardized courier codes. "
+            "You can specify multiple patterns (comma-separated) for each courier.",
         )
-        instructions2.setWordWrap(True)
-        theme = get_theme_manager().get_current_theme()
-        instructions2.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('body')}")
-        courier_main_layout.addWidget(instructions2)
 
         # Container for courier mapping rows
         self.courier_mappings_container = QWidget()
         self.courier_mappings_layout = QVBoxLayout(self.courier_mappings_container)
         self.courier_mappings_layout.setContentsMargins(0, 0, 0, 0)
 
-        courier_main_layout.addWidget(self.courier_mappings_container)
+        courier_mappings_box.add_widget(self.courier_mappings_container)
 
         add_courier_btn = QPushButton("+ Add Courier Mapping")
         add_courier_btn.clicked.connect(lambda: self.add_courier_mapping_row())
-        courier_main_layout.addWidget(add_courier_btn, 0, Qt.AlignLeft)
+        add_courier_btn.setMaximumWidth(200)
+        courier_mappings_box.add_widget(add_courier_btn)
 
         scroll_layout.addWidget(courier_mappings_box)
         scroll_layout.addStretch()
