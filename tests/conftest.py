@@ -1,11 +1,20 @@
-"""Shared fixtures for the backend test suite.
+"""Shared fixtures for the test suite.
 
 Column names mirror the DEFAULT Shopify/Bulgarian-ERP mapping hardcoded in
 shopify_tool.analysis._clean_and_prepare_data (used when column_mappings=None),
 so fixtures exercise the exact same path production runs through.
+
+The SettingsWindow fixtures at the bottom are here rather than in a test
+module because three test files need them and `tests/` is not a package --
+conftest is the only sharing mechanism that does not depend on sys.path.
 """
+from unittest.mock import Mock
+
 import pandas as pd
 import pytest
+from PySide6.QtWidgets import QApplication, QMessageBox
+
+from gui.settings.window import SettingsWindow
 
 
 @pytest.fixture
@@ -75,3 +84,141 @@ def simple_stock_df(stock_df_factory):
         {"Артикул": "B1", "Име": "Widget B1", "Наличност": 10},
         {"Артикул": "B2", "Име": "Widget B2", "Наличност": 10},
     ])
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def no_modals(monkeypatch):
+    """Fail loudly instead of blocking forever.
+
+    save_settings() reports validation failures through modal QMessageBox
+    calls and returns early. Under the offscreen QPA platform an unstubbed
+    modal hangs the test run, so every popup is recorded and dismissed.
+    """
+    seen = []
+    for name in ("warning", "critical", "information", "question"):
+        monkeypatch.setattr(
+            QMessageBox, name,
+            staticmethod(lambda *a, _n=name, **k: seen.append((_n, a[1:3]))),
+        )
+    return seen
+
+
+def settings_fixture_config():
+    """A config touching every section save_settings() writes."""
+    return {
+        "settings": {
+            "stock_csv_delimiter": ";",
+            "orders_csv_delimiter": ",",
+            "low_stock_threshold": 5,
+            "repeat_detection_days": 30,
+        },
+        "rules": [
+            {
+                "name": "Flag big orders",
+                "priority": 1,
+                "level": "order",
+                "steps": [
+                    {
+                        "conditions": [
+                            {"field": "item_count", "operator": "is greater than", "value": "5"}
+                        ],
+                        "match": "ALL",
+                        "actions": [{"type": "ADD_ORDER_TAG", "value": "BULK"}],
+                    }
+                ],
+            }
+        ],
+        "packing_list_configs": [
+            {
+                "name": "Main",
+                "output_filename": "main.xlsx",
+                "filters": [{"field": "SKU", "operator": "contains", "value": "AB"}],
+                "exclude_skus": ["X1", "X2"],
+            }
+        ],
+        "stock_export_configs": [
+            {
+                "name": "Daily",
+                "output_filename": "daily.csv",
+                "filters": [{"field": "Tags", "operator": "==", "value": "hot"}],
+            }
+        ],
+        # v2 mappings are {csv_column: internal_name}. Every required internal
+        # field must appear or save_settings() aborts at validation.
+        "column_mappings": {
+            "version": 2,
+            "orders": {
+                "Name": "Order_Number",
+                "Lineitem sku": "SKU",
+                "Lineitem quantity": "Quantity",
+                "Shipping Method": "Shipping_Method",
+                "Lineitem name": "Product_Name",
+            },
+            "stock": {"Article": "SKU", "Available": "Stock"},
+        },
+        "courier_mappings": {
+            "DHL": {"patterns": ["dhl", "DHL Express"], "case_sensitive": False}
+        },
+        "set_decoders": {},
+        "weight_config": {
+            "volumetric_divisor": 5000,
+            "products": {
+                "SKU1": {
+                    "name": "Widget",
+                    "length_cm": 10.0,
+                    "width_cm": 5.0,
+                    "height_cm": 2.0,
+                    "no_packaging": False,
+                }
+            },
+            "boxes": [
+                {"name": "Small", "length_cm": 20.0, "width_cm": 15.0, "height_cm": 10.0}
+            ],
+        },
+        "tag_categories": {"version": 2, "categories": {}},
+    }
+
+
+@pytest.fixture
+def make_settings_config():
+    """Factory, not a value: test_settings_nav builds two windows in one test
+    and each needs its own config to mutate."""
+    return settings_fixture_config
+
+
+@pytest.fixture
+def started_workers(monkeypatch):
+    """Intercept the background save instead of letting it run.
+
+    save_settings() hands a Worker to QThreadPool.globalInstance().start().
+    Left alone that really runs, on a real thread, racing the assertions and
+    delivering a success QMessageBox through queued signals. Capturing the
+    worker keeps the test deterministic and still proves the save was reached.
+    """
+    started = []
+    monkeypatch.setattr(
+        "gui.settings.window.QThreadPool",
+        type("Pool", (), {
+            "globalInstance": staticmethod(
+                lambda: type("P", (), {"start": staticmethod(started.append)})()
+            )
+        }),
+    )
+    return started
+
+
+@pytest.fixture
+def window(qapp, no_modals, started_workers):
+    """A real SettingsWindow with the background save intercepted."""
+    win = SettingsWindow(
+        client_id="M",
+        client_config=settings_fixture_config(),
+        profile_manager=Mock(),
+    )
+    yield win
+    win.deleteLater()

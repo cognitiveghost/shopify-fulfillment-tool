@@ -26,7 +26,7 @@ from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
 from gui.settings.stock_exports import StockExportsPage
 from gui.settings.weight import WeightPage
-from gui.theme_manager import apply_font
+from gui.theme_manager import apply_font, set_button_role
 from gui.worker import Worker
 
 logger = logging.getLogger(__name__)
@@ -167,6 +167,8 @@ class SettingsWindow(QDialog):
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = button_box.button(QDialogButtonBox.Save)
+        set_button_role(self.save_button, "primary")
+        set_button_role(button_box.button(QDialogButtonBox.Cancel), "secondary")
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
@@ -314,6 +316,18 @@ class _TagCategoriesPage(SettingsPage):
         layout.setSpacing(0)
         self.panel = TagCategoriesPanel(tag_categories, parent=self)
         layout.addWidget(self.panel)
+
+        # TagCategoriesPanel is also used standalone (its own dialog, outside
+        # the Hub) -- mark roles on this wrapped instance only, not in
+        # tag_categories_dialog.py itself, so the standalone dialog keeps its
+        # current appearance.
+        for button in (
+            self.panel.new_category_btn, self.panel.delete_category_btn,
+            self.panel.color_button, self.panel.add_tag_btn,
+            self.panel.remove_tag_btn, self.panel.add_mapping_btn,
+            self.panel.remove_mapping_btn,
+        ):
+            set_button_role(button, "secondary")
 
     def collect(self) -> dict:
         return {"tag_categories": self.panel.get_categories()}

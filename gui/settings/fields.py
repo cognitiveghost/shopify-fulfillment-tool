@@ -6,6 +6,7 @@ reverse, so there is no cycle back through window.py.
 
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
 
+from gui.theme_manager import set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 
 FILTERABLE_COLUMNS: list[str] = [
@@ -149,6 +150,7 @@ def add_filter_row(parent_widget_refs, fields, operators, analysis_df, config=No
     op_combo.addItems(operators)
     value_edit = QLineEdit()
     delete_btn = QPushButton("X")
+    set_button_role(delete_btn, "secondary")
 
     row_layout.addWidget(field_combo)
     row_layout.addWidget(op_combo)

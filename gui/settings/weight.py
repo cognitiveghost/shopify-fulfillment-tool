@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.settings.base import SettingsPage
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager, set_button_role
 
 
 class WeightPage(SettingsPage):
@@ -82,21 +82,26 @@ class WeightPage(SettingsPage):
 
         prod_toolbar = QHBoxLayout()
         import_sku_btn = QPushButton("Import from Stock CSV")
+        set_button_role(import_sku_btn, "secondary")
         import_sku_btn.setToolTip("Load SKUs from the current stock CSV file")
         import_sku_btn.clicked.connect(self._weight_import_skus_from_stock_csv)
         prod_toolbar.addWidget(import_sku_btn)
         import_dims_btn = QPushButton("Import Dimensions CSV")
+        set_button_role(import_dims_btn, "secondary")
         import_dims_btn.setToolTip("Import SKU dimensions from a CSV (columns: SKU, Name, L, W, H, No Packaging)")
         import_dims_btn.clicked.connect(self._weight_import_products_from_csv)
         prod_toolbar.addWidget(import_dims_btn)
         add_prod_btn = QPushButton("Add Row")
+        set_button_role(add_prod_btn, "secondary")
         add_prod_btn.clicked.connect(self._weight_add_product_row)
         prod_toolbar.addWidget(add_prod_btn)
         export_prod_btn = QPushButton("Export CSV")
+        set_button_role(export_prod_btn, "secondary")
         export_prod_btn.setToolTip("Export all products with dimensions to a CSV file")
         export_prod_btn.clicked.connect(self._weight_export_products_to_csv)
         prod_toolbar.addWidget(export_prod_btn)
         del_prod_btn = QPushButton("Delete Selected")
+        set_button_role(del_prod_btn, "secondary")
         del_prod_btn.clicked.connect(lambda: self._weight_delete_selected(self.weight_products_table))
         prod_toolbar.addWidget(del_prod_btn)
         prod_toolbar.addStretch()
@@ -131,6 +136,7 @@ class WeightPage(SettingsPage):
         quick_add_row.addWidget(self.weight_quick_no_pkg)
 
         quick_add_btn = QPushButton("Add")
+        set_button_role(quick_add_btn, "secondary")
         quick_add_btn.setToolTip("Add this SKU and keep the form open for the next one (Enter also works)")
         quick_add_btn.clicked.connect(self._weight_quick_add_product)
         quick_add_row.addWidget(quick_add_btn)
@@ -173,17 +179,21 @@ class WeightPage(SettingsPage):
 
         box_toolbar = QHBoxLayout()
         import_box_btn = QPushButton("Import CSV")
+        set_button_role(import_box_btn, "secondary")
         import_box_btn.setToolTip("Import boxes from a CSV (columns: Name, L, W, H)")
         import_box_btn.clicked.connect(self._weight_import_boxes_from_csv)
         box_toolbar.addWidget(import_box_btn)
         add_box_btn = QPushButton("Add Box")
+        set_button_role(add_box_btn, "secondary")
         add_box_btn.clicked.connect(self._weight_add_box_row)
         box_toolbar.addWidget(add_box_btn)
         export_box_btn = QPushButton("Export CSV")
+        set_button_role(export_box_btn, "secondary")
         export_box_btn.setToolTip("Export all boxes to a CSV file")
         export_box_btn.clicked.connect(self._weight_export_boxes_to_csv)
         box_toolbar.addWidget(export_box_btn)
         del_box_btn = QPushButton("Delete Selected")
+        set_button_role(del_box_btn, "secondary")
         del_box_btn.clicked.connect(lambda: self._weight_delete_selected(self.weight_boxes_table))
         box_toolbar.addWidget(del_box_btn)
         box_toolbar.addStretch()

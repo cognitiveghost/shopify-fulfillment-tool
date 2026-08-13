@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from gui.settings.base import SettingsPage
 from gui.settings.fields import FILTER_OPERATORS, FILTERABLE_COLUMNS, add_filter_row
+from gui.theme_manager import set_button_role
 
 
 class StockExportsPage(SettingsPage):
@@ -26,6 +27,7 @@ class StockExportsPage(SettingsPage):
 
         main_layout = QVBoxLayout(self)
         add_btn = QPushButton("Add New Stock Export")
+        set_button_role(add_btn, "secondary")
         add_btn.clicked.connect(self.add_stock_export_widget)
         main_layout.addWidget(add_btn, 0, Qt.AlignLeft)
         scroll_area = QScrollArea()
@@ -60,9 +62,11 @@ class StockExportsPage(SettingsPage):
         filters_rows_layout = QVBoxLayout()
         filters_layout.addLayout(filters_rows_layout)
         add_filter_btn = QPushButton("Add Filter")
+        set_button_role(add_filter_btn, "secondary")
         filters_layout.addWidget(add_filter_btn, 0, Qt.AlignLeft)
         se_layout.addWidget(filters_box)
         delete_btn = QPushButton("Delete Stock Export")
+        set_button_role(delete_btn, "secondary")
         se_layout.addWidget(delete_btn, 0, Qt.AlignRight)
         self.stock_exports_layout.addWidget(se_box)
         widget_refs = {

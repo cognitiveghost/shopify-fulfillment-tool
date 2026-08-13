@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from gui.column_mapping_widget import ColumnMappingWidget
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
+from gui.theme_manager import set_button_role
 
 
 class MappingsPage(SettingsPage):
@@ -94,6 +95,7 @@ class MappingsPage(SettingsPage):
         courier_mappings_box.add_widget(self.courier_mappings_container)
 
         add_courier_btn = QPushButton("+ Add Courier Mapping")
+        set_button_role(add_courier_btn, "secondary")
         add_courier_btn.clicked.connect(lambda: self.add_courier_mapping_row())
         add_courier_btn.setMaximumWidth(200)
         courier_mappings_box.add_widget(add_courier_btn)
@@ -144,6 +146,7 @@ class MappingsPage(SettingsPage):
 
         # Delete button
         delete_btn = QPushButton("✕")
+        set_button_role(delete_btn, "secondary")
         delete_btn.setFixedWidth(30)
         delete_btn.setStyleSheet("color: red; font-weight: bold;")
         delete_btn.setToolTip("Remove this courier mapping")
