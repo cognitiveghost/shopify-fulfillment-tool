@@ -1,3 +1,5 @@
+import copy
+
 import pytest
 from PySide6.QtWidgets import QApplication
 
@@ -29,8 +31,24 @@ def sample_weight_config():
 
 def test_weight_page_round_trips_its_config(qapp):
     weight_config = sample_weight_config()
+    expected = copy.deepcopy(weight_config)
     page = WeightPage(weight_config, {}, ";")
-    assert page.collect() == {"weight_config": weight_config}
+    # Compare against a copy taken before construction: the page holds the
+    # live dict, so comparing collect() to `weight_config` compares an object
+    # to itself and passes for any implementation.
+    assert page.collect() == {"weight_config": expected}
+
+
+def test_weight_page_writes_every_key_it_owns(qapp):
+    """The live-dict contract means a key the page stops writing survives in
+    the dict it was handed -- so round-trip tests cannot see the drop. Detach
+    the page from that dict and only what collect() actively writes remains."""
+    page = WeightPage(sample_weight_config(), {}, ";")
+    page._weight_config = {}
+
+    assert set(page.collect()["weight_config"]) == {
+        "volumetric_divisor", "products", "boxes"
+    }
 
 
 def test_weight_page_normalizes_an_empty_config(qapp):

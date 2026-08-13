@@ -4,6 +4,8 @@ shared/theme.py paints every QPushButton accent-blue, and it is sync-owned
 by packing-tool so it cannot be edited here. These rules are layered on in
 gui/theme_manager.py, the repo-owned seam.
 """
+import re
+
 import pytest
 from PySide6.QtWidgets import QApplication, QPushButton
 
@@ -14,6 +16,15 @@ from shared.theme import get_theme
 @pytest.fixture(scope="module", autouse=True)
 def _app():
     yield QApplication.instance() or QApplication([])
+
+
+def _background_color(qss: str, role: str) -> str:
+    """The resolved colour of the role's base rule -- comparing whole QSS
+    blocks instead would pass on `font-weight: bold` alone."""
+    block = qss.split(f'QPushButton[role="{role}"]')[1].split("}")[0]
+    match = re.search(r"background-color:\s*([^;]+);", block)
+    assert match, f"no background-color in the {role} rule"
+    return match.group(1).strip()
 
 
 @pytest.mark.parametrize("theme_name", ["light", "dark"])
@@ -28,13 +39,10 @@ def test_the_two_roles_do_not_render_the_same(theme_name):
     """A token that happens to resolve to the same colour in one theme is
     invisible on Linux and only shows up on the Windows machines that run
     this app."""
-    theme = get_theme(theme_name)
-    qss = role_stylesheet(theme)
-    primary = qss.split('QPushButton[role="primary"]')[1].split("}")[0]
-    secondary = qss.split('QPushButton[role="secondary"]')[1].split("}")[0]
-    assert "background-color" in primary
-    assert "background-color" in secondary
-    assert primary != secondary
+    qss = role_stylesheet(get_theme(theme_name))
+    primary = _background_color(qss, "primary")
+    secondary = _background_color(qss, "secondary")
+    assert primary != secondary, f"both roles render {primary} in the {theme_name} theme"
 
 
 def test_set_button_role_sets_the_property():

@@ -12,6 +12,7 @@ from unittest.mock import Mock
 
 import pandas as pd
 import pytest
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from gui.settings.window import SettingsWindow
@@ -210,6 +211,17 @@ def started_workers(monkeypatch):
         }),
     )
     return started
+
+
+@pytest.fixture(autouse=True)
+def clean_nav_setting():
+    """QSettings is process-global and writes to the real ~/.config store, so
+    any test that builds a SettingsWindow would otherwise leave the developer's
+    (and CI's) last-page setting behind and leak it into the next run."""
+    store = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
+    store.remove(SettingsWindow.NAV_SETTINGS_KEY)
+    yield
+    store.remove(SettingsWindow.NAV_SETTINGS_KEY)
 
 
 @pytest.fixture

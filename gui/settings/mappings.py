@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 from gui.column_mapping_widget import ColumnMappingWidget
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
-from gui.theme_manager import set_button_role
+from gui.theme_manager import get_theme_manager, set_button_role
 
 
 class MappingsPage(SettingsPage):
@@ -148,7 +148,9 @@ class MappingsPage(SettingsPage):
         delete_btn = QPushButton("✕")
         set_button_role(delete_btn, "secondary")
         delete_btn.setFixedWidth(30)
-        delete_btn.setStyleSheet("color: red; font-weight: bold;")
+        theme = get_theme_manager().get_current_theme()
+        # Sets only `color`, so the secondary role's background still applies.
+        delete_btn.setStyleSheet(f"color: {theme.accent_red}; font-weight: bold;")
         delete_btn.setToolTip("Remove this courier mapping")
 
         row_layout.addWidget(code_label)

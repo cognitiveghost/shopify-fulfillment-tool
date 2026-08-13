@@ -38,12 +38,15 @@ def test_save_round_trips_every_config_section(window, no_modals):
 
 
 def test_no_page_silently_drops_a_field(window):
-    """Round-tripping through save_settings() alone cannot see a dropped key.
+    """Compare each page's collect() output against the config it was built
+    from, section by section.
 
-    The shell merges dict-valued sections with `config_data[key].update(...)`,
-    so a key the fixture already holds survives even if collect() stopped
-    producing it. Compare each page's collect() output directly instead --
-    every page owns disjoint top-level keys, so no merge is needed here.
+    Blind spot to know about: General and Weight hold the *live* sub-dict
+    (see gui/settings/base.py), so for those two this compares an object to
+    a deepcopy of itself and a dropped key still shows up. Their key coverage
+    lives in test_settings_page_{general,weight}.py, which detach the page
+    from the live dict first. Every other page builds a fresh dict, so this
+    still bites for them.
     """
     before = copy.deepcopy(window.config_data)
 

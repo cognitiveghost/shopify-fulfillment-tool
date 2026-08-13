@@ -290,6 +290,8 @@ class RulesPage(SettingsPage):
         set_button_role(test_btn, "secondary")
         test_btn.setMaximumWidth(70)
         test_btn.setToolTip("Test this rule against current analysis data")
+        # As with Delete Rule below: the per-widget green background is
+        # deliberate and overrides the secondary role's background.
         test_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.accent_green};
@@ -311,6 +313,9 @@ class RulesPage(SettingsPage):
         header_layout.addWidget(name_edit)
         delete_rule_btn = QPushButton("Delete Rule")
         set_button_role(delete_rule_btn, "secondary")
+        # The per-widget background wins over the role on purpose: destructive
+        # red stays. The role is here so the Hub's inventory guard sees it
+        # marked, and so it picks up the secondary border/disabled treatment.
         delete_rule_btn.setStyleSheet(f"background-color: {theme.accent_red}; color: white;")
         header_layout.addWidget(delete_rule_btn)
         rule_layout.addLayout(header_layout)

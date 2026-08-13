@@ -200,6 +200,7 @@ def role_stylesheet(theme: ThemeTokens) -> str:
             font-weight: bold;
         }}
         QPushButton[role="primary"]:hover {{ background-color: {hover}; }}
+        QPushButton[role="primary"]:pressed {{ background-color: {hover}; }}
 
         QPushButton[role="secondary"] {{
             background-color: {theme.background_elevated};
@@ -207,6 +208,9 @@ def role_stylesheet(theme: ThemeTokens) -> str:
             border: 1px solid {theme.border};
         }}
         QPushButton[role="secondary"]:hover {{ background-color: {theme.hover}; }}
+        /* shared/theme.py presses every QPushButton to dark accent-blue, which
+           reads as primary for the fraction of a second it is held. */
+        QPushButton[role="secondary"]:pressed {{ background-color: {theme.active_background}; }}
 
         QPushButton[role="primary"]:disabled, QPushButton[role="secondary"]:disabled {{
             background-color: {theme.background};
@@ -223,6 +227,8 @@ def role_stylesheet(theme: ThemeTokens) -> str:
         QListWidget#settingsNav::item {{
             padding: 6px 10px;
             border-radius: {theme.radius}px;
+            /* matches :selected's accent bar so selecting does not shift text */
+            border-left: 2px solid transparent;
         }}
         QListWidget#settingsNav::item:hover {{ background-color: {theme.hover}; }}
         QListWidget#settingsNav::item:selected {{

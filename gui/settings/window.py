@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPushButton,
     QStackedWidget,
     QVBoxLayout,
 )
@@ -344,13 +345,10 @@ class _TagCategoriesPage(SettingsPage):
         # TagCategoriesPanel is also used standalone (its own dialog, outside
         # the Hub) -- mark roles on this wrapped instance only, not in
         # tag_categories_dialog.py itself, so the standalone dialog keeps its
-        # current appearance.
-        for button in (
-            self.panel.new_category_btn, self.panel.delete_category_btn,
-            self.panel.color_button, self.panel.add_tag_btn,
-            self.panel.remove_tag_btn, self.panel.add_mapping_btn,
-            self.panel.remove_mapping_btn,
-        ):
+        # current appearance. findChildren rather than a list of attribute
+        # names: a rename over there would otherwise raise AttributeError in
+        # here, and a new button would fail the role guard in the wrong file.
+        for button in self.panel.findChildren(QPushButton):
             set_button_role(button, "secondary")
 
     def collect(self) -> dict:

@@ -8,20 +8,9 @@ all come from conftest.py.
 """
 from unittest.mock import Mock
 
-import pytest
 from PySide6.QtCore import QSettings, Qt
 
 from gui.settings.window import SettingsWindow
-
-
-@pytest.fixture(autouse=True)
-def clean_nav_setting():
-    """QSettings is process-global and persists to disk on this machine, so
-    a leftover value would leak between tests and between runs."""
-    store = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
-    store.remove(SettingsWindow.NAV_SETTINGS_KEY)
-    yield
-    store.remove(SettingsWindow.NAV_SETTINGS_KEY)
 
 
 def _current_page_name(win):
@@ -65,7 +54,8 @@ def test_a_page_name_that_no_longer_exists_falls_back(
     win.deleteLater()
 
 
-def test_headers_are_not_selectable_and_are_never_stored(window):
+def test_group_headers_are_not_selectable(window):
+    """Not selectable is also why one can never be the stored page name."""
     headers = [
         window._settings_nav.item(row)
         for row in range(window._settings_nav.count())

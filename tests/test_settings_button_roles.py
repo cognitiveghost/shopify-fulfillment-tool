@@ -1,10 +1,10 @@
 """Inside the Hub, Save is the only accent-filled button on screen."""
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QDialogButtonBox, QPushButton
 
 
 def test_the_footer_marks_save_primary_and_cancel_secondary(window):
     assert window.save_button.property("role") == "primary"
-    cancel = window.save_button.parent().buttons()[1]
+    cancel = window.save_button.parent().button(QDialogButtonBox.Cancel)
     assert cancel.property("role") == "secondary"
 
 
