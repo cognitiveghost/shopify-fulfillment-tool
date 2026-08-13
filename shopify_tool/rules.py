@@ -898,11 +898,13 @@ class RuleEngine:
     def _prepare_df_for_actions(self, df):
         """Ensures the DataFrame has the columns required for rule actions.
 
-        Scans all rules to find out which columns will be modified or created
-        by the actions (e.g., 'Status_Note', 'Internal_Tags'). If these columns
-        do not already exist in the DataFrame, they are created and initialized
-        with a default value. This prevents errors when an action tries to
-        modify a non-existent column.
+        Scans all rules for the tag columns their actions append to --
+        'Status_Note' and 'Internal_Tags' -- and creates them if missing, so an
+        action can read-modify-write them without a existence check.
+
+        COPY_FIELD and CALCULATE targets are deliberately NOT created here: each
+        handler builds its own target column so it can give it the right dtype
+        and leave unmatched rows NaN, neither of which is knowable from here.
 
         Args:
             df (pd.DataFrame): The DataFrame to prepare.
@@ -917,10 +919,6 @@ class RuleEngine:
                         needed_columns.add("Status_Note")
                     elif action_type == "ADD_INTERNAL_TAG":
                         needed_columns.add("Internal_Tags")
-                    elif action_type == "COPY_FIELD" or action_type == "CALCULATE":
-                        target = action.get("target")
-                        if target:
-                            needed_columns.add(target)
                     # SET_STATUS uses existing Order_Fulfillment_Status column
 
         # Add only the necessary columns if they don't already exist
