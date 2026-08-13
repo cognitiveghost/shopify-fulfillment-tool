@@ -59,6 +59,12 @@ class RuleTestDialog(QDialog):
         self.df_after = None
         self.matches = None
         self.matched_count = 0
+        self.changed_count = 0
+
+        # Set by _align_frames(): df_before/df_after made comparable.
+        self.before_aligned = None
+        self.after_existing = None
+        self.added_rows = None
 
         self.setWindowTitle(f"Test Rule: {rule_config.get('name', 'Unnamed')}")
         self.setMinimumSize(1000, 800)
@@ -164,7 +170,10 @@ class RuleTestDialog(QDialog):
         layout.addWidget(self.after_table)
 
         # Legend for highlights
-        legend = QLabel("Yellow highlight = Modified by rule actions")
+        legend = QLabel(
+            "Yellow highlight = Modified by rule actions   |   "
+            "Green highlight = Row added by rule"
+        )
         theme = get_theme_manager().get_current_theme()
         legend.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} margin-top: 5px;")
         layout.addWidget(legend)
@@ -193,9 +202,14 @@ class RuleTestDialog(QDialog):
             # Apply rule (modifies test_df in-place)
             self.df_after = engine.apply(self.test_df)
 
+            # RuleEngine.apply() may add columns and append rows, so make the
+            # two frames comparable before anything diffs them.
+            self._align_frames()
+
             # Detect matched rows by comparing before/after (works for all rule types)
             self.matches = self._detect_changed_rows()
-            self.matched_count = self.matches.sum()
+            self.changed_count = int(self.matches.sum())
+            self.matched_count = self.changed_count + len(self.added_rows)
             logger.info(f"[RULE TEST] Rule affected {self.matched_count} rows")
 
             # Populate UI sections
@@ -212,25 +226,68 @@ class RuleTestDialog(QDialog):
                 f"Failed to test rule:\n\n{e!s}\n\nCheck logs for details."
             )
 
+    def _align_frames(self):
+        """Make df_before and df_after comparable.
+
+        apply() changes the frame two ways: CALCULATE/COPY_FIELD create their
+        target column mid-apply, and ADD_PRODUCT rows are concatenated with
+        ignore_index=True. Either one breaks a naive before/after diff.
+
+        apply() only ever appends -- it has no drop, sort, or reindex -- so
+        the first len(df_before) positional rows of df_after are the original
+        rows in order. Slice positionally rather than by label: it is correct
+        whether or not ignore_index fired, and label alignment is precisely
+        what breaks. tests/test_rule_test_dialog.py asserts that assumption.
+        """
+        n = len(self.df_before)
+
+        self.after_existing = self.df_after.iloc[:n].copy()
+        self.after_existing.index = self.df_before.index
+        self.added_rows = self.df_after.iloc[n:]
+
+        # A column the rule created is absent from df_before -- reindex adds
+        # it as NaN so every populate method can read a uniform column set.
+        # _detect_changed_rows treats new columns specially; see there.
+        self.before_aligned = self.df_before.reindex(columns=self.df_after.columns)
+
+        if len(self.added_rows):
+            logger.info(f"[RULE TEST] Rule appended {len(self.added_rows)} new rows")
+
     def _detect_changed_rows(self):
-        """Detect which rows were modified by comparing before/after DataFrames."""
-        # Find common columns
-        common_cols = [c for c in self.df_before.columns if c in self.df_after.columns]
-        # Also check new columns added by CALCULATE
-        new_cols = [c for c in self.df_after.columns if c not in self.df_before.columns]
+        """Detect which existing rows were modified, comparing aligned frames.
 
-        # Compare common columns
-        changed = pd.Series(False, index=self.df_before.index)
-        for col in common_cols:
-            before_vals = self.df_before[col].fillna("").astype(str)
-            # df_after may have extra rows from ADD_PRODUCT, limit to original index
-            after_vals = self.df_after.loc[self.df_before.index, col].fillna("").astype(str)
-            changed = changed | (before_vals != after_vals)
+        Rows the rule *added* are not changes -- they have no before state --
+        and are tracked separately in self.added_rows.
 
-        # New columns with non-default values indicate changes
-        for col in new_cols:
-            if col in self.df_after.columns:
-                after_vals = self.df_after.loc[self.df_before.index, col]
+        A column the rule creates (CALCULATE/COPY_FIELD's target) is a
+        special case: rules.py seeds it for *every* row (e.g. CALCULATE's
+        `df[target] = 0.0`) before writing real results only into matched
+        rows, so an unmatched row's cell also differs from the reindexed
+        NaN even though the rule never touched that row. Pre-existing
+        columns don't have this seeding step, so a plain before/after
+        string diff is exact for them; a brand-new column instead needs the
+        "does it hold a real value" check.
+
+        ponytail: that check is a heuristic, not a proof, and it is wrong at
+        both ends. It *under*-reports a matched row whose CALCULATE result is
+        legitimately 0/0.0/NaN -- indistinguishable from the seed once apply()
+        has returned. It *over*-reports a brand-new Internal_Tags, which
+        _prepare_df_for_actions seeds with the truthy string "[]" for every
+        row. Both are pre-existing behaviour, and the second is latent in
+        practice: analysis.py initialises Internal_Tags on every real
+        analysis, so it always takes the exact pre-existing-column path.
+        Exact counts need rules.py to report which rows it wrote, which is
+        out of scope here -- the engine is correct, the dialog was wrong.
+        """
+        original_cols = set(self.df_before.columns)
+        changed = pd.Series(False, index=self.before_aligned.index)
+
+        for col in self.df_after.columns:
+            after_vals = self.after_existing[col]
+            if col in original_cols:
+                before_vals = self.before_aligned[col].fillna("").astype(str)
+                changed = changed | (before_vals != after_vals.fillna("").astype(str))
+            else:
                 has_value = after_vals.notna() & (after_vals != 0) & (after_vals != "") & (after_vals != 0.0)
                 changed = changed | has_value
 
@@ -264,28 +321,39 @@ class RuleTestDialog(QDialog):
 
         # Update summary label
         total_rows = len(self.test_df)
-        percentage = (self.matched_count / total_rows * 100) if total_rows > 0 else 0
+        # Percentage is of existing rows only -- added rows have no denominator
+        # to belong to, and counting them made this read 133.3%.
+        percentage = (self.changed_count / total_rows * 100) if total_rows > 0 else 0
         step_info = f"{len(steps)} step(s)" if len(steps) > 1 else "1 step"
 
         summary = f"Final Result ({step_info}, narrowing): "
         summary += f"<span style='color: {theme.accent_green}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
-        summary += f"({percentage:.1f}% of {total_rows} total rows)"
+        summary += f"({self.changed_count} of {total_rows} existing rows, {percentage:.1f}%)"
+        if len(self.added_rows):
+            summary += f" — {len(self.added_rows)} added by rule"
 
         self.match_summary_label.setText(summary)
 
     def _populate_preview_table(self):
         """Populate preview table with first 5 matched rows."""
         theme = get_theme_manager().get_current_theme()
-        if self.matches is None or self.matched_count == 0:
+        # This table shows *before* rows, so it is empty whenever no existing
+        # row matched -- even if the rule appended rows (an ADD_PRODUCT-only
+        # rule has matched_count > 0 but nothing to preview). Guard on the
+        # existing-row count, or that case renders a blank table.
+        if self.matches is None or self.changed_count == 0:
             self.preview_table.setRowCount(1)
             self.preview_table.setColumnCount(1)
-            no_match_item = QTableWidgetItem("No rows matched the conditions")
+            message = "No rows matched the conditions"
+            if self.added_rows is not None and len(self.added_rows):
+                message += f" — {len(self.added_rows)} rows added by the rule (see After Actions)"
+            no_match_item = QTableWidgetItem(message)
             no_match_item.setForeground(QColor(theme.text_secondary))
             self.preview_table.setItem(0, 0, no_match_item)
             return
 
         # Get matched rows (first 5)
-        matched_df = self.df_before[self.matches].head(5)
+        matched_df = self.before_aligned[self.matches].head(5)
 
         # Select relevant columns to display
         display_cols = self._get_display_columns(matched_df)
@@ -304,9 +372,9 @@ class RuleTestDialog(QDialog):
         self.preview_table.resizeColumnsToContents()
 
         # Show "and X more" if there are more matches
-        if self.matched_count > 5:
-            remaining = self.matched_count - 5
-            logger.info(f"[RULE TEST] Showing 5 of {self.matched_count} matched rows ({remaining} more)")
+        if self.changed_count > 5:
+            remaining = self.changed_count - 5
+            logger.info(f"[RULE TEST] Showing 5 of {self.changed_count} matched rows ({remaining} more)")
 
     def _populate_actions_list(self):
         """Populate actions list with actions from all steps."""
@@ -365,14 +433,14 @@ class RuleTestDialog(QDialog):
             self.after_table.setItem(0, 0, no_match_item)
             return
 
-        # Get matched rows before and after (first 5)
-        matched_before = self.df_before[self.matches].head(5)
-        matched_after = self.df_after[self.matches].head(5)
+        # Aligned frames: same columns, same index, same length.
+        matched_before = self.before_aligned[self.matches].head(5)
+        matched_after = self.after_existing[self.matches].head(5)
+        added = self.added_rows.head(5)
 
-        # Select relevant columns to display
-        display_cols = self._get_display_columns(matched_after)
+        display_cols = self._get_display_columns(self.after_existing)
 
-        self.after_table.setRowCount(len(matched_after))
+        self.after_table.setRowCount(len(matched_after) + len(added))
         self.after_table.setColumnCount(len(display_cols))
         self.after_table.setHorizontalHeaderLabels(display_cols)
 
@@ -386,12 +454,26 @@ class RuleTestDialog(QDialog):
                 item = QTableWidgetItem(str(value_after))
 
                 # Highlight changed cells
-                # ponytail: literal diff-highlight yellow, not worth a new
-                # ThemeTokens field for this one call site.
+                # ponytail: literal diff-highlight yellow/green, not worth two
+                # new ThemeTokens fields for this one call site. The tints are
+                # light in both themes, so pin a dark foreground too -- dark
+                # theme's text_primary is near-white and vanishes on them.
                 if value_before != value_after and not (pd.isna(value_before) and pd.isna(value_after)):
                     item.setBackground(QColor("#FFEB3B"))  # Yellow
+                    item.setForeground(QColor("#000000"))
                     item.setToolTip(f"Changed from: {value_before}")
 
+                self.after_table.setItem(row_idx, col_idx, item)
+
+        # Rows the rule created have no before state, so they are tinted whole
+        # rather than diffed cell by cell.
+        for offset, (_, row_added) in enumerate(added.iterrows()):
+            row_idx = len(matched_after) + offset
+            for col_idx, col_name in enumerate(display_cols):
+                item = QTableWidgetItem(str(row_added[col_name]))
+                item.setBackground(QColor("#C8E6C9"))  # Green
+                item.setForeground(QColor("#000000"))
+                item.setToolTip("Added by rule")
                 self.after_table.setItem(row_idx, col_idx, item)
 
         self.after_table.resizeColumnsToContents()
