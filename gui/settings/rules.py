@@ -183,6 +183,28 @@ class RulesPage(SettingsPage):
                 combo.blockSignals(False)
                 self._check_field_resolvable(cond_refs)
 
+    def _update_rule_summary(self, widget_refs):
+        """Rewrites a rule's header summary from its current widget state."""
+        level = widget_refs["level_combo"].currentText()
+        steps = widget_refs.get("steps", [])
+        conditions = sum(len(s["conditions"]) for s in steps)
+        actions = sum(len(s["actions"]) for s in steps)
+
+        def plural(n, word):
+            return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+        widget_refs["summary_label"].setText(
+            f"{level} · {plural(len(steps), 'step')} · "
+            f"{plural(conditions, 'condition')} · {plural(actions, 'action')}"
+        )
+
+    def _update_rule_summary_for_step(self, step_refs):
+        """Finds the rule a step belongs to and refreshes its summary."""
+        for rule_w in self.rule_widgets:
+            if step_refs in rule_w.get("steps", []):
+                self._update_rule_summary(rule_w)
+                return
+
     def get_available_rule_fields(self, level="article"):
         """Fields offered for a condition on a rule of the given level.
 
@@ -269,11 +291,19 @@ class RulesPage(SettingsPage):
                 blank rule.
         """
         theme = get_theme_manager().get_current_theme()
+        config_was_none = not isinstance(config, dict)
         if not isinstance(config, dict):
             config = {"name": "New Rule", "level": "article", "match": "ALL", "conditions": [], "actions": []}
         rule_box = QGroupBox()
         rule_layout = QVBoxLayout(rule_box)
         header_layout = QHBoxLayout()
+
+        # Disclosure toggle
+        toggle_btn = QPushButton("▶")
+        set_button_role(toggle_btn, "secondary")
+        toggle_btn.setMaximumWidth(30)
+        toggle_btn.setToolTip("Show or hide this rule's conditions and actions")
+        header_layout.addWidget(toggle_btn)
 
         # Priority label (e.g., "Article #1", "Order #2")
         priority_label = QLabel("")
@@ -321,6 +351,11 @@ class RulesPage(SettingsPage):
         header_layout.addWidget(QLabel("Rule Name:"))
         name_edit = QLineEdit(config.get("name", ""))
         header_layout.addWidget(name_edit)
+
+        summary_label = QLabel("")
+        summary_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
+        header_layout.addWidget(summary_label)
+
         delete_rule_btn = QPushButton("Delete Rule")
         set_button_role(delete_rule_btn, "secondary")
         # The per-widget background wins over the role on purpose: destructive
@@ -357,11 +392,8 @@ class RulesPage(SettingsPage):
         level_layout.addWidget(level_combo)
         level_layout.addStretch()
 
-        rule_layout.addLayout(level_layout)
-
         # Steps container
         steps_container = QVBoxLayout()
-        rule_layout.addLayout(steps_container)
 
         # "Add Step" button
         add_step_btn = QPushButton("+ Add Step")
@@ -373,7 +405,14 @@ class RulesPage(SettingsPage):
             "match, the rule stops and later steps do not run."
         )
         add_step_btn.setStyleSheet(f"color: {theme.accent_blue}; font-weight: bold;")
-        rule_layout.addWidget(add_step_btn, 0, Qt.AlignLeft)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.addLayout(level_layout)
+        body_layout.addLayout(steps_container)
+        body_layout.addWidget(add_step_btn, 0, Qt.AlignLeft)
+        rule_layout.addWidget(body)
 
         self.rules_layout.addWidget(rule_box)
         widget_refs = {
@@ -386,6 +425,8 @@ class RulesPage(SettingsPage):
             "level_combo": level_combo,
             "steps_container": steps_container,
             "steps": [],
+            "body": body,
+            "summary_label": summary_label,
         }
         self.rule_widgets.append(widget_refs)
         delete_rule_btn.clicked.connect(lambda: self._delete_widget_from_list(widget_refs, self.rule_widgets))
@@ -395,8 +436,16 @@ class RulesPage(SettingsPage):
         add_step_btn.clicked.connect(lambda: self._add_step_widget(widget_refs))
         level_combo.currentTextChanged.connect(
             lambda: [self._repopulate_field_combos(widget_refs),
-                     self._update_priority_labels()]
+                     self._update_priority_labels(),
+                     self._update_rule_summary(widget_refs)]
         )
+
+        def _toggle():
+            visible = not body.isVisible()
+            body.setVisible(visible)
+            toggle_btn.setText("▼" if visible else "▶")
+
+        toggle_btn.clicked.connect(_toggle)
 
         # Update test button state based on data availability
         self._update_test_button_state(widget_refs)
@@ -414,6 +463,13 @@ class RulesPage(SettingsPage):
                 "actions": config.get("actions", []),
             }
             self._add_step_widget(widget_refs, single_step)
+
+        # A rule loaded from config starts collapsed; a rule the user just
+        # added starts expanded, since they are about to edit it.
+        expanded = config_was_none
+        body.setVisible(expanded)
+        toggle_btn.setText("▼" if expanded else "▶")
+        self._update_rule_summary(widget_refs)
 
     def _add_step_widget(self, rule_widget_refs, step_config=None):
         """Adds a step (IF conditions + THEN actions) to a rule.
@@ -516,6 +572,8 @@ class RulesPage(SettingsPage):
         for act_config in step_config.get("actions", []):
             self.add_action_row(step_refs, act_config)
 
+        self._update_rule_summary(rule_widget_refs)
+
     def _delete_step(self, rule_widget_refs, step_refs):
         """Delete a step from a rule (never deletes step 1)."""
         steps = rule_widget_refs["steps"]
@@ -540,6 +598,8 @@ class RulesPage(SettingsPage):
                 s["separator_label"].setParent(None)
                 s["separator_label"].deleteLater()
                 s["separator_label"] = None
+
+        self._update_rule_summary(rule_widget_refs)
 
     def add_condition_row(self, rule_widget_refs, config=None):
         """Adds a new row of widgets for a single condition within a rule.
@@ -628,8 +688,11 @@ class RulesPage(SettingsPage):
         rule_widget_refs["conditions_layout"].addWidget(row_widget)
         rule_widget_refs["conditions"].append(condition_refs)
         delete_btn.clicked.connect(
-            lambda: self._delete_row_from_list(row_widget, rule_widget_refs["conditions"], condition_refs)
+            lambda: [self._delete_row_from_list(row_widget, rule_widget_refs["conditions"], condition_refs),
+                     self._update_rule_summary_for_step(rule_widget_refs)]
         )
+
+        self._update_rule_summary_for_step(rule_widget_refs)
 
     def _on_rule_condition_changed(self, condition_refs, initial_value=None):
         """Dynamically changes the rule's value widget based on other selections.
@@ -1110,8 +1173,11 @@ class RulesPage(SettingsPage):
         rule_widget_refs["actions"].append(action_refs)
 
         delete_btn.clicked.connect(
-            lambda: self._delete_row_from_list(row_widget, rule_widget_refs["actions"], action_refs)
+            lambda: [self._delete_row_from_list(row_widget, rule_widget_refs["actions"], action_refs),
+                     self._update_rule_summary_for_step(rule_widget_refs)]
         )
+
+        self._update_rule_summary_for_step(rule_widget_refs)
 
     def _on_action_type_changed(self, action_refs, initial_config=None):
         """Dynamically updates parameter widgets based on action type."""

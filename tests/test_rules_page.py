@@ -94,3 +94,42 @@ class TestUnresolvableFieldIsFlagged:
         cond_refs = page.rule_widgets[0]["steps"][0]["conditions"][0]
         assert page._check_field_resolvable(cond_refs) is True
         assert cond_refs["field"].styleSheet() == ""
+
+
+class TestCollapsibleRuleCards:
+    def _rule(self, name="r"):
+        return {
+            "name": name, "level": "article",
+            "steps": [{
+                "conditions": [{"field": "SKU", "operator": "equals", "value": "x"}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+
+    def test_loaded_rules_start_collapsed(self, qtbot, analysis_df):
+        page = RulesPage([self._rule()], analysis_df)
+        qtbot.addWidget(page)
+        assert page.rule_widgets[0]["body"].isVisibleTo(page) is False
+
+    def test_added_rule_starts_expanded(self, qtbot, analysis_df):
+        page = RulesPage([], analysis_df)
+        qtbot.addWidget(page)
+        page.add_rule_widget()
+        assert page.rule_widgets[0]["body"].isVisibleTo(page) is True
+
+    def test_summary_reports_counts(self, qtbot, analysis_df):
+        page = RulesPage([self._rule()], analysis_df)
+        qtbot.addWidget(page)
+        text = page.rule_widgets[0]["summary_label"].text()
+        assert "article" in text
+        assert "1 step" in text
+        assert "1 condition" in text
+        assert "1 action" in text
+
+    def test_collect_is_unaffected_by_collapse_state(self, qtbot, analysis_df):
+        page = RulesPage([self._rule()], analysis_df)
+        qtbot.addWidget(page)
+        collapsed = page.collect()
+        page.rule_widgets[0]["body"].setVisible(True)
+        assert page.collect() == collapsed
