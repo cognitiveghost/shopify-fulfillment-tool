@@ -129,6 +129,23 @@ changes nothing the user can see and nothing the engine does — `apply()`
 partitions by level before sorting by priority, so priorities only ever compare
 within a level. The button appears broken because, for that pairing, it is.
 
+### F9 — Three copies of the order-level field list, one of them dead
+
+The names of the order-level fields exist in three places:
+
+1. `RuleEngine.ORDER_LEVEL_FIELDS` (rules.py:636) — the authority; the engine
+   dispatches on these keys
+2. `get_available_rule_fields()` (gui/settings/rules.py:166) — a hardcoded list
+   that feeds the editor's dropdowns
+3. `gui/settings/fields.py:31` — `ORDER_LEVEL_FIELDS` and the `CONDITION_FIELDS`
+   built from it
+
+Copy 3 is **dead**: nothing imports either name (`gui/settings/rules.py` takes only
+`ACTION_TYPES` and `CONDITION_OPERATORS` from that module). It has also drifted —
+it lists `Has_SKU`, which the engine has never supported, so anything reviving it
+would offer users a field that cannot match. Copy 2 is live but must be kept in
+step with copy 1 by hand.
+
 ## Decisions
 
 Two decisions were put to the user before designing; both were answered.
@@ -242,9 +259,12 @@ Enablement follows the same rule (first/last *of its level*). This keeps the
 existing flat list; splitting the page into article and order sections is the
 larger alternative and is deliberately not done here.
 
-**2.5 Level-aware field lists (closes F2).**
+**2.5 Level-aware field lists (closes F2 and F9).**
 `get_available_rule_fields()` takes the rule's level and omits the order-level
-block for article rules. `level_combo.currentTextChanged` repopulates the field
+block for article rules. Its hardcoded order-level names are replaced by
+`RuleEngine.ORDER_LEVEL_FIELDS.keys()` so the editor cannot drift from what the
+engine dispatches on, and the dead `ORDER_LEVEL_FIELDS`/`CONDITION_FIELDS` pair in
+`gui/settings/fields.py` is deleted. `level_combo.currentTextChanged` repopulates the field
 combos of that rule's conditions. A previously-saved field that is no longer
 offered is preserved as an extra combo item and marked invalid, reusing the
 existing "field not found in combo box — add it to preserve saved value" path at
