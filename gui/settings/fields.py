@@ -26,19 +26,6 @@ FILTERABLE_COLUMNS: list[str] = [
 
 FILTER_OPERATORS: list[str] = ["==", "!=", "in", "not in", "contains"]
 
-# Order-level fields are grouped first, with the separator rows the combo
-# boxes render as non-selectable headers.
-ORDER_LEVEL_FIELDS: list[str] = [
-    "--- ORDER-LEVEL FIELDS ---",
-    "item_count",
-    "total_quantity",
-    "has_sku",
-    "Has_SKU",
-    "--- ARTICLE-LEVEL FIELDS ---",
-]
-
-CONDITION_FIELDS: list[str] = ORDER_LEVEL_FIELDS + FILTERABLE_COLUMNS
-
 CONDITION_OPERATORS: list[str] = [
     "equals",
     "does not equal",

@@ -67,9 +67,11 @@ class TestOperatorsCorrectBehavior:
         out = RuleEngine(any_rule).apply(df.copy())
         assert out["Status_Note"].tolist() == ["MATCH", "MATCH", ""]
 
-    def test_unrecognized_operator_condition_is_skipped_not_fatal(self):
-        # Per _get_matching_rows: field/operator not found -> condition skipped,
-        # remaining conditions still apply (documented current behavior).
+    def test_unrecognized_operator_condition_fails_the_rule_closed(self):
+        # Was documenting the widening bug: a bad condition used to be dropped
+        # from the ALL-match, letting the rule fire on the remaining condition
+        # alone. It now fails closed instead -- see
+        # TestUnresolvableConditionsFailClosed.
         df = _df({"A": [1, 2]})
         rules = [_rule(
             [{"field": "A", "operator": "not_a_real_operator", "value": 1},
@@ -77,7 +79,7 @@ class TestOperatorsCorrectBehavior:
             [{"type": "ADD_TAG", "value": "X"}], match="ALL",
         )]
         out = RuleEngine(rules).apply(df.copy())
-        assert out["Status_Note"].tolist() == ["X", ""]
+        assert out["Status_Note"].tolist() == ["", ""]
 
 
 class TestRulePriorityAndAccumulation:
@@ -191,3 +193,138 @@ class TestConfirmedBugs:
         )]
         out = RuleEngine(rules).apply(df.copy())  # currently raises KeyError
         assert "A" in out.loc[0, "Status_Note"]
+
+
+class TestUnresolvableConditionsFailClosed:
+    """An unresolvable condition evaluates to False, it is not dropped.
+
+    Before this change _get_matching_rows skipped conditions it could not
+    resolve, so an ALL-match rule fired on its surviving conditions alone and
+    tagged more rows than the rule was written to tag.
+    """
+
+    def test_all_match_with_unknown_field_does_not_fire(self):
+        df = _df({"Order_Type": ["Single", "Single", "Multi"]})
+        rules = [_rule(
+            [{"field": "Order_Type", "operator": "equals", "value": "Single"},
+             {"field": "item_count", "operator": "is greater than", "value": 3}],
+            [{"type": "ADD_TAG", "value": "NOPE"}],
+            match="ALL",
+        )]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["", "", ""]
+
+    def test_any_match_with_unknown_field_still_fires_on_valid_condition(self):
+        df = _df({"Order_Type": ["Single", "Multi"]})
+        rules = [_rule(
+            [{"field": "Order_Type", "operator": "equals", "value": "Single"},
+             {"field": "no_such_column", "operator": "equals", "value": "x"}],
+            [{"type": "ADD_TAG", "value": "YES"}],
+            match="ANY",
+        )]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["YES", ""]
+
+    def test_unknown_operator_fails_closed(self):
+        df = _df({"Order_Type": ["Single", "Multi"]})
+        rules = [_rule(
+            [{"field": "Order_Type", "operator": "sounds like", "value": "Single"}],
+            [{"type": "ADD_TAG", "value": "NOPE"}],
+        )]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["", ""]
+
+    def test_separator_field_fails_closed(self):
+        df = _df({"Order_Type": ["Single", "Multi"]})
+        rules = [_rule(
+            [{"field": "Order_Type", "operator": "equals", "value": "Single"},
+             {"field": "--- ORDER-LEVEL FIELDS ---", "operator": "equals", "value": ""}],
+            [{"type": "ADD_TAG", "value": "NOPE"}],
+            match="ALL",
+        )]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["", ""]
+
+    def test_order_level_rule_agrees_on_unknown_field(self):
+        df = _df({
+            "Order_Number": ["A", "A"],
+            "Quantity": [1, 2],
+        })
+        rules = [_rule(
+            [{"field": "item_count", "operator": "equals", "value": 2},
+             {"field": "no_such_column", "operator": "equals", "value": "x"}],
+            [{"type": "ADD_TAG", "value": "NOPE"}],
+            match="ALL", level="order",
+        )]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["", ""]
+
+
+class TestOrderRuleLoopRewrite:
+    """Order-level rules: same results, without O(rows) slicing per step."""
+
+    def test_multi_order_multi_rule_output_unchanged(self):
+        df = _df({
+            "Order_Number": ["A", "A", "B", "C", "C", "C"],
+            "Quantity": [1, 2, 5, 1, 1, 1],
+            "SKU": ["x", "y", "z", "x", "x", "y"],
+        })
+        rules = [
+            _rule([{"field": "item_count", "operator": "is greater than", "value": 2}],
+                  [{"type": "ADD_TAG", "value": "BIG"}],
+                  level="order", priority=1, name="big"),
+            _rule([{"field": "total_quantity", "operator": "is greater than or equal", "value": 5}],
+                  [{"type": "ADD_TAG", "value": "HEAVY"}],
+                  level="order", priority=2, name="heavy"),
+        ]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == [
+            "", "", "HEAVY", "BIG", "BIG", "BIG",
+        ]
+
+    def test_later_step_sees_earlier_step_action_writes(self):
+        """Guards the deliberate re-slice: order_df is re-taken every step."""
+        df = _df({
+            "Order_Number": ["A", "A"],
+            "Quantity": [1, 1],
+        })
+        rules = [{
+            "name": "two-step", "level": "order", "priority": 1,
+            "steps": [
+                {"conditions": [{"field": "item_count", "operator": "equals", "value": 2}],
+                 "match": "ALL",
+                 "actions": [{"type": "ADD_TAG", "value": "FIRST"}]},
+                {"conditions": [{"field": "Status_Note", "operator": "contains", "value": "FIRST"}],
+                 "match": "ALL",
+                 "actions": [{"type": "ADD_TAG", "value": "SECOND"}]},
+            ],
+        }]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["FIRST, SECOND", "FIRST, SECOND"]
+
+    def test_first_row_action_targets_one_row_with_duplicate_index_labels(self):
+        df = pd.DataFrame(
+            {"Order_Number": ["A", "A"], "Quantity": [1, 1]},
+            index=[0, 0],
+        )
+        rules = [_rule([{"field": "item_count", "operator": "equals", "value": 2}],
+                       [{"type": "ADD_ORDER_TAG", "value": "ONCE"}],
+                       level="order")]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["ONCE", "ONCE"]
+
+    def test_order_step_gates_and_stops(self):
+        df = _df({"Order_Number": ["A", "A"], "Quantity": [1, 1]})
+        rules = [{
+            "name": "gate", "level": "order", "priority": 1,
+            "steps": [
+                {"conditions": [{"field": "item_count", "operator": "equals", "value": 99}],
+                 "match": "ALL",
+                 "actions": [{"type": "ADD_TAG", "value": "NO"}]},
+                {"conditions": [{"field": "item_count", "operator": "equals", "value": 2}],
+                 "match": "ALL",
+                 "actions": [{"type": "ADD_TAG", "value": "ALSO_NO"}]},
+            ],
+        }]
+        out = RuleEngine(rules).apply(df.copy())
+        assert out["Status_Note"].tolist() == ["", ""]

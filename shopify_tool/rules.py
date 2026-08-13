@@ -748,6 +748,9 @@ class RuleEngine:
         and then executes the rule's actions on those matching rows.
 
         Supports both article-level (row-by-row) and order-level (entire order) rules.
+        Multi-step rules behave differently by level: article-level steps narrow
+        the matched rows progressively, while order-level steps act as sequential
+        gates on the whole order.
 
         The DataFrame is modified in place.
 
@@ -769,7 +772,7 @@ class RuleEngine:
         # Create columns for actions if they don't exist
         self._prepare_df_for_actions(df)
 
-        # Збирати нові рядки з ADD_PRODUCT actions
+        # Rows created by ADD_PRODUCT actions, appended after all rules run.
         all_new_rows = []
 
         # Separate rules by level
@@ -819,61 +822,72 @@ class RuleEngine:
 
         # Apply order-level rules with multi-step support
         if order_rules and "Order_Number" in df.columns:
-            for order_number in df["Order_Number"].unique():
-                order_mask = df["Order_Number"] == order_number
-                df[order_mask]
+            # Group once. .indices gives positional arrays, so every slice and
+            # mask below is positional -- index labels are not guaranteed unique
+            # (apply() itself concatenates with ignore_index at the end).
+            positions_by_order = df.groupby("Order_Number", sort=False).indices
 
+            # Audit trail, hoisted above the order loop -- one line per rule,
+            # not one per rule per order.
+            for idx, rule in enumerate(order_rules):
+                logger.info(
+                    f"[RULE ENGINE] Applying order rule #{idx+1}: "
+                    f"{rule.get('name', 'Unnamed')} "
+                    f"(Priority: {rule.get('priority', 1000)}, "
+                    f"Steps: {len(rule.get('steps', []))})"
+                )
+
+            for order_number, positions in positions_by_order.items():
                 for rule in order_rules:
                     rule_name = rule.get("name", "Unnamed")
-                    priority = rule.get("priority", 1000)
                     steps = rule.get("steps", [])
-                    logger.info(f"[RULE ENGINE] Applying order rule: {rule_name} (Priority: {priority}, Steps: {len(steps)})")
-
-                    # Track which rows in order are still eligible (for narrowing)
-                    order_eligible_mask = order_mask.copy()
 
                     for step_idx, step in enumerate(steps):
-                        # Evaluate conditions on eligible order rows
-                        eligible_df = df[order_eligible_mask]
-                        if eligible_df.empty:
-                            break
+                        # Re-taken every step on purpose: a later step's
+                        # conditions must see what an earlier step's actions
+                        # wrote. O(len(order)), not O(len(df)).
+                        order_df = df.iloc[positions]
 
-                        matches = self._evaluate_order_conditions(
-                            eligible_df,
+                        matched = self._evaluate_order_conditions(
+                            order_df,
                             step.get("conditions", []),
-                            step.get("match", "ALL")
+                            step.get("match", "ALL"),
                         )
-
-                        if not matches:
-                            logger.info(f"[RULE ENGINE] Order {order_number} step {step_idx+1}: No match, stopping")
+                        if not matched:
+                            logger.info(
+                                f"[RULE ENGINE] Order {order_number} rule "
+                                f"'{rule_name}' step {step_idx+1}: no match, stopping"
+                            )
                             break
 
-                        # Separate actions by scope
                         actions = step.get("actions", [])
-                        apply_to_all_actions = []
-                        apply_to_first_actions = []
+                        apply_to_all = [
+                            a for a in actions
+                            if a.get("type", "").upper() in ("ADD_TAG", "ADD_ORDER_TAG")
+                        ]
+                        apply_to_first = [
+                            a for a in actions
+                            if a.get("type", "").upper() not in ("ADD_TAG", "ADD_ORDER_TAG")
+                        ]
 
-                        for action in actions:
-                            action_type = action.get("type", "").upper()
-                            if action_type in ("ADD_TAG", "ADD_ORDER_TAG"):
-                                apply_to_all_actions.append(action)
-                            else:
-                                apply_to_first_actions.append(action)
+                        # Masks are built only once a step has matched and has
+                        # actions, so the O(len(df)) allocation stays off the
+                        # hot path.
+                        if apply_to_all:
+                            mask = pd.Series(False, index=df.index)
+                            mask.iloc[positions] = True
+                            all_new_rows.extend(
+                                self._execute_actions(df, mask, apply_to_all)
+                            )
 
-                        # Apply to all rows of order
-                        if apply_to_all_actions:
-                            new_rows = self._execute_actions(df, order_eligible_mask, apply_to_all_actions)
-                            all_new_rows.extend(new_rows)
+                        if apply_to_first:
+                            mask = pd.Series(False, index=df.index)
+                            mask.iloc[positions[0]] = True
+                            all_new_rows.extend(
+                                self._execute_actions(df, mask, apply_to_first)
+                            )
 
-                        # Apply to first row only
-                        if apply_to_first_actions:
-                            first_row_index = eligible_df.index[0]
-                            first_row_mask = pd.Series(False, index=df.index)
-                            first_row_mask[first_row_index] = True
-                            new_rows = self._execute_actions(df, first_row_mask, apply_to_first_actions)
-                            all_new_rows.extend(new_rows)
-
-        # Додати всі нові рядки з ADD_PRODUCT actions
+        # Append the rows ADD_PRODUCT actions created.
         if all_new_rows:
             new_df = pd.DataFrame(all_new_rows)
             df = pd.concat([df, new_df], ignore_index=True)
@@ -915,6 +929,45 @@ class RuleEngine:
         if "Internal_Tags" in needed_columns and "Internal_Tags" not in df.columns:
             df["Internal_Tags"] = "[]"
 
+    def _resolve_condition(self, cond, columns, allow_order_fields):
+        """Resolves a condition to (field, operator, value, error).
+
+        A condition the engine cannot evaluate is an error, not something to
+        skip. Skipping one drops it out of an ALL-match, which makes the rule
+        fire on its remaining conditions and match more rows than written.
+
+        Args:
+            cond (dict): The condition, with 'field', 'operator' and 'value'.
+            columns: The DataFrame columns available to this condition.
+            allow_order_fields (bool): True on the order-level path, where
+                ORDER_LEVEL_FIELDS names are computed rather than looked up.
+
+        Returns:
+            tuple: (field, operator, value, error). error is None when the
+                condition is usable; otherwise it explains why not and the
+                other three values must not be used.
+        """
+        field = cond.get("field")
+        operator = cond.get("operator")
+        value = cond.get("value")
+
+        if not field:
+            return None, None, None, "condition has no field"
+        if field.startswith("---"):
+            return None, None, None, f"'{field}' is a dropdown separator, not a field"
+        if not operator:
+            return None, None, None, f"condition on '{field}' has no operator"
+        if operator not in OPERATOR_MAP:
+            return None, None, None, f"unknown operator '{operator}'"
+
+        if allow_order_fields and field in self.ORDER_LEVEL_FIELDS:
+            return field, operator, value, None
+        if field not in columns:
+            hint = "" if allow_order_fields else " (order-level fields need level: order)"
+            return None, None, None, f"field '{field}' is not a column{hint}"
+
+        return field, operator, value, None
+
     def _get_matching_rows(self, df, rule):
         """Evaluates a rule's conditions and finds all matching rows.
 
@@ -944,44 +997,23 @@ class RuleEngine:
         # Get a boolean Series for each individual condition
         condition_results = []
         for cond in conditions:
-            field = cond.get("field")
-            operator = cond.get("operator")
-            value = cond.get("value")
-
-            # Skip separator fields (from UI)
-            if field and field.startswith("---"):
-                logger.info(f"[RULE ENGINE] Skipping separator field: {field}")
+            field, operator, value, error = self._resolve_condition(
+                cond, df.columns, allow_order_fields=False
+            )
+            if error:
+                logger.warning(
+                    f"[RULE ENGINE] Condition cannot be evaluated and is treated "
+                    f"as no-match: {error}"
+                )
+                condition_results.append(pd.Series(False, index=df.index))
                 continue
 
-            # Check conditions
-            if not field:
-                logger.warning(f"[RULE ENGINE] Condition missing field: {cond}")
-                continue
-            if not operator:
-                logger.warning(f"[RULE ENGINE] Condition missing operator: {cond}")
-                continue
-            if field not in df.columns:
-                logger.warning(f"[RULE ENGINE] Field '{field}' not in DataFrame columns: {list(df.columns)}")
-                continue
-            if operator not in OPERATOR_MAP:
-                logger.warning(f"[RULE ENGINE] Operator '{operator}' not in OPERATOR_MAP: {list(OPERATOR_MAP.keys())}")
-                continue
-
-            op_func_name = OPERATOR_MAP[operator]
-            op_func = globals()[op_func_name]
-
-            logger.info(f"[RULE ENGINE] Evaluating condition: {field} {operator} {value}")
-
-            # Log data types and sample values
-            logger.info(f"[RULE ENGINE] Field '{field}' dtype: {df[field].dtype}")
-            logger.info(f"[RULE ENGINE] Rule value type: {type(value).__name__}, value: {value!r}")
-            unique_vals = df[field].dropna().unique()[:5]
-            logger.info(f"[RULE ENGINE] Sample values in '{field}': {list(unique_vals)}")
-
+            op_func = globals()[OPERATOR_MAP[operator]]
+            logger.debug(
+                f"[RULE ENGINE] {field} {operator} {value!r} "
+                f"(dtype {df[field].dtype})"
+            )
             result = op_func(df[field], value)
-            matches_count = result.sum()
-            logger.info(f"[RULE ENGINE] Condition matched {matches_count} rows")
-
             condition_results.append(result)
 
         if not condition_results:
@@ -1015,7 +1047,7 @@ class RuleEngine:
         import logging
         logger = logging.getLogger(__name__)
 
-        new_rows = []  # Збирати нові рядки тут
+        new_rows = []  # Rows to append, collected here.
 
         for action in actions:
             action_type = action.get("type", "").upper()
@@ -1255,18 +1287,21 @@ class RuleEngine:
         Returns:
             bool: True if conditions met
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         results = []
 
         for condition in conditions:
-            field = condition.get("field")
-            operator = condition.get("operator")
-            value = condition.get("value")
-
-            if not all([field, operator]):
-                continue
-
-            # Skip separator fields (from UI)
-            if field and field.startswith("---"):
+            field, operator, value, error = self._resolve_condition(
+                condition, order_df.columns, allow_order_fields=True
+            )
+            if error:
+                logger.warning(
+                    f"[RULE ENGINE] Order condition cannot be evaluated and is "
+                    f"treated as no-match: {error}"
+                )
+                results.append(False)
                 continue
 
             # Check if this is an order-level field
@@ -1282,21 +1317,15 @@ class RuleEngine:
                 else:
                     # For numeric fields: wrap in Series, use global operator
                     field_value = calc_method(order_df, None)
-                    if operator not in OPERATOR_MAP:
-                        result = False
-                    else:
-                        scalar_series = pd.Series([field_value])
-                        op_func = globals()[OPERATOR_MAP[operator]]
-                        result = bool(op_func(scalar_series, value).iloc[0])
+                    scalar_series = pd.Series([field_value])
+                    op_func = globals()[OPERATOR_MAP[operator]]
+                    result = bool(op_func(scalar_series, value).iloc[0])
 
             else:
                 # Regular article-level field - check if ANY row matches
-                if field not in order_df.columns or operator not in OPERATOR_MAP:
-                    result = False
-                else:
-                    op_func = globals()[OPERATOR_MAP[operator]]
-                    series_result = op_func(order_df[field], value)
-                    result = series_result.any()  # At least one row matches
+                op_func = globals()[OPERATOR_MAP[operator]]
+                series_result = op_func(order_df[field], value)
+                result = series_result.any()  # At least one row matches
 
             results.append(result)
 

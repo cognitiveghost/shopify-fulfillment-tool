@@ -23,6 +23,7 @@ from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.core import get_unique_column_values
+from shopify_tool.rules import RuleEngine
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,13 @@ class RulesPage(SettingsPage):
         set_button_role(add_rule_btn, "secondary")
         add_rule_btn.clicked.connect(lambda: [self.add_rule_widget(), self._update_priority_labels(), self._update_rules_count_label()])
         header_row.addWidget(add_rule_btn)
+
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filter rules by name…")
+        self.filter_edit.setClearButtonEnabled(True)
+        self.filter_edit.textChanged.connect(self._filter_rules)
+        header_row.addWidget(self.filter_edit)
+
         header_row.addStretch()
         self.rules_count_label = QLabel("")
         theme = get_theme_manager().get_current_theme()
@@ -81,51 +89,42 @@ class RulesPage(SettingsPage):
         row_widget.deleteLater()
         ref_list.remove(ref_dict)
 
-    def _move_rule_up(self, widget_refs):
-        """Moves a rule up in the list (higher priority)."""
-        idx = self.rule_widgets.index(widget_refs)
-        if idx == 0:
-            return  # Already at top
+    def _neighbour_of_same_level(self, idx, direction):
+        """Index of the nearest rule sharing this one's level, or None."""
+        level = self.rule_widgets[idx]["level_combo"].currentText()
+        candidate = idx + direction
+        while 0 <= candidate < len(self.rule_widgets):
+            if self.rule_widgets[candidate]["level_combo"].currentText() == level:
+                return candidate
+            candidate += direction
+        return None
 
-        # Swap in list
-        self.rule_widgets[idx], self.rule_widgets[idx - 1] = \
-            self.rule_widgets[idx - 1], self.rule_widgets[idx]
+    def _swap_rules(self, idx_a, idx_b):
+        """Swaps two rules in both the refs list and the layout."""
+        widgets = self.rule_widgets
+        widgets[idx_a], widgets[idx_b] = widgets[idx_b], widgets[idx_a]
 
-        # Swap in UI layout
         layout = self.rules_layout
-        widget = widget_refs["group_box"]
-        prev_widget = self.rule_widgets[idx]["group_box"]
+        for position in sorted((idx_a, idx_b)):
+            box = widgets[position]["group_box"]
+            layout.removeWidget(box)
+            layout.insertWidget(position, box)
 
-        layout.removeWidget(widget)
-        layout.removeWidget(prev_widget)
-        layout.insertWidget(idx - 1, widget)
-        layout.insertWidget(idx, prev_widget)
-
-        # Update priority labels
         self._update_priority_labels()
+
+    def _move_rule_up(self, widget_refs):
+        """Moves a rule above the nearest rule of the same level."""
+        idx = self.rule_widgets.index(widget_refs)
+        target = self._neighbour_of_same_level(idx, -1)
+        if target is not None:
+            self._swap_rules(idx, target)
 
     def _move_rule_down(self, widget_refs):
-        """Moves a rule down in the list (lower priority)."""
+        """Moves a rule below the nearest rule of the same level."""
         idx = self.rule_widgets.index(widget_refs)
-        if idx >= len(self.rule_widgets) - 1:
-            return  # Already at bottom
-
-        # Swap in list
-        self.rule_widgets[idx], self.rule_widgets[idx + 1] = \
-            self.rule_widgets[idx + 1], self.rule_widgets[idx]
-
-        # Swap in UI layout
-        layout = self.rules_layout
-        widget = widget_refs["group_box"]
-        next_widget = self.rule_widgets[idx]["group_box"]
-
-        layout.removeWidget(widget)
-        layout.removeWidget(next_widget)
-        layout.insertWidget(idx, next_widget)
-        layout.insertWidget(idx + 1, widget)
-
-        # Update priority labels
-        self._update_priority_labels()
+        target = self._neighbour_of_same_level(idx, +1)
+        if target is not None:
+            self._swap_rules(idx, target)
 
     def _update_priority_labels(self):
         """Updates priority labels and button states for all rules.
@@ -147,34 +146,88 @@ class RulesPage(SettingsPage):
                 rule_w["priority_label"].setText(f"Order #{order_count}")
                 order_count += 1
 
-            # Disable up button for first rule
-            rule_w["up_btn"].setEnabled(idx > 0)
+            rule_w["up_btn"].setEnabled(
+                self._neighbour_of_same_level(idx, -1) is not None
+            )
+            rule_w["down_btn"].setEnabled(
+                self._neighbour_of_same_level(idx, +1) is not None
+            )
 
-            # Disable down button for last rule
-            rule_w["down_btn"].setEnabled(idx < len(self.rule_widgets) - 1)
+    def _filter_rules(self, text):
+        """Hides rule cards whose name does not contain `text`."""
+        needle = (text or "").strip().lower()
+        for rule_w in self.rule_widgets:
+            name = rule_w["name_edit"].text().lower()
+            rule_w["group_box"].setVisible(not needle or needle in name)
 
-    def get_available_rule_fields(self):
-        """Get all available fields for rules from DataFrame + common fields.
+    def _repopulate_field_combos(self, rule_widget_refs):
+        """Rebuilds condition field combos after the rule's level changed.
 
-        Returns a list of field names including:
-        - Order-level fields (shown first)
-        - Common article-level fields
-        - All other DataFrame columns (dynamically discovered)
-        - Separators (disabled items starting with "---")
+        A field the new level does not offer is kept as an extra item so a
+        saved condition is never silently reset; Task 6's validation marks it.
         """
-        # Start with order-level fields (these are ALWAYS available)
-        order_level_fields = [
-            "--- ORDER-LEVEL FIELDS ---",
-            "item_count",
-            "total_quantity",
-            "unique_sku_count",
-            "max_quantity",
-            "has_sku",
-            "has_product",
-            "order_volumetric_weight",
-            "all_no_packaging",
-            "order_min_box",
-        ]
+        level = rule_widget_refs["level_combo"].currentText()
+        available_fields = self.get_available_rule_fields(level=level)
+
+        for step_refs in rule_widget_refs.get("steps", []):
+            for cond_refs in step_refs["conditions"]:
+                combo = cond_refs["field"]
+                previous = combo.currentText()
+
+                combo.blockSignals(True)
+                combo.clear()
+                for field in available_fields:
+                    combo.addItem(field)
+                    if field.startswith("---"):
+                        combo.model().item(combo.count() - 1).setEnabled(False)
+
+                index = combo.findText(previous)
+                if index < 0:
+                    combo.addItem(previous)
+                    index = combo.count() - 1
+                combo.setCurrentIndex(index)
+                combo.blockSignals(False)
+                # Re-run the value validation first so a field that just became
+                # resolvable again does not keep the old "never match" message,
+                # then re-apply the resolvability mark on top of it.
+                self._perform_validation(cond_refs)
+                self._check_field_resolvable(cond_refs)
+
+    def _update_rule_summary(self, widget_refs):
+        """Rewrites a rule's header summary from its current widget state."""
+        level = widget_refs["level_combo"].currentText()
+        steps = widget_refs.get("steps", [])
+        conditions = sum(len(s["conditions"]) for s in steps)
+        actions = sum(len(s["actions"]) for s in steps)
+
+        def plural(n, word):
+            return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+        widget_refs["summary_label"].setText(
+            f"{level} · {plural(len(steps), 'step')} · "
+            f"{plural(conditions, 'condition')} · {plural(actions, 'action')}"
+        )
+
+    def _update_rule_summary_for_step(self, step_refs):
+        """Finds the rule a step belongs to and refreshes its summary."""
+        for rule_w in self.rule_widgets:
+            if step_refs in rule_w.get("steps", []):
+                self._update_rule_summary(rule_w)
+                return
+
+    def get_available_rule_fields(self, level="article"):
+        """Fields offered for a condition on a rule of the given level.
+
+        Order-level field names come from RuleEngine.ORDER_LEVEL_FIELDS so the
+        editor cannot drift from what the engine dispatches on, and they are
+        offered only on order-level rules -- on an article rule they are never
+        DataFrame columns, so selecting one produces a condition the engine
+        treats as no-match.
+        """
+        fields = []
+        if level == "order":
+            fields += ["--- ORDER-LEVEL FIELDS ---"]
+            fields += list(RuleEngine.ORDER_LEVEL_FIELDS.keys())
 
         # Common article-level fields
         common_fields = [
@@ -191,15 +244,11 @@ class RulesPage(SettingsPage):
             "Destination_Country",
         ]
 
+        fields += common_fields
+
         # Get ALL columns from DataFrame
         if self.analysis_df is not None and not self.analysis_df.empty:
             all_columns = sorted(self.analysis_df.columns.tolist())
-            logger.info(f"[RULE ENGINE] DataFrame has {len(all_columns)} columns")
-            logger.info(f"[RULE ENGINE] ALL COLUMNS: {all_columns}")
-
-            # Check if specific columns exist
-            logger.info(f"[RULE ENGINE] 'Stock' in columns: {'Stock' in all_columns}")
-            logger.info(f"[RULE ENGINE] 'Total_Price' in columns: {'Total_Price' in all_columns}")
 
             # Filter out internal columns (starting with _) and already listed common fields
             # But keep separators for checking
@@ -211,19 +260,12 @@ class RulesPage(SettingsPage):
                 and col not in common_field_names  # Avoid duplicates
             ]
 
-            logger.info(f"[RULE ENGINE] Found {len(custom_columns)} custom columns: {custom_columns}")
-
-            # Combine: order-level fields first, then common fields, then separator, then custom
             if custom_columns:
-                return order_level_fields + common_fields + [
-                    "--- OTHER AVAILABLE FIELDS ---"
-                ] + custom_columns
-            else:
-                return order_level_fields + common_fields
+                fields += ["--- OTHER AVAILABLE FIELDS ---"] + custom_columns
         else:
             logger.warning(f"[RULE ENGINE] No analysis_df available (is None: {self.analysis_df is None})")
 
-        return order_level_fields + common_fields  # Fallback to order-level + common only
+        return fields
 
     def _update_rules_count_label(self):
         """Update the rules summary label in the Rules tab header."""
@@ -259,11 +301,19 @@ class RulesPage(SettingsPage):
                 blank rule.
         """
         theme = get_theme_manager().get_current_theme()
+        config_was_none = not isinstance(config, dict)
         if not isinstance(config, dict):
             config = {"name": "New Rule", "level": "article", "match": "ALL", "conditions": [], "actions": []}
         rule_box = QGroupBox()
         rule_layout = QVBoxLayout(rule_box)
         header_layout = QHBoxLayout()
+
+        # Disclosure toggle
+        toggle_btn = QPushButton("▶")
+        set_button_role(toggle_btn, "secondary")
+        toggle_btn.setMaximumWidth(30)
+        toggle_btn.setToolTip("Show or hide this rule's conditions and actions")
+        header_layout.addWidget(toggle_btn)
 
         # Priority label (e.g., "Article #1", "Order #2")
         priority_label = QLabel("")
@@ -311,6 +361,11 @@ class RulesPage(SettingsPage):
         header_layout.addWidget(QLabel("Rule Name:"))
         name_edit = QLineEdit(config.get("name", ""))
         header_layout.addWidget(name_edit)
+
+        summary_label = QLabel("")
+        summary_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
+        header_layout.addWidget(summary_label)
+
         delete_rule_btn = QPushButton("Delete Rule")
         set_button_role(delete_rule_btn, "secondary")
         # The per-widget background wins over the role on purpose: destructive
@@ -347,18 +402,27 @@ class RulesPage(SettingsPage):
         level_layout.addWidget(level_combo)
         level_layout.addStretch()
 
-        rule_layout.addLayout(level_layout)
-
         # Steps container
         steps_container = QVBoxLayout()
-        rule_layout.addLayout(steps_container)
 
         # "Add Step" button
         add_step_btn = QPushButton("+ Add Step")
         set_button_role(add_step_btn, "secondary")
-        add_step_btn.setToolTip("Add a new step to this rule (narrowing: each step filters rows from previous step)")
+        add_step_btn.setToolTip(
+            "Add a step to this rule.\n"
+            "article rules: each step narrows the rows matched by the step before it.\n"
+            "order rules: each step is a gate on the whole order - if it does not\n"
+            "match, the rule stops and later steps do not run."
+        )
         add_step_btn.setStyleSheet(f"color: {theme.accent_blue}; font-weight: bold;")
-        rule_layout.addWidget(add_step_btn, 0, Qt.AlignLeft)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.addLayout(level_layout)
+        body_layout.addLayout(steps_container)
+        body_layout.addWidget(add_step_btn, 0, Qt.AlignLeft)
+        rule_layout.addWidget(body)
 
         self.rules_layout.addWidget(rule_box)
         widget_refs = {
@@ -371,6 +435,8 @@ class RulesPage(SettingsPage):
             "level_combo": level_combo,
             "steps_container": steps_container,
             "steps": [],
+            "body": body,
+            "summary_label": summary_label,
         }
         self.rule_widgets.append(widget_refs)
         delete_rule_btn.clicked.connect(lambda: self._delete_widget_from_list(widget_refs, self.rule_widgets))
@@ -378,6 +444,18 @@ class RulesPage(SettingsPage):
         down_btn.clicked.connect(lambda: self._move_rule_down(widget_refs))
         test_btn.clicked.connect(lambda: self._test_rule(widget_refs))
         add_step_btn.clicked.connect(lambda: self._add_step_widget(widget_refs))
+        level_combo.currentTextChanged.connect(
+            lambda: [self._repopulate_field_combos(widget_refs),
+                     self._update_priority_labels(),
+                     self._update_rule_summary(widget_refs)]
+        )
+
+        def _toggle():
+            visible = body.isHidden()
+            body.setVisible(visible)
+            toggle_btn.setText("▼" if visible else "▶")
+
+        toggle_btn.clicked.connect(_toggle)
 
         # Update test button state based on data availability
         self._update_test_button_state(widget_refs)
@@ -395,6 +473,13 @@ class RulesPage(SettingsPage):
                 "actions": config.get("actions", []),
             }
             self._add_step_widget(widget_refs, single_step)
+
+        # A rule loaded from config starts collapsed; a rule the user just
+        # added starts expanded, since they are about to edit it.
+        expanded = config_was_none
+        body.setVisible(expanded)
+        toggle_btn.setText("▼" if expanded else "▶")
+        self._update_rule_summary(widget_refs)
 
     def _add_step_widget(self, rule_widget_refs, step_config=None):
         """Adds a step (IF conditions + THEN actions) to a rule.
@@ -481,6 +566,7 @@ class RulesPage(SettingsPage):
             "actions_layout": actions_rows_layout,
             "conditions": [],
             "actions": [],
+            "level_combo": rule_widget_refs["level_combo"],
         }
         steps.append(step_refs)
 
@@ -495,6 +581,8 @@ class RulesPage(SettingsPage):
             self.add_condition_row(step_refs, cond_config)
         for act_config in step_config.get("actions", []):
             self.add_action_row(step_refs, act_config)
+
+        self._update_rule_summary(rule_widget_refs)
 
     def _delete_step(self, rule_widget_refs, step_refs):
         """Delete a step from a rule (never deletes step 1)."""
@@ -521,6 +609,8 @@ class RulesPage(SettingsPage):
                 s["separator_label"].deleteLater()
                 s["separator_label"] = None
 
+        self._update_rule_summary(rule_widget_refs)
+
     def add_condition_row(self, rule_widget_refs, config=None):
         """Adds a new row of widgets for a single condition within a rule.
 
@@ -539,7 +629,9 @@ class RulesPage(SettingsPage):
         field_combo = WheelIgnoreComboBox()
 
         # Get dynamic fields from analysis DataFrame
-        available_fields = self.get_available_rule_fields()
+        level_combo = rule_widget_refs.get("level_combo")
+        level = level_combo.currentText() if level_combo else "article"
+        available_fields = self.get_available_rule_fields(level=level)
 
         # Add fields with separators disabled
         for field in available_fields:
@@ -591,6 +683,7 @@ class RulesPage(SettingsPage):
             "op": op_combo,
             "value_widget": None,
             "value_layout": row_layout,
+            "level_combo": rule_widget_refs.get("level_combo"),
         }
 
         row_layout.addWidget(delete_btn)
@@ -605,8 +698,11 @@ class RulesPage(SettingsPage):
         rule_widget_refs["conditions_layout"].addWidget(row_widget)
         rule_widget_refs["conditions"].append(condition_refs)
         delete_btn.clicked.connect(
-            lambda: self._delete_row_from_list(row_widget, rule_widget_refs["conditions"], condition_refs)
+            lambda: [self._delete_row_from_list(row_widget, rule_widget_refs["conditions"], condition_refs),
+                     self._update_rule_summary_for_step(rule_widget_refs)]
         )
+
+        self._update_rule_summary_for_step(rule_widget_refs)
 
     def _on_rule_condition_changed(self, condition_refs, initial_value=None):
         """Dynamically changes the rule's value widget based on other selections.
@@ -643,6 +739,7 @@ class RulesPage(SettingsPage):
 
         # Operators that don't need a value input
         if op in ["is_empty", "is_not_empty"]:
+            self._check_field_resolvable(condition_refs)
             return  # No widget will be created or added
 
         # Determine if a ComboBox should be used
@@ -706,6 +803,12 @@ class RulesPage(SettingsPage):
         # Connect validation for QLineEdit widgets (QLineEdit is already imported globally)
         if isinstance(new_widget, QLineEdit):
             new_widget.textChanged.connect(lambda: self._validate_condition_value(condition_refs))
+
+        # Mark an unresolvable field as soon as the row is built. This is the
+        # only path that runs on load -- the value validation that also calls it
+        # is driven by textChanged, which a programmatic setText above does not
+        # reach (it is connected after the text is set).
+        self._check_field_resolvable(condition_refs)
 
     def _validate_condition_value(self, condition_refs):
         """
@@ -804,6 +907,8 @@ class RulesPage(SettingsPage):
             # No validation needed for other operators
             self._show_validation_feedback(condition_refs, "clear", "")
 
+        self._check_field_resolvable(condition_refs)
+
     def _show_validation_feedback(self, condition_refs, status, message):
         """
         Show validation feedback with visual indicators.
@@ -853,6 +958,51 @@ class RulesPage(SettingsPage):
         elif status == "clear":
             value_widget.setStyleSheet("")
             feedback_label.hide()
+
+    def _check_field_resolvable(self, condition_refs):
+        """Marks a field the engine will treat as no-match.
+
+        The engine fails a condition closed when its field is not a column (or,
+        on an order rule, a known order-level field). Showing that here means the
+        user sees it while editing rather than finding a rule that quietly
+        stopped firing.
+
+        Returns:
+            bool: True when the field is one the engine can evaluate.
+        """
+        theme = get_theme_manager().get_current_theme()
+        combo = condition_refs.get("field")
+        if combo is None:
+            return True
+
+        field = combo.currentText()
+        level_combo = condition_refs.get("level_combo")
+        level = level_combo.currentText() if level_combo else "article"
+
+        if not field or field.startswith("---"):
+            resolvable = False
+        elif field in set(self.get_available_rule_fields(level=level)):
+            resolvable = True
+        elif self.analysis_df is None or self.analysis_df.empty:
+            # No analysis loaded, so the offered list is only a hardcoded guess
+            # at the columns and any real client column would flag falsely. The
+            # one thing still provable is an order-level field on an article
+            # rule -- that never resolves whatever the data looks like.
+            resolvable = field not in RuleEngine.ORDER_LEVEL_FIELDS
+        else:
+            resolvable = False
+
+        if resolvable:
+            combo.setStyleSheet("")
+        else:
+            combo.setStyleSheet(f"border: 1px solid {theme.accent_red};")
+            self._show_validation_feedback(
+                condition_refs,
+                "error",
+                f"'{field}' is not available on an {level} rule - this condition "
+                f"will never match.",
+            )
+        return resolvable
 
     def _parse_date_for_widget(self, date_str):
         """
@@ -1051,8 +1201,11 @@ class RulesPage(SettingsPage):
         rule_widget_refs["actions"].append(action_refs)
 
         delete_btn.clicked.connect(
-            lambda: self._delete_row_from_list(row_widget, rule_widget_refs["actions"], action_refs)
+            lambda: [self._delete_row_from_list(row_widget, rule_widget_refs["actions"], action_refs),
+                     self._update_rule_summary_for_step(rule_widget_refs)]
         )
+
+        self._update_rule_summary_for_step(rule_widget_refs)
 
     def _on_action_type_changed(self, action_refs, initial_config=None):
         """Dynamically updates parameter widgets based on action type."""
