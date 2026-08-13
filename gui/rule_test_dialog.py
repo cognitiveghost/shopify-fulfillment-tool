@@ -169,7 +169,10 @@ class RuleTestDialog(QDialog):
         layout.addWidget(self.after_table)
 
         # Legend for highlights
-        legend = QLabel("Yellow highlight = Modified by rule actions")
+        legend = QLabel(
+            "Yellow highlight = Modified by rule actions   |   "
+            "Green highlight = Row added by rule"
+        )
         theme = get_theme_manager().get_current_theme()
         legend.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} margin-top: 5px;")
         layout.addWidget(legend)
@@ -240,8 +243,9 @@ class RuleTestDialog(QDialog):
         self.after_existing.index = self.df_before.index
         self.added_rows = self.df_after.iloc[n:]
 
-        # A column the rule created reads as NaN before and a value after,
-        # which is the truth: the rule changed that cell from nothing.
+        # A column the rule created is absent from df_before -- reindex adds
+        # it as NaN so every populate method can read a uniform column set.
+        # _detect_changed_rows treats new columns specially; see there.
         self.before_aligned = self.df_before.reindex(columns=self.df_after.columns)
 
         if len(self.added_rows):
@@ -252,13 +256,27 @@ class RuleTestDialog(QDialog):
 
         Rows the rule *added* are not changes -- they have no before state --
         and are tracked separately in self.added_rows.
+
+        A column the rule creates (CALCULATE/COPY_FIELD's target) is a
+        special case: rules.py seeds it for *every* row (e.g. CALCULATE's
+        `df[target] = 0.0`) before writing real results only into matched
+        rows, so an unmatched row's cell also differs from the reindexed
+        NaN even though the rule never touched that row. Pre-existing
+        columns don't have this seeding step, so a plain before/after
+        string diff is exact for them; a brand-new column instead needs the
+        "does it hold a real value" check.
         """
+        original_cols = set(self.df_before.columns)
         changed = pd.Series(False, index=self.before_aligned.index)
 
         for col in self.df_after.columns:
-            before_vals = self.before_aligned[col].fillna("").astype(str)
-            after_vals = self.after_existing[col].fillna("").astype(str)
-            changed = changed | (before_vals != after_vals)
+            after_vals = self.after_existing[col]
+            if col in original_cols:
+                before_vals = self.before_aligned[col].fillna("").astype(str)
+                changed = changed | (before_vals != after_vals.fillna("").astype(str))
+            else:
+                has_value = after_vals.notna() & (after_vals != 0) & (after_vals != "") & (after_vals != 0.0)
+                changed = changed | has_value
 
         return changed
 
@@ -296,6 +314,8 @@ class RuleTestDialog(QDialog):
         summary = f"Final Result ({step_info}, narrowing): "
         summary += f"<span style='color: {theme.accent_green}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
         summary += f"({percentage:.1f}% of {total_rows} total rows)"
+        if len(self.added_rows):
+            summary += f" — {len(self.added_rows)} added by rule"
 
         self.match_summary_label.setText(summary)
 
@@ -311,7 +331,7 @@ class RuleTestDialog(QDialog):
             return
 
         # Get matched rows (first 5)
-        matched_df = self.df_before[self.matches].head(5)
+        matched_df = self.before_aligned[self.matches].head(5)
 
         # Select relevant columns to display
         display_cols = self._get_display_columns(matched_df)
@@ -391,14 +411,14 @@ class RuleTestDialog(QDialog):
             self.after_table.setItem(0, 0, no_match_item)
             return
 
-        # Get matched rows before and after (first 5)
-        matched_before = self.df_before[self.matches].head(5)
-        matched_after = self.df_after[self.matches].head(5)
+        # Aligned frames: same columns, same index, same length.
+        matched_before = self.before_aligned[self.matches].head(5)
+        matched_after = self.after_existing[self.matches].head(5)
+        added = self.added_rows.head(5)
 
-        # Select relevant columns to display
-        display_cols = self._get_display_columns(matched_after)
+        display_cols = self._get_display_columns(self.after_existing)
 
-        self.after_table.setRowCount(len(matched_after))
+        self.after_table.setRowCount(len(matched_after) + len(added))
         self.after_table.setColumnCount(len(display_cols))
         self.after_table.setHorizontalHeaderLabels(display_cols)
 
@@ -412,12 +432,22 @@ class RuleTestDialog(QDialog):
                 item = QTableWidgetItem(str(value_after))
 
                 # Highlight changed cells
-                # ponytail: literal diff-highlight yellow, not worth a new
-                # ThemeTokens field for this one call site.
+                # ponytail: literal diff-highlight yellow/green, not worth two
+                # new ThemeTokens fields for this one call site.
                 if value_before != value_after and not (pd.isna(value_before) and pd.isna(value_after)):
                     item.setBackground(QColor("#FFEB3B"))  # Yellow
                     item.setToolTip(f"Changed from: {value_before}")
 
+                self.after_table.setItem(row_idx, col_idx, item)
+
+        # Rows the rule created have no before state, so they are tinted whole
+        # rather than diffed cell by cell.
+        for offset, (_, row_added) in enumerate(added.iterrows()):
+            row_idx = len(matched_after) + offset
+            for col_idx, col_name in enumerate(display_cols):
+                item = QTableWidgetItem(str(row_added[col_name]))
+                item.setBackground(QColor("#C8E6C9"))  # Green
+                item.setToolTip("Added by rule")
                 self.after_table.setItem(row_idx, col_idx, item)
 
         self.after_table.resizeColumnsToContents()
