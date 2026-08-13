@@ -5,19 +5,12 @@ Users can see the relationship between their CSV columns and the internal proces
 """
 
 import logging
+from typing import ClassVar
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QComboBox, QVBoxLayout, QWidget
 
-from gui.theme_manager import font_css, get_theme_manager
+from gui.components.form_section import FormSection
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -39,6 +32,20 @@ class ColumnMappingWidget(QWidget):
 
     mappings_changed = Signal()
 
+    # Only fields whose effect is not obvious from the name. A warehouse
+    # operator setting up lot tracking has no other way to learn what these do.
+    FIELD_TOOLTIPS: ClassVar[dict[str, str]] = {
+        "Expiry_Date": (
+            "Optional. When mapped, stock is allocated oldest-expiry-first (FIFO) "
+            "and each packing list row shows the lot it came from.\n"
+            "Understood formats: YYMMDD, YYYYMMDD, DDMMYY, MMYY."
+        ),
+        "Batch": (
+            "Optional. Lot or batch number. Shown per lot on packing lists, and "
+            "used to keep separate deliveries of the same SKU apart."
+        ),
+    }
+
     def __init__(self, mapping_type, current_mappings=None, required_fields=None, optional_fields=None):
         super().__init__()
         self.mapping_type = mapping_type
@@ -55,117 +62,54 @@ class ColumnMappingWidget(QWidget):
         self._setup_ui()
 
     def _setup_ui(self):
-        """Setup the UI layout."""
+        """Setup the UI layout.
+
+        No QScrollArea here: the settings page already scrolls, and nesting a
+        second one clips this widget to a few rows. One FormSection per group;
+        the internal field name is the row label, so the per-row
+        "Your CSV Column:" label and the -> arrow both go.
+        """
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Instructions
-        instructions = QLabel(
-            f"Map your CSV column names to internal fields for {self.mapping_type.upper()} file.\n"
-            f"Fields marked with * are required."
-        )
-        instructions.setWordWrap(True)
-        theme = get_theme_manager().get_current_theme()
-        instructions.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; padding: 5px;")
-        layout.addWidget(instructions)
-
-        # Scroll area for mappings
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
-
-        # Required fields section
         if self.required_fields:
-            required_group = QGroupBox("Required Fields *")
-            required_group.setStyleSheet("QGroupBox { font-weight: bold; }")
-            required_layout = QVBoxLayout(required_group)
-
+            required_section = FormSection("Required")
             for internal_name in self.required_fields:
-                row_widget = self._create_mapping_row(internal_name, required=True)
-                required_layout.addWidget(row_widget)
+                self._add_mapping_row(required_section, internal_name, required=True)
+            layout.addWidget(required_section)
 
-            scroll_layout.addWidget(required_group)
-
-        # Optional fields section
         if self.optional_fields:
-            optional_group = QGroupBox("Optional Fields")
-            optional_layout = QVBoxLayout(optional_group)
-
+            optional_section = FormSection("Optional")
             for internal_name in self.optional_fields:
-                row_widget = self._create_mapping_row(internal_name, required=False)
-                optional_layout.addWidget(row_widget)
+                self._add_mapping_row(optional_section, internal_name, required=False)
+            layout.addWidget(optional_section)
 
-            scroll_layout.addWidget(optional_group)
-
-        scroll_layout.addStretch()
-        scroll.setWidget(scroll_widget)
-        layout.addWidget(scroll)
-
-    def _create_mapping_row(self, internal_name, required=False):
-        """Create a single mapping row.
+    def _add_mapping_row(self, section, internal_name, required=False):
+        """Add one internal-field row to `section`.
 
         Args:
-            internal_name (str): The internal field name (e.g., "Order_Number")
-            required (bool): Whether this field is required
-
-        Returns:
-            QWidget: Widget containing the mapping row
+            section (FormSection): The section to append the row to.
+            internal_name (str): The internal field name (e.g. "Order_Number").
+            required (bool): Whether this field is required.
         """
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(5, 3, 5, 3)
+        csv_input = QComboBox()
+        csv_input.setEditable(True)
+        csv_input.setInsertPolicy(QComboBox.NoInsert)
+        csv_input.lineEdit().setPlaceholderText("Enter column name...")
+        csv_input.setCurrentText(self.internal_to_csv.get(internal_name, ""))
+        csv_input.currentTextChanged.connect(lambda: self.mappings_changed.emit())
 
-        # CSV Column input (left side)
-        csv_label = QLabel("Your CSV Column:")
-        csv_label.setFixedWidth(120)
-
-        csv_input = QLineEdit()
-        csv_input.setPlaceholderText("Enter column name...")
-        csv_input.setMinimumWidth(200)
-
-        # Set current value if exists
-        current_csv_name = self.internal_to_csv.get(internal_name, "")
-        if current_csv_name:
-            csv_input.setText(current_csv_name)
-
-        # Connect change signal
-        csv_input.textChanged.connect(lambda: self.mappings_changed.emit())
-
-        # Store for later access
         self.csv_column_inputs[internal_name] = csv_input
-
-        # Arrow
-        arrow_label = QLabel("→")
-        arrow_label.setStyleSheet(font_css("heading"))
-        arrow_label.setFixedWidth(30)
-        arrow_label.setAlignment(Qt.AlignCenter)
-
-        # Internal name label (right side)
-        internal_label = QLabel(internal_name)
-        internal_label.setStyleSheet("font-family: monospace; font-weight: bold;")
-        internal_label.setFixedWidth(150)
-
-        # Required indicator
-        if required:
-            required_indicator = QLabel("*")
-            # Track 3 moves the literal red onto a theme token; only the size is in scope here.
-            required_indicator.setStyleSheet(f"color: red; {font_css('heading')}")
-            required_indicator.setFixedWidth(15)
-            required_indicator.setToolTip("This field is required")
-        else:
-            required_indicator = QLabel("")
-            required_indicator.setFixedWidth(15)
-
-        # Add to layout
-        row_layout.addWidget(csv_label)
-        row_layout.addWidget(csv_input, 1)
-        row_layout.addWidget(arrow_label)
-        row_layout.addWidget(internal_label)
-        row_layout.addWidget(required_indicator)
-        row_layout.addStretch()
-
-        return row_widget
+        section.add_row(
+            f"{internal_name} *" if required else internal_name,
+            csv_input,
+            tooltip=self.FIELD_TOOLTIPS.get(
+                internal_name,
+                "Required — the save is blocked until this is mapped."
+                if required
+                else "",
+            ),
+        )
 
     def get_mappings(self):
         """Get current mappings from UI.
@@ -192,7 +136,7 @@ class ColumnMappingWidget(QWidget):
         for internal_name in self.required_fields + self.optional_fields:
             input_widget = self.csv_column_inputs.get(internal_name)
             if input_widget:
-                csv_column = input_widget.text().strip()
+                csv_column = input_widget.currentText().strip()
                 if csv_column:  # Only add non-empty mappings
                     mappings[csv_column] = internal_name
 
@@ -208,7 +152,7 @@ class ColumnMappingWidget(QWidget):
 
         # Check that all required fields are mapped
         for internal_name in self.required_fields:
-            csv_column = self.csv_column_inputs[internal_name].text().strip()
+            csv_column = self.csv_column_inputs[internal_name].currentText().strip()
             if not csv_column:
                 return False, f"Required field '{internal_name}' must be mapped to a CSV column"
 
@@ -238,4 +182,22 @@ class ColumnMappingWidget(QWidget):
         # Update all input widgets
         for internal_name, input_widget in self.csv_column_inputs.items():
             csv_column = self.internal_to_csv.get(internal_name, "")
-            input_widget.setText(csv_column)
+            input_widget.setCurrentText(csv_column)
+
+    def set_available_headers(self, headers):
+        """Offer `headers` as dropdown options on every row.
+
+        The text already in each box is preserved -- a configured mapping
+        whose column is absent from the file the user just picked must not be
+        wiped by looking at that file. A header already used by another row is
+        still offered; validate_mappings() catches the duplicate on Save,
+        which is where that error belongs.
+
+        Args:
+            headers (list): Column names read from a CSV.
+        """
+        for input_widget in self.csv_column_inputs.values():
+            current = input_widget.currentText()
+            input_widget.clear()
+            input_widget.addItems(headers)
+            input_widget.setCurrentText(current)

@@ -92,7 +92,7 @@ def test_get_mappings_still_removes_a_cleared_managed_field(qapp):
         required_fields=["SKU"],
         optional_fields=["Product_Name"],
     )
-    widget.csv_column_inputs["Product_Name"].setText("")
+    widget.csv_column_inputs["Product_Name"].setCurrentText("")
     assert widget.get_mappings() == {"Article": "SKU"}
 
 
@@ -121,3 +121,36 @@ def test_stock_lot_mappings_round_trip_through_the_page(qapp):
         "Exp date": "Expiry_Date",
         "Lot": "Batch",
     }
+
+
+from PySide6.QtWidgets import QComboBox, QScrollArea
+
+
+def test_mapping_inputs_are_editable_combo_boxes(qapp):
+    page = MappingsPage(valid_column_mappings(), {})
+    sku_input = page.orders_mapping_widget.csv_column_inputs["SKU"]
+    assert isinstance(sku_input, QComboBox)
+    assert sku_input.isEditable()
+    assert sku_input.currentText() == "Lineitem sku"
+
+
+def test_set_available_headers_offers_them_on_every_row_without_losing_text(qapp):
+    page = MappingsPage(valid_column_mappings(), {})
+    widget = page.orders_mapping_widget
+
+    widget.set_available_headers(["Name", "Lineitem sku", "Some other column"])
+
+    sku_input = widget.csv_column_inputs["SKU"]
+    assert [sku_input.itemText(i) for i in range(sku_input.count())] == [
+        "Name",
+        "Lineitem sku",
+        "Some other column",
+    ]
+    assert sku_input.currentText() == "Lineitem sku", "typed/configured text must survive"
+
+
+def test_the_widget_has_no_scroll_area_of_its_own(qapp):
+    """The page already scrolls. A second QScrollArea inside it clips the
+    Stock block to a few rows and produces two scrollbars side by side."""
+    page = MappingsPage(valid_column_mappings(), {})
+    assert page.orders_mapping_widget.findChildren(QScrollArea) == []
