@@ -450,7 +450,7 @@ class WeightPage(SettingsPage):
                         break
 
             if not sku_col:
-                QMessageBox.warning(self, "Warning", "Could not find SKU column in CSV.\nCheck column mappings in Settings → Mappings tab.")
+                QMessageBox.warning(self, "Warning", "Could not find SKU column in CSV.\nCheck column mappings in Settings → Stock Mapping.")
                 return
 
             skus_in_csv = df[sku_col].dropna().astype(str).str.strip().unique().tolist()

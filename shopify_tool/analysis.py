@@ -14,6 +14,28 @@ logger = logging.getLogger(__name__)
 _LOT_COLUMN_DEFAULTS: dict[str, str] = {"Годност": "Expiry_Date", "Партида": "Batch"}
 
 
+def _resolve_stock_mappings(stock_mappings: dict[str, str]) -> dict[str, str]:
+    """Back-fill lot column defaults that the config does not already cover.
+
+    Lot tracking works for clients whose configs pre-date the Stock mapping UI
+    without a config migration. A default is skipped when its CSV header is
+    already mapped, or when its *internal* name is -- otherwise a client who
+    maps "Exp date" -> Expiry_Date also gets "Годност" -> Expiry_Date, i.e.
+    two CSV headers claiming one internal field.
+
+    ponytail: this back-fill is only needed until existing configs have been
+    re-saved through the fixed Mappings UI -- drop it, and the constant, once
+    that has happened.
+    """
+    mapped_internals = set(stock_mappings.values())
+    missing = {
+        csv_col: internal
+        for csv_col, internal in _LOT_COLUMN_DEFAULTS.items()
+        if csv_col not in stock_mappings and internal not in mapped_internals
+    }
+    return {**stock_mappings, **missing} if missing else stock_mappings
+
+
 def _parse_expiry_date(raw) -> date | None:
     """Parse a raw expiry string from the stock CSV to a comparable date object.
 
@@ -213,12 +235,7 @@ def _clean_and_prepare_data(
     orders_mappings = column_mappings.get("orders", {})
     stock_mappings = column_mappings.get("stock", {})
 
-    # Inject lot column defaults for any keys not already in the config mapping.
-    # This ensures lot tracking works for existing clients whose configs pre-date
-    # this feature without requiring a config migration or UI change.
-    missing = {k: v for k, v in _LOT_COLUMN_DEFAULTS.items() if k not in stock_mappings}
-    if missing:
-        stock_mappings = {**stock_mappings, **missing}
+    stock_mappings = _resolve_stock_mappings(stock_mappings)
 
     # Apply mappings to orders DataFrame
     # Only rename columns that exist in the DataFrame AND are different from internal names
