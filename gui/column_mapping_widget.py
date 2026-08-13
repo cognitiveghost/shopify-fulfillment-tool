@@ -156,11 +156,22 @@ class ColumnMappingWidget(QWidget):
             if not csv_column:
                 return False, f"Required field '{internal_name}' must be mapped to a CSV column"
 
-        # Check for duplicate CSV column names
-        csv_columns = list(mappings.keys())
+        # Check for duplicate CSV column names.
+        #
+        # Read the boxes, not get_mappings() -- that returns a dict keyed by CSV
+        # column, so two rows sharing a column have already collapsed into one
+        # entry by then and the duplicate is invisible. Picking the same header
+        # twice from the dropdowns is easy, and the row that loses would be
+        # saved with no mapping at all.
+        csv_columns = [
+            self.csv_column_inputs[internal_name].currentText().strip()
+            for internal_name in self.required_fields + self.optional_fields
+            if internal_name in self.csv_column_inputs
+        ]
+        csv_columns = [col for col in csv_columns if col]
         if len(csv_columns) != len(set(csv_columns)):
-            duplicates = [col for col in csv_columns if csv_columns.count(col) > 1]
-            return False, f"Duplicate CSV column names: {', '.join(set(duplicates))}"
+            duplicates = {col for col in csv_columns if csv_columns.count(col) > 1}
+            return False, f"Duplicate CSV column names: {', '.join(sorted(duplicates))}"
 
         # Check that no two CSV columns map to the same internal name
         internal_names = list(mappings.values())

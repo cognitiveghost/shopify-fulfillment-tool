@@ -105,6 +105,24 @@ def test_get_mappings_still_removes_a_cleared_managed_field(qapp):
     assert widget.get_mappings() == {"Article": "SKU"}
 
 
+def test_validate_rejects_two_rows_sharing_one_csv_column(qapp):
+    """Regression: the duplicate check read get_mappings(), which is keyed by
+    CSV column -- so the duplicate had already collapsed and the check could
+    never fire. Save then succeeded with the losing row unmapped. Now that the
+    inputs are dropdowns, picking one header twice is a click away."""
+    widget = ColumnMappingWidget(
+        mapping_type="orders",
+        current_mappings={"Name": "Order_Number", "Tags": "Tags"},
+        required_fields=["Order_Number"],
+        optional_fields=["Tags"],
+    )
+    widget.csv_column_inputs["Tags"].setCurrentText("Name")
+
+    ok, error = widget.validate_mappings()
+    assert ok is False
+    assert "Name" in error
+
+
 def test_stock_page_offers_rows_for_the_lot_tracking_fields(qapp):
     """Expiry_Date and Batch drive _build_fifo_lots(); before this they were
     in the default client config with no way to see or edit them."""
@@ -194,7 +212,12 @@ def test_stock_page_collect_emits_every_stock_key_it_was_built_with(qapp):
     """Key coverage for the live-dict blind spot: collect() returns the same
     object the page was constructed with, so the roundtrip guard in
     test_settings_roundtrip.py cannot see a dropped sub-key here. Detach
-    first, then assert on what collect() actively writes."""
+    first, then assert on what collect() actively writes.
+
+    This pins the write, not the field list -- get_mappings() carries an
+    unmanaged internal name through from current_mappings, so a field dropped
+    from OPTIONAL_FIELDS still lands here. The field list is guarded by
+    test_stock_page_offers_rows_for_the_lot_tracking_fields."""
     column_mappings = valid_column_mappings()
     column_mappings["stock"] = {
         "Article": "SKU",
@@ -208,7 +231,13 @@ def test_stock_page_collect_emits_every_stock_key_it_was_built_with(qapp):
     page.column_mappings = {}  # detach from the live dict
     written = page.collect()["column_mappings"]["stock"]
 
-    assert set(written.values()) == {"SKU", "Stock", "Product_Name", "Expiry_Date", "Batch"}
+    assert written == {
+        "Article": "SKU",
+        "Available": "Stock",
+        "Name": "Product_Name",
+        "Exp date": "Expiry_Date",
+        "Lot": "Batch",
+    }
 
 
 def test_load_headers_fills_every_row_from_the_chosen_file(qapp, tmp_path, monkeypatch):
