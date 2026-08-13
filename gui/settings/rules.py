@@ -674,15 +674,32 @@ class RulesPage(SettingsPage):
         op_combo.setCurrentText(config.get("operator", CONDITION_OPERATORS[0]))
         initial_value = config.get("value", "")
 
+        # The row goes inside a vertical wrapper so its validation message can
+        # have a full-width line of its own underneath, instead of being
+        # appended as one more horizontal cell past the delete button. The
+        # wrapper takes over the row's padding -- a nested layout gets none of
+        # its own -- so the row's geometry is unchanged.
         row_widget = QWidget()
-        row_widget.setLayout(row_layout)
+        outer_layout = QVBoxLayout(row_widget)
+        outer_layout.setSpacing(2)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addLayout(row_layout)
+
+        # One feedback label per condition row, alive for the row's whole
+        # lifetime. A hidden label is skipped by the layout, so a row with
+        # nothing to say keeps exactly its old height.
+        feedback_label = QLabel()
+        feedback_label.setWordWrap(True)
+        feedback_label.hide()
+        outer_layout.addWidget(feedback_label)
 
         condition_refs = {
             "widget": row_widget,
             "field": field_combo,
             "op": op_combo,
             "value_widget": None,
-            "value_layout": row_layout,
+            "row_layout": row_layout,
+            "feedback_label": feedback_label,
             "level_combo": rule_widget_refs.get("level_combo"),
         }
 
@@ -722,10 +739,10 @@ class RulesPage(SettingsPage):
         field = condition_refs["field"].currentText()
         op = condition_refs["op"].currentText()
 
-        # Clean up validation feedback before removing widget
-        if "feedback_label" in condition_refs:
-            condition_refs["feedback_label"].deleteLater()
-            del condition_refs["feedback_label"]
+        # Drop any message the previous operator left behind. The label belongs
+        # to the row, so it is reused rather than rebuilt.
+        condition_refs["feedback_label"].clear()
+        condition_refs["feedback_label"].hide()
 
         # Cancel pending validation timer
         if "validation_timer" in condition_refs:
@@ -797,7 +814,7 @@ class RulesPage(SettingsPage):
                 new_widget.setText(str(initial_value))
 
         # Insert the new widget into the layout at the correct position
-        condition_refs["value_layout"].insertWidget(2, new_widget, 1)
+        condition_refs["row_layout"].insertWidget(2, new_widget, 1)
         condition_refs["value_widget"] = new_widget
 
         # Connect validation for QLineEdit widgets (QLineEdit is already imported globally)
@@ -920,44 +937,38 @@ class RulesPage(SettingsPage):
         """
         theme = get_theme_manager().get_current_theme()
 
-        value_widget = condition_refs.get("value_widget")
-        if not value_widget:
-            return
-
-        # Create feedback label if doesn't exist
-        if "feedback_label" not in condition_refs:
-            feedback_label = QLabel()
-            feedback_label.setWordWrap(True)
-            feedback_label.setStyleSheet(f"{font_css('caption')} margin-top: 2px;")
-            condition_refs["value_layout"].addWidget(feedback_label)
-            condition_refs["feedback_label"] = feedback_label
-
-        feedback_label = condition_refs["feedback_label"]
-
         # ponytail: literal validation-tint background colors, not worth new
         # ThemeTokens fields for ~2 call sites; revisit if more validation
         # states are added.
-        if status == "error":
-            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_red}; background-color: #ffebee; color: #1A1A1A;")
-            feedback_label.setStyleSheet(f"color: {theme.accent_red}; {font_css('caption')}")
-            feedback_label.setText(f"{message}")
-            feedback_label.show()
+        border_css = {
+            "error": f"border: 1px solid {theme.accent_red}; background-color: #ffebee; color: #1A1A1A;",
+            "warning": f"border: 1px solid {theme.accent_orange}; background-color: #fff3e0; color: #1A1A1A;",
+            "success": f"border: 1px solid {theme.accent_green};",
+        }
+        text_color = {
+            "error": theme.accent_red,
+            "warning": theme.accent_orange,
+            "success": theme.accent_green,
+        }
+        if status not in text_color:
+            status = "clear"
 
-        elif status == "warning":
-            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_orange}; background-color: #fff3e0; color: #1A1A1A;")
-            feedback_label.setStyleSheet(f"color: {theme.accent_orange}; {font_css('caption')}")
-            feedback_label.setText(f"{message}")
-            feedback_label.show()
+        # The message describes the condition; only the tinted border needs a
+        # value widget. An operator that takes no value still has something to
+        # say -- most of all that its field will never match.
+        value_widget = condition_refs.get("value_widget")
+        if value_widget is not None:
+            value_widget.setStyleSheet(border_css.get(status, ""))
 
-        elif status == "success":
-            value_widget.setStyleSheet(f"border: 1px solid {theme.accent_green};")
-            feedback_label.setStyleSheet(f"color: {theme.accent_green}; {font_css('caption')}")
-            feedback_label.setText(f"{message}")
-            feedback_label.show()
-
-        elif status == "clear":
-            value_widget.setStyleSheet("")
+        feedback_label = condition_refs["feedback_label"]
+        if status == "clear":
+            feedback_label.clear()
             feedback_label.hide()
+            return
+
+        feedback_label.setStyleSheet(f"color: {text_color[status]}; {font_css('caption')}")
+        feedback_label.setText(message)
+        feedback_label.show()
 
     def _check_field_resolvable(self, condition_refs):
         """Marks a field the engine will treat as no-match.

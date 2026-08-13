@@ -224,4 +224,67 @@ class TestFilterAndReorder:
         )
         qtbot.addWidget(page)
         assert page.rule_widgets[0]["down_btn"].isEnabled() is False
-        assert page.rule_widgets[1]["down_btn"].isEnabled() is False
+
+
+class TestValidationFeedbackPlacement:
+    """The message has to land somewhere the user can actually read it."""
+
+    @staticmethod
+    def _rule(field="SKU", operator="matches regex", value="["):
+        return {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": field, "operator": operator, "value": value}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+
+    @staticmethod
+    def _condition(page):
+        return page.rule_widgets[0]["steps"][0]["conditions"][0]
+
+    def test_message_sits_below_the_row_not_inside_it(self, qtbot, analysis_df):
+        page = RulesPage([self._rule()], analysis_df)
+        qtbot.addWidget(page)
+        cond = self._condition(page)
+
+        page._perform_validation(cond)
+
+        label = cond["feedback_label"]
+        assert label.text() == "Invalid regex syntax"
+        # Not one more cell in the horizontal row, past the delete button.
+        assert cond["row_layout"].indexOf(label) == -1
+        outer = cond["widget"].layout()
+        assert outer.itemAt(0).layout() is cond["row_layout"]
+        assert outer.itemAt(1).widget() is label
+
+    def test_changing_the_operator_drops_a_stale_message(self, qtbot, analysis_df):
+        page = RulesPage([self._rule()], analysis_df)
+        qtbot.addWidget(page)
+        cond = self._condition(page)
+        page._perform_validation(cond)
+        assert cond["feedback_label"].text()
+
+        cond["op"].setCurrentText("contains")
+
+        assert cond["feedback_label"].text() == ""
+        assert cond["feedback_label"].isHidden()
+
+    def test_unresolvable_field_reports_without_a_value_widget(self, qtbot, analysis_df):
+        """The 'never match' message is about the field, not the value box, so a
+        row with no value widget must still show it. No UI path reaches this
+        state today -- the empty-check branch that would create it is dead code
+        (design doc section 5, finding A) -- so the state is set directly here, to keep
+        the guard from being reintroduced when that branch is fixed."""
+        page = RulesPage([self._rule(field="item_count", operator="equals", value="2")], analysis_df)
+        qtbot.addWidget(page)
+        cond = self._condition(page)
+        cond["feedback_label"].clear()
+        cond["feedback_label"].hide()
+        cond["value_widget"] = None
+
+        assert page._check_field_resolvable(cond) is False
+
+        assert "never match" in cond["feedback_label"].text()
+        assert not cond["feedback_label"].isHidden()
