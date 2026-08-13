@@ -167,6 +167,43 @@ def test_save_round_trips_every_config_section(window, no_modals):
         )
 
 
+def test_no_page_silently_drops_a_field(window):
+    """Round-tripping through save_settings() alone cannot see a dropped key.
+
+    The shell merges dict-valued sections with `config_data[key].update(...)`,
+    so a key the fixture already holds survives even if collect() stopped
+    producing it. Compare each page's collect() output directly instead --
+    every page owns disjoint top-level keys, so no merge is needed here.
+    """
+    before = copy.deepcopy(window.config_data)
+
+    for page in window._pages:
+        for section, value in page.collect().items():
+            assert value == before[section], (
+                f"{type(page).__name__}.collect() no longer reproduces "
+                f"section {section!r}"
+            )
+
+
+def test_deleting_a_courier_row_survives_the_save_merge(window, no_modals):
+    """Guards the live-reference contract MappingsPage depends on.
+
+    `courier_mappings` holds a variable set of keys, and the shell's merge is
+    `dict.update()`, which never drops one. MappingsPage only gets away with
+    this because window.py hands it the *live* sub-dict, which it clears and
+    refills in place. Hand it a copy instead and this test fails while every
+    page-level test stays green.
+    """
+    mappings = window._pages[window._page_index_by_name["Mappings"]]
+    for row_refs in list(mappings.courier_mapping_widgets):
+        mappings._delete_courier_row(row_refs)
+
+    window.save_settings()
+
+    assert no_modals == [], f"save_settings() reported a problem: {no_modals}"
+    assert window.config_data["courier_mappings"] == {}
+
+
 def test_save_reaches_the_background_write(window, started_workers):
     """Guards the four gotchas above: had validation aborted early,
     save_settings() would have returned before queuing any worker."""
