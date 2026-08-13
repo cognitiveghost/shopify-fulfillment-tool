@@ -247,7 +247,7 @@ class RuleTestDialog(QDialog):
 
         # A column the rule created is absent from df_before -- reindex adds
         # it as NaN so every populate method can read a uniform column set.
-        # _detect_changed_rows treats new columns specially; see there.
+        # _detect_changed_rows reads a new column's NaNs as "untouched"; see there.
         self.before_aligned = self.df_before.reindex(columns=self.df_after.columns)
 
         if len(self.added_rows):
@@ -259,25 +259,19 @@ class RuleTestDialog(QDialog):
         Rows the rule *added* are not changes -- they have no before state --
         and are tracked separately in self.added_rows.
 
-        A column the rule creates (CALCULATE/COPY_FIELD's target) is a
-        special case: rules.py seeds it for *every* row (e.g. CALCULATE's
-        `df[target] = 0.0`) before writing real results only into matched
-        rows, so an unmatched row's cell also differs from the reindexed
-        NaN even though the rule never touched that row. Pre-existing
-        columns don't have this seeding step, so a plain before/after
-        string diff is exact for them; a brand-new column instead needs the
-        "does it hold a real value" check.
+        A column the rule creates (CALCULATE/COPY_FIELD's target) is NaN on
+        every row the rule did not write, so `notna()` is a good proxy for the
+        rows it did. Pre-existing columns get a plain before/after string diff.
 
-        ponytail: that check is a heuristic, not a proof, and it is wrong at
-        both ends. It *under*-reports a matched row whose CALCULATE result is
-        legitimately 0/0.0/NaN -- indistinguishable from the seed once apply()
-        has returned. It *over*-reports a brand-new Internal_Tags, which
-        _prepare_df_for_actions seeds with the truthy string "[]" for every
-        row. Both are pre-existing behaviour, and the second is latent in
-        practice: analysis.py initialises Internal_Tags on every real
-        analysis, so it always takes the exact pre-existing-column path.
-        Exact counts need rules.py to report which rows it wrote, which is
-        out of scope here -- the engine is correct, the dialog was wrong.
+        ponytail: a proxy, not a proof, at either end. It over-reports a
+        brand-new Internal_Tags, because _prepare_df_for_actions seeds it with
+        the truthy string "[]" for every row -- latent in practice, since
+        analysis.py initialises Internal_Tags on every real analysis, so it
+        always takes the exact pre-existing-column path. And it under-reports a
+        row whose written result is itself NaN: a CALCULATE divide-by-zero, a
+        CALCULATE over a non-numeric field, or a COPY_FIELD whose source cell
+        is empty. Fixing either properly needs rules.py to report which rows it
+        wrote, which is out of scope here.
         """
         original_cols = set(self.df_before.columns)
         changed = pd.Series(False, index=self.before_aligned.index)
@@ -288,7 +282,7 @@ class RuleTestDialog(QDialog):
                 before_vals = self.before_aligned[col].fillna("").astype(str)
                 changed = changed | (before_vals != after_vals.fillna("").astype(str))
             else:
-                has_value = after_vals.notna() & (after_vals != 0) & (after_vals != "") & (after_vals != 0.0)
+                has_value = after_vals.notna() & (after_vals != "")
                 changed = changed | has_value
 
         return changed

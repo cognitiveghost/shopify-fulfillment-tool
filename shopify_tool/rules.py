@@ -898,11 +898,13 @@ class RuleEngine:
     def _prepare_df_for_actions(self, df):
         """Ensures the DataFrame has the columns required for rule actions.
 
-        Scans all rules to find out which columns will be modified or created
-        by the actions (e.g., 'Status_Note', 'Internal_Tags'). If these columns
-        do not already exist in the DataFrame, they are created and initialized
-        with a default value. This prevents errors when an action tries to
-        modify a non-existent column.
+        Scans all rules for the tag columns their actions append to --
+        'Status_Note' and 'Internal_Tags' -- and creates them if missing, so an
+        action can read-modify-write them without a existence check.
+
+        COPY_FIELD and CALCULATE targets are deliberately NOT created here: each
+        handler builds its own target column so it can give it the right dtype
+        and leave unmatched rows NaN, neither of which is knowable from here.
 
         Args:
             df (pd.DataFrame): The DataFrame to prepare.
@@ -917,10 +919,6 @@ class RuleEngine:
                         needed_columns.add("Status_Note")
                     elif action_type == "ADD_INTERNAL_TAG":
                         needed_columns.add("Internal_Tags")
-                    elif action_type == "COPY_FIELD" or action_type == "CALCULATE":
-                        target = action.get("target")
-                        if target:
-                            needed_columns.add(target)
                     # SET_STATUS uses existing Order_Fulfillment_Status column
 
         # Add only the necessary columns if they don't already exist
@@ -1101,9 +1099,13 @@ class RuleEngine:
                     continue
 
                 if target not in df.columns:
-                    df[target] = ""
-
-                df.loc[matches, target] = df.loc[matches, source]
+                    # Build the column from the source so it takes the source's
+                    # dtype. Seeding "" first made it str dtype on pandas 3, and
+                    # writing a numeric source into that raises TypeError.
+                    # Unmatched rows are NaN -- the rule never wrote them.
+                    df[target] = df[source].where(matches)
+                else:
+                    df.loc[matches, target] = df.loc[matches, source]
                 logger.info(f"[RULE ENGINE] Copied {source} -> {target} for {matches.sum()} rows")
 
             elif action_type == "SET_MULTI_TAGS":
@@ -1185,9 +1187,13 @@ class RuleEngine:
                     logger.warning("[RULE ENGINE] CALCULATE fields not found in DataFrame")
                     continue
 
-                # Створити target column якщо не існує
+                # Створити target column якщо не існує.
+                # NaN, not 0.0 -- a row the rule never matched has no result,
+                # and a literal 0.0 there is indistinguishable from a real one.
+                # float("nan") gives a float64 column without importing numpy
+                # (numpy is imported locally in the divide branch below).
                 if target not in df.columns:
-                    df[target] = 0.0
+                    df[target] = float("nan")
 
                 # Конвертувати в числа
                 val1 = pd.to_numeric(df.loc[matches, field1], errors='coerce')
