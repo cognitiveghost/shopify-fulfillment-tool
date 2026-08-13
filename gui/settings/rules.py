@@ -356,7 +356,12 @@ class RulesPage(SettingsPage):
         # "Add Step" button
         add_step_btn = QPushButton("+ Add Step")
         set_button_role(add_step_btn, "secondary")
-        add_step_btn.setToolTip("Add a new step to this rule (narrowing: each step filters rows from previous step)")
+        add_step_btn.setToolTip(
+            "Add a step to this rule.\n"
+            "article rules: each step narrows the rows matched by the step before it.\n"
+            "order rules: each step is a gate on the whole order - if it does not\n"
+            "match, the rule stops and later steps do not run."
+        )
         add_step_btn.setStyleSheet(f"color: {theme.accent_blue}; font-weight: bold;")
         rule_layout.addWidget(add_step_btn, 0, Qt.AlignLeft)
 

@@ -748,6 +748,9 @@ class RuleEngine:
         and then executes the rule's actions on those matching rows.
 
         Supports both article-level (row-by-row) and order-level (entire order) rules.
+        Multi-step rules behave differently by level: article-level steps narrow
+        the matched rows progressively, while order-level steps act as sequential
+        gates on the whole order.
 
         The DataFrame is modified in place.
 
@@ -819,59 +822,60 @@ class RuleEngine:
 
         # Apply order-level rules with multi-step support
         if order_rules and "Order_Number" in df.columns:
-            for order_number in df["Order_Number"].unique():
-                order_mask = df["Order_Number"] == order_number
-                df[order_mask]
+            # Group once. .indices gives positional arrays, so every slice and
+            # mask below is positional -- index labels are not guaranteed unique
+            # (apply() itself concatenates with ignore_index at the end).
+            positions_by_order = df.groupby("Order_Number", sort=False).indices
 
+            for order_number, positions in positions_by_order.items():
                 for rule in order_rules:
                     rule_name = rule.get("name", "Unnamed")
-                    priority = rule.get("priority", 1000)
                     steps = rule.get("steps", [])
-                    logger.info(f"[RULE ENGINE] Applying order rule: {rule_name} (Priority: {priority}, Steps: {len(steps)})")
-
-                    # Track which rows in order are still eligible (for narrowing)
-                    order_eligible_mask = order_mask.copy()
 
                     for step_idx, step in enumerate(steps):
-                        # Evaluate conditions on eligible order rows
-                        eligible_df = df[order_eligible_mask]
-                        if eligible_df.empty:
-                            break
+                        # Re-taken every step on purpose: a later step's
+                        # conditions must see what an earlier step's actions
+                        # wrote. O(len(order)), not O(len(df)).
+                        order_df = df.iloc[positions]
 
-                        matches = self._evaluate_order_conditions(
-                            eligible_df,
+                        matched = self._evaluate_order_conditions(
+                            order_df,
                             step.get("conditions", []),
-                            step.get("match", "ALL")
+                            step.get("match", "ALL"),
                         )
-
-                        if not matches:
-                            logger.info(f"[RULE ENGINE] Order {order_number} step {step_idx+1}: No match, stopping")
+                        if not matched:
+                            logger.info(
+                                f"[RULE ENGINE] Order {order_number} rule "
+                                f"'{rule_name}' step {step_idx+1}: no match, stopping"
+                            )
                             break
 
-                        # Separate actions by scope
                         actions = step.get("actions", [])
-                        apply_to_all_actions = []
-                        apply_to_first_actions = []
+                        apply_to_all = [
+                            a for a in actions
+                            if a.get("type", "").upper() in ("ADD_TAG", "ADD_ORDER_TAG")
+                        ]
+                        apply_to_first = [
+                            a for a in actions
+                            if a.get("type", "").upper() not in ("ADD_TAG", "ADD_ORDER_TAG")
+                        ]
 
-                        for action in actions:
-                            action_type = action.get("type", "").upper()
-                            if action_type in ("ADD_TAG", "ADD_ORDER_TAG"):
-                                apply_to_all_actions.append(action)
-                            else:
-                                apply_to_first_actions.append(action)
+                        # Masks are built only once a step has matched and has
+                        # actions, so the O(len(df)) allocation stays off the
+                        # hot path.
+                        if apply_to_all:
+                            mask = pd.Series(False, index=df.index)
+                            mask.iloc[positions] = True
+                            all_new_rows.extend(
+                                self._execute_actions(df, mask, apply_to_all)
+                            )
 
-                        # Apply to all rows of order
-                        if apply_to_all_actions:
-                            new_rows = self._execute_actions(df, order_eligible_mask, apply_to_all_actions)
-                            all_new_rows.extend(new_rows)
-
-                        # Apply to first row only
-                        if apply_to_first_actions:
-                            first_row_index = eligible_df.index[0]
-                            first_row_mask = pd.Series(False, index=df.index)
-                            first_row_mask[first_row_index] = True
-                            new_rows = self._execute_actions(df, first_row_mask, apply_to_first_actions)
-                            all_new_rows.extend(new_rows)
+                        if apply_to_first:
+                            mask = pd.Series(False, index=df.index)
+                            mask.iloc[positions[0]] = True
+                            all_new_rows.extend(
+                                self._execute_actions(df, mask, apply_to_first)
+                            )
 
         # Додати всі нові рядки з ADD_PRODUCT actions
         if all_new_rows:
