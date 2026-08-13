@@ -170,7 +170,7 @@ round-trip — that is the behaviour the live-dict rule buys, and nothing curren
 
 ```python
 FormSection(title: str, description: str = "", parent=None)
-    .add_row(label: str, widget: QWidget, tooltip: str = "") -> QWidget
+    .add_row(label: str, widget: QWidget, tooltip: str = "") -> QLabel
     .add_widget(widget: QWidget) -> None
 ```
 
