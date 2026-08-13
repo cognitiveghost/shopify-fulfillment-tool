@@ -187,6 +187,10 @@ class RulesPage(SettingsPage):
                     index = combo.count() - 1
                 combo.setCurrentIndex(index)
                 combo.blockSignals(False)
+                # Re-run the value validation first so a field that just became
+                # resolvable again does not keep the old "never match" message,
+                # then re-apply the resolvability mark on top of it.
+                self._perform_validation(cond_refs)
                 self._check_field_resolvable(cond_refs)
 
     def _update_rule_summary(self, widget_refs):
@@ -447,7 +451,7 @@ class RulesPage(SettingsPage):
         )
 
         def _toggle():
-            visible = not body.isVisible()
+            visible = body.isHidden()
             body.setVisible(visible)
             toggle_btn.setText("▼" if visible else "▶")
 
@@ -735,6 +739,7 @@ class RulesPage(SettingsPage):
 
         # Operators that don't need a value input
         if op in ["is_empty", "is_not_empty"]:
+            self._check_field_resolvable(condition_refs)
             return  # No widget will be created or added
 
         # Determine if a ComboBox should be used
@@ -798,6 +803,12 @@ class RulesPage(SettingsPage):
         # Connect validation for QLineEdit widgets (QLineEdit is already imported globally)
         if isinstance(new_widget, QLineEdit):
             new_widget.textChanged.connect(lambda: self._validate_condition_value(condition_refs))
+
+        # Mark an unresolvable field as soon as the row is built. This is the
+        # only path that runs on load -- the value validation that also calls it
+        # is driven by textChanged, which a programmatic setText above does not
+        # reach (it is connected after the text is set).
+        self._check_field_resolvable(condition_refs)
 
     def _validate_condition_value(self, condition_refs):
         """
@@ -967,8 +978,19 @@ class RulesPage(SettingsPage):
         field = combo.currentText()
         level_combo = condition_refs.get("level_combo")
         level = level_combo.currentText() if level_combo else "article"
-        known = set(self.get_available_rule_fields(level=level))
-        resolvable = bool(field) and not field.startswith("---") and field in known
+
+        if not field or field.startswith("---"):
+            resolvable = False
+        elif field in set(self.get_available_rule_fields(level=level)):
+            resolvable = True
+        elif self.analysis_df is None or self.analysis_df.empty:
+            # No analysis loaded, so the offered list is only a hardcoded guess
+            # at the columns and any real client column would flag falsely. The
+            # one thing still provable is an order-level field on an article
+            # rule -- that never resolves whatever the data looks like.
+            resolvable = field not in RuleEngine.ORDER_LEVEL_FIELDS
+        else:
+            resolvable = False
 
         if resolvable:
             combo.setStyleSheet("")

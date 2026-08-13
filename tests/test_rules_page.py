@@ -59,6 +59,7 @@ class TestLevelSwitchPreservesSavedField:
 
         combo = refs["steps"][0]["conditions"][0]["field"]
         assert combo.currentText() == "item_count"
+        assert "border" in combo.styleSheet()  # preserved, but flagged
         assert page.collect()["rules"][0]["steps"][0]["conditions"][0]["field"] == "item_count"
 
 
@@ -76,8 +77,43 @@ class TestUnresolvableFieldIsFlagged:
         qtbot.addWidget(page)
 
         cond_refs = page.rule_widgets[0]["steps"][0]["conditions"][0]
-        assert page._check_field_resolvable(cond_refs) is False
+        # Asserted before calling the helper: the flag has to be there on load,
+        # which is the only moment the user sees a rule they did not just edit.
         assert "border" in cond_refs["field"].styleSheet()
+        assert page._check_field_resolvable(cond_refs) is False
+
+    def test_order_field_on_article_rule_is_flagged_without_an_analysis(self, qtbot):
+        rule = {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": "item_count", "operator": "equals", "value": "2"}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+        page = RulesPage([rule], pd.DataFrame())
+        qtbot.addWidget(page)
+
+        cond_refs = page.rule_widgets[0]["steps"][0]["conditions"][0]
+        assert "border" in cond_refs["field"].styleSheet()
+
+    def test_unlisted_column_is_not_flagged_without_an_analysis(self, qtbot):
+        """Settings opens before any analysis runs, and the offered field list
+        is then only a hardcoded guess -- a real client column must not be
+        called a never-match on the strength of that guess."""
+        rule = {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": "Total_Price", "operator": "equals", "value": "1"}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+        page = RulesPage([rule], pd.DataFrame())
+        qtbot.addWidget(page)
+
+        cond_refs = page.rule_widgets[0]["steps"][0]["conditions"][0]
+        assert cond_refs["field"].styleSheet() == ""
 
     def test_real_column_is_not_flagged(self, qtbot, analysis_df):
         rule = {
@@ -180,3 +216,12 @@ class TestFilterAndReorder:
         qtbot.addWidget(page)
         assert page.rule_widgets[0]["up_btn"].isEnabled() is False
         assert page.rule_widgets[1]["up_btn"].isEnabled() is False
+
+    def test_last_of_its_level_cannot_move_down(self, qtbot, analysis_df):
+        page = RulesPage(
+            [self._rule("a1", "article"), self._rule("o1", "order")],
+            analysis_df,
+        )
+        qtbot.addWidget(page)
+        assert page.rule_widgets[0]["down_btn"].isEnabled() is False
+        assert page.rule_widgets[1]["down_btn"].isEnabled() is False

@@ -827,6 +827,16 @@ class RuleEngine:
             # (apply() itself concatenates with ignore_index at the end).
             positions_by_order = df.groupby("Order_Number", sort=False).indices
 
+            # Audit trail, hoisted above the order loop -- one line per rule,
+            # not one per rule per order.
+            for idx, rule in enumerate(order_rules):
+                logger.info(
+                    f"[RULE ENGINE] Applying order rule #{idx+1}: "
+                    f"{rule.get('name', 'Unnamed')} "
+                    f"(Priority: {rule.get('priority', 1000)}, "
+                    f"Steps: {len(rule.get('steps', []))})"
+                )
+
             for order_number, positions in positions_by_order.items():
                 for rule in order_rules:
                     rule_name = rule.get("name", "Unnamed")
@@ -1307,12 +1317,9 @@ class RuleEngine:
                 else:
                     # For numeric fields: wrap in Series, use global operator
                     field_value = calc_method(order_df, None)
-                    if operator not in OPERATOR_MAP:
-                        result = False
-                    else:
-                        scalar_series = pd.Series([field_value])
-                        op_func = globals()[OPERATOR_MAP[operator]]
-                        result = bool(op_func(scalar_series, value).iloc[0])
+                    scalar_series = pd.Series([field_value])
+                    op_func = globals()[OPERATOR_MAP[operator]]
+                    result = bool(op_func(scalar_series, value).iloc[0])
 
             else:
                 # Regular article-level field - check if ANY row matches
