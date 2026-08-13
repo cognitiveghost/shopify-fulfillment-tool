@@ -71,7 +71,7 @@ class ThemeManager(QObject):
             logger.warning("QApplication not found, cannot apply theme")
             return
         theme = self.get_current_theme()
-        app.setStyleSheet(build_stylesheet(theme))
+        app.setStyleSheet(build_stylesheet(theme) + role_stylesheet(theme))
         app.setPalette(build_palette(theme))
         logger.debug(f"Applied {self._current_theme_name} theme globally")
 
@@ -173,3 +173,86 @@ def apply_font(target, role: str, bold: bool | None = None) -> None:
     font.setPointSize(style.size_pt)
     font.setBold(style.bold if bold is None else bold)
     target.setFont(font)
+
+
+BUTTON_ROLES = ("primary", "secondary")
+
+
+def role_stylesheet(theme: ThemeTokens) -> str:
+    """QSS for the button hierarchy, appended after shared.theme's sheet.
+
+    shared/theme.py paints every QPushButton accent-blue and is sync-owned
+    by packing-tool, so it cannot be edited here -- these rules layer on in
+    this module, the same seam Track 1 used for the font override.
+
+    Deliberately opt-in: a button with no `role` property keeps exactly its
+    current appearance. The opposite arrangement (neutral by default, mark
+    the primaries) is fewer edits but restyles every button in the app at
+    once, and this is a Windows-only app with three tracks of visual change
+    not yet verified on Windows.
+    """
+    hover = theme.button_hover_dark if theme.name == "dark" else theme.button_hover_light
+    return f"""
+        QPushButton[role="primary"] {{
+            background-color: {theme.accent_blue};
+            color: white;
+            border: 1px solid {theme.accent_blue};
+            font-weight: bold;
+        }}
+        QPushButton[role="primary"]:hover {{ background-color: {hover}; }}
+        QPushButton[role="primary"]:pressed {{ background-color: {hover}; }}
+
+        QPushButton[role="secondary"] {{
+            background-color: {theme.background_elevated};
+            color: {theme.text};
+            border: 1px solid {theme.border};
+        }}
+        QPushButton[role="secondary"]:hover {{ background-color: {theme.hover}; }}
+        /* shared/theme.py presses every QPushButton to dark accent-blue, which
+           reads as primary for the fraction of a second it is held. */
+        QPushButton[role="secondary"]:pressed {{ background-color: {theme.active_background}; }}
+
+        QPushButton[role="primary"]:disabled, QPushButton[role="secondary"]:disabled {{
+            background-color: {theme.background};
+            color: {theme.text_disabled};
+            border: 1px solid {theme.border_subtle};
+        }}
+
+        QListWidget#settingsNav {{
+            background-color: {theme.background};
+            border: none;
+            border-right: 1px solid {theme.border_subtle};
+            outline: none;
+        }}
+        QListWidget#settingsNav::item {{
+            padding: 6px 10px;
+            border-radius: {theme.radius}px;
+            /* matches :selected's accent bar so selecting does not shift text */
+            border-left: 2px solid transparent;
+        }}
+        QListWidget#settingsNav::item:hover {{ background-color: {theme.hover}; }}
+        QListWidget#settingsNav::item:selected {{
+            background-color: {theme.active_background};
+            color: {theme.text};
+            border-left: 2px solid {theme.accent_blue};
+        }}
+        QListWidget#settingsNav::item:disabled {{
+            color: {theme.text_secondary};
+            padding-top: 10px;
+        }}
+    """
+
+
+def set_button_role(button, role: str) -> None:
+    """Mark a button primary or secondary.
+
+    Qt does not restyle a widget when a dynamic property changes after the
+    stylesheet was applied -- the classic trap. Every call site here sets
+    the role at construction, where it would not matter, but unpolish/polish
+    runs unconditionally so a later live-flipping caller cannot step in it.
+    """
+    if role not in BUTTON_ROLES:
+        raise ValueError(f"Unknown button role {role!r}; expected one of {BUTTON_ROLES}")
+    button.setProperty("role", role)
+    button.style().unpolish(button)
+    button.style().polish(button)

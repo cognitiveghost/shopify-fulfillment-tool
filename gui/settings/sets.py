@@ -25,8 +25,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
 
 
@@ -40,10 +41,7 @@ class SetsPage(SettingsPage):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Header
-        header_label = QLabel("Set/Bundle Definitions")
-        header_label.setStyleSheet(font_css("heading"))
-        main_layout.addWidget(header_label)
+        main_layout.addWidget(FormSection("Set/Bundle Definitions"))
 
         # Search box
         self.sets_search = QLineEdit()
@@ -73,14 +71,17 @@ class SetsPage(SettingsPage):
         buttons_layout = QHBoxLayout()
 
         add_btn = QPushButton("Add Set")
+        set_button_role(add_btn, "secondary")
         add_btn.clicked.connect(self._add_set_dialog)
         buttons_layout.addWidget(add_btn)
 
         import_btn = QPushButton("Import from CSV")
+        set_button_role(import_btn, "secondary")
         import_btn.clicked.connect(self._import_sets_from_csv)
         buttons_layout.addWidget(import_btn)
 
         export_btn = QPushButton("Export to CSV")
+        set_button_role(export_btn, "secondary")
         export_btn.clicked.connect(self._export_sets_to_csv)
         buttons_layout.addWidget(export_btn)
 
@@ -138,11 +139,13 @@ class SetsPage(SettingsPage):
             actions_layout.setSpacing(5)
 
             edit_btn = QPushButton("Edit")
+            set_button_role(edit_btn, "secondary")
             edit_btn.setMaximumWidth(70)
             edit_btn.clicked.connect(lambda checked, sku=set_sku: self._edit_set_dialog(sku))
             actions_layout.addWidget(edit_btn)
 
             delete_btn = QPushButton("Delete")
+            set_button_role(delete_btn, "secondary")
             delete_btn.setMaximumWidth(70)
             delete_btn.clicked.connect(lambda checked, sku=set_sku: self._delete_set(sku))
             actions_layout.addWidget(delete_btn)
@@ -363,6 +366,7 @@ class SetEditorDialog(QDialog):
 
         # Add component button
         add_comp_btn = QPushButton("+ Add Component")
+        set_button_role(add_comp_btn, "secondary")
         # Use lambda to avoid passing 'checked' bool as first argument
         add_comp_btn.clicked.connect(lambda: self._add_component_row())
         layout.addWidget(add_comp_btn)
@@ -414,6 +418,7 @@ class SetEditorDialog(QDialog):
 
         # Remove button - використовуємо sender() щоб знайти правильний row
         remove_btn = QPushButton("Remove")
+        set_button_role(remove_btn, "secondary")
         remove_btn.setMaximumWidth(60)
         remove_btn.clicked.connect(self._remove_component_row)
         self.components_table.setCellWidget(row_idx, 2, remove_btn)

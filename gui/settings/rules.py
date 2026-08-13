@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from gui.settings.base import SettingsPage
 from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.core import get_unique_column_values
 
@@ -46,6 +46,7 @@ class RulesPage(SettingsPage):
         # Header row with Add button and rule count label
         header_row = QHBoxLayout()
         add_rule_btn = QPushButton("Add New Rule")
+        set_button_role(add_rule_btn, "secondary")
         add_rule_btn.clicked.connect(lambda: [self.add_rule_widget(), self._update_priority_labels(), self._update_rules_count_label()])
         header_row.addWidget(add_rule_btn)
         header_row.addStretch()
@@ -272,20 +273,25 @@ class RulesPage(SettingsPage):
 
         # Up button
         up_btn = QPushButton("↑")
+        set_button_role(up_btn, "secondary")
         up_btn.setMaximumWidth(30)
         up_btn.setToolTip("Move rule up (higher priority)")
         header_layout.addWidget(up_btn)
 
         # Down button
         down_btn = QPushButton("↓")
+        set_button_role(down_btn, "secondary")
         down_btn.setMaximumWidth(30)
         down_btn.setToolTip("Move rule down (lower priority)")
         header_layout.addWidget(down_btn)
 
         # Test button
         test_btn = QPushButton("Test")
+        set_button_role(test_btn, "secondary")
         test_btn.setMaximumWidth(70)
         test_btn.setToolTip("Test this rule against current analysis data")
+        # As with Delete Rule below: the per-widget green background is
+        # deliberate and overrides the secondary role's background.
         test_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.accent_green};
@@ -306,6 +312,10 @@ class RulesPage(SettingsPage):
         name_edit = QLineEdit(config.get("name", ""))
         header_layout.addWidget(name_edit)
         delete_rule_btn = QPushButton("Delete Rule")
+        set_button_role(delete_rule_btn, "secondary")
+        # The per-widget background wins over the role on purpose: destructive
+        # red stays. The role is here so the Hub's inventory guard sees it
+        # marked, and so it picks up the secondary border/disabled treatment.
         delete_rule_btn.setStyleSheet(f"background-color: {theme.accent_red}; color: white;")
         header_layout.addWidget(delete_rule_btn)
         rule_layout.addLayout(header_layout)
@@ -345,6 +355,7 @@ class RulesPage(SettingsPage):
 
         # "Add Step" button
         add_step_btn = QPushButton("+ Add Step")
+        set_button_role(add_step_btn, "secondary")
         add_step_btn.setToolTip("Add a new step to this rule (narrowing: each step filters rows from previous step)")
         add_step_btn.setStyleSheet(f"color: {theme.accent_blue}; font-weight: bold;")
         rule_layout.addWidget(add_step_btn, 0, Qt.AlignLeft)
@@ -437,6 +448,7 @@ class RulesPage(SettingsPage):
         conditions_rows_layout = QVBoxLayout()
         conditions_layout.addLayout(conditions_rows_layout)
         add_condition_btn = QPushButton("Add Condition")
+        set_button_role(add_condition_btn, "secondary")
         conditions_layout.addWidget(add_condition_btn, 0, Qt.AlignLeft)
         step_layout.addWidget(conditions_box)
 
@@ -446,6 +458,7 @@ class RulesPage(SettingsPage):
         actions_rows_layout = QVBoxLayout()
         actions_layout.addLayout(actions_rows_layout)
         add_action_btn = QPushButton("Add Action")
+        set_button_role(add_action_btn, "secondary")
         actions_layout.addWidget(add_action_btn, 0, Qt.AlignLeft)
         step_layout.addWidget(actions_box)
 
@@ -453,6 +466,7 @@ class RulesPage(SettingsPage):
         delete_step_btn = None
         if step_number > 1:
             delete_step_btn = QPushButton("Delete Step")
+            set_button_role(delete_step_btn, "secondary")
             delete_step_btn.setStyleSheet(f"color: {theme.accent_red};")
             step_layout.addWidget(delete_step_btn, 0, Qt.AlignRight)
 
@@ -542,6 +556,7 @@ class RulesPage(SettingsPage):
         op_combo = WheelIgnoreComboBox()
         op_combo.addItems(CONDITION_OPERATORS)
         delete_btn = QPushButton("X")
+        set_button_role(delete_btn, "secondary")
 
         row_layout.addWidget(field_combo)
         row_layout.addWidget(op_combo)
@@ -1006,6 +1021,7 @@ class RulesPage(SettingsPage):
 
         # Delete button
         delete_btn = QPushButton("X")
+        set_button_role(delete_btn, "secondary")
 
         row_layout.addWidget(type_combo)
         # Параметри будуть вставлені динамічно

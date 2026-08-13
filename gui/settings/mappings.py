@@ -1,8 +1,6 @@
 """Column mappings (orders/stock) and courier-name mappings."""
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -13,8 +11,9 @@ from PySide6.QtWidgets import (
 )
 
 from gui.column_mapping_widget import ColumnMappingWidget
+from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import get_theme_manager, set_button_role
 
 
 class MappingsPage(SettingsPage):
@@ -40,8 +39,7 @@ class MappingsPage(SettingsPage):
         # ========================================
         # COLUMN MAPPINGS - Orders
         # ========================================
-        orders_box = QGroupBox("Orders CSV Column Mapping")
-        orders_layout = QVBoxLayout(orders_box)
+        orders_box = FormSection("Orders CSV Column Mapping")
 
         # Define required and optional fields for orders
         orders_required = ["Order_Number", "SKU", "Quantity", "Shipping_Method"]
@@ -56,14 +54,13 @@ class MappingsPage(SettingsPage):
             optional_fields=orders_optional
         )
 
-        orders_layout.addWidget(self.orders_mapping_widget)
+        orders_box.add_widget(self.orders_mapping_widget)
         scroll_layout.addWidget(orders_box)
 
         # ========================================
         # COLUMN MAPPINGS - Stock
         # ========================================
-        stock_box = QGroupBox("Stock CSV Column Mapping")
-        stock_layout = QVBoxLayout(stock_box)
+        stock_box = FormSection("Stock CSV Column Mapping")
 
         # Define required and optional fields for stock
         stock_required = ["SKU", "Stock"]
@@ -78,34 +75,30 @@ class MappingsPage(SettingsPage):
             optional_fields=stock_optional
         )
 
-        stock_layout.addWidget(self.stock_mapping_widget)
+        stock_box.add_widget(self.stock_mapping_widget)
         scroll_layout.addWidget(stock_box)
 
         # ========================================
         # COURIER MAPPINGS
         # ========================================
-        courier_mappings_box = QGroupBox("Courier Mappings")
-        courier_main_layout = QVBoxLayout(courier_mappings_box)
-
-        instructions2 = QLabel(
-            "Map different shipping provider names to standardized courier codes.\n"
-            "You can specify multiple patterns (comma-separated) for each courier."
+        courier_mappings_box = FormSection(
+            "Courier Mappings",
+            "Map different shipping provider names to standardized courier codes. "
+            "You can specify multiple patterns (comma-separated) for each courier.",
         )
-        instructions2.setWordWrap(True)
-        theme = get_theme_manager().get_current_theme()
-        instructions2.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('body')}")
-        courier_main_layout.addWidget(instructions2)
 
         # Container for courier mapping rows
         self.courier_mappings_container = QWidget()
         self.courier_mappings_layout = QVBoxLayout(self.courier_mappings_container)
         self.courier_mappings_layout.setContentsMargins(0, 0, 0, 0)
 
-        courier_main_layout.addWidget(self.courier_mappings_container)
+        courier_mappings_box.add_widget(self.courier_mappings_container)
 
         add_courier_btn = QPushButton("+ Add Courier Mapping")
+        set_button_role(add_courier_btn, "secondary")
         add_courier_btn.clicked.connect(lambda: self.add_courier_mapping_row())
-        courier_main_layout.addWidget(add_courier_btn, 0, Qt.AlignLeft)
+        add_courier_btn.setMaximumWidth(200)
+        courier_mappings_box.add_widget(add_courier_btn)
 
         scroll_layout.addWidget(courier_mappings_box)
         scroll_layout.addStretch()
@@ -153,8 +146,11 @@ class MappingsPage(SettingsPage):
 
         # Delete button
         delete_btn = QPushButton("✕")
+        set_button_role(delete_btn, "secondary")
         delete_btn.setFixedWidth(30)
-        delete_btn.setStyleSheet("color: red; font-weight: bold;")
+        theme = get_theme_manager().get_current_theme()
+        # Sets only `color`, so the secondary role's background still applies.
+        delete_btn.setStyleSheet(f"color: {theme.accent_red}; font-weight: bold;")
         delete_btn.setToolTip("Remove this courier mapping")
 
         row_layout.addWidget(code_label)
@@ -203,11 +199,9 @@ class MappingsPage(SettingsPage):
                 patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
                 new_couriers[courier_code] = {"patterns": patterns, "case_sensitive": False}
 
-        # The shell merges collect() dict values one level deep
-        # (config_data[key].update(value)) rather than replacing them, so a
-        # deleted courier code or a stale legacy column_mappings key would
-        # survive a plain new-dict return. Mutate the live dicts in place --
-        # update() against itself is then a no-op and the deletion sticks.
+        # SettingsPage's contract: the returned value replaces
+        # config_data[key], so these must be the live dicts handed to
+        # __init__ -- clear-and-refill in place, never a fresh dict.
         self.column_mappings.clear()
         self.column_mappings.update({"version": 2, "orders": orders_mappings, "stock": stock_mappings})
         self.courier_mappings.clear()

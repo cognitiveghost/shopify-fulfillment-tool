@@ -3,7 +3,7 @@ import logging
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import QSettings, Qt, QThreadPool
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -13,10 +13,12 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPushButton,
     QStackedWidget,
     QVBoxLayout,
 )
 
+from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.settings.general import GeneralPage
 from gui.settings.mappings import MappingsPage
@@ -25,7 +27,7 @@ from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
 from gui.settings.stock_exports import StockExportsPage
 from gui.settings.weight import WeightPage
-from gui.theme_manager import apply_font, font_css
+from gui.theme_manager import apply_font, set_button_role
 from gui.worker import Worker
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,10 @@ class SettingsWindow(QDialog):
         ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
         ("Organization", ["Tag Categories"]),
     ]
+
+    # Stored by *name*, not row index: the nav groups have gained entries
+    # twice already and an index would silently point at a different page.
+    NAV_SETTINGS_KEY = "settings_hub/last_page"
 
     def __init__(self, client_id, client_config, profile_manager, analysis_df=None, parent=None):
         """Initializes the SettingsWindow.
@@ -119,6 +125,7 @@ class SettingsWindow(QDialog):
         main_layout.addLayout(content_layout)
 
         self._settings_nav = QListWidget()
+        self._settings_nav.setObjectName("settingsNav")
         self._settings_nav.setFixedWidth(170)
         self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         content_layout.addWidget(self._settings_nav)
@@ -166,6 +173,8 @@ class SettingsWindow(QDialog):
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = button_box.button(QDialogButtonBox.Save)
+        set_button_role(self.save_button, "primary")
+        set_button_role(button_box.button(QDialogButtonBox.Cancel), "secondary")
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
@@ -201,11 +210,27 @@ class SettingsWindow(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name])
                 self._settings_nav.addItem(item)
         self._settings_nav.currentItemChanged.connect(self._on_settings_nav_changed)
-        # Select the first real (non-header) entry
+        self._restore_nav_selection()
+
+    def _first_selectable_row(self) -> int:
         for row in range(self._settings_nav.count()):
             if self._settings_nav.item(row).flags() & Qt.ItemFlag.ItemIsSelectable:
+                return row
+        return -1
+
+    def _restore_nav_selection(self) -> None:
+        """Select the last-viewed page, or the first entry if it is gone."""
+        wanted = QSettings("ShopifyFulfillmentTool", "FulfillmentApp").value(
+            self.NAV_SETTINGS_KEY
+        )
+        for row in range(self._settings_nav.count()):
+            item = self._settings_nav.item(row)
+            if item.text() == wanted and item.flags() & Qt.ItemFlag.ItemIsSelectable:
                 self._settings_nav.setCurrentRow(row)
-                break
+                return
+        row = self._first_selectable_row()
+        if row >= 0:
+            self._settings_nav.setCurrentRow(row)
 
     def _on_settings_nav_changed(self, current, _previous):
         if current is None:
@@ -213,6 +238,9 @@ class SettingsWindow(QDialog):
         index = current.data(Qt.ItemDataRole.UserRole)
         if index is not None:
             self.tab_widget.setCurrentIndex(index)
+            QSettings("ShopifyFulfillmentTool", "FulfillmentApp").setValue(
+                self.NAV_SETTINGS_KEY, current.text()
+            )
 
     def reject(self):
         if self._is_saving:
@@ -230,10 +258,7 @@ class SettingsWindow(QDialog):
 
             for page in self._pages:
                 for key, value in page.collect().items():
-                    if isinstance(value, dict) and isinstance(self.config_data.get(key), dict):
-                        self.config_data[key].update(value)
-                    else:
-                        self.config_data[key] = value
+                    self.config_data[key] = value
 
             # ========================================
             # Save to server via ProfileManager (background -- avoids blocking
@@ -317,6 +342,15 @@ class _TagCategoriesPage(SettingsPage):
         self.panel = TagCategoriesPanel(tag_categories, parent=self)
         layout.addWidget(self.panel)
 
+        # TagCategoriesPanel is also used standalone (its own dialog, outside
+        # the Hub) -- mark roles on this wrapped instance only, not in
+        # tag_categories_dialog.py itself, so the standalone dialog keeps its
+        # current appearance. findChildren rather than a list of attribute
+        # names: a rename over there would otherwise raise AttributeError in
+        # here, and a new button would fail the role guard in the wrong file.
+        for button in self.panel.findChildren(QPushButton):
+            set_button_role(button, "secondary")
+
     def collect(self) -> dict:
         return {"tag_categories": self.panel.get_categories()}
 
@@ -341,21 +375,11 @@ class _ColumnConfigPage(SettingsPage):
         from gui.column_config_dialog import ColumnConfigPanel
 
         layout.setContentsMargins(10, 10, 10, 10)
-        header_label = QLabel("Column Configuration")
-        header_label.setStyleSheet(font_css("heading"))
-        layout.addWidget(header_label)
-
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
-        help_text = QLabel(
+        layout.addWidget(FormSection(
+            "Column Configuration",
             "Configure which columns are visible in the analysis table, "
-            "their order, and saved views."
-        )
-        help_text.setWordWrap(True)
-        help_text.setStyleSheet(
-            f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 6px;"
-        )
-        layout.addWidget(help_text)
+            "their order, and saved views.",
+        ))
 
         self.panel = ColumnConfigPanel(
             main_window.table_config_manager, main_window=main_window, parent=self
