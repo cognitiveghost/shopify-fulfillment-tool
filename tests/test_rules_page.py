@@ -253,6 +253,7 @@ class TestValidationFeedbackPlacement:
 
         label = cond["feedback_label"]
         assert label.text() == "Invalid regex syntax"
+        assert not label.isHidden()
         # Not one more cell in the horizontal row, past the delete button.
         assert cond["row_layout"].indexOf(label) == -1
         outer = cond["widget"].layout()
