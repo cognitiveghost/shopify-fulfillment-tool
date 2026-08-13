@@ -94,3 +94,30 @@ def test_get_mappings_still_removes_a_cleared_managed_field(qapp):
     )
     widget.csv_column_inputs["Product_Name"].setText("")
     assert widget.get_mappings() == {"Article": "SKU"}
+
+
+def test_stock_page_offers_rows_for_the_lot_tracking_fields(qapp):
+    """Expiry_Date and Batch drive _build_fifo_lots(); before this they were
+    in the default client config with no way to see or edit them."""
+    page = MappingsPage(valid_column_mappings(), {})
+    inputs = page.stock_mapping_widget.csv_column_inputs
+    assert "Expiry_Date" in inputs
+    assert "Batch" in inputs
+
+
+def test_stock_lot_mappings_round_trip_through_the_page(qapp):
+    column_mappings = valid_column_mappings()
+    column_mappings["stock"] = {
+        "Article": "SKU",
+        "Available": "Stock",
+        "Exp date": "Expiry_Date",
+        "Lot": "Batch",
+    }
+    page = MappingsPage(column_mappings, {})
+
+    assert page.collect()["column_mappings"]["stock"] == {
+        "Article": "SKU",
+        "Available": "Stock",
+        "Exp date": "Expiry_Date",
+        "Lot": "Batch",
+    }

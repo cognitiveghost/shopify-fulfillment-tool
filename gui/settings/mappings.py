@@ -62,9 +62,12 @@ class MappingsPage(SettingsPage):
         # ========================================
         stock_box = FormSection("Stock CSV Column Mapping")
 
-        # Define required and optional fields for stock
+        # Define required and optional fields for stock.
+        # Expiry_Date and Batch are the exact internal names _build_fifo_lots()
+        # looks for (shopify_tool/analysis.py:96-97) -- renaming them here
+        # silently turns FIFO lot allocation off.
         stock_required = ["SKU", "Stock"]
-        stock_optional = ["Product_Name"]
+        stock_optional = ["Product_Name", "Expiry_Date", "Batch"]
 
         stock_mappings = column_mappings.get("stock", {})
 
