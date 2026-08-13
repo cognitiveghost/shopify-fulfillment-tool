@@ -209,3 +209,35 @@ def test_stock_page_collect_emits_every_stock_key_it_was_built_with(qapp):
     written = page.collect()["column_mappings"]["stock"]
 
     assert set(written.values()) == {"SKU", "Stock", "Product_Name", "Expiry_Date", "Batch"}
+
+
+def test_load_headers_fills_every_row_from_the_chosen_file(qapp, tmp_path, monkeypatch):
+    csv = tmp_path / "stock.csv"
+    csv.write_text("Article;Available;Exp date;Lot\nA1;5;261230;L7\n", encoding="utf-8")
+
+    page = StockMappingPage(valid_column_mappings())
+    monkeypatch.setattr(
+        "gui.settings.mappings.QFileDialog.getOpenFileName",
+        lambda *a, **k: (str(csv), ""),
+    )
+
+    page._load_headers_from_csv()
+
+    sku_input = page.stock_mapping_widget.csv_column_inputs["SKU"]
+    assert [sku_input.itemText(i) for i in range(sku_input.count())] == [
+        "Article", "Available", "Exp date", "Lot",
+    ]
+    assert sku_input.currentText() == "Article", "the configured mapping must survive"
+
+
+def test_load_headers_cancelled_leaves_the_inputs_alone(qapp, monkeypatch):
+    page = StockMappingPage(valid_column_mappings())
+    monkeypatch.setattr(
+        "gui.settings.mappings.QFileDialog.getOpenFileName", lambda *a, **k: ("", "")
+    )
+
+    page._load_headers_from_csv()
+
+    sku_input = page.stock_mapping_widget.csv_column_inputs["SKU"]
+    assert sku_input.count() == 0
+    assert sku_input.currentText() == "Article"

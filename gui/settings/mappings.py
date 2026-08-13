@@ -4,9 +4,11 @@ mappings, which resolve an orders column) and stock."""
 from typing import ClassVar
 
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -17,6 +19,7 @@ from gui.column_mapping_widget import ColumnMappingWidget
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.theme_manager import get_theme_manager, set_button_role
+from shopify_tool.csv_utils import read_csv_headers
 
 
 class _MappingPageBase(SettingsPage):
@@ -47,6 +50,16 @@ class _MappingPageBase(SettingsPage):
         self.scroll_layout = QVBoxLayout(scroll_widget)
 
         box = FormSection(self.TITLE, self.DESCRIPTION)
+        self.load_headers_btn = QPushButton("Load headers from CSV...")
+        set_button_role(self.load_headers_btn, "secondary")
+        self.load_headers_btn.setMaximumWidth(220)
+        self.load_headers_btn.setToolTip(
+            "Pick your CSV to fill each field's dropdown with its real column "
+            "names. Nothing you have already typed is changed."
+        )
+        self.load_headers_btn.clicked.connect(self._load_headers_from_csv)
+        box.add_widget(self.load_headers_btn)
+
         self.mapping_widget = ColumnMappingWidget(
             mapping_type=self.MAPPING_TYPE,
             current_mappings=column_mappings.get(self.MAPPING_TYPE, {}),
@@ -70,6 +83,40 @@ class _MappingPageBase(SettingsPage):
         self.column_mappings["version"] = 2
         self.column_mappings[self.MAPPING_TYPE] = self.mapping_widget.get_mappings()
         return self.column_mappings
+
+    def _load_headers_from_csv(self):
+        """Offer a chosen CSV's column names as dropdown options on every row.
+
+        Reads the header line only, and detects the delimiter itself, so this
+        does not depend on the delimiter the General page currently shows --
+        which may hold an edit the user has not saved yet.
+        """
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Select {self.MAPPING_TYPE.capitalize()} CSV",
+            "",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        try:
+            headers = read_csv_headers(file_path)
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Could Not Read CSV",
+                f"Failed to read column names from this file:\n\n{e!s}",
+            )
+            return
+
+        if not headers:
+            QMessageBox.warning(
+                self, "No Columns Found", "That file has no column headers."
+            )
+            return
+
+        self.mapping_widget.set_available_headers(headers)
 
 
 class OrdersMappingPage(_MappingPageBase):
