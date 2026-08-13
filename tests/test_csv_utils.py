@@ -8,6 +8,7 @@ from shopify_tool.csv_utils import (
     normalize_sku,
     normalize_sku_for_matching,
     order_number_sort_key,
+    read_csv_headers,
 )
 
 
@@ -139,3 +140,26 @@ class TestMergeCsvFiles:
     def test_empty_file_list_raises(self):
         with pytest.raises(ValueError):
             merge_csv_files([], delimiter=",")
+
+
+def test_read_csv_headers_semicolon_delimited(tmp_path):
+    csv = tmp_path / "stock.csv"
+    csv.write_text(
+        "Артикул;Наличност;Годност;Партида\nSKU1;10;261230;L42\n",
+        encoding="utf-8",
+    )
+    assert read_csv_headers(str(csv)) == ["Артикул", "Наличност", "Годност", "Партида"]
+
+
+def test_read_csv_headers_comma_delimited(tmp_path):
+    csv = tmp_path / "orders.csv"
+    csv.write_text("Name,Lineitem sku,Lineitem quantity\n#1001,ABC,2\n", encoding="utf-8")
+    assert read_csv_headers(str(csv)) == ["Name", "Lineitem sku", "Lineitem quantity"]
+
+
+def test_read_csv_headers_does_not_read_rows(tmp_path):
+    """nrows=0 keeps this cheap on a large stock export over a network share."""
+    csv = tmp_path / "big.csv"
+    rows = "\n".join(f"SKU{i};{i}" for i in range(5000))
+    csv.write_text(f"Артикул;Наличност\n{rows}\n", encoding="utf-8")
+    assert read_csv_headers(str(csv)) == ["Артикул", "Наличност"]
