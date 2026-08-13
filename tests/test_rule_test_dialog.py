@@ -83,7 +83,7 @@ class TestNoCrashOnShapeChange:
     def test_add_product_with_a_tag_does_not_crash(self, qtbot, analysis_df, no_modals):
         """ADD_PRODUCT appends rows with ignore_index, so a boolean mask built
         on df_before.index no longer aligns with df_after."""
-        dialog = _open(qtbot, _rule(
+        _open(qtbot, _rule(
             {"type": "ADD_PRODUCT", "sku": "B", "quantity": 1},
             {"type": "ADD_TAG", "value": "bonus"},
         ), analysis_df)
