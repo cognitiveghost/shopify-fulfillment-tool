@@ -1101,9 +1101,13 @@ class RuleEngine:
                     continue
 
                 if target not in df.columns:
-                    df[target] = ""
-
-                df.loc[matches, target] = df.loc[matches, source]
+                    # Build the column from the source so it takes the source's
+                    # dtype. Seeding "" first made it str dtype on pandas 3, and
+                    # writing a numeric source into that raises TypeError.
+                    # Unmatched rows are NaN -- the rule never wrote them.
+                    df[target] = df[source].where(matches)
+                else:
+                    df.loc[matches, target] = df.loc[matches, source]
                 logger.info(f"[RULE ENGINE] Copied {source} -> {target} for {matches.sum()} rows")
 
             elif action_type == "SET_MULTI_TAGS":
@@ -1185,9 +1189,13 @@ class RuleEngine:
                     logger.warning("[RULE ENGINE] CALCULATE fields not found in DataFrame")
                     continue
 
-                # Створити target column якщо не існує
+                # Створити target column якщо не існує.
+                # NaN, not 0.0 -- a row the rule never matched has no result,
+                # and a literal 0.0 there is indistinguishable from a real one.
+                # float("nan") gives a float64 column without importing numpy
+                # (numpy is imported locally in the divide branch below).
                 if target not in df.columns:
-                    df[target] = 0.0
+                    df[target] = float("nan")
 
                 # Конвертувати в числа
                 val1 = pd.to_numeric(df.loc[matches, field1], errors='coerce')

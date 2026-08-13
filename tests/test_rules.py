@@ -327,4 +327,53 @@ class TestOrderRuleLoopRewrite:
             ],
         }]
         out = RuleEngine(rules).apply(df.copy())
+
         assert out["Status_Note"].tolist() == ["", ""]
+
+
+class TestRuleCreatedColumnSeeding:
+    """A column the engine creates is NaN where the rule did not write.
+
+    Regression: seeding a new COPY_FIELD target with "" made it str dtype on
+    pandas 3, so copying a numeric source into it raised TypeError.
+    """
+
+    def test_copy_field_numeric_source_into_new_column(self):
+        df = _df({"Quantity": [1, 2, 3], "SKU": ["a", "b", "c"]})
+        rules = [_rule([{"field": "Quantity", "operator": "is greater than", "value": 1}],
+                       [{"type": "COPY_FIELD", "source": "Quantity", "target": "Qty_Copy"}])]
+        out = RuleEngine(rules).apply(df.copy())
+
+        assert "Qty_Copy" in out.columns
+        assert out.loc[0, "Qty_Copy"] != out.loc[0, "Qty_Copy"]  # NaN: unmatched
+        assert out.loc[1, "Qty_Copy"] == 2
+        assert out.loc[2, "Qty_Copy"] == 3
+
+    def test_copy_field_string_source_into_new_column(self):
+        df = _df({"Quantity": [1, 2, 3], "SKU": ["a", "b", "c"]})
+        rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 2}],
+                       [{"type": "COPY_FIELD", "source": "SKU", "target": "SKU_Copy"}])]
+        out = RuleEngine(rules).apply(df.copy())
+
+        assert out.loc[1, "SKU_Copy"] == "b"
+        assert pd.isna(out.loc[0, "SKU_Copy"])
+        assert pd.isna(out.loc[2, "SKU_Copy"])
+
+    def test_copy_field_into_existing_column_leaves_other_rows_alone(self):
+        df = _df({"Quantity": [1, 2], "SKU": ["a", "b"], "Note": ["keep", "keep"]})
+        rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 2}],
+                       [{"type": "COPY_FIELD", "source": "SKU", "target": "Note"}])]
+        out = RuleEngine(rules).apply(df.copy())
+
+        assert out.loc[0, "Note"] == "keep"
+        assert out.loc[1, "Note"] == "b"
+
+    def test_calculate_leaves_unmatched_rows_empty(self):
+        df = _df({"Quantity": [1, 2], "Price": [10, 20]})
+        rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 2}],
+                       [{"type": "CALCULATE", "operation": "multiply",
+                         "field1": "Quantity", "field2": "Price", "target": "Total"}])]
+        out = RuleEngine(rules).apply(df.copy())
+
+        assert pd.isna(out.loc[0, "Total"]), "unmatched row must be blank, not 0.0"
+        assert out.loc[1, "Total"] == 40
