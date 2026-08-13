@@ -772,7 +772,7 @@ class RuleEngine:
         # Create columns for actions if they don't exist
         self._prepare_df_for_actions(df)
 
-        # Збирати нові рядки з ADD_PRODUCT actions
+        # Rows created by ADD_PRODUCT actions, appended after all rules run.
         all_new_rows = []
 
         # Separate rules by level
@@ -877,7 +877,7 @@ class RuleEngine:
                                 self._execute_actions(df, mask, apply_to_first)
                             )
 
-        # Додати всі нові рядки з ADD_PRODUCT actions
+        # Append the rows ADD_PRODUCT actions created.
         if all_new_rows:
             new_df = pd.DataFrame(all_new_rows)
             df = pd.concat([df, new_df], ignore_index=True)
@@ -1037,7 +1037,7 @@ class RuleEngine:
         import logging
         logger = logging.getLogger(__name__)
 
-        new_rows = []  # Збирати нові рядки тут
+        new_rows = []  # Rows to append, collected here.
 
         for action in actions:
             action_type = action.get("type", "").upper()
