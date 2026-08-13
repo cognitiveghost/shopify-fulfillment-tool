@@ -1,7 +1,7 @@
 # Rule Target Column Seeding Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to
-> implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 > (The runner's Stage B declines subagent-driven-development and stays in-session.)
 
 **Goal:** A column a rule *creates* must hold "no value" (NaN) on every row the rule
@@ -131,7 +131,7 @@ seed kept.
   unmatched rows and holds the source value, at the source's dtype, on matched rows."*
   Task 3 relies on this.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_rules.py`, at the end of the file, a new class. `_df` and `_rule`
 are the module-level helpers already defined at `tests/test_rules.py:12-22`.
@@ -175,7 +175,7 @@ class TestRuleCreatedColumnSeeding:
         assert out.loc[1, "Note"] == "b"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_rules.py::TestRuleCreatedColumnSeeding -v`
 
@@ -185,7 +185,7 @@ per-action exceptions in places, so the failure may surface either as a raised
 numbers — either way the assertions do not hold. The other two tests should already
 pass; they are there to pin behaviour the fix must not break.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `shopify_tool/rules.py`, replace lines 1103-1106:
 
@@ -209,13 +209,13 @@ with:
                     df.loc[matches, target] = df.loc[matches, source]
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_rules.py -v`
 
 Expected: all PASS, including the three new ones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add shopify_tool/rules.py tests/test_rules.py
@@ -244,7 +244,7 @@ does — see the note in Task 3, Step 3.
 - Produces: the invariant *"a CALCULATE target column created by the engine is NaN on
   unmatched rows."* Task 3 relies on this.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this method to the `TestRuleCreatedColumnSeeding` class created in Task 1:
 
@@ -260,13 +260,13 @@ Add this method to the `TestRuleCreatedColumnSeeding` class created in Task 1:
         assert out.loc[1, "Total"] == 40
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest "tests/test_rules.py::TestRuleCreatedColumnSeeding::test_calculate_leaves_unmatched_rows_empty" -v`
 
 Expected: FAIL — `assert pd.isna(0.0)` is False, because the column is seeded `0.0`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `shopify_tool/rules.py`, replace lines 1188-1190:
 
@@ -288,13 +288,13 @@ with:
                     df[target] = float("nan")
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_rules.py -v`
 
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add shopify_tool/rules.py tests/test_rules.py
@@ -319,7 +319,7 @@ Rule Test dialog's != 0 workaround."
   on rows the rule did not write.
 - Produces: nothing later tasks depend on.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/test_rule_test_dialog.py` already has everything this needs: the `analysis_df`
 fixture (`:14-31`), the `_rule(*actions)` helper (`:34-48`) which builds a rule matching
@@ -351,13 +351,13 @@ class TestZeroResultsAreChanges:
         assert pd.isna(dialog.df_after.loc[1, "Line_Total"])
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_rule_test_dialog.py -v`
 
 Expected: the new test FAILS with `assert 0 == 2` — the `!= 0` guard filters both rows out.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `gui/rule_test_dialog.py`, replace line 291:
 
@@ -406,13 +406,13 @@ to:
         # _detect_changed_rows reads a new column's NaNs as "untouched"; see there.
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_rule_test_dialog.py tests/test_rules.py -v`
 
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gui/rule_test_dialog.py tests/test_rule_test_dialog.py
@@ -440,7 +440,7 @@ pre-created here.
 - Consumes: nothing. Pure deletion.
 - Produces: nothing.
 
-- [ ] **Step 1: Delete the dead branch**
+- [x] **Step 1: Delete the dead branch**
 
 In `shopify_tool/rules.py`, delete these four lines (`rules.py:920-923`):
 
@@ -451,7 +451,7 @@ In `shopify_tool/rules.py`, delete these four lines (`rules.py:920-923`):
                             needed_columns.add(target)
 ```
 
-- [ ] **Step 2: Update the docstring to match**
+- [x] **Step 2: Update the docstring to match**
 
 In the same function, replace this sentence in the docstring
 (`rules.py:901-905`):
@@ -476,21 +476,21 @@ with:
         and leave unmatched rows NaN, neither of which is knowable from here.
 ```
 
-- [ ] **Step 3: Run the full suite**
+- [x] **Step 3: Run the full suite**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest`
 
 Expected: **580 passed** (575 baseline + 5 new). If the count differs, stop and
 investigate before committing — a dropped test is a regression, not a rounding error.
 
-- [ ] **Step 4: Run the linter**
+- [x] **Step 4: Run the linter**
 
 Run: `.venv/bin/ruff check . --exclude shared`
 
 Expected: clean. If it flags `needed_columns` as now-unused, it is not — `Status_Note`
 and `Internal_Tags` are still added to it and read at `rules.py:927-930`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add shopify_tool/rules.py
@@ -505,10 +505,10 @@ the collection was dead code that read as though it did the work."
 
 ## Verification before finishing Stage B
 
-- [ ] `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest` → 580 passed
-- [ ] `.venv/bin/ruff check . --exclude shared` → clean
-- [ ] `graphify update .` run in this worktree
-- [ ] Manual sanity (optional, needs a display): open a rule with
+- [x] `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest` → 580 passed
+- [x] `.venv/bin/ruff check . --exclude shared` → clean
+- [x] `graphify update .` run in this worktree
+- [x] Manual sanity (optional, needs a display): open a rule with
       `COPY_FIELD: Quantity -> Qty_Copy`, hit **Test Rule**, confirm the preview table
       renders and unmatched rows show blank in the `Qty_Copy` column.
 
