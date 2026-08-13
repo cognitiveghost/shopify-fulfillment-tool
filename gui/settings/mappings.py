@@ -1,9 +1,14 @@
-"""Column mappings (orders/stock) and courier-name mappings."""
+"""Column mappings, split one page per CSV: orders (plus courier name
+mappings, which resolve an orders column) and stock."""
+
+from typing import ClassVar
 
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -14,107 +19,151 @@ from gui.column_mapping_widget import ColumnMappingWidget
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.theme_manager import get_theme_manager, set_button_role
+from shopify_tool.csv_utils import read_csv_headers
 
 
-class MappingsPage(SettingsPage):
-    """Column and courier mappings, stored under config_data["column_mappings"]
-    and config_data["courier_mappings"]."""
+class _MappingPageBase(SettingsPage):
+    """Shared scaffolding: one scroll area, one column-mapping widget.
 
-    def __init__(self, column_mappings: dict, courier_mappings: dict, parent=None):
+    Both pages hold the SAME live config_data["column_mappings"] dict and
+    write only their own sub-key into it, in place. Never clear() it and
+    never rebuild it -- whichever page collect()s second would wipe the
+    other's sub-key, and _pages order would silently decide which.
+    """
+
+    MAPPING_TYPE = ""
+    TITLE = ""
+    DESCRIPTION = ""
+    # ClassVar, not a bare annotation: ruff's RUF012 rejects a mutable class
+    # attribute without it, and window.py already uses this for the same reason.
+    REQUIRED_FIELDS: ClassVar[list[str]] = []
+    OPTIONAL_FIELDS: ClassVar[list[str]] = []
+
+    def __init__(self, column_mappings: dict, parent=None):
         super().__init__(parent)
-        # Held by reference (not copied) so collect() can mutate them in place --
-        # see the comment on collect() for why that matters.
         self.column_mappings = column_mappings
-        self.courier_mappings = courier_mappings
-        self.courier_mapping_widgets = []
 
         main_layout = QVBoxLayout(self)
-
-        # Add scroll area for the entire tab
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
+        self.scroll_layout = QVBoxLayout(scroll_widget)
 
-        # ========================================
-        # COLUMN MAPPINGS - Orders
-        # ========================================
-        orders_box = FormSection("Orders CSV Column Mapping")
-
-        # Define required and optional fields for orders
-        orders_required = ["Order_Number", "SKU", "Quantity", "Shipping_Method"]
-        orders_optional = ["Product_Name", "Shipping_Country", "Tags", "Notes", "Total_Price", "Subtotal"]
-
-        orders_mappings = column_mappings.get("orders", {})
-
-        self.orders_mapping_widget = ColumnMappingWidget(
-            mapping_type="orders",
-            current_mappings=orders_mappings,
-            required_fields=orders_required,
-            optional_fields=orders_optional
+        box = FormSection(self.TITLE, self.DESCRIPTION)
+        self.load_headers_btn = QPushButton("Load headers from CSV...")
+        set_button_role(self.load_headers_btn, "secondary")
+        self.load_headers_btn.setMaximumWidth(220)
+        self.load_headers_btn.setToolTip(
+            "Pick your CSV to fill each field's dropdown with its real column "
+            "names. Nothing you have already typed is changed."
         )
+        self.load_headers_btn.clicked.connect(self._load_headers_from_csv)
+        box.add_widget(self.load_headers_btn)
 
-        orders_box.add_widget(self.orders_mapping_widget)
-        scroll_layout.addWidget(orders_box)
-
-        # ========================================
-        # COLUMN MAPPINGS - Stock
-        # ========================================
-        stock_box = FormSection("Stock CSV Column Mapping")
-
-        # Define required and optional fields for stock
-        stock_required = ["SKU", "Stock"]
-        stock_optional = ["Product_Name"]
-
-        stock_mappings = column_mappings.get("stock", {})
-
-        self.stock_mapping_widget = ColumnMappingWidget(
-            mapping_type="stock",
-            current_mappings=stock_mappings,
-            required_fields=stock_required,
-            optional_fields=stock_optional
+        self.mapping_widget = ColumnMappingWidget(
+            mapping_type=self.MAPPING_TYPE,
+            current_mappings=column_mappings.get(self.MAPPING_TYPE, {}),
+            required_fields=self.REQUIRED_FIELDS,
+            optional_fields=self.OPTIONAL_FIELDS,
         )
+        box.add_widget(self.mapping_widget)
+        self.scroll_layout.addWidget(box)
 
-        stock_box.add_widget(self.stock_mapping_widget)
-        scroll_layout.addWidget(stock_box)
+        scroll.setWidget(scroll_widget)
+        main_layout.addWidget(scroll)
 
-        # ========================================
-        # COURIER MAPPINGS
-        # ========================================
-        courier_mappings_box = FormSection(
+    def validate(self) -> tuple[bool, list[str]]:
+        ok, error = self.mapping_widget.validate_mappings()
+        if not ok:
+            return False, [f"{self.TITLE} is invalid:\n{error}"]
+        return True, []
+
+    def _collect_column_mappings(self) -> dict:
+        """Write this page's sub-key into the live dict and return it."""
+        self.column_mappings["version"] = 2
+        self.column_mappings[self.MAPPING_TYPE] = self.mapping_widget.get_mappings()
+        return self.column_mappings
+
+    def _load_headers_from_csv(self):
+        """Offer a chosen CSV's column names as dropdown options on every row.
+
+        Reads the header line only, and detects the delimiter itself, so this
+        does not depend on the delimiter the General page currently shows --
+        which may hold an edit the user has not saved yet.
+        """
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Select {self.MAPPING_TYPE.capitalize()} CSV",
+            "",
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        try:
+            headers = read_csv_headers(file_path)
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Could Not Read CSV",
+                f"Failed to read column names from this file:\n\n{e!s}",
+            )
+            return
+
+        if not headers:
+            QMessageBox.warning(
+                self, "No Columns Found", "That file has no column headers."
+            )
+            return
+
+        self.mapping_widget.set_available_headers(headers)
+
+
+class OrdersMappingPage(_MappingPageBase):
+    """Orders CSV columns, plus the courier name mappings that resolve the
+    Shipping_Method values those columns carry."""
+
+    MAPPING_TYPE = "orders"
+    TITLE = "Orders CSV Column Mapping"
+    DESCRIPTION = "Map your CSV column names to internal fields for the ORDERS file."
+    REQUIRED_FIELDS: ClassVar[list[str]] = [
+        "Order_Number", "SKU", "Quantity", "Shipping_Method",
+    ]
+    OPTIONAL_FIELDS: ClassVar[list[str]] = [
+        "Product_Name", "Shipping_Country", "Tags", "Notes", "Total_Price", "Subtotal",
+    ]
+
+    def __init__(self, column_mappings: dict, courier_mappings: dict, parent=None):
+        super().__init__(column_mappings, parent)
+        self.courier_mappings = courier_mappings
+        self.courier_mapping_widgets = []
+        self.orders_mapping_widget = self.mapping_widget  # name used by tests/callers
+
+        courier_box = FormSection(
             "Courier Mappings",
             "Map different shipping provider names to standardized courier codes. "
             "You can specify multiple patterns (comma-separated) for each courier.",
         )
-
-        # Container for courier mapping rows
         self.courier_mappings_container = QWidget()
         self.courier_mappings_layout = QVBoxLayout(self.courier_mappings_container)
         self.courier_mappings_layout.setContentsMargins(0, 0, 0, 0)
-
-        courier_mappings_box.add_widget(self.courier_mappings_container)
+        courier_box.add_widget(self.courier_mappings_container)
 
         add_courier_btn = QPushButton("+ Add Courier Mapping")
         set_button_role(add_courier_btn, "secondary")
         add_courier_btn.clicked.connect(lambda: self.add_courier_mapping_row())
         add_courier_btn.setMaximumWidth(200)
-        courier_mappings_box.add_widget(add_courier_btn)
+        courier_box.add_widget(add_courier_btn)
 
-        scroll_layout.addWidget(courier_mappings_box)
-        scroll_layout.addStretch()
+        self.scroll_layout.addWidget(courier_box)
+        self.scroll_layout.addStretch()
 
-        scroll.setWidget(scroll_widget)
-        main_layout.addWidget(scroll)
-
-        # Populate existing courier mappings
         if isinstance(courier_mappings, dict):
             for courier_code, mapping_data in courier_mappings.items():
                 if isinstance(mapping_data, dict):
                     patterns = mapping_data.get("patterns", [])
-                    patterns_str = ", ".join(patterns) if patterns else ""
-                    self.add_courier_mapping_row(courier_code, patterns_str)
+                    self.add_courier_mapping_row(courier_code, ", ".join(patterns) if patterns else "")
 
-        # Add at least one empty row if no mappings exist
         if not courier_mappings:
             self.add_courier_mapping_row()
 
@@ -175,39 +224,42 @@ class MappingsPage(SettingsPage):
         row_refs["widget"].deleteLater()
         self.courier_mapping_widgets.remove(row_refs)
 
-    def validate(self) -> tuple[bool, list[str]]:
-        orders_valid, orders_error = self.orders_mapping_widget.validate_mappings()
-        if not orders_valid:
-            return False, [f"Orders column mapping is invalid:\n{orders_error}"]
-
-        stock_valid, stock_error = self.stock_mapping_widget.validate_mappings()
-        if not stock_valid:
-            return False, [f"Stock column mapping is invalid:\n{stock_error}"]
-
-        return True, []
-
     def collect(self) -> dict:
-        orders_mappings = self.orders_mapping_widget.get_mappings()
-        stock_mappings = self.stock_mapping_widget.get_mappings()
-
         new_couriers = {}
         for row_refs in self.courier_mapping_widgets:
             courier_code = row_refs["courier_code"].text().strip()
             patterns_str = row_refs["patterns"].text().strip()
-
             if courier_code and patterns_str:
                 patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
                 new_couriers[courier_code] = {"patterns": patterns, "case_sensitive": False}
 
-        # SettingsPage's contract: the returned value replaces
-        # config_data[key], so these must be the live dicts handed to
-        # __init__ -- clear-and-refill in place, never a fresh dict.
-        self.column_mappings.clear()
-        self.column_mappings.update({"version": 2, "orders": orders_mappings, "stock": stock_mappings})
+        # Same live-dict contract as column_mappings: clear-and-refill in
+        # place so a deleted courier code does not survive the shell's merge.
         self.courier_mappings.clear()
         self.courier_mappings.update(new_couriers)
 
         return {
-            "column_mappings": self.column_mappings,
+            "column_mappings": self._collect_column_mappings(),
             "courier_mappings": self.courier_mappings,
         }
+
+
+class StockMappingPage(_MappingPageBase):
+    """Stock CSV columns, including the two that drive FIFO lot allocation."""
+
+    MAPPING_TYPE = "stock"
+    TITLE = "Stock CSV Column Mapping"
+    DESCRIPTION = "Map your CSV column names to internal fields for the STOCK file."
+    REQUIRED_FIELDS: ClassVar[list[str]] = ["SKU", "Stock"]
+    # Expiry_Date and Batch are the exact internal names _build_fifo_lots()
+    # looks for (shopify_tool/analysis.py:96-97) -- renaming them here
+    # silently turns FIFO lot allocation off.
+    OPTIONAL_FIELDS: ClassVar[list[str]] = ["Product_Name", "Expiry_Date", "Batch"]
+
+    def __init__(self, column_mappings: dict, parent=None):
+        super().__init__(column_mappings, parent)
+        self.stock_mapping_widget = self.mapping_widget  # name used by tests/callers
+        self.scroll_layout.addStretch()
+
+    def collect(self) -> dict:
+        return {"column_mappings": self._collect_column_mappings()}

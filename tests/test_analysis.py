@@ -444,3 +444,18 @@ class TestQuantityRobustness:
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         final_df, *_ = _run(orders, stock)
         assert final_df.iloc[0]["Order_Fulfillment_Status"] == "Not Fulfillable"
+
+
+def test_lot_defaults_are_not_injected_when_the_internal_name_is_already_mapped():
+    """A client who maps their own expiry header in Settings must not also get
+    the Bulgarian default injected -- that is two CSV headers claiming one
+    internal name."""
+    from shopify_tool.analysis import _LOT_COLUMN_DEFAULTS, _resolve_stock_mappings
+
+    resolved = _resolve_stock_mappings({"Article": "SKU", "Exp date": "Expiry_Date"})
+
+    assert resolved["Exp date"] == "Expiry_Date"
+    assert "Годност" not in resolved
+    # Batch is still unmapped, so its default is still injected.
+    assert resolved["Партида"] == "Batch"
+    assert _LOT_COLUMN_DEFAULTS == {"Годност": "Expiry_Date", "Партида": "Batch"}
