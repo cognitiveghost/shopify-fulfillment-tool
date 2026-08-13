@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.theme_manager import font_css, get_theme_manager
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
@@ -40,10 +41,7 @@ class SetsPage(SettingsPage):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Header
-        header_label = QLabel("Set/Bundle Definitions")
-        header_label.setStyleSheet(font_css("heading"))
-        main_layout.addWidget(header_label)
+        main_layout.addWidget(FormSection("Set/Bundle Definitions"))
 
         # Search box
         self.sets_search = QLineEdit()

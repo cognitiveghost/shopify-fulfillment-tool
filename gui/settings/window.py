@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.settings.general import GeneralPage
 from gui.settings.mappings import MappingsPage
@@ -25,7 +26,7 @@ from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
 from gui.settings.stock_exports import StockExportsPage
 from gui.settings.weight import WeightPage
-from gui.theme_manager import apply_font, font_css
+from gui.theme_manager import apply_font
 from gui.worker import Worker
 
 logger = logging.getLogger(__name__)
@@ -338,21 +339,11 @@ class _ColumnConfigPage(SettingsPage):
         from gui.column_config_dialog import ColumnConfigPanel
 
         layout.setContentsMargins(10, 10, 10, 10)
-        header_label = QLabel("Column Configuration")
-        header_label.setStyleSheet(font_css("heading"))
-        layout.addWidget(header_label)
-
-        from gui.theme_manager import get_theme_manager
-        theme = get_theme_manager().get_current_theme()
-        help_text = QLabel(
+        layout.addWidget(FormSection(
+            "Column Configuration",
             "Configure which columns are visible in the analysis table, "
-            "their order, and saved views."
-        )
-        help_text.setWordWrap(True)
-        help_text.setStyleSheet(
-            f"color: {theme.text_secondary}; font-style: italic; margin-bottom: 6px;"
-        )
-        layout.addWidget(help_text)
+            "their order, and saved views.",
+        ))
 
         self.panel = ColumnConfigPanel(
             main_window.table_config_manager, main_window=main_window, parent=self
