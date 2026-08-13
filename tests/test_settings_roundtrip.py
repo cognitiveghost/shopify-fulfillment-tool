@@ -19,7 +19,8 @@ from gui.settings.window import SettingsWindow
 
 def test_window_registers_every_page(window):
     assert list(window._page_index_by_name) == [
-        "General", "Rules", "Packing Lists", "Stock Exports", "Mappings",
+        "General", "Rules", "Packing Lists", "Stock Exports",
+        "Orders Mapping", "Stock Mapping",
         "Sets", "Weight", "Tag Categories", "Column Config",
     ]
 
@@ -59,15 +60,15 @@ def test_no_page_silently_drops_a_field(window):
 
 
 def test_deleting_a_courier_row_survives_the_save_merge(window, no_modals):
-    """Guards the live-reference contract MappingsPage depends on.
+    """Guards the live-reference contract OrdersMappingPage depends on.
 
     `courier_mappings` holds a variable set of keys, and the shell's merge is
-    `dict.update()`, which never drops one. MappingsPage only gets away with
-    this because window.py hands it the *live* sub-dict, which it clears and
-    refills in place. Hand it a copy instead and this test fails while every
-    page-level test stays green.
+    `dict.update()`, which never drops one. OrdersMappingPage only gets away
+    with this because window.py hands it the *live* sub-dict, which it clears
+    and refills in place. Hand it a copy instead and this test fails while
+    every page-level test stays green.
     """
-    mappings = window._pages[window._page_index_by_name["Mappings"]]
+    mappings = window._pages[window._page_index_by_name["Orders Mapping"]]
     for row_refs in list(mappings.courier_mapping_widgets):
         mappings._delete_courier_row(row_refs)
 

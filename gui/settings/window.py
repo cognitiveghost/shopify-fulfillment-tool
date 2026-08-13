@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.settings.general import GeneralPage
-from gui.settings.mappings import MappingsPage
+from gui.settings.mappings import OrdersMappingPage, StockMappingPage
 from gui.settings.packing_lists import PackingListsPage
 from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
@@ -56,7 +56,7 @@ class SettingsWindow(QDialog):
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
     SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
-        ("Data", ["General", "Mappings", "Column Config"]),
+        ("Data", ["General", "Orders Mapping", "Stock Mapping", "Column Config"]),
         ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
         ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
         ("Organization", ["Tag Categories"]),
@@ -148,11 +148,15 @@ class SettingsWindow(QDialog):
             "Stock Exports",
         )
         self._add_page(
-            MappingsPage(
+            OrdersMappingPage(
                 self.config_data.get("column_mappings", {}),
                 self.config_data.get("courier_mappings", {}),
             ),
-            "Mappings",
+            "Orders Mapping",
+        )
+        self._add_page(
+            StockMappingPage(self.config_data.get("column_mappings", {})),
+            "Stock Mapping",
         )
         self._add_page(SetsPage(self.config_data.get("set_decoders", {})), "Sets")
         self._add_page(

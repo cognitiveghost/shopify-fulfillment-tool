@@ -1,8 +1,8 @@
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QComboBox, QScrollArea
 
 from gui.column_mapping_widget import ColumnMappingWidget
-from gui.settings.mappings import MappingsPage
+from gui.settings.mappings import OrdersMappingPage, StockMappingPage
 
 
 @pytest.fixture(scope="module")
@@ -23,10 +23,10 @@ def valid_column_mappings():
     }
 
 
-def test_mappings_page_round_trips_valid_mappings(qapp):
+def test_orders_page_round_trips_valid_mappings(qapp):
     column_mappings = valid_column_mappings()
     courier_mappings = {"DHL": {"patterns": ["dhl", "DHL Express"], "case_sensitive": False}}
-    page = MappingsPage(column_mappings, courier_mappings)
+    page = OrdersMappingPage(column_mappings, courier_mappings)
 
     ok, errors = page.validate()
     assert (ok, errors) == (True, [])
@@ -36,13 +36,22 @@ def test_mappings_page_round_trips_valid_mappings(qapp):
     }
 
 
-def test_mappings_page_deleting_a_courier_row_removes_it_on_save(qapp):
+def test_stock_page_round_trips_valid_mappings(qapp):
+    column_mappings = valid_column_mappings()
+    page = StockMappingPage(column_mappings)
+
+    ok, errors = page.validate()
+    assert (ok, errors) == (True, [])
+    assert page.collect() == {"column_mappings": column_mappings}
+
+
+def test_orders_page_deleting_a_courier_row_removes_it_on_save(qapp):
     """Regression: the shell merges collect() dict values one level deep, which
     would silently un-delete a removed courier code if collect() didn't mutate
     the live dict in place."""
     column_mappings = valid_column_mappings()
     courier_mappings = {"DHL": {"patterns": ["dhl"], "case_sensitive": False}}
-    page = MappingsPage(column_mappings, courier_mappings)
+    page = OrdersMappingPage(column_mappings, courier_mappings)
 
     # Simulate deleting the only courier row.
     row_refs = page.courier_mapping_widgets[0]
@@ -53,16 +62,16 @@ def test_mappings_page_deleting_a_courier_row_removes_it_on_save(qapp):
     assert courier_mappings == {}, "the live dict passed in must be mutated in place"
 
 
-def test_mappings_page_validate_reports_invalid_orders_mapping(qapp):
+def test_orders_page_validate_reports_invalid_orders_mapping(qapp):
     column_mappings = {
         "version": 2,
         "orders": {},  # missing every required field
         "stock": {"Article": "SKU", "Available": "Stock"},
     }
-    page = MappingsPage(column_mappings, {})
+    page = OrdersMappingPage(column_mappings, {})
     ok, errors = page.validate()
     assert ok is False
-    assert errors and "Orders column mapping is invalid" in errors[0]
+    assert errors and "Orders CSV Column Mapping is invalid" in errors[0]
 
 
 def test_get_mappings_preserves_an_internal_name_it_has_no_row_for(qapp):
@@ -99,7 +108,7 @@ def test_get_mappings_still_removes_a_cleared_managed_field(qapp):
 def test_stock_page_offers_rows_for_the_lot_tracking_fields(qapp):
     """Expiry_Date and Batch drive _build_fifo_lots(); before this they were
     in the default client config with no way to see or edit them."""
-    page = MappingsPage(valid_column_mappings(), {})
+    page = StockMappingPage(valid_column_mappings())
     inputs = page.stock_mapping_widget.csv_column_inputs
     assert "Expiry_Date" in inputs
     assert "Batch" in inputs
@@ -113,7 +122,7 @@ def test_stock_lot_mappings_round_trip_through_the_page(qapp):
         "Exp date": "Expiry_Date",
         "Lot": "Batch",
     }
-    page = MappingsPage(column_mappings, {})
+    page = StockMappingPage(column_mappings)
 
     assert page.collect()["column_mappings"]["stock"] == {
         "Article": "SKU",
@@ -123,11 +132,8 @@ def test_stock_lot_mappings_round_trip_through_the_page(qapp):
     }
 
 
-from PySide6.QtWidgets import QComboBox, QScrollArea
-
-
 def test_mapping_inputs_are_editable_combo_boxes(qapp):
-    page = MappingsPage(valid_column_mappings(), {})
+    page = OrdersMappingPage(valid_column_mappings(), {})
     sku_input = page.orders_mapping_widget.csv_column_inputs["SKU"]
     assert isinstance(sku_input, QComboBox)
     assert sku_input.isEditable()
@@ -135,7 +141,7 @@ def test_mapping_inputs_are_editable_combo_boxes(qapp):
 
 
 def test_set_available_headers_offers_them_on_every_row_without_losing_text(qapp):
-    page = MappingsPage(valid_column_mappings(), {})
+    page = OrdersMappingPage(valid_column_mappings(), {})
     widget = page.orders_mapping_widget
 
     widget.set_available_headers(["Name", "Lineitem sku", "Some other column"])
@@ -152,5 +158,54 @@ def test_set_available_headers_offers_them_on_every_row_without_losing_text(qapp
 def test_the_widget_has_no_scroll_area_of_its_own(qapp):
     """The page already scrolls. A second QScrollArea inside it clips the
     Stock block to a few rows and produces two scrollbars side by side."""
-    page = MappingsPage(valid_column_mappings(), {})
+    page = OrdersMappingPage(valid_column_mappings(), {})
     assert page.orders_mapping_widget.findChildren(QScrollArea) == []
+
+
+def test_both_pages_collect_into_one_live_column_mappings_dict(qapp):
+    """Two pages now own one config key. Each must write only its own sub-key
+    in place -- a clear() or a freshly built dict in either one wipes the
+    other's work, and _pages order decides who loses."""
+    column_mappings = valid_column_mappings()
+    orders_page = OrdersMappingPage(column_mappings, {})
+    stock_page = StockMappingPage(column_mappings)
+
+    stock_page.collect()
+    orders_page.collect()
+
+    assert column_mappings["orders"]["Lineitem sku"] == "SKU"
+    assert column_mappings["stock"]["Article"] == "SKU"
+    assert column_mappings["version"] == 2
+
+
+def test_collect_order_does_not_matter(qapp):
+    column_mappings = valid_column_mappings()
+    orders_page = OrdersMappingPage(column_mappings, {})
+    stock_page = StockMappingPage(column_mappings)
+
+    orders_page.collect()
+    result = stock_page.collect()["column_mappings"]
+
+    assert set(result) == {"version", "orders", "stock"}
+    assert result["orders"] and result["stock"]
+
+
+def test_stock_page_collect_emits_every_stock_key_it_was_built_with(qapp):
+    """Key coverage for the live-dict blind spot: collect() returns the same
+    object the page was constructed with, so the roundtrip guard in
+    test_settings_roundtrip.py cannot see a dropped sub-key here. Detach
+    first, then assert on what collect() actively writes."""
+    column_mappings = valid_column_mappings()
+    column_mappings["stock"] = {
+        "Article": "SKU",
+        "Available": "Stock",
+        "Name": "Product_Name",
+        "Exp date": "Expiry_Date",
+        "Lot": "Batch",
+    }
+    page = StockMappingPage(column_mappings)
+
+    page.column_mappings = {}  # detach from the live dict
+    written = page.collect()["column_mappings"]["stock"]
+
+    assert set(written.values()) == {"SKU", "Stock", "Product_Name", "Expiry_Date", "Batch"}
