@@ -139,3 +139,26 @@ class TestEngineOrderingAssumption:
         original = dialog.df_after.iloc[:n]
         assert list(original["Order_Number"]) == list(dialog.df_before["Order_Number"])
         assert list(original["SKU"]) == list(dialog.df_before["SKU"])
+
+
+class TestZeroResultsAreChanges:
+    def test_calculate_result_of_zero_counts_as_changed(self, qtbot, analysis_df, no_modals):
+        """A legitimate CALCULATE result of 0 is a change, not a seed value.
+
+        The old detector filtered out `!= 0` to hide CALCULATE's 0.0 seed, and
+        hid every real zero result with it. The seed is NaN now, so a real 0 is
+        distinguishable and must be counted.
+        """
+        df = analysis_df.copy()
+        df["Total_Price"] = 0.0          # every product is now legitimately 0
+
+        dialog = _open(qtbot, _rule({
+            "type": "CALCULATE", "operation": "multiply",
+            "field1": "Quantity", "field2": "Total_Price",
+            "target": "Line_Total",
+        }), df)
+
+        assert no_modals == []
+        # Rows 0 and 2 match and get a real result of 0.0; row 1 stays NaN.
+        assert dialog.changed_count == 2
+        assert pd.isna(dialog.df_after.loc[1, "Line_Total"])
