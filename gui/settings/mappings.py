@@ -203,11 +203,9 @@ class MappingsPage(SettingsPage):
                 patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
                 new_couriers[courier_code] = {"patterns": patterns, "case_sensitive": False}
 
-        # The shell merges collect() dict values one level deep
-        # (config_data[key].update(value)) rather than replacing them, so a
-        # deleted courier code or a stale legacy column_mappings key would
-        # survive a plain new-dict return. Mutate the live dicts in place --
-        # update() against itself is then a no-op and the deletion sticks.
+        # SettingsPage's contract: the returned value replaces
+        # config_data[key], so these must be the live dicts handed to
+        # __init__ -- clear-and-refill in place, never a fresh dict.
         self.column_mappings.clear()
         self.column_mappings.update({"version": 2, "orders": orders_mappings, "stock": stock_mappings})
         self.courier_mappings.clear()

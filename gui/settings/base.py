@@ -10,10 +10,22 @@ class SettingsPage(QWidget):
     calls validate() then collect() on every page in turn. Pages that
     persist their own data immediately (Sets, Column Config) inherit both
     defaults and contribute nothing to the window's single write.
+
+    collect() returns {config_key: value}, and each value REPLACES
+    config_data[key] outright -- the window does not merge. A page that
+    owns a dict sub-tree must therefore mutate and return the live dict it
+    was constructed with, so keys it does not render survive the save.
+    Returning a freshly built dict silently drops them.
+
+    collect() writing into config_data before the window assigns is safe by
+    construction: save_settings() runs validate() across every page before
+    calling collect() on any of them, so no page mutates during a save a
+    later page will block. config_data is a deep copy, so a failed server
+    write cannot reach the caller's config either.
     """
 
     def collect(self) -> dict:
-        """The config keys this page owns, merged into config_data on save."""
+        """The config keys this page owns. Each value replaces config_data[key]."""
         return {}
 
     def validate(self) -> tuple[bool, list[str]]:

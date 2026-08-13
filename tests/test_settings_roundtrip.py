@@ -210,3 +210,20 @@ def test_save_reaches_the_background_write(window, started_workers):
     window.save_settings()
     assert len(started_workers) == 1
     assert window._is_saving is True
+
+
+def test_a_key_no_page_renders_survives_a_save(qapp, no_modals, started_workers):
+    """Live client configs on the server can carry keys this build's UI does
+    not know about -- profile_migrations.py exists because that has happened.
+    A page returning a fresh dict would drop them on every save."""
+    config = settings_fixture_config()
+    config["settings"]["legacy_key_no_page_renders"] = "keep me"
+    config["weight_config"]["legacy_weight_key"] = 123
+
+    win = SettingsWindow(client_id="M", client_config=config, profile_manager=Mock())
+    win.save_settings()
+
+    assert no_modals == [], f"save_settings() reported a problem: {no_modals}"
+    assert win.config_data["settings"]["legacy_key_no_page_renders"] == "keep me"
+    assert win.config_data["weight_config"]["legacy_weight_key"] == 123
+    win.deleteLater()

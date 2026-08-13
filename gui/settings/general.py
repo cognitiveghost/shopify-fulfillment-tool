@@ -17,6 +17,10 @@ class GeneralPage(SettingsPage):
 
     def __init__(self, settings: dict, parent=None):
         super().__init__(parent)
+        # Held by reference so collect() can update it in place. The shell
+        # assigns collect()'s value straight over config_data[key], so a
+        # fresh dict here would drop any key this page does not render.
+        self._settings = settings
         main_layout = QVBoxLayout(self)
 
         settings_box = QGroupBox("General Settings")
@@ -74,11 +78,10 @@ class GeneralPage(SettingsPage):
         main_layout.addStretch()
 
     def collect(self) -> dict:
-        return {
-            "settings": {
-                "stock_csv_delimiter": self.stock_delimiter_edit.text(),
-                "orders_csv_delimiter": self.orders_delimiter_edit.text(),
-                "low_stock_threshold": int(self.low_stock_edit.text()),
-                "repeat_detection_days": self.repeat_days_input.value(),
-            }
-        }
+        self._settings.update({
+            "stock_csv_delimiter": self.stock_delimiter_edit.text(),
+            "orders_csv_delimiter": self.orders_delimiter_edit.text(),
+            "low_stock_threshold": int(self.low_stock_edit.text()),
+            "repeat_detection_days": self.repeat_days_input.value(),
+        })
+        return {"settings": self._settings}

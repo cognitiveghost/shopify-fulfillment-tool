@@ -43,6 +43,10 @@ class WeightPage(SettingsPage):
             "products": {},
             "boxes": []
         }
+        # Held by reference for collect() -- see SettingsPage's contract. Note
+        # this is weight_cfg, not weight_config: an empty config substitutes a
+        # fresh dict above, and that substitute is the one to keep.
+        self._weight_config = weight_cfg
 
         # ---- Global Settings (compact row) ----
         global_row = QHBoxLayout()
@@ -870,10 +874,9 @@ class WeightPage(SettingsPage):
                 "height_cm": _safe_float_b(row, 3),
             })
 
-        return {
-            "weight_config": {
-                "volumetric_divisor": divisor,
-                "products": products,
-                "boxes": boxes,
-            }
-        }
+        self._weight_config.update({
+            "volumetric_divisor": divisor,
+            "products": products,
+            "boxes": boxes,
+        })
+        return {"weight_config": self._weight_config}

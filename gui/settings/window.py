@@ -230,10 +230,7 @@ class SettingsWindow(QDialog):
 
             for page in self._pages:
                 for key, value in page.collect().items():
-                    if isinstance(value, dict) and isinstance(self.config_data.get(key), dict):
-                        self.config_data[key].update(value)
-                    else:
-                        self.config_data[key] = value
+                    self.config_data[key] = value
 
             # ========================================
             # Save to server via ProfileManager (background -- avoids blocking
