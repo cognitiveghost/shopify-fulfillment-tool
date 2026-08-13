@@ -170,15 +170,26 @@ class ColumnMappingWidget(QWidget):
     def get_mappings(self):
         """Get current mappings from UI.
 
+        Entries for internal names this widget has no row for are carried
+        through untouched. Without that, a field missing from
+        required_fields/optional_fields is silently deleted from the client's
+        config on every save -- which is exactly what happened to the
+        Expiry_Date and Batch mappings that drive FIFO lot allocation.
+
+        A *managed* field left blank is still removed: its old entry was
+        never carried over, so clearing a box does delete the mapping.
+
         Returns:
             dict: Dictionary of {csv_column_name: internal_name}
         """
-        mappings = {}
+        managed = set(self.required_fields) | set(self.optional_fields)
+        mappings = {
+            csv_column: internal_name
+            for csv_column, internal_name in self.current_mappings.items()
+            if internal_name not in managed
+        }
 
-        # Combine required and optional fields
-        all_fields = self.required_fields + self.optional_fields
-
-        for internal_name in all_fields:
+        for internal_name in self.required_fields + self.optional_fields:
             input_widget = self.csv_column_inputs.get(internal_name)
             if input_widget:
                 csv_column = input_widget.text().strip()

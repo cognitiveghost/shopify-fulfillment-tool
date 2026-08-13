@@ -160,7 +160,12 @@ def settings_fixture_config():
                 "Shipping Method": "Shipping_Method",
                 "Lineitem name": "Product_Name",
             },
-            "stock": {"Article": "SKU", "Available": "Stock"},
+            "stock": {
+                "Article": "SKU",
+                "Available": "Stock",
+                "Годност": "Expiry_Date",
+                "Партида": "Batch",
+            },
         },
         "courier_mappings": {
             "DHL": {"patterns": ["dhl", "DHL Express"], "case_sensitive": False}

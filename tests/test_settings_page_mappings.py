@@ -1,6 +1,7 @@
 import pytest
 from PySide6.QtWidgets import QApplication
 
+from gui.column_mapping_widget import ColumnMappingWidget
 from gui.settings.mappings import MappingsPage
 
 
@@ -62,3 +63,34 @@ def test_mappings_page_validate_reports_invalid_orders_mapping(qapp):
     ok, errors = page.validate()
     assert ok is False
     assert errors and "Orders column mapping is invalid" in errors[0]
+
+
+def test_get_mappings_preserves_an_internal_name_it_has_no_row_for(qapp):
+    """A field missing from required/optional must not delete the client's
+    mapping for it. Regression: stock_optional listed only Product_Name, so
+    one Save destroyed the Expiry_Date and Batch mappings the default config
+    ships with -- and with them, FIFO lot allocation."""
+    widget = ColumnMappingWidget(
+        mapping_type="stock",
+        current_mappings={"Article": "SKU", "Available": "Stock", "Годност": "Expiry_Date"},
+        required_fields=["SKU", "Stock"],
+        optional_fields=[],  # deliberately does not manage Expiry_Date
+    )
+    assert widget.get_mappings() == {
+        "Article": "SKU",
+        "Available": "Stock",
+        "Годност": "Expiry_Date",
+    }
+
+
+def test_get_mappings_still_removes_a_cleared_managed_field(qapp):
+    """Carrying unmanaged entries through must not resurrect a field the user
+    deliberately cleared."""
+    widget = ColumnMappingWidget(
+        mapping_type="stock",
+        current_mappings={"Article": "SKU", "Name": "Product_Name"},
+        required_fields=["SKU"],
+        optional_fields=["Product_Name"],
+    )
+    widget.csv_column_inputs["Product_Name"].setText("")
+    assert widget.get_mappings() == {"Article": "SKU"}
