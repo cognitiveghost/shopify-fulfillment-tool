@@ -181,6 +181,7 @@ class RulesPage(SettingsPage):
                     index = combo.count() - 1
                 combo.setCurrentIndex(index)
                 combo.blockSignals(False)
+                self._check_field_resolvable(cond_refs)
 
     def get_available_rule_fields(self, level="article"):
         """Fields offered for a condition on a rule of the given level.
@@ -612,6 +613,7 @@ class RulesPage(SettingsPage):
             "op": op_combo,
             "value_widget": None,
             "value_layout": row_layout,
+            "level_combo": rule_widget_refs.get("level_combo"),
         }
 
         row_layout.addWidget(delete_btn)
@@ -825,6 +827,8 @@ class RulesPage(SettingsPage):
             # No validation needed for other operators
             self._show_validation_feedback(condition_refs, "clear", "")
 
+        self._check_field_resolvable(condition_refs)
+
     def _show_validation_feedback(self, condition_refs, status, message):
         """
         Show validation feedback with visual indicators.
@@ -874,6 +878,40 @@ class RulesPage(SettingsPage):
         elif status == "clear":
             value_widget.setStyleSheet("")
             feedback_label.hide()
+
+    def _check_field_resolvable(self, condition_refs):
+        """Marks a field the engine will treat as no-match.
+
+        The engine fails a condition closed when its field is not a column (or,
+        on an order rule, a known order-level field). Showing that here means the
+        user sees it while editing rather than finding a rule that quietly
+        stopped firing.
+
+        Returns:
+            bool: True when the field is one the engine can evaluate.
+        """
+        theme = get_theme_manager().get_current_theme()
+        combo = condition_refs.get("field")
+        if combo is None:
+            return True
+
+        field = combo.currentText()
+        level_combo = condition_refs.get("level_combo")
+        level = level_combo.currentText() if level_combo else "article"
+        known = set(self.get_available_rule_fields(level=level))
+        resolvable = bool(field) and not field.startswith("---") and field in known
+
+        if resolvable:
+            combo.setStyleSheet("")
+        else:
+            combo.setStyleSheet(f"border: 1px solid {theme.accent_red};")
+            self._show_validation_feedback(
+                condition_refs,
+                "error",
+                f"'{field}' is not available on an {level} rule - this condition "
+                f"will never match.",
+            )
+        return resolvable
 
     def _parse_date_for_widget(self, date_str):
         """
