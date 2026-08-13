@@ -50,6 +50,13 @@ class RulesPage(SettingsPage):
         set_button_role(add_rule_btn, "secondary")
         add_rule_btn.clicked.connect(lambda: [self.add_rule_widget(), self._update_priority_labels(), self._update_rules_count_label()])
         header_row.addWidget(add_rule_btn)
+
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filter rules by name…")
+        self.filter_edit.setClearButtonEnabled(True)
+        self.filter_edit.textChanged.connect(self._filter_rules)
+        header_row.addWidget(self.filter_edit)
+
         header_row.addStretch()
         self.rules_count_label = QLabel("")
         theme = get_theme_manager().get_current_theme()
@@ -82,51 +89,42 @@ class RulesPage(SettingsPage):
         row_widget.deleteLater()
         ref_list.remove(ref_dict)
 
-    def _move_rule_up(self, widget_refs):
-        """Moves a rule up in the list (higher priority)."""
-        idx = self.rule_widgets.index(widget_refs)
-        if idx == 0:
-            return  # Already at top
+    def _neighbour_of_same_level(self, idx, direction):
+        """Index of the nearest rule sharing this one's level, or None."""
+        level = self.rule_widgets[idx]["level_combo"].currentText()
+        candidate = idx + direction
+        while 0 <= candidate < len(self.rule_widgets):
+            if self.rule_widgets[candidate]["level_combo"].currentText() == level:
+                return candidate
+            candidate += direction
+        return None
 
-        # Swap in list
-        self.rule_widgets[idx], self.rule_widgets[idx - 1] = \
-            self.rule_widgets[idx - 1], self.rule_widgets[idx]
+    def _swap_rules(self, idx_a, idx_b):
+        """Swaps two rules in both the refs list and the layout."""
+        widgets = self.rule_widgets
+        widgets[idx_a], widgets[idx_b] = widgets[idx_b], widgets[idx_a]
 
-        # Swap in UI layout
         layout = self.rules_layout
-        widget = widget_refs["group_box"]
-        prev_widget = self.rule_widgets[idx]["group_box"]
+        for position in sorted((idx_a, idx_b)):
+            box = widgets[position]["group_box"]
+            layout.removeWidget(box)
+            layout.insertWidget(position, box)
 
-        layout.removeWidget(widget)
-        layout.removeWidget(prev_widget)
-        layout.insertWidget(idx - 1, widget)
-        layout.insertWidget(idx, prev_widget)
-
-        # Update priority labels
         self._update_priority_labels()
+
+    def _move_rule_up(self, widget_refs):
+        """Moves a rule above the nearest rule of the same level."""
+        idx = self.rule_widgets.index(widget_refs)
+        target = self._neighbour_of_same_level(idx, -1)
+        if target is not None:
+            self._swap_rules(idx, target)
 
     def _move_rule_down(self, widget_refs):
-        """Moves a rule down in the list (lower priority)."""
+        """Moves a rule below the nearest rule of the same level."""
         idx = self.rule_widgets.index(widget_refs)
-        if idx >= len(self.rule_widgets) - 1:
-            return  # Already at bottom
-
-        # Swap in list
-        self.rule_widgets[idx], self.rule_widgets[idx + 1] = \
-            self.rule_widgets[idx + 1], self.rule_widgets[idx]
-
-        # Swap in UI layout
-        layout = self.rules_layout
-        widget = widget_refs["group_box"]
-        next_widget = self.rule_widgets[idx]["group_box"]
-
-        layout.removeWidget(widget)
-        layout.removeWidget(next_widget)
-        layout.insertWidget(idx, next_widget)
-        layout.insertWidget(idx + 1, widget)
-
-        # Update priority labels
-        self._update_priority_labels()
+        target = self._neighbour_of_same_level(idx, +1)
+        if target is not None:
+            self._swap_rules(idx, target)
 
     def _update_priority_labels(self):
         """Updates priority labels and button states for all rules.
@@ -148,11 +146,19 @@ class RulesPage(SettingsPage):
                 rule_w["priority_label"].setText(f"Order #{order_count}")
                 order_count += 1
 
-            # Disable up button for first rule
-            rule_w["up_btn"].setEnabled(idx > 0)
+            rule_w["up_btn"].setEnabled(
+                self._neighbour_of_same_level(idx, -1) is not None
+            )
+            rule_w["down_btn"].setEnabled(
+                self._neighbour_of_same_level(idx, +1) is not None
+            )
 
-            # Disable down button for last rule
-            rule_w["down_btn"].setEnabled(idx < len(self.rule_widgets) - 1)
+    def _filter_rules(self, text):
+        """Hides rule cards whose name does not contain `text`."""
+        needle = (text or "").strip().lower()
+        for rule_w in self.rule_widgets:
+            name = rule_w["name_edit"].text().lower()
+            rule_w["group_box"].setVisible(not needle or needle in name)
 
     def _repopulate_field_combos(self, rule_widget_refs):
         """Rebuilds condition field combos after the rule's level changed.

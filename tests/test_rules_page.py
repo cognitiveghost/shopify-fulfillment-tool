@@ -133,3 +133,50 @@ class TestCollapsibleRuleCards:
         collapsed = page.collect()
         page.rule_widgets[0]["body"].setVisible(True)
         assert page.collect() == collapsed
+
+
+class TestFilterAndReorder:
+    def _rule(self, name, level="article"):
+        return {
+            "name": name, "level": level,
+            "steps": [{
+                "conditions": [{"field": "SKU", "operator": "equals", "value": "x"}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+
+    def test_filter_hides_non_matching_rules(self, qtbot, analysis_df):
+        page = RulesPage([self._rule("alpha"), self._rule("beta")], analysis_df)
+        qtbot.addWidget(page)
+        page._filter_rules("alp")
+        assert page.rule_widgets[0]["group_box"].isVisibleTo(page) is True
+        assert page.rule_widgets[1]["group_box"].isVisibleTo(page) is False
+
+    def test_empty_filter_shows_everything(self, qtbot, analysis_df):
+        page = RulesPage([self._rule("alpha"), self._rule("beta")], analysis_df)
+        qtbot.addWidget(page)
+        page._filter_rules("alp")
+        page._filter_rules("")
+        assert page.rule_widgets[1]["group_box"].isVisibleTo(page) is True
+
+    def test_move_up_skips_over_other_level(self, qtbot, analysis_df):
+        page = RulesPage(
+            [self._rule("a1", "article"),
+             self._rule("o1", "order"),
+             self._rule("a2", "article")],
+            analysis_df,
+        )
+        qtbot.addWidget(page)
+        page._move_rule_up(page.rule_widgets[2])
+        names = [r["name_edit"].text() for r in page.rule_widgets]
+        assert names == ["a2", "o1", "a1"]
+
+    def test_first_of_its_level_cannot_move_up(self, qtbot, analysis_df):
+        page = RulesPage(
+            [self._rule("a1", "article"), self._rule("o1", "order")],
+            analysis_df,
+        )
+        qtbot.addWidget(page)
+        assert page.rule_widgets[0]["up_btn"].isEnabled() is False
+        assert page.rule_widgets[1]["up_btn"].isEnabled() is False
