@@ -23,6 +23,7 @@ from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.core import get_unique_column_values
+from shopify_tool.rules import RuleEngine
 
 logger = logging.getLogger(__name__)
 
@@ -153,28 +154,47 @@ class RulesPage(SettingsPage):
             # Disable down button for last rule
             rule_w["down_btn"].setEnabled(idx < len(self.rule_widgets) - 1)
 
-    def get_available_rule_fields(self):
-        """Get all available fields for rules from DataFrame + common fields.
+    def _repopulate_field_combos(self, rule_widget_refs):
+        """Rebuilds condition field combos after the rule's level changed.
 
-        Returns a list of field names including:
-        - Order-level fields (shown first)
-        - Common article-level fields
-        - All other DataFrame columns (dynamically discovered)
-        - Separators (disabled items starting with "---")
+        A field the new level does not offer is kept as an extra item so a
+        saved condition is never silently reset; Task 6's validation marks it.
         """
-        # Start with order-level fields (these are ALWAYS available)
-        order_level_fields = [
-            "--- ORDER-LEVEL FIELDS ---",
-            "item_count",
-            "total_quantity",
-            "unique_sku_count",
-            "max_quantity",
-            "has_sku",
-            "has_product",
-            "order_volumetric_weight",
-            "all_no_packaging",
-            "order_min_box",
-        ]
+        level = rule_widget_refs["level_combo"].currentText()
+        available_fields = self.get_available_rule_fields(level=level)
+
+        for step_refs in rule_widget_refs.get("steps", []):
+            for cond_refs in step_refs["conditions"]:
+                combo = cond_refs["field"]
+                previous = combo.currentText()
+
+                combo.blockSignals(True)
+                combo.clear()
+                for field in available_fields:
+                    combo.addItem(field)
+                    if field.startswith("---"):
+                        combo.model().item(combo.count() - 1).setEnabled(False)
+
+                index = combo.findText(previous)
+                if index < 0:
+                    combo.addItem(previous)
+                    index = combo.count() - 1
+                combo.setCurrentIndex(index)
+                combo.blockSignals(False)
+
+    def get_available_rule_fields(self, level="article"):
+        """Fields offered for a condition on a rule of the given level.
+
+        Order-level field names come from RuleEngine.ORDER_LEVEL_FIELDS so the
+        editor cannot drift from what the engine dispatches on, and they are
+        offered only on order-level rules -- on an article rule they are never
+        DataFrame columns, so selecting one produces a condition the engine
+        treats as no-match.
+        """
+        fields = []
+        if level == "order":
+            fields += ["--- ORDER-LEVEL FIELDS ---"]
+            fields += list(RuleEngine.ORDER_LEVEL_FIELDS.keys())
 
         # Common article-level fields
         common_fields = [
@@ -191,6 +211,8 @@ class RulesPage(SettingsPage):
             "Destination_Country",
         ]
 
+        fields += common_fields
+
         # Get ALL columns from DataFrame
         if self.analysis_df is not None and not self.analysis_df.empty:
             all_columns = sorted(self.analysis_df.columns.tolist())
@@ -205,17 +227,12 @@ class RulesPage(SettingsPage):
                 and col not in common_field_names  # Avoid duplicates
             ]
 
-            # Combine: order-level fields first, then common fields, then separator, then custom
             if custom_columns:
-                return order_level_fields + common_fields + [
-                    "--- OTHER AVAILABLE FIELDS ---"
-                ] + custom_columns
-            else:
-                return order_level_fields + common_fields
+                fields += ["--- OTHER AVAILABLE FIELDS ---"] + custom_columns
         else:
             logger.warning(f"[RULE ENGINE] No analysis_df available (is None: {self.analysis_df is None})")
 
-        return order_level_fields + common_fields  # Fallback to order-level + common only
+        return fields
 
     def _update_rules_count_label(self):
         """Update the rules summary label in the Rules tab header."""
@@ -375,6 +392,10 @@ class RulesPage(SettingsPage):
         down_btn.clicked.connect(lambda: self._move_rule_down(widget_refs))
         test_btn.clicked.connect(lambda: self._test_rule(widget_refs))
         add_step_btn.clicked.connect(lambda: self._add_step_widget(widget_refs))
+        level_combo.currentTextChanged.connect(
+            lambda: [self._repopulate_field_combos(widget_refs),
+                     self._update_priority_labels()]
+        )
 
         # Update test button state based on data availability
         self._update_test_button_state(widget_refs)
@@ -478,6 +499,7 @@ class RulesPage(SettingsPage):
             "actions_layout": actions_rows_layout,
             "conditions": [],
             "actions": [],
+            "level_combo": rule_widget_refs["level_combo"],
         }
         steps.append(step_refs)
 
@@ -536,7 +558,9 @@ class RulesPage(SettingsPage):
         field_combo = WheelIgnoreComboBox()
 
         # Get dynamic fields from analysis DataFrame
-        available_fields = self.get_available_rule_fields()
+        level_combo = rule_widget_refs.get("level_combo")
+        level = level_combo.currentText() if level_combo else "article"
+        available_fields = self.get_available_rule_fields(level=level)
 
         # Add fields with separators disabled
         for field in available_fields:
