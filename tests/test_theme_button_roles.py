@@ -56,3 +56,10 @@ def test_the_suffix_is_actually_applied_to_the_app():
 
     get_theme_manager().apply_theme()
     assert 'QPushButton[role="primary"]' in QApplication.instance().styleSheet()
+
+
+@pytest.mark.parametrize("theme_name", ["light", "dark"])
+def test_the_settings_nav_is_styled_as_a_sidebar(theme_name):
+    qss = role_stylesheet(get_theme(theme_name))
+    assert "QListWidget#settingsNav" in qss
+    assert "QListWidget#settingsNav::item:selected" in qss

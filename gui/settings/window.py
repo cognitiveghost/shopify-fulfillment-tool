@@ -3,7 +3,7 @@ import logging
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import QSettings, Qt, QThreadPool
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -60,6 +60,10 @@ class SettingsWindow(QDialog):
         ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
         ("Organization", ["Tag Categories"]),
     ]
+
+    # Stored by *name*, not row index: the nav groups have gained entries
+    # twice already and an index would silently point at a different page.
+    NAV_SETTINGS_KEY = "settings_hub/last_page"
 
     def __init__(self, client_id, client_config, profile_manager, analysis_df=None, parent=None):
         """Initializes the SettingsWindow.
@@ -120,6 +124,7 @@ class SettingsWindow(QDialog):
         main_layout.addLayout(content_layout)
 
         self._settings_nav = QListWidget()
+        self._settings_nav.setObjectName("settingsNav")
         self._settings_nav.setFixedWidth(170)
         self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         content_layout.addWidget(self._settings_nav)
@@ -204,11 +209,27 @@ class SettingsWindow(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name])
                 self._settings_nav.addItem(item)
         self._settings_nav.currentItemChanged.connect(self._on_settings_nav_changed)
-        # Select the first real (non-header) entry
+        self._restore_nav_selection()
+
+    def _first_selectable_row(self) -> int:
         for row in range(self._settings_nav.count()):
             if self._settings_nav.item(row).flags() & Qt.ItemFlag.ItemIsSelectable:
+                return row
+        return -1
+
+    def _restore_nav_selection(self) -> None:
+        """Select the last-viewed page, or the first entry if it is gone."""
+        wanted = QSettings("ShopifyFulfillmentTool", "FulfillmentApp").value(
+            self.NAV_SETTINGS_KEY
+        )
+        for row in range(self._settings_nav.count()):
+            item = self._settings_nav.item(row)
+            if item.text() == wanted and item.flags() & Qt.ItemFlag.ItemIsSelectable:
                 self._settings_nav.setCurrentRow(row)
-                break
+                return
+        row = self._first_selectable_row()
+        if row >= 0:
+            self._settings_nav.setCurrentRow(row)
 
     def _on_settings_nav_changed(self, current, _previous):
         if current is None:
@@ -216,6 +237,9 @@ class SettingsWindow(QDialog):
         index = current.data(Qt.ItemDataRole.UserRole)
         if index is not None:
             self.tab_widget.setCurrentIndex(index)
+            QSettings("ShopifyFulfillmentTool", "FulfillmentApp").setValue(
+                self.NAV_SETTINGS_KEY, current.text()
+            )
 
     def reject(self):
         if self._is_saving:

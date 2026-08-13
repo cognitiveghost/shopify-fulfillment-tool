@@ -213,6 +213,27 @@ def role_stylesheet(theme: ThemeTokens) -> str:
             color: {theme.text_disabled};
             border: 1px solid {theme.border_subtle};
         }}
+
+        QListWidget#settingsNav {{
+            background-color: {theme.background};
+            border: none;
+            border-right: 1px solid {theme.border_subtle};
+            outline: none;
+        }}
+        QListWidget#settingsNav::item {{
+            padding: 6px 10px;
+            border-radius: {theme.radius}px;
+        }}
+        QListWidget#settingsNav::item:hover {{ background-color: {theme.hover}; }}
+        QListWidget#settingsNav::item:selected {{
+            background-color: {theme.active_background};
+            color: {theme.text};
+            border-left: 2px solid {theme.accent_blue};
+        }}
+        QListWidget#settingsNav::item:disabled {{
+            color: {theme.text_secondary};
+            padding-top: 10px;
+        }}
     """
 
 
