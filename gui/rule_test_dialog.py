@@ -260,15 +260,18 @@ class RuleTestDialog(QDialog):
         and are tracked separately in self.added_rows.
 
         A column the rule creates (CALCULATE/COPY_FIELD's target) is NaN on
-        every row the rule did not write, so `notna()` identifies exactly the
+        every row the rule did not write, so `notna()` is a good proxy for the
         rows it did. Pre-existing columns get a plain before/after string diff.
 
-        ponytail: still not a proof at one end -- a brand-new Internal_Tags
-        over-reports, because _prepare_df_for_actions seeds it with the truthy
-        string "[]" for every row. That stays latent in practice: analysis.py
-        initialises Internal_Tags on every real analysis, so it always takes
-        the exact pre-existing-column path. Fixing it properly needs rules.py
-        to report which rows it wrote, which is out of scope here.
+        ponytail: a proxy, not a proof, at either end. It over-reports a
+        brand-new Internal_Tags, because _prepare_df_for_actions seeds it with
+        the truthy string "[]" for every row -- latent in practice, since
+        analysis.py initialises Internal_Tags on every real analysis, so it
+        always takes the exact pre-existing-column path. And it under-reports a
+        row whose written result is itself NaN: a CALCULATE divide-by-zero, a
+        CALCULATE over a non-numeric field, or a COPY_FIELD whose source cell
+        is empty. Fixing either properly needs rules.py to report which rows it
+        wrote, which is out of scope here.
         """
         original_cols = set(self.df_before.columns)
         changed = pd.Series(False, index=self.before_aligned.index)
