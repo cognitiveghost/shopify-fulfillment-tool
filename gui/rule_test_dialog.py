@@ -59,6 +59,7 @@ class RuleTestDialog(QDialog):
         self.df_after = None
         self.matches = None
         self.matched_count = 0
+        self.changed_count = 0
 
         # Set by _align_frames(): df_before/df_after made comparable.
         self.before_aligned = None
@@ -207,7 +208,8 @@ class RuleTestDialog(QDialog):
 
             # Detect matched rows by comparing before/after (works for all rule types)
             self.matches = self._detect_changed_rows()
-            self.matched_count = int(self.matches.sum()) + len(self.added_rows)
+            self.changed_count = int(self.matches.sum())
+            self.matched_count = self.changed_count + len(self.added_rows)
             logger.info(f"[RULE TEST] Rule affected {self.matched_count} rows")
 
             # Populate UI sections
@@ -265,6 +267,17 @@ class RuleTestDialog(QDialog):
         columns don't have this seeding step, so a plain before/after
         string diff is exact for them; a brand-new column instead needs the
         "does it hold a real value" check.
+
+        ponytail: that check is a heuristic, not a proof, and it is wrong at
+        both ends. It *under*-reports a matched row whose CALCULATE result is
+        legitimately 0/0.0/NaN -- indistinguishable from the seed once apply()
+        has returned. It *over*-reports a brand-new Internal_Tags, which
+        _prepare_df_for_actions seeds with the truthy string "[]" for every
+        row. Both are pre-existing behaviour, and the second is latent in
+        practice: analysis.py initialises Internal_Tags on every real
+        analysis, so it always takes the exact pre-existing-column path.
+        Exact counts need rules.py to report which rows it wrote, which is
+        out of scope here -- the engine is correct, the dialog was wrong.
         """
         original_cols = set(self.df_before.columns)
         changed = pd.Series(False, index=self.before_aligned.index)
@@ -308,12 +321,14 @@ class RuleTestDialog(QDialog):
 
         # Update summary label
         total_rows = len(self.test_df)
-        percentage = (self.matched_count / total_rows * 100) if total_rows > 0 else 0
+        # Percentage is of existing rows only -- added rows have no denominator
+        # to belong to, and counting them made this read 133.3%.
+        percentage = (self.changed_count / total_rows * 100) if total_rows > 0 else 0
         step_info = f"{len(steps)} step(s)" if len(steps) > 1 else "1 step"
 
         summary = f"Final Result ({step_info}, narrowing): "
         summary += f"<span style='color: {theme.accent_green}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
-        summary += f"({percentage:.1f}% of {total_rows} total rows)"
+        summary += f"({self.changed_count} of {total_rows} existing rows, {percentage:.1f}%)"
         if len(self.added_rows):
             summary += f" — {len(self.added_rows)} added by rule"
 
@@ -322,10 +337,17 @@ class RuleTestDialog(QDialog):
     def _populate_preview_table(self):
         """Populate preview table with first 5 matched rows."""
         theme = get_theme_manager().get_current_theme()
-        if self.matches is None or self.matched_count == 0:
+        # This table shows *before* rows, so it is empty whenever no existing
+        # row matched -- even if the rule appended rows (an ADD_PRODUCT-only
+        # rule has matched_count > 0 but nothing to preview). Guard on the
+        # existing-row count, or that case renders a blank table.
+        if self.matches is None or self.changed_count == 0:
             self.preview_table.setRowCount(1)
             self.preview_table.setColumnCount(1)
-            no_match_item = QTableWidgetItem("No rows matched the conditions")
+            message = "No rows matched the conditions"
+            if self.added_rows is not None and len(self.added_rows):
+                message += f" — {len(self.added_rows)} rows added by the rule (see After Actions)"
+            no_match_item = QTableWidgetItem(message)
             no_match_item.setForeground(QColor(theme.text_secondary))
             self.preview_table.setItem(0, 0, no_match_item)
             return
@@ -350,9 +372,9 @@ class RuleTestDialog(QDialog):
         self.preview_table.resizeColumnsToContents()
 
         # Show "and X more" if there are more matches
-        if self.matched_count > 5:
-            remaining = self.matched_count - 5
-            logger.info(f"[RULE TEST] Showing 5 of {self.matched_count} matched rows ({remaining} more)")
+        if self.changed_count > 5:
+            remaining = self.changed_count - 5
+            logger.info(f"[RULE TEST] Showing 5 of {self.changed_count} matched rows ({remaining} more)")
 
     def _populate_actions_list(self):
         """Populate actions list with actions from all steps."""
@@ -433,9 +455,12 @@ class RuleTestDialog(QDialog):
 
                 # Highlight changed cells
                 # ponytail: literal diff-highlight yellow/green, not worth two
-                # new ThemeTokens fields for this one call site.
+                # new ThemeTokens fields for this one call site. The tints are
+                # light in both themes, so pin a dark foreground too -- dark
+                # theme's text_primary is near-white and vanishes on them.
                 if value_before != value_after and not (pd.isna(value_before) and pd.isna(value_after)):
                     item.setBackground(QColor("#FFEB3B"))  # Yellow
+                    item.setForeground(QColor("#000000"))
                     item.setToolTip(f"Changed from: {value_before}")
 
                 self.after_table.setItem(row_idx, col_idx, item)
@@ -447,6 +472,7 @@ class RuleTestDialog(QDialog):
             for col_idx, col_name in enumerate(display_cols):
                 item = QTableWidgetItem(str(row_added[col_name]))
                 item.setBackground(QColor("#C8E6C9"))  # Green
+                item.setForeground(QColor("#000000"))
                 item.setToolTip("Added by rule")
                 self.after_table.setItem(row_idx, col_idx, item)
 

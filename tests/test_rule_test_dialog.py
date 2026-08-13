@@ -101,6 +101,31 @@ class TestAddedRowsAreReported:
         assert len(dialog.added_rows) == 2
         assert dialog.matched_count == 2
 
+    def test_add_product_alone_explains_the_empty_preview(self, qtbot, analysis_df, no_modals):
+        """The preview table shows *before* rows, so an ADD_PRODUCT-only rule
+        has nothing to put in it. Rendering it blank reads as broken -- say why
+        it is empty and where the added rows are."""
+        dialog = _open(qtbot, _rule(
+            {"type": "ADD_PRODUCT", "sku": "B", "quantity": 1},
+        ), analysis_df)
+        assert no_modals == []
+        assert dialog.preview_table.rowCount() == 1
+        assert "2 rows added by the rule" in dialog.preview_table.item(0, 0).text()
+        # The added rows still show up where they belong.
+        assert dialog.after_table.rowCount() == 2
+
+    def test_summary_percentage_never_exceeds_total_rows(self, qtbot, analysis_df, no_modals):
+        """Added rows have no denominator to belong to -- counting them in the
+        percentage rendered "4 rows affected (133.3% of 3 total rows)"."""
+        dialog = _open(qtbot, _rule(
+            {"type": "ADD_PRODUCT", "sku": "B", "quantity": 1},
+            {"type": "ADD_TAG", "value": "bonus"},
+        ), analysis_df)
+        assert no_modals == []
+        assert dialog.matched_count == 4
+        assert dialog.changed_count == 2
+        assert "2 of 3 existing rows, 66.7%" in dialog.match_summary_label.text()
+
 
 class TestEngineOrderingAssumption:
     def test_added_rows_are_appended_not_interleaved(self, qtbot, analysis_df, no_modals):
