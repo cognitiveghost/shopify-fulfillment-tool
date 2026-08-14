@@ -338,3 +338,52 @@ def migrate_add_inventory_memory(client_id: str, config: dict) -> bool:
         return True
 
     return False
+
+
+# The labels shipped as defaults before the tag-category de-localization.
+# A label is rewritten only when it still matches its entry here exactly --
+# anything the user renamed themselves is left alone.
+_UKRAINIAN_DEFAULT_LABELS = {
+    "packaging": "Пакетаж",
+    "priority": "Пріоритет",
+    "status": "Статус",
+    "order_type": "Тип замовлення",
+    "accessories": "Додатки",
+    "delivery": "Кур'єр/Доставка",
+    "custom": "Інші",
+}
+
+
+def migrate_tag_category_labels_to_english(client_id: str, config: dict) -> bool:
+    """Replace untouched Ukrainian default category labels with English ones.
+
+    Relabels only. Tags, colors, orders and sku_writeoff config are never
+    touched, so tags already applied to orders keep working. A label the user
+    renamed is left as-is.
+
+    Returns:
+        bool: True if at least one label was rewritten.
+    """
+    categories = config.get("tag_categories", {})
+    if not isinstance(categories, dict):
+        return False
+    categories = categories.get("categories", {})
+    if not isinstance(categories, dict):
+        return False
+
+    english = DEFAULT_TAG_CATEGORIES["categories"]
+    changed = False
+
+    for category_id, old_label in _UKRAINIAN_DEFAULT_LABELS.items():
+        category = categories.get(category_id)
+        if not isinstance(category, dict):
+            continue
+        if category.get("label") != old_label:
+            continue
+        category["label"] = english[category_id]["label"]
+        changed = True
+
+    if changed:
+        logger.info(f"Relabeled tag categories to English for CLIENT_{client_id}")
+
+    return changed

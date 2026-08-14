@@ -32,6 +32,7 @@ from shopify_tool.profile_migrations import (
     migrate_column_mappings_v1_to_v2,
     migrate_delimiter_config_v1_to_v2,
     migrate_tag_categories_v1_to_v2,
+    migrate_tag_category_labels_to_english,
 )
 from shopify_tool.tag_manager import DEFAULT_TAG_CATEGORIES
 
@@ -538,6 +539,9 @@ class ProfileManager:
             migrated_tag_categories_v2 = migrate_tag_categories_v1_to_v2(
                 client_id, config
             )
+            migrated_tag_labels = migrate_tag_category_labels_to_english(
+                client_id, config
+            )
             migrated_weight = migrate_add_weight_config(client_id, config)
             migrated_inv_memory = migrate_add_inventory_memory(client_id, config)
 
@@ -546,6 +550,7 @@ class ProfileManager:
                 or migrated_delimiters
                 or migrated_tag_categories
                 or migrated_tag_categories_v2
+                or migrated_tag_labels
                 or migrated_weight
                 or migrated_inv_memory
             ):
