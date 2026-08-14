@@ -401,3 +401,69 @@ class TestLegacyActionFlag:
             qtbot, analysis_df, {"type": "ADD_TAG", "value": "T"})
         refs["type"].setCurrentText("ADD_INTERNAL_TAG")
         assert refs["legacy_label"].isHidden()
+
+
+_TAG_CATEGORIES = {
+    "version": 2,
+    "categories": {
+        "handling": {"label": "Handling", "color": "#FF0000",
+                     "tags": ["FRAGILE", "GIFT"], "order": 1},
+        "shipping": {"label": "Shipping", "color": "#00FF00",
+                     "tags": ["EXPRESS"], "order": 2},
+    },
+}
+
+
+class TestInternalTagValueCombo:
+    def _refs(self, qtbot, analysis_df, action):
+        rule = {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": "SKU", "operator": "equals", "value": "x"}],
+                "match": "ALL",
+                "actions": [action],
+            }],
+        }
+        page = RulesPage([rule], analysis_df, tag_categories=_TAG_CATEGORIES)
+        qtbot.addWidget(page)
+        return page, page.rule_widgets[0]["steps"][0]["actions"][0]
+
+    def test_configured_tags_are_offered_sorted_and_deduped(self, qtbot, analysis_df):
+        page = RulesPage([], analysis_df, tag_categories=_TAG_CATEGORIES)
+        qtbot.addWidget(page)
+        assert page.get_configured_tags() == ["EXPRESS", "FRAGILE", "GIFT"]
+
+    def test_missing_tag_categories_yields_an_empty_vocabulary(self, qtbot, analysis_df):
+        page = RulesPage([], analysis_df)
+        qtbot.addWidget(page)
+        assert page.get_configured_tags() == []
+
+    def test_tag_value_widget_is_an_editable_combo_of_the_vocabulary(self, qtbot, analysis_df):
+        page, refs = self._refs(
+            qtbot, analysis_df, {"type": "ADD_INTERNAL_TAG", "value": "GIFT"})
+        combo = refs["param_widgets"]["value"]
+        assert combo.isEditable()
+        assert {combo.itemText(i) for i in range(combo.count())} == {
+            "EXPRESS", "FRAGILE", "GIFT"}
+        assert combo.currentText() == "GIFT"
+
+    def test_remove_internal_tag_gets_the_same_combo(self, qtbot, analysis_df):
+        page, refs = self._refs(
+            qtbot, analysis_df, {"type": "REMOVE_INTERNAL_TAG", "value": "FRAGILE"})
+        assert refs["param_widgets"]["value"].currentText() == "FRAGILE"
+
+    def test_a_tag_outside_the_vocabulary_round_trips(self, qtbot, analysis_df):
+        page, refs = self._refs(
+            qtbot, analysis_df, {"type": "ADD_INTERNAL_TAG", "value": "BRAND_NEW"})
+        assert refs["param_widgets"]["value"].currentText() == "BRAND_NEW"
+        action = page.collect()["rules"][0]["steps"][0]["actions"][0]
+        assert action == {"type": "ADD_INTERNAL_TAG", "value": "BRAND_NEW"}
+
+    def test_set_status_keeps_its_plain_line_edit(self, qtbot, analysis_df):
+        from PySide6.QtWidgets import QLineEdit
+
+        page, refs = self._refs(
+            qtbot, analysis_df, {"type": "SET_STATUS", "value": "Ready"})
+        assert isinstance(refs["param_widgets"]["value"], QLineEdit)
+        action = page.collect()["rules"][0]["steps"][0]["actions"][0]
+        assert action["value"] == "Ready"

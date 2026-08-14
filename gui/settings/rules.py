@@ -36,11 +36,16 @@ class RulesPage(SettingsPage):
             to the UI widgets for a single rule.
     """
 
-    def __init__(self, rules: list, analysis_df, parent=None):
+    def __init__(self, rules: list, analysis_df, tag_categories: dict | None = None, parent=None):
         super().__init__(parent)
         self.analysis_df = analysis_df
         self.rule_widgets = []
         self._rules_config = rules
+        # ponytail: a snapshot taken when the dialog opens. The Tag Categories
+        # page can add a tag while this page is open and this list will not
+        # see it; the combo is editable, so the tag is still typeable. Wire up
+        # a signal between the two pages if that stops being good enough.
+        self._tag_categories = tag_categories or {}
 
         main_layout = QVBoxLayout(self)
 
@@ -266,6 +271,20 @@ class RulesPage(SettingsPage):
             logger.warning(f"[RULE ENGINE] No analysis_df available (is None: {self.analysis_df is None})")
 
         return fields
+
+    def get_configured_tags(self) -> list[str]:
+        """Every tag named by the configured tag categories, sorted and deduped.
+
+        SYSTEM_TAGS (core.py) are deliberately excluded: the analyser owns
+        them, and offering them here invites rules that fight it. The combo
+        that consumes this is editable, so they remain typeable.
+        """
+        from shopify_tool.tag_manager import _normalize_tag_categories
+
+        tags = set()
+        for category in _normalize_tag_categories(self._tag_categories).values():
+            tags.update(category.get("tags", []))
+        return sorted(tags)
 
     def _update_rules_count_label(self):
         """Update the rules summary label in the Rules tab header."""
@@ -1285,7 +1304,22 @@ class RulesPage(SettingsPage):
         insert_pos = 1  # Після type combo
 
         # Створити widgets залежно від типу
-        if action_type in ["ADD_TAG", "ADD_ORDER_TAG", "ADD_INTERNAL_TAG", "SET_STATUS"]:
+        if action_type in ["ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG"]:
+            # Editable: an unlisted tag must stay typeable, and an unknown
+            # value loaded from config must round-trip rather than snap to
+            # item 0 the way a fixed combo would.
+            value_combo = WheelIgnoreComboBox()
+            value_combo.setEditable(True)
+            value_combo.addItems(self.get_configured_tags())
+            # On an editable combo the placeholder lives on the line edit --
+            # QComboBox.setPlaceholderText only shows at currentIndex == -1.
+            value_combo.lineEdit().setPlaceholderText("Tag")
+            if initial_config:
+                value_combo.setCurrentText(initial_config.get("value", ""))
+            layout.insertWidget(insert_pos, value_combo, 1)
+            action_refs["param_widgets"]["value"] = value_combo
+
+        elif action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_STATUS"]:
             # Простий value field
             value_edit = QLineEdit()
             value_edit.setPlaceholderText("Value")
@@ -1432,7 +1466,10 @@ class RulesPage(SettingsPage):
                     act = {"type": action_type}
 
                     # Serialize parameters based on type
-                    if action_type in ["ADD_TAG", "ADD_ORDER_TAG", "ADD_INTERNAL_TAG", "SET_STATUS"]:
+                    if action_type in ["ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG"]:
+                        act["value"] = act_refs["param_widgets"]["value"].currentText()
+
+                    elif action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_STATUS"]:
                         act["value"] = act_refs["param_widgets"]["value"].text()
 
                     elif action_type == "COPY_FIELD":
