@@ -163,3 +163,26 @@ def test_theme_change_reblends_row_backgrounds(qtbot):
         assert _labels(panel)["priority"] == "Priority"
     finally:
         tm.set_theme(original)
+
+
+def test_removing_a_tag_drops_its_writeoff_mappings(qtbot):
+    from gui.tag_categories_dialog import TagCategoriesPanel
+
+    panel = TagCategoriesPanel(_sample_categories())
+    qtbot.addWidget(panel)
+
+    # select 'priority', which has tag URGENT with a writeoff mapping
+    for i in range(panel.categories_list.count()):
+        item = panel.categories_list.item(i)
+        if item.data(Qt.UserRole) == "priority":
+            panel.categories_list.setCurrentItem(item)
+            break
+    assert panel.current_category_id == "priority"
+    assert panel.writeoff_mappings_table.rowCount() == 1
+
+    panel.tags_list.setCurrentRow(0)  # URGENT
+    panel._on_remove_tag()
+
+    saved = panel.get_categories()["categories"]["priority"]
+    assert saved["tags"] == []
+    assert saved["sku_writeoff"]["mappings"] == {}

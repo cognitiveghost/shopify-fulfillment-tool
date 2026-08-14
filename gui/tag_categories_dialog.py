@@ -534,13 +534,26 @@ class TagCategoriesPanel(QWidget):
             self._on_editor_changed()
 
     def _on_remove_tag(self):
-        """Handle remove tag button click."""
+        """Handle remove tag button click.
+
+        Also drops any writeoff mapping rows keyed by the removed tags --
+        _save_editor_to_working_copy rebuilds mappings from the table, so rows
+        left behind here would persist as mappings for a tag the category no
+        longer has.
+        """
         selected_items = self.tags_list.selectedItems()
         if not selected_items:
             return
 
+        removed = {item.text() for item in selected_items}
+
         for item in selected_items:
             self.tags_list.takeItem(self.tags_list.row(item))
+
+        for row in reversed(range(self.writeoff_mappings_table.rowCount())):
+            tag_item = self.writeoff_mappings_table.item(row, 0)
+            if tag_item is not None and tag_item.text() in removed:
+                self.writeoff_mappings_table.removeRow(row)
 
         self._on_editor_changed()
 
