@@ -129,6 +129,38 @@ class TestRulePriorityAndAccumulation:
         assert parse_tags(out.loc[1, "Internal_Tags"]) == ["GIFT"]  # order 1001's other line
         assert parse_tags(out.loc[2, "Internal_Tags"]) == ["GIFT"]  # order 1002, matched directly
 
+    def test_remove_internal_tag_clears_the_tag_from_every_line_of_the_order(self):
+        # Mirror of the ADD case: the rule matches only row 0, but
+        # Internal_Tags is order-level, so both of order 1001's lines must
+        # lose the tag -- not just the matched line.
+        df = _df({
+            "Order_Number": ["1001", "1001", "1002"],
+            "Quantity": [5, 1, 9],
+            "Internal_Tags": ['["GIFT", "FRAGILE"]', '["GIFT", "FRAGILE"]', '["GIFT"]'],
+        })
+        rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 5}],
+                        [{"type": "REMOVE_INTERNAL_TAG", "value": "GIFT"}])]
+        out = RuleEngine(rules).apply(df.copy())
+        assert parse_tags(out.loc[0, "Internal_Tags"]) == ["FRAGILE"]
+        assert parse_tags(out.loc[1, "Internal_Tags"]) == ["FRAGILE"]  # same order
+        assert parse_tags(out.loc[2, "Internal_Tags"]) == ["GIFT"]     # unmatched order
+
+    def test_remove_internal_tag_is_a_noop_for_an_absent_tag(self):
+        df = _df({"Order_Number": ["X"], "Quantity": [1], "Internal_Tags": ['["GIFT"]']})
+        rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 1}],
+                        [{"type": "REMOVE_INTERNAL_TAG", "value": "NOT_THERE"}])]
+        out = RuleEngine(rules).apply(df.copy())
+        assert parse_tags(out.loc[0, "Internal_Tags"]) == ["GIFT"]
+
+    def test_remove_internal_tag_creates_the_column_when_missing(self):
+        # _prepare_df_for_actions must build Internal_Tags even for a
+        # remove-only rule, or the read at execute time raises KeyError.
+        df = _df({"Order_Number": ["X"], "Quantity": [1]})
+        rules = [_rule([{"field": "Quantity", "operator": "equals", "value": 1}],
+                        [{"type": "REMOVE_INTERNAL_TAG", "value": "GIFT"}])]
+        out = RuleEngine(rules).apply(df.copy())
+        assert parse_tags(out.loc[0, "Internal_Tags"]) == []
+
     def test_empty_rules_list_is_noop(self):
         df = _df({"Quantity": [1, 2]})
         out = RuleEngine([]).apply(df.copy())
