@@ -32,7 +32,9 @@ from shopify_tool.profile_migrations import (
     migrate_column_mappings_v1_to_v2,
     migrate_delimiter_config_v1_to_v2,
     migrate_tag_categories_v1_to_v2,
+    migrate_tag_category_labels_to_english,
 )
+from shopify_tool.tag_manager import DEFAULT_TAG_CATEGORIES
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -413,60 +415,7 @@ class ProfileManager:
             "set_decoders": {},
             "packaging_rules": [],
             "weight_config": {"volumetric_divisor": 6000, "products": {}, "boxes": []},
-            "tag_categories": {
-                "version": 2,
-                "categories": {
-                    "packaging": {
-                        "label": "Пакетаж",
-                        "color": "#4CAF50",
-                        "order": 1,
-                        "tags": ["SMALL_BAG", "LARGE_BAG", "BOX", "NO_BOX", "BOX+ANY"],
-                        "sku_writeoff": {"enabled": False, "mappings": {}},
-                    },
-                    "priority": {
-                        "label": "Пріоритет",
-                        "color": "#FF9800",
-                        "order": 2,
-                        "tags": ["URGENT", "HIGH_VALUE", "DOUBLE_TRACK"],
-                        "sku_writeoff": {"enabled": False, "mappings": {}},
-                    },
-                    "status": {
-                        "label": "Статус",
-                        "color": "#2196F3",
-                        "order": 3,
-                        "tags": ["CHECKED", "PROBLEM", "VERIFIED"],
-                        "sku_writeoff": {"enabled": False, "mappings": {}},
-                    },
-                    "order_type": {
-                        "label": "Тип замовлення",
-                        "color": "#9C27B0",
-                        "order": 4,
-                        "tags": ["RETAIL", "WHOLESALE", "RETURN", "EXCHANGE"],
-                        "sku_writeoff": {"enabled": False, "mappings": {}},
-                    },
-                    "accessories": {
-                        "label": "Додатки",
-                        "color": "#E91E63",
-                        "order": 5,
-                        "tags": ["STICKER", "BUSINESS_CARD", "GIFT_BOX"],
-                        "sku_writeoff": {"enabled": False, "mappings": {}},
-                    },
-                    "delivery": {
-                        "label": "Кур'єр/Доставка",
-                        "color": "#FF5722",
-                        "order": 6,
-                        "tags": ["NOVA_POSHTA", "UKRPOSHTA", "SELF_PICKUP"],
-                        "sku_writeoff": {"enabled": False, "mappings": {}},
-                    },
-                    "custom": {
-                        "label": "Інші",
-                        "color": "#9E9E9E",
-                        "order": 999,
-                        "tags": [],
-                        "sku_writeoff": {"enabled": False, "mappings": {}},
-                    },
-                },
-            },
+            "tag_categories": copy.deepcopy(DEFAULT_TAG_CATEGORIES),
             "inventory_memory": {
                 "enabled": False,
                 "skus": {},
@@ -590,6 +539,9 @@ class ProfileManager:
             migrated_tag_categories_v2 = migrate_tag_categories_v1_to_v2(
                 client_id, config
             )
+            migrated_tag_labels = migrate_tag_category_labels_to_english(
+                client_id, config
+            )
             migrated_weight = migrate_add_weight_config(client_id, config)
             migrated_inv_memory = migrate_add_inventory_memory(client_id, config)
 
@@ -598,6 +550,7 @@ class ProfileManager:
                 or migrated_delimiters
                 or migrated_tag_categories
                 or migrated_tag_categories_v2
+                or migrated_tag_labels
                 or migrated_weight
                 or migrated_inv_memory
             ):

@@ -6,8 +6,9 @@ with support for v2 format including order, colors, and SKU writeoff configurati
 
 import copy
 import logging
+import re
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -40,6 +41,50 @@ from gui.theme_manager import font_css, get_theme_manager
 from shopify_tool.tag_manager import validate_tag_categories_v2
 
 logger = logging.getLogger(__name__)
+
+_VALID_CATEGORY_ID = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+
+
+def is_valid_category_id(category_id: str) -> bool:
+    """Category IDs are ASCII lowercase, digits and underscores, not all-underscore.
+
+    str.isalnum() -- which this used to rely on -- is True for any Unicode
+    letter, so it accepted 'категорія' under a message promising ASCII.
+    """
+    return bool(_VALID_CATEGORY_ID.match(category_id))
+
+
+# The editor's order spinbox maxes out at this value, and 'custom' uses it as a
+# keep-me-last sentinel.
+_MAX_CATEGORY_ORDER = 999
+
+
+def next_available_order(existing_orders) -> int:
+    """Lowest unused display order in [1, 999].
+
+    Not len(categories) + 1 -- that collides with a live order as soon as any
+    category has been deleted, and the resulting sort falls back to dict order.
+    """
+    taken = {o for o in existing_orders if isinstance(o, int)}
+    for candidate in range(1, _MAX_CATEGORY_ORDER + 1):
+        if candidate not in taken:
+            return candidate
+    return _MAX_CATEGORY_ORDER
+
+
+def _read_only_item(text: str) -> QTableWidgetItem:
+    item = QTableWidgetItem(text)
+    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+    return item
+
+
+def mapping_row_exists(rows, tag: str, sku: str) -> bool:
+    """True if this exact tag+SKU pair is already mapped.
+
+    Several different SKUs per tag is the intended feature; the same SKU twice
+    just doubles the deduction.
+    """
+    return (tag, sku) in rows
 
 
 class TagCategoriesPanel(QWidget):
@@ -268,30 +313,47 @@ class TagCategoriesPanel(QWidget):
         return self.working_categories
 
     def _load_categories(self):
-        """Load categories into the list widget."""
-        self.categories_list.clear()
+        """Load categories into the list widget.
 
-        categories = self.working_categories.get("categories", {})
+        The whole rebuild runs with the list's signals blocked. Qt drains
+        currentItemChanged repeatedly during clear(), and those emissions reach
+        _on_category_selected, which reassigns current_category_id and then
+        clears the editor fields -- whose textChanged handlers write the now-empty
+        editor back over a real category's label. Blocking here is the single
+        place that closes every variant of that path.
+        """
+        with QSignalBlocker(self.categories_list):
+            self.categories_list.clear()
 
-        sorted_categories = sorted(
-            categories.items(),
-            key=lambda x: x[1].get("order", 999)
-        )
+            categories = self.working_categories.get("categories", {})
 
-        for category_id, category_config in sorted_categories:
-            item = QListWidgetItem(category_config.get("label", category_id))
-            item.setData(Qt.UserRole, category_id)
-            # ponytail: literal neutral swatch-fill default, not a text color —
-            # see _create_editor comment above for why no theme token fits.
-            color = category_config.get("color", "#9E9E9E")
-            _cat = QColor(color)
-            _bg = QColor(get_theme_manager().get_current_theme().background)
-            item.setBackground(QColor(
-                int(_cat.red() * 0.45 + _bg.red() * 0.55),
-                int(_cat.green() * 0.45 + _bg.green() * 0.55),
-                int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
-            ))
-            self.categories_list.addItem(item)
+            sorted_categories = sorted(
+                categories.items(),
+                key=lambda x: x[1].get("order", 999)
+            )
+
+            for category_id, category_config in sorted_categories:
+                item = QListWidgetItem(category_config.get("label", category_id))
+                item.setData(Qt.UserRole, category_id)
+                # ponytail: literal neutral swatch-fill default, not a text color —
+                # see _create_editor comment above for why no theme token fits.
+                color = category_config.get("color", "#9E9E9E")
+                _cat = QColor(color)
+                _bg = QColor(get_theme_manager().get_current_theme().background)
+                item.setBackground(QColor(
+                    int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                    int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                    int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+                ))
+                self.categories_list.addItem(item)
+
+    def _select_category(self, category_id: str):
+        """Make category_id the list's current item, if it is still present."""
+        for i in range(self.categories_list.count()):
+            item = self.categories_list.item(i)
+            if item.data(Qt.UserRole) == category_id:
+                self.categories_list.setCurrentItem(item)
+                return
 
     def _on_category_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
         """Handle category selection change."""
@@ -359,9 +421,11 @@ class TagCategoriesPanel(QWidget):
                 row_position = self.writeoff_mappings_table.rowCount()
                 self.writeoff_mappings_table.insertRow(row_position)
 
-                self.writeoff_mappings_table.setItem(row_position, 0, QTableWidgetItem(tag))
-                self.writeoff_mappings_table.setItem(row_position, 1, QTableWidgetItem(item["sku"]))
-                self.writeoff_mappings_table.setItem(row_position, 2, QTableWidgetItem(f"{item['quantity']:.2f}"))
+                self.writeoff_mappings_table.setItem(row_position, 0, _read_only_item(tag))
+                self.writeoff_mappings_table.setItem(row_position, 1, _read_only_item(item["sku"]))
+                self.writeoff_mappings_table.setItem(
+                    row_position, 2, _read_only_item(f"{item['quantity']:.2f}")
+                )
 
         self.writeoff_enabled_checkbox.blockSignals(False)
 
@@ -374,6 +438,13 @@ class TagCategoriesPanel(QWidget):
             self.color_display.setStyleSheet(
                 f"border: 1px solid {self.theme.border}; background-color: {self.current_color};"
             )
+        # Row backgrounds are blended against theme.background, so they are
+        # stale until the list is rebuilt. Safe because _load_categories blocks
+        # the list's signals (see Task 4) -- which is also why the selection has
+        # to be restored by hand, or Delete stays armed against an invisible one.
+        self._load_categories()
+        if self.current_category_id:
+            self._select_category(self.current_category_id)
 
     def _set_editor_enabled(self, enabled: bool):
         """Enable/disable editor fields."""
@@ -400,6 +471,12 @@ class TagCategoriesPanel(QWidget):
             self.tags_list.clear()
             self.writeoff_mappings_table.setRowCount(0)
             self.writeoff_enabled_checkbox.setChecked(False)
+            # ponytail: same literal neutral swatch fill as the editor default —
+            # see _create_category_editor_panel for why no theme token fits.
+            self.current_color = "#9E9E9E"
+            self.color_display.setStyleSheet(
+                f"border: 1px solid {self.theme.border}; background-color: {self.current_color};"
+            )
 
     def _on_editor_changed(self):
         """Handle editor field changes."""
@@ -520,13 +597,26 @@ class TagCategoriesPanel(QWidget):
             self._on_editor_changed()
 
     def _on_remove_tag(self):
-        """Handle remove tag button click."""
+        """Handle remove tag button click.
+
+        Also drops any writeoff mapping rows keyed by the removed tags --
+        _save_editor_to_working_copy rebuilds mappings from the table, so rows
+        left behind here would persist as mappings for a tag the category no
+        longer has.
+        """
         selected_items = self.tags_list.selectedItems()
         if not selected_items:
             return
 
+        removed = {item.text() for item in selected_items}
+
         for item in selected_items:
             self.tags_list.takeItem(self.tags_list.row(item))
+
+        for row in reversed(range(self.writeoff_mappings_table.rowCount())):
+            tag_item = self.writeoff_mappings_table.item(row, 0)
+            if tag_item is not None and tag_item.text() in removed:
+                self.writeoff_mappings_table.removeRow(row)
 
         self._on_editor_changed()
 
@@ -550,7 +640,7 @@ class TagCategoriesPanel(QWidget):
 
     def _on_writeoff_enabled_changed(self, state):
         """Handle writeoff enabled checkbox state change."""
-        enabled = (state == Qt.Checked)
+        enabled = self.writeoff_enabled_checkbox.isChecked()
 
         self.writeoff_mappings_table.setEnabled(enabled)
         self.add_mapping_btn.setEnabled(enabled)
@@ -608,12 +698,29 @@ class TagCategoriesPanel(QWidget):
                 QMessageBox.warning(self, "Invalid Input", "SKU cannot be empty.")
                 return
 
+            existing = [
+                (
+                    self.writeoff_mappings_table.item(r, 0).text(),
+                    self.writeoff_mappings_table.item(r, 1).text(),
+                )
+                for r in range(self.writeoff_mappings_table.rowCount())
+                if self.writeoff_mappings_table.item(r, 0)
+                and self.writeoff_mappings_table.item(r, 1)
+            ]
+            if mapping_row_exists(existing, tag, sku):
+                QMessageBox.warning(
+                    self,
+                    "Duplicate Mapping",
+                    f"'{sku}' is already mapped to tag '{tag}'.",
+                )
+                return
+
             row_position = self.writeoff_mappings_table.rowCount()
             self.writeoff_mappings_table.insertRow(row_position)
 
-            self.writeoff_mappings_table.setItem(row_position, 0, QTableWidgetItem(tag))
-            self.writeoff_mappings_table.setItem(row_position, 1, QTableWidgetItem(sku))
-            self.writeoff_mappings_table.setItem(row_position, 2, QTableWidgetItem(f"{quantity:.2f}"))
+            self.writeoff_mappings_table.setItem(row_position, 0, _read_only_item(tag))
+            self.writeoff_mappings_table.setItem(row_position, 1, _read_only_item(sku))
+            self.writeoff_mappings_table.setItem(row_position, 2, _read_only_item(f"{quantity:.2f}"))
 
             self._on_editor_changed()
 
@@ -648,7 +755,7 @@ class TagCategoriesPanel(QWidget):
             QMessageBox.warning(self, "Invalid ID", "Category ID cannot be empty.")
             return
 
-        if not category_id.replace("_", "").isalnum():
+        if not is_valid_category_id(category_id):
             QMessageBox.warning(
                 self,
                 "Invalid ID",
@@ -669,7 +776,9 @@ class TagCategoriesPanel(QWidget):
             # theme-at-creation-time-dependent color into saved config.
             # No theme-invariant neutral-gray token exists.
             "color": "#9E9E9E",
-            "order": len(categories) + 1,
+            "order": next_available_order(
+                c.get("order") for c in categories.values() if isinstance(c, dict)
+            ),
             "tags": [],
             "sku_writeoff": {
                 "enabled": False,
@@ -681,12 +790,7 @@ class TagCategoriesPanel(QWidget):
         self.modified = True
 
         self._load_categories()
-
-        for i in range(self.categories_list.count()):
-            item = self.categories_list.item(i)
-            if item.data(Qt.UserRole) == category_id:
-                self.categories_list.setCurrentItem(item)
-                break
+        self._select_category(category_id)
 
     def _on_delete_category(self):
         """Handle delete category button click."""

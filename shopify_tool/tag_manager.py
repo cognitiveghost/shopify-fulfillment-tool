@@ -6,6 +6,64 @@ from functools import lru_cache
 
 import pandas as pd
 
+DEFAULT_TAG_CATEGORIES = {
+    "version": 2,
+    "categories": {
+        "packaging": {
+            "label": "Packaging",
+            "color": "#4CAF50",
+            "order": 1,
+            "tags": ["SMALL_BAG", "LARGE_BAG", "BOX", "NO_BOX", "BOX+ANY"],
+            "sku_writeoff": {"enabled": False, "mappings": {}},
+        },
+        "priority": {
+            "label": "Priority",
+            "color": "#FF9800",
+            "order": 2,
+            "tags": ["URGENT", "HIGH_VALUE", "DOUBLE_TRACK"],
+            "sku_writeoff": {"enabled": False, "mappings": {}},
+        },
+        "status": {
+            "label": "Status",
+            "color": "#2196F3",
+            "order": 3,
+            "tags": ["CHECKED", "PROBLEM", "VERIFIED"],
+            "sku_writeoff": {"enabled": False, "mappings": {}},
+        },
+        "order_type": {
+            "label": "Order Type",
+            "color": "#9C27B0",
+            "order": 4,
+            "tags": ["RETAIL", "WHOLESALE", "RETURN", "EXCHANGE"],
+            "sku_writeoff": {"enabled": False, "mappings": {}},
+        },
+        "accessories": {
+            "label": "Accessories",
+            "color": "#E91E63",
+            "order": 5,
+            "tags": ["STICKER", "BUSINESS_CARD", "GIFT_BOX"],
+            "sku_writeoff": {"enabled": False, "mappings": {}},
+        },
+        "delivery": {
+            "label": "Delivery",
+            "color": "#FF5722",
+            "order": 6,
+            "tags": [],
+            "sku_writeoff": {"enabled": False, "mappings": {}},
+        },
+        # ponytail: 'custom' is the fallback bucket get_tag_category() returns
+        # for any unrecognized tag. order 999 keeps it last; the dialog's order
+        # spinbox maxes out at 999, so do not raise this value.
+        "custom": {
+            "label": "Other",
+            "color": "#9E9E9E",
+            "order": 999,
+            "tags": [],
+            "sku_writeoff": {"enabled": False, "mappings": {}},
+        },
+    },
+}
+
 
 def parse_tags(tags_value) -> list[str]:
     """
@@ -316,6 +374,12 @@ def validate_tag_categories_v2(config: dict) -> tuple[bool, list[str]]:
         for field in required_fields:
             if field not in category_config:
                 errors.append(f"Category '{category_id}' missing required field '{field}'")
+
+        # Only when present -- a missing label is already reported above, and
+        # reporting it twice just makes the dialog's error box noisier.
+        label = category_config.get("label")
+        if "label" in category_config and (not isinstance(label, str) or not label.strip()):
+            errors.append(f"Category '{category_id}' has an empty label")
 
         # Validate color format (basic check)
         color = category_config.get("color", "")
