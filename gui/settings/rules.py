@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.settings.base import SettingsPage
-from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS
+from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS, LEGACY_ACTION_TYPES
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.core import get_unique_column_values
@@ -1195,8 +1195,23 @@ class RulesPage(SettingsPage):
         row_layout.addWidget(type_combo)
         # Параметри будуть вставлені динамічно
 
+        # The row goes inside a vertical wrapper so the retired-action notice
+        # gets a full-width line of its own underneath, instead of being
+        # squeezed in past the delete button. The wrapper takes over the row's
+        # padding, so the row's geometry is unchanged.
         row_widget = QWidget()
-        row_widget.setLayout(row_layout)
+        outer_layout = QVBoxLayout(row_widget)
+        outer_layout.setSpacing(2)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addLayout(row_layout)
+
+        # One label per action row, alive for the row's whole lifetime. Hidden
+        # labels are skipped by the layout, so an unflagged row keeps its
+        # current height.
+        legacy_label = QLabel()
+        legacy_label.setWordWrap(True)
+        legacy_label.hide()
+        outer_layout.addWidget(legacy_label)
 
         # Зберегти посилання
         action_refs = {
@@ -1204,6 +1219,7 @@ class RulesPage(SettingsPage):
             "type": type_combo,
             "param_widgets": {},
             "param_layout": row_layout,
+            "legacy_label": legacy_label,
         }
 
         # Connect type change
@@ -1226,9 +1242,39 @@ class RulesPage(SettingsPage):
 
         self._update_rule_summary_for_step(rule_widget_refs)
 
+    def _refresh_legacy_action_flag(self, action_refs):
+        """Explain a retired action type on the row that still uses it.
+
+        These three still run -- the engine is deliberately unchanged -- so
+        this is advice, not an error. It leads with what the action really
+        does, because the name says the opposite.
+        """
+        label = action_refs["legacy_label"]
+        action_type = action_refs["type"].currentText()
+
+        if action_type not in LEGACY_ACTION_TYPES:
+            label.clear()
+            label.hide()
+            return
+
+        replacement = (
+            "one ADD_INTERNAL_TAG per tag"
+            if action_type == "SET_MULTI_TAGS"
+            else "ADD_INTERNAL_TAG"
+        )
+        theme = get_theme_manager().get_current_theme()
+        label.setStyleSheet(f"color: {theme.accent_orange}; {font_css('caption')}")
+        label.setText(
+            f"Writes the Status_Note text column, not tags. "
+            f"Replace with {replacement} to add a real tag."
+        )
+        label.show()
+
     def _on_action_type_changed(self, action_refs, initial_config=None):
         """Dynamically updates parameter widgets based on action type."""
         action_type = action_refs["type"].currentText()
+
+        self._refresh_legacy_action_flag(action_refs)
 
         # Очистити існуючі параметри
         for widget in action_refs["param_widgets"].values():
