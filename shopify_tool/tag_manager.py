@@ -375,8 +375,10 @@ def validate_tag_categories_v2(config: dict) -> tuple[bool, list[str]]:
             if field not in category_config:
                 errors.append(f"Category '{category_id}' missing required field '{field}'")
 
+        # Only when present -- a missing label is already reported above, and
+        # reporting it twice just makes the dialog's error box noisier.
         label = category_config.get("label")
-        if isinstance(label, str) and not label.strip():
+        if "label" in category_config and (not isinstance(label, str) or not label.strip()):
             errors.append(f"Category '{category_id}' has an empty label")
 
         # Validate color format (basic check)

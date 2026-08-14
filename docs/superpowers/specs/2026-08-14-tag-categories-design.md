@@ -286,8 +286,17 @@ Gate before finishing: `QT_QPA_PLATFORM=offscreen python -m pytest` and
 The migration writes to live warehouse client configs. Its guard is exact string
 equality against seven known constants, and it only ever replaces one string
 field — so the worst case for a config it misjudges is an English label where the
-user wanted Ukrainian, recoverable by typing the old name back into the dialog.
-No tag, color, order or writeoff data is reachable from this code path.
+user wanted Ukrainian. No tag, color, order or writeoff data is reachable from
+this code path.
+
+That relabel is **permanent, by design**. The migration is unversioned and runs on
+every `load_shopify_config`, so typing one of the seven Ukrainian labels back into
+the dialog does not stick — it is rewritten on the next load. This is the intended
+outcome of de-localizing the defaults, not an oversight, and it is why the guard
+is exact equality rather than a heuristic: only those seven exact strings can ever
+be taken from a user. Anything else the user types survives untouched. Should a
+client ever need to keep a Ukrainian label, the migration needs a one-shot stamp
+(`labels_migrated: true`) rather than a workaround in the dialog.
 
 Fix A changes behavior users may have unknowingly worked around (a blanked label
 they retyped). That is strictly an improvement, but it is the one change in this

@@ -165,6 +165,30 @@ def test_theme_change_reblends_row_backgrounds(qtbot):
         tm.set_theme(original)
 
 
+def test_theme_change_keeps_the_selection_visible(qtbot):
+    """The rebuild runs with signals blocked, so nothing restores the current
+    item on its own -- leaving Delete armed against an invisible selection."""
+    from gui.tag_categories_dialog import TagCategoriesPanel
+    from gui.theme_manager import get_theme_manager
+
+    panel = TagCategoriesPanel(_sample_categories())
+    qtbot.addWidget(panel)
+    panel.categories_list.setCurrentRow(0)
+    selected = panel.current_category_id
+    assert selected
+
+    tm = get_theme_manager()
+    original = tm.get_current_theme_name()
+    try:
+        tm.set_theme("dark" if original != "dark" else "light")
+        current = panel.categories_list.currentItem()
+        assert current is not None
+        assert current.data(Qt.UserRole) == selected
+        assert panel.current_category_id == selected
+    finally:
+        tm.set_theme(original)
+
+
 def test_removing_a_tag_drops_its_writeoff_mappings(qtbot):
     from gui.tag_categories_dialog import TagCategoriesPanel
 

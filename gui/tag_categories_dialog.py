@@ -51,9 +51,7 @@ def is_valid_category_id(category_id: str) -> bool:
     str.isalnum() -- which this used to rely on -- is True for any Unicode
     letter, so it accepted 'категорія' under a message promising ASCII.
     """
-    if not _VALID_CATEGORY_ID.match(category_id):
-        return False
-    return bool(category_id.replace("_", ""))
+    return bool(_VALID_CATEGORY_ID.match(category_id))
 
 
 # The editor's order spinbox maxes out at this value, and 'custom' uses it as a
@@ -86,7 +84,7 @@ def mapping_row_exists(rows, tag: str, sku: str) -> bool:
     Several different SKUs per tag is the intended feature; the same SKU twice
     just doubles the deduction.
     """
-    return (tag, sku) in {(t, s) for t, s in rows}
+    return (tag, sku) in rows
 
 
 class TagCategoriesPanel(QWidget):
@@ -324,31 +322,38 @@ class TagCategoriesPanel(QWidget):
         editor back over a real category's label. Blocking here is the single
         place that closes every variant of that path.
         """
-        blocker = QSignalBlocker(self.categories_list)  # noqa: F841
+        with QSignalBlocker(self.categories_list):
+            self.categories_list.clear()
 
-        self.categories_list.clear()
+            categories = self.working_categories.get("categories", {})
 
-        categories = self.working_categories.get("categories", {})
+            sorted_categories = sorted(
+                categories.items(),
+                key=lambda x: x[1].get("order", 999)
+            )
 
-        sorted_categories = sorted(
-            categories.items(),
-            key=lambda x: x[1].get("order", 999)
-        )
+            for category_id, category_config in sorted_categories:
+                item = QListWidgetItem(category_config.get("label", category_id))
+                item.setData(Qt.UserRole, category_id)
+                # ponytail: literal neutral swatch-fill default, not a text color —
+                # see _create_editor comment above for why no theme token fits.
+                color = category_config.get("color", "#9E9E9E")
+                _cat = QColor(color)
+                _bg = QColor(get_theme_manager().get_current_theme().background)
+                item.setBackground(QColor(
+                    int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                    int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                    int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+                ))
+                self.categories_list.addItem(item)
 
-        for category_id, category_config in sorted_categories:
-            item = QListWidgetItem(category_config.get("label", category_id))
-            item.setData(Qt.UserRole, category_id)
-            # ponytail: literal neutral swatch-fill default, not a text color —
-            # see _create_editor comment above for why no theme token fits.
-            color = category_config.get("color", "#9E9E9E")
-            _cat = QColor(color)
-            _bg = QColor(get_theme_manager().get_current_theme().background)
-            item.setBackground(QColor(
-                int(_cat.red() * 0.45 + _bg.red() * 0.55),
-                int(_cat.green() * 0.45 + _bg.green() * 0.55),
-                int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
-            ))
-            self.categories_list.addItem(item)
+    def _select_category(self, category_id: str):
+        """Make category_id the list's current item, if it is still present."""
+        for i in range(self.categories_list.count()):
+            item = self.categories_list.item(i)
+            if item.data(Qt.UserRole) == category_id:
+                self.categories_list.setCurrentItem(item)
+                return
 
     def _on_category_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
         """Handle category selection change."""
@@ -435,8 +440,11 @@ class TagCategoriesPanel(QWidget):
             )
         # Row backgrounds are blended against theme.background, so they are
         # stale until the list is rebuilt. Safe because _load_categories blocks
-        # the list's signals (see Task 4).
+        # the list's signals (see Task 4) -- which is also why the selection has
+        # to be restored by hand, or Delete stays armed against an invisible one.
         self._load_categories()
+        if self.current_category_id:
+            self._select_category(self.current_category_id)
 
     def _set_editor_enabled(self, enabled: bool):
         """Enable/disable editor fields."""
@@ -782,12 +790,7 @@ class TagCategoriesPanel(QWidget):
         self.modified = True
 
         self._load_categories()
-
-        for i in range(self.categories_list.count()):
-            item = self.categories_list.item(i)
-            if item.data(Qt.UserRole) == category_id:
-                self.categories_list.setCurrentItem(item)
-                break
+        self._select_category(category_id)
 
     def _on_delete_category(self):
         """Handle delete category button click."""
