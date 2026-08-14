@@ -395,12 +395,16 @@ class RuleTestDialog(QDialog):
             if action_value:
                 actions_text += f": <code>{action_value}</code>"
 
-            if action_type == "ADD_TAG":
-                actions_text += " → Appends to Status_Note column"
+            if action_type in ("ADD_TAG", "ADD_ORDER_TAG", "SET_MULTI_TAGS"):
+                # Retired from the rule editor's dropdown but still executed;
+                # the name promises a tag and the code writes free text.
+                actions_text += " → Appends to Status_Note (text, not tags)"
             elif action_type == "SET_STATUS":
                 actions_text += " → Sets Order_Fulfillment_Status"
             elif action_type == "ADD_INTERNAL_TAG":
-                actions_text += " → Appends to Internal_Tags (JSON list)"
+                actions_text += " → Adds to Internal_Tags (JSON list, whole order)"
+            elif action_type == "REMOVE_INTERNAL_TAG":
+                actions_text += " → Removes from Internal_Tags (JSON list, whole order)"
             elif action_type == "COPY_FIELD":
                 source = action.get("source", "")
                 target = action.get("target", "")

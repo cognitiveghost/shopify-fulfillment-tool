@@ -51,16 +51,22 @@ CONDITION_OPERATORS: list[str] = [
 ]
 
 ACTION_TYPES: list[str] = [
-    "ADD_TAG",
-    "ADD_ORDER_TAG",
     "ADD_INTERNAL_TAG",
+    "REMOVE_INTERNAL_TAG",
     "SET_STATUS",
     "COPY_FIELD",
     "CALCULATE",
-    "SET_MULTI_TAGS",
     "ALERT_NOTIFICATION",
     "ADD_PRODUCT",
 ]
+
+# Still executed by the rule engine, but no longer offered when building a
+# new rule: all three append to the free-text Status_Note column despite
+# their names, and the first two are the same code path. A rule already
+# using one keeps working and round-trips through save unchanged; the
+# editor flags it instead. See
+# docs/superpowers/specs/2026-08-14-rule-actions-internal-tags-design.md.
+LEGACY_ACTION_TYPES: list[str] = ["ADD_TAG", "ADD_ORDER_TAG", "SET_MULTI_TAGS"]
 
 
 def _delete_filter_row(row_widget, ref_list, ref_dict):

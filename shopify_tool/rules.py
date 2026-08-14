@@ -917,7 +917,7 @@ class RuleEngine:
                     action_type = action.get("type", "").upper()
                     if action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_MULTI_TAGS"]:
                         needed_columns.add("Status_Note")
-                    elif action_type == "ADD_INTERNAL_TAG":
+                    elif action_type in ("ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG"):
                         needed_columns.add("Internal_Tags")
                     # SET_STATUS uses existing Order_Fulfillment_Status column
 
@@ -1081,6 +1081,17 @@ class RuleEngine:
                 order_mask = expand_to_order_rows(df, matches)
                 current_tags = df.loc[order_mask, "Internal_Tags"]
                 new_tags = current_tags.apply(lambda t, value=value: add_tag(t, value))
+                df.loc[order_mask, "Internal_Tags"] = new_tags
+
+            elif action_type == "REMOVE_INTERNAL_TAG":
+                # Order-level like ADD_INTERNAL_TAG -- see the note there. In an
+                # order-level rule this lands in the caller's "apply to first
+                # row" bucket, which is fine precisely because of this expansion.
+                from shopify_tool.tag_manager import expand_to_order_rows, remove_tag
+
+                order_mask = expand_to_order_rows(df, matches)
+                current_tags = df.loc[order_mask, "Internal_Tags"]
+                new_tags = current_tags.apply(lambda t, value=value: remove_tag(t, value))
                 df.loc[order_mask, "Internal_Tags"] = new_tags
 
             elif action_type == "SET_STATUS":

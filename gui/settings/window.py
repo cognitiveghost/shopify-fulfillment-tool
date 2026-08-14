@@ -138,7 +138,14 @@ class SettingsWindow(QDialog):
 
         # Create all tabs (unchanged call order/method names)
         self._add_page(GeneralPage(self.config_data.get("settings", {})), "General")
-        self._add_page(RulesPage(self.config_data.get("rules", []), self.analysis_df), "Rules")
+        self._add_page(
+            RulesPage(
+                self.config_data.get("rules", []),
+                self.analysis_df,
+                tag_categories=self.config_data.get("tag_categories", {}),
+            ),
+            "Rules",
+        )
         self._add_page(
             PackingListsPage(self.config_data.get("packing_list_configs", []), self.analysis_df),
             "Packing Lists",

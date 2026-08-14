@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.settings.base import SettingsPage
-from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS
+from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS, LEGACY_ACTION_TYPES
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.core import get_unique_column_values
@@ -36,11 +36,16 @@ class RulesPage(SettingsPage):
             to the UI widgets for a single rule.
     """
 
-    def __init__(self, rules: list, analysis_df, parent=None):
+    def __init__(self, rules: list, analysis_df, tag_categories: dict | None = None, parent=None):
         super().__init__(parent)
         self.analysis_df = analysis_df
         self.rule_widgets = []
         self._rules_config = rules
+        # ponytail: a snapshot taken when the dialog opens. The Tag Categories
+        # page can add a tag while this page is open and this list will not
+        # see it; the combo is editable, so the tag is still typeable. Wire up
+        # a signal between the two pages if that stops being good enough.
+        self._tag_categories = tag_categories or {}
 
         main_layout = QVBoxLayout(self)
 
@@ -267,6 +272,20 @@ class RulesPage(SettingsPage):
 
         return fields
 
+    def get_configured_tags(self) -> list[str]:
+        """Every tag named by the configured tag categories, sorted and deduped.
+
+        SYSTEM_TAGS (core.py) are deliberately excluded: the analyser owns
+        them, and offering them here invites rules that fight it. The combo
+        that consumes this is editable, so they remain typeable.
+        """
+        from shopify_tool.tag_manager import _normalize_tag_categories
+
+        tags = set()
+        for category in _normalize_tag_categories(self._tag_categories).values():
+            tags.update(category.get("tags", []))
+        return sorted(tags)
+
     def _update_rules_count_label(self):
         """Update the rules summary label in the Rules tab header."""
         if not hasattr(self, 'rules_count_label'):
@@ -394,10 +413,11 @@ class RulesPage(SettingsPage):
             "     • max_quantity - max quantity of single item\n"
             "     • has_sku - check if order contains specific SKU\n"
             "     • has_product - check by Product_Name\n"
-            "  → Actions behavior:\n"
-            "     • ADD_TAG - applies to ALL rows (for filtering)\n"
-            "     • ADD_ORDER_TAG - applies to first row only (for counting)\n"
-            "     • ADD_INTERNAL_TAG - applies to ALL rows (structured tags)"
+            "  → Actions:\n"
+            "     • ADD_INTERNAL_TAG / REMOVE_INTERNAL_TAG - order-level\n"
+            "       structured tags, applied to every row of the order\n"
+            "     • ADD_TAG / ADD_ORDER_TAG - every row of the order\n"
+            "     • all other actions - applied to the order's first row"
         )
         level_layout.addWidget(level_combo)
         level_layout.addStretch()
@@ -1178,7 +1198,15 @@ class RulesPage(SettingsPage):
         # Type dropdown
         type_combo = WheelIgnoreComboBox()
         type_combo.addItems(ACTION_TYPES)
-        type_combo.setCurrentText(config.get("type", ACTION_TYPES[0]))
+        # A retired action type is added to this row's combo only, so the rule
+        # round-trips instead of being silently retyped: setCurrentText on a
+        # non-editable QComboBox is a no-op for an absent string, which would
+        # leave the row showing ACTION_TYPES[0] and save that over the user's
+        # rule. New rows still offer only the current types.
+        configured_type = config.get("type", ACTION_TYPES[0])
+        if configured_type and configured_type not in ACTION_TYPES:
+            type_combo.addItem(configured_type)
+        type_combo.setCurrentText(configured_type)
 
         # Delete button
         delete_btn = QPushButton("X")
@@ -1187,8 +1215,23 @@ class RulesPage(SettingsPage):
         row_layout.addWidget(type_combo)
         # Параметри будуть вставлені динамічно
 
+        # The row goes inside a vertical wrapper so the retired-action notice
+        # gets a full-width line of its own underneath, instead of being
+        # squeezed in past the delete button. The wrapper takes over the row's
+        # padding, so the row's geometry is unchanged.
         row_widget = QWidget()
-        row_widget.setLayout(row_layout)
+        outer_layout = QVBoxLayout(row_widget)
+        outer_layout.setSpacing(2)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addLayout(row_layout)
+
+        # One label per action row, alive for the row's whole lifetime. Hidden
+        # labels are skipped by the layout, so an unflagged row keeps its
+        # current height.
+        legacy_label = QLabel()
+        legacy_label.setWordWrap(True)
+        legacy_label.hide()
+        outer_layout.addWidget(legacy_label)
 
         # Зберегти посилання
         action_refs = {
@@ -1196,6 +1239,7 @@ class RulesPage(SettingsPage):
             "type": type_combo,
             "param_widgets": {},
             "param_layout": row_layout,
+            "legacy_label": legacy_label,
         }
 
         # Connect type change
@@ -1218,9 +1262,39 @@ class RulesPage(SettingsPage):
 
         self._update_rule_summary_for_step(rule_widget_refs)
 
+    def _refresh_legacy_action_flag(self, action_refs):
+        """Explain a retired action type on the row that still uses it.
+
+        These three still run -- the engine is deliberately unchanged -- so
+        this is advice, not an error. It leads with what the action really
+        does, because the name says the opposite.
+        """
+        label = action_refs["legacy_label"]
+        action_type = action_refs["type"].currentText()
+
+        if action_type not in LEGACY_ACTION_TYPES:
+            label.clear()
+            label.hide()
+            return
+
+        replacement = (
+            "one ADD_INTERNAL_TAG per tag"
+            if action_type == "SET_MULTI_TAGS"
+            else "ADD_INTERNAL_TAG"
+        )
+        theme = get_theme_manager().get_current_theme()
+        label.setStyleSheet(f"color: {theme.accent_orange}; {font_css('caption')}")
+        label.setText(
+            f"Writes the Status_Note text column, not tags. "
+            f"Replace with {replacement} to add a real tag."
+        )
+        label.show()
+
     def _on_action_type_changed(self, action_refs, initial_config=None):
         """Dynamically updates parameter widgets based on action type."""
         action_type = action_refs["type"].currentText()
+
+        self._refresh_legacy_action_flag(action_refs)
 
         # Очистити існуючі параметри
         for widget in action_refs["param_widgets"].values():
@@ -1231,7 +1305,26 @@ class RulesPage(SettingsPage):
         insert_pos = 1  # Після type combo
 
         # Створити widgets залежно від типу
-        if action_type in ["ADD_TAG", "ADD_ORDER_TAG", "ADD_INTERNAL_TAG", "SET_STATUS"]:
+        if action_type in ["ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG"]:
+            # Editable: an unlisted tag must stay typeable, and an unknown
+            # value loaded from config must round-trip rather than snap to
+            # item 0 the way a fixed combo would.
+            value_combo = WheelIgnoreComboBox()
+            value_combo.setEditable(True)
+            value_combo.addItems(self.get_configured_tags())
+            # On an editable combo the placeholder lives on the line edit --
+            # QComboBox.setPlaceholderText only shows at currentIndex == -1.
+            value_combo.lineEdit().setPlaceholderText("Tag")
+            if initial_config:
+                value_combo.setCurrentText(initial_config.get("value", ""))
+            else:
+                # addItems() lands on index 0, so a new row would collect the
+                # alphabetically-first configured tag as if the user picked it.
+                value_combo.setCurrentIndex(-1)
+            layout.insertWidget(insert_pos, value_combo, 1)
+            action_refs["param_widgets"]["value"] = value_combo
+
+        elif action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_STATUS"]:
             # Простий value field
             value_edit = QLineEdit()
             value_edit.setPlaceholderText("Value")
@@ -1378,7 +1471,10 @@ class RulesPage(SettingsPage):
                     act = {"type": action_type}
 
                     # Serialize parameters based on type
-                    if action_type in ["ADD_TAG", "ADD_ORDER_TAG", "ADD_INTERNAL_TAG", "SET_STATUS"]:
+                    if action_type in ["ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG"]:
+                        act["value"] = act_refs["param_widgets"]["value"].currentText()
+
+                    elif action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_STATUS"]:
                         act["value"] = act_refs["param_widgets"]["value"].text()
 
                     elif action_type == "COPY_FIELD":
