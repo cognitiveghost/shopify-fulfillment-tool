@@ -215,3 +215,41 @@ def test_new_category_order_never_exceeds_the_spinbox_maximum():
     from gui.tag_categories_dialog import next_available_order
 
     assert next_available_order(list(range(1, 999))) <= 999
+
+
+def test_writeoff_quantity_cells_are_not_editable(qtbot):
+    from gui.tag_categories_dialog import TagCategoriesPanel
+
+    panel = TagCategoriesPanel(_sample_categories())
+    qtbot.addWidget(panel)
+    for i in range(panel.categories_list.count()):
+        item = panel.categories_list.item(i)
+        if item.data(Qt.UserRole) == "priority":
+            panel.categories_list.setCurrentItem(item)
+            break
+
+    for col in range(3):
+        cell = panel.writeoff_mappings_table.item(0, col)
+        assert not (cell.flags() & Qt.ItemIsEditable)
+
+
+def test_duplicate_tag_and_sku_mapping_is_rejected():
+    from gui.tag_categories_dialog import mapping_row_exists
+
+    rows = [("URGENT", "S1"), ("URGENT", "S2")]
+    assert mapping_row_exists(rows, "URGENT", "S1") is True
+    assert mapping_row_exists(rows, "URGENT", "S3") is False
+    assert mapping_row_exists(rows, "OTHER", "S1") is False
+
+
+def test_deselecting_resets_the_color_swatch(qtbot):
+    from gui.tag_categories_dialog import TagCategoriesPanel
+
+    panel = TagCategoriesPanel(_sample_categories())
+    qtbot.addWidget(panel)
+    panel.categories_list.setCurrentRow(0)
+    assert panel.current_color == "#4CAF50"
+
+    panel._set_editor_enabled(False)
+
+    assert panel.current_color == "#9E9E9E"

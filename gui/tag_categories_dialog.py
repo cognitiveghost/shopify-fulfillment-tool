@@ -74,6 +74,21 @@ def next_available_order(existing_orders) -> int:
     return _MAX_CATEGORY_ORDER
 
 
+def _read_only_item(text: str) -> QTableWidgetItem:
+    item = QTableWidgetItem(text)
+    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+    return item
+
+
+def mapping_row_exists(rows, tag: str, sku: str) -> bool:
+    """True if this exact tag+SKU pair is already mapped.
+
+    Several different SKUs per tag is the intended feature; the same SKU twice
+    just doubles the deduction.
+    """
+    return (tag, sku) in {(t, s) for t, s in rows}
+
+
 class TagCategoriesPanel(QWidget):
     """Embeddable panel for managing tag categories (v2 format).
 
@@ -401,9 +416,11 @@ class TagCategoriesPanel(QWidget):
                 row_position = self.writeoff_mappings_table.rowCount()
                 self.writeoff_mappings_table.insertRow(row_position)
 
-                self.writeoff_mappings_table.setItem(row_position, 0, QTableWidgetItem(tag))
-                self.writeoff_mappings_table.setItem(row_position, 1, QTableWidgetItem(item["sku"]))
-                self.writeoff_mappings_table.setItem(row_position, 2, QTableWidgetItem(f"{item['quantity']:.2f}"))
+                self.writeoff_mappings_table.setItem(row_position, 0, _read_only_item(tag))
+                self.writeoff_mappings_table.setItem(row_position, 1, _read_only_item(item["sku"]))
+                self.writeoff_mappings_table.setItem(
+                    row_position, 2, _read_only_item(f"{item['quantity']:.2f}")
+                )
 
         self.writeoff_enabled_checkbox.blockSignals(False)
 
@@ -446,6 +463,12 @@ class TagCategoriesPanel(QWidget):
             self.tags_list.clear()
             self.writeoff_mappings_table.setRowCount(0)
             self.writeoff_enabled_checkbox.setChecked(False)
+            # ponytail: same literal neutral swatch fill as the editor default —
+            # see _create_category_editor_panel for why no theme token fits.
+            self.current_color = "#9E9E9E"
+            self.color_display.setStyleSheet(
+                f"border: 1px solid {self.theme.border}; background-color: {self.current_color};"
+            )
 
     def _on_editor_changed(self):
         """Handle editor field changes."""
@@ -667,12 +690,29 @@ class TagCategoriesPanel(QWidget):
                 QMessageBox.warning(self, "Invalid Input", "SKU cannot be empty.")
                 return
 
+            existing = [
+                (
+                    self.writeoff_mappings_table.item(r, 0).text(),
+                    self.writeoff_mappings_table.item(r, 1).text(),
+                )
+                for r in range(self.writeoff_mappings_table.rowCount())
+                if self.writeoff_mappings_table.item(r, 0)
+                and self.writeoff_mappings_table.item(r, 1)
+            ]
+            if mapping_row_exists(existing, tag, sku):
+                QMessageBox.warning(
+                    self,
+                    "Duplicate Mapping",
+                    f"'{sku}' is already mapped to tag '{tag}'.",
+                )
+                return
+
             row_position = self.writeoff_mappings_table.rowCount()
             self.writeoff_mappings_table.insertRow(row_position)
 
-            self.writeoff_mappings_table.setItem(row_position, 0, QTableWidgetItem(tag))
-            self.writeoff_mappings_table.setItem(row_position, 1, QTableWidgetItem(sku))
-            self.writeoff_mappings_table.setItem(row_position, 2, QTableWidgetItem(f"{quantity:.2f}"))
+            self.writeoff_mappings_table.setItem(row_position, 0, _read_only_item(tag))
+            self.writeoff_mappings_table.setItem(row_position, 1, _read_only_item(sku))
+            self.writeoff_mappings_table.setItem(row_position, 2, _read_only_item(f"{quantity:.2f}"))
 
             self._on_editor_changed()
 
