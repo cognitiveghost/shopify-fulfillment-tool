@@ -378,7 +378,7 @@ class TestLegacyActionFlag:
         return page, page.rule_widgets[0]["steps"][0]["actions"][0]
 
     def test_legacy_action_row_explains_itself(self, qtbot, analysis_df):
-        page, refs = self._page_with_action(
+        _page, refs = self._page_with_action(
             qtbot, analysis_df, {"type": "ADD_TAG", "value": "T"})
         label = refs["legacy_label"]
         assert not label.isHidden()
@@ -386,18 +386,18 @@ class TestLegacyActionFlag:
         assert "ADD_INTERNAL_TAG" in label.text()
 
     def test_set_multi_tags_says_one_action_per_tag(self, qtbot, analysis_df):
-        page, refs = self._page_with_action(
+        _page, refs = self._page_with_action(
             qtbot, analysis_df, {"type": "SET_MULTI_TAGS", "tags": ["A", "B"]})
         assert "one ADD_INTERNAL_TAG per tag" in refs["legacy_label"].text()
 
     def test_current_action_row_is_not_flagged(self, qtbot, analysis_df):
-        page, refs = self._page_with_action(
+        _page, refs = self._page_with_action(
             qtbot, analysis_df, {"type": "ADD_INTERNAL_TAG", "value": "GIFT"})
         assert refs["legacy_label"].isHidden()
         assert refs["legacy_label"].text() == ""
 
     def test_switching_off_a_legacy_type_clears_the_flag(self, qtbot, analysis_df):
-        page, refs = self._page_with_action(
+        _page, refs = self._page_with_action(
             qtbot, analysis_df, {"type": "ADD_TAG", "value": "T"})
         refs["type"].setCurrentText("ADD_INTERNAL_TAG")
         assert refs["legacy_label"].isHidden()
@@ -439,7 +439,7 @@ class TestInternalTagValueCombo:
         assert page.get_configured_tags() == []
 
     def test_tag_value_widget_is_an_editable_combo_of_the_vocabulary(self, qtbot, analysis_df):
-        page, refs = self._refs(
+        _page, refs = self._refs(
             qtbot, analysis_df, {"type": "ADD_INTERNAL_TAG", "value": "GIFT"})
         combo = refs["param_widgets"]["value"]
         assert combo.isEditable()
@@ -448,7 +448,7 @@ class TestInternalTagValueCombo:
         assert combo.currentText() == "GIFT"
 
     def test_remove_internal_tag_gets_the_same_combo(self, qtbot, analysis_df):
-        page, refs = self._refs(
+        _page, refs = self._refs(
             qtbot, analysis_df, {"type": "REMOVE_INTERNAL_TAG", "value": "FRAGILE"})
         assert refs["param_widgets"]["value"].currentText() == "FRAGILE"
 

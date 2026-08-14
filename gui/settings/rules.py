@@ -413,10 +413,10 @@ class RulesPage(SettingsPage):
             "     • max_quantity - max quantity of single item\n"
             "     • has_sku - check if order contains specific SKU\n"
             "     • has_product - check by Product_Name\n"
-            "  → Actions behavior:\n"
-            "     • ADD_TAG - applies to ALL rows (for filtering)\n"
-            "     • ADD_ORDER_TAG - applies to first row only (for counting)\n"
-            "     • ADD_INTERNAL_TAG - applies to ALL rows (structured tags)"
+            "  → Actions:\n"
+            "     • ADD_INTERNAL_TAG / REMOVE_INTERNAL_TAG - order-level\n"
+            "       structured tags, applied to every row of the order\n"
+            "     • all other actions - applied to the order's first row"
         )
         level_layout.addWidget(level_combo)
         level_layout.addStretch()
