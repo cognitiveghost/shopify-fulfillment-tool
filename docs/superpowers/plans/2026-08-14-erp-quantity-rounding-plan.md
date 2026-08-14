@@ -400,11 +400,16 @@ In `generate_writeoff_report`:
 - [ ] **Step 7: Verify no `.astype(int)` remains on an export path**
 
 ```bash
-rtk grep -n "astype(int)" shopify_tool/stock_export.py shopify_tool/sku_writeoff.py
+rtk grep -nE "astype\(int\)|int\(" shopify_tool/stock_export.py shopify_tool/sku_writeoff.py
 ```
 
-Expected: no matches. (`set_decoder.py:206` is a different concern — `Component_Quantity` on
-set expansion, not an ERP export column. Leave it alone.)
+Expected: only the `.astype(int)` inside `_to_erp_quantity` itself. **The `int(` half of this
+grep matters** — the first pass of this plan searched for the literal `astype(int)` only and
+missed two bare `int(qty)` calls in `_expand_lot_summary`, which truncate *before*
+`_finalize_export_df` runs and so cannot be recovered by it. Code review caught them.
+
+(`set_decoder.py:206` is a different concern — `Component_Quantity` on set expansion, not an
+ERP export column. Leave it alone.)
 
 - [ ] **Step 8: Run the tests to verify they pass**
 

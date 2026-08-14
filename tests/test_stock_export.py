@@ -102,6 +102,17 @@ class TestLotAggregation:
         expiry_val = result.iloc[0, COL_EXPIRY]
         assert expiry_val == "" or pd.isna(expiry_val)
 
+    def test_fractional_lot_quantity_rounds_instead_of_truncating(self, tmp_path):
+        # The lot path built its rows with int(qty), which truncated BEFORE
+        # _finalize_export_df could round -- the finalizer cannot recover a
+        # fraction that was already thrown away.
+        lot_details = [{"expiry": "260601", "batch": "B1", "qty_allocated": 1.5}]
+        df = _analysis_df([{"Order_Number": "#1", "SKU": "A1", "Quantity": 1.5, "Lot_Details": lot_details}])
+        out = tmp_path / "export.xls"
+        create_stock_export(df, str(out))
+        result = _read(out)
+        assert result.iloc[0, COL_QTY] == 2
+
 
 class TestConfirmedBugs:
     def test_missing_order_number_does_not_drop_distinct_lot_allocations(self, tmp_path):

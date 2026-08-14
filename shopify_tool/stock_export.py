@@ -120,7 +120,7 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
             records.append(
                 {
                     "Артикул": sku,
-                    QTY_COL: int(qty),
+                    QTY_COL: qty,
                     "Годност": expiry,
                     "Партида": batch,
                 }
@@ -130,7 +130,7 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
             records.append(
                 {
                     "Артикул": sku,
-                    QTY_COL: int(qty),
+                    QTY_COL: qty,
                     "Годност": "",
                     "Партида": "",
                 }
@@ -227,7 +227,6 @@ def create_stock_export(
                 f"Report '{report_name}': Using per-lot aggregation (FIFO lot tracking active)."
             )
             export_df = _expand_lot_summary(filtered_items)
-            export_df = export_df[export_df[QTY_COL] > 0].reset_index(drop=True)
             if export_df.empty:
                 logger.warning(
                     f"Report '{report_name}': No items with positive quantity after lot expansion."
@@ -238,11 +237,7 @@ def create_stock_export(
                 )
         else:
             # Summarize quantities by SKU
-            sku_summary = (
-                filtered_items.groupby("SKU")["Quantity"]
-                .sum()
-                .reset_index()
-            )
+            sku_summary = filtered_items.groupby("SKU")["Quantity"].sum().reset_index()
             sku_summary = sku_summary[sku_summary["Quantity"] > 0]
 
             if sku_summary.empty:
@@ -392,11 +387,7 @@ def merge_session_stock_exports(
     # unaffected by this function. Splitting the SAME SKU across multiple
     # rows here (one per distinct expiry/batch) previously contradicted this
     # function's own contract of "grouped by SKU... summed across sessions".
-    sku_summary = (
-        combined.groupby("SKU")["Quantity"]
-        .sum()
-        .reset_index()
-    )
+    sku_summary = combined.groupby("SKU")["Quantity"].sum().reset_index()
     sku_summary = sku_summary[sku_summary["Quantity"] > 0]
     if sku_summary.empty:
         return _empty_export_df()
