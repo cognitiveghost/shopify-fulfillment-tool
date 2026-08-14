@@ -56,6 +56,24 @@ def is_valid_category_id(category_id: str) -> bool:
     return bool(category_id.replace("_", ""))
 
 
+# The editor's order spinbox maxes out at this value, and 'custom' uses it as a
+# keep-me-last sentinel.
+_MAX_CATEGORY_ORDER = 999
+
+
+def next_available_order(existing_orders) -> int:
+    """Lowest unused display order in [1, 999].
+
+    Not len(categories) + 1 -- that collides with a live order as soon as any
+    category has been deleted, and the resulting sort falls back to dict order.
+    """
+    taken = {o for o in existing_orders if isinstance(o, int)}
+    for candidate in range(1, _MAX_CATEGORY_ORDER + 1):
+        if candidate not in taken:
+            return candidate
+    return _MAX_CATEGORY_ORDER
+
+
 class TagCategoriesPanel(QWidget):
     """Embeddable panel for managing tag categories (v2 format).
 
@@ -710,7 +728,9 @@ class TagCategoriesPanel(QWidget):
             # theme-at-creation-time-dependent color into saved config.
             # No theme-invariant neutral-gray token exists.
             "color": "#9E9E9E",
-            "order": len(categories) + 1,
+            "order": next_available_order(
+                c.get("order") for c in categories.values() if isinstance(c, dict)
+            ),
             "tags": [],
             "sku_writeoff": {
                 "enabled": False,

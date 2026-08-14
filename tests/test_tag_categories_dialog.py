@@ -199,3 +199,19 @@ def test_category_id_validation_rejects_non_ascii():
     assert is_valid_category_id("___") is False
     assert is_valid_category_id("has space") is False
     assert is_valid_category_id("UPPER") is False
+
+
+def test_new_category_order_is_unused_after_deletions():
+    from gui.tag_categories_dialog import next_available_order
+
+    assert next_available_order([1, 2, 3, 999]) == 4
+    assert next_available_order([1, 3, 999]) == 2      # fills the gap
+    assert next_available_order([999]) == 1
+    assert next_available_order([]) == 1
+    assert next_available_order([1, 2, 3, 4, 5, 6, 999]) == 7
+
+
+def test_new_category_order_never_exceeds_the_spinbox_maximum():
+    from gui.tag_categories_dialog import next_available_order
+
+    assert next_available_order(list(range(1, 999))) <= 999
