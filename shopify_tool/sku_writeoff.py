@@ -58,10 +58,18 @@ def calculate_writeoff_quantities(
     configured writeoff mappings for each tag, and accumulates SKU quantities
     that should be written off based on the tag applications.
 
-    The function processes each row in the DataFrame, extracts the tags, and
-    for each tag that has a writeoff mapping configured, adds the corresponding
-    SKU quantities to the accumulator. If multiple orders have the same tag,
-    the quantities are summed together.
+    Two contracts govern the count, and both matter:
+
+    1. **Each (order, tag) pair is applied exactly once.** Internal_Tags is an
+       order-level value that tag_manager.expand_to_order_rows replicates onto
+       every line of the order, so the frame has one row per order LINE.
+       Accumulating per row multiplies every writeoff by the order's line count.
+       The key is (order, tag), not (order, SKU) -- two different tags mapping
+       to the same SKU must each contribute.
+    2. **Only Fulfillable rows count** when Order_Fulfillment_Status is present.
+       When the column is absent, every row is considered.
+
+    If multiple orders carry the same tag, their quantities are summed.
 
     Args:
         analysis_df: Analysis DataFrame with Internal_Tags column.
@@ -120,7 +128,9 @@ def calculate_writeoff_quantities(
         - Disabled categories (enabled=False) are skipped
         - Quantity accumulation handles floats for partial units
         - If Internal_Tags column is missing, logs warning and returns empty
-        - Order numbers are tracked to count unique orders (uses row index if missing)
+        - Order numbers are tracked to count unique orders. If Order_Number is
+          missing, per-order dedup is impossible and each row counts separately
+          (logged as a warning) -- the pre-fix behaviour, kept as the fallback.
 
     Raises:
         Does not raise exceptions - logs warnings for invalid data and continues processing
@@ -149,35 +159,49 @@ def calculate_writeoff_quantities(
     else:
         rows_df = analysis_df
 
-    # Process each row
-    for idx, row in rows_df.iterrows():
-        tags = parse_tags(row.get("Internal_Tags"))
+    # Internal_Tags is order-level, but rows_df has one row per order LINE
+    # (see tag_manager.expand_to_order_rows). Dedupe (order, tag) so each tag
+    # is counted once per order -- matching how analysis.py builds its tags
+    # breakdown. Accumulating per row multiplies every writeoff by the order's
+    # line count.
+    if "Order_Number" in rows_df.columns:
+        order_col = rows_df["Order_Number"].astype(str)
+    else:
+        logger.warning(
+            "Order_Number column missing - writeoff cannot deduplicate per order; "
+            "quantities will be counted per row"
+        )
+        order_col = pd.Series(
+            [f"row_{i}" for i in rows_df.index], index=rows_df.index
+        )
 
-        # Get order number (use row index if Order_Number not present)
-        if "Order_Number" in analysis_df.columns:
-            order_number = row.get("Order_Number", f"row_{idx}")
-        else:
-            order_number = f"row_{idx}"
+    order_tags = (
+        pd.DataFrame({
+            "order": order_col,
+            "tag": rows_df["Internal_Tags"].fillna("[]").apply(parse_tags),
+        })
+        .explode("tag")
+        .dropna(subset=["tag"])
+        .drop_duplicates()
+    )
 
-        for tag in tags:
-            if tag not in writeoff_mappings:
-                continue
+    for pair in order_tags.itertuples(index=False):
+        if pair.tag not in writeoff_mappings:
+            continue
 
-            # Apply mappings for this tag
-            for mapping in writeoff_mappings[tag]:
-                sku = mapping["sku"]
-                quantity = mapping["quantity"]
+        for mapping in writeoff_mappings[pair.tag]:
+            sku = mapping["sku"]
 
-                if sku not in writeoff_accumulator:
-                    writeoff_accumulator[sku] = {
-                        "quantity": 0.0,
-                        "tags": set(),
-                        "orders": set()
-                    }
+            if sku not in writeoff_accumulator:
+                writeoff_accumulator[sku] = {
+                    "quantity": 0.0,
+                    "tags": set(),
+                    "orders": set(),
+                }
 
-                writeoff_accumulator[sku]["quantity"] += quantity
-                writeoff_accumulator[sku]["tags"].add(tag)
-                writeoff_accumulator[sku]["orders"].add(str(order_number))
+            writeoff_accumulator[sku]["quantity"] += mapping["quantity"]
+            writeoff_accumulator[sku]["tags"].add(pair.tag)
+            writeoff_accumulator[sku]["orders"].add(pair.order)
 
     # Convert to DataFrame
     if not writeoff_accumulator:
@@ -194,7 +218,10 @@ def calculate_writeoff_quantities(
         })
 
     result_df = pd.DataFrame(rows)
-    logger.info(f"Calculated writeoffs for {len(result_df)} SKUs from {len(analysis_df)} orders")
+    logger.info(
+        f"Calculated writeoffs for {len(result_df)} SKUs "
+        f"from {order_tags['order'].nunique()} orders"
+    )
 
     return result_df
 
