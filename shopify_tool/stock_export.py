@@ -241,7 +241,6 @@ def create_stock_export(
             sku_summary = (
                 filtered_items.groupby("SKU")["Quantity"]
                 .sum()
-                .astype(int)
                 .reset_index()
             )
             sku_summary = sku_summary[sku_summary["Quantity"] > 0]
@@ -280,7 +279,7 @@ def create_stock_export(
                     pd.DataFrame(
                         {
                             "Артикул": writeoff_df["SKU"],
-                            QTY_COL: writeoff_df["Writeoff_Quantity"].astype(int),
+                            QTY_COL: writeoff_df["Writeoff_Quantity"],
                         }
                     )
                 )
@@ -396,7 +395,6 @@ def merge_session_stock_exports(
     sku_summary = (
         combined.groupby("SKU")["Quantity"]
         .sum()
-        .astype(int)
         .reset_index()
     )
     sku_summary = sku_summary[sku_summary["Quantity"] > 0]

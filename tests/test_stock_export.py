@@ -209,3 +209,53 @@ class TestQuantityRounding:
         result = _finalize_export_df(_empty_export_df())
         assert result.empty
         assert list(result.columns) == list(_empty_export_df().columns)
+
+    def test_fractional_writeoff_on_a_single_order_is_not_lost(self, tmp_path):
+        # The headline bug: 0.5 boxes for one order truncated to 0 and the packaging
+        # material vanished from the export entirely.
+        config = {
+            "version": 2,
+            "categories": {
+                "packaging": {
+                    "tags": ["BOX"],
+                    "sku_writeoff": {
+                        "enabled": True,
+                        "mappings": {"BOX": [{"sku": "PKG-BOX", "quantity": 0.5}]},
+                    },
+                }
+            },
+        }
+        df = _analysis_df([
+            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
+        ])
+        out = tmp_path / "export.xls"
+        create_stock_export(df, str(out), apply_writeoff=True, tag_categories=config)
+        result = _read(out)
+        packaging = result[result.iloc[:, COL_SKU] == "PKG-BOX"]
+        assert len(packaging) == 1
+        assert packaging.iloc[0, COL_QTY] == 1
+
+    def test_fractional_writeoff_across_three_orders_rounds_up(self, tmp_path):
+        config = {
+            "version": 2,
+            "categories": {
+                "packaging": {
+                    "tags": ["BOX"],
+                    "sku_writeoff": {
+                        "enabled": True,
+                        "mappings": {"BOX": [{"sku": "PKG-BOX", "quantity": 0.5}]},
+                    },
+                }
+            },
+        }
+        # 3 orders x 0.5 = 1.5 -> 2. Truncation gave 1.
+        df = _analysis_df([
+            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
+            {"Order_Number": "#2", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
+            {"Order_Number": "#3", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
+        ])
+        out = tmp_path / "export.xls"
+        create_stock_export(df, str(out), apply_writeoff=True, tag_categories=config)
+        result = _read(out)
+        packaging = result[result.iloc[:, COL_SKU] == "PKG-BOX"]
+        assert packaging.iloc[0, COL_QTY] == 2

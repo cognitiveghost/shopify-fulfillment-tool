@@ -417,7 +417,7 @@ def generate_writeoff_report(
         export_df = _finalize_export_df(
             pd.DataFrame({
                 "Артикул": writeoff_df["SKU"],
-                QTY_COL: writeoff_df["Writeoff_Quantity"].astype(int),
+                QTY_COL: writeoff_df["Writeoff_Quantity"],
             })
         )
 
