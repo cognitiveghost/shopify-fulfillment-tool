@@ -6,7 +6,12 @@ back by column index rather than by header name.
 """
 import pandas as pd
 
-from shopify_tool.stock_export import create_stock_export, merge_session_stock_exports
+from shopify_tool.stock_export import (
+    _finalize_export_df,
+    _to_erp_quantity,
+    create_stock_export,
+    merge_session_stock_exports,
+)
 
 COL_SKU, COL_BLANK, COL_UNIT, COL_QTY, COL_EXPIRY, COL_BATCH = range(6)
 
@@ -149,3 +154,58 @@ class TestMergeSessionStockExportsBug:
         a1_rows = result[result.iloc[:, COL_SKU] == "A1"]
         assert len(a1_rows) == 1
         assert a1_rows.iloc[0, COL_QTY] == 5
+
+
+class TestQuantityRounding:
+    def test_rounds_half_up_not_half_to_even(self):
+        # pandas/numpy .round() is banker's rounding: 0.5 -> 0 and 2.5 -> 2, which
+        # leaves the exact bug this helper exists to fix. Half-up is required.
+        result = _to_erp_quantity(pd.Series([0.5, 1.5, 2.5, 3.5]))
+        assert list(result) == [1, 2, 3, 4]
+
+    def test_rounds_down_below_the_half(self):
+        result = _to_erp_quantity(pd.Series([0.4, 0.49, 1.2, 2.499]))
+        assert list(result) == [0, 0, 1, 2]
+
+    def test_whole_numbers_are_unchanged(self):
+        result = _to_erp_quantity(pd.Series([0.0, 1.0, 7.0, 100.0]))
+        assert list(result) == [0, 1, 7, 100]
+
+    def test_non_numeric_and_missing_become_zero(self):
+        result = _to_erp_quantity(pd.Series([1.6, None, "abc"]))
+        assert list(result) == [2, 0, 0]
+
+    def test_negative_quantities_clip_to_zero(self):
+        result = _to_erp_quantity(pd.Series([-3.0, -0.4]))
+        assert list(result) == [0, 0]
+
+    def test_finalize_rounds_the_quantity_column(self):
+        df = pd.DataFrame({"Артикул": ["A1", "A2"], "Брой": [1.5, 2.5]})
+        result = _finalize_export_df(df)
+        assert list(result["Брой"]) == [2, 3]
+
+    def test_finalize_drops_rows_that_round_to_zero(self):
+        df = pd.DataFrame({"Артикул": ["KEEP", "DROP"], "Брой": [1.0, 0.15]})
+        result = _finalize_export_df(df)
+        assert list(result["Артикул"]) == ["KEEP"]
+
+    def test_finalize_logs_the_sku_it_dropped(self, caplog):
+        df = pd.DataFrame({"Артикул": ["PKG-TAPE"], "Брой": [0.15]})
+        with caplog.at_level("WARNING", logger="ShopifyToolLogger"):
+            _finalize_export_df(df)
+        assert "PKG-TAPE" in caplog.text
+
+    def test_finalize_stays_idempotent(self):
+        df = pd.DataFrame({"Артикул": ["A1"], "Брой": [2.5]})
+        once = _finalize_export_df(df)
+        twice = _finalize_export_df(once)
+        assert list(twice["Брой"]) == [3]
+        assert list(once.columns) == list(twice.columns)
+        assert len(twice) == 1
+
+    def test_finalize_handles_an_empty_frame(self):
+        from shopify_tool.stock_export import _empty_export_df
+
+        result = _finalize_export_df(_empty_export_df())
+        assert result.empty
+        assert list(result.columns) == list(_empty_export_df().columns)
