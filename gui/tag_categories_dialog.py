@@ -6,6 +6,7 @@ with support for v2 format including order, colors, and SKU writeoff configurati
 
 import copy
 import logging
+import re
 
 from PySide6.QtCore import Qt, QSignalBlocker, Signal
 from PySide6.QtGui import QColor
@@ -40,6 +41,19 @@ from gui.theme_manager import font_css, get_theme_manager
 from shopify_tool.tag_manager import validate_tag_categories_v2
 
 logger = logging.getLogger(__name__)
+
+_VALID_CATEGORY_ID = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+
+
+def is_valid_category_id(category_id: str) -> bool:
+    """Category IDs are ASCII lowercase, digits and underscores, not all-underscore.
+
+    str.isalnum() -- which this used to rely on -- is True for any Unicode
+    letter, so it accepted 'категорія' under a message promising ASCII.
+    """
+    if not _VALID_CATEGORY_ID.match(category_id):
+        return False
+    return bool(category_id.replace("_", ""))
 
 
 class TagCategoriesPanel(QWidget):
@@ -675,7 +689,7 @@ class TagCategoriesPanel(QWidget):
             QMessageBox.warning(self, "Invalid ID", "Category ID cannot be empty.")
             return
 
-        if not category_id.replace("_", "").isalnum():
+        if not is_valid_category_id(category_id):
             QMessageBox.warning(
                 self,
                 "Invalid ID",

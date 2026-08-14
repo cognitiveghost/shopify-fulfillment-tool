@@ -186,3 +186,16 @@ def test_removing_a_tag_drops_its_writeoff_mappings(qtbot):
     saved = panel.get_categories()["categories"]["priority"]
     assert saved["tags"] == []
     assert saved["sku_writeoff"]["mappings"] == {}
+
+
+def test_category_id_validation_rejects_non_ascii():
+    from gui.tag_categories_dialog import is_valid_category_id
+
+    assert is_valid_category_id("my_category") is True
+    assert is_valid_category_id("cat2") is True
+    assert is_valid_category_id("категорія") is False
+    assert is_valid_category_id("café") is False
+    assert is_valid_category_id("") is False
+    assert is_valid_category_id("___") is False
+    assert is_valid_category_id("has space") is False
+    assert is_valid_category_id("UPPER") is False
