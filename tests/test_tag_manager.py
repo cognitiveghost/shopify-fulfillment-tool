@@ -83,5 +83,5 @@ def test_validator_rejects_whitespace_only_label():
             }
         },
     }
-    is_valid, errors = validate_tag_categories_v2(config)
+    is_valid, _errors = validate_tag_categories_v2(config)
     assert is_valid is False

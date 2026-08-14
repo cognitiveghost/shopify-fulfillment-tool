@@ -253,3 +253,25 @@ def test_deselecting_resets_the_color_swatch(qtbot):
     panel._set_editor_enabled(False)
 
     assert panel.current_color == "#9E9E9E"
+
+
+def test_writeoff_checkbox_toggles_the_mappings_table(qtbot):
+    from gui.tag_categories_dialog import TagCategoriesPanel
+
+    panel = TagCategoriesPanel(_sample_categories())
+    qtbot.addWidget(panel)
+    for i in range(panel.categories_list.count()):
+        item = panel.categories_list.item(i)
+        if item.data(Qt.UserRole) == "packaging":
+            panel.categories_list.setCurrentItem(item)
+            break
+
+    assert panel.writeoff_enabled_checkbox.isChecked() is False
+    assert panel.writeoff_mappings_table.isEnabled() is False
+
+    panel.writeoff_enabled_checkbox.setChecked(True)
+    assert panel.writeoff_mappings_table.isEnabled() is True
+    assert panel.add_mapping_btn.isEnabled() is True
+
+    panel.writeoff_enabled_checkbox.setChecked(False)
+    assert panel.writeoff_mappings_table.isEnabled() is False

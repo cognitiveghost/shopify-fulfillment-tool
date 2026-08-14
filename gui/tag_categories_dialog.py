@@ -8,7 +8,7 @@ import copy
 import logging
 import re
 
-from PySide6.QtCore import Qt, QSignalBlocker, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -632,7 +632,7 @@ class TagCategoriesPanel(QWidget):
 
     def _on_writeoff_enabled_changed(self, state):
         """Handle writeoff enabled checkbox state change."""
-        enabled = (state == Qt.Checked)
+        enabled = self.writeoff_enabled_checkbox.isChecked()
 
         self.writeoff_mappings_table.setEnabled(enabled)
         self.add_mapping_btn.setEnabled(enabled)
