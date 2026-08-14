@@ -34,7 +34,10 @@ Settled with the user before design:
 1. **Drop all three from the authoring surface.** Internal tags become the only tag action a
    new rule can be built with.
 2. **No migration, no silent rewrites.** Rules already configured with the legacy actions are
-   *flagged in the editor* for the user to fix by hand.
+   *flagged in the editor* for the user to fix by hand. One pre-existing exception, out of
+   scope here: `SET_MULTI_TAGS` is collected back as a comma-joined `value` rather than its
+   original `tags` list. The engine accepts both, but a tag containing a comma or leading
+   whitespace does change meaning across that round trip.
 3. **Also in scope:** an `ADD_INTERNAL_TAG` value dropdown seeded from tag categories, a new
    `REMOVE_INTERNAL_TAG` action, and a corrected help text.
 
@@ -141,8 +144,9 @@ Wording states what the action *does* before what to do about it — the user's 
 "this adds a tag", and correcting that is the whole point of the message.
 
 It updates on `currentTextChanged`, so switching a legacy row to `ADD_INTERNAL_TAG` clears the
-flag immediately, and (because the legacy name is only in that row's combo) switching away is
-one-directional — which is the desired nudge.
+flag immediately. The legacy name stays in that row's combo afterwards, so the switch is
+undoable until the rule is saved; it disappears on the next load, once the saved type is a
+current one.
 
 No rule-level or page-level warning banner. The flag sits on the row that has the problem.
 

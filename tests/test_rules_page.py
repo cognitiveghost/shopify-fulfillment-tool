@@ -459,6 +459,26 @@ class TestInternalTagValueCombo:
         action = page.collect()["rules"][0]["steps"][0]["actions"][0]
         assert action == {"type": "ADD_INTERNAL_TAG", "value": "BRAND_NEW"}
 
+    def test_a_new_action_row_starts_blank_not_on_the_first_tag(self, qtbot, analysis_df):
+        # addItems() lands on index 0, so without an explicit reset a brand-new
+        # row would collect "EXPRESS" as if the user had chosen it.
+        page, _refs = self._refs(
+            qtbot, analysis_df, {"type": "SET_STATUS", "value": "Ready"})
+        page.add_action_row(page.rule_widgets[0]["steps"][0])
+        new_refs = page.rule_widgets[0]["steps"][0]["actions"][1]
+        assert new_refs["param_widgets"]["value"].currentText() == ""
+        actions = page.collect()["rules"][0]["steps"][0]["actions"]
+        assert actions[1] == {"type": "ADD_INTERNAL_TAG", "value": ""}
+
+    def test_switching_a_legacy_row_to_internal_tag_starts_blank(self, qtbot, analysis_df):
+        # The migration path the retired-action notice pushes users onto.
+        page, refs = self._refs(
+            qtbot, analysis_df, {"type": "ADD_TAG", "value": "old"})
+        refs["type"].setCurrentText("ADD_INTERNAL_TAG")
+        assert refs["param_widgets"]["value"].currentText() == ""
+        action = page.collect()["rules"][0]["steps"][0]["actions"][0]
+        assert action == {"type": "ADD_INTERNAL_TAG", "value": ""}
+
     def test_set_status_keeps_its_plain_line_edit(self, qtbot, analysis_df):
         from PySide6.QtWidgets import QLineEdit
 

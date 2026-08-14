@@ -416,6 +416,7 @@ class RulesPage(SettingsPage):
             "  → Actions:\n"
             "     • ADD_INTERNAL_TAG / REMOVE_INTERNAL_TAG - order-level\n"
             "       structured tags, applied to every row of the order\n"
+            "     • ADD_TAG / ADD_ORDER_TAG - every row of the order\n"
             "     • all other actions - applied to the order's first row"
         )
         level_layout.addWidget(level_combo)
@@ -1316,6 +1317,10 @@ class RulesPage(SettingsPage):
             value_combo.lineEdit().setPlaceholderText("Tag")
             if initial_config:
                 value_combo.setCurrentText(initial_config.get("value", ""))
+            else:
+                # addItems() lands on index 0, so a new row would collect the
+                # alphabetically-first configured tag as if the user picked it.
+                value_combo.setCurrentIndex(-1)
             layout.insertWidget(insert_pos, value_combo, 1)
             action_refs["param_widgets"]["value"] = value_combo
 

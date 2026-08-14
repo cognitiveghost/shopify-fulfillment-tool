@@ -161,6 +161,22 @@ class TestRulePriorityAndAccumulation:
         out = RuleEngine(rules).apply(df.copy())
         assert parse_tags(out.loc[0, "Internal_Tags"]) == []
 
+    def test_remove_internal_tag_on_an_order_level_rule_clears_every_line(self):
+        # Order-level rules route through the apply_to_first bucket, so
+        # REMOVE_INTERNAL_TAG has to expand back out to the whole order the
+        # same way ADD_INTERNAL_TAG does.
+        df = _df({
+            "Order_Number": ["1001", "1001", "1002"],
+            "Quantity": [5, 1, 1],
+            "Internal_Tags": ['["GIFT"]', '["GIFT"]', '["GIFT"]'],
+        })
+        rules = [_rule([{"field": "total_quantity", "operator": "equals", "value": 6}],
+                        [{"type": "REMOVE_INTERNAL_TAG", "value": "GIFT"}], level="order")]
+        out = RuleEngine(rules).apply(df.copy())
+        assert parse_tags(out.loc[0, "Internal_Tags"]) == []
+        assert parse_tags(out.loc[1, "Internal_Tags"]) == []
+        assert parse_tags(out.loc[2, "Internal_Tags"]) == ["GIFT"]  # unmatched order
+
     def test_empty_rules_list_is_noop(self):
         df = _df({"Quantity": [1, 2]})
         out = RuleEngine([]).apply(df.copy())
