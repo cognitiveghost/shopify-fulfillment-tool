@@ -213,11 +213,13 @@ invented per-row distinction:
      • all other actions - applied to the order's first row
 ```
 
-`gui/rule_test_dialog.py` describes actions too and needs the same treatment:
+`gui/rule_test_dialog.py` describes actions too and needs the same treatment, at
+`:398-403`: `ADD_TAG` says `"→ Appends to Status_Note column"` and should say so as a
+correction rather than a neutral description; `ADD_ORDER_TAG` and `SET_MULTI_TAGS` fall through
+with no description at all and should get one; `REMOVE_INTERNAL_TAG` needs a branch.
 
-- `:341` — `"→ Appends to Status_Note column"`, currently attached to the tag actions.
-- `:398-402` — the `ADD_TAG` / `ADD_INTERNAL_TAG` branches; add `REMOVE_INTERNAL_TAG`.
-- `:419` — the affected-columns list.
+Its display-column list (`:487-496`) already carries both `Status_Note` and `Internal_Tags`, so
+it needs no change.
 
 ## Data model
 
