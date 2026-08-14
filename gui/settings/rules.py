@@ -1178,7 +1178,15 @@ class RulesPage(SettingsPage):
         # Type dropdown
         type_combo = WheelIgnoreComboBox()
         type_combo.addItems(ACTION_TYPES)
-        type_combo.setCurrentText(config.get("type", ACTION_TYPES[0]))
+        # A retired action type is added to this row's combo only, so the rule
+        # round-trips instead of being silently retyped: setCurrentText on a
+        # non-editable QComboBox is a no-op for an absent string, which would
+        # leave the row showing ACTION_TYPES[0] and save that over the user's
+        # rule. New rows still offer only the current types.
+        configured_type = config.get("type", ACTION_TYPES[0])
+        if configured_type and configured_type not in ACTION_TYPES:
+            type_combo.addItem(configured_type)
+        type_combo.setCurrentText(configured_type)
 
         # Delete button
         delete_btn = QPushButton("X")

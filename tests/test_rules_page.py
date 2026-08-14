@@ -289,3 +289,75 @@ class TestValidationFeedbackPlacement:
 
         assert "never match" in cond["feedback_label"].text()
         assert not cond["feedback_label"].isHidden()
+
+
+class TestLegacyActionRoundTrip:
+    """A rule using one of the three retired actions must survive an
+    open-and-save with its type and value byte-identical. The editor flags
+    it; the editor never rewrites it."""
+
+    @pytest.mark.parametrize("legacy_type", ["ADD_TAG", "ADD_ORDER_TAG"])
+    def test_legacy_action_survives_collect_untouched(self, qtbot, analysis_df, legacy_type):
+        rule = {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": "SKU", "operator": "equals", "value": "x"}],
+                "match": "ALL",
+                "actions": [{"type": legacy_type, "value": "KEEP_ME"}],
+            }],
+        }
+        page = RulesPage([rule], analysis_df)
+        qtbot.addWidget(page)
+
+        action = page.collect()["rules"][0]["steps"][0]["actions"][0]
+        assert action["type"] == legacy_type
+        assert action["value"] == "KEEP_ME"
+
+    def test_legacy_set_multi_tags_survives_collect_untouched(self, qtbot, analysis_df):
+        rule = {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": "SKU", "operator": "equals", "value": "x"}],
+                "match": "ALL",
+                "actions": [{"type": "SET_MULTI_TAGS", "tags": ["A", "B"]}],
+            }],
+        }
+        page = RulesPage([rule], analysis_df)
+        qtbot.addWidget(page)
+
+        action = page.collect()["rules"][0]["steps"][0]["actions"][0]
+        assert action["type"] == "SET_MULTI_TAGS"
+        assert action["value"] == "A, B"
+
+    def test_a_new_action_row_does_not_offer_the_retired_types(self, qtbot, analysis_df):
+        from gui.settings.fields import LEGACY_ACTION_TYPES
+
+        page = RulesPage([], analysis_df)
+        qtbot.addWidget(page)
+        page.add_rule_widget()
+        rule_refs = page.rule_widgets[0]
+        # add_action_row takes the *step* refs -- it appends to their
+        # "actions_layout" / "actions". A blank rule always has exactly one step.
+        page.add_action_row(rule_refs["steps"][0])
+
+        combo = rule_refs["steps"][0]["actions"][-1]["type"]
+        offered = {combo.itemText(i) for i in range(combo.count())}
+        assert not (offered & set(LEGACY_ACTION_TYPES))
+        assert "ADD_INTERNAL_TAG" in offered
+        assert "REMOVE_INTERNAL_TAG" in offered
+
+    def test_the_retired_type_is_offered_only_on_the_row_that_uses_it(self, qtbot, analysis_df):
+        rule = {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": "SKU", "operator": "equals", "value": "x"}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+        page = RulesPage([rule], analysis_df)
+        qtbot.addWidget(page)
+
+        combo = page.rule_widgets[0]["steps"][0]["actions"][0]["type"]
+        assert combo.currentText() == "ADD_TAG"
+        assert "ADD_TAG" in {combo.itemText(i) for i in range(combo.count())}
