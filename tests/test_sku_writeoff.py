@@ -20,16 +20,30 @@ BOX_ONLY = _config({"BOX": [{"sku": "PKG-BOX", "quantity": 1.0}]})
 
 
 def test_tag_counts_once_per_order_not_once_per_line_item():
+    # Last three rows are the untagged shapes that reach explode(): NaN, an
+    # empty array, and an array holding an empty string. None may contribute.
     df = pd.DataFrame({
-        "Order_Number": [1001, 1001, 1001, 1002],
-        "SKU": ["A", "B", "C", "A"],
-        "Order_Fulfillment_Status": ["Fulfillable"] * 4,
-        "Internal_Tags": ['["BOX"]'] * 4,
+        "Order_Number": [1001, 1001, 1001, 1002, 1003, 1004, 1005],
+        "SKU": ["A", "B", "C", "A", "A", "A", "A"],
+        "Order_Fulfillment_Status": ["Fulfillable"] * 7,
+        "Internal_Tags": ['["BOX"]'] * 4 + [None, "[]", '[""]'],
     })
     result = calculate_writeoff_quantities(df, BOX_ONLY)
     row = result[result["SKU"] == "PKG-BOX"].iloc[0]
     assert row["Writeoff_Quantity"] == 2.0
     assert row["Order_Count"] == 2
+    assert row["Tags_Applied"] == ["BOX"]
+
+
+def test_missing_order_number_falls_back_to_per_row_counting():
+    # No Order_Number means per-order dedup is impossible; each row counts
+    # separately (the pre-fix behaviour), and the caller is warned.
+    df = pd.DataFrame({
+        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
+        "Internal_Tags": ['["BOX"]'] * 3,
+    })
+    result = calculate_writeoff_quantities(df, BOX_ONLY)
+    assert result[result["SKU"] == "PKG-BOX"].iloc[0]["Writeoff_Quantity"] == 3.0
 
 
 def test_two_tags_mapping_to_same_sku_each_count_once():

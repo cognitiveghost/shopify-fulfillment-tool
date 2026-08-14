@@ -58,10 +58,18 @@ def calculate_writeoff_quantities(
     configured writeoff mappings for each tag, and accumulates SKU quantities
     that should be written off based on the tag applications.
 
-    The function processes each row in the DataFrame, extracts the tags, and
-    for each tag that has a writeoff mapping configured, adds the corresponding
-    SKU quantities to the accumulator. If multiple orders have the same tag,
-    the quantities are summed together.
+    Two contracts govern the count, and both matter:
+
+    1. **Each (order, tag) pair is applied exactly once.** Internal_Tags is an
+       order-level value that tag_manager.expand_to_order_rows replicates onto
+       every line of the order, so the frame has one row per order LINE.
+       Accumulating per row multiplies every writeoff by the order's line count.
+       The key is (order, tag), not (order, SKU) -- two different tags mapping
+       to the same SKU must each contribute.
+    2. **Only Fulfillable rows count** when Order_Fulfillment_Status is present.
+       When the column is absent, every row is considered.
+
+    If multiple orders carry the same tag, their quantities are summed.
 
     Args:
         analysis_df: Analysis DataFrame with Internal_Tags column.
@@ -120,7 +128,9 @@ def calculate_writeoff_quantities(
         - Disabled categories (enabled=False) are skipped
         - Quantity accumulation handles floats for partial units
         - If Internal_Tags column is missing, logs warning and returns empty
-        - Order numbers are tracked to count unique orders (uses row index if missing)
+        - Order numbers are tracked to count unique orders. If Order_Number is
+          missing, per-order dedup is impossible and each row counts separately
+          (logged as a warning) -- the pre-fix behaviour, kept as the fallback.
 
     Raises:
         Does not raise exceptions - logs warnings for invalid data and continues processing
@@ -208,7 +218,10 @@ def calculate_writeoff_quantities(
         })
 
     result_df = pd.DataFrame(rows)
-    logger.info(f"Calculated writeoffs for {len(result_df)} SKUs from {len(analysis_df)} orders")
+    logger.info(
+        f"Calculated writeoffs for {len(result_df)} SKUs "
+        f"from {order_tags['order'].nunique()} orders"
+    )
 
     return result_df
 
