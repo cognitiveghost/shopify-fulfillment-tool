@@ -7,7 +7,7 @@ with support for v2 format including order, colors, and SKU writeoff configurati
 import copy
 import logging
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QSignalBlocker, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -268,7 +268,17 @@ class TagCategoriesPanel(QWidget):
         return self.working_categories
 
     def _load_categories(self):
-        """Load categories into the list widget."""
+        """Load categories into the list widget.
+
+        The whole rebuild runs with the list's signals blocked. Qt drains
+        currentItemChanged repeatedly during clear(), and those emissions reach
+        _on_category_selected, which reassigns current_category_id and then
+        clears the editor fields -- whose textChanged handlers write the now-empty
+        editor back over a real category's label. Blocking here is the single
+        place that closes every variant of that path.
+        """
+        blocker = QSignalBlocker(self.categories_list)  # noqa: F841
+
         self.categories_list.clear()
 
         categories = self.working_categories.get("categories", {})
