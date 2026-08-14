@@ -22,6 +22,24 @@ def _empty_export_df() -> pd.DataFrame:
     return pd.DataFrame(columns=STOCK_EXPORT_COLUMNS)
 
 
+def _to_erp_quantity(values: pd.Series) -> pd.Series:
+    """Coerce a quantity column to the ERP's whole-piece integers, rounding half UP.
+
+    The ERP's Брой column is measured in Мярка="брой" -- pieces -- so it cannot carry a
+    fraction. Write-off quantities do arrive fractional (a per-order mapping rate such as
+    0.5 times the order count), so this conversion has to round rather than truncate:
+    a bare ``.astype(int)`` turned a 0.5-piece write-off into 0 and the material vanished
+    from the export with no trace.
+
+    Do NOT reach for ``Series.round()`` here -- numpy rounds half to EVEN, so 0.5 -> 0 and
+    2.5 -> 2, which is the very bug this function exists to fix.
+    """
+    numeric = pd.to_numeric(values, errors="coerce").fillna(0.0).clip(lower=0)
+    # Adding 0.5 and truncating is round-half-up, and .astype(int) truncates toward zero
+    # -- which equals floor only because clip(lower=0) guarantees a non-negative input.
+    return (numeric + 0.5).astype(int)
+
+
 def _finalize_export_df(df: pd.DataFrame) -> pd.DataFrame:
     """Coerce a built export frame to the canonical ERP column layout.
 
@@ -39,7 +57,15 @@ def _finalize_export_df(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = ""
     df[BLANK_COL] = ""
-    return df[STOCK_EXPORT_COLUMNS].reset_index(drop=True)
+    df = df[STOCK_EXPORT_COLUMNS].copy()
+    df[QTY_COL] = _to_erp_quantity(df[QTY_COL])
+    dropped = df.loc[df[QTY_COL] <= 0, "Артикул"]
+    if not dropped.empty:
+        logger.warning(
+            f"Dropped {len(dropped)} export row(s) whose quantity rounded to zero: "
+            f"{', '.join(map(str, dropped))}"
+        )
+    return df[df[QTY_COL] > 0].reset_index(drop=True)
 
 
 def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
@@ -94,7 +120,7 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
             records.append(
                 {
                     "Артикул": sku,
-                    QTY_COL: int(qty),
+                    QTY_COL: qty,
                     "Годност": expiry,
                     "Партида": batch,
                 }
@@ -104,7 +130,7 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
             records.append(
                 {
                     "Артикул": sku,
-                    QTY_COL: int(qty),
+                    QTY_COL: qty,
                     "Годност": "",
                     "Партида": "",
                 }
@@ -201,7 +227,6 @@ def create_stock_export(
                 f"Report '{report_name}': Using per-lot aggregation (FIFO lot tracking active)."
             )
             export_df = _expand_lot_summary(filtered_items)
-            export_df = export_df[export_df[QTY_COL] > 0].reset_index(drop=True)
             if export_df.empty:
                 logger.warning(
                     f"Report '{report_name}': No items with positive quantity after lot expansion."
@@ -212,12 +237,7 @@ def create_stock_export(
                 )
         else:
             # Summarize quantities by SKU
-            sku_summary = (
-                filtered_items.groupby("SKU")["Quantity"]
-                .sum()
-                .astype(int)
-                .reset_index()
-            )
+            sku_summary = filtered_items.groupby("SKU")["Quantity"].sum().reset_index()
             sku_summary = sku_summary[sku_summary["Quantity"] > 0]
 
             if sku_summary.empty:
@@ -254,7 +274,7 @@ def create_stock_export(
                     pd.DataFrame(
                         {
                             "Артикул": writeoff_df["SKU"],
-                            QTY_COL: writeoff_df["Writeoff_Quantity"].astype(int),
+                            QTY_COL: writeoff_df["Writeoff_Quantity"],
                         }
                     )
                 )
@@ -367,12 +387,7 @@ def merge_session_stock_exports(
     # unaffected by this function. Splitting the SAME SKU across multiple
     # rows here (one per distinct expiry/batch) previously contradicted this
     # function's own contract of "grouped by SKU... summed across sessions".
-    sku_summary = (
-        combined.groupby("SKU")["Quantity"]
-        .sum()
-        .astype(int)
-        .reset_index()
-    )
+    sku_summary = combined.groupby("SKU")["Quantity"].sum().reset_index()
     sku_summary = sku_summary[sku_summary["Quantity"] > 0]
     if sku_summary.empty:
         return _empty_export_df()
