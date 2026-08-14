@@ -270,3 +270,29 @@ class TestQuantityRounding:
         result = _read(out)
         packaging = result[result.iloc[:, COL_SKU] == "PKG-BOX"]
         assert packaging.iloc[0, COL_QTY] == 2
+
+    def test_no_zero_quantity_cell_ever_reaches_the_file(self, tmp_path):
+        # The warehouse ERP REJECTS a row whose quantity is 0, so this is a hard
+        # requirement of the file format, not a tidiness rule. Before the rounding
+        # fix a 0.5-per-order write-off truncated to 0 and was written as a 0 cell.
+        # A 0.4 rate still rounds to 0 -- that row must be absent, not zeroed.
+        config = {
+            "version": 2,
+            "categories": {
+                "packaging": {
+                    "tags": ["BOX"],
+                    "sku_writeoff": {
+                        "enabled": True,
+                        "mappings": {"BOX": [{"sku": "PKG-TAPE", "quantity": 0.4}]},
+                    },
+                }
+            },
+        }
+        df = _analysis_df([
+            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
+        ])
+        out = tmp_path / "export.xls"
+        create_stock_export(df, str(out), apply_writeoff=True, tag_categories=config)
+        result = _read(out)
+        assert "PKG-TAPE" not in set(result.iloc[:, COL_SKU])
+        assert (result.iloc[:, COL_QTY] > 0).all()
