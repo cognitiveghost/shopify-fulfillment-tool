@@ -5,9 +5,12 @@ repo. Each function mutates `config` in place and returns True when it
 changed something -- the caller saves in that case.
 """
 
+import copy
 import logging
 import os
 from datetime import datetime
+
+from shopify_tool.tag_manager import DEFAULT_TAG_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -131,60 +134,7 @@ def migrate_add_tag_categories(client_id: str, config: dict) -> bool:
     )
 
     # Add default tag categories in v2 format
-    config["tag_categories"] = {
-        "version": 2,
-        "categories": {
-            "packaging": {
-                "label": "Пакетаж",
-                "color": "#4CAF50",
-                "order": 1,
-                "tags": ["SMALL_BAG", "LARGE_BAG", "BOX", "NO_BOX", "BOX+ANY"],
-                "sku_writeoff": {"enabled": False, "mappings": {}},
-            },
-            "priority": {
-                "label": "Пріоритет",
-                "color": "#FF9800",
-                "order": 2,
-                "tags": ["URGENT", "HIGH_VALUE", "DOUBLE_TRACK"],
-                "sku_writeoff": {"enabled": False, "mappings": {}},
-            },
-            "status": {
-                "label": "Статус",
-                "color": "#2196F3",
-                "order": 3,
-                "tags": ["CHECKED", "PROBLEM", "VERIFIED"],
-                "sku_writeoff": {"enabled": False, "mappings": {}},
-            },
-            "order_type": {
-                "label": "Тип замовлення",
-                "color": "#9C27B0",
-                "order": 4,
-                "tags": ["RETAIL", "WHOLESALE", "RETURN", "EXCHANGE"],
-                "sku_writeoff": {"enabled": False, "mappings": {}},
-            },
-            "accessories": {
-                "label": "Додатки",
-                "color": "#E91E63",
-                "order": 5,
-                "tags": ["STICKER", "BUSINESS_CARD", "GIFT_BOX"],
-                "sku_writeoff": {"enabled": False, "mappings": {}},
-            },
-            "delivery": {
-                "label": "Кур'єр/Доставка",
-                "color": "#FF5722",
-                "order": 6,
-                "tags": ["NOVA_POSHTA", "UKRPOSHTA", "SELF_PICKUP"],
-                "sku_writeoff": {"enabled": False, "mappings": {}},
-            },
-            "custom": {
-                "label": "Інші",
-                "color": "#9E9E9E",
-                "order": 999,
-                "tags": [],
-                "sku_writeoff": {"enabled": False, "mappings": {}},
-            },
-        },
-    }
+    config["tag_categories"] = copy.deepcopy(DEFAULT_TAG_CATEGORIES)
 
     logger.info(f"Tag categories (v2) added for CLIENT_{client_id}")
     return True
@@ -271,38 +221,13 @@ def migrate_tag_categories_v1_to_v2(client_id: str, config: dict) -> bool:
             )
 
     # Add new default categories if missing
-    if "order_type" not in migrated_categories:
-        migrated_categories["order_type"] = {
-            "label": "Тип замовлення",
-            "color": "#9C27B0",
-            "order": order_counter,
-            "tags": ["RETAIL", "WHOLESALE", "RETURN", "EXCHANGE"],
-            "sku_writeoff": {"enabled": False, "mappings": {}},
-        }
-        order_counter += 1
-        logger.info(f"Added 'order_type' category for CLIENT_{client_id}")
-
-    if "accessories" not in migrated_categories:
-        migrated_categories["accessories"] = {
-            "label": "Додатки",
-            "color": "#E91E63",
-            "order": order_counter,
-            "tags": ["STICKER", "BUSINESS_CARD", "GIFT_BOX"],
-            "sku_writeoff": {"enabled": False, "mappings": {}},
-        }
-        order_counter += 1
-        logger.info(f"Added 'accessories' category for CLIENT_{client_id}")
-
-    if "delivery" not in migrated_categories:
-        migrated_categories["delivery"] = {
-            "label": "Кур'єр/Доставка",
-            "color": "#FF5722",
-            "order": order_counter,
-            "tags": ["NOVA_POSHTA", "UKRPOSHTA", "SELF_PICKUP"],
-            "sku_writeoff": {"enabled": False, "mappings": {}},
-        }
-        order_counter += 1
-        logger.info(f"Added 'delivery' category for CLIENT_{client_id}")
+    _defaults = DEFAULT_TAG_CATEGORIES["categories"]
+    for category_id in ("order_type", "accessories", "delivery"):
+        if category_id not in migrated_categories:
+            migrated_categories[category_id] = copy.deepcopy(_defaults[category_id])
+            migrated_categories[category_id]["order"] = order_counter
+            order_counter += 1
+            logger.info(f"Added '{category_id}' category for CLIENT_{client_id}")
 
     # Wrap in v2 structure
     config["tag_categories"] = {"version": 2, "categories": migrated_categories}
