@@ -375,6 +375,10 @@ def validate_tag_categories_v2(config: dict) -> tuple[bool, list[str]]:
             if field not in category_config:
                 errors.append(f"Category '{category_id}' missing required field '{field}'")
 
+        label = category_config.get("label")
+        if isinstance(label, str) and not label.strip():
+            errors.append(f"Category '{category_id}' has an empty label")
+
         # Validate color format (basic check)
         color = category_config.get("color", "")
         if color and not (color.startswith("#") and len(color) == 7):

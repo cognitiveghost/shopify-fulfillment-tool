@@ -52,3 +52,36 @@ class TestExpandToOrderRows:
         mask = df["Order_Number"] == "DOES-NOT-EXIST"
         result = expand_to_order_rows(df, mask)
         assert not result.any()
+
+
+def test_validator_rejects_empty_category_label():
+    from shopify_tool.tag_manager import validate_tag_categories_v2
+
+    config = {
+        "version": 2,
+        "categories": {
+            "packaging": {
+                "label": "", "color": "#4CAF50", "order": 1, "tags": [],
+                "sku_writeoff": {"enabled": False, "mappings": {}},
+            }
+        },
+    }
+    is_valid, errors = validate_tag_categories_v2(config)
+    assert is_valid is False
+    assert any("empty label" in e for e in errors)
+
+
+def test_validator_rejects_whitespace_only_label():
+    from shopify_tool.tag_manager import validate_tag_categories_v2
+
+    config = {
+        "version": 2,
+        "categories": {
+            "packaging": {
+                "label": "   ", "color": "#4CAF50", "order": 1, "tags": [],
+                "sku_writeoff": {"enabled": False, "mappings": {}},
+            }
+        },
+    }
+    is_valid, errors = validate_tag_categories_v2(config)
+    assert is_valid is False
