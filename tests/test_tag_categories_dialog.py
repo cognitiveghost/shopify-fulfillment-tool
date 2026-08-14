@@ -144,3 +144,22 @@ def test_new_category_becomes_the_selected_one(qtbot):
 
     assert panel.current_category_id == "extra"
     assert panel.label_input.text() == "Extra"
+
+
+def test_theme_change_reblends_row_backgrounds(qtbot):
+    from gui.tag_categories_dialog import TagCategoriesPanel
+    from gui.theme_manager import get_theme_manager
+
+    panel = TagCategoriesPanel(_sample_categories())
+    qtbot.addWidget(panel)
+    before = panel.categories_list.item(0).background().color().name()
+
+    tm = get_theme_manager()
+    original = tm.get_current_theme_name()
+    try:
+        tm.set_theme("dark" if original != "dark" else "light")
+        after = panel.categories_list.item(0).background().color().name()
+        assert after != before
+        assert _labels(panel)["priority"] == "Priority"
+    finally:
+        tm.set_theme(original)

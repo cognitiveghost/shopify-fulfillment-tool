@@ -384,6 +384,10 @@ class TagCategoriesPanel(QWidget):
             self.color_display.setStyleSheet(
                 f"border: 1px solid {self.theme.border}; background-color: {self.current_color};"
             )
+        # Row backgrounds are blended against theme.background, so they are
+        # stale until the list is rebuilt. Safe because _load_categories blocks
+        # the list's signals (see Task 4).
+        self._load_categories()
 
     def _set_editor_enabled(self, enabled: bool):
         """Enable/disable editor fields."""
