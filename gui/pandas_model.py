@@ -88,6 +88,24 @@ def _format_lot(lot: dict) -> str:
     return f"{qty_str}x, {expiry_str}{batch_str}"
 
 
+def cell_display_text(value) -> str:
+    """Render one DataFrame cell as the text the user sees in a table.
+
+    The list check MUST come before ``pd.isna()``: ``Lot_Details`` holds real
+    Python lists, and ``pd.isna()`` on a list returns an *array*, so a plain
+    ``if`` on it raises "truth value of an array is ambiguous". Every caller
+    that renders or searches cell text must go through here — a private copy
+    is how that crash got reintroduced in the filter proxy.
+    """
+    if isinstance(value, list):
+        if not value:
+            return ""
+        return f"{len(value)} lot{'s' if len(value) != 1 else ''}"
+    if pd.isna(value):
+        return ""
+    return str(value)
+
+
 class PandasModel(QAbstractTableModel):
     """A Qt model to interface a pandas DataFrame with a QTableView.
 
@@ -179,19 +197,12 @@ class PandasModel(QAbstractTableModel):
             except IndexError:
                 return None
 
-            if isinstance(value, list):
-                if not value:
-                    return "" if role == Qt.ItemDataRole.DisplayRole else None
-                if role == Qt.ItemDataRole.DisplayRole:
-                    return f"{len(value)} lot{'s' if len(value) != 1 else ''}"
-                return "\n".join(_format_lot(lot) for lot in value)
-
             if role == Qt.ItemDataRole.ToolTipRole:
-                return None  # no tooltip for plain scalar cells
+                if isinstance(value, list) and value:
+                    return "\n".join(_format_lot(lot) for lot in value)
+                return None  # no tooltip for empty or plain scalar cells
 
-            if pd.isna(value):
-                return ""
-            return str(value)
+            return cell_display_text(value)
 
         if role == Qt.ItemDataRole.BackgroundRole:
             return self._row_bg_cache[row]

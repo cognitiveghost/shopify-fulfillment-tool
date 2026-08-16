@@ -13,7 +13,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from gui.pandas_model import PandasModel
+from gui.pandas_model import PandasModel, cell_display_text
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -69,3 +69,20 @@ def test_plain_scalar_cell_still_renders_and_has_no_tooltip():
     index = model.index(0, 0)
     assert model.data(index, Qt.ItemDataRole.DisplayRole) == "A1"
     assert model.data(index, Qt.ItemDataRole.ToolTipRole) is None
+
+
+def test_cell_display_text_renders_empty_and_missing_as_blank():
+    assert cell_display_text(None) == ""
+    assert cell_display_text([]) == ""
+    assert cell_display_text(float("nan")) == ""
+
+
+def test_cell_display_text_counts_lots_without_raising():
+    """The list check must precede pd.isna(); see this module's docstring."""
+    lots = [
+        {"expiry": "261230", "expiry_dt": date(2026, 12, 30), "batch": "B1", "qty_allocated": 2.0},
+        {"expiry": "270101", "expiry_dt": date(2027, 1, 1), "batch": None, "qty_allocated": 1.0},
+    ]
+    assert cell_display_text(lots) == "2 lots"
+    assert cell_display_text(lots[:1]) == "1 lot"
+    assert cell_display_text("A1") == "A1"
