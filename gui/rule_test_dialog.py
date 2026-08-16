@@ -386,7 +386,10 @@ class RuleTestDialog(QDialog):
         actions_text = f"<b>{len(all_actions)} action(s) across {len(steps)} step(s):</b><br><br>"
 
         for idx, (step_num, action) in enumerate(all_actions, 1):
-            action_type = action.get("type", "")
+            # Normalized, because the engine dispatches on the uppercased type
+            # (shopify_tool/rules.py:917). Reporting the raw spelling would let
+            # a lowercase type run with no explanation shown for it.
+            action_type = action.get("type", "").upper()
             action_value = action.get("value", "")
 
             step_prefix = f"[Step {step_num}] " if len(steps) > 1 else ""

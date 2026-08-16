@@ -162,3 +162,29 @@ class TestZeroResultsAreChanges:
         # Rows 0 and 2 match and get a real result of 0.0; row 1 stays NaN.
         assert dialog.changed_count == 2
         assert pd.isna(dialog.df_after.loc[1, "Line_Total"])
+
+
+class TestActionTypeCaseIsNormalized:
+    """RuleEngine uppercases action types (shopify_tool/rules.py:917, :1051),
+    so a lowercase type executes. The dialog must explain it, not go silent."""
+
+    def test_lowercase_type_still_gets_its_explanation(
+        self, qtbot, analysis_df, no_modals
+    ):
+        rule = _rule({"type": "set_status", "value": "Ready"})
+        dialog = _open(qtbot, rule, analysis_df)
+        assert "Sets Order_Fulfillment_Status" in dialog.actions_label.text()
+
+    def test_mixed_case_copy_field_still_gets_its_explanation(
+        self, qtbot, analysis_df, no_modals
+    ):
+        rule = _rule({"type": "Copy_Field", "source": "SKU", "target": "Status_Note"})
+        dialog = _open(qtbot, rule, analysis_df)
+        text = dialog.actions_label.text()
+        assert "Copies 'SKU' to 'Status_Note'" in text
+
+    def test_uppercase_type_is_unchanged(self, qtbot, analysis_df, no_modals):
+        """Baseline: passes today."""
+        rule = _rule({"type": "SET_STATUS", "value": "Ready"})
+        dialog = _open(qtbot, rule, analysis_df)
+        assert "Sets Order_Fulfillment_Status" in dialog.actions_label.text()
