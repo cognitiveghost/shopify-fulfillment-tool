@@ -747,7 +747,7 @@ class RulesPage(SettingsPage):
         This method is connected to the 'field' and 'operator' combo boxes
         for a rule condition. It creates a `QComboBox` for value selection if
         the field is in the DataFrame and the operator is suitable (e.g., 'equals').
-        For operators like 'is_empty', it hides the value widget. Otherwise,
+        For operators like 'is empty', it hides the value widget. Otherwise,
         it provides a standard `QLineEdit`.
 
         Args:
@@ -774,8 +774,11 @@ class RulesPage(SettingsPage):
             condition_refs["value_widget"].deleteLater()
             condition_refs["value_widget"] = None
 
-        # Operators that don't need a value input
-        if op in ["is_empty", "is_not_empty"]:
+        # Operators that don't need a value input. These must match
+        # CONDITION_OPERATORS (gui/settings/fields.py) verbatim -- they carry
+        # spaces, not underscores, and the underscored spelling silently
+        # rendered a value box the engine throws away.
+        if op in ["is empty", "is not empty"]:
             self._check_field_resolvable(condition_refs)
             return  # No widget will be created or added
 
@@ -892,10 +895,10 @@ class RulesPage(SettingsPage):
         op = condition_refs["op"].currentText()
         value_widget = condition_refs.get("value_widget")
 
-        if not value_widget:
-            return
-
-        # Get value based on widget type
+        # A valueless operator ('is empty') has no widget to read, and an
+        # unrecognised widget type has no text. Neither can be value-validated,
+        # but both still need the field-resolvability mark at the tail -- an
+        # early return here drops PR #278's "never matches" flag.
         if isinstance(value_widget, QComboBox):
             value = value_widget.currentText()
         elif isinstance(value_widget, QDateEdit):
@@ -903,6 +906,8 @@ class RulesPage(SettingsPage):
         elif isinstance(value_widget, QLineEdit):
             value = value_widget.text()
         else:
+            self._show_validation_feedback(condition_refs, "clear", "")
+            self._check_field_resolvable(condition_refs)
             return
 
         # Validate based on operator

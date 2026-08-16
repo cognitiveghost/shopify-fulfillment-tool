@@ -487,3 +487,70 @@ class TestInternalTagValueCombo:
         assert isinstance(refs["param_widgets"]["value"], QLineEdit)
         action = page.collect()["rules"][0]["steps"][0]["actions"][0]
         assert action["value"] == "Ready"
+
+
+class TestValuelessOperators:
+    """'is empty'/'is not empty' ignore rule_val (shopify_tool/rules.py:175),
+    so the editor must not offer a value box for them."""
+
+    def _rule(self, operator):
+        return {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [{"field": "SKU", "operator": operator, "value": ""}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+
+    @pytest.mark.parametrize("operator", ["is empty", "is not empty"])
+    def test_no_value_widget_on_load(self, qtbot, analysis_df, operator):
+        page = RulesPage([self._rule(operator)], analysis_df)
+        qtbot.addWidget(page)
+
+        cond_refs = page.rule_widgets[0]["steps"][0]["conditions"][0]
+        assert cond_refs["value_widget"] is None
+
+    @pytest.mark.parametrize("operator", ["is empty", "is not empty"])
+    def test_no_value_widget_after_switching_operator(self, qtbot, analysis_df, operator):
+        page = RulesPage([self._rule("equals")], analysis_df)
+        qtbot.addWidget(page)
+
+        cond_refs = page.rule_widgets[0]["steps"][0]["conditions"][0]
+        assert cond_refs["value_widget"] is not None  # baseline: 'equals' has one
+        cond_refs["op"].setCurrentText(operator)
+        assert cond_refs["value_widget"] is None
+
+    def test_collect_still_emits_an_empty_value(self, qtbot, analysis_df):
+        """The engine reads condition['value'] unconditionally; a valueless
+        operator must still round-trip a key, not drop it."""
+        page = RulesPage([self._rule("is empty")], analysis_df)
+        qtbot.addWidget(page)
+
+        condition = page.collect()["rules"][0]["steps"][0]["conditions"][0]
+        assert condition["operator"] == "is empty"
+        assert condition["value"] == ""
+
+    def test_unresolvable_field_is_still_flagged_without_a_value_widget(
+        self, qtbot, analysis_df
+    ):
+        """PR #278's flag must survive the now-reachable no-widget path."""
+        rule = {
+            "name": "r", "level": "article",
+            "steps": [{
+                "conditions": [
+                    {"field": "item_count", "operator": "is empty", "value": ""}
+                ],
+                "match": "ALL",
+                "actions": [{"type": "ADD_TAG", "value": "T"}],
+            }],
+        }
+        page = RulesPage([rule], analysis_df)
+        qtbot.addWidget(page)
+
+        cond_refs = page.rule_widgets[0]["steps"][0]["conditions"][0]
+        assert cond_refs["value_widget"] is None
+        assert "border" in cond_refs["field"].styleSheet()
+        # The tail of _perform_validation must run even with no value widget.
+        page._perform_validation(cond_refs)
+        assert page._check_field_resolvable(cond_refs) is False
