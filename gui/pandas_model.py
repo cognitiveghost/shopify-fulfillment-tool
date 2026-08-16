@@ -71,7 +71,7 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
         fold = (lambda s: s) if self._case_sensitive else str.casefold
         for c in col_indices:
             cell = df.iat[source_row, c]
-            hay = "" if pd.isna(cell) else str(cell)
+            hay = cell_display_text(cell)
             if self._needle in fold(hay):
                 return True
         return False
@@ -86,6 +86,27 @@ def _format_lot(lot: dict) -> str:
     batch = lot.get("batch")
     batch_str = f", Batch {batch}" if batch else ""
     return f"{qty_str}x, {expiry_str}{batch_str}"
+
+
+def cell_display_text(value) -> str:
+    """Render one DataFrame cell as the text the user sees in a table.
+
+    The list check MUST come before ``pd.isna()``: ``Lot_Details`` holds real
+    Python lists, and ``pd.isna()`` on a list returns an *array*, so a plain
+    ``if`` on it raises "truth value of an array is ambiguous". Every caller
+    that renders or searches cell text must go through here — a private copy
+    is how that crash got reintroduced in the filter proxy.
+
+    Note the wording is column-agnostic: *any* list-valued cell renders as
+    "N lots". ``Lot_Details`` is the only such column today.
+    """
+    if isinstance(value, list):
+        if not value:
+            return ""
+        return f"{len(value)} lot{'s' if len(value) != 1 else ''}"
+    if pd.isna(value):
+        return ""
+    return str(value)
 
 
 class PandasModel(QAbstractTableModel):
@@ -179,19 +200,12 @@ class PandasModel(QAbstractTableModel):
             except IndexError:
                 return None
 
-            if isinstance(value, list):
-                if not value:
-                    return "" if role == Qt.ItemDataRole.DisplayRole else None
-                if role == Qt.ItemDataRole.DisplayRole:
-                    return f"{len(value)} lot{'s' if len(value) != 1 else ''}"
-                return "\n".join(_format_lot(lot) for lot in value)
-
             if role == Qt.ItemDataRole.ToolTipRole:
-                return None  # no tooltip for plain scalar cells
+                if isinstance(value, list) and value:
+                    return "\n".join(_format_lot(lot) for lot in value)
+                return None  # no tooltip for empty or plain scalar cells
 
-            if pd.isna(value):
-                return ""
-            return str(value)
+            return cell_display_text(value)
 
         if role == Qt.ItemDataRole.BackgroundRole:
             return self._row_bg_cache[row]
