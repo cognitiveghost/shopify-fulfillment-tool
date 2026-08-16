@@ -27,6 +27,23 @@ logger = logging.getLogger(__name__)
 from gui.theme_manager import font_css, get_theme_manager
 
 
+def _cell_text(value) -> str:
+    """Render one DataFrame cell the way the main analysis table renders it.
+
+    Mirrors gui/pandas_model.py:182-194, including its ordering: the list
+    check comes first because Lot_Details holds real lists, and pd.isna()
+    on a list returns an array, which makes a plain `if` raise
+    "truth value of an array is ambiguous".
+    """
+    if isinstance(value, list):
+        if not value:
+            return ""
+        return f"{len(value)} lot{'s' if len(value) != 1 else ''}"
+    if pd.isna(value):
+        return ""
+    return str(value)
+
+
 class RuleTestDialog(QDialog):
     """
     Dialog for testing a rule against current analysis DataFrame.
@@ -360,7 +377,7 @@ class RuleTestDialog(QDialog):
         for row_idx, (_, row) in enumerate(display_df.iterrows()):
             for col_idx, col_name in enumerate(display_cols):
                 value = row[col_name]
-                item = QTableWidgetItem(str(value))
+                item = QTableWidgetItem(_cell_text(value))
                 self.preview_table.setItem(row_idx, col_idx, item)
 
         self.preview_table.resizeColumnsToContents()
@@ -386,7 +403,10 @@ class RuleTestDialog(QDialog):
         actions_text = f"<b>{len(all_actions)} action(s) across {len(steps)} step(s):</b><br><br>"
 
         for idx, (step_num, action) in enumerate(all_actions, 1):
-            action_type = action.get("type", "")
+            # Normalized, because the engine dispatches on the uppercased type
+            # (shopify_tool/rules.py:917). Reporting the raw spelling would let
+            # a lowercase type run with no explanation shown for it.
+            action_type = action.get("type", "").upper()
             action_value = action.get("value", "")
 
             step_prefix = f"[Step {step_num}] " if len(steps) > 1 else ""
@@ -446,20 +466,27 @@ class RuleTestDialog(QDialog):
             row_before = matched_before.loc[idx_after]
 
             for col_idx, col_name in enumerate(display_cols):
-                value_before = row_before[col_name]
-                value_after = row_after[col_name]
+                # Diff what the cells display, not the raw objects. That drops
+                # the NaN != NaN special case (both render "") and is safe on
+                # list columns, where pd.isna() returns an array.
+                # ponytail: on a list column this compares lengths only ("2 lots"
+                # == "2 lots"), so an edit that swaps contents without changing
+                # the count would not tint. Unreachable today -- no action writes
+                # a list-valued column. Compare reprs if one ever does.
+                text_before = _cell_text(row_before[col_name])
+                text_after = _cell_text(row_after[col_name])
 
-                item = QTableWidgetItem(str(value_after))
+                item = QTableWidgetItem(text_after)
 
                 # Highlight changed cells
                 # ponytail: literal diff-highlight yellow/green, not worth two
                 # new ThemeTokens fields for this one call site. The tints are
                 # light in both themes, so pin a dark foreground too -- dark
                 # theme's text_primary is near-white and vanishes on them.
-                if value_before != value_after and not (pd.isna(value_before) and pd.isna(value_after)):
+                if text_before != text_after:
                     item.setBackground(QColor("#FFEB3B"))  # Yellow
                     item.setForeground(QColor("#000000"))
-                    item.setToolTip(f"Changed from: {value_before}")
+                    item.setToolTip(f"Changed from: {text_before}")
 
                 self.after_table.setItem(row_idx, col_idx, item)
 
@@ -468,7 +495,7 @@ class RuleTestDialog(QDialog):
         for offset, (_, row_added) in enumerate(added.iterrows()):
             row_idx = len(matched_after) + offset
             for col_idx, col_name in enumerate(display_cols):
-                item = QTableWidgetItem(str(row_added[col_name]))
+                item = QTableWidgetItem(_cell_text(row_added[col_name]))
                 item.setBackground(QColor("#C8E6C9"))  # Green
                 item.setForeground(QColor("#000000"))
                 item.setToolTip("Added by rule")
