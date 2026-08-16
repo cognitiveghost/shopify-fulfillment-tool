@@ -71,7 +71,7 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
         fold = (lambda s: s) if self._case_sensitive else str.casefold
         for c in col_indices:
             cell = df.iat[source_row, c]
-            hay = "" if pd.isna(cell) else str(cell)
+            hay = cell_display_text(cell)
             if self._needle in fold(hay):
                 return True
         return False
