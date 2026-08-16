@@ -188,3 +188,78 @@ class TestActionTypeCaseIsNormalized:
         rule = _rule({"type": "SET_STATUS", "value": "Ready"})
         dialog = _open(qtbot, rule, analysis_df)
         assert "Sets Order_Fulfillment_Status" in dialog.actions_label.text()
+
+
+class TestMissingValuesRenderBlank:
+    """gui/pandas_model.py:192 renders a missing cell as "", so the dialog the
+    user compares against that table must not print the literal text 'nan'."""
+
+    def _texts(self, table):
+        return {
+            table.item(r, c).text()
+            for r in range(table.rowCount())
+            for c in range(table.columnCount())
+            if table.item(r, c) is not None
+        }
+
+    def test_nan_is_not_shown_as_the_word_nan(self, qtbot, analysis_df, no_modals):
+        analysis_df.loc[0, "Product_Name"] = float("nan")
+        rule = _rule({"type": "ADD_TAG", "value": "T"})
+        dialog = _open(qtbot, rule, analysis_df)
+
+        assert "nan" not in self._texts(dialog.preview_table)
+        assert "nan" not in self._texts(dialog.after_table)
+
+    def test_none_is_not_shown_as_the_word_none(self, qtbot, analysis_df, no_modals):
+        analysis_df["Lot_Details"] = None
+        rule = _rule({"type": "ADD_TAG", "value": "T"})
+        dialog = _open(qtbot, rule, analysis_df)
+
+        assert "None" not in self._texts(dialog.preview_table)
+
+    def test_a_list_valued_column_does_not_crash_the_dialog(
+        self, qtbot, analysis_df, no_modals
+    ):
+        """Lot_Details holds real lists (shopify_tool/analysis.py:1111), and
+        _get_display_columns pulls spare columns straight from df.columns.
+        pd.isna() on a list returns an array, so an unguarded truth test raises
+        'truth value of an array is ambiguous'."""
+        analysis_df["Lot_Details"] = [
+            [{"lot": "L1", "quantity": 1}, {"lot": "L2", "quantity": 2}],
+            [],
+            None,
+        ]
+        rule = _rule({"type": "ADD_TAG", "value": "T"})
+        dialog = _open(qtbot, rule, analysis_df)
+
+        texts = self._texts(dialog.preview_table)
+        assert "2 lots" in texts
+        assert "nan" not in texts
+
+    def test_a_changed_cell_is_still_highlighted(self, qtbot, analysis_df, no_modals):
+        """Baseline for the rewritten diff test: a real change must still tint."""
+        rule = _rule({"type": "SET_STATUS", "value": "Shipped"})
+        dialog = _open(qtbot, rule, analysis_df)
+
+        col = [
+            dialog.after_table.horizontalHeaderItem(c).text()
+            for c in range(dialog.after_table.columnCount())
+        ].index("Order_Fulfillment_Status")
+        item = dialog.after_table.item(0, col)
+        assert item.text() == "Shipped"
+        assert item.background().color().name().lower() == "#ffeb3b"
+
+    def test_an_unchanged_missing_cell_is_not_highlighted(
+        self, qtbot, analysis_df, no_modals
+    ):
+        """NaN != NaN, so a naive object diff tints every missing cell."""
+        analysis_df.loc[0, "Product_Name"] = float("nan")
+        rule = _rule({"type": "SET_STATUS", "value": "Shipped"})
+        dialog = _open(qtbot, rule, analysis_df)
+
+        col = [
+            dialog.after_table.horizontalHeaderItem(c).text()
+            for c in range(dialog.after_table.columnCount())
+        ].index("Product_Name")
+        item = dialog.after_table.item(0, col)
+        assert item.background().color().name().lower() != "#ffeb3b"
