@@ -24,24 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 logger = logging.getLogger(__name__)
+from gui.pandas_model import cell_display_text
 from gui.theme_manager import font_css, get_theme_manager
-
-
-def _cell_text(value) -> str:
-    """Render one DataFrame cell the way the main analysis table renders it.
-
-    Mirrors gui/pandas_model.py:182-194, including its ordering: the list
-    check comes first because Lot_Details holds real lists, and pd.isna()
-    on a list returns an array, which makes a plain `if` raise
-    "truth value of an array is ambiguous".
-    """
-    if isinstance(value, list):
-        if not value:
-            return ""
-        return f"{len(value)} lot{'s' if len(value) != 1 else ''}"
-    if pd.isna(value):
-        return ""
-    return str(value)
 
 
 class RuleTestDialog(QDialog):
@@ -377,7 +361,7 @@ class RuleTestDialog(QDialog):
         for row_idx, (_, row) in enumerate(display_df.iterrows()):
             for col_idx, col_name in enumerate(display_cols):
                 value = row[col_name]
-                item = QTableWidgetItem(_cell_text(value))
+                item = QTableWidgetItem(cell_display_text(value))
                 self.preview_table.setItem(row_idx, col_idx, item)
 
         self.preview_table.resizeColumnsToContents()
@@ -473,8 +457,8 @@ class RuleTestDialog(QDialog):
                 # == "2 lots"), so an edit that swaps contents without changing
                 # the count would not tint. Unreachable today -- no action writes
                 # a list-valued column. Compare reprs if one ever does.
-                text_before = _cell_text(row_before[col_name])
-                text_after = _cell_text(row_after[col_name])
+                text_before = cell_display_text(row_before[col_name])
+                text_after = cell_display_text(row_after[col_name])
 
                 item = QTableWidgetItem(text_after)
 
@@ -495,7 +479,7 @@ class RuleTestDialog(QDialog):
         for offset, (_, row_added) in enumerate(added.iterrows()):
             row_idx = len(matched_after) + offset
             for col_idx, col_name in enumerate(display_cols):
-                item = QTableWidgetItem(_cell_text(row_added[col_name]))
+                item = QTableWidgetItem(cell_display_text(row_added[col_name]))
                 item.setBackground(QColor("#C8E6C9"))  # Green
                 item.setForeground(QColor("#000000"))
                 item.setToolTip("Added by rule")
