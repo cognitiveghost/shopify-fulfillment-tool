@@ -96,6 +96,9 @@ def cell_display_text(value) -> str:
     ``if`` on it raises "truth value of an array is ambiguous". Every caller
     that renders or searches cell text must go through here — a private copy
     is how that crash got reintroduced in the filter proxy.
+
+    Note the wording is column-agnostic: *any* list-valued cell renders as
+    "N lots". ``Lot_Details`` is the only such column today.
     """
     if isinstance(value, list):
         if not value:

@@ -39,10 +39,12 @@ _TWO_LOTS = [
 ]
 
 
-def test_empty_lot_details_shows_blank_not_crash():
-    model = _model(None)
+@pytest.mark.parametrize("empty", [None, [], float("nan")])
+def test_empty_lot_details_shows_blank_and_no_tooltip(empty):
+    model = _model(empty)
     index = model.index(0, 1)
     assert model.data(index, Qt.ItemDataRole.DisplayRole) == ""
+    assert model.data(index, Qt.ItemDataRole.ToolTipRole) is None
 
 
 def test_single_lot_shows_count_and_tooltip_detail():
