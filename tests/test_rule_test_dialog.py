@@ -173,6 +173,7 @@ class TestActionTypeCaseIsNormalized:
     ):
         rule = _rule({"type": "set_status", "value": "Ready"})
         dialog = _open(qtbot, rule, analysis_df)
+        assert no_modals == []
         assert "Sets Order_Fulfillment_Status" in dialog.actions_label.text()
 
     def test_mixed_case_copy_field_still_gets_its_explanation(
@@ -180,6 +181,7 @@ class TestActionTypeCaseIsNormalized:
     ):
         rule = _rule({"type": "Copy_Field", "source": "SKU", "target": "Status_Note"})
         dialog = _open(qtbot, rule, analysis_df)
+        assert no_modals == []
         text = dialog.actions_label.text()
         assert "Copies 'SKU' to 'Status_Note'" in text
 
@@ -187,6 +189,7 @@ class TestActionTypeCaseIsNormalized:
         """Baseline: passes today."""
         rule = _rule({"type": "SET_STATUS", "value": "Ready"})
         dialog = _open(qtbot, rule, analysis_df)
+        assert no_modals == []
         assert "Sets Order_Fulfillment_Status" in dialog.actions_label.text()
 
 
@@ -207,6 +210,7 @@ class TestMissingValuesRenderBlank:
         rule = _rule({"type": "ADD_TAG", "value": "T"})
         dialog = _open(qtbot, rule, analysis_df)
 
+        assert no_modals == []
         assert "nan" not in self._texts(dialog.preview_table)
         assert "nan" not in self._texts(dialog.after_table)
 
@@ -215,6 +219,7 @@ class TestMissingValuesRenderBlank:
         rule = _rule({"type": "ADD_TAG", "value": "T"})
         dialog = _open(qtbot, rule, analysis_df)
 
+        assert no_modals == []
         assert "None" not in self._texts(dialog.preview_table)
 
     def test_a_list_valued_column_does_not_crash_the_dialog(
@@ -232,6 +237,10 @@ class TestMissingValuesRenderBlank:
         rule = _rule({"type": "ADD_TAG", "value": "T"})
         dialog = _open(qtbot, rule, analysis_df)
 
+        # First, and load-bearing: _run_test swallows every exception into a
+        # QMessageBox.critical, and the after-table is populated last — so the
+        # table assertions below can pass while the dialog blew up behind them.
+        assert no_modals == []
         texts = self._texts(dialog.preview_table)
         assert "2 lots" in texts
         assert "nan" not in texts
@@ -241,6 +250,7 @@ class TestMissingValuesRenderBlank:
         rule = _rule({"type": "SET_STATUS", "value": "Shipped"})
         dialog = _open(qtbot, rule, analysis_df)
 
+        assert no_modals == []
         col = [
             dialog.after_table.horizontalHeaderItem(c).text()
             for c in range(dialog.after_table.columnCount())
@@ -257,6 +267,7 @@ class TestMissingValuesRenderBlank:
         rule = _rule({"type": "SET_STATUS", "value": "Shipped"})
         dialog = _open(qtbot, rule, analysis_df)
 
+        assert no_modals == []
         col = [
             dialog.after_table.horizontalHeaderItem(c).text()
             for c in range(dialog.after_table.columnCount())

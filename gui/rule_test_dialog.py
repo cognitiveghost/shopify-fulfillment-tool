@@ -469,6 +469,10 @@ class RuleTestDialog(QDialog):
                 # Diff what the cells display, not the raw objects. That drops
                 # the NaN != NaN special case (both render "") and is safe on
                 # list columns, where pd.isna() returns an array.
+                # ponytail: on a list column this compares lengths only ("2 lots"
+                # == "2 lots"), so an edit that swaps contents without changing
+                # the count would not tint. Unreachable today -- no action writes
+                # a list-valued column. Compare reprs if one ever does.
                 text_before = _cell_text(row_before[col_name])
                 text_after = _cell_text(row_after[col_name])
 
