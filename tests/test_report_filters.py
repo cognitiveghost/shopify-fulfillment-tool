@@ -9,7 +9,11 @@ pins that last one -- it is the case that shipped wrong picking lists.
 import pandas as pd
 import pytest
 
-from shopify_tool.report_filters import apply_report_filters, normalize_operator
+from shopify_tool.report_filters import (
+    apply_report_filters,
+    fulfillable_only,
+    normalize_operator,
+)
 
 
 @pytest.fixture
@@ -123,25 +127,62 @@ def test_preview_and_writer_agree_on_the_same_config(tmp_path):
     order and the file could contain three -- and the JSON handed to Packing
     Tool, which used the preview's implementation, could disagree with the
     XLSX given to the warehouse.
+
+    The status column is deliberately mixed. An all-Fulfillable fixture
+    cannot falsify this: sharing the evaluator is not sufficient on its own,
+    because the writers restricted to fulfillable orders and the preview did
+    not, so the two agreed only as long as the fixture had nothing to
+    disagree about.
     """
     from shopify_tool.packing_lists import create_packing_list
 
     df = pd.DataFrame({
-        "Order_Number": ["#1001", "#1002", "#1003"],
-        "SKU": ["AB-01", "CD-02", "EF-03"],
-        "Product_Name": ["Widget", "Gadget", "Doohickey"],
-        "Warehouse_Name": ["Widget", "Gadget", "Doohickey"],
-        "Quantity": [1, 2, 3],
-        "Shipping_Provider": ["DHL", "DPD", "DHL"],
-        "Destination_Country": ["DE", "FR", "DE"],
-        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
+        "Order_Number": ["#1001", "#1002", "#1003", "#1004"],
+        "SKU": ["AB-01", "CD-02", "EF-03", "GH-04"],
+        "Product_Name": ["Widget", "Gadget", "Doohickey", "Thing"],
+        "Warehouse_Name": ["Widget", "Gadget", "Doohickey", "Thing"],
+        "Quantity": [1, 2, 3, 4],
+        "Shipping_Provider": ["DHL", "DPD", "DHL", "DHL"],
+        "Destination_Country": ["DE", "FR", "DE", "DE"],
+        "Order_Fulfillment_Status": [
+            "Fulfillable", "Fulfillable", "Fulfillable", "Not Fulfillable",
+        ],
     })
+    # GH-04 passes the filter and is excluded only by its status.
     filters = [{"field": "SKU", "operator": "not in", "value": "AB-01,CD-02"}]
 
-    preview_skus = sorted(apply_report_filters(df, filters)["SKU"].tolist())
+    preview_skus = sorted(
+        apply_report_filters(fulfillable_only(df), filters)["SKU"].tolist()
+    )
 
     out = tmp_path / "agree.xlsx"
     create_packing_list(df, str(out), "agree", filters=filters)
     written_skus = sorted(pd.read_excel(out)["SKU"].tolist())
 
     assert preview_skus == written_skus == ["EF-03"]
+
+
+def test_apply_filters_matches_the_writers_on_a_mixed_status_frame():
+    """The GUI's preview/JSON entry point drops non-fulfillable rows too.
+
+    actions_handler._apply_filters is what the dialog preview counts and what
+    builds the JSON handed to Packing Tool. It was passed the whole analysis
+    frame, so both could include orders the XLSX excluded.
+    """
+    from gui.actions_handler import ActionsHandler
+
+    df = pd.DataFrame({
+        "Order_Number": ["#1001", "#1002"],
+        "SKU": ["AB-01", "CD-02"],
+        "Order_Fulfillment_Status": ["Fulfillable", "Not Fulfillable"],
+    })
+
+    result = ActionsHandler._apply_filters(None, df, [])
+
+    assert result["SKU"].tolist() == ["AB-01"]
+
+
+def test_fulfillable_only_matches_nothing_without_the_status_column():
+    """Fail closed, same as a filter on a column that is not there."""
+    df = pd.DataFrame({"SKU": ["AB-01"]})
+    assert fulfillable_only(df).empty

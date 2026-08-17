@@ -2,7 +2,7 @@ import logging
 
 import pandas as pd
 
-from shopify_tool.report_filters import apply_report_filters
+from shopify_tool.report_filters import apply_report_filters, fulfillable_only
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -190,10 +190,7 @@ def create_stock_export(
         # Same shared evaluator as the packing-list writer -- these two used
         # to hold byte-identical copies of a query-string builder, and so
         # shared its defects.
-        fulfillable = analysis_df[
-            analysis_df["Order_Fulfillment_Status"] == "Fulfillable"
-        ]
-        filtered_items = apply_report_filters(fulfillable, filters)
+        filtered_items = apply_report_filters(fulfillable_only(analysis_df), filters)
 
         # Detect whether lot tracking data is present
         has_lot_details = (

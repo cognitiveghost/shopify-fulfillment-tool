@@ -1,5 +1,7 @@
 """Packing list export accuracy: output must exactly reflect the analysis
 DataFrame (priority: packing list / export generation accuracy)."""
+import zipfile
+
 import pandas as pd
 
 from shopify_tool.packing_lists import create_packing_list
@@ -231,5 +233,14 @@ def test_metadata_survives_a_column_set_that_drops_the_carrier_columns(tmp_path)
                         columns=["SKU", "Quantity"])
 
     written = pd.read_excel(out)
-    # No metadata smuggled into a column name.
+    # No metadata smuggled into a column name...
     assert list(written.columns) == ["SKU", "Quantity"]
+
+    # ...and it actually reached the sheet, in the print header. Read from the
+    # xlsx itself: xlsxwriter exposes no way to read a header back, and
+    # asserting only on the column names is what the assertion above already
+    # does -- it would pass with the header dropped entirely.
+    with zipfile.ZipFile(out) as book:
+        sheet = book.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    assert "oddHeader" in sheet
+    assert "no_carriers" in sheet

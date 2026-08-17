@@ -54,6 +54,30 @@ def normalize_operator(operator):
     return LEGACY_OPERATOR_ALIASES.get(operator, operator)
 
 
+def fulfillable_only(df):
+    """Restricts ``df`` to fulfillable orders.
+
+    Every report covers fulfillable orders and nothing else. Both file
+    writers applied this inline while the preview and the JSON handed to
+    Packing Tool did not, so the same config could report -- and hand the
+    sibling app -- orders the warehouse's own file excluded. Sharing the
+    evaluator is not enough; the four paths have to filter the same input.
+
+    A frame without the status column matches nothing, for the same reason a
+    filter on a missing column does: it is not an analysis frame, and a
+    report that quietly contains rows no one vouched for is worse than one
+    that is visibly empty.
+    """
+    if df is None or df.empty:
+        return df
+    if "Order_Fulfillment_Status" not in df.columns:
+        logger.warning(
+            "[REPORT FILTERS] No Order_Fulfillment_Status column, matches nothing"
+        )
+        return df.iloc[0:0].copy()
+    return df[df["Order_Fulfillment_Status"] == "Fulfillable"]
+
+
 def _tag_mask(series, operator, value):
     """Boolean mask for a filter on the Internal_Tags column."""
     present = series.apply(lambda cell: has_tag(cell, value))

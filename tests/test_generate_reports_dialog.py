@@ -4,6 +4,9 @@ Previously two buttons opened two modal dialogs, each emitting exactly one
 config, so producing a packing list and its stock export took two full
 round-trips.
 """
+import logging
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -71,3 +74,45 @@ def test_generate_button_is_disabled_until_something_is_checked():
     dialog.set_checked("packing_lists", 0, True)
 
     assert dialog.generate_button.isEnabled() is True
+
+
+def test_one_failing_report_does_not_cost_the_user_the_others(monkeypatch):
+    """The whole point of generating a batch in one pass.
+
+    Without the per-report try/except, the first bad config aborts the loop
+    and the user loses every report after it -- which is worse than the two
+    single-select dialogs this replaced.
+    """
+    from gui import actions_handler
+    from gui.actions_handler import ActionsHandler
+
+    warnings = []
+    monkeypatch.setattr(
+        actions_handler.QMessageBox,
+        "warning",
+        lambda parent, title, text: warnings.append(text),
+    )
+
+    generated = []
+
+    def fake_single(report_type, config, session_path):
+        if config["name"] == "DPD":
+            raise ValueError("no such column")
+        generated.append(config["name"])
+
+    handler = SimpleNamespace(
+        log=logging.getLogger(__name__),
+        mw=None,
+        _generate_single_report=fake_single,
+    )
+
+    batch = [
+        {"name": "DHL", "report_type": "packing_lists"},
+        {"name": "DPD", "report_type": "packing_lists"},
+        {"name": "Daily ERP", "report_type": "stock_exports"},
+    ]
+    ActionsHandler._generate_reports(handler, batch, "/tmp/session")
+
+    assert generated == ["DHL", "Daily ERP"]
+    assert len(warnings) == 1
+    assert "DPD: no such column" in warnings[0]

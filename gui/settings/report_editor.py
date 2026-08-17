@@ -80,7 +80,15 @@ class ReportEditor(QGroupBox):
             # collapses to about two visible rows.
             self.columns_list.setMinimumHeight(160)
             chosen = config.get("columns") or []
-            for name in report_filter_fields(analysis_df):
+            # Same rule as the filter field combo: offer the union, never
+            # just the sourced list. _chosen_columns can only return what has
+            # an item, so a saved column missing from the offered list is
+            # dropped on the next save -- and the offered list is the short
+            # static fallback until an analysis has been run. Warehouse_Name
+            # is a default packing-list column that is not in it.
+            offered = report_filter_fields(analysis_df)
+            offered += [name for name in chosen if name not in offered]
+            for name in offered:
                 item = QListWidgetItem(name)
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Checked if name in chosen else Qt.Unchecked)

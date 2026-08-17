@@ -97,3 +97,49 @@ def test_legacy_operators_survive_a_load_and_save(stored, expected):
 
     assert saved["operator"] == expected
     assert saved["value"] == "AB-01"
+
+
+def test_a_field_outside_the_offered_list_survives_a_load_and_save():
+    """Same trap as the operator, one combo to the left.
+
+    With no analysis loaded the field list falls back to the 13-entry static
+    FILTERABLE_COLUMNS, and setCurrentText is a silent no-op for anything
+    outside it -- so a filter on Internal_Tags would render as (and be saved
+    as) the first entry, silently repointing it at another column. That is
+    every app start until an analysis is run.
+    """
+    config = [{
+        "name": "tagged",
+        "output_filename": "tagged.xlsx",
+        "filters": [{"field": "Internal_Tags", "operator": "contains", "value": "Gift"}],
+        "exclude_skus": [],
+    }]
+    page = ReportsPage(config, [], analysis_df=None)
+
+    saved = page.collect()["packing_list_configs"][0]["filters"][0]
+
+    assert saved["field"] == "Internal_Tags"
+    assert saved["value"] == "Gift"
+
+
+def test_columns_outside_the_offered_list_survive_a_load_and_save():
+    """The column picker can only return what it has an item for.
+
+    Warehouse_Name is a default packing-list column and is not in
+    FILTERABLE_COLUMNS, so without the union it is dropped from any config
+    saved before an analysis has been run.
+    """
+    config = [{
+        "name": "wide",
+        "output_filename": "wide.xlsx",
+        "filters": [],
+        "exclude_skus": [],
+        "columns": ["Order_Number", "SKU", "Warehouse_Name", "Quantity"],
+    }]
+    page = ReportsPage(config, [], analysis_df=None)
+
+    saved = page.collect()["packing_list_configs"][0]
+
+    assert sorted(saved["columns"]) == [
+        "Order_Number", "Quantity", "SKU", "Warehouse_Name",
+    ]

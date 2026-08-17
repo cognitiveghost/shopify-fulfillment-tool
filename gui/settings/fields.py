@@ -25,8 +25,6 @@ FILTERABLE_COLUMNS: list[str] = [
     "Quantity",
 ]
 
-FILTER_OPERATORS: list[str] = ["==", "!=", "in", "not in", "contains"]
-
 CONDITION_OPERATORS: list[str] = [
     "equals",
     "does not equal",
@@ -116,7 +114,15 @@ def _on_filter_criteria_changed(filter_refs, analysis_df, initial_value=None):
     if filter_refs["value_widget"]:
         filter_refs["value_widget"].deleteLater()
 
-    use_combobox = op in ["==", "!="] and not analysis_df.empty and field in analysis_df.columns
+    # analysis_df is None until an analysis has been run. The old operator
+    # names never matched here, so this branch was dead and the None never
+    # reached .empty; it does now.
+    use_combobox = (
+        op in ["equals", "does not equal"]
+        and analysis_df is not None
+        and not analysis_df.empty
+        and field in analysis_df.columns
+    )
 
     if use_combobox:
         try:
@@ -132,7 +138,7 @@ def _on_filter_criteria_changed(filter_refs, analysis_df, initial_value=None):
     else:
         new_widget = QLineEdit()
         placeholder = "Value"
-        if op in ["in", "not in"]:
+        if op in ["in list", "not in list"]:
             placeholder = "Values, comma-separated"
         new_widget.setPlaceholderText(placeholder)
         text_value = ",".join(initial_value) if isinstance(initial_value, list) else (initial_value or "")
@@ -158,6 +164,17 @@ def add_filter_row(parent_widget_refs, fields, operators, analysis_df, config=No
     """
     if not isinstance(config, dict):
         config = {}
+    # A saved field the offered list does not contain must still be offered.
+    # setCurrentText is a silent no-op on a non-editable combo, so without
+    # this the row would render as fields[0] and be written back that way on
+    # the next save -- silently repointing the filter at another column. The
+    # list is short of the full set whenever no analysis has been run yet,
+    # which is every app start, so this is the common case rather than the
+    # exotic one.
+    saved_field = config.get("field")
+    if saved_field and saved_field not in fields:
+        fields = [*fields, saved_field]
+
     row_layout = QHBoxLayout()
     field_combo = WheelIgnoreComboBox()
     field_combo.addItems(fields)

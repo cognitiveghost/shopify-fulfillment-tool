@@ -593,6 +593,11 @@ class ActionsHandler(QObject):
         they used to, and the preview could report a different number of
         orders than the file contained.
 
+        Restricts to fulfillable orders first, exactly as both writers do.
+        Sharing the evaluator alone was not enough: this path was handed the
+        whole analysis frame, so the preview counted -- and the JSON handed
+        to Packing Tool contained -- orders the XLSX excluded.
+
         Args:
             df: DataFrame to filter
             filters: List of filter dicts with 'field', 'operator', 'value'
@@ -600,9 +605,9 @@ class ActionsHandler(QObject):
         Returns:
             Filtered DataFrame
         """
-        from shopify_tool.report_filters import apply_report_filters
+        from shopify_tool.report_filters import apply_report_filters, fulfillable_only
 
-        return apply_report_filters(df, filters)
+        return apply_report_filters(fulfillable_only(df), filters)
 
     def _create_analysis_json(self, df):
         """Convert DataFrame to packing list JSON format for Packing Tool.

@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from shopify_tool.report_filters import apply_report_filters
+from shopify_tool.report_filters import apply_report_filters, fulfillable_only
 
 from .csv_utils import normalize_sku_for_matching, order_number_sort_key
 
@@ -110,10 +110,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
         # Packing lists only ever contain fulfillable orders; the report's own
         # filters narrow it further. Both go through the shared evaluator so
         # the XLSX, the JSON and the dialog preview cannot disagree.
-        fulfillable = analysis_df[
-            analysis_df["Order_Fulfillment_Status"] == "Fulfillable"
-        ]
-        filtered_orders = apply_report_filters(fulfillable, filters)
+        filtered_orders = apply_report_filters(fulfillable_only(analysis_df), filters)
 
         # Exclude specified SKUs if any are provided
         if exclude_skus and not filtered_orders.empty:
