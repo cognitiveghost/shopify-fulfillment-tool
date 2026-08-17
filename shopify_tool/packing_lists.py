@@ -63,7 +63,8 @@ def _expand_lot_rows(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).reset_index(drop=True)
 
 
-def create_packing_list(analysis_df, output_file, report_name="Packing List", filters=None, exclude_skus=None):
+def create_packing_list(analysis_df, output_file, report_name="Packing List",
+                        filters=None, exclude_skus=None, columns=None):
     """Creates a versatile, formatted packing list in an Excel .xlsx file.
 
     This function takes the main analysis DataFrame and generates a packing list
@@ -98,6 +99,9 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
             'field', 'operator', and 'value' keys. Defaults to None.
         exclude_skus (list[str], optional): A list of SKUs to exclude from the
             packing list. Defaults to None.
+        columns (list[str], optional): The columns to print, in order. None
+            keeps the default layout. Columns not present in the data are
+            dropped with a warning rather than raising.
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -193,7 +197,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
             sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
                 ~sorted_list["Order_Number"].duplicated(), ""
             )
-            columns_for_print = [
+            default_columns = [
                 "Destination_Country",
                 "Order_Number",
                 "SKU",
@@ -201,14 +205,40 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
                 "Quantity",
                 "Shipping_Provider",
             ]
+            if columns:
+                columns_for_print = [c for c in columns if c in sorted_list.columns]
+                missing = [c for c in columns if c not in sorted_list.columns]
+                if missing:
+                    logger.warning(f"Configured columns not in the data, skipped: {missing}")
+                if not columns_for_print:
+                    logger.warning("No configured column exists in the data; using the default layout")
+                    columns_for_print = default_columns
+            else:
+                columns_for_print = default_columns
 
         print_list = sorted_list[columns_for_print]
+
+        # Borders group the rows of one order. Read the boundaries off the
+        # full frame -- the user may not have chosen to print Order_Number.
+        order_boundaries = (
+            sorted_list["Order_Number"].ne(sorted_list["Order_Number"].shift()).cumsum()
+        )
 
         generation_timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         output_filename = os.path.basename(output_file)
 
-        # Rename columns to embed metadata into the header
-        rename_map = {"Shipping_Provider": generation_timestamp, "Warehouse_Name": output_filename}
+        # The timestamp and the filename ride on two column headers when those
+        # columns are printed -- that is the established look. With a custom
+        # column set they may be absent, so the same metadata also goes into
+        # the Excel print header, where it cannot be lost.
+        rename_map = {
+            col: label
+            for col, label in (
+                ("Shipping_Provider", generation_timestamp),
+                ("Warehouse_Name", output_filename),
+            )
+            if col in print_list.columns
+        }
         print_list = print_list.rename(columns=rename_map)
 
         logger.info("Creating Excel file...")
@@ -249,7 +279,6 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
                 cell_formats[key + "_centered"] = workbook.add_format(props_centered)
 
             # Apply borders to group items by order number
-            order_boundaries = print_list["Order_Number"].ne(print_list["Order_Number"].shift()).cumsum()
             for row_num in range(len(print_list)):
                 is_top = (row_num == 0) or (order_boundaries.iloc[row_num] != order_boundaries.iloc[row_num - 1])
                 is_bottom = (row_num == len(print_list) - 1) or (
@@ -285,6 +314,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
 
             # Set print settings
             worksheet.set_paper(9)  # A4 paper
+            worksheet.set_header(f"&L{output_filename}&R{generation_timestamp}")
             worksheet.set_landscape()
             worksheet.repeat_rows(0)  # Repeat header row
             worksheet.fit_to_pages(1, 0)  # Fit to 1 page wide

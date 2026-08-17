@@ -173,3 +173,63 @@ def test_contains_filter_writes_the_matching_row(tmp_path):
                         filters=[{"field": "SKU", "operator": "contains", "value": "AB"}])
 
     assert pd.read_excel(out)["SKU"].tolist() == ["AB-01"]
+
+
+def _three_row_df():
+    return pd.DataFrame({
+        "Order_Number": ["#1001", "#1001", "#1002"],
+        "SKU": ["AB-01", "CD-02", "EF-03"],
+        "Product_Name": ["Widget", "Gadget", "Doohickey"],
+        "Warehouse_Name": ["Widget", "Gadget", "Doohickey"],
+        "Quantity": [1, 2, 3],
+        "Shipping_Provider": ["DHL", "DHL", "DPD"],
+        "Destination_Country": ["DE", "DE", "FR"],
+        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
+    })
+
+
+def test_columns_none_reproduces_the_default_layout(tmp_path):
+    """The guard against regressing every existing packing list."""
+    out = tmp_path / "default.xlsx"
+    create_packing_list(_three_row_df(), str(out), "default")
+
+    written = pd.read_excel(out)
+    # Shipping_Provider and Warehouse_Name are renamed to carry the timestamp
+    # and the filename; the other four keep their names and order.
+    assert list(written.columns)[:3] == ["Destination_Country", "Order_Number", "SKU"]
+    assert len(written.columns) == 6
+
+
+def test_chosen_columns_appear_in_the_chosen_order(tmp_path):
+    out = tmp_path / "custom.xlsx"
+    create_packing_list(_three_row_df(), str(out), "custom",
+                        columns=["SKU", "Quantity", "Order_Number"])
+
+    written = pd.read_excel(out)
+    assert list(written.columns) == ["SKU", "Quantity", "Order_Number"]
+    assert written["SKU"].tolist() == ["AB-01", "CD-02", "EF-03"]
+
+
+def test_column_set_without_order_number_still_writes(tmp_path):
+    """Order boundaries drive the row borders and used to be read off the
+    printed frame, so deselecting Order_Number raised KeyError."""
+    out = tmp_path / "no_order_col.xlsx"
+    create_packing_list(_three_row_df(), str(out), "no_order_col",
+                        columns=["SKU", "Quantity"])
+
+    written = pd.read_excel(out)
+    assert list(written.columns) == ["SKU", "Quantity"]
+    assert len(written) == 3
+
+
+def test_metadata_survives_a_column_set_that_drops_the_carrier_columns(tmp_path):
+    """The timestamp and filename used to ride on Shipping_Provider and
+    Warehouse_Name. With neither selected they must still reach the sheet --
+    they move to the Excel print header."""
+    out = tmp_path / "no_carriers.xlsx"
+    create_packing_list(_three_row_df(), str(out), "no_carriers",
+                        columns=["SKU", "Quantity"])
+
+    written = pd.read_excel(out)
+    # No metadata smuggled into a column name.
+    assert list(written.columns) == ["SKU", "Quantity"]
