@@ -173,3 +173,21 @@ def test_batch_search_works_on_the_second_lot_of_a_multi_lot_row():
     proxy = _lot_proxy(_TWO_LOTS)
     proxy.set_text_filter("2027-01-01")
     assert proxy.rowCount() == 1
+
+
+def test_tag_filter_matches_an_unserialized_tag_list():
+    """Internal_Tags is normally a JSON string, but tag_manager.py:78 and
+    barcode_processor.py:82 both document that it is sometimes a native list.
+
+    Two distinct bugs on that path: pd.isna(list) raises for 2+ elements, and
+    str(["URGENT"]) is "['URGENT']" -- single quotes, so the double-quoted
+    needle misses even when it doesn't raise. Hence json.dumps.
+    """
+    proxy = FulfillmentFilterProxy()
+    proxy.setSourceModel(
+        PandasModel(pd.DataFrame({"SKU": ["A1"], "Internal_Tags": [["URGENT", "FRAGILE"]]}))
+    )
+    proxy.set_tag_filter("URGENT")
+    assert proxy.rowCount() == 1  # must not raise, and must not filter the row out
+    proxy.set_tag_filter("MISSING")
+    assert proxy.rowCount() == 0

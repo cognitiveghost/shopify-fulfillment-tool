@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
 from PySide6.QtGui import QColor
@@ -56,7 +58,14 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
             if "Internal_Tags" not in df.columns:
                 return False
             val = df.iat[source_row, df.columns.get_loc("Internal_Tags")]
-            if self._tag_needle not in ("" if pd.isna(val) else str(val)):
+            if isinstance(val, list):
+                # Internal_Tags is normally a JSON string, but is sometimes stored
+                # unserialized (tag_manager.py:78, barcode_processor.py:82). json.dumps,
+                # not str(): repr uses single quotes, so the double-quoted needle misses.
+                hay = json.dumps(val)
+            else:
+                hay = "" if pd.isna(val) else str(val)
+            if self._tag_needle not in hay:
                 return False
 
         if not self._needle:
