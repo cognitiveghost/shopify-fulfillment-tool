@@ -11,8 +11,9 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
     Replaces the default ``setFilterRegularExpression`` behaviour, which
     treated raw user input as a regex (so typing ``(``, ``+`` or ``[`` broke
     the filter or silently hid every row). Matching is plain substring on the
-    cell's display text, and the text and tag filters are ANDed together
-    instead of being mutually exclusive.
+    cell's search text (see :func:`cell_search_text` — the display text, widened
+    for lot cells so batch numbers and expiry dates stay findable), and the text
+    and tag filters are ANDed together instead of being mutually exclusive.
 
     Columns are addressed by *DataFrame* index (``-1`` = all columns); the
     proxy reads the source ``PandasModel``'s frame directly via ``iat``, so it
@@ -71,7 +72,7 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
         fold = (lambda s: s) if self._case_sensitive else str.casefold
         for c in col_indices:
             cell = df.iat[source_row, c]
-            hay = cell_display_text(cell)
+            hay = cell_search_text(cell)
             if self._needle in fold(hay):
                 return True
         return False
@@ -107,6 +108,37 @@ def cell_display_text(value) -> str:
     if pd.isna(value):
         return ""
     return str(value)
+
+
+def cell_search_text(value) -> str:
+    """Render one DataFrame cell as the text the *search filter* matches against.
+
+    Deliberately wider than :func:`cell_display_text`: a ``Lot_Details`` cell
+    displays as "2 lots", but users search it by batch number or expiry date.
+    The haystack is the display text, plus each lot's tooltip line, plus each
+    lot's raw ``expiry`` string.
+
+    Both expiry forms are included on purpose. ``expiry`` is the raw stock-file
+    string ("261230") that a user reads off the ERP; ``_format_lot`` renders the
+    parsed ISO date ("2026-12-30") that the tooltip shows. They are different
+    strings and either is a reasonable thing to type.
+
+    Non-list cells return ``cell_display_text(value)`` unchanged, so no other
+    column's filtering behaviour changes.
+    """
+    text = cell_display_text(value)
+    if not isinstance(value, list) or not value:
+        return text
+    parts = [text]
+    for lot in value:
+        if not isinstance(lot, dict):
+            parts.append(str(lot))
+            continue
+        parts.append(_format_lot(lot))
+        raw = lot.get("expiry")
+        if raw:
+            parts.append(str(raw))
+    return "\n".join(parts)
 
 
 class PandasModel(QAbstractTableModel):

@@ -13,7 +13,12 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from gui.pandas_model import FulfillmentFilterProxy, PandasModel, cell_display_text
+from gui.pandas_model import (
+    FulfillmentFilterProxy,
+    PandasModel,
+    cell_display_text,
+    cell_search_text,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -124,4 +129,47 @@ def test_text_filter_matches_a_lot_cell_by_its_displayed_text():
 def test_text_filter_still_matches_plain_scalar_columns():
     proxy = _lot_proxy(_TWO_LOTS)
     proxy.set_text_filter("a1")  # case-insensitive by default
+    assert proxy.rowCount() == 1
+
+
+def test_cell_search_text_exposes_batch_and_both_expiry_forms():
+    """The haystack carries the raw stock-file expiry AND the parsed ISO date.
+
+    Users read '261230' off the ERP but see '2026-12-30' in the tooltip; both
+    must find the row. See the plan's Context section.
+    """
+    hay = cell_search_text(_TWO_LOTS)
+    assert "B1" in hay             # batch
+    assert "261230" in hay         # raw expiry, as typed from the ERP
+    assert "2026-12-30" in hay     # parsed expiry, as shown in the tooltip
+    assert "270101" in hay         # second lot, raw
+    assert "2027-01-01" in hay     # second lot, parsed
+    assert "2 lots" in hay         # display text is still part of the haystack
+
+
+def test_cell_search_text_leaves_non_list_cells_identical_to_display_text():
+    """Only list cells widen; every other column must behave exactly as before."""
+    for value in ["A1", None, float("nan"), 5, []]:
+        assert cell_search_text(value) == cell_display_text(value)
+
+
+def test_text_filter_finds_a_row_by_batch_number():
+    """The #285 regression, stated as the user sees it."""
+    proxy = _lot_proxy(_TWO_LOTS)
+    proxy.set_text_filter("B1")
+    assert proxy.rowCount() == 1
+
+
+def test_text_filter_finds_a_row_by_raw_and_iso_expiry():
+    proxy = _lot_proxy(_TWO_LOTS)
+    proxy.set_text_filter("261230")
+    assert proxy.rowCount() == 1
+    proxy.set_text_filter("2026-12-30")
+    assert proxy.rowCount() == 1
+
+
+def test_batch_search_works_on_the_second_lot_of_a_multi_lot_row():
+    """Never worked at any revision: pre-#285 this raised, post-#285 it missed."""
+    proxy = _lot_proxy(_TWO_LOTS)
+    proxy.set_text_filter("2027-01-01")
     assert proxy.rowCount() == 1
