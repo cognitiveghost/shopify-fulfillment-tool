@@ -713,19 +713,13 @@ class UIManager:
         layout = QVBoxLayout()
         group.setLayout(layout)
 
-        self.mw.packing_list_button = QPushButton("Create Packing List")
-        self.mw.packing_list_button.setToolTip(
-            "Generate packing lists based on pre-defined filters."
+        self.mw.generate_reports_button = QPushButton("Generate Reports")
+        self.mw.generate_reports_button.setToolTip(
+            "Generate packing lists and stock exports based on pre-defined filters."
         )
-        self.mw.stock_export_button = QPushButton("Create Stock Export")
-        self.mw.stock_export_button.setToolTip(
-            "Generate stock export files for couriers."
-        )
-        self.mw.packing_list_button.setEnabled(False)
-        self.mw.stock_export_button.setEnabled(False)
+        self.mw.generate_reports_button.setEnabled(False)
 
-        layout.addWidget(self.mw.packing_list_button)
-        layout.addWidget(self.mw.stock_export_button)
+        layout.addWidget(self.mw.generate_reports_button)
 
         # Add "Open Session Folder" button
         self.mw.open_session_folder_button = QPushButton("Open Session Folder")
@@ -848,8 +842,7 @@ class UIManager:
             and not self.mw.analysis_results_df.empty
         )
 
-        self.mw.packing_list_button.setEnabled(not is_busy and is_data_loaded)
-        self.mw.stock_export_button.setEnabled(not is_busy and is_data_loaded)
+        self.mw.generate_reports_button.setEnabled(not is_busy and is_data_loaded)
 
         # Enable "Add Product" button after analysis
         if hasattr(self.mw, "add_product_button"):
@@ -1143,35 +1136,18 @@ class UIManager:
         )
         layout.addWidget(self.mw.add_product_button_tab2)
 
-        # Packing List button (Tab 2 version)
-        self.mw.packing_list_button_tab2 = QPushButton("Packing List")
-        self.mw.packing_list_button_tab2.setEnabled(False)
-        self.mw.packing_list_button_tab2.setToolTip(
-            "Generate packing lists based on pre-defined filters"
+        # Generate Reports button (Tab 2 version)
+        self.mw.generate_reports_button_tab2 = QPushButton("Generate Reports")
+        self.mw.generate_reports_button_tab2.setEnabled(False)
+        self.mw.generate_reports_button_tab2.setToolTip(
+            "Generate packing lists and stock exports based on pre-defined filters"
         )
-        self.mw.packing_list_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_report_selection_dialog(
-                "packing_lists"
-            )
+        self.mw.generate_reports_button_tab2.clicked.connect(
+            lambda: self.mw.actions_handler.open_generate_reports_dialog()
             if hasattr(self.mw, "actions_handler")
             else None
         )
-        layout.addWidget(self.mw.packing_list_button_tab2)
-
-        # Stock Export button (Tab 2 version)
-        self.mw.stock_export_button_tab2 = QPushButton("Stock Export")
-        self.mw.stock_export_button_tab2.setEnabled(False)
-        self.mw.stock_export_button_tab2.setToolTip(
-            "Generate stock export files for couriers"
-        )
-        self.mw.stock_export_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_report_selection_dialog(
-                "stock_exports"
-            )
-            if hasattr(self.mw, "actions_handler")
-            else None
-        )
-        layout.addWidget(self.mw.stock_export_button_tab2)
+        layout.addWidget(self.mw.generate_reports_button_tab2)
 
         # Settings button (Tab 2 version)
         self.mw.settings_button_tab2 = QPushButton("Settings")

@@ -482,13 +482,10 @@ class ActionsHandler(QObject):
         dialog.categories_updated.connect(on_categories_updated)
         dialog.exec()
 
-    def open_report_selection_dialog(self, report_type):
-        """Opens dialog for selecting which reports to generate.
-
-        Args:
-            report_type (str): Either "packing_lists" or "stock_exports"
-        """
-        self.log.info(f"Opening report selection dialog: {report_type}")
+    def open_generate_reports_dialog(self):
+        """Opens the multi-select dialog for generating packing lists and
+        stock exports in one pass."""
+        self.log.info("Opening Generate Reports dialog")
 
         # Validate that analysis has been run
         if self.mw.analysis_results_df is None or self.mw.analysis_results_df.empty:
@@ -536,49 +533,56 @@ class ActionsHandler(QObject):
             )
             return
 
-        # FIX: Use correct config keys
-        if report_type == "packing_lists":
-            config_key = "packing_list_configs"  # Correct key
-        elif report_type == "stock_exports":
-            config_key = "stock_export_configs"  # Correct key
-        else:
-            raise ValueError(f"Unknown report type: {report_type}")
+        packing_configs = fresh_config.get("packing_list_configs", [])
+        stock_configs = fresh_config.get("stock_export_configs", [])
 
-        report_configs = fresh_config.get(config_key, [])
-
-        if not report_configs:
+        if not packing_configs and not stock_configs:
             QMessageBox.information(
                 self.mw,
                 "No Reports Configured",
-                f"No {report_type.replace('_', ' ')} are configured for this client.\n\n"
-                f"Please configure them in Client Settings.",
+                "No packing lists or stock exports are configured for this client.\n\n"
+                "Please configure them in Client Settings.",
             )
             return
 
-        # Open selection dialog (new preview-enabled dialogs)
+        from gui.report_selection_dialog import GenerateReportsDialog
+
         analysis_df = self.mw.analysis_results_df
+        dialog = GenerateReportsDialog(
+            packing_configs,
+            stock_configs,
+            analysis_df,
+            self._apply_filters,
+            writeoff_handler=self.generate_writeoff_report,
+            parent=self.mw,
+        )
 
-        if report_type == "packing_lists":
-            from gui.report_selection_dialog import PackingListDialog
-
-            dialog = PackingListDialog(
-                report_configs, analysis_df, self._apply_filters, self.mw
-            )
-        else:
-            from gui.report_selection_dialog import StockExportDialog
-
-            dialog = StockExportDialog(
-                report_configs,
-                analysis_df,
-                self._apply_filters,
-                writeoff_handler=self.generate_writeoff_report,
-                parent=self.mw,
-            )
-
-        dialog.reportSelected.connect(
-            lambda rc: self._generate_single_report(report_type, rc, session_path)
+        dialog.reportsSelected.connect(
+            lambda batch: self._generate_reports(batch, session_path)
         )
         dialog.exec()
+
+    def _generate_reports(self, batch, session_path):
+        """Generate every report the dialog emitted.
+
+        One report failing must not cost the user the others -- that is the
+        whole point of generating them in one pass.
+        """
+        failures = []
+        for report_config in batch:
+            report_type = report_config.get("report_type")
+            try:
+                self._generate_single_report(report_type, report_config, session_path)
+            except Exception as exc:
+                self.log.exception(f"Failed to generate {report_config.get('name')}")
+                failures.append(f"{report_config.get('name', 'Unknown')}: {exc}")
+
+        if failures:
+            QMessageBox.warning(
+                self.mw,
+                "Some Reports Failed",
+                "These reports could not be generated:\n\n" + "\n".join(failures),
+            )
 
     def _apply_filters(self, df, filters):
         """Apply a report config's filters to a DataFrame.
@@ -727,6 +731,7 @@ class ActionsHandler(QObject):
                     report_name=report_name,
                     filters=filters,
                     exclude_skus=exclude_skus,
+                    columns=report_config.get("columns"),
                 )
 
                 self.log.info(f"Packing list XLSX created: {output_file}")

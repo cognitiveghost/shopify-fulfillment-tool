@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -389,6 +390,173 @@ class PackingListDialog(_BaseReportDialog):
             parent
         )
         self.setWindowTitle("Generate Packing List")
+
+
+_SECTION_HEADER_MARKER = "__section_header__"
+
+
+class GenerateReportsDialog(_BaseReportDialog):
+    """Multi-select dialog generating any number of packing lists and stock
+    exports in one pass.
+
+    Both kinds share one checkable list under non-selectable section header
+    rows, following the header-row pattern in column_config_dialog
+    (_CATEGORY_HEADER_MARKER): a row flagged Qt.NoItemFlags with a sentinel in
+    Qt.UserRole so it can't be checked or selected but still renders inline.
+    """
+
+    reportsSelected = Signal(list)
+
+    def __init__(self, packing_configs, stock_configs, analysis_df, apply_filters_fn,
+                 writeoff_handler=None, parent=None):
+        self._packing_configs = packing_configs or []
+        self._stock_configs = stock_configs or []
+        self._writeoff_handler = writeoff_handler
+        self._checked_count = 0
+        super().__init__(
+            "Generate Reports",
+            [],  # reports_config unused here -- _populate_list is overridden
+            analysis_df,
+            apply_filters_fn,
+            parent,
+        )
+        self.report_list.setCurrentRow(-1)
+
+    def _init_ui(self):
+        super()._init_ui()
+        self.footer_label = QLabel("0 selected")
+        self.layout().addWidget(self.footer_label)
+
+    def _add_extra_sections(self, layout):
+        """Add the Writeoff section, same as StockExportDialog."""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(sep)
+
+        writeoff_group = QGroupBox("Writeoff Report")
+        writeoff_layout = QVBoxLayout(writeoff_group)
+
+        self.writeoff_checkbox = QCheckBox("Include Packaging Materials in export (SKU Writeoff)")
+        self.writeoff_checkbox.setToolTip(
+            "When enabled, packaging materials (based on Internal Tags) will be\n"
+            "automatically added to the stock export as separate SKU lines.\n"
+            "Example: Orders with 'BOX' tag will add PKG-BOX-SMALL to the export."
+        )
+        writeoff_layout.addWidget(self.writeoff_checkbox)
+
+        if self._writeoff_handler:
+            self.writeoff_only_btn = QPushButton("Generate Writeoff Report Only")
+            self.writeoff_only_btn.setMinimumHeight(36)
+            theme = get_theme_manager().get_current_theme()
+            self.writeoff_only_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {theme.accent_orange};
+                    color: white;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 4px;
+                }}
+                QPushButton:hover {{ background-color: {theme.accent_orange}; }}
+                QPushButton:pressed {{ background-color: {theme.accent_orange}; }}
+            """)
+            self.writeoff_only_btn.clicked.connect(self._on_writeoff_only)
+            writeoff_layout.addWidget(self.writeoff_only_btn)
+
+        layout.addWidget(writeoff_group)
+
+    def _on_writeoff_only(self):
+        if self._writeoff_handler:
+            self._writeoff_handler()
+        self.accept()
+
+    def _populate_list(self):
+        """Fill the list with both kinds under section headers."""
+        self.report_list.clear()
+        self.generate_btn.setText("Generate Selected Reports")
+
+        for kind, title, configs in (
+            ("packing_lists", "PACKING LISTS", self._packing_configs),
+            ("stock_exports", "STOCK EXPORTS", self._stock_configs),
+        ):
+            header_item = QListWidgetItem(title)
+            header_item.setFlags(Qt.NoItemFlags)
+            header_item.setData(Qt.UserRole, _SECTION_HEADER_MARKER)
+            header_font = header_item.font()
+            header_font.setBold(True)
+            header_item.setFont(header_font)
+            header_item.setForeground(QColor(self.theme.text_secondary))
+            self.report_list.addItem(header_item)
+
+            for index, cfg in enumerate(configs):
+                name = cfg.get("name", "Unnamed Report")
+                filters = cfg.get("filters", [])
+                item = QListWidgetItem(name)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Unchecked)
+                item.setData(Qt.UserRole, (kind, index, cfg))
+                item.setToolTip(f"Filters: {len(filters)} active" if filters else "No filters")
+                self.report_list.addItem(item)
+
+        self.report_list.itemChanged.connect(self._on_item_changed)
+
+    def _on_report_selected(self, row):
+        """Selecting (not checking) a row updates the preview."""
+        if row < 0:
+            return
+        item = self.report_list.item(row)
+        data = item.data(Qt.UserRole)
+        if data == _SECTION_HEADER_MARKER:
+            return
+        _kind, _index, cfg = data
+        self._selected_config = cfg
+        self._update_preview(cfg)
+
+    def _on_item_changed(self, item):
+        data = item.data(Qt.UserRole)
+        if data == _SECTION_HEADER_MARKER:
+            return
+        self._checked_count = sum(
+            1
+            for i in range(self.report_list.count())
+            if self.report_list.item(i).data(Qt.UserRole) != _SECTION_HEADER_MARKER
+            and self.report_list.item(i).checkState() == Qt.Checked
+        )
+        self.footer_label.setText(f"{self._checked_count} selected")
+        self.generate_btn.setEnabled(self._checked_count > 0)
+
+    def set_checked(self, kind, index, checked):
+        """Checks/unchecks the row for (kind, index). Used by the UI and tests."""
+        for i in range(self.report_list.count()):
+            item = self.report_list.item(i)
+            data = item.data(Qt.UserRole)
+            if data != _SECTION_HEADER_MARKER and data[0] == kind and data[1] == index:
+                item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+                return
+
+    @property
+    def generate_button(self):
+        return self.generate_btn
+
+    def _on_generate(self):
+        """Emit every checked report, in list order, with its report_type."""
+        batch = []
+        for i in range(self.report_list.count()):
+            item = self.report_list.item(i)
+            data = item.data(Qt.UserRole)
+            if data == _SECTION_HEADER_MARKER or item.checkState() != Qt.Checked:
+                continue
+            kind, _index, cfg = data
+            entry = {**cfg, "report_type": kind}
+            if kind == "stock_exports" and hasattr(self, "writeoff_checkbox"):
+                entry["apply_writeoff"] = self.writeoff_checkbox.isChecked()
+            batch.append(entry)
+
+        if not batch:
+            return
+
+        self.reportsSelected.emit(batch)
+        self.accept()
 
 
 class StockExportDialog(_BaseReportDialog):

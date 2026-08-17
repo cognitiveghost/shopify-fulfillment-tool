@@ -233,10 +233,8 @@ class MainWindow(QMainWindow):
 
                 # Disable report buttons until new analysis
                 self.run_analysis_button.setEnabled(False)
-                if hasattr(self, "packing_list_button"):
-                    self.packing_list_button.setEnabled(False)
-                if hasattr(self, "stock_export_button"):
-                    self.stock_export_button.setEnabled(False)
+                if hasattr(self, "generate_reports_button"):
+                    self.generate_reports_button.setEnabled(False)
                 if hasattr(self, "add_product_button"):
                     self.add_product_button.setEnabled(False)
 
@@ -315,11 +313,8 @@ class MainWindow(QMainWindow):
         )
 
         # Reports
-        self.packing_list_button.clicked.connect(
-            lambda: self.actions_handler.open_report_selection_dialog("packing_lists")
-        )
-        self.stock_export_button.clicked.connect(
-            lambda: self.actions_handler.open_report_selection_dialog("stock_exports")
+        self.generate_reports_button.clicked.connect(
+            self.actions_handler.open_generate_reports_dialog
         )
 
         # Table interactions
@@ -755,18 +750,14 @@ class MainWindow(QMainWindow):
         reports_enabled = has_session and has_analysis
 
         # Tab 1 buttons
-        if hasattr(self, "packing_list_button"):
-            self.packing_list_button.setEnabled(reports_enabled)
-        if hasattr(self, "stock_export_button"):
-            self.stock_export_button.setEnabled(reports_enabled)
+        if hasattr(self, "generate_reports_button"):
+            self.generate_reports_button.setEnabled(reports_enabled)
         if hasattr(self, "add_product_button"):
             self.add_product_button.setEnabled(has_analysis)
 
         # Tab 2 buttons
-        if hasattr(self, "packing_list_button_tab2"):
-            self.packing_list_button_tab2.setEnabled(reports_enabled)
-        if hasattr(self, "stock_export_button_tab2"):
-            self.stock_export_button_tab2.setEnabled(reports_enabled)
+        if hasattr(self, "generate_reports_button_tab2"):
+            self.generate_reports_button_tab2.setEnabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
             self.add_product_button_tab2.setEnabled(has_analysis)
         if hasattr(self, "configure_columns_button_tab2"):
