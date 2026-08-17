@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 
 from .csv_utils import normalize_sku_for_matching, order_number_sort_key
+from shopify_tool.report_filters import apply_report_filters
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -101,29 +102,13 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List", fi
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
 
-        # Build the query string to filter the DataFrame
-        query_parts = ["Order_Fulfillment_Status == 'Fulfillable'"]
-        if filters:
-            for f in filters:
-                field = f.get("field")
-                operator = f.get("operator")
-                value = f.get("value")
-
-                if not all([field, operator, value is not None]):
-                    logger.warning(f"Skipping invalid filter: {f}")
-                    continue
-
-                # Correctly quote string values for the query
-                if isinstance(value, str):
-                    formatted_value = repr(value)
-                else:
-                    # For lists (for 'in'/'not in') and numbers, no extra quotes are needed.
-                    formatted_value = value
-
-                query_parts.append(f"`{field}` {operator} {formatted_value}")
-
-        full_query = " & ".join(query_parts)
-        filtered_orders = analysis_df.query(full_query).copy()
+        # Packing lists only ever contain fulfillable orders; the report's own
+        # filters narrow it further. Both go through the shared evaluator so
+        # the XLSX, the JSON and the dialog preview cannot disagree.
+        fulfillable = analysis_df[
+            analysis_df["Order_Fulfillment_Status"] == "Fulfillable"
+        ]
+        filtered_orders = apply_report_filters(fulfillable, filters)
 
         # Exclude specified SKUs if any are provided
         if exclude_skus and not filtered_orders.empty:

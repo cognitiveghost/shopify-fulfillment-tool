@@ -126,3 +126,50 @@ class TestLotExpansion:
         result = _read_output(out)
         assert result.iloc[0]["Lot_Expiry"] in ("", None) or pd.isna(result.iloc[0]["Lot_Expiry"])
         assert result.iloc[0]["Lot_Batch"] in ("", None) or pd.isna(result.iloc[0]["Lot_Batch"])
+
+
+def test_not_in_filter_excludes_the_listed_skus(tmp_path):
+    """Regression: the old .query() builder wrote every row here.
+
+    "SKU not in AB-01,CD-02" against three rows must leave exactly EF-03.
+    Before the shared evaluator this produced a 3-row file -- a picking list
+    containing both SKUs the config excluded, reported as "Report saved".
+    """
+    df = pd.DataFrame({
+        "Order_Number": ["#1001", "#1002", "#1003"],
+        "SKU": ["AB-01", "CD-02", "EF-03"],
+        "Product_Name": ["Widget", "Gadget", "Doohickey"],
+        "Warehouse_Name": ["Widget", "Gadget", "Doohickey"],
+        "Quantity": [1, 2, 3],
+        "Shipping_Provider": ["DHL", "DPD", "DHL"],
+        "Destination_Country": ["DE", "FR", "DE"],
+        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
+    })
+    out = tmp_path / "notin.xlsx"
+
+    create_packing_list(df, str(out), "notin",
+                        filters=[{"field": "SKU", "operator": "not in", "value": "AB-01,CD-02"}])
+
+    written = pd.read_excel(out)
+    assert written["SKU"].tolist() == ["EF-03"]
+
+
+def test_contains_filter_writes_the_matching_row(tmp_path):
+    """"contains" used to raise SyntaxError -- it is not valid pandas query
+    syntax -- so the report failed outright."""
+    df = pd.DataFrame({
+        "Order_Number": ["#1001", "#1002"],
+        "SKU": ["AB-01", "CD-02"],
+        "Product_Name": ["Widget", "Gadget"],
+        "Warehouse_Name": ["Widget", "Gadget"],
+        "Quantity": [1, 2],
+        "Shipping_Provider": ["DHL", "DPD"],
+        "Destination_Country": ["DE", "FR"],
+        "Order_Fulfillment_Status": ["Fulfillable"] * 2,
+    })
+    out = tmp_path / "contains.xlsx"
+
+    create_packing_list(df, str(out), "contains",
+                        filters=[{"field": "SKU", "operator": "contains", "value": "AB"}])
+
+    assert pd.read_excel(out)["SKU"].tolist() == ["AB-01"]
