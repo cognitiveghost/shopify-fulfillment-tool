@@ -581,7 +581,13 @@ class ActionsHandler(QObject):
         dialog.exec()
 
     def _apply_filters(self, df, filters):
-        """Apply filters from report config to DataFrame.
+        """Apply a report config's filters to a DataFrame.
+
+        Kept as a method because report_selection_dialog receives it as
+        apply_filters_fn. The logic lives in shopify_tool.report_filters so
+        the preview, the JSON and both file writers cannot drift apart --
+        they used to, and the preview could report a different number of
+        orders than the file contained.
 
         Args:
             df: DataFrame to filter
@@ -590,37 +596,9 @@ class ActionsHandler(QObject):
         Returns:
             Filtered DataFrame
         """
-        filtered_df = df.copy()
+        from shopify_tool.report_filters import apply_report_filters
 
-        for filt in filters:
-            field = filt.get("field")
-            operator = filt.get("operator")
-            value = filt.get("value")
-
-            if not field or field not in filtered_df.columns:
-                continue
-
-            try:
-                if operator == "==":
-                    filtered_df = filtered_df[filtered_df[field] == value]
-                elif operator == "!=":
-                    filtered_df = filtered_df[filtered_df[field] != value]
-                elif operator == "in":
-                    values = [v.strip() for v in value.split(",")]
-                    filtered_df = filtered_df[filtered_df[field].isin(values)]
-                elif operator == "not in":
-                    values = [v.strip() for v in value.split(",")]
-                    filtered_df = filtered_df[~filtered_df[field].isin(values)]
-                elif operator == "contains":
-                    filtered_df = filtered_df[
-                        filtered_df[field].astype(str).str.contains(value, na=False)
-                    ]
-            except Exception as e:
-                self.log.warning(
-                    f"Failed to apply filter {field} {operator} {value}: {e}"
-                )
-
-        return filtered_df
+        return apply_report_filters(df, filters)
 
     def _create_analysis_json(self, df):
         """Convert DataFrame to packing list JSON format for Packing Tool.
