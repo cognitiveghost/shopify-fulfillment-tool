@@ -4,8 +4,9 @@ from datetime import datetime
 
 import pandas as pd
 
-from .csv_utils import normalize_sku_for_matching, order_number_sort_key
 from shopify_tool.report_filters import apply_report_filters
+
+from .csv_utils import normalize_sku_for_matching, order_number_sort_key
 
 logger = logging.getLogger("ShopifyToolLogger")
 

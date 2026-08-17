@@ -19,7 +19,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from gui.settings.fields import REPORT_FILTER_OPERATORS, add_filter_row, report_filter_fields
+from gui.settings.fields import (
+    REPORT_FILTER_OPERATORS,
+    add_filter_row,
+    report_filter_fields,
+)
 from gui.theme_manager import set_button_role
 from shopify_tool.report_filters import normalize_operator
 
