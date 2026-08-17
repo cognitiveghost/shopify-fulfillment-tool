@@ -191,3 +191,15 @@ def test_tag_filter_matches_an_unserialized_tag_list():
     assert proxy.rowCount() == 1  # must not raise, and must not filter the row out
     proxy.set_tag_filter("MISSING")
     assert proxy.rowCount() == 0
+
+
+def test_tag_filter_matches_the_normal_json_string_form():
+    """The list branch above is the rare one; analysis.py writes a JSON string."""
+    proxy = FulfillmentFilterProxy()
+    proxy.setSourceModel(
+        PandasModel(pd.DataFrame({"SKU": ["A1"], "Internal_Tags": ['["URGENT", "FRAGILE"]']}))
+    )
+    proxy.set_tag_filter("URGENT")
+    assert proxy.rowCount() == 1
+    proxy.set_tag_filter("MISSING")
+    assert proxy.rowCount() == 0

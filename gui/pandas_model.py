@@ -62,7 +62,9 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
                 # Internal_Tags is normally a JSON string, but is sometimes stored
                 # unserialized (tag_manager.py:78, barcode_processor.py:82). json.dumps,
                 # not str(): repr uses single quotes, so the double-quoted needle misses.
-                hay = json.dumps(val)
+                # default=str: tag_manager returns the list verbatim, so a
+                # non-string element would otherwise raise across the Qt boundary.
+                hay = json.dumps(val, default=str)
             else:
                 hay = "" if pd.isna(val) else str(val)
             if self._tag_needle not in hay:
@@ -104,8 +106,9 @@ def cell_display_text(value) -> str:
     The list check MUST come before ``pd.isna()``: ``Lot_Details`` holds real
     Python lists, and ``pd.isna()`` on a list returns an *array*, so a plain
     ``if`` on it raises "truth value of an array is ambiguous". Every caller
-    that renders or searches cell text must go through here — a private copy
-    is how that crash got reintroduced in the filter proxy.
+    that renders cell text must go through here, and every caller that
+    searches it through :func:`cell_search_text` (which delegates here) — a
+    private copy is how that crash got reintroduced in the filter proxy.
 
     Note the wording is column-agnostic: *any* list-valued cell renders as
     "N lots". ``Lot_Details`` is the only such column today.
