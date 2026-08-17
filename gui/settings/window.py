@@ -22,10 +22,9 @@ from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.settings.general import GeneralPage
 from gui.settings.mappings import OrdersMappingPage, StockMappingPage
-from gui.settings.packing_lists import PackingListsPage
+from gui.settings.reports import ReportsPage
 from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
-from gui.settings.stock_exports import StockExportsPage
 from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_font, set_button_role
 from gui.worker import Worker
@@ -147,12 +146,12 @@ class SettingsWindow(QDialog):
             "Rules",
         )
         self._add_page(
-            PackingListsPage(self.config_data.get("packing_list_configs", []), self.analysis_df),
-            "Packing Lists",
-        )
-        self._add_page(
-            StockExportsPage(self.config_data.get("stock_export_configs", []), self.analysis_df),
-            "Stock Exports",
+            ReportsPage(
+                self.config_data.get("packing_list_configs", []),
+                self.config_data.get("stock_export_configs", []),
+                self.analysis_df,
+            ),
+            "Reports",
         )
         self._add_page(
             OrdersMappingPage(

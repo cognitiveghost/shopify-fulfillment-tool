@@ -146,7 +146,7 @@ def settings_fixture_config():
             {
                 "name": "Daily",
                 "output_filename": "daily.csv",
-                "filters": [{"field": "Tags", "operator": "==", "value": "hot"}],
+                "filters": [{"field": "Tags", "operator": "equals", "value": "hot"}],
             }
         ],
         # v2 mappings are {csv_column: internal_name}. Every required internal

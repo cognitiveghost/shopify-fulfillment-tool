@@ -22,6 +22,7 @@ FILTERABLE_COLUMNS: list[str] = [
     "System_note",
     "Status_Note",
     "Total Price",
+    "Quantity",
 ]
 
 FILTER_OPERATORS: list[str] = ["==", "!=", "in", "not in", "contains"]
@@ -67,6 +68,27 @@ ACTION_TYPES: list[str] = [
 # editor flags it instead. See
 # docs/superpowers/specs/2026-08-14-rule-actions-internal-tags-design.md.
 LEGACY_ACTION_TYPES: list[str] = ["ADD_TAG", "ADD_ORDER_TAG", "SET_MULTI_TAGS"]
+
+
+# Report filters use the rule engine's vocabulary. The old five-symbol list
+# (==, !=, in, not in, contains) is still understood when reading saved
+# configs -- see shopify_tool/report_filters.LEGACY_OPERATOR_ALIASES -- but
+# new configs are written with these names.
+REPORT_FILTER_OPERATORS: list[str] = list(CONDITION_OPERATORS)
+
+
+def report_filter_fields(analysis_df) -> list[str]:
+    """Columns offered in a report filter's field dropdown and column picker.
+
+    Sourced from the analysis DataFrame so Internal_Tags and any additional
+    CSV columns the client configured are filterable, falling back to the
+    static list when no analysis has been run yet. Always sorted, so the
+    column picker's order -- and therefore a saved config's column order --
+    does not depend on which branch produced the list.
+    """
+    if analysis_df is not None and not analysis_df.empty:
+        return sorted(analysis_df.columns.tolist())
+    return sorted(FILTERABLE_COLUMNS)
 
 
 def _delete_filter_row(row_widget, ref_list, ref_dict):

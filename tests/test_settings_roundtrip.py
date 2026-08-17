@@ -19,7 +19,7 @@ from gui.settings.window import SettingsWindow
 
 def test_window_registers_every_page(window):
     assert list(window._page_index_by_name) == [
-        "General", "Rules", "Packing Lists", "Stock Exports",
+        "General", "Rules", "Reports",
         "Orders Mapping", "Stock Mapping",
         "Sets", "Weight", "Tag Categories", "Column Config",
     ]
