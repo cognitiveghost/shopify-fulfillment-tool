@@ -37,13 +37,17 @@ query_parts.append(f"`{field}` {operator} {formatted_value}")
 `gui/settings/fields.py:FILTER_OPERATORS` offers. Behaviour of each, measured
 against a 3-row fixture:
 
-| operator | packing-list XLSX | stock export | severity |
+| operator | packing-list XLSX | stock export | what the user sees |
 |---|---|---|---|
 | `==` | correct | correct | — |
 | `!=` | correct | correct | — |
-| `in` | **no file written**, no error surfaced | no file | silent no-op |
-| `not in` | **all 3 rows written**, including both SKUs that should have been excluded | same builder, same defect | **silent wrong data** |
-| `contains` | `SyntaxError: invalid syntax`, caught and logged, no file | no file | silent failure |
+| `in` | **no file written** | no file | **"Report saved: …" in the status bar.** `create_packing_list` returns early after logging "No orders found matching the criteria", and `_generate_single_report` reports success regardless — a false success for a file that does not exist |
+| `not in` | **all 3 rows written**, including both SKUs that should have been excluded | same builder, same defect | **"Report saved: …"** — and a file that looks entirely normal while containing rows the config excluded |
+| `contains` | `SyntaxError`, re-raised | no file | an error dialog — the one failure mode that is honest |
+
+Severity order is the reverse of what it looks like. `contains` fails loudly
+and is therefore the least dangerous. `not in` is the worst: a plausible-looking
+picking list, a success message, and wrong contents.
 
 The `not in` case is the serious one: a warehouse worker is handed a picking
 list containing items the configuration explicitly excluded, with nothing
