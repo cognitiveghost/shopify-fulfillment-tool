@@ -844,6 +844,22 @@ def _run_analysis_and_rules(
     return final_df, summary_present_df, summary_missing_df, stats
 
 
+def _merge_fulfillment_history(
+    history_df: pd.DataFrame, newly_fulfilled: pd.DataFrame
+) -> pd.DataFrame:
+    """Merge newly fulfilled orders into history, keeping the ORIGINAL date.
+
+    keep="first" is load-bearing. `newly_fulfilled` is concatenated after
+    `history_df` and carries today's date, so keep="last" would overwrite
+    each order's original Execution_Date on every re-analysis -- destroying
+    the only record of when it was first fulfilled, and silently clearing
+    its "Repeat" flag.
+    """
+    return pd.concat([history_df, newly_fulfilled]).drop_duplicates(
+        subset=["Order_Number"], keep="first"
+    )
+
+
 def _save_results_and_reports(
     final_df: pd.DataFrame,
     summary_present_df: pd.DataFrame,
@@ -1044,9 +1060,7 @@ def _save_results_and_reports(
 
     if not newly_fulfilled.empty:
         newly_fulfilled["Execution_Date"] = datetime.now().astimezone().strftime("%Y-%m-%d")
-        updated_history = pd.concat([history_df, newly_fulfilled]).drop_duplicates(
-            subset=["Order_Number"], keep="last"
-        )
+        updated_history = _merge_fulfillment_history(history_df, newly_fulfilled)
 
         # Determine history path (same logic as load)
         if profile_manager and client_id:
