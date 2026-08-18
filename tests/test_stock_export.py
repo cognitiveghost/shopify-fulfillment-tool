@@ -296,3 +296,26 @@ class TestQuantityRounding:
         result = _read(out)
         assert "PKG-TAPE" not in set(result.iloc[:, COL_SKU])
         assert (result.iloc[:, COL_QTY] > 0).all()
+
+
+def test_not_in_filter_excludes_the_listed_skus(tmp_path):
+    """stock_export.py carried a verbatim copy of the packing-list query
+    builder, so it carried the same defect."""
+    df = pd.DataFrame({
+        "Order_Number": ["#1001", "#1002", "#1003"],
+        "SKU": ["AB-01", "CD-02", "EF-03"],
+        "Product_Name": ["Widget", "Gadget", "Doohickey"],
+        "Quantity": [1, 2, 3],
+        "Final_Stock": [10, 20, 30],
+        "Shipping_Provider": ["DHL", "DPD", "DHL"],
+        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
+    })
+    out = tmp_path / "notin.xls"
+
+    create_stock_export(df, str(out),
+                        filters=[{"field": "SKU", "operator": "not in", "value": "AB-01,CD-02"}])
+
+    written = pd.read_excel(out)
+    assert "AB-01" not in written.to_string()
+    assert "CD-02" not in written.to_string()
+    assert "EF-03" in written.to_string()

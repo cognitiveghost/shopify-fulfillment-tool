@@ -2,6 +2,8 @@ import logging
 
 import pandas as pd
 
+from shopify_tool.report_filters import apply_report_filters, fulfillable_only
+
 logger = logging.getLogger("ShopifyToolLogger")
 
 # Canonical column layout for the warehouse ERP's column auto-detection.
@@ -185,29 +187,10 @@ def create_stock_export(
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
 
-        # Build the query string to filter the DataFrame
-        query_parts = ["Order_Fulfillment_Status == 'Fulfillable'"]
-        if filters:
-            for f in filters:
-                field = f.get("field")
-                operator = f.get("operator")
-                value = f.get("value")
-
-                if not all([field, operator, value is not None]):
-                    logger.warning(f"Skipping invalid filter: {f}")
-                    continue
-
-                # Correctly quote string values for the query
-                if isinstance(value, str):
-                    formatted_value = repr(value)
-                else:
-                    # For lists (for 'in'/'not in') and numbers, no extra quotes are needed.
-                    formatted_value = value
-
-                query_parts.append(f"`{field}` {operator} {formatted_value}")
-
-        full_query = " & ".join(query_parts)
-        filtered_items = analysis_df.query(full_query).copy()
+        # Same shared evaluator as the packing-list writer -- these two used
+        # to hold byte-identical copies of a query-string builder, and so
+        # shared its defects.
+        filtered_items = apply_report_filters(fulfillable_only(analysis_df), filters)
 
         # Detect whether lot tracking data is present
         has_lot_details = (

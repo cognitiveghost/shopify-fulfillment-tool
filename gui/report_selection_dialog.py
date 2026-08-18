@@ -1,4 +1,5 @@
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -15,186 +16,6 @@ from PySide6.QtWidgets import (
 )
 
 from gui.theme_manager import font_css, get_theme_manager
-
-
-class ReportSelectionDialog(QDialog):
-    """A dialog that dynamically creates buttons for selecting a pre-configured report.
-
-    This dialog is populated with a button for each report found in the
-    application's configuration file for a given report type (e.g.,
-    'packing_lists' or 'stock_exports'). When the user clicks a button, the
-    dialog emits a signal containing the configuration for that specific
-    report and then closes.
-
-    Signals:
-        reportSelected (dict): Emitted when a report button is clicked,
-                               carrying the configuration dictionary for that
-                               report.
-    """
-
-    # Signal that emits the selected report configuration when a button is clicked
-    reportSelected = Signal(dict)
-
-    def __init__(self, report_type, reports_config, parent=None):
-        """Initializes the ReportSelectionDialog.
-
-        Args:
-            report_type (str): The type of reports to display (e.g.,
-                "packing_lists"). Used for the window title.
-            reports_config (list[dict]): A list of report configuration
-                dictionaries, each used to create a button.
-            parent (QWidget, optional): The parent widget. Defaults to None.
-        """
-        super().__init__(parent)
-
-        self.setWindowTitle(f"Select {report_type.replace('_', ' ').title()}")
-        self.setMinimumWidth(400)
-        self.setMinimumHeight(300)
-
-        self.report_type = report_type  # Store report type
-        layout = QVBoxLayout(self)
-
-        # Add writeoff checkbox for stock_exports
-        if report_type == "stock_exports":
-            self.writeoff_checkbox = QCheckBox("Include Packaging Materials (SKU Writeoff)")
-            self.writeoff_checkbox.setToolTip(
-                "When enabled, packaging materials (based on Internal Tags) will be\n"
-                "automatically added to the stock export as separate SKU lines.\n"
-                "Example: Orders with 'BOX' tag will add PKG-BOX-SMALL to the export."
-            )
-            self.writeoff_checkbox.setChecked(False)
-            layout.addWidget(self.writeoff_checkbox)
-
-            # Add separator line
-            line = QFrame()
-            line.setFrameShape(QFrame.HLine)
-            line.setFrameShadow(QFrame.Sunken)
-            layout.addWidget(line)
-
-        if not reports_config:
-            no_reports_label = QLabel("No reports configured for this type.")
-            theme = get_theme_manager().get_current_theme()
-            no_reports_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; padding: 20px;")
-            layout.addWidget(no_reports_label)
-        else:
-            for report_config in reports_config:
-                # Create a button for each report with tooltip
-                button = self._create_report_button(report_config)
-                layout.addWidget(button)
-
-        layout.addStretch()
-
-    def _create_report_button(self, report_config):
-        """Create a button for a single report with tooltip showing filters.
-
-        Args:
-            report_config (dict): Report configuration dictionary.
-
-        Returns:
-            QPushButton: Button for selecting this report.
-        """
-        button_text = report_config.get("name", "Unknown Report")
-        button = QPushButton(button_text)
-        button.clicked.connect(lambda checked=False, rc=report_config: self.on_report_button_clicked(rc))
-        button.setMinimumHeight(40)
-
-        # Create tooltip with filters information
-        tooltip = self._create_tooltip_text(report_config)
-        button.setToolTip(tooltip)
-
-        theme = get_theme_manager().get_current_theme()
-        button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {theme.accent_blue};
-                color: white;
-                padding: 10px;
-                {font_css('body', bold=True)}
-                text-align: left;
-                border: none;
-                border-radius: 4px;
-            }}
-            QPushButton:hover {{ background-color: {theme.button_hover_light}; }}
-            QPushButton:pressed {{ background-color: {theme.button_hover_light}; }}
-        """)
-
-        return button
-
-    def _create_tooltip_text(self, report_config):
-        """Create tooltip text showing report filters.
-
-        Args:
-            report_config (dict): Report configuration dictionary.
-
-        Returns:
-            str: Formatted tooltip text with filters.
-        """
-        tooltip_lines = [f"<b>{report_config.get('name', 'Unknown Report')}</b>", ""]
-
-        filters = report_config.get("filters", {})
-        if filters:
-            tooltip_lines.append("<b>Applied Filters:</b>")
-
-            # Handle both dict and list formats for filters
-            if isinstance(filters, dict):
-                # Dictionary format: {key: value}
-                for filter_key, filter_value in filters.items():
-                    filter_text = self._format_filter(filter_key, filter_value)
-                    tooltip_lines.append(f"• {filter_text}")
-            elif isinstance(filters, list):
-                # List format: [{"field": "key", "value": "val"}, ...]
-                for filter_item in filters:
-                    if isinstance(filter_item, dict):
-                        field = filter_item.get("field", "Unknown")
-                        value = filter_item.get("value", "")
-                        filter_text = self._format_filter(field, value)
-                        tooltip_lines.append(f"• {filter_text}")
-            else:
-                # Unknown format - display as string
-                tooltip_lines.append(f"• {filters!s}")
-        else:
-            tooltip_lines.append("<i>No filters (includes all data)</i>")
-
-        return "<br>".join(tooltip_lines)
-
-    def _format_filter(self, filter_key, filter_value):
-        """Format a filter for display.
-
-        Args:
-            filter_key (str): The filter field name.
-            filter_value: The filter value (can be str, list, etc.).
-
-        Returns:
-            str: Formatted filter string.
-        """
-        # Convert key to more readable format
-        readable_key = filter_key.replace("_", " ").title()
-
-        # Format value
-        if isinstance(filter_value, list):
-            if len(filter_value) == 1:
-                return f"{readable_key}: {filter_value[0]}"
-            else:
-                return f"{readable_key}: {', '.join(str(v) for v in filter_value)}"
-        else:
-            return f"{readable_key}: {filter_value}"
-
-    @Slot(dict)
-    def on_report_button_clicked(self, report_config):
-        """Handles the click of any report button.
-
-        Emits the `reportSelected` signal with the configuration of the
-        clicked report and then closes the dialog.
-
-        Args:
-            report_config (dict): The configuration dictionary associated
-                with the button that was clicked.
-        """
-        # Inject writeoff setting into report_config if checkbox exists
-        if hasattr(self, 'writeoff_checkbox'):
-            report_config["apply_writeoff"] = self.writeoff_checkbox.isChecked()
-
-        self.reportSelected.emit(report_config)
-        self.accept()
 
 
 class _BaseReportDialog(QDialog):
@@ -377,47 +198,43 @@ class _BaseReportDialog(QDialog):
         self.accept()
 
 
-class PackingListDialog(_BaseReportDialog):
-    """Two-column dialog for selecting and previewing packing list reports."""
-
-    def __init__(self, reports_config, analysis_df, apply_filters_fn, parent=None):
-        super().__init__(
-            "Generate Packing List",
-            reports_config,
-            analysis_df,
-            apply_filters_fn,
-            parent
-        )
-        self.setWindowTitle("Generate Packing List")
+_SECTION_HEADER_MARKER = "__section_header__"
 
 
-class StockExportDialog(_BaseReportDialog):
-    """Two-column dialog for selecting and previewing stock export reports.
+class GenerateReportsDialog(_BaseReportDialog):
+    """Multi-select dialog generating any number of packing lists and stock
+    exports in one pass.
 
-    Includes an integrated Writeoff Report section replacing the old standalone button.
+    Both kinds share one checkable list under non-selectable section header
+    rows, following the header-row pattern in column_config_dialog
+    (_CATEGORY_HEADER_MARKER): a row flagged Qt.NoItemFlags with a sentinel in
+    Qt.UserRole so it can't be checked or selected but still renders inline.
     """
 
-    writeoff_requested = Signal()  # emitted when "Generate Writeoff Only" is clicked
+    reportsSelected = Signal(list)
 
-    def __init__(self, reports_config, analysis_df, apply_filters_fn,
+    def __init__(self, packing_configs, stock_configs, analysis_df, apply_filters_fn,
                  writeoff_handler=None, parent=None):
-        """
-        Args:
-            writeoff_handler: Callable to call when "Generate Writeoff Only" is clicked.
-                              If None, the button is hidden.
-        """
+        self._packing_configs = packing_configs or []
+        self._stock_configs = stock_configs or []
         self._writeoff_handler = writeoff_handler
+        self._checked_count = 0
         super().__init__(
-            "Generate Stock Export",
-            reports_config,
+            "Generate Reports",
+            [],  # reports_config unused here -- _populate_list is overridden
             analysis_df,
             apply_filters_fn,
-            parent
+            parent,
         )
-        self.setWindowTitle("Generate Stock Export")
+        self.report_list.setCurrentRow(-1)
+
+    def _init_ui(self):
+        super()._init_ui()
+        self.footer_label = QLabel("0 selected")
+        self.layout().addWidget(self.footer_label)
 
     def _add_extra_sections(self, layout):
-        """Add the Writeoff section between preview and generate button."""
+        """Add the Writeoff section, same as StockExportDialog."""
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
         sep.setFrameShadow(QFrame.Sunken)
@@ -455,13 +272,94 @@ class StockExportDialog(_BaseReportDialog):
         layout.addWidget(writeoff_group)
 
     def _on_writeoff_only(self):
-        """Call writeoff handler and close the dialog."""
         if self._writeoff_handler:
             self._writeoff_handler()
         self.accept()
 
-    def _build_emit_config(self):
-        """Include apply_writeoff flag in the emitted config."""
-        cfg = dict(self._selected_config)
-        cfg["apply_writeoff"] = self.writeoff_checkbox.isChecked() if hasattr(self, 'writeoff_checkbox') else False
-        return cfg
+    def _populate_list(self):
+        """Fill the list with both kinds under section headers."""
+        self.report_list.clear()
+        self.generate_btn.setText("Generate Selected Reports")
+
+        for kind, title, configs in (
+            ("packing_lists", "PACKING LISTS", self._packing_configs),
+            ("stock_exports", "STOCK EXPORTS", self._stock_configs),
+        ):
+            header_item = QListWidgetItem(title)
+            header_item.setFlags(Qt.NoItemFlags)
+            header_item.setData(Qt.UserRole, _SECTION_HEADER_MARKER)
+            header_font = header_item.font()
+            header_font.setBold(True)
+            header_item.setFont(header_font)
+            header_item.setForeground(QColor(self.theme.text_secondary))
+            self.report_list.addItem(header_item)
+
+            for index, cfg in enumerate(configs):
+                name = cfg.get("name", "Unnamed Report")
+                filters = cfg.get("filters", [])
+                item = QListWidgetItem(name)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Unchecked)
+                item.setData(Qt.UserRole, (kind, index, cfg))
+                item.setToolTip(f"Filters: {len(filters)} active" if filters else "No filters")
+                self.report_list.addItem(item)
+
+        self.report_list.itemChanged.connect(self._on_item_changed)
+
+    def _on_report_selected(self, row):
+        """Selecting (not checking) a row updates the preview."""
+        if row < 0:
+            return
+        item = self.report_list.item(row)
+        data = item.data(Qt.UserRole)
+        if data == _SECTION_HEADER_MARKER:
+            return
+        _kind, _index, cfg = data
+        self._selected_config = cfg
+        self._update_preview(cfg)
+
+    def _on_item_changed(self, item):
+        data = item.data(Qt.UserRole)
+        if data == _SECTION_HEADER_MARKER:
+            return
+        self._checked_count = sum(
+            1
+            for i in range(self.report_list.count())
+            if self.report_list.item(i).data(Qt.UserRole) != _SECTION_HEADER_MARKER
+            and self.report_list.item(i).checkState() == Qt.Checked
+        )
+        self.footer_label.setText(f"{self._checked_count} selected")
+        self.generate_btn.setEnabled(self._checked_count > 0)
+
+    def set_checked(self, kind, index, checked):
+        """Checks/unchecks the row for (kind, index). Used by the UI and tests."""
+        for i in range(self.report_list.count()):
+            item = self.report_list.item(i)
+            data = item.data(Qt.UserRole)
+            if data != _SECTION_HEADER_MARKER and data[0] == kind and data[1] == index:
+                item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+                return
+
+    @property
+    def generate_button(self):
+        return self.generate_btn
+
+    def _on_generate(self):
+        """Emit every checked report, in list order, with its report_type."""
+        batch = []
+        for i in range(self.report_list.count()):
+            item = self.report_list.item(i)
+            data = item.data(Qt.UserRole)
+            if data == _SECTION_HEADER_MARKER or item.checkState() != Qt.Checked:
+                continue
+            kind, _index, cfg = data
+            entry = {**cfg, "report_type": kind}
+            if kind == "stock_exports" and hasattr(self, "writeoff_checkbox"):
+                entry["apply_writeoff"] = self.writeoff_checkbox.isChecked()
+            batch.append(entry)
+
+        if not batch:
+            return
+
+        self.reportsSelected.emit(batch)
+        self.accept()
