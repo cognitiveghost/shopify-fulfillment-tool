@@ -57,7 +57,7 @@ class SettingsWindow(QDialog):
     SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
         ("Data", ["General", "Orders Mapping", "Stock Mapping", "Column Config"]),
         ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
-        ("Output", ["Packing Lists", "Stock Exports", "SKU Labels"]),
+        ("Output", ["Reports"]),
         ("Organization", ["Tag Categories"]),
     ]
 
