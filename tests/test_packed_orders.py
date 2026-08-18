@@ -192,3 +192,76 @@ class TestUnionHistoryWithPacked:
         out = union_history_with_packed(empty, empty)
         assert out.empty
         assert list(out.columns) == ["Order_Number", "Execution_Date"]
+
+
+class TestMalformedCrossToolDataNeverAborts:
+    """The contract is 'never raises'. These shapes all come from a file the
+    OTHER tool writes, and each one used to escape to run_full_analysis's
+    outer handler and fail the whole analysis."""
+
+    def _load(self, tmp_path, block):
+        pm = _write_index(tmp_path, "ALMADERM", [
+            {"session_name": "s", "packing_progress": {"ALL": block}}
+        ])
+        return load_packed_orders(pm, "ALMADERM")
+
+    def test_completed_orders_not_a_list(self, tmp_path):
+        out = self._load(tmp_path, {"updated_at": "2026-07-01T10:00:00+03:00",
+                                    "completed_orders": 5})
+        assert out.empty
+
+    def test_completed_orders_is_a_bare_string(self, tmp_path):
+        """A string is iterable: this used to yield one row per character."""
+        out = self._load(tmp_path, {"updated_at": "2026-07-01T10:00:00+03:00",
+                                    "completed_orders": "#A"})
+        assert out.empty
+
+    def test_timestamp_is_a_list(self, tmp_path):
+        out = self._load(tmp_path, {"updated_at": ["2026-07-01", "2026-07-02"],
+                                    "completed_orders": ["#A"]})
+        assert out.empty
+
+    def test_timestamp_is_a_dict(self, tmp_path):
+        out = self._load(tmp_path, {"updated_at": {"a": 1},
+                                    "completed_orders": ["#A"]})
+        assert out.empty
+
+    def test_non_string_order_numbers_are_dropped(self, tmp_path):
+        out = self._load(tmp_path, {"updated_at": "2026-07-01T10:00:00+03:00",
+                                    "completed_orders": ["#A", None, 7, "#B"]})
+        assert set(out["Order_Number"]) == {"#A", "#B"}
+
+
+class TestUnionToleratesLegacyHistory:
+    def test_history_without_execution_date_is_returned_untouched(self):
+        """analysis._detect_repeated_orders has its own branch for this shape.
+        Unioning here raised KeyError and aborted the analysis instead."""
+        history = pd.DataFrame({"Order_Number": ["#A"]})
+        packed = pd.DataFrame({"Order_Number": ["#B"], "Execution_Date": ["2026-07-01"]})
+
+        out = union_history_with_packed(history, packed)
+        assert list(out.columns) == ["Order_Number"]
+        assert set(out["Order_Number"]) == {"#A"}
+
+    def test_legacy_date_format_does_not_win_earliest_by_string_sort(self):
+        """'27/11/2025' sorts after '2026-07-01' lexicographically but is
+        the earlier date."""
+        history = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["27/11/2025"]})
+        packed = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["2026-07-01"]})
+
+        out = union_history_with_packed(history, packed)
+        assert out.iloc[0]["Execution_Date"] == "27/11/2025"
+
+
+class TestPackedDateUsesWarehouseLocalDate:
+    def test_after_midnight_local_is_not_shifted_to_yesterday(self, tmp_path):
+        """utc=True turned 01:00 local (+03:00) into the previous day, which
+        flags an order packed this morning as a same-day Repeat."""
+        pm = _write_index(tmp_path, "ALMADERM", [
+            {"session_name": "s", "packing_progress": {"ALL": {
+                "updated_at": "2026-07-02T01:00:00+03:00",
+                "completed_orders": ["#A"],
+            }}}
+        ])
+        out = load_packed_orders(pm, "ALMADERM")
+        assert out.iloc[0]["Execution_Date"] == "2026-07-02"
