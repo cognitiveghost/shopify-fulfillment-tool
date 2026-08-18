@@ -11,6 +11,7 @@ import pandas as pd
 
 from . import analysis, packing_lists, stock_export
 from .csv_utils import normalize_sku
+from .packed_orders import load_packed_orders, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
 from .utils import get_persistent_data_path
@@ -1233,6 +1234,12 @@ def run_full_analysis(
             stock_file_path, orders_file_path, client_id, profile_manager, config
         )
 
+        # Repeat detection also counts orders Packing Tool has already packed.
+        # Detection only -- history_df below is what gets written back to
+        # fulfillment_history.csv, and must stay this repo's own record.
+        packed_df = load_packed_orders(profile_manager, client_id)
+        detection_history_df = union_history_with_packed(history_df, packed_df)
+
         # Step 4: Run analysis and apply rules
         logger.info("Step 4: Running analysis and applying rules...")
 
@@ -1263,7 +1270,7 @@ def run_full_analysis(
             )
 
         final_df, summary_present_df, summary_missing_df, stats = (
-            _run_analysis_and_rules(orders_df, stock_df, history_df, config)
+            _run_analysis_and_rules(orders_df, stock_df, detection_history_df, config)
         )
 
         # Step 5: Save results and reports
