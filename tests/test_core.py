@@ -88,6 +88,43 @@ class TestFulfillmentHistoryMerge:
         assert dates["#99999"] == "2026-08-18"
         assert dates["#11014590"] == "2025-11-27"
 
+    def test_unreadable_history_date_is_healed_by_this_runs_date(self):
+        """A blank Execution_Date is not a date to preserve. Positional
+        keep="first" pinned it forever; the earliest PARSED date must win,
+        and NaT is not earliest."""
+        from shopify_tool.core import _merge_fulfillment_history
+
+        history = pd.DataFrame({
+            "Order_Number": ["#11014590"],
+            "Execution_Date": [None],
+        })
+        newly_fulfilled = pd.DataFrame({
+            "Order_Number": ["#11014590"],
+            "Execution_Date": ["2026-08-18"],
+        })
+
+        merged = _merge_fulfillment_history(history, newly_fulfilled)
+        assert len(merged) == 1
+        assert merged.iloc[0]["Execution_Date"] == "2026-08-18"
+
+    def test_duplicate_history_rows_keep_the_earliest_date(self):
+        """Legacy history files hold more than one row per order; whichever
+        row came first in the file is not necessarily the earliest."""
+        from shopify_tool.core import _merge_fulfillment_history
+
+        history = pd.DataFrame({
+            "Order_Number": ["#A", "#A"],
+            "Execution_Date": ["2026-03-01", "2025-11-27"],
+        })
+        newly_fulfilled = pd.DataFrame({
+            "Order_Number": ["#A"],
+            "Execution_Date": ["2026-08-18"],
+        })
+
+        merged = _merge_fulfillment_history(history, newly_fulfilled)
+        assert len(merged) == 1
+        assert merged.iloc[0]["Execution_Date"] == "2025-11-27"
+
     def test_empty_history_accepts_all_new_orders(self):
         from shopify_tool.core import _merge_fulfillment_history
 
@@ -133,7 +170,8 @@ class TestPackedOrdersAreDetectionOnly:
         ok, _msg, final_df, _stats = core.run_full_analysis(
             str(stock_csv), str(orders_csv), str(tmp_path / "out"), ",", ",",
             {
-                "analysis": {"repeat_detection_days": 1},
+                # core reads this from "settings", not "analysis".
+                "settings": {"repeat_detection_days": 1},
                 "column_mappings": {
                     "orders": _ORDERS_MAPPING,
                     "stock": {"Артикул": "SKU", "Име": "Product_Name", "Наличност": "Stock"},

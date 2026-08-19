@@ -348,12 +348,13 @@ class SessionManager:
         leaves the count identical, so a count-only check would serve that
         session's stale entry forever.
 
-        session_info.json is written as temp-file + rename (see
-        shared.atomic_write), so any write to it bumps its session
-        directory's mtime. Every writer in this class updates the index
-        *after* the session_info.json write it mirrors, which leaves the
-        index newer than the directory it describes and does not trigger a
-        rebuild.
+        Packing Tool writes session_info.json as temp-file + rename (see
+        shared.atomic_write) and takes the sidecar .lock first, so its
+        writes bump the session directory's mtime. This class's own writers
+        overwrite session_info.json in place (plain open(..., "w"), which
+        leaves the directory mtime alone) and update the index *afterwards*,
+        so the index stays newer than the directory it describes and never
+        triggers a rebuild of our own making.
 
         ponytail: mtime comparison assumes the PCs writing to the share
         agree on the clock. Skew only costs extra rebuilds (the pre-index

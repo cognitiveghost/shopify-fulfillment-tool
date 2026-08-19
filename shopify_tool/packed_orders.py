@@ -74,11 +74,16 @@ def _load_packed_orders(profile_manager, client_id: str) -> pd.DataFrame:
             if not isinstance(orders, list) or not orders:
                 # Written before completed_orders existed, or nothing packed.
                 continue
-            packed_date = _to_date(block.get("updated_at") or block.get("started_at"))
+            # Fall back per-parse, not per-value: a block whose updated_at is
+            # garbage still has a usable started_at, and `a or b` on the raw
+            # values would pick the garbage and drop the whole block.
+            packed_date = _to_date(block.get("updated_at")) or _to_date(
+                block.get("started_at")
+            )
             if packed_date is None:
                 continue
             rows.extend(
-                {"Order_Number": str(o), "Execution_Date": packed_date}
+                {"Order_Number": o, "Execution_Date": packed_date}
                 for o in orders
                 if isinstance(o, str) and o
             )

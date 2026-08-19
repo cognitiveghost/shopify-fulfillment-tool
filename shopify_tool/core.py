@@ -848,16 +848,29 @@ def _run_analysis_and_rules(
 def _merge_fulfillment_history(
     history_df: pd.DataFrame, newly_fulfilled: pd.DataFrame
 ) -> pd.DataFrame:
-    """Merge newly fulfilled orders into history, keeping the ORIGINAL date.
+    """Merge newly fulfilled orders into history, keeping the EARLIEST date.
 
-    keep="first" is load-bearing. `newly_fulfilled` is concatenated after
-    `history_df` and carries today's date, so keep="last" would overwrite
-    each order's original Execution_Date on every re-analysis -- destroying
-    the only record of when it was first fulfilled, and silently clearing
-    its "Repeat" flag.
+    `newly_fulfilled` carries today's date, so a plain keep="last" would
+    overwrite each order's original Execution_Date on every re-analysis --
+    destroying the only record of when it was first fulfilled, and silently
+    clearing its "Repeat" flag.
+
+    Sort on the parsed date before deduping rather than relying on
+    concatenation order: a legacy history file can hold duplicate
+    Order_Numbers, or a row with a blank/unparseable Execution_Date, and
+    positional keep="first" would preserve that unusable row forever (the
+    old keep="last" at least healed it on the next fulfilment). NaT sorts
+    last, so today's date wins over a date nothing can read.
     """
-    return pd.concat([history_df, newly_fulfilled]).drop_duplicates(
-        subset=["Order_Number"], keep="first"
+    combined = pd.concat([history_df, newly_fulfilled])
+    sort_key = pd.to_datetime(
+        combined["Execution_Date"], errors="coerce", format="mixed"
+    )
+    combined = combined.assign(_sort_key=sort_key).sort_values(
+        "_sort_key", na_position="last"
+    )
+    return combined.drop_duplicates(subset=["Order_Number"], keep="first").drop(
+        columns="_sort_key"
     )
 
 

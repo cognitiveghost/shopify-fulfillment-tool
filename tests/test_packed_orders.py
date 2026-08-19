@@ -76,6 +76,25 @@ class TestLoadPackedOrders:
         df = load_packed_orders(pm, "ALMADERM")
         assert df.iloc[0]["Execution_Date"] == "2026-07-26"
 
+    def test_falls_back_to_started_at_when_updated_at_is_unparseable(self, tmp_path):
+        """`updated_at or started_at` on the raw values picks the garbage and
+        drops the whole block; the fallback has to be per-parse."""
+        pm = _write_sessions(tmp_path, "ALMADERM", [
+            {
+                "session_name": "2026-07-26_2",
+                "packing_progress": {
+                    "ALL_ORDERS": {
+                        "started_at": "2026-07-26T18:25:33+00:00",
+                        "updated_at": "not-a-date",
+                        "completed_orders": ["#A"],
+                    }
+                },
+            }
+        ])
+
+        df = load_packed_orders(pm, "ALMADERM")
+        assert df.iloc[0]["Execution_Date"] == "2026-07-26"
+
     def test_collects_across_sessions_and_packing_lists(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {
