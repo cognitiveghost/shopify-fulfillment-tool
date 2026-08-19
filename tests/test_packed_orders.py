@@ -1,4 +1,5 @@
 import json
+import os
 
 import pandas as pd
 
@@ -15,18 +16,28 @@ class _FakeProfileManager:
         return self._sessions_root
 
 
-def _write_index(tmp_path, client_id, entries):
+def _write_sessions(tmp_path, client_id, entries):
+    """Write each entry as a real session directory's session_info.json.
+
+    Deliberately writes no session_index.json. These fixtures used to
+    hand-write the index, which assumed the very link that was broken:
+    Packing Tool writes session_info.json and nothing else, so a test that
+    seeds the index proves nothing about whether its writes are visible.
+    """
     client_dir = tmp_path / f"CLIENT_{client_id}"
     client_dir.mkdir(parents=True, exist_ok=True)
-    (client_dir / "session_index.json").write_text(
-        json.dumps(entries), encoding="utf-8"
-    )
+    for entry in entries:
+        session_dir = client_dir / entry["session_name"]
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / "session_info.json").write_text(
+            json.dumps(entry), encoding="utf-8"
+        )
     return _FakeProfileManager(tmp_path)
 
 
 class TestLoadPackedOrders:
     def test_reads_completed_orders_with_packing_date(self, tmp_path):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {
                 "session_name": "2026-07-26_2",
                 "packing_progress": {
@@ -49,7 +60,7 @@ class TestLoadPackedOrders:
         }
 
     def test_falls_back_to_started_at_when_no_updated_at(self, tmp_path):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {
                 "session_name": "2026-07-26_2",
                 "packing_progress": {
@@ -66,7 +77,7 @@ class TestLoadPackedOrders:
         assert df.iloc[0]["Execution_Date"] == "2026-07-26"
 
     def test_collects_across_sessions_and_packing_lists(self, tmp_path):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {
                 "session_name": "2026-07-01_1",
                 "packing_progress": {
@@ -89,7 +100,7 @@ class TestLoadPackedOrders:
         assert set(df["Order_Number"]) == {"#A", "#B", "#C"}
 
     def test_same_order_packed_twice_keeps_earliest(self, tmp_path):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "2026-07-05_1", "packing_progress": {
                 "L": {"updated_at": "2026-07-05T10:00:00+00:00",
                       "completed_orders": ["#A"]}}},
@@ -106,7 +117,7 @@ class TestLoadPackedOrders:
 
     def test_entry_without_completed_orders_key_is_skipped(self, tmp_path):
         """The normal case before Task 4 ships -- not an error."""
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {
                 "session_name": "2026-07-26_2",
                 "packing_progress": {
@@ -123,35 +134,69 @@ class TestLoadPackedOrders:
         assert list(df.columns) == ["Order_Number", "Execution_Date"]
 
     def test_entry_without_packing_progress_is_skipped(self, tmp_path):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "2026-07-26_1", "status": "active"}
         ])
         assert load_packed_orders(pm, "ALMADERM").empty
 
-    def test_missing_index_file_returns_empty(self, tmp_path):
+    def test_missing_client_directory_returns_empty(self, tmp_path):
         assert load_packed_orders(_FakeProfileManager(tmp_path), "NOSUCH").empty
 
-    def test_malformed_json_returns_empty(self, tmp_path):
-        client_dir = tmp_path / "CLIENT_ALMADERM"
-        client_dir.mkdir(parents=True)
-        (client_dir / "session_index.json").write_text("{not json", encoding="utf-8")
+    def test_malformed_index_is_rebuilt_from_the_session_directories(self, tmp_path):
+        pm = _write_sessions(tmp_path, "ALMADERM", [
+            {"session_name": "s", "packing_progress": {
+                "L": {"updated_at": "2026-07-01T10:00:00+00:00",
+                      "completed_orders": ["#A"]}}},
+        ])
+        (tmp_path / "CLIENT_ALMADERM" / "session_index.json").write_text(
+            "{not json", encoding="utf-8"
+        )
 
-        assert load_packed_orders(_FakeProfileManager(tmp_path), "ALMADERM").empty
+        assert set(load_packed_orders(pm, "ALMADERM")["Order_Number"]) == {"#A"}
 
     def test_unparseable_timestamp_is_skipped_without_raising(self, tmp_path):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "s", "packing_progress": {
                 "L": {"updated_at": "not-a-date", "completed_orders": ["#A"]}}},
         ])
         assert load_packed_orders(pm, "ALMADERM").empty
 
     def test_client_id_is_case_insensitive(self, tmp_path):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "s", "packing_progress": {
                 "L": {"updated_at": "2026-07-01T10:00:00+00:00",
                       "completed_orders": ["#A"]}}},
         ])
         assert not load_packed_orders(pm, "almaderm").empty
+
+
+class TestStaleIndexIsRefreshed:
+    """The transport this feature rides on.
+
+    Packing Tool only writes session_info.json. It never touches this
+    repo's session_index.json and never changes the session count, so a
+    count-only staleness check leaves the packed orders invisible forever
+    -- silently, which is how this shipped as a draft.
+    """
+
+    def test_packed_orders_written_after_the_index_are_still_seen(self, tmp_path):
+        pm = _write_sessions(tmp_path, "ALMADERM", [
+            {"session_name": "2026-07-01_1", "packing_progress": {
+                "L": {"updated_at": "2026-07-01T10:00:00+00:00",
+                      "completed_orders": ["#A"]}}},
+        ])
+        client_dir = tmp_path / "CLIENT_ALMADERM"
+        # The index as it looked before Packing Tool packed anything: same
+        # session, same count, no packing_progress.
+        index_path = client_dir / "session_index.json"
+        index_path.write_text(
+            json.dumps([{"session_name": "2026-07-01_1", "status": "active"}]),
+            encoding="utf-8",
+        )
+        session_mtime = (client_dir / "2026-07-01_1").stat().st_mtime
+        os.utime(index_path, (session_mtime - 10, session_mtime - 10))
+
+        assert set(load_packed_orders(pm, "ALMADERM")["Order_Number"]) == {"#A"}
 
 
 class TestUnionHistoryWithPacked:
@@ -200,7 +245,7 @@ class TestMalformedCrossToolDataNeverAborts:
     outer handler and fail the whole analysis."""
 
     def _load(self, tmp_path, block):
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "s", "packing_progress": {"ALL": block}}
         ])
         return load_packed_orders(pm, "ALMADERM")
@@ -257,7 +302,7 @@ class TestPackedDateUsesWarehouseLocalDate:
     def test_after_midnight_local_is_not_shifted_to_yesterday(self, tmp_path):
         """utc=True turned 01:00 local (+03:00) into the previous day, which
         flags an order packed this morning as a same-day Repeat."""
-        pm = _write_index(tmp_path, "ALMADERM", [
+        pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "s", "packing_progress": {"ALL": {
                 "updated_at": "2026-07-02T01:00:00+03:00",
                 "completed_orders": ["#A"],

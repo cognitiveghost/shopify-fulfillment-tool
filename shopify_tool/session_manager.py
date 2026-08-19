@@ -240,12 +240,8 @@ class SessionManager:
             return []
 
         entries = self._read_index(client_sessions_dir)
-        if entries is None:
+        if entries is None or self._index_is_stale(client_sessions_dir, entries):
             entries = self._rebuild_index(client_sessions_dir)
-        else:
-            actual_count = sum(1 for item in client_sessions_dir.iterdir() if item.is_dir())
-            if actual_count != len(entries):
-                entries = self._rebuild_index(client_sessions_dir)
 
         sessions = []
         for entry in entries:
@@ -342,6 +338,49 @@ class SessionManager:
             logger.exception("Failed to read session index, treating as missing")
             return None
 
+    def _index_is_stale(self, client_sessions_dir: Path, entries: list[dict]) -> bool:
+        """True if the index no longer reflects the session directories.
+
+        Comparing counts alone only notices sessions appearing or
+        disappearing. It misses every change made inside an existing
+        session -- including the ones another tool makes: Packing Tool
+        writes `completed_orders` into a session's session_info.json, which
+        leaves the count identical, so a count-only check would serve that
+        session's stale entry forever.
+
+        session_info.json is written as temp-file + rename (see
+        shared.atomic_write), so any write to it bumps its session
+        directory's mtime. Every writer in this class updates the index
+        *after* the session_info.json write it mirrors, which leaves the
+        index newer than the directory it describes and does not trigger a
+        rebuild.
+
+        ponytail: mtime comparison assumes the PCs writing to the share
+        agree on the clock. Skew only costs extra rebuilds (the pre-index
+        behaviour), never wrong data, and clears itself once the stamps
+        pass; record a per-entry mtime in the index if that ever shows up
+        on the UNC share.
+        """
+        try:
+            index_mtime = (client_sessions_dir / self.INDEX_FILENAME).stat().st_mtime
+        except OSError:
+            return True
+
+        count = 0
+        newest_session_mtime = 0.0
+        # scandir, not iterdir: on Windows the directory listing already
+        # carries the timestamps, so DirEntry.stat() costs no extra network
+        # round trip on the share.
+        with os.scandir(client_sessions_dir) as it:
+            for item in it:
+                if not item.is_dir():
+                    continue
+                count += 1
+                with contextlib.suppress(OSError):
+                    newest_session_mtime = max(newest_session_mtime, item.stat().st_mtime)
+
+        return count != len(entries) or newest_session_mtime > index_mtime
+
     def _write_index(self, client_sessions_dir: Path, entries: list[dict]) -> None:
         index_path = client_sessions_dir / self.INDEX_FILENAME
         atomic_write_json(index_path, entries)
@@ -360,8 +399,8 @@ class SessionManager:
         return entries
 
     def _rebuild_index(self, client_sessions_dir: Path) -> list[dict]:
-        """Full scan + persist. Called when no index exists yet, or the
-        directory count no longer matches the index (see list_client_sessions).
+        """Full scan + persist. Called when no index exists yet, or the index
+        no longer reflects the session directories (see _index_is_stale).
 
         Scan and write both happen under the index lock: an unlocked scan
         could read a stale snapshot, then overwrite a concurrent

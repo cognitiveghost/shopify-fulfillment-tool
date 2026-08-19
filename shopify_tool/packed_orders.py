@@ -2,16 +2,15 @@
 
 Packing Tool records the order numbers it completed into the
 `packing_progress` block of each session's `session_info.json`. This module
-reads them from the per-client `session_index.json` cache, which is one
-network read instead of a walk of the session tree.
+reads them through `SessionManager.list_client_sessions()`, which serves the
+per-client `session_index.json` cache -- one network read instead of a walk
+of the session tree.
 
-**Freshness caveat.** That index is SFT-owned and is refreshed only by SFT's
-own writes (`SessionManager._upsert_index_entry`) or by its directory-count
-staleness check. Packing Tool writing `session_info.json` triggers neither,
-so a session's `completed_orders` reach the index only if SFT happens to
-rewrite that session afterwards. Until that transport is fixed, this module
-under-reports rather than over-reports: it can miss packed orders, never
-invent them.
+Going through that method rather than reading the index file directly is
+load-bearing, not stylistic: it is the only path that runs
+`SessionManager._index_is_stale()`, which rebuilds the index when a session
+directory is newer than it. Packing Tool's writes are exactly that case, so
+a raw index read would report the packed orders as empty forever.
 
 Everything here is best-effort by contract: a missing file, malformed JSON
 or an old-format entry yields an empty result and a log line. Repeat
@@ -20,17 +19,15 @@ never fail because the packing signal is unavailable -- the warehouse can
 still ship.
 """
 
-import json
 import logging
-from pathlib import Path
 
 import pandas as pd
+
+from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
 COLUMNS = ["Order_Number", "Execution_Date"]
-
-INDEX_FILENAME = "session_index.json"
 
 
 def _empty() -> pd.DataFrame:
@@ -61,21 +58,10 @@ def load_packed_orders(profile_manager, client_id: str) -> pd.DataFrame:
 
 
 def _load_packed_orders(profile_manager, client_id: str) -> pd.DataFrame:
-    sessions_root = Path(profile_manager.get_sessions_root())
-    index_path = sessions_root / f"CLIENT_{client_id.upper()}" / INDEX_FILENAME
-    if not index_path.exists():
-        logger.debug(f"No session index for packed orders: {index_path}")
-        return _empty()
-    entries = json.loads(index_path.read_text(encoding="utf-8"))
-
-    if not isinstance(entries, list):
-        logger.warning("Session index is not a list; ignoring packed orders")
-        return _empty()
+    entries = SessionManager(profile_manager).list_client_sessions(client_id)
 
     rows = []
     for entry in entries:
-        if not isinstance(entry, dict):
-            continue
         progress = entry.get("packing_progress")
         if not isinstance(progress, dict):
             continue
