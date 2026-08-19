@@ -1,9 +1,11 @@
 """Session lifecycle & session_info.json accuracy (part of priority 6: app config)."""
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+from shared.atomic_write import atomic_write_json
 from shopify_tool.session_manager import SessionManager, SessionManagerError
 
 
@@ -196,6 +198,44 @@ class TestSessionIndex:
         entries = json.loads(index_path.read_text())
         assert len(entries) == 2
 
+    def test_another_tools_write_to_a_session_is_picked_up(self, session_manager):
+        """Packing Tool writes session_info.json and nothing else. The count
+        is unchanged, so a count-only staleness check served the stale entry
+        forever -- silently."""
+        session_path = Path(session_manager.create_session("M"))
+        client_sessions_dir = session_path.parent
+
+        info = json.loads((session_path / "session_info.json").read_text())
+        info["packing_progress"] = {"ALL": {"completed_orders": ["#A"]}}
+        atomic_write_json(session_path / "session_info.json", info)
+        # The index was written before that; pin the ordering so the test
+        # doesn't depend on filesystem timestamp granularity.
+        index_path = client_sessions_dir / SessionManager.INDEX_FILENAME
+        stamp = session_path.stat().st_mtime - 10
+        os.utime(index_path, (stamp, stamp))
+
+        sessions = session_manager.list_client_sessions("M")
+        assert sessions[0]["packing_progress"] == {"ALL": {"completed_orders": ["#A"]}}
+
+    def test_own_writes_do_not_trigger_a_rebuild(self, session_manager):
+        """The whole point of the index is that the UI doesn't walk the
+        session tree. Every writer here updates the index *after* the
+        session_info.json write it mirrors, so the index stays newer than
+        the directory and the mtime check must stay quiet."""
+        session_manager.create_session("M")
+        session_path = session_manager.create_session("M")
+        session_manager.update_session_status(session_path, "completed")
+        session_manager.update_session_info(session_path, {"comments": "hi"})
+
+        scans = []
+        original_scan = session_manager._scan_sessions
+        session_manager._scan_sessions = lambda d: scans.append(d) or original_scan(d)
+
+        for _ in range(3):
+            session_manager.list_client_sessions("M")
+
+        assert scans == []
+
     def test_rebuild_index_scans_directory_and_writes_index(self, session_manager):
         session_path = Path(session_manager.create_session("M"))
         index_path = session_path.parent / SessionManager.INDEX_FILENAME
@@ -208,10 +248,10 @@ class TestSessionIndex:
     def test_rebuild_holds_index_lock_across_scan_and_write(self, session_manager):
         """A rebuild that only locks the write (not the scan) can capture a
         stale snapshot and then overwrite a concurrent _upsert_index_entry()
-        write with it once the lock is finally taken -- the directory-count
-        staleness guard can't catch that, since an existing session's info
-        changing doesn't change the count. Proven directly: while the scan is
-        in flight, a second lock attempt on the same file must not succeed.
+        write with it once the lock is finally taken -- and the loser's data
+        is gone until something else marks the index stale again. Proven
+        directly: while the scan is in flight, a second lock attempt on the
+        same file must not succeed.
         """
         import fcntl
         import threading

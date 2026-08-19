@@ -11,6 +11,7 @@ import pandas as pd
 
 from . import analysis, packing_lists, stock_export
 from .csv_utils import normalize_sku
+from .packed_orders import load_packed_orders, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
 from .utils import get_persistent_data_path
@@ -844,6 +845,35 @@ def _run_analysis_and_rules(
     return final_df, summary_present_df, summary_missing_df, stats
 
 
+def _merge_fulfillment_history(
+    history_df: pd.DataFrame, newly_fulfilled: pd.DataFrame
+) -> pd.DataFrame:
+    """Merge newly fulfilled orders into history, keeping the EARLIEST date.
+
+    `newly_fulfilled` carries today's date, so a plain keep="last" would
+    overwrite each order's original Execution_Date on every re-analysis --
+    destroying the only record of when it was first fulfilled, and silently
+    clearing its "Repeat" flag.
+
+    Sort on the parsed date before deduping rather than relying on
+    concatenation order: a legacy history file can hold duplicate
+    Order_Numbers, or a row with a blank/unparseable Execution_Date, and
+    positional keep="first" would preserve that unusable row forever (the
+    old keep="last" at least healed it on the next fulfilment). NaT sorts
+    last, so today's date wins over a date nothing can read.
+    """
+    combined = pd.concat([history_df, newly_fulfilled])
+    sort_key = pd.to_datetime(
+        combined["Execution_Date"], errors="coerce", format="mixed"
+    )
+    combined = combined.assign(_sort_key=sort_key).sort_values(
+        "_sort_key", na_position="last"
+    )
+    return combined.drop_duplicates(subset=["Order_Number"], keep="first").drop(
+        columns="_sort_key"
+    )
+
+
 def _save_results_and_reports(
     final_df: pd.DataFrame,
     summary_present_df: pd.DataFrame,
@@ -1044,9 +1074,7 @@ def _save_results_and_reports(
 
     if not newly_fulfilled.empty:
         newly_fulfilled["Execution_Date"] = datetime.now().astimezone().strftime("%Y-%m-%d")
-        updated_history = pd.concat([history_df, newly_fulfilled]).drop_duplicates(
-            subset=["Order_Number"], keep="last"
-        )
+        updated_history = _merge_fulfillment_history(history_df, newly_fulfilled)
 
         # Determine history path (same logic as load)
         if profile_manager and client_id:
@@ -1219,6 +1247,12 @@ def run_full_analysis(
             stock_file_path, orders_file_path, client_id, profile_manager, config
         )
 
+        # Repeat detection also counts orders Packing Tool has already packed.
+        # Detection only -- history_df below is what gets written back to
+        # fulfillment_history.csv, and must stay this repo's own record.
+        packed_df = load_packed_orders(profile_manager, client_id)
+        detection_history_df = union_history_with_packed(history_df, packed_df)
+
         # Step 4: Run analysis and apply rules
         logger.info("Step 4: Running analysis and applying rules...")
 
@@ -1249,7 +1283,7 @@ def run_full_analysis(
             )
 
         final_df, summary_present_df, summary_missing_df, stats = (
-            _run_analysis_and_rules(orders_df, stock_df, history_df, config)
+            _run_analysis_and_rules(orders_df, stock_df, detection_history_df, config)
         )
 
         # Step 5: Save results and reports
