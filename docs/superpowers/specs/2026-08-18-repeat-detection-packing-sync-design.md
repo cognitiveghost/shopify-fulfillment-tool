@@ -191,7 +191,16 @@ def load_packed_orders(profile_manager, client_id) -> pd.DataFrame:
 
 Reads the client's `session_index.json` via the existing session-listing path,
 walks each entry's `packing_progress` blocks, and emits one row per completed
-order number dated by that block's `updated_at` (falling back to `started_at`).
+order number dated by that block's `started_at` (falling back to `updated_at`).
+
+**Why `started_at`.** A packing list left open across days carries one
+`updated_at` for the whole block, so dating by it re-dates every order already
+packed in that list to the later day -- an order packed Monday reads as "packed
+today" on Tuesday, never gets flagged `Repeat`, and ships a second time.
+`started_at` is the stable lower bound the earliest-wins union wants. It errs
+the other way, flagging an order packed on day 2 of a list a day early, but that
+badge reads "already packed" and is still true; `Repeat` is advisory in the GUI,
+not a shipping block.
 
 **Best-effort by contract.** A missing file, malformed JSON, an unreachable
 server or an old-format entry logs and yields an empty frame. Repeat detection

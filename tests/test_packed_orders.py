@@ -36,7 +36,14 @@ def _write_sessions(tmp_path, client_id, entries):
 
 
 class TestLoadPackedOrders:
-    def test_reads_completed_orders_with_packing_date(self, tmp_path):
+    def test_a_multi_day_list_dates_its_orders_by_started_at(self, tmp_path):
+        """The double-ship regression.
+
+        One updated_at covers the whole block, so dating by it re-dates
+        orders packed on day 1 to the last day the list was touched. On day
+        2 they read as "packed today", miss the Repeat flag, and get picked
+        and shipped a second time.
+        """
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {
                 "session_name": "2026-07-26_2",
@@ -55,17 +62,17 @@ class TestLoadPackedOrders:
 
         assert list(df.columns) == ["Order_Number", "Execution_Date"]
         assert dict(zip(df["Order_Number"], df["Execution_Date"])) == {
-            "#11019512": "2026-07-28",
-            "#11019513": "2026-07-28",
+            "#11019512": "2026-07-26",
+            "#11019513": "2026-07-26",
         }
 
-    def test_falls_back_to_started_at_when_no_updated_at(self, tmp_path):
+    def test_falls_back_to_updated_at_when_no_started_at(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {
                 "session_name": "2026-07-26_2",
                 "packing_progress": {
                     "ALL_ORDERS": {
-                        "started_at": "2026-07-26T18:25:33+00:00",
+                        "updated_at": "2026-07-26T18:25:33+00:00",
                         "status": "completed",
                         "completed_orders": ["#A"],
                     }
@@ -76,16 +83,16 @@ class TestLoadPackedOrders:
         df = load_packed_orders(pm, "ALMADERM")
         assert df.iloc[0]["Execution_Date"] == "2026-07-26"
 
-    def test_falls_back_to_started_at_when_updated_at_is_unparseable(self, tmp_path):
-        """`updated_at or started_at` on the raw values picks the garbage and
+    def test_falls_back_to_updated_at_when_started_at_is_unparseable(self, tmp_path):
+        """`started_at or updated_at` on the raw values picks the garbage and
         drops the whole block; the fallback has to be per-parse."""
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {
                 "session_name": "2026-07-26_2",
                 "packing_progress": {
                     "ALL_ORDERS": {
-                        "started_at": "2026-07-26T18:25:33+00:00",
-                        "updated_at": "not-a-date",
+                        "started_at": "not-a-date",
+                        "updated_at": "2026-07-26T18:25:33+00:00",
                         "completed_orders": ["#A"],
                     }
                 },
