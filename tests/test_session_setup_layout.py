@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QSplitter,
 )
 
-from gui.ui_manager import UIManager
+from gui.ui_manager import _RECENT_PANEL_MAX_WIDTH, UIManager
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -65,7 +65,10 @@ def main_window(tmp_path, monkeypatch):
     monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
     from gui.main_window_pyside import MainWindow
     win = MainWindow()
-    win.resize(1100, 900)  # the app's own default, main_window_pyside.py:76
+    # The app's own default (main_window_pyside.py:76). Qt clamps it up to the
+    # window's real minimum, so these tests measure the narrowest window a user
+    # can actually produce -- which is the case that matters.
+    win.resize(1100, 900)
     win.show()
     QApplication.processEvents()
     win.main_tabs.setCurrentIndex(0)
@@ -97,5 +100,31 @@ def test_setup_column_never_scrolls_horizontally(main_window):
 def test_recent_sessions_panel_stays_compact(main_window):
     tab = main_window.main_tabs.widget(0)
     card = tab.findChild(QSplitter).widget(1)
-    assert card.width() <= 320
+    assert card.width() <= _RECENT_PANEL_MAX_WIDTH
     assert main_window.recent_sessions_list.height() <= 200
+
+    # The stretch factors alone already keep the card at the cap, so the above
+    # would pass with setMaximumWidth removed. Simulate a user dragging the
+    # splitter open -- that is the only thing the cap actually resists.
+    main_window.resize(1920, 1080)
+    QApplication.processEvents()
+    tab.findChild(QSplitter).setSizes([200, 1500])
+    QApplication.processEvents()
+    assert card.width() <= _RECENT_PANEL_MAX_WIDTH
+
+
+def test_setup_column_does_not_raise_the_app_minimum_window_width(main_window):
+    """Pinning Tab 1's minimum to its content is what stops buttons hiding --
+    but it also means anything added to that column widens that minimum. The
+    widest tab sets the whole app's minimum window width, and today that is
+    Tab 2 (Analysis Results), with Tab 1 ~30px behind it. Compare against the
+    other tabs rather than a pixel constant, so this fails when Tab 1 actually
+    takes over the floor and not when Windows font metrics shift everything.
+    """
+    tabs = main_window.main_tabs
+    widths = [tabs.widget(i).minimumSizeHint().width() for i in range(tabs.count())]
+    setup, others = widths[0], max(widths[1:])
+    assert setup <= others, (
+        f"Tab 1 now sets the app's minimum window width ({setup}px vs {others}px "
+        f"for the next widest tab) -- the whole app got harder to fit on screen."
+    )

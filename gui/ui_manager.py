@@ -40,7 +40,9 @@ from .wheel_ignore_combobox import WheelIgnoreComboBox
 # willing to scroll rather than ask the splitter for room -- so it must declare
 # the width its content needs, or action buttons get hidden. See
 # docs/superpowers/specs/2026-08-23-session-setup-layout-design.md.
-_SETUP_COLUMN_SLACK = 24  # frame + vertical scrollbar
+# Frame + vertical scrollbar. Measured: frame 0 (the scroll area is NoFrame)
+# and a 12px scrollbar from the theme -- 24 is deliberate slack over that.
+_SETUP_COLUMN_SLACK = 24
 _RECENT_PANEL_MAX_WIDTH = 320
 _RECENT_SESSIONS_ROWS = 5
 
@@ -49,7 +51,9 @@ def _recent_list_height(widget: QListWidget) -> int:
     """Height of exactly _RECENT_SESSIONS_ROWS rows.
 
     From font metrics, not sizeHintForRow(), which returns -1 while the list is
-    empty -- and it is empty when the panel is built.
+    empty -- and it is empty when the panel is built. The trailing +4 is the
+    slack that makes the fifth row fit whole rather than clipped (the viewport
+    otherwise lands at 5.23 rows).
     """
     row = QFontMetrics(widget.font()).height()
     return row * _RECENT_SESSIONS_ROWS + 2 * widget.frameWidth() + 4
@@ -294,11 +298,11 @@ class UIManager:
         # Create horizontal splitter
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left panel (60%) - Session Setup content
+        # Left panel - Session Setup content
         left_panel = self._create_session_setup_panel()
         splitter.addWidget(left_panel)
 
-        # Right panel (40%) - Session Browser
+        # Right panel - Session Browser
         right_panel = self._create_session_browser_panel()
         splitter.addWidget(right_panel)
 
@@ -308,7 +312,6 @@ class UIManager:
         splitter.setSizes([1100, _RECENT_PANEL_MAX_WIDTH])
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
-        splitter.setCollapsible(1, True)
 
         main_layout.addWidget(splitter)
         return tab
@@ -365,6 +368,8 @@ class UIManager:
         2026-07-26-unified-ui-design-system-design.md.
         """
         panel = QWidget()
+        # The stretch factors already size the card; this cap is what stops the
+        # user dragging the splitter and re-inflating it.
         panel.setMaximumWidth(_RECENT_PANEL_MAX_WIDTH)
         layout = QVBoxLayout(panel)
         layout.setSpacing(5)
@@ -542,10 +547,11 @@ class UIManager:
         group.setLayout(layout)
 
         # Orders section
-        # ponytail: Orders and Stock side by side set this page's 706px floor.
-        # Below a ~1050px window the setup column stops shrinking. The app's own
-        # default is 1100px, so no responsive stacking is built; if that ever
-        # matters, stack these two vertically below a width threshold.
+        # ponytail: Orders and Stock side by side set this page's 706px floor,
+        # so the setup column stops shrinking at 730px. That is inert today --
+        # the window cannot go below 1221px anyway, a floor Tab 2 sets, not this
+        # one. No responsive stacking is built; if Tab 2's floor ever drops,
+        # stack these two vertically below a width threshold.
         layout.addWidget(self._create_orders_file_section())
 
         # Stock section

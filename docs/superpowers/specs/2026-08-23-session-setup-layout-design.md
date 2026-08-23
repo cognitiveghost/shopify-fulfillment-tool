@@ -35,6 +35,12 @@ right edge:
 | 1400×900 | 682px | 706px | `Add Product to Order`, `Settings`, `Generate Reports`, `Open Session Folder` |
 | 1920×1080 | 994px | 706px | none |
 
+> **On the "1100×900" row label** (it recurs in the tables below): the numbers
+> are measured, but the window is not actually 1100 wide. Qt clamps
+> `resize(1100, 900)` up to the window's real minimum of **1221×828**, a floor
+> Tab 2 sets. So that row is *the narrowest window a user can produce* — which
+> is the case worth measuring — not literally 1100px.
+
 So on first launch, at the geometry the app sets for itself, five controls —
 including `Generate Reports` — are reachable only by scrolling sideways. The
 page is correct only above roughly 1500px of window width.
@@ -101,6 +107,21 @@ window, so reading it at construction is sound.
 This is the root-cause fix. Anything later added to the setup column widens the
 minimum automatically; the panel never silently starts hiding controls again.
 
+Two qualifications, both measured:
+
+- The pin is read **at construction**, so it tracks widgets added to the column
+  in the builder. A widget whose own minimum grows at *runtime* would not
+  re-widen it. Probed by forcing very long text into `current_client_label` and
+  `session_info_label`: the inner minimum stayed at 706 and nothing clipped, and
+  there is no combobox in this column (client selection is in the sidebar). So
+  this is theoretical today.
+- The auto-widening cuts both ways. Tab 1's minimum is now **928px**; the app's
+  minimum window width is **1221px**, set by Tab 2 (Analysis Results, 957px).
+  That leaves **29px of headroom**. Once a future addition to the setup column
+  pushes Tab 1 past 957, it stops being free — it starts raising the *whole
+  app's* minimum window width, which is already close to a 1280-wide display.
+  `test_setup_column_does_not_raise_the_app_minimum_window_width` guards it.
+
 ### 2. The quick-pick card is capped
 
 `_create_session_browser_panel` sets `panel.setMaximumWidth(_RECENT_PANEL_MAX_WIDTH)`
@@ -163,13 +184,17 @@ room to spare at every size the app can be opened at.
 
 ## Known ceiling
 
-The content column cannot go below **730px**. Below roughly a 1050px window the
-splitter stops shrinking and the card is pushed against the window edge. That is
-strictly better than today (which breaks at 1500px), and the app's own default
-is 1100px, so no responsive stacking of Orders/Stock is being built for window
-sizes nobody opens. If that ever matters, the fix is in `_create_files_group`:
-stack the two file sections vertically below a threshold. Recorded as a
-`ponytail:` comment, not built.
+The content column cannot go below **730px**, so the splitter stops shrinking
+somewhere around a 1050px window.
+
+**That state is unreachable.** The window cannot be resized below **1221×828**
+at all — a pre-existing floor set by Tab 2, not by this change. `resize(1100,
+900)` is silently clamped up to it. So the 730px ceiling sits below anything a
+user can produce and is inert; do not go build responsive stacking for it.
+
+If Tab 2's floor ever drops far enough to expose this, the fix is in
+`_create_files_group`: stack the two file sections vertically below a threshold.
+Recorded as a `ponytail:` comment, not built.
 
 ## Testing
 
