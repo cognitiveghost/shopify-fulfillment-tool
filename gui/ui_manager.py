@@ -36,7 +36,6 @@ from .tag_management_panel import TagManagementPanel
 from .theme_manager import font_css, get_theme_manager
 from .wheel_ignore_combobox import WheelIgnoreComboBox
 
-
 # Tab 1 layout. The setup column is inside a QScrollArea, which is always
 # willing to scroll rather than ask the splitter for room -- so it must declare
 # the width its content needs, or action buttons get hidden. See

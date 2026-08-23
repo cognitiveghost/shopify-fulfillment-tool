@@ -13,7 +13,13 @@ Two unrelated regressions pinned in one file (same area of the codebase):
    docs/superpowers/specs/2026-08-23-session-setup-layout-design.md.
 """
 import pytest
-from PySide6.QtWidgets import QApplication, QMainWindow, QScrollArea, QSplitter, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QPushButton,
+    QScrollArea,
+    QSplitter,
+)
 
 from gui.ui_manager import UIManager
 
