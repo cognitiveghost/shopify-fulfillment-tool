@@ -179,7 +179,8 @@ derives an empty update set and writes nothing.
 - **New `Packing` column** between `Packing Lists` and `Comments`, read-only,
   showing `3/4`, or `—` when the session has no packing lists. Table goes from
   7 to 8 columns. The tooltip already assembled per row gains a line naming
-  the lists still outstanding.
+  the lists still outstanding. (Superseded by the plan, which emits the
+  simpler `Packed: n/m lists completed in Packing Tool`.)
 - **Delete `filter_sessions_by_age` and `DEFAULT_SESSION_AGE_CUTOFF_DAYS`.**
   Their job is now done by a persisted, visible, user-editable `archived`
   status instead of an invisible display-time rule. This is the simplification

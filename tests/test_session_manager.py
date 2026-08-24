@@ -1,11 +1,13 @@
 """Session lifecycle & session_info.json accuracy (part of priority 6: app config)."""
 import json
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from shared.atomic_write import atomic_write_json
+from shopify_tool.session_lifecycle import derive_status_updates
 from shopify_tool.session_manager import SessionManager, SessionManagerError
 
 
@@ -411,6 +413,48 @@ class TestBatchStatusUpdates:
         session_path = Path(session_manager.create_session("M"))
         assert session_manager.apply_status_updates("M", {session_path.name: "bogus"}) == 0
         assert session_manager.get_session_info(str(session_path))["status"] == "active"
+
+    def test_manual_flag_survives_a_batch_update(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+        session_manager.update_session_status(str(session_path), "active", manual=True)
+
+        session_manager.apply_status_updates("M", {session_path.name: "archived"})
+
+        info = session_manager.get_session_info(str(session_path))
+        assert info["status"] == "archived"
+        assert info["status_manually_set"] is True
+
+    def test_a_failed_index_rewrite_drops_the_index(self, session_manager, monkeypatch):
+        # The write pass is only self-limiting while the index reflects it.
+        # If the rewrite fails and the stale index survives, every refresh
+        # re-derives and rewrites the same sessions forever.
+        session_path = Path(session_manager.create_session("M"))
+        index_path = session_path.parent / SessionManager.INDEX_FILENAME
+        session_manager.list_client_sessions("M")
+        assert index_path.exists()
+
+        monkeypatch.setattr(
+            SessionManager, "_write_index",
+            lambda *a, **k: (_ for _ in ()).throw(OSError("share went away")),
+        )
+        session_manager.apply_status_updates("M", {session_path.name: "archived"})
+
+        assert not index_path.exists()
+
+    def test_derive_apply_reread_derive_is_a_fixed_point(self, session_manager):
+        # The end-to-end idempotency the design relies on: after one pass
+        # clears the backlog, later refreshes must derive nothing at all.
+        session_path = Path(session_manager.create_session("M"))
+        old = (datetime.now().astimezone() - timedelta(days=90)).isoformat()
+        session_manager.update_session_info(str(session_path), {"created_at": old})
+
+        now = datetime.now().astimezone()
+        first = derive_status_updates(session_manager.list_client_sessions("M"), now)
+        assert first == {session_path.name: "archived"}
+
+        session_manager.apply_status_updates("M", first)
+
+        assert derive_status_updates(session_manager.list_client_sessions("M"), now) == {}
 
 
 class TestManualStatusFlag:

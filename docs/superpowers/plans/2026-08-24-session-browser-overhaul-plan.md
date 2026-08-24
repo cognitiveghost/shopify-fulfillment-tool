@@ -500,8 +500,15 @@ Insert this method directly after `update_session_status` (before `update_sessio
 
         `update_session_status` rewrites the whole client index per call, so
         applying a backlog one session at a time is O(N^2) in bytes written
-        over a UNC share. Each session_info.json still takes its own lock --
-        Packing Tool writes those same files -- but the index is written once.
+        over a UNC share. Each session_info.json still takes its own lock,
+        but the index is written once.
+
+        CORRECTION (applied at Stage C review): this docstring originally
+        claimed the per-session lock protects against Packing Tool. It does
+        not. Packing Tool's update_session_metadata() read-modify-writes the
+        same file WITHOUT taking the sidecar lock, so the lock serializes
+        this class against itself only. See the shipped docstring in
+        session_manager.py for the accurate wording.
 
         Best-effort per session: one unwritable session is logged and skipped
         and the rest still apply. Never raises; a session list that will not

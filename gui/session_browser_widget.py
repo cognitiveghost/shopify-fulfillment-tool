@@ -31,6 +31,17 @@ from shopify_tool.session_manager import SessionManager
 logger = logging.getLogger(__name__)
 
 
+class _RatioSortItem(QTableWidgetItem):
+    """Displays "packed/total" but sorts on the ratio behind it.
+
+    QTableWidgetItem compares its DisplayRole, so the plain text form puts
+    "10/12" above "2/3".
+    """
+
+    def __lt__(self, other):
+        return self.data(Qt.UserRole) < other.data(Qt.UserRole)
+
+
 class SessionLoaderWorker(BackgroundWorker):
     """Background worker for loading session list from file server.
 
@@ -323,6 +334,9 @@ class SessionBrowserWidget(QWidget):
         """Synchronous refresh fallback (for tests).
 
         This is the old blocking behavior, kept for test compatibility.
+        Note it does NOT run SessionLoaderWorker._sync_statuses, so a test
+        written against sync mode does not exercise automatic status
+        derivation at all -- test that against the worker directly.
         """
         try:
             # Get status filter
@@ -466,7 +480,8 @@ class SessionBrowserWidget(QWidget):
 
             # Column 6: Packing progress from Packing Tool (READ-ONLY)
             packed, total = packing_completion(session_info)
-            packing_item = QTableWidgetItem(f"{packed}/{total}" if total else "—")
+            packing_item = _RatioSortItem(f"{packed}/{total}" if total else "—")
+            packing_item.setData(Qt.UserRole, packed / total if total else -1.0)
             packing_item.setTextAlignment(Qt.AlignCenter)
             self.sessions_table.setItem(row, 6, packing_item)
 

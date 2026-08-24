@@ -91,6 +91,10 @@ def derive_status_updates(entries, now: datetime) -> dict:
     Returns only actual changes, so a steady state writes nothing and the
     pass is self-limiting: the first refresh clears the backlog, every later
     one derives an empty set.
+
+    `entries` must come from a single client. Session names are unique only
+    within a client, so pooling clients silently collapses same-named
+    sessions into one key -- and apply_status_updates is per-client anyway.
     """
     cutoff = now - timedelta(days=AUTO_ARCHIVE_AFTER_DAYS)
     updates = {}

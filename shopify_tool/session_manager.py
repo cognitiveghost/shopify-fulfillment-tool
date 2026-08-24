@@ -349,12 +349,12 @@ class SessionManager:
         session's stale entry forever.
 
         Packing Tool writes session_info.json as temp-file + rename (see
-        shared.atomic_write) and takes the sidecar .lock first, so its
-        writes bump the session directory's mtime. This class's own writers
-        overwrite session_info.json in place (plain open(..., "w"), which
-        leaves the directory mtime alone) and update the index *afterwards*,
-        so the index stays newer than the directory it describes and never
-        triggers a rebuild of our own making.
+        shared.atomic_write), so its writes bump the session directory's
+        mtime. This class's own writers update the index *afterwards* --
+        including apply_status_updates, which writes every session file
+        before its single index rewrite -- so the index stays newer than
+        the directory it describes and never triggers a rebuild of our own
+        making.
 
         ponytail: mtime comparison assumes the PCs writing to the share
         agree on the clock. Skew only costs extra rebuilds (the pre-index
@@ -493,8 +493,16 @@ class SessionManager:
 
         `update_session_status` rewrites the whole client index per call, so
         applying a backlog one session at a time is O(N^2) in bytes written
-        over a UNC share. Each session_info.json still takes its own lock --
-        Packing Tool writes those same files -- but the index is written once.
+        over a UNC share. Each session_info.json still takes its own lock,
+        but the index is written once.
+
+        That lock serializes this class against itself only: Packing Tool's
+        update_session_metadata() read-modify-writes the same file without
+        taking the sidecar lock, so its packing_progress write and this
+        status write can still lose each other in the few ms between read
+        and write. Both sides re-derive on the next refresh, so the cost is
+        a stale field, not lost order data. Closing it properly means
+        teaching Packing Tool to take the same lock.
 
         Best-effort per session: one unwritable session is logged and skipped
         and the rest still apply. Never raises; a session list that will not
@@ -522,8 +530,12 @@ class SessionManager:
                     session_info["status"] = status
                     session_info["status_updated_at"] = datetime.now().astimezone().isoformat()
                     session_info.pop("session_path", None)
-                    with open(session_path_obj / "session_info.json", "w", encoding="utf-8") as f:
-                        json.dump(session_info, f, indent=2)
+                    # Atomic: this path writes ~N files unattended (41 on the
+                    # first archive pass). A torn session_info.json makes
+                    # get_session_info return None, which drops the session
+                    # out of the browser entirely and breaks Packing Tool's
+                    # read of the same file.
+                    atomic_write_json(session_path_obj / "session_info.json", session_info, indent=2)
                 applied[session_name] = session_info
             except Exception:
                 logger.exception(f"Failed to apply status to {session_path_obj}")
@@ -540,6 +552,14 @@ class SessionManager:
                 self._write_index(client_sessions_dir, entries)
         except Exception:
             logger.exception(f"Failed to rewrite session index for CLIENT_{client_id}")
+            # Drop the index so the next read rebuilds from disk. Without
+            # this the derive pass stops being self-limiting: the session
+            # files say "archived" while the stale index keeps serving
+            # "active", so every refresh re-derives and rewrites the same N
+            # sessions forever. _index_is_stale cannot catch it -- these
+            # writes bump session mtimes but the index still looks newer.
+            with contextlib.suppress(OSError):
+                (client_sessions_dir / self.INDEX_FILENAME).unlink()
 
         logger.info(f"Applied {len(applied)} automatic status updates for CLIENT_{client_id}")
         return len(applied)
