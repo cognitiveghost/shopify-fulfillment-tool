@@ -86,6 +86,12 @@ class SessionLoaderWorker(BackgroundWorker):
         touch a widget. Failures are swallowed: a stale status is survivable,
         a session list that will not load is not.
         """
+        # ponytail: the first refresh after this shipped clears the whole
+        # backlog in one pass -- 41 of 42 sessions on the data this was built
+        # against. It is one-time (the derive returns empty forever after) and
+        # runs off the UI thread, so no progress UI or first-run prompt is
+        # built. If it drags on the production share, bound the pass to the N
+        # oldest sessions per refresh.
         try:
             updates = derive_status_updates(sessions, datetime.now().astimezone())
             if not updates:
