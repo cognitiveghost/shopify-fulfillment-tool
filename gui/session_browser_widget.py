@@ -5,7 +5,7 @@ with filtering by status and the ability to open existing sessions.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
@@ -25,38 +25,10 @@ from PySide6.QtWidgets import (
 from gui.background_worker import BackgroundWorker
 from gui.theme_manager import get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
-from shopify_tool.session_lifecycle import derive_status_updates
+from shopify_tool.session_lifecycle import derive_status_updates, packing_completion
 from shopify_tool.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_SESSION_AGE_CUTOFF_DAYS = 30
-
-
-def filter_sessions_by_age(sessions: list, cutoff_days: int | None, now: datetime) -> list:
-    """Keep sessions created within the last `cutoff_days`. `cutoff_days=None`
-    disables filtering (the "Show older" state). Sessions with an unparsable
-    or missing created_at are kept -- never hide real data because of a
-    formatting issue in a single record. This includes legacy/naive
-    created_at values (no UTC offset) that can't be compared against `now`
-    (always offset-aware) -- that comparison raises TypeError, not
-    ValueError, and is just as much a formatting issue as a bad string.
-    """
-    if cutoff_days is None:
-        return list(sessions)
-    cutoff = now - timedelta(days=cutoff_days)
-    kept = []
-    for session in sessions:
-        created_at = session.get("created_at", "")
-        try:
-            created = datetime.fromisoformat(created_at)
-            keep = created >= cutoff
-        except (ValueError, TypeError):
-            kept.append(session)
-            continue
-        if keep:
-            kept.append(session)
-    return kept
 
 
 class SessionLoaderWorker(BackgroundWorker):
@@ -158,7 +130,7 @@ class SessionBrowserWidget(QWidget):
         self.current_client_id = None
         self.sessions_data = []
         self.worker = None  # Track active background worker
-        self._show_older = False
+        self._show_archived = False
         self._is_dirty = True  # forces one load on first show
 
         self._init_ui()
@@ -192,17 +164,19 @@ class SessionBrowserWidget(QWidget):
         self.refresh_btn.clicked.connect(self.refresh_sessions)
         filter_layout.addWidget(self.refresh_btn)
 
-        self.show_older_btn = QPushButton("Show Older (30+ days)")
-        self.show_older_btn.setCheckable(True)
-        self.show_older_btn.setToolTip("Show sessions older than 30 days")
-        self.show_older_btn.toggled.connect(self._on_show_older_toggled)
-        filter_layout.addWidget(self.show_older_btn)
+        self.show_archived_btn = QPushButton("Show Archived")
+        self.show_archived_btn.setCheckable(True)
+        self.show_archived_btn.setToolTip(
+            "Show archived sessions (sessions are archived automatically after 30 days)"
+        )
+        self.show_archived_btn.toggled.connect(self._on_show_archived_toggled)
+        filter_layout.addWidget(self.show_archived_btn)
 
         group_layout.addLayout(filter_layout)
 
         # Sessions table
         self.sessions_table = QTableWidget()
-        self.sessions_table.setColumnCount(7)
+        self.sessions_table.setColumnCount(8)
         self.sessions_table.setHorizontalHeaderLabels(
             [
                 "Session Name",
@@ -211,6 +185,7 @@ class SessionBrowserWidget(QWidget):
                 "Orders",
                 "Items",
                 "Packing Lists",
+                "Packing",
                 "Comments",
             ]
         )
@@ -234,7 +209,9 @@ class SessionBrowserWidget(QWidget):
         header.resizeSection(4, 80)  # Items
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(5, 120)  # Packing Lists
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)  # Comments
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(6, 90)  # Packing
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)  # Comments
 
         group_layout.addWidget(self.sessions_table)
 
@@ -398,10 +375,17 @@ class SessionBrowserWidget(QWidget):
 
     def _populate_table(self):
         """Populate the table with sessions data."""
-        cutoff_days = None if self._show_older else DEFAULT_SESSION_AGE_CUTOFF_DAYS
-        visible_sessions = filter_sessions_by_age(
-            self.sessions_data, cutoff_days, datetime.now().astimezone()
-        )
+        # Archived sessions are hidden unless asked for. When the user picks
+        # "Archived" in the status filter the server-side query already
+        # returned only archived rows, so hiding them here would leave an
+        # empty table.
+        showing_archived_explicitly = self.status_filter.currentText().lower() == "archived"
+        if self._show_archived or showing_archived_explicitly:
+            visible_sessions = list(self.sessions_data)
+        else:
+            visible_sessions = [
+                s for s in self.sessions_data if s.get("status") != "archived"
+            ]
         self.sessions_table.setSortingEnabled(False)
         self.sessions_table.setRowCount(len(visible_sessions))
 
@@ -474,7 +458,13 @@ class SessionBrowserWidget(QWidget):
             packing_lists_item.setTextAlignment(Qt.AlignCenter)
             self.sessions_table.setItem(row, 5, packing_lists_item)
 
-            # Column 6: Comments (EDITABLE LINE EDIT)
+            # Column 6: Packing progress from Packing Tool (READ-ONLY)
+            packed, total = packing_completion(session_info)
+            packing_item = QTableWidgetItem(f"{packed}/{total}" if total else "—")
+            packing_item.setTextAlignment(Qt.AlignCenter)
+            self.sessions_table.setItem(row, 6, packing_item)
+
+            # Column 7: Comments (EDITABLE LINE EDIT)
             comments = session_info.get("comments", "")
             comments_edit = QLineEdit(comments)
             comments_edit.setPlaceholderText("Add comments...")
@@ -482,7 +472,7 @@ class SessionBrowserWidget(QWidget):
                 lambda path=session_path,
                 widget=comments_edit: self._on_comments_changed(path, widget.text())
             )
-            self.sessions_table.setCellWidget(row, 6, comments_edit)
+            self.sessions_table.setCellWidget(row, 7, comments_edit)
 
             # Build tooltip with full info
             packing_lists_str = ", ".join(stats.get("packing_lists", [])) or "None"
@@ -492,10 +482,11 @@ Status: {status.capitalize()}
 Orders: {orders_count if orders_count > 0 else "N/A"}
 Items: {items_count if items_count > 0 else "N/A"}
 Packing Lists ({packing_lists_count}): {packing_lists_str}
+Packed: {packed}/{total} lists completed in Packing Tool
 Comments: {comments if comments else "None"}"""
 
             # Apply tooltip to all cells in row
-            for col in range(7):
+            for col in range(8):
                 item = self.sessions_table.item(row, col)
                 if item:
                     item.setToolTip(tooltip)
@@ -508,10 +499,10 @@ Comments: {comments if comments else "None"}"""
         """Apply the status filter."""
         self.refresh_sessions()
 
-    def _on_show_older_toggled(self, checked: bool):
+    def _on_show_archived_toggled(self, checked: bool):
         """Toggling this only re-filters the already-loaded self.sessions_data --
         no new file-server call, since the whole index is already in memory."""
-        self._show_older = checked
+        self._show_archived = checked
         self._populate_table()
 
     def mark_dirty(self):
@@ -587,7 +578,10 @@ Comments: {comments if comments else "None"}"""
             status = new_status.lower()
 
             # Update session_info.json
-            self.session_manager.update_session_status(session_path, status)
+            # manual=True stops session_lifecycle from ever managing this
+            # session's status again -- otherwise un-archiving an old session
+            # would just re-archive it on the next refresh.
+            self.session_manager.update_session_status(session_path, status, manual=True)
 
             logger.info(f"Updated session status: {session_path} -> {status}")
 
