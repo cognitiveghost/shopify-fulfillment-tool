@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from gui.background_worker import BackgroundWorker
 from gui.theme_manager import get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from shopify_tool.session_lifecycle import derive_status_updates
 from shopify_tool.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -91,16 +92,40 @@ class SessionLoaderWorker(BackgroundWorker):
                 self.client_id, status_filter=self.status_filter
             )
 
-            if not self._is_cancelled:
-                self.finished_with_data.emit(sessions)
-                logger.debug(
-                    f"Loaded {len(sessions)} sessions for CLIENT_{self.client_id}"
-                )
+            if self._is_cancelled:
+                return
+
+            sessions = self._sync_statuses(sessions)
+
+            self.finished_with_data.emit(sessions)
+            logger.debug(
+                f"Loaded {len(sessions)} sessions for CLIENT_{self.client_id}"
+            )
 
         except Exception as e:
             if not self._is_cancelled:
                 logger.exception("Error loading sessions")
                 self.error_occurred.emit(str(e))
+
+    def _sync_statuses(self, sessions):
+        """Apply automatic status changes, then reflect them into `sessions`.
+
+        File I/O only -- this runs on a background thread and must never
+        touch a widget. Failures are swallowed: a stale status is survivable,
+        a session list that will not load is not.
+        """
+        try:
+            updates = derive_status_updates(sessions, datetime.now().astimezone())
+            if not updates:
+                return sessions
+            self.session_manager.apply_status_updates(self.client_id, updates)
+            for session in sessions:
+                new_status = updates.get(session.get("session_name"))
+                if new_status:
+                    session["status"] = new_status
+        except Exception:
+            logger.exception("Automatic session status sync failed; showing stored statuses")
+        return sessions
 
 
 class SessionBrowserWidget(QWidget):
