@@ -2,7 +2,7 @@ import logging
 from typing import ClassVar
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -35,6 +35,28 @@ from .pandas_model import PandasModel
 from .tag_management_panel import TagManagementPanel
 from .theme_manager import font_css, get_theme_manager
 from .wheel_ignore_combobox import WheelIgnoreComboBox
+
+# Tab 1 layout. The setup column is inside a QScrollArea, which is always
+# willing to scroll rather than ask the splitter for room -- so it must declare
+# the width its content needs, or action buttons get hidden. See
+# docs/superpowers/specs/2026-08-23-session-setup-layout-design.md.
+# Frame + vertical scrollbar. Measured: frame 0 (the scroll area is NoFrame)
+# and a 12px scrollbar from the theme -- 24 is deliberate slack over that.
+_SETUP_COLUMN_SLACK = 24
+_RECENT_PANEL_MAX_WIDTH = 320
+_RECENT_SESSIONS_ROWS = 5
+
+
+def _recent_list_height(widget: QListWidget) -> int:
+    """Height of exactly _RECENT_SESSIONS_ROWS rows.
+
+    From font metrics, not sizeHintForRow(), which returns -1 while the list is
+    empty -- and it is empty when the panel is built. The trailing +4 is the
+    slack that makes the fifth row fit whole rather than clipped (the viewport
+    otherwise lands at 5.23 rows).
+    """
+    row = QFontMetrics(widget.font()).height()
+    return row * _RECENT_SESSIONS_ROWS + 2 * widget.frameWidth() + 4
 
 
 class UIManager:
@@ -263,8 +285,11 @@ class UIManager:
         """Create Tab 1: Session Setup with split layout.
 
         Contains:
-        - Left panel (60%): Session management, File loading, Actions, Reports
-        - Right panel (40%): Recent Sessions quick-pick (full browser is on Tab 3)
+        - Left panel: Session management, File loading, Actions, Reports. Takes
+          all width the quick-pick does not need, and never less than its
+          content requires.
+        - Right panel: Recent Sessions quick-pick, capped at
+          _RECENT_PANEL_MAX_WIDTH (full browser is on Tab 3).
         """
         tab = QWidget()
         main_layout = QHBoxLayout(tab)
@@ -273,18 +298,20 @@ class UIManager:
         # Create horizontal splitter
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left panel (60%) - Session Setup content
+        # Left panel - Session Setup content
         left_panel = self._create_session_setup_panel()
         splitter.addWidget(left_panel)
 
-        # Right panel (40%) - Session Browser
+        # Right panel - Session Browser
         right_panel = self._create_session_browser_panel()
         splitter.addWidget(right_panel)
 
-        # Set initial sizes (60:40 proportion)
-        splitter.setSizes([600, 400])
-        splitter.setStretchFactor(0, 6)
-        splitter.setStretchFactor(1, 4)
+        # All extra width goes to the setup content, not the quick-pick card --
+        # a 6:4 stretch re-inflates the card to 642px on a wide monitor for a
+        # five-row list.
+        splitter.setSizes([1100, _RECENT_PANEL_MAX_WIDTH])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
 
         main_layout.addWidget(splitter)
         return tab
@@ -321,6 +348,15 @@ class UIManager:
         scroll.setWidget(scroll_widget)
         outer_layout.addWidget(scroll)
 
+        # A QScrollArea's own minimum is tiny -- it would rather scroll than ask
+        # for room, which let the splitter squeeze this column below the 706px
+        # its content needs and hide action buttons behind a horizontal
+        # scrollbar. Pin the minimum to what the content actually reports; the
+        # hint is already correct here, before show().
+        panel.setMinimumWidth(
+            scroll_widget.minimumSizeHint().width() + _SETUP_COLUMN_SLACK
+        )
+
         return panel
 
     def _create_session_browser_panel(self):
@@ -332,6 +368,9 @@ class UIManager:
         2026-07-26-unified-ui-design-system-design.md.
         """
         panel = QWidget()
+        # The stretch factors already size the card; this cap is what stops the
+        # user dragging the splitter and re-inflating it.
+        panel.setMaximumWidth(_RECENT_PANEL_MAX_WIDTH)
         layout = QVBoxLayout(panel)
         layout.setSpacing(5)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -342,12 +381,16 @@ class UIManager:
 
         self.mw.recent_sessions_list = QListWidget()
         self.mw.recent_sessions_list.itemDoubleClicked.connect(self._on_recent_session_double_clicked)
-        layout.addWidget(self.mw.recent_sessions_list, 1)
+        self.mw.recent_sessions_list.setFixedHeight(
+            _recent_list_height(self.mw.recent_sessions_list)
+        )
+        layout.addWidget(self.mw.recent_sessions_list)
 
         open_full_link = QPushButton("Open full Session Browser →")
         open_full_link.setFlat(True)
         open_full_link.clicked.connect(lambda: self.mw.main_tabs.setCurrentIndex(2))
         layout.addWidget(open_full_link)
+        layout.addStretch()  # keep the list and its link together at the top
 
         return panel
 
@@ -362,7 +405,9 @@ class UIManager:
         self.mw.recent_sessions_list.clear()
         if not client_id:
             return
-        sessions = self.mw.session_manager.list_client_sessions(client_id)[:5]
+        sessions = self.mw.session_manager.list_client_sessions(client_id)[
+            :_RECENT_SESSIONS_ROWS
+        ]
         for info in sessions:
             label = f"{info.get('session_name', '?')} — {info.get('status', '?')}"
             item = QListWidgetItem(label)
@@ -502,6 +547,11 @@ class UIManager:
         group.setLayout(layout)
 
         # Orders section
+        # ponytail: Orders and Stock side by side set this page's 706px floor,
+        # so the setup column stops shrinking at 730px. That is inert today --
+        # the window cannot go below 1221px anyway, a floor Tab 2 sets, not this
+        # one. No responsive stacking is built; if Tab 2's floor ever drops,
+        # stack these two vertically below a width threshold.
         layout.addWidget(self._create_orders_file_section())
 
         # Stock section

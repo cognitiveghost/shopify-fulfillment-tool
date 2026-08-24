@@ -1,24 +1,32 @@
-"""Regression test for the Session Setup window resizing/shifting when the
-user switches Orders 'Load Mode' to Folder -- gui.ui_manager.UIManager.
+"""Regression tests for Tab 1's layout -- gui.ui_manager.
 
-Root cause: _create_session_setup_panel() (Tab 1's left panel) laid its
-sections directly in a QVBoxLayout with no QScrollArea. Switching to Folder
-mode reveals extra widgets (file list, count label, options checkboxes) that
-were previously hidden (and so contributed zero height). With no scroll area
-to absorb the growth, the panel's increased minimum height forces the whole
-top-level window to resize -- exactly the pattern this codebase already
-avoids elsewhere (see _create_statistics_subtab's QScrollArea wrapping).
+Two unrelated regressions pinned in one file (same area of the codebase):
+
+1. Switching Orders 'Load Mode' to Folder must not grow the panel's minimum
+   height and resize the whole window (root cause: no QScrollArea absorbing
+   the newly-revealed widgets -- fixed by wrapping the setup column in one).
+2. That same QScrollArea is always willing to scroll rather than ask the
+   splitter for room, so a fixed 60/40 splitter squeezed it below the 706px
+   its content needs: a horizontal scrollbar appeared and five action
+   buttons -- including "Generate Reports" -- fell off the right edge at the
+   app's own default 1100x900 geometry. See
+   docs/superpowers/specs/2026-08-23-session-setup-layout-design.md.
 """
 import pytest
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QPushButton,
+    QScrollArea,
+    QSplitter,
+)
 
-from gui.ui_manager import UIManager
+from gui.ui_manager import _RECENT_PANEL_MAX_WIDTH, UIManager
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def qapp():
-    app = QApplication.instance() or QApplication([])
-    yield app
+    return QApplication.instance() or QApplication([])
 
 
 @pytest.fixture
@@ -50,3 +58,73 @@ def test_switching_orders_to_folder_mode_does_not_grow_minimum_height(mw, qapp):
 
     height_after = central.minimumSizeHint().height()
     assert height_after == height_before
+
+
+@pytest.fixture
+def main_window(tmp_path, monkeypatch):
+    monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
+    from gui.main_window_pyside import MainWindow
+    win = MainWindow()
+    # The app's own default (main_window_pyside.py:76). Qt clamps it up to the
+    # window's real minimum, so these tests measure the narrowest window a user
+    # can actually produce -- which is the case that matters.
+    win.resize(1100, 900)
+    win.show()
+    QApplication.processEvents()
+    win.main_tabs.setCurrentIndex(0)
+    QApplication.processEvents()
+    yield win
+    win.close()
+
+
+def _clipped_buttons(tab):
+    """Buttons whose right edge falls outside the setup column's viewport."""
+    scroll = tab.findChild(QScrollArea)
+    inner = scroll.widget()
+    limit = scroll.viewport().width()
+    return [b.text() for b in inner.findChildren(QPushButton)
+            if b.mapTo(inner, b.rect().topRight()).x() > limit]
+
+
+def test_no_action_button_is_clipped_at_default_window_size(main_window):
+    tab = main_window.main_tabs.widget(0)
+    assert _clipped_buttons(tab) == []
+
+
+def test_setup_column_never_scrolls_horizontally(main_window):
+    tab = main_window.main_tabs.widget(0)
+    scroll = tab.findChild(QScrollArea)
+    assert not scroll.horizontalScrollBar().isVisible()
+
+
+def test_recent_sessions_panel_stays_compact(main_window):
+    tab = main_window.main_tabs.widget(0)
+    card = tab.findChild(QSplitter).widget(1)
+    assert card.width() <= _RECENT_PANEL_MAX_WIDTH
+    assert main_window.recent_sessions_list.height() <= 200
+
+    # The stretch factors alone already keep the card at the cap, so the above
+    # would pass with setMaximumWidth removed. Simulate a user dragging the
+    # splitter open -- that is the only thing the cap actually resists.
+    main_window.resize(1920, 1080)
+    QApplication.processEvents()
+    tab.findChild(QSplitter).setSizes([200, 1500])
+    QApplication.processEvents()
+    assert card.width() <= _RECENT_PANEL_MAX_WIDTH
+
+
+def test_setup_column_does_not_raise_the_app_minimum_window_width(main_window):
+    """Pinning Tab 1's minimum to its content is what stops buttons hiding --
+    but it also means anything added to that column widens that minimum. The
+    widest tab sets the whole app's minimum window width, and today that is
+    Tab 2 (Analysis Results), with Tab 1 ~30px behind it. Compare against the
+    other tabs rather than a pixel constant, so this fails when Tab 1 actually
+    takes over the floor and not when Windows font metrics shift everything.
+    """
+    tabs = main_window.main_tabs
+    widths = [tabs.widget(i).minimumSizeHint().width() for i in range(tabs.count())]
+    setup, others = widths[0], max(widths[1:])
+    assert setup <= others, (
+        f"Tab 1 now sets the app's minimum window width ({setup}px vs {others}px "
+        f"for the next widest tab) -- the whole app got harder to fit on screen."
+    )
