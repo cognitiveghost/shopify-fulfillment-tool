@@ -349,3 +349,77 @@ class TestListClientSessionsUsesIndex:
 
     def test_no_sessions_dir_returns_empty_list(self, session_manager):
         assert session_manager.list_client_sessions("M") == []
+
+
+class TestBatchStatusUpdates:
+    def test_applies_every_update_to_session_info(self, session_manager):
+        first = Path(session_manager.create_session("M"))
+        second = Path(session_manager.create_session("M"))
+
+        applied = session_manager.apply_status_updates(
+            "M", {first.name: "archived", second.name: "completed"}
+        )
+
+        assert applied == 2
+        assert session_manager.get_session_info(str(first))["status"] == "archived"
+        assert session_manager.get_session_info(str(second))["status"] == "completed"
+
+    def test_rewrites_the_index_exactly_once(self, session_manager, monkeypatch):
+        # The whole point of the batch path. A test that only checks the
+        # resulting statuses passes just as happily with the per-session
+        # implementation, which rewrites the entire index once per session.
+        names = [Path(session_manager.create_session("M")).name for _ in range(3)]
+
+        calls = []
+        original = SessionManager._write_index
+        def counting(self, client_sessions_dir, entries):
+            calls.append(client_sessions_dir)
+            return original(self, client_sessions_dir, entries)
+        monkeypatch.setattr(SessionManager, "_write_index", counting)
+
+        session_manager.apply_status_updates("M", dict.fromkeys(names, "archived"))
+
+        assert len(calls) == 1
+
+    def test_index_reflects_the_new_statuses(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+
+        session_manager.apply_status_updates("M", {session_path.name: "archived"})
+
+        sessions = session_manager.list_client_sessions("M")
+        assert [s["status"] for s in sessions] == ["archived"]
+
+    def test_one_bad_session_does_not_stop_the_others(self, session_manager):
+        good = Path(session_manager.create_session("M"))
+
+        applied = session_manager.apply_status_updates(
+            "M", {"does_not_exist": "archived", good.name: "archived"}
+        )
+
+        assert applied == 1
+        assert session_manager.get_session_info(str(good))["status"] == "archived"
+
+    def test_empty_updates_writes_nothing(self, session_manager, monkeypatch):
+        session_manager.create_session("M")
+        monkeypatch.setattr(
+            SessionManager, "_write_index",
+            lambda *a, **k: pytest.fail("must not touch the index for an empty update set"),
+        )
+        assert session_manager.apply_status_updates("M", {}) == 0
+
+    def test_invalid_status_is_skipped_not_raised(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+        assert session_manager.apply_status_updates("M", {session_path.name: "bogus"}) == 0
+        assert session_manager.get_session_info(str(session_path))["status"] == "active"
+
+
+class TestManualStatusFlag:
+    def test_manual_update_records_the_flag(self, session_manager):
+        session_path = session_manager.create_session("M")
+        session_manager.update_session_status(session_path, "active", manual=True)
+        assert session_manager.get_session_info(session_path)["status_manually_set"] is True
+
+    def test_automatic_update_does_not_set_the_flag(self, session_manager):
+        session_path = session_manager.create_session("M")
+        session_manager.update_session_status(session_path, "completed")
+        assert "status_manually_set" not in session_manager.get_session_info(session_path)

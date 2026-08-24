@@ -433,12 +433,15 @@ class SessionManager:
         except Exception:
             logger.exception(f"Failed to update session index for {session_path_obj}")
 
-    def update_session_status(self, session_path: str, status: str) -> bool:
+    def update_session_status(self, session_path: str, status: str, manual: bool = False) -> bool:
         """Update session status in session_info.json.
 
         Args:
             session_path (str): Full path to session directory
             status (str): New status ("active", "completed", "abandoned")
+            manual (bool): True when a human set this status. Records
+                `status_manually_set`, which stops session_lifecycle from
+                ever managing this session's status again.
 
         Returns:
             bool: True if updated successfully
@@ -461,6 +464,8 @@ class SessionManager:
             # Update status
             session_info["status"] = status
             session_info["status_updated_at"] = datetime.now().astimezone().isoformat()
+            if manual:
+                session_info["status_manually_set"] = True
 
             # Save back
             session_info_path = session_path_obj / "session_info.json"
@@ -482,6 +487,62 @@ class SessionManager:
             except Exception as e:
                 logger.exception("Failed to update session status")
                 raise SessionManagerError(f"Failed to update session status: {e}")
+
+    def apply_status_updates(self, client_id: str, updates: dict) -> int:
+        """Set many sessions' statuses with a single index rewrite.
+
+        `update_session_status` rewrites the whole client index per call, so
+        applying a backlog one session at a time is O(N^2) in bytes written
+        over a UNC share. Each session_info.json still takes its own lock --
+        Packing Tool writes those same files -- but the index is written once.
+
+        Best-effort per session: one unwritable session is logged and skipped
+        and the rest still apply. Never raises; a session list that will not
+        load is worse than one carrying a stale status.
+
+        Returns the number of sessions actually updated.
+        """
+        if not updates:
+            return 0
+
+        client_sessions_dir = self.sessions_root / f"CLIENT_{client_id.upper()}"
+        applied = {}
+
+        for session_name, status in updates.items():
+            if status not in self.VALID_STATUSES:
+                logger.warning(f"Skipping invalid status '{status}' for {session_name}")
+                continue
+            session_path_obj = client_sessions_dir / session_name
+            try:
+                with self._locked_session_info(session_path_obj):
+                    session_info = self.get_session_info(str(session_path_obj))
+                    if not session_info:
+                        logger.warning(f"Skipping missing session: {session_path_obj}")
+                        continue
+                    session_info["status"] = status
+                    session_info["status_updated_at"] = datetime.now().astimezone().isoformat()
+                    session_info.pop("session_path", None)
+                    with open(session_path_obj / "session_info.json", "w", encoding="utf-8") as f:
+                        json.dump(session_info, f, indent=2)
+                applied[session_name] = session_info
+            except Exception:
+                logger.exception(f"Failed to apply status to {session_path_obj}")
+
+        if not applied:
+            return 0
+
+        # One lock, one rewrite -- the reason this method exists.
+        try:
+            with self._exclusive_lock(self._index_lock_path(client_sessions_dir)):
+                entries = self._read_index(client_sessions_dir) or []
+                entries = [e for e in entries if e.get("session_name") not in applied]
+                entries.extend(applied.values())
+                self._write_index(client_sessions_dir, entries)
+        except Exception:
+            logger.exception(f"Failed to rewrite session index for CLIENT_{client_id}")
+
+        logger.info(f"Applied {len(applied)} automatic status updates for CLIENT_{client_id}")
+        return len(applied)
 
     def update_session_info(self, session_path: str, updates: dict) -> bool:
         """Update session metadata with arbitrary fields.
