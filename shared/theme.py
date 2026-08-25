@@ -22,7 +22,7 @@ class ThemeTokens:
     """Color/spacing/font tokens for one theme (light or dark).
 
     Color field names are kept identical to shopify-fulfillment-tool's
-    pre-unification `ThemeColors` dataclass on purpose -- ~180 call sites
+    pre-unification `ThemeColors` dataclass on purpose — ~180 call sites
     across gui/*.py read these by exact attribute name (e.g.
     `theme.text_secondary`, `theme.accent_blue`) and renaming them would
     mean touching every one of those call sites for no functional gain.
@@ -110,6 +110,9 @@ LIGHT_THEME = ThemeTokens(
     name="light",
     surface="#FFFFFF",
     surface_raised="#F4F4F5",
+    # Binding plane for light: text_placeholder lands at 4.50 and status_info at
+    # 4.52 against this, both within 0.05 of their floors. Darkening it fails
+    # validate_theme -- retune those two tokens with it, not after.
     surface_overlay="#EAEAEC",
     text="#1A1A1A",
     text_secondary="#5A5A5A",
@@ -235,6 +238,9 @@ _ALIAS_PAIRS = (
 # Text floors are AAA for body and AA for secondary; 3.0 is WCAG's non-text
 # minimum, applied to disabled text as well because a warehouse operator who
 # cannot read a disabled control files a support ticket.
+# Deliberately mirrored by a parametrized test in packing-tool's
+# tests/test_theme.py: the copy there is what catches someone *weakening* a
+# floor here. Keep both in step when adding a token.
 _MIN_CONTRAST_ON_PLANES = {
     "text": 7.0,
     "text_secondary": 4.5,
@@ -300,6 +306,10 @@ def validate_theme(theme: ThemeTokens) -> None:
                 f"tint {tint}, below the 4.5:1 minimum"
             )
 
+    # ponytail: on_accent is proven against accent_fill only. QPushButton:hover
+    # and :pressed swap button_hover_light/dark in behind the same white text;
+    # dark's #2D9FE8 is 2.90:1. Re-value in 8.3, when the five literal `white`s
+    # become on_accent and this pairing starts claiming to be covered.
     on_accent = contrast_ratio(theme.on_accent, theme.accent_fill)
     if on_accent < 4.5:
         raise ValueError(
