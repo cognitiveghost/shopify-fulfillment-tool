@@ -84,29 +84,37 @@ Known presentation debt folded into 8.6 (carried from the roadmap task):
 
 ---
 
-## Open questions for the user
+## Design decisions (answered by the user, 2026-08-25)
 
-These three shape everything downstream and are expensive to undo, so 8.1 does not start
-until they are answered.
+**Q1 — palette depth: expand tokens and retune.**
+Current hues stay as the base. The token set grows: elevation scale, semantic status roles
+(success/warning/danger/info as *roles*, not raw `accent_*`), plus spacing, radius and
+typographic scales. Light and dark both retuned for contrast. Not a rebrand.
 
-**Q1 — How far does the palette move?**
-- (a) Keep the current 20 tokens and palette; only fix the 125 violations. Cheapest, but
-  "fresh colour palettes" in the task implies more.
-- (b) *Recommended.* Keep the current hues as a base, expand the token set (elevation,
-  semantic status roles, spacing/radius/type scales) and retune light/dark for contrast.
-- (c) Full rebrand — new brand hue, both themes redrawn from scratch.
+**Q2 — Packing Tool restructure: full parity.**
+onefile → onedir, flat `src/` → a `gui/` package, and `gui/assets/` with the icon set and
+Inter. The 2771-line `main.py` gets a real refactor. Item 8.4 keeps its own cycle and its
+own risk budget, and stays isolated from all visual work so a broken Windows build can be
+bisected without palette churn in the way.
 
-**Q2 — How deep does the Packing Tool restructure go?**
-- (a) *Recommended.* Full parity: onedir + `gui/` package + `gui/assets/`, as the task
-  literally asks. Real refactor of a 2771-line `main.py`; own cycle, own risk budget.
-- (b) Assets only: add `gui/assets/` and the loaders, leave flat `src/` and onefile alone.
-  Much cheaper, but the two apps stay structurally divergent.
+**Q3 — layout: rework navigation as well.**
+Not just a restyle and not just the known defects — tab/navigation structure is in scope.
 
-**Q3 — Does layout actually change, or is this a restyle?**
-- (a) Restyle in place — same screens, same navigation, new tokens and spacing.
-- (b) *Recommended.* Restyle plus targeted layout fixes only where there is a known defect
-  (the three debts above), leaving navigation structure alone.
-- (c) Rework navigation/tab structure too. Highest risk; retrains warehouse users who use
-  this daily.
+> **Risk accepted by the user.** This was flagged as the highest-risk option and chosen
+> deliberately. Warehouse staff use both apps daily, so navigation changes mean retraining.
+> Two consequences for the items below:
+>
+> - 8.6 must split navigation rework out from cosmetic restyle into separate commits, so
+>   navigation can be reverted independently if it does not survive contact with users.
+> - The 8.1 spec must include a before/after navigation map, not just token tables. That map
+>   is the artifact the user signs off on before any navigation code is written — a second,
+>   narrower consult inside 8.1, not a re-litigation of this decision.
 
-A one-line answer per question is enough to unblock 8.1.
+### Consequences for the decomposition
+
+- **8.1** now has two deliverables: the design-system spec *and* the navigation map. It is
+  the largest item in the phase and should not be squeezed into a partial budget window.
+- **8.2** token expansion is confirmed as a real change, not a no-op — it must be authored
+  in `packing-tool`'s `shared/theme.py` and pulled here via `scripts/sync_shared.py`.
+- **8.4** is confirmed at full scope and is now on the critical path for 8.5.
+- **8.6** grows and should be expected to split further once the navigation map exists.
