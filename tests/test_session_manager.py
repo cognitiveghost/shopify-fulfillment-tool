@@ -1,11 +1,13 @@
 """Session lifecycle & session_info.json accuracy (part of priority 6: app config)."""
 import json
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from shared.atomic_write import atomic_write_json
+from shopify_tool.session_lifecycle import derive_status_updates
 from shopify_tool.session_manager import SessionManager, SessionManagerError
 
 
@@ -349,3 +351,119 @@ class TestListClientSessionsUsesIndex:
 
     def test_no_sessions_dir_returns_empty_list(self, session_manager):
         assert session_manager.list_client_sessions("M") == []
+
+
+class TestBatchStatusUpdates:
+    def test_applies_every_update_to_session_info(self, session_manager):
+        first = Path(session_manager.create_session("M"))
+        second = Path(session_manager.create_session("M"))
+
+        applied = session_manager.apply_status_updates(
+            "M", {first.name: "archived", second.name: "completed"}
+        )
+
+        assert applied == 2
+        assert session_manager.get_session_info(str(first))["status"] == "archived"
+        assert session_manager.get_session_info(str(second))["status"] == "completed"
+
+    def test_rewrites_the_index_exactly_once(self, session_manager, monkeypatch):
+        # The whole point of the batch path. A test that only checks the
+        # resulting statuses passes just as happily with the per-session
+        # implementation, which rewrites the entire index once per session.
+        names = [Path(session_manager.create_session("M")).name for _ in range(3)]
+
+        calls = []
+        original = SessionManager._write_index
+        def counting(self, client_sessions_dir, entries):
+            calls.append(client_sessions_dir)
+            return original(self, client_sessions_dir, entries)
+        monkeypatch.setattr(SessionManager, "_write_index", counting)
+
+        session_manager.apply_status_updates("M", dict.fromkeys(names, "archived"))
+
+        assert len(calls) == 1
+
+    def test_index_reflects_the_new_statuses(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+
+        session_manager.apply_status_updates("M", {session_path.name: "archived"})
+
+        sessions = session_manager.list_client_sessions("M")
+        assert [s["status"] for s in sessions] == ["archived"]
+
+    def test_one_bad_session_does_not_stop_the_others(self, session_manager):
+        good = Path(session_manager.create_session("M"))
+
+        applied = session_manager.apply_status_updates(
+            "M", {"does_not_exist": "archived", good.name: "archived"}
+        )
+
+        assert applied == 1
+        assert session_manager.get_session_info(str(good))["status"] == "archived"
+
+    def test_empty_updates_writes_nothing(self, session_manager, monkeypatch):
+        session_manager.create_session("M")
+        monkeypatch.setattr(
+            SessionManager, "_write_index",
+            lambda *a, **k: pytest.fail("must not touch the index for an empty update set"),
+        )
+        assert session_manager.apply_status_updates("M", {}) == 0
+
+    def test_invalid_status_is_skipped_not_raised(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+        assert session_manager.apply_status_updates("M", {session_path.name: "bogus"}) == 0
+        assert session_manager.get_session_info(str(session_path))["status"] == "active"
+
+    def test_manual_flag_survives_a_batch_update(self, session_manager):
+        session_path = Path(session_manager.create_session("M"))
+        session_manager.update_session_status(str(session_path), "active", manual=True)
+
+        session_manager.apply_status_updates("M", {session_path.name: "archived"})
+
+        info = session_manager.get_session_info(str(session_path))
+        assert info["status"] == "archived"
+        assert info["status_manually_set"] is True
+
+    def test_a_failed_index_rewrite_drops_the_index(self, session_manager, monkeypatch):
+        # The write pass is only self-limiting while the index reflects it.
+        # If the rewrite fails and the stale index survives, every refresh
+        # re-derives and rewrites the same sessions forever.
+        session_path = Path(session_manager.create_session("M"))
+        index_path = session_path.parent / SessionManager.INDEX_FILENAME
+        session_manager.list_client_sessions("M")
+        assert index_path.exists()
+
+        monkeypatch.setattr(
+            SessionManager, "_write_index",
+            lambda *a, **k: (_ for _ in ()).throw(OSError("share went away")),
+        )
+        session_manager.apply_status_updates("M", {session_path.name: "archived"})
+
+        assert not index_path.exists()
+
+    def test_derive_apply_reread_derive_is_a_fixed_point(self, session_manager):
+        # The end-to-end idempotency the design relies on: after one pass
+        # clears the backlog, later refreshes must derive nothing at all.
+        session_path = Path(session_manager.create_session("M"))
+        old = (datetime.now().astimezone() - timedelta(days=90)).isoformat()
+        session_manager.update_session_info(str(session_path), {"created_at": old})
+
+        now = datetime.now().astimezone()
+        first = derive_status_updates(session_manager.list_client_sessions("M"), now)
+        assert first == {session_path.name: "archived"}
+
+        session_manager.apply_status_updates("M", first)
+
+        assert derive_status_updates(session_manager.list_client_sessions("M"), now) == {}
+
+
+class TestManualStatusFlag:
+    def test_manual_update_records_the_flag(self, session_manager):
+        session_path = session_manager.create_session("M")
+        session_manager.update_session_status(session_path, "active", manual=True)
+        assert session_manager.get_session_info(session_path)["status_manually_set"] is True
+
+    def test_automatic_update_does_not_set_the_flag(self, session_manager):
+        session_path = session_manager.create_session("M")
+        session_manager.update_session_status(session_path, "completed")
+        assert "status_manually_set" not in session_manager.get_session_info(session_path)
