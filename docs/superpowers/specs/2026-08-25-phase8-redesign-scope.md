@@ -15,9 +15,9 @@ facts instead of from a re-survey.
 
 | | |
 |---|---|
-| UI code | `gui/`, 22.5K lines across ~30 modules |
+| UI code | `gui/`, 22.5K lines across 51 modules (37 at top level) |
 | Largest modules | `actions_handler.py` 2159, `ui_manager.py` 1881, `main_window_pyside.py` 1598 |
-| Assets | `gui/assets/` — 19 Lucide SVG icons + Inter (Regular/Bold) |
+| Assets | `gui/assets/` — 17 Lucide SVG icons + Inter (Regular/Bold) |
 | Asset loaders | `gui/icons.py`, `gui/fonts.py` |
 | Shared widgets | `gui/components/` — only `card.py`, `form_section.py` |
 | Build | PyInstaller `--onedir`, `--add-data "gui/assets;gui/assets"`, asset presence verified in CI |
@@ -26,8 +26,8 @@ facts instead of from a re-survey.
 
 | | |
 |---|---|
-| UI code | flat `src/`, 15.8K lines; `src/main.py` alone is 2771 lines |
-| Assets | none — no icon set, no bundled font; styling via loose `src/*.qss` |
+| UI code | flat `src/`, 13.9K lines of `.py`; `src/main.py` alone is 2771 lines |
+| Assets | none — no icon set, no bundled font. Styling is inline stylesheets only; the old `src/*.qss` files were deleted, so the row below is the whole story |
 | Build | PyInstaller **onefile** (`main.spec`, single `EXE`, no `COLLECT`) |
 | Theme | consumes `shared/theme.py` through a thin `src/theme.py` shim |
 
@@ -46,6 +46,12 @@ Notable gaps for a redesign: no elevation scale beyond one step, no semantic sta
 (success/warning/danger/info as *roles* rather than raw accents), no spacing or radius
 scale, no typographic scale.
 
+> **Corrected during 8.1** — measuring the values rather than reading the field list showed
+> `spacing_xs/sm/md/lg/xl` (4/8/12/16/24) and `radius = 4` already exist. "No spacing or radius
+> scale" above is wrong for spacing and half-wrong for radius. See
+> `2026-08-25-phase8.1-design-system-design.md` §1; that document supersedes this survey
+> wherever they disagree.
+
 `shared/` is **owned by `packing-tool`**. Every token change is edited there and pulled in
 via `python scripts/sync_shared.py`. Any palette work is a packing-tool change first,
 shopify-tool second — never the reverse.
@@ -55,7 +61,10 @@ shopify-tool second — never the reverse.
 - shopify-tool `gui/`: **61** hits
 - packing-tool `src/`: **64** hits
 
-125 total violations of the repo's no-hardcoded-colours rule. This is mechanical cleanup,
+125 total violations of the repo's no-hardcoded-colours rule. **Colours only** — hex literals
+plus CSS colour keywords; hardcoded font sizes and spacing are not in this number (see the
+design spec §4). Re-greps vary by a few either way depending on the pattern, so 8.3 should
+record the exact regex it used as its own completion measure rather than chasing 125 exactly. This is mechanical cleanup,
 independent of any design decision, and it is a prerequisite for a palette retune having
 any visible effect.
 
