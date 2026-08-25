@@ -1,8 +1,13 @@
 # Phase 8 — UI/UX redesign of Shopify Tool + Packer Tool
 
-**Status:** design / brainstorm. **One question is open for the user** (visual
-direction, §6) — Phase 8's own brief makes consulting the user a hard
-requirement, not a courtesy.
+**Status:** design / brainstorm.
+
+- §6 **palette — ANSWERED**: C, Warm slate. 8.1 and 8.2 are ready to implement.
+- §9 **information architecture — OPEN**, raised by the user. Needs its own
+  design pass with rendered options before 8.4/8.5/8.6 can be planned.
+
+Phase 8's own brief makes consulting the user on design a hard requirement, not
+a courtesy — hence the picture-first treatment for both questions.
 
 **Todoist:** `6hM87j3HVcc576vV` (no subtasks — this document proposes them).
 **Branch:** `worktree-phase8-ui-redesign`.
@@ -161,12 +166,16 @@ swap only. PNGs are attached to the Todoist task and in the session output.
 | **B — Softened outline** | `#0D0D0F` / `#151518` | `#3A3A44`, still visible | Keeps today's outlined structure and the current `#007ACC` accent — just stops shouting. Smallest change, most familiar to existing users. |
 | **C — Warm slate** | `#16181D` / `#1F232A` | `#2F343D` | Lifted blue-grey ground, teal active state (`#26A69A`). Warmest, furthest from today. |
 
-**Recommendation: A.** It is the direction that actually pays off in 8.3 —
-surface-fill hierarchy needs a ground light enough to raise a card above, which
-`#000000` cannot do and B only barely can. B is the safe pick if warehouse
-staff's familiarity with the current look matters more than the redesign.
+**Recommendation was A.** **ANSWERED 2026-08-25: the user chose C — Warm
+slate.** `background="#16181D"`, `background_elevated="#1F232A"`,
+`border="#2F343D"`, `active_border="#26A69A"`, `accent_blue="#3D9BE9"`. 8.2 is
+unblocked and builds against those values. Light theme derives from them.
 
-A fourth answer is fine: "none of these, here's what I want."
+The user's ground is lifted well clear of `#000000`, so the surface-fill
+hierarchy 8.3 needs works under C exactly as it would have under A — the
+concern that drove the A recommendation does not apply to C.
+
+The same answer opened a larger question — see §9.
 
 ## 7. Decisions taken without asking (reversible, recorded)
 
@@ -190,3 +199,71 @@ w.grab().save(path)
 zero output — `MainWindow(config_path=...)` reaches a modal on startup, and a
 modal under `offscreen` blocks with no diagnostic. Use
 `faulthandler.dump_traceback_later(N, exit=True)` to find it, or stub the dialog.
+
+---
+
+## 9. OPEN — reconsidering the information architecture
+
+Raised by the user answering §6: *"what if we reconsider whole perspective of
+our visual and positioning in UI"*. This is the right instinct and it is a
+bigger question than the palette. The §2 audit kept turning up problems that no
+palette fixes, and they share one root cause: **the tab bar presents five
+things as peers when they are not.**
+
+### The structural evidence, restated as an IA problem
+
+- **The five tabs are two different kinds of thing.** Session Setup →
+  Analysis Results → Session Browser is a *workflow over one session*.
+  Information and Tools are *utilities*. The tab bar flattens that distinction.
+- **Actions are duplicated because ownership is unclear.** `Add Product to
+  Order`, `Generate Reports` and `Settings` appear on both Session Setup and
+  Analysis Results. That is not sloppiness — it is the UI admitting those two
+  tabs are views of the same object, and the user should not have to remember
+  which view carries which button.
+- **The client sidebar costs a permanent full-height column and is empty.**
+  Client selection is a *mode* that scopes everything downstream, not a list
+  worth browsing. It is currently spending ~250px of permanent width, squeezing
+  the one screen that actually needs width.
+- **Analysis Results is a wide data table in a portrait-ish 1100×900 window**,
+  with the sidebar taking a fifth of it.
+- **Session Setup uses ~75% of its height and leaves the rest blank**, while
+  Analysis Results has no room to breathe.
+- **The action strip has no rank** — eight flat buttons, and the visually
+  primary one is the *theme toggle*.
+
+### Three directions (none rendered yet — that is the next design pass)
+
+1. **Keep tabs, fix the hierarchy.** Demote Information and Tools out of the
+   tab bar into the gear menu; make the client a header control instead of a
+   sidebar; one primary action per screen. Lowest risk, smallest diff, does not
+   address the Setup/Results duplication.
+2. **Session-centric single view.** Collapse the Setup/Results split: loading
+   files and reading results become stages of one screen, and Session Browser
+   becomes the way you open or start a session. Removes the duplicated actions
+   by removing the second place they could live.
+3. **Nav rail + content pane.** Replace both the tab bar and the client sidebar
+   with a narrow icon rail — workflow at the top, utilities at the bottom — and
+   a persistent client selector in the header. Gives the table its full width
+   and scales past five destinations.
+
+**Leaning: 3 for the shell, 2 for the Setup/Results relationship.** They
+compose — a rail whose first destination is one session-centric screen. But
+this needs rendering before anyone commits: §6 was decided from pictures, and
+an IA change is far more expensive to undo than a palette.
+
+### What this does to the plan in §5
+
+- **8.1 is unaffected** and stays ready to implement — it moves files and
+  retires hardcoded colours, and cares nothing about layout.
+- **8.2 is unblocked** (palette C) and also layout-independent.
+- **8.3 (stylesheet pass) is mostly unaffected** — surface fills, spacing scale
+  and focus rings are per-widget, not per-screen.
+- **8.4 changes character.** It was "polish the Shopify screens". It becomes
+  "implement the chosen IA", and it needs its own design pass with rendered
+  options first — the same treatment §6 got.
+- 8.5 and 8.6 now depend on the IA answer, since both restyle screens that the
+  IA may move or merge.
+
+**Next Stage A should do the IA pass**: mock the three directions against the
+real app and let the user pick from pictures. Do not implement any of them
+first.
