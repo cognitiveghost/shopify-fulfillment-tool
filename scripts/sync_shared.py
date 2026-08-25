@@ -4,14 +4,22 @@ packing-tool/docs/superpowers/specs/2026-07-25-shared-unification-design.md)
 — never hand-edit shopify-fulfillment-tool/shared/ directly.
 
 Usage:
-    python scripts/sync_shared.py
+    python scripts/sync_shared.py [/path/to/packing-tool]
+
+The argument is only needed when this repo is checked out as a git worktree,
+where the sibling-directory default does not resolve.
 """
 import shutil
 import sys
 from pathlib import Path
 
 THIS_REPO = Path(__file__).resolve().parent.parent
-SOURCE = THIS_REPO.parent / "packing-tool" / "shared"
+DEFAULT_PACKING_TOOL = THIS_REPO.parent / "packing-tool"
+SOURCE = (
+    Path(sys.argv[1]).expanduser().resolve()
+    if len(sys.argv) > 1
+    else DEFAULT_PACKING_TOOL
+) / "shared"
 DEST = THIS_REPO / "shared"
 
 
