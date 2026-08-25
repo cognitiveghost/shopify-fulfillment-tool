@@ -95,7 +95,10 @@ font silently fell back (`fonts.py` never raises, by design).
 
 In `packing-tool/shared/theme.py`, extend `ThemeTokens` with what
 `build_stylesheet()` needs in 8.3 but does not have. Add fields only; do not
-change any existing value (that is 8.2, and it is gated on the user's answer):
+change any existing value — that is 8.2's job. (8.2 is no longer blocked: the
+user chose palette **C, Warm slate** — `background="#16181D"`,
+`background_elevated="#1F232A"`, `border="#2F343D"`, `active_border="#26A69A"`,
+`accent_blue="#3D9BE9"`, light theme derived. Settled; do not re-open it.)
 
 - surface levels: the dataclass has `background` and `background_elevated` but
   nothing between — add `surface` for card fills.
