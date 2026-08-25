@@ -26,67 +26,165 @@ class ThemeTokens:
     across gui/*.py read these by exact attribute name (e.g.
     `theme.text_secondary`, `theme.accent_blue`) and renaming them would
     mean touching every one of those call sites for no functional gain.
+
+    Phase 8.2 therefore adds the design-system vocabulary alongside the old
+    names rather than replacing them: `background`, `background_elevated`,
+    `accent_*`, `active_*` are now aliases carrying the same literal as
+    their canonical token (see `_ALIAS_PAIRS`). `validate_theme` asserts
+    the pairs stay equal, so the duplication cannot drift.
+
+    No color field carries a default. The light-mode WCAG failure this
+    phase repairs was caused by `accent_*` being defaults that neither
+    theme overrode, so both themes rendered identical status colors on
+    opposite backgrounds. Every color is spelled out per theme; only the
+    theme-independent `spacing_*` / `radius_*` / `font_*` scales default.
     """
     name: str
-    background: str
-    background_elevated: str
+
+    # --- Surfaces: a real three-step elevation scale (spec 3.1) ---
+    surface: str
+    surface_raised: str
+    surface_overlay: str
+
+    # --- Text (spec 3.2) ---
     text: str
     text_secondary: str
     text_disabled: str
     text_placeholder: str
+
+    # --- Borders: the missing middle (spec 3.3) ---
     border: str
     border_subtle: str
+    border_strong: str
+
+    # --- Status roles, foreground + tint (spec 3.4) ---
+    status_info: str
+    status_info_bg: str
+    status_success: str
+    status_success_bg: str
+    status_warning: str
+    status_warning_bg: str
+    status_danger: str
+    status_danger_bg: str
+
+    # --- Solid accent fill; on_accent is the text that sits on it (spec 3.4a) ---
+    accent_fill: str
+    on_accent: str
+
+    # --- Selection and focus (spec 3.5) ---
+    selection_border: str
+    selection_bg: str
+    focus_ring: str
+
+    # --- Unchanged interaction colors ---
     hover: str
-    active_background: str
-    active_border: str
     button_hover_light: str
     button_hover_dark: str
-    accent_blue: str = "#007ACC"
-    accent_green: str = "#4CAF50"
-    accent_orange: str = "#FF9800"
-    accent_red: str = "#F44336"
+
+    # --- Aliases: same literal as the canonical token, see _ALIAS_PAIRS ---
+    background: str
+    background_elevated: str
+    accent_blue: str
+    accent_green: str
+    accent_orange: str
+    accent_red: str
+    active_background: str
+    active_border: str
+
+    # --- Theme-independent scales ---
     radius: int = 4
+    radius_sm: int = 3
+    radius_md: int = 6
+    radius_lg: int = 10
     spacing_xs: int = 4
     spacing_sm: int = 8
     spacing_md: int = 12
     spacing_lg: int = 16
     spacing_xl: int = 24
+    spacing_2xl: int = 32
     font_family: str = "Segoe UI, sans-serif"
     font_family_mono: str = "Consolas, monospace"
 
 
 LIGHT_THEME = ThemeTokens(
     name="light",
-    background="#FFFFFF",
-    background_elevated="#FAFAFA",
+    surface="#FFFFFF",
+    surface_raised="#F4F4F5",
+    # Binding plane for light: text_placeholder lands at 4.50 and status_info at
+    # 4.52 against this, both within 0.05 of their floors. Darkening it fails
+    # validate_theme -- retune those two tokens with it, not after.
+    surface_overlay="#EAEAEC",
     text="#1A1A1A",
     text_secondary="#5A5A5A",
-    text_disabled="#AAAAAA",
-    text_placeholder="#888888",
-    border="#1A1A1A",
-    border_subtle="#CCCCCC",
+    text_disabled="#808080",
+    text_placeholder="#6A6A6A",
+    border="#868686",
+    border_subtle="#D8D8D8",
+    border_strong="#1A1A1A",
+    status_info="#006DB7",
+    status_info_bg="#E3F2FD",
+    status_success="#347736",
+    status_success_bg="#EAF6EA",
+    status_warning="#995B00",
+    status_warning_bg="#FDF2E3",
+    status_danger="#D0190B",
+    status_danger_bg="#FDE4E3",
+    accent_fill="#006FBA",
+    on_accent="#FFFFFF",
+    selection_border="#006DB7",
+    selection_bg="#E3F2FD",
+    focus_ring="#0064AB",
     hover="#EEEEEE",
-    active_background="#F0F8F0",
-    active_border="#4CAF50",
     button_hover_light="#005A9E",
     button_hover_dark="#005A9E",
+    # aliases
+    background="#FFFFFF",
+    background_elevated="#F4F4F5",
+    accent_blue="#006FBA",
+    accent_green="#347736",
+    accent_orange="#995B00",
+    accent_red="#D0190B",
+    active_background="#E3F2FD",
+    active_border="#006DB7",
 )
 
 DARK_THEME = ThemeTokens(
     name="dark",
-    background="#000000",
-    background_elevated="#0F0F0F",
-    text="#FFFFFF",
+    surface="#0A0A0A",
+    surface_raised="#17171A",
+    surface_overlay="#232327",
+    text="#F2F2F2",
     text_secondary="#B0B0B0",
-    text_disabled="#444444",
-    text_placeholder="#888888",
-    border="#FFFFFF",
-    border_subtle="#404040",
+    text_disabled="#6E6E6E",
+    text_placeholder="#8A8A8A",
+    border="#6D6D6D",
+    border_subtle="#2E2E2E",
+    border_strong="#F2F2F2",
+    status_info="#008EEE",
+    status_info_bg="#042134",
+    status_success="#4CAF50",
+    status_success_bg="#112712",
+    status_warning="#FF9800",
+    status_warning_bg="#342104",
+    status_danger="#F54E42",
+    status_danger_bg="#340704",
+    accent_fill="#006FBA",
+    on_accent="#FFFFFF",
+    selection_border="#008EEE",
+    selection_bg="#042134",
+    focus_ring="#4DA9E8",
     hover="#1A1A1A",
-    active_background="#1A3D1A",
-    active_border="#4CAF50",
     button_hover_light="#2D9FE8",
     button_hover_dark="#2D9FE8",
+    # aliases
+    background="#0A0A0A",
+    background_elevated="#17171A",
+    accent_blue="#006FBA",
+    accent_green="#4CAF50",
+    accent_orange="#FF9800",
+    accent_red="#F54E42",
+    active_background="#042134",
+    active_border="#008EEE",
 )
 
 THEMES: dict = {"light": LIGHT_THEME, "dark": DARK_THEME}
@@ -98,23 +196,155 @@ def get_theme(name: str) -> ThemeTokens:
 
 
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+_SURFACE_PLANES = ("surface", "surface_raised", "surface_overlay")
+
 _COLOR_FIELDS = (
-    "background", "background_elevated", "text", "text_secondary",
-    "text_disabled", "text_placeholder", "border", "border_subtle",
-    "hover", "active_background", "active_border", "button_hover_light",
-    "button_hover_dark", "accent_blue", "accent_green", "accent_orange",
-    "accent_red",
+    # canonical
+    "surface", "surface_raised", "surface_overlay",
+    "text", "text_secondary", "text_disabled", "text_placeholder",
+    "border", "border_subtle", "border_strong",
+    "status_info", "status_info_bg",
+    "status_success", "status_success_bg",
+    "status_warning", "status_warning_bg",
+    "status_danger", "status_danger_bg",
+    "accent_fill", "on_accent",
+    "selection_border", "selection_bg", "focus_ring",
+    "hover", "button_hover_light", "button_hover_dark",
+    # aliases
+    "background", "background_elevated",
+    "accent_blue", "accent_green", "accent_orange", "accent_red",
+    "active_background", "active_border",
+)
+
+# Legacy name -> canonical token. Each pair carries the same literal in both
+# theme constructors; validate_theme asserts they stay equal so the
+# duplication cannot drift. Aliases are real dataclass fields, not
+# properties: a property would sit outside _COLOR_FIELDS and escape
+# validation entirely.
+_ALIAS_PAIRS = (
+    ("background", "surface"),
+    ("background_elevated", "surface_raised"),
+    ("accent_blue", "accent_fill"),
+    ("accent_green", "status_success"),
+    ("accent_orange", "status_warning"),
+    ("accent_red", "status_danger"),
+    ("active_background", "selection_bg"),
+    ("active_border", "selection_border"),
 )
 
 
+# token -> minimum contrast ratio against every plane in _SURFACE_PLANES.
+# Text floors are AAA for body and AA for secondary; 3.0 is WCAG's non-text
+# minimum, applied to disabled text as well because a warehouse operator who
+# cannot read a disabled control files a support ticket.
+# Deliberately mirrored by a parametrized test in packing-tool's
+# tests/test_theme.py: the copy there is what catches someone *weakening* a
+# floor here. Keep both in step when adding a token.
+_MIN_CONTRAST_ON_PLANES = {
+    "text": 7.0,
+    "text_secondary": 4.5,
+    "text_disabled": 3.0,
+    "text_placeholder": 4.5,
+    "border": 3.0,
+    "focus_ring": 3.0,
+    "selection_border": 3.0,
+    "status_info": 4.5,
+    "status_success": 4.5,
+    "status_warning": 4.5,
+    "status_danger": 4.5,
+}
+
+_STATUS_ROLES = ("info", "success", "warning", "danger")
+
+
 def validate_theme(theme: ThemeTokens) -> None:
-    """Raise ValueError if any color field isn't a valid #RRGGBB string."""
+    """Raise ValueError if a theme violates the 8.1 design-system contract.
+
+    Checks three things: every color field is a valid #RRGGBB string, every
+    alias still equals its canonical token, and every foreground clears its
+    WCAG minimum on all three surface planes -- not just on the window
+    background. The plane matrix is the point: light mode shipped three
+    status colors below AA for months because nothing ever measured them,
+    and a check against a single background per theme would have stayed
+    green throughout.
+
+    See docs/superpowers/specs/2026-08-25-phase8.1-design-system-design.md
+    section 6 in shopify-fulfillment-tool for the acceptance criterion.
+    """
     for field_name in _COLOR_FIELDS:
         value = getattr(theme, field_name)
         if not _HEX_RE.match(value):
             raise ValueError(
                 f"{theme.name}.{field_name} = {value!r} is not a valid #RRGGBB color"
             )
+
+    for alias, canonical in _ALIAS_PAIRS:
+        if getattr(theme, alias) != getattr(theme, canonical):
+            raise ValueError(
+                f"{theme.name}.{alias} = {getattr(theme, alias)!r} has drifted "
+                f"from its canonical token {canonical} = "
+                f"{getattr(theme, canonical)!r}"
+            )
+
+    for token, floor in _MIN_CONTRAST_ON_PLANES.items():
+        value = getattr(theme, token)
+        for plane in _SURFACE_PLANES:
+            ratio = contrast_ratio(value, getattr(theme, plane))
+            if ratio < floor:
+                raise ValueError(
+                    f"{theme.name}.{token} has {ratio:.2f}:1 contrast against "
+                    f"{plane}, below the {floor}:1 minimum"
+                )
+
+    for role in _STATUS_ROLES:
+        fg, tint = f"status_{role}", f"status_{role}_bg"
+        ratio = contrast_ratio(getattr(theme, fg), getattr(theme, tint))
+        if ratio < 4.5:
+            raise ValueError(
+                f"{theme.name}.{fg} has {ratio:.2f}:1 contrast against its own "
+                f"tint {tint}, below the 4.5:1 minimum"
+            )
+
+    # ponytail: on_accent is proven against accent_fill only. QPushButton:hover
+    # and :pressed swap button_hover_light/dark in behind the same white text;
+    # dark's #2D9FE8 is 2.90:1. Re-value in 8.3, when the five literal `white`s
+    # become on_accent and this pairing starts claiming to be covered.
+    on_accent = contrast_ratio(theme.on_accent, theme.accent_fill)
+    if on_accent < 4.5:
+        raise ValueError(
+            f"{theme.name}.on_accent has {on_accent:.2f}:1 contrast against "
+            f"accent_fill, below the 4.5:1 minimum"
+        )
+
+    selected_text = contrast_ratio(theme.text, theme.selection_bg)
+    if selected_text < 4.5:
+        raise ValueError(
+            f"{theme.name}.text has {selected_text:.2f}:1 contrast against "
+            f"selection_bg, below the 4.5:1 minimum"
+        )
+
+
+def _relative_luminance(hex_color: str) -> float:
+    """WCAG 2.1 relative luminance of an #RRGGBB color."""
+    raw = hex_color.lstrip("#")
+    channels = [int(raw[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    linear = [
+        c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+        for c in channels
+    ]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast_ratio(fg: str, bg: str) -> float:
+    """WCAG 2.1 contrast ratio between two #RRGGBB colors, 1.0 to 21.0.
+
+    Symmetric in its arguments -- the names are for the caller's benefit.
+    """
+    lighter, darker = sorted(
+        (_relative_luminance(fg), _relative_luminance(bg)), reverse=True
+    )
+    return (lighter + 0.05) / (darker + 0.05)
 
 
 def clamp_geometry(

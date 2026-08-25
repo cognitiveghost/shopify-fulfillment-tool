@@ -77,7 +77,9 @@ It's one-way synced from `../packing-tool/shared/`, the canonical source (see `p
 
 - **Never hand-edit files under `shared/`** — the next sync silently overwrites them.
 - To change shared behavior: edit it in `packing-tool`, then run `python scripts/sync_shared.py` from this repo's root.
-- `packing-tool` must exist as a sibling directory (`../packing-tool`) for the sync script to find it.
+- `packing-tool` must exist as a sibling directory (`../packing-tool`) for the sync script to find it,
+  or pass its path: `python scripts/sync_shared.py /path/to/packing-tool` (needed from a worktree,
+  where the sibling default resolves to `.claude/worktrees/packing-tool` and does not exist).
 
 ---
 

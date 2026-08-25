@@ -108,7 +108,7 @@ def test_app_icon_is_built_in_a_fixed_accent_color():
     # alpha == 255 (fully covered), not just "mostly opaque": Qt's
     # antialiased edge pixels are alpha-blended against transparent and
     # unpremultiply with a +/-1 per-channel rounding drift for any color
-    # whose channels aren't all 0 or 255 -- accent_blue (#007ACC) is exactly
+    # whose channels aren't all 0 or 255 -- accent_blue (#006FBA) is exactly
     # such a color, so a >200 threshold picks up near-misses like #0079cc.
     opaque = {
         image.pixelColor(x, y).name()
