@@ -8,7 +8,13 @@ test_type_scale.py::test_body_role_matches_shared_button_size.
 """
 import pytest
 
-from shared.theme import DARK_THEME, LIGHT_THEME, contrast_ratio, validate_theme
+from shared.theme import (
+    _SURFACE_PLANES,
+    DARK_THEME,
+    LIGHT_THEME,
+    contrast_ratio,
+    validate_theme,
+)
 
 
 @pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=["light", "dark"])
@@ -24,6 +30,36 @@ def test_accent_blue_is_still_the_fill_that_carries_white_text(theme):
     """
     assert theme.accent_blue == theme.accent_fill
     assert contrast_ratio(theme.on_accent, theme.accent_blue) >= 4.5
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=["light", "dark"])
+@pytest.mark.parametrize("fill", ["accent_fill", "accent_fill_hover", "accent_fill_active"])
+def test_white_still_clears_aa_on_every_button_fill(theme, fill):
+    """spec 7 test 2. gui/*.py paints white on the accent fill and Qt swaps
+    the hover and pressed fills in behind the same label. A sync that
+    re-pointed any of the three would drop a primary button below AA
+    silently -- 2.90:1 is exactly what shipped before 8.1."""
+    assert contrast_ratio(theme.on_accent, getattr(theme, fill)) >= 4.5
+
+
+def test_the_sync_brought_the_fourth_plane_with_it():
+    """spec 7 test 1. surface_sunken has no call site in this repo until 8.6,
+    so nothing else here would notice if a sync dropped it -- and the
+    four-plane contrast sweep inside validate_theme silently narrows back to
+    three when it goes."""
+    assert len(_SURFACE_PLANES) == 4
+    assert "surface_sunken" in _SURFACE_PLANES
+    for theme in (LIGHT_THEME, DARK_THEME):
+        assert theme.surface_sunken != theme.surface
+
+
+def test_the_hover_aliases_carry_an_aa_safe_fill():
+    """~180 call sites in gui/*.py still read button_hover_light/dark by
+    name (they are frozen until 8.3). Whatever they resolve to has to carry
+    white text, because that is what QPushButton paints on them."""
+    for theme in (LIGHT_THEME, DARK_THEME):
+        assert contrast_ratio(theme.on_accent, theme.button_hover_light) >= 4.5
+        assert contrast_ratio(theme.on_accent, theme.button_hover_dark) >= 4.5
 
 
 def test_the_tokens_gui_reads_by_name_all_still_exist():

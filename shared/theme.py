@@ -41,7 +41,10 @@ class ThemeTokens:
     """
     name: str
 
-    # --- Surfaces: a real three-step elevation scale (spec 3.1) ---
+    # --- Surfaces: a four-step elevation scale (spec 2/C1) ---
+    # surface_sunken is the app frame, nav rail and gutters: regions separate
+    # by elevation, so a border is reserved for inputs and the focused control.
+    surface_sunken: str
     surface: str
     surface_raised: str
     surface_overlay: str
@@ -68,7 +71,11 @@ class ThemeTokens:
     status_danger_bg: str
 
     # --- Solid accent fill; on_accent is the text that sits on it (spec 3.4a) ---
+    # hover and active are theme-independent: a button fill sits on itself,
+    # not on a surface, so it needs no per-theme value (spec 2/C4).
     accent_fill: str
+    accent_fill_hover: str
+    accent_fill_active: str
     on_accent: str
 
     # --- Selection and focus (spec 3.5) ---
@@ -108,6 +115,7 @@ class ThemeTokens:
 
 LIGHT_THEME = ThemeTokens(
     name="light",
+    surface_sunken="#E8E8EB",
     surface="#FFFFFF",
     surface_raised="#F4F4F5",
     # Binding plane for light: text_placeholder lands at 4.50 and status_info at
@@ -117,19 +125,21 @@ LIGHT_THEME = ThemeTokens(
     text="#1A1A1A",
     text_secondary="#5A5A5A",
     text_disabled="#808080",
-    text_placeholder="#6A6A6A",
-    border="#868686",
+    text_placeholder="#686868",
+    border="#858585",
     border_subtle="#D8D8D8",
     border_strong="#1A1A1A",
-    status_info="#006DB7",
+    status_info="#006BB5",
     status_info_bg="#E3F2FD",
-    status_success="#347736",
+    status_success="#337635",
     status_success_bg="#EAF6EA",
-    status_warning="#995B00",
+    status_warning="#985A00",
     status_warning_bg="#FDF2E3",
-    status_danger="#D0190B",
+    status_danger="#CF180A",
     status_danger_bg="#FDE4E3",
     accent_fill="#006FBA",
+    accent_fill_hover="#0A78C4",
+    accent_fill_active="#005A9E",
     on_accent="#FFFFFF",
     selection_border="#006DB7",
     selection_bg="#E3F2FD",
@@ -141,16 +151,17 @@ LIGHT_THEME = ThemeTokens(
     background="#FFFFFF",
     background_elevated="#F4F4F5",
     accent_blue="#006FBA",
-    accent_green="#347736",
-    accent_orange="#995B00",
-    accent_red="#D0190B",
+    accent_green="#337635",
+    accent_orange="#985A00",
+    accent_red="#CF180A",
     active_background="#E3F2FD",
     active_border="#006DB7",
 )
 
 DARK_THEME = ThemeTokens(
     name="dark",
-    surface="#0A0A0A",
+    surface_sunken="#08080B",
+    surface="#101014",
     surface_raised="#17171A",
     surface_overlay="#232327",
     text="#F2F2F2",
@@ -169,15 +180,17 @@ DARK_THEME = ThemeTokens(
     status_danger="#F54E42",
     status_danger_bg="#340704",
     accent_fill="#006FBA",
+    accent_fill_hover="#0A78C4",
+    accent_fill_active="#005A9E",
     on_accent="#FFFFFF",
     selection_border="#008EEE",
     selection_bg="#042134",
     focus_ring="#4DA9E8",
     hover="#1A1A1A",
-    button_hover_light="#2D9FE8",
-    button_hover_dark="#2D9FE8",
+    button_hover_light="#005A9E",
+    button_hover_dark="#005A9E",
     # aliases
-    background="#0A0A0A",
+    background="#101014",
     background_elevated="#17171A",
     accent_blue="#006FBA",
     accent_green="#4CAF50",
@@ -197,18 +210,23 @@ def get_theme(name: str) -> ThemeTokens:
 
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
-_SURFACE_PLANES = ("surface", "surface_raised", "surface_overlay")
+_SURFACE_PLANES = ("surface_sunken", "surface", "surface_raised", "surface_overlay")
+
+# on_accent must clear AA against every fill a button can swap in, not just
+# the resting one. Proving it against accent_fill alone is how #2D9FE8
+# shipped at 2.90:1 (spec 2/C4).
+_ACCENT_FILLS = ("accent_fill", "accent_fill_hover", "accent_fill_active")
 
 _COLOR_FIELDS = (
     # canonical
-    "surface", "surface_raised", "surface_overlay",
+    "surface_sunken", "surface", "surface_raised", "surface_overlay",
     "text", "text_secondary", "text_disabled", "text_placeholder",
     "border", "border_subtle", "border_strong",
     "status_info", "status_info_bg",
     "status_success", "status_success_bg",
     "status_warning", "status_warning_bg",
     "status_danger", "status_danger_bg",
-    "accent_fill", "on_accent",
+    "accent_fill", "accent_fill_hover", "accent_fill_active", "on_accent",
     "selection_border", "selection_bg", "focus_ring",
     "hover", "button_hover_light", "button_hover_dark",
     # aliases
@@ -231,6 +249,8 @@ _ALIAS_PAIRS = (
     ("accent_red", "status_danger"),
     ("active_background", "selection_bg"),
     ("active_border", "selection_border"),
+    ("button_hover_light", "accent_fill_active"),
+    ("button_hover_dark", "accent_fill_active"),
 )
 
 
@@ -259,18 +279,19 @@ _STATUS_ROLES = ("info", "success", "warning", "danger")
 
 
 def validate_theme(theme: ThemeTokens) -> None:
-    """Raise ValueError if a theme violates the 8.1 design-system contract.
+    """Raise ValueError if a theme violates the design-system contract.
 
     Checks three things: every color field is a valid #RRGGBB string, every
     alias still equals its canonical token, and every foreground clears its
-    WCAG minimum on all three surface planes -- not just on the window
-    background. The plane matrix is the point: light mode shipped three
-    status colors below AA for months because nothing ever measured them,
-    and a check against a single background per theme would have stayed
-    green throughout.
+    WCAG minimum on all four surface planes -- not just on the window
+    background -- while on_accent clears AA against all three accent fills.
+    The two matrices are the point: light mode shipped three status colors
+    below AA for months, and dark's hover fill shipped at 2.90:1, because
+    each was measured against exactly one partner.
 
-    See docs/superpowers/specs/2026-08-25-phase8.1-design-system-design.md
-    section 6 in shopify-fulfillment-tool for the acceptance criterion.
+    See docs/superpowers/specs/2026-08-26-phase8-unified-design-system.md
+    sections 2/C1, 2/C4 and 7 in shopify-fulfillment-tool for the
+    acceptance criteria.
     """
     for field_name in _COLOR_FIELDS:
         value = getattr(theme, field_name)
@@ -306,16 +327,13 @@ def validate_theme(theme: ThemeTokens) -> None:
                 f"tint {tint}, below the 4.5:1 minimum"
             )
 
-    # ponytail: on_accent is proven against accent_fill only. QPushButton:hover
-    # and :pressed swap button_hover_light/dark in behind the same white text;
-    # dark's #2D9FE8 is 2.90:1. Re-value in 8.3, when the five literal `white`s
-    # become on_accent and this pairing starts claiming to be covered.
-    on_accent = contrast_ratio(theme.on_accent, theme.accent_fill)
-    if on_accent < 4.5:
-        raise ValueError(
-            f"{theme.name}.on_accent has {on_accent:.2f}:1 contrast against "
-            f"accent_fill, below the 4.5:1 minimum"
-        )
+    for fill in _ACCENT_FILLS:
+        ratio = contrast_ratio(theme.on_accent, getattr(theme, fill))
+        if ratio < 4.5:
+            raise ValueError(
+                f"{theme.name}.on_accent has {ratio:.2f}:1 contrast against "
+                f"{fill}, below the 4.5:1 minimum"
+            )
 
     selected_text = contrast_ratio(theme.text, theme.selection_bg)
     if selected_text < 4.5:
