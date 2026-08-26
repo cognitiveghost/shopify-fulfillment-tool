@@ -8,7 +8,7 @@ token definitions and stylesheet/palette builders.
 import logging
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Optional
+from typing import Mapping, Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication
@@ -152,6 +152,85 @@ TYPE_SCALE: dict[str, TypeStyle] = {
     "display": TypeStyle(17, True),   # stat-card numbers
     "display_xl": TypeStyle(28, True),  # KPI numerals, Packer Mode scan verdict
 }
+
+
+@dataclass(frozen=True)
+class DensityProfile:
+    """One density profile: how tall a control is, how much air it gets, and
+    the two type rungs that move with it.
+
+    Spec 2026-08-26 §2/C3. Colour and radius are deliberately absent -- density
+    never touches them.
+    """
+
+    control_height: int          # px, the finished height of an interactive control
+    row_height: int              # px, table and list row height
+    padding_v: int               # px, must equal a shared.theme spacing token
+    padding_h: int               # px, must equal a shared.theme spacing token
+    type_overrides: Mapping[str, int]  # role -> pt, overriding the TYPE_SCALE baseline
+
+    @property
+    def control_content_height(self) -> int:
+        """What to put in QSS `min-height:` to land on `control_height`.
+
+        Qt's box model treats min-height as the *content* box -- padding and the
+        1px border add on top of it. Emitting `control_height` directly would
+        ship a 40px 'desk' control against a spec that says 32.
+        """
+        return self.control_height - 2 * self.padding_v - 2
+
+
+# Spec 2026-08-26 §2/C3. Padding values are the shared.theme spacing tokens
+# (spacing_xs 4 / spacing_sm 8 / spacing_md 12) written as literals, because
+# shared/theme.py is sync-owned by packing-tool and cannot be imported into a
+# frozen default here without coupling module import order to it. A test asserts
+# they still match.
+DENSITY_PROFILES: dict[str, DensityProfile] = {
+    "desk": DensityProfile(
+        control_height=32, row_height=28, padding_v=4, padding_h=8,
+        type_overrides={},
+    ),
+    "floor": DensityProfile(
+        control_height=44, row_height=40, padding_v=8, padding_h=12,
+        type_overrides={"body": 12, "caption": 10},
+    ),
+}
+
+# Per-app default, not a global one: a supervisor at a desk with a mouse. Packing
+# Tool defaults to "floor" when it gains a theme manager of its own (8.5/8.9) --
+# "a station that has not been told otherwise is a scan station".
+DEFAULT_DENSITY = "desk"
+
+_active_density: str = DEFAULT_DENSITY
+
+
+def get_density() -> str:
+    """Name of the active density profile."""
+    return _active_density
+
+
+def get_density_profile() -> DensityProfile:
+    """The active density profile."""
+    return DENSITY_PROFILES[_active_density]
+
+
+def set_density(name: str) -> None:
+    """Switch the active profile. Pure -- no QSettings, no restyle, no Qt.
+
+    ThemeManager.set_density() is the call site that also persists and repaints.
+    This one exists so tests (and any non-Qt caller) can move the flag without
+    standing up an application.
+
+    Raises KeyError on an unknown name, matching font_css()'s behaviour on an
+    unknown role: a typo must fail during development, not render at some
+    default density in a warehouse.
+    """
+    global _active_density
+    if name not in DENSITY_PROFILES:
+        raise KeyError(
+            f"Unknown density {name!r}; expected one of {tuple(DENSITY_PROFILES)}"
+        )
+    _active_density = name
 
 
 def font_css(role: str, bold: bool | None = None) -> str:

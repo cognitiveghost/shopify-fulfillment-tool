@@ -13,7 +13,16 @@ import pytest
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QLabel, QListWidgetItem
 
-from gui.theme_manager import TYPE_SCALE, apply_font, font_css
+from gui.theme_manager import (
+    DEFAULT_DENSITY,
+    DENSITY_PROFILES,
+    TYPE_SCALE,
+    apply_font,
+    font_css,
+    get_density,
+    get_density_profile,
+    set_density,
+)
 from shared.theme import build_stylesheet, get_theme
 
 
@@ -116,3 +125,70 @@ def test_no_hardcoded_font_sizes_outside_theme_manager():
         "Use theme_manager.font_css()/apply_font() instead of hardcoding sizes:\n"
         + "\n".join(offenders)
     )
+
+
+@pytest.fixture(autouse=True)
+def reset_density():
+    """Density is module-global state. A test that switches it must not leak
+    into the next one, and the whole file assumes the desk baseline."""
+    set_density(DEFAULT_DENSITY)
+    yield
+    set_density(DEFAULT_DENSITY)
+
+
+def test_exactly_two_profiles_and_desk_is_the_default():
+    assert set(DENSITY_PROFILES) == {"desk", "floor"}
+    assert DEFAULT_DENSITY == "desk"
+    assert get_density() == "desk"
+
+
+@pytest.mark.parametrize("name,control,row,pad_v,pad_h", [
+    ("desk", 32, 28, 4, 8),
+    ("floor", 44, 40, 8, 12),
+])
+def test_profile_metrics_match_the_spec_table(name, control, row, pad_v, pad_h):
+    profile = DENSITY_PROFILES[name]
+    assert profile.control_height == control
+    assert profile.row_height == row
+    assert profile.padding_v == pad_v
+    assert profile.padding_h == pad_h
+
+
+def test_profile_padding_is_the_shared_spacing_scale():
+    """Spec C3 names spacing tokens, not raw pixels. shared/theme.py is
+    sync-owned by packing-tool, so if its spacing scale moves under us these
+    profiles silently stop meaning what the spec says."""
+    theme = get_theme("light")
+    assert DENSITY_PROFILES["desk"].padding_v == theme.spacing_xs
+    assert DENSITY_PROFILES["desk"].padding_h == theme.spacing_sm
+    assert DENSITY_PROFILES["floor"].padding_v == theme.spacing_sm
+    assert DENSITY_PROFILES["floor"].padding_h == theme.spacing_md
+
+
+def test_desk_is_the_identity_profile():
+    """TYPE_SCALE is the desk baseline, so desk overrides nothing."""
+    assert DENSITY_PROFILES["desk"].type_overrides == {}
+
+
+def test_floor_overrides_body_and_caption_and_nothing_else():
+    """Spec C3 overrides Parcker's 'density never changes type size' in exactly
+    one place. A third key here would be silent drift, which is the thing the
+    spec explicitly said it did not want."""
+    assert DENSITY_PROFILES["floor"].type_overrides == {"body": 12, "caption": 10}
+
+
+@pytest.mark.parametrize("name,expected", [("desk", 22), ("floor", 26)])
+def test_control_content_height_backs_out_padding_and_border(name, expected):
+    assert DENSITY_PROFILES[name].control_content_height == expected
+
+
+def test_set_density_switches_and_get_density_reports_it():
+    set_density("floor")
+    assert get_density() == "floor"
+    assert get_density_profile() is DENSITY_PROFILES["floor"]
+
+
+def test_unknown_density_raises_rather_than_falling_back():
+    with pytest.raises(KeyError):
+        set_density("comfortable")
+    assert get_density() == "desk"
