@@ -22,8 +22,10 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
-def test_scale_has_exactly_the_five_documented_roles():
-    assert set(TYPE_SCALE) == {"caption", "body", "label", "heading", "display"}
+def test_scale_has_exactly_the_six_documented_roles():
+    assert set(TYPE_SCALE) == {
+        "caption", "body", "label", "heading", "display", "display_xl",
+    }
 
 
 @pytest.mark.parametrize("role,size_pt,bold", [
@@ -32,6 +34,7 @@ def test_scale_has_exactly_the_five_documented_roles():
     ("label", 12, True),
     ("heading", 14, True),
     ("display", 17, True),
+    ("display_xl", 28, True),
 ])
 def test_roles_resolve_to_expected_size_and_weight(role, size_pt, bold):
     assert TYPE_SCALE[role].size_pt == size_pt

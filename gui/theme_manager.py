@@ -141,12 +141,16 @@ class TypeStyle:
 # rounded to integers because Qt's QSS parser is unreliable on fractional pt.
 # `caption` is 9pt rather than the geometric 8.33pt -- a deliberate legibility
 # floor for warehouse-floor use. See the 2026-08-12 design spec.
+# `display_xl` (28pt) sits off the ratio on purpose: it is a single-glance
+# numeral read across an aisle, not the next rung up. Spec 2026-08-26 §2/C2.
+# This dict is the *desk* baseline -- see DENSITY_PROFILES for floor's overrides.
 TYPE_SCALE: dict[str, TypeStyle] = {
     "caption": TypeStyle(9, False),   # hints, tips, feedback, dense card labels
     "body": TypeStyle(10, False),     # default text and button labels
     "label": TypeStyle(12, True),     # emphasis, sub-headers, count badges
     "heading": TypeStyle(14, True),   # dialog and section headers
     "display": TypeStyle(17, True),   # stat-card numbers
+    "display_xl": TypeStyle(28, True),  # KPI numerals, Packer Mode scan verdict
 }
 
 
