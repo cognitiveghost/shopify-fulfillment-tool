@@ -83,6 +83,60 @@ costs every foreground 0.2–0.4 of ratio and **every token still clears its flo
 
 `text` on `surface_sunken #08080B` = 17.87; `text_secondary` = 9.22. Both clear.
 
+**Amended 2026-08-26 — light `surface_sunken` was asserted, not measured.** The table above
+only measured *dark* `surface_sunken`. Measuring the light value revealed the gap: light's
+existing tokens were tuned to exactly clear `surface_overlay #EAEAEC`, which the code
+comment in `shared/theme.py` already names as light's binding plane — `text_placeholder`
+lands there at 4.50 and `status_info` at 4.52. Adding a plane one step *darker* than the
+old darkest necessarily costs ratio, because in light theme the background is the lighter
+side of `(L_lighter + 0.05) / (L_darker + 0.05)`. Six shipped tokens fall short against
+`#E8E8EB`, all by 0.02–0.08:
+
+| token | value | on `#EAEAEC` | on `#E8E8EB` | floor |
+|---|---|---|---|---|
+| `text_placeholder` | `#6A6A6A` | 4.50 | 4.42 | 4.5 |
+| `border` | `#868686` | 3.03 | 2.98 | 3.0 |
+| `status_info` | `#006DB7` | 4.52 | 4.44 | 4.5 |
+| `status_success` | `#347736` | 4.55 | 4.47 | 4.5 |
+| `status_warning` | `#995B00` | 4.54 | 4.46 | 4.5 |
+| `status_danger` | `#D0190B` | 4.57 | 4.49 | 4.5 |
+
+**Resolved: `surface_sunken` keeps `#E8E8EB`; the six foregrounds widen to meet it.** The
+ramp's premise — sunken is the darkest plane — is load-bearing for 8.6's nav rail and every
+later phase, so the plane does not move. Each foreground darkens by the minimum that clears
+its floor, one to two sRGB units per channel:
+
+| token | from | to | on `#E8E8EB` | floor |
+|---|---|---|---|---|
+| `text_placeholder` | `#6A6A6A` | `#686868` | 4.56 | 4.5 |
+| `border` | `#868686` | `#858585` | 3.02 | 3.0 |
+| `status_info` | `#006DB7` | `#006BB5` | 4.55 | 4.5 |
+| `status_success` | `#347736` | `#337635` | 4.54 | 4.5 |
+| `status_warning` | `#995B00` | `#985A00` | 4.52 | 4.5 |
+| `status_danger` | `#D0190B` | `#CF180A` | 4.53 | 4.5 |
+
+Verified: `validate_theme` passes on both themes with these values and the four planes in
+place. Every other light foreground already clears `#E8E8EB` with room — `text` 14.23,
+`text_secondary` 5.64, `text_disabled` 3.23, `focus_ring` 5.03, `selection_border` 4.44.
+
+Two consequences worth stating so a later phase does not "fix" them:
+
+- `accent_green` / `accent_orange` / `accent_red` are aliases of `status_success` /
+  `status_warning` / `status_danger`. The alias-drift check requires them to carry the same
+  value, so they move in lockstep. This changes their *value*, not what they point at, so
+  the "legacy aliases are read-only until 8.3" rule still holds.
+- `selection_border` and `active_border` merely *happen* to share `#006DB7` with
+  `status_info`; they are not aliased to it. They stay at `#006DB7` and now differ from
+  `status_info` by two units — invisible, and `selection_border` clears its 3.0 floor at
+  4.44 either way.
+
+Two alternatives were measured and rejected. Letting `surface_sunken` rise to or above
+`surface_overlay` clears the floor but inverts the token's name, and every later phase reads
+the ramp as ordered. Exempting the six tokens from the `surface_sunken` pairing keeps every
+hex as shipped, but writes an exemption list into the one check whose stated purpose is that
+no pairing goes unmeasured — and 8.6 puts the nav rail on `surface_sunken`, where status
+colours land and the exemption would still be active.
+
 ### C2 — Type scale: Parcker proposes seven rungs, Depot proposes six, five already ship
 
 Parcker (floor-facing) wants display 22 / title 18 / heading 16 / subheading 13.
@@ -184,9 +238,14 @@ reverse):
 6. Extend `validate_theme`: assert `on_accent` ≥ 4.5:1 against **all three** fills, and
    assert every foreground clears its floor on **all four** planes — not just `surface`.
 7. Delete the `ponytail:` comment at `shared/theme.py:309`; it is resolved by (6).
+8. Widen light's six binding foregrounds so they clear their floors on the new
+   `surface_sunken` plane (§2/C1, amended): `text_placeholder` `#686868`, `border`
+   `#858585`, `status_info` `#006BB5`, `status_success` `#337635`, `status_warning`
+   `#985A00`, `status_danger` `#CF180A` — with `accent_green` / `accent_orange` /
+   `accent_red` carried along in lockstep by the alias-drift check.
 
-Six tokens' worth of edit. The acceptance test is the table in §2/C1 plus the three ratios
-in §2/C4, as a fixture.
+Six tokens' worth of edit, plus (8)'s six one-to-two-unit foreground nudges. The
+acceptance test is the table in §2/C1 plus the three ratios in §2/C4, as a fixture.
 
 ---
 
