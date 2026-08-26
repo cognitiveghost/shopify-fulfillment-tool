@@ -244,8 +244,8 @@ reverse):
    `#985A00`, `status_danger` `#CF180A` — with `accent_green` / `accent_orange` /
    `accent_red` carried along in lockstep by the alias-drift check.
 
-Six tokens' worth of edit, plus (8)'s six one-to-two-unit foreground nudges. The acceptance test is the table in §2/C1 plus the three ratios
-in §2/C4, as a fixture.
+Six tokens' worth of edit, plus (8)'s six one-to-two-unit foreground nudges. The
+acceptance test is the table in §2/C1 plus the three ratios in §2/C4, as a fixture.
 
 ---
 

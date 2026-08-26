@@ -115,12 +115,12 @@ class ThemeTokens:
 
 LIGHT_THEME = ThemeTokens(
     name="light",
+    # Binding plane for light since 8.1: border lands at 3.02 and status_warning
+    # at 4.52 against this, both 0.02 above their floors. Darkening it fails
+    # validate_theme -- retune those two tokens with it, not after.
     surface_sunken="#E8E8EB",
     surface="#FFFFFF",
     surface_raised="#F4F4F5",
-    # Binding plane for light: text_placeholder lands at 4.50 and status_info at
-    # 4.52 against this, both within 0.05 of their floors. Darkening it fails
-    # validate_theme -- retune those two tokens with it, not after.
     surface_overlay="#EAEAEC",
     text="#1A1A1A",
     text_secondary="#5A5A5A",
@@ -210,13 +210,6 @@ def get_theme(name: str) -> ThemeTokens:
 
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
-_SURFACE_PLANES = ("surface_sunken", "surface", "surface_raised", "surface_overlay")
-
-# on_accent must clear AA against every fill a button can swap in, not just
-# the resting one. Proving it against accent_fill alone is how #2D9FE8
-# shipped at 2.90:1 (spec 2/C4).
-_ACCENT_FILLS = ("accent_fill", "accent_fill_hover", "accent_fill_active")
-
 _COLOR_FIELDS = (
     # canonical
     "surface_sunken", "surface", "surface_raised", "surface_overlay",
@@ -234,6 +227,14 @@ _COLOR_FIELDS = (
     "accent_blue", "accent_green", "accent_orange", "accent_red",
     "active_background", "active_border",
 )
+
+# Derived from _COLOR_FIELDS rather than listed again, so registering a token
+# is the only step: a new plane or fill joins the validate_theme matrices
+# automatically. Proving on_accent against accent_fill alone is how #2D9FE8
+# shipped at 2.90:1 (spec 2/C4), and a second registration site to forget is
+# how that happens again.
+_SURFACE_PLANES = tuple(f for f in _COLOR_FIELDS if f.startswith("surface"))
+_ACCENT_FILLS = tuple(f for f in _COLOR_FIELDS if f.startswith("accent_fill"))
 
 # Legacy name -> canonical token. Each pair carries the same literal in both
 # theme constructors; validate_theme asserts they stay equal so the

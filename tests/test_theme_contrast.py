@@ -54,9 +54,10 @@ def test_the_sync_brought_the_fourth_plane_with_it():
 
 
 def test_the_hover_aliases_carry_an_aa_safe_fill():
-    """~180 call sites in gui/*.py still read button_hover_light/dark by
-    name (they are frozen until 8.3). Whatever they resolve to has to carry
-    white text, because that is what QPushButton paints on them."""
+    """Three gui/*.py files still read button_hover_light/dark by name
+    (theme_manager, report_selection_dialog, client_sidebar -- frozen
+    until 8.3). Whatever they resolve to has to carry white text,
+    because that is what QPushButton paints on them."""
     for theme in (LIGHT_THEME, DARK_THEME):
         assert contrast_ratio(theme.on_accent, theme.button_hover_light) >= 4.5
         assert contrast_ratio(theme.on_accent, theme.button_hover_dark) >= 4.5
