@@ -22,6 +22,7 @@ from gui.theme_manager import (
     get_density,
     get_density_profile,
     set_density,
+    type_style,
 )
 from shared.theme import build_stylesheet, get_theme
 
@@ -192,3 +193,45 @@ def test_unknown_density_raises_rather_than_falling_back():
     with pytest.raises(KeyError):
         set_density("comfortable")
     assert get_density() == "desk"
+
+
+def test_type_style_is_the_baseline_at_desk():
+    for role, style in TYPE_SCALE.items():
+        assert type_style(role).size_pt == style.size_pt
+        assert type_style(role).bold is style.bold
+
+
+def test_floor_raises_body_and_caption():
+    set_density("floor")
+    assert type_style("body").size_pt == 12
+    assert type_style("caption").size_pt == 10
+
+
+def test_floor_leaves_every_other_rung_alone():
+    set_density("floor")
+    for role in ("label", "heading", "display", "display_xl"):
+        assert type_style(role).size_pt == TYPE_SCALE[role].size_pt
+
+
+def test_floor_never_changes_weight():
+    set_density("floor")
+    for role in TYPE_SCALE:
+        assert type_style(role).bold is TYPE_SCALE[role].bold
+
+
+def test_font_css_follows_the_density():
+    assert font_css("body") == "font-size: 10pt; font-weight: normal;"
+    set_density("floor")
+    assert font_css("body") == "font-size: 12pt; font-weight: normal;"
+
+
+def test_apply_font_follows_the_density():
+    label = QLabel("x")
+    set_density("floor")
+    apply_font(label, "caption")
+    assert label.font().pointSize() == 10
+
+
+def test_type_style_rejects_an_unknown_role():
+    with pytest.raises(KeyError):
+        type_style("subheading")

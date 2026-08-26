@@ -233,13 +233,28 @@ def set_density(name: str) -> None:
     _active_density = name
 
 
+def type_style(role: str) -> TypeStyle:
+    """The scale rung as the active density renders it.
+
+    TYPE_SCALE is the desk baseline; `floor` overrides `body` and `caption`
+    only. That is spec §2/C3's one deliberate exception to Parcker's "density
+    changes control height and padding only, never type size" -- at arm's
+    length a 10pt body is the failure.
+
+    Raises KeyError on an unknown role.
+    """
+    style = TYPE_SCALE[role]
+    override = get_density_profile().type_overrides.get(role)
+    return style if override is None else replace(style, size_pt=override)
+
+
 def font_css(role: str, bold: bool | None = None) -> str:
     """QSS fragment for f-string stylesheets, e.g. 'font-size: 12pt; font-weight: bold;'.
 
     Raises KeyError on an unknown role -- a typo must fail during development
     rather than silently render at some default size in production.
     """
-    style = TYPE_SCALE[role]
+    style = type_style(role)
     weight = "bold" if (style.bold if bold is None else bold) else "normal"
     return f"font-size: {style.size_pt}pt; font-weight: {weight};"
 
@@ -251,7 +266,7 @@ def apply_font(target, role: str, bold: bool | None = None) -> None:
     target's existing font so the inherited family survives -- building a bare
     QFont() instead would silently drop it.
     """
-    style = TYPE_SCALE[role]
+    style = type_style(role)
     font = target.font()
     font.setPointSize(style.size_pt)
     font.setBold(style.bold if bold is None else bold)
