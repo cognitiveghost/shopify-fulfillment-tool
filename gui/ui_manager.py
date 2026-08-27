@@ -1642,10 +1642,11 @@ class UIManager:
         # Denser than the default on purpose: these sit 60px wide in a
         # horizontal scroll strip.
         card = Card(min_width=60, margins=(6, 4, 6, 4))
+        theme = get_theme_manager().get_current_theme()
         card.add_text(
             count,
             "label",
-            css=f"color: white; background-color: {color}; border-radius: 8px; padding: 2px 6px;",
+            css=f"color: {theme.on_accent}; background-color: {color}; border-radius: 8px; padding: 2px 6px;",
         )
         card.add_text(tag, "caption", wrap=True)
         return card

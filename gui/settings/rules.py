@@ -364,7 +364,7 @@ class RulesPage(SettingsPage):
         test_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.accent_green};
-                color: white;
+                color: {theme.on_accent};
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -390,7 +390,7 @@ class RulesPage(SettingsPage):
         # The per-widget background wins over the role on purpose: destructive
         # red stays. The role is here so the Hub's inventory guard sees it
         # marked, and so it picks up the secondary border/disabled treatment.
-        delete_rule_btn.setStyleSheet(f"background-color: {theme.accent_red}; color: white;")
+        delete_rule_btn.setStyleSheet(f"background-color: {theme.accent_red}; color: {theme.on_accent};")
         header_layout.addWidget(delete_rule_btn)
         rule_layout.addLayout(header_layout)
 

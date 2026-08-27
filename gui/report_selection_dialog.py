@@ -108,7 +108,7 @@ class _BaseReportDialog(QDialog):
         self.generate_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {self.theme.accent_blue};
-                color: white;
+                color: {self.theme.on_accent};
                 {font_css('body', bold=True)}
                 border: none;
                 border-radius: 4px;
@@ -258,7 +258,7 @@ class GenerateReportsDialog(_BaseReportDialog):
             self.writeoff_only_btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {theme.accent_orange};
-                    color: white;
+                    color: {theme.on_accent};
                     font-weight: bold;
                     border: none;
                     border-radius: 4px;

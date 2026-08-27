@@ -160,6 +160,7 @@ class AddProductDialog(QDialog):
         order_numbers_str = self.analysis_df["Order_Number"].astype(str)
         order_exists = text_str in order_numbers_str.values
 
+        theme = get_theme_manager().get_current_theme()
         if order_exists:
             # Get order info - compare as strings
             order_rows = self.analysis_df[
@@ -171,10 +172,10 @@ class AddProductDialog(QDialog):
             self.order_status_label.setText(
                 f"Order found: {item_count} items, Status: {status}"
             )
-            self.order_status_label.setStyleSheet("color: green;")
+            self.order_status_label.setStyleSheet(f"color: {theme.status_success};")
         else:
             self.order_status_label.setText("Order not found")
-            self.order_status_label.setStyleSheet("color: red;")
+            self.order_status_label.setStyleSheet(f"color: {theme.status_danger};")
 
     def _on_sku_changed(self, text):
         """Handle SKU input change."""
@@ -190,7 +191,7 @@ class AddProductDialog(QDialog):
 
         if stock_row.empty:
             self.product_info_label.setText("SKU not found in stock")
-            self.product_info_label.setStyleSheet("color: red;")
+            self.product_info_label.setStyleSheet(f"color: {theme.status_danger};")
             return
 
         # Get product info
@@ -201,7 +202,7 @@ class AddProductDialog(QDialog):
         self.product_info_label.setText(
             f"{product_name} | Live stock: {current_stock}"
         )
-        self.product_info_label.setStyleSheet("color: green;")
+        self.product_info_label.setStyleSheet(f"color: {theme.status_success};")
 
         # Show warning if low/zero stock
         if current_stock == 0:

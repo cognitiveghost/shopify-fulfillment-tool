@@ -7,6 +7,7 @@ import pandas as pd
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox
 
+from gui.theme_manager import get_theme_manager
 from shopify_tool import core
 
 
@@ -431,14 +432,15 @@ class FileHandler:
             path, required_cols, delimiter
         )
 
+        theme = get_theme_manager().get_current_theme()
         if is_valid:
             label.setText("✓")
-            label.setStyleSheet("color: green; font-weight: bold;")
+            label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
             label.setToolTip("File is valid.")
             self.log.info(f"'{file_type}' file is valid.")
         else:
             label.setText("✗")
-            label.setStyleSheet("color: red; font-weight: bold;")
+            label.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
             tooltip_text = f"Missing columns: {', '.join(missing_cols)}"
             label.setToolTip(tooltip_text)
             self.log.warning(f"'{file_type}' file is invalid. {tooltip_text}")

@@ -338,11 +338,13 @@ class ReferenceLabelsWidget(QWidget):
         self.process_btn.setEnabled(has_both_files and has_output)
 
         if has_both_files and has_output:
+            theme = get_theme_manager().get_current_theme()
             self.status_label.setText("Ready to process")
-            self.status_label.setStyleSheet("color: green; font-weight: bold;")
+            self.status_label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
         elif not has_output:
+            theme = get_theme_manager().get_current_theme()
             self.status_label.setText("No session selected")
-            self.status_label.setStyleSheet("color: orange;")
+            self.status_label.setStyleSheet(f"color: {theme.status_warning};")
         else:
             self.status_label.setText("Waiting for files...")
             theme = get_theme_manager().get_current_theme()
@@ -377,7 +379,8 @@ class ReferenceLabelsWidget(QWidget):
             self.log.exception("Failed to set output directory")
             self.output_dir = None
             self.output_dir_label.setText("Error accessing session directory")
-            self.output_dir_label.setStyleSheet("color: red;")
+            theme = get_theme_manager().get_current_theme()
+            self.output_dir_label.setStyleSheet(f"color: {theme.status_danger};")
 
         self._update_process_button()
 
@@ -438,7 +441,8 @@ class ReferenceLabelsWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         self.status_label.setText("Processing...")
-        self.status_label.setStyleSheet("color: blue;")
+        theme = get_theme_manager().get_current_theme()
+        self.status_label.setStyleSheet(f"color: {theme.status_info};")
 
         self.log.info(f"Starting PDF processing: {self.pdf_path}")
 
@@ -507,7 +511,8 @@ class ReferenceLabelsWidget(QWidget):
         """
         self.progress_bar.setValue(100)
         self.status_label.setText("Processing complete!")
-        self.status_label.setStyleSheet("color: green; font-weight: bold;")
+        theme = get_theme_manager().get_current_theme()
+        self.status_label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
 
         self.last_output_pdf = Path(result['output_file'])
         self.print_btn.setEnabled(True)
@@ -546,7 +551,8 @@ class ReferenceLabelsWidget(QWidget):
         _exctype, value, traceback_str = error_info
 
         self.status_label.setText("Processing failed")
-        self.status_label.setStyleSheet("color: red; font-weight: bold;")
+        theme = get_theme_manager().get_current_theme()
+        self.status_label.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
 
         self.log.error(f"PDF processing failed: {value}\n{traceback_str}")
 

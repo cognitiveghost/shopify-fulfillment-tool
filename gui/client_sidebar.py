@@ -99,10 +99,11 @@ class SectionWidget(QWidget):
 
         # Header
         header = QLabel(title)
+        theme = get_theme_manager().get_current_theme()
         header.setStyleSheet(f"""
             QLabel {{
                 background-color: {color};
-                color: white;
+                color: {theme.on_accent};
                 padding: 6px 8px;
                 {font_css('body', bold=True)}
             }}
@@ -834,7 +835,7 @@ class ClientSidebar(QWidget):
         button_style = f"""
             QPushButton {{
                 background-color: {theme.accent_blue};
-                color: white;
+                color: {theme.on_accent};
                 border: 1px solid {theme.border};
                 border-radius: 6px;
                 padding: 4px 8px;

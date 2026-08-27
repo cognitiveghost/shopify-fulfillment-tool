@@ -250,7 +250,7 @@ class BarcodeGeneratorWidget(QWidget):
             QPushButton {{
                 {font_css('label')}
                 background-color: {theme.accent_green};
-                color: white;
+                color: {theme.on_accent};
                 border-radius: 5px;
             }}
             QPushButton:hover {{
@@ -520,7 +520,8 @@ class BarcodeGeneratorWidget(QWidget):
         self.status_label.setText(
             f"Complete: {len(successful)} barcodes generated"
         )
-        self.status_label.setStyleSheet("color: green; font-weight: bold;")
+        theme = get_theme_manager().get_current_theme()
+        self.status_label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
 
         self.log.info(
             f"Barcode generation complete: {len(successful)} successful, "
@@ -583,7 +584,8 @@ class BarcodeGeneratorWidget(QWidget):
         _exctype, value, traceback_str = error_info
 
         self.status_label.setText("Generation failed")
-        self.status_label.setStyleSheet("color: red; font-weight: bold;")
+        theme = get_theme_manager().get_current_theme()
+        self.status_label.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
 
         self.log.error(f"Barcode generation failed: {value}\n{traceback_str}")
 

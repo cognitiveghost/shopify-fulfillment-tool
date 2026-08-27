@@ -438,14 +438,14 @@ class SessionBrowserWidget(QWidget):
             status_combo.addItems(["Active", "Completed", "Abandoned", "Archived"])
             status_combo.setCurrentText(status.capitalize())
             # Color code by status
+            theme = get_theme_manager().get_current_theme()
             if status == "active":
-                status_combo.setStyleSheet("QComboBox { color: blue; }")
+                status_combo.setStyleSheet(f"QComboBox {{ color: {theme.status_info}; }}")
             elif status == "completed":
-                status_combo.setStyleSheet("QComboBox { color: darkgreen; }")
+                status_combo.setStyleSheet(f"QComboBox {{ color: {theme.status_success}; }}")
             elif status == "abandoned":
-                status_combo.setStyleSheet("QComboBox { color: red; }")
+                status_combo.setStyleSheet(f"QComboBox {{ color: {theme.status_danger}; }}")
             elif status == "archived":
-                theme = get_theme_manager().get_current_theme()
                 status_combo.setStyleSheet(
                     f"QComboBox {{ color: {theme.text_secondary}; }}"
                 )

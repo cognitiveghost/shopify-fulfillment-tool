@@ -370,16 +370,15 @@ def role_stylesheet(theme: ThemeTokens) -> str:
     once, and this is a Windows-only app with three tracks of visual change
     not yet verified on Windows.
     """
-    hover = theme.button_hover_dark if theme.name == "dark" else theme.button_hover_light
     return f"""
         QPushButton[role="primary"] {{
             background-color: {theme.accent_blue};
-            color: white;
+            color: {theme.on_accent};
             border: 1px solid {theme.accent_blue};
             font-weight: bold;
         }}
-        QPushButton[role="primary"]:hover {{ background-color: {hover}; }}
-        QPushButton[role="primary"]:pressed {{ background-color: {hover}; }}
+        QPushButton[role="primary"]:hover {{ background-color: {theme.accent_fill_hover}; }}
+        QPushButton[role="primary"]:pressed {{ background-color: {theme.accent_fill_active}; }}
 
         QPushButton[role="secondary"] {{
             background-color: {theme.background_elevated};
