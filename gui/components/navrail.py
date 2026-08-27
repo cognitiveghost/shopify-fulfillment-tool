@@ -80,6 +80,25 @@ class NavRail(QWidget):
             self._current = 0
         return index
 
+    def add_footer_item(self, icon_name: str, label: str) -> QToolButton:
+        """Append an app-level action below the destinations.
+
+        Deliberately outside self._group and not checkable: an exclusive
+        group has exactly one checked member, so a checkable gear would
+        un-check the current destination and leave the rail lit nowhere
+        while the page behind it had not moved.
+        """
+        glyph = icon(icon_name)                  # raises KeyError on a typo
+        button = QToolButton(self)
+        button.setIcon(glyph)
+        button.setText(label)
+        button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        button.setAutoRaise(True)
+        button.setFixedWidth(RAIL_WIDTH)
+        button.setStyleSheet(font_css("caption"))
+        self._layout.addWidget(button)
+        return button
+
     def button(self, index: int) -> QToolButton:
         return self._buttons[index]
 
