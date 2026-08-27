@@ -229,6 +229,30 @@ def clean_nav_setting():
     store.remove(SettingsWindow.NAV_SETTINGS_KEY)
 
 
+@pytest.fixture(autouse=True)
+def reset_theme_and_density():
+    """ThemeManager is a process-wide singleton that reads real QSettings once,
+    on its first construction anywhere in the whole test run -- so a
+    developer's actual saved theme (or a previous test's toggle) leaks into
+    every later test, including ones that never touch theming themselves.
+    Removing the QSettings keys is not enough on its own: the singleton
+    already has the leaked value cached in memory, so the in-memory state is
+    forced back to the desk/light baseline directly, both before and after."""
+    from gui.theme_manager import DEFAULT_DENSITY, get_theme_manager, set_density
+
+    store = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
+
+    def _reset():
+        store.remove("theme")
+        store.remove("density")
+        get_theme_manager()._current_theme_name = "light"
+        set_density(DEFAULT_DENSITY)
+
+    _reset()
+    yield
+    _reset()
+
+
 @pytest.fixture
 def window(qapp, no_modals, started_workers):
     """A real SettingsWindow with the background save intercepted."""

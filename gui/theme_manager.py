@@ -6,9 +6,10 @@ token definitions and stylesheet/palette builders.
 """
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Mapping, Optional
+from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication
@@ -71,7 +72,9 @@ class ThemeManager(QObject):
             logger.warning("QApplication not found, cannot apply theme")
             return
         theme = self.get_current_theme()
-        app.setStyleSheet(build_stylesheet(theme) + role_stylesheet(theme))
+        app.setStyleSheet(
+            build_stylesheet(theme) + role_stylesheet(theme) + density_stylesheet()
+        )
         app.setPalette(build_palette(theme))
         logger.debug(f"Applied {self._current_theme_name} theme globally")
 
@@ -337,6 +340,46 @@ def role_stylesheet(theme: ThemeTokens) -> str:
         QListWidget#settingsNav::item:disabled {{
             color: {theme.text_secondary};
             padding-top: 10px;
+        }}
+    """
+
+
+# The interactive controls whose finished height the density profile owns.
+# Deliberately excludes QLabel and the item views: labels and table rows keep
+# their current sizing until 8.3 routes them through the scale, so that an
+# unverified visual change across the whole Windows app does not ride in the
+# same commit as the mechanism. Table rows read profile.row_height directly
+# -- Qt sets those through setDefaultSectionSize(), not through QSS.
+_DENSITY_CONTROLS = (
+    "QPushButton",
+    "QComboBox",
+    "QLineEdit",
+    "QSpinBox",
+    "QDoubleSpinBox",
+    "QDateEdit",
+)
+
+
+def density_stylesheet() -> str:
+    """QSS for the active density profile's box metrics.
+
+    Appended after shared.theme's sheet and role_stylesheet, so it outranks the
+    equal-specificity `padding: 6px 12px; font-size: 10pt` that shared/theme.py
+    sets on QPushButton. shared/theme.py is sync-owned by packing-tool and
+    cannot be edited here -- this is the same layering seam the font override
+    and the button hierarchy already use.
+
+    Emits size but never weight: role_stylesheet's QPushButton[role="primary"]
+    rule is an attribute selector and outranks this one anyway, but emitting a
+    weight here would still fight it for every other control.
+    """
+    profile = get_density_profile()
+    selector = ", ".join(_DENSITY_CONTROLS)
+    return f"""
+        {selector} {{
+            min-height: {profile.control_content_height}px;
+            padding: {profile.padding_v}px {profile.padding_h}px;
+            font-size: {type_style('body').size_pt}pt;
         }}
     """
 

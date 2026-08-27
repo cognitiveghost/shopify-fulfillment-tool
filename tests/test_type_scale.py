@@ -18,6 +18,7 @@ from gui.theme_manager import (
     DENSITY_PROFILES,
     TYPE_SCALE,
     apply_font,
+    density_stylesheet,
     font_css,
     get_density,
     get_density_profile,
@@ -235,3 +236,51 @@ def test_apply_font_follows_the_density():
 def test_type_style_rejects_an_unknown_role():
     with pytest.raises(KeyError):
         type_style("subheading")
+
+
+def test_density_stylesheet_emits_the_derived_content_height():
+    """min-height is the content box, so the sheet must carry
+    control_content_height, not control_height."""
+    sheet = density_stylesheet()
+    assert "min-height: 22px;" in sheet
+    assert "min-height: 32px;" not in sheet
+    set_density("floor")
+    floor = density_stylesheet()
+    assert "min-height: 26px;" in floor
+
+
+def test_density_stylesheet_emits_the_profile_padding():
+    assert "padding: 4px 8px;" in density_stylesheet()
+    set_density("floor")
+    assert "padding: 8px 12px;" in density_stylesheet()
+
+
+def test_density_stylesheet_carries_the_body_size_but_not_a_weight():
+    """Density owns size. Weight belongs to role_stylesheet's primary rule,
+    which is an attribute selector and would otherwise be outranked here."""
+    sheet = density_stylesheet()
+    assert "font-size: 10pt;" in sheet
+    assert "font-weight" not in sheet
+    set_density("floor")
+    assert "font-size: 12pt;" in density_stylesheet()
+
+
+def test_density_stylesheet_touches_no_colour_or_radius():
+    """Spec C3's closing rule, asserted rather than trusted."""
+    for name in DENSITY_PROFILES:
+        set_density(name)
+        sheet = density_stylesheet()
+        for forbidden in ("color", "background", "border-radius", "#"):
+            assert forbidden not in sheet, f"{name} density leaked {forbidden!r}"
+
+
+def test_density_stylesheet_scope_is_the_interactive_controls():
+    sheet = density_stylesheet()
+    for selector in ("QPushButton", "QComboBox", "QLineEdit", "QSpinBox",
+                     "QDoubleSpinBox", "QDateEdit"):
+        assert selector in sheet
+    # Labels and table rows are 8.3/8.5 work -- restyling every QLabel here
+    # would put an unverified visual change across the whole Windows app in
+    # the same commit as the mechanism.
+    assert "QLabel" not in sheet
+    assert "QTableView" not in sheet
