@@ -15,8 +15,8 @@ from __future__ import annotations
 import ast
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 ALLOW_MARKER = "style-lint: allow"
 

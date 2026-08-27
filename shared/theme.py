@@ -441,7 +441,6 @@ def restore_window_geometry(window, settings, key: str = "window_geometry") -> b
 
 def build_stylesheet(theme: ThemeTokens) -> str:
     """Build the global Qt stylesheet (QSS) for one theme."""
-    hover = theme.button_hover_dark if theme.name == "dark" else theme.button_hover_light
     r = theme.radius
     return f"""
         QWidget {{
@@ -452,14 +451,14 @@ def build_stylesheet(theme: ThemeTokens) -> str:
 
         QPushButton {{
             background-color: {theme.accent_blue};
-            color: white;
+            color: {theme.on_accent};
             border: 1px solid {theme.border};
             border-radius: {r}px;
             padding: 6px 12px;
             font-size: 10pt;
         }}
-        QPushButton:hover {{ background-color: {hover}; }}
-        QPushButton:pressed {{ background-color: {theme.button_hover_dark}; }}
+        QPushButton:hover {{ background-color: {theme.accent_fill_hover}; }}
+        QPushButton:pressed {{ background-color: {theme.accent_fill_active}; }}
         QPushButton:disabled {{
             background-color: {theme.background};
             color: {theme.text_disabled};
@@ -495,7 +494,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             background-color: {theme.background_elevated};
             color: {theme.text};
             selection-background-color: {theme.accent_blue};
-            selection-color: white;
+            selection-color: {theme.on_accent};
         }}
 
         QSpinBox, QDoubleSpinBox, QDateEdit {{
@@ -548,7 +547,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
-        QTableView::item:selected {{ background-color: {theme.accent_blue}; color: white; }}
+        QTableView::item:selected {{ background-color: {theme.accent_blue}; color: {theme.on_accent}; }}
         QTableView::item:hover {{ background-color: {theme.hover}; }}
         QHeaderView::section {{
             background-color: {theme.background_elevated};
@@ -567,7 +566,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
-        QListWidget::item:selected {{ background-color: {theme.accent_blue}; color: white; }}
+        QListWidget::item:selected {{ background-color: {theme.accent_blue}; color: {theme.on_accent}; }}
         QListWidget::item:hover {{ background-color: {theme.hover}; }}
 
         QScrollBar:vertical {{ background-color: {theme.background}; width: 12px; border: none; }}
@@ -610,7 +609,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             color: {theme.text};
             border: 1px solid {theme.border};
         }}
-        QMenu::item:selected {{ background-color: {theme.accent_blue}; color: white; }}
+        QMenu::item:selected {{ background-color: {theme.accent_blue}; color: {theme.on_accent}; }}
 
         QToolBar {{
             background-color: {theme.background_elevated};
