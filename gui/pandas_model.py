@@ -366,42 +366,22 @@ class PandasModel(QAbstractTableModel):
         self._row_bg_cache = bg
         self._row_fg_cache = fg
 
-    def _update_colors(self):
+    def _update_colors(self, theme=None):
         """Update row colors based on current theme.
 
         Sets background and text colors for table rows based on fulfillment status.
-        Uses different color palettes for light and dark themes to maintain contrast.
         """
-        theme_manager = get_theme_manager()
-
-        # ponytail: literal per-status row-highlight tints (dark/light palettes
-        # for Fulfillable/NotFulfillable/SystemNoteHighlight), not worth 12 new
-        # ThemeTokens fields for this one call site; already theme-aware via the
-        # is_dark_theme() branch below.
-        if theme_manager.is_dark_theme():
-            # Dark theme: dark tinted backgrounds with white text
-            self.colors = {
-                "Fulfillable": QColor("#1B3A1B"),          # Dark green tint
-                "NotFulfillable": QColor("#3A1B1B"),       # Dark red tint
-                "SystemNoteHighlight": QColor("#3A3020"),  # Dark orange tint
-            }
-            self.text_colors = {
-                "Fulfillable": QColor("#FFFFFF"),          # White text
-                "NotFulfillable": QColor("#FFFFFF"),       # White text
-                "SystemNoteHighlight": QColor("#FFFFFF"),  # White text
-            }
-        else:
-            # Light theme: brighter tinted backgrounds with dark text (more visible)
-            self.colors = {
-                "Fulfillable": QColor("#C8E6C9"),          # Brighter green tint (was #E8F5E9)
-                "NotFulfillable": QColor("#FFCDD2"),       # Brighter red tint (was #FFEBEE)
-                "SystemNoteHighlight": QColor("#FFE0B2"),  # Brighter orange tint (was #FFF3E0)
-            }
-            self.text_colors = {
-                "Fulfillable": QColor("#1B5E20"),          # Darker green text for contrast
-                "NotFulfillable": QColor("#B71C1C"),       # Darker red text for contrast
-                "SystemNoteHighlight": QColor("#E65100"),  # Darker orange text for contrast
-            }
+        theme = theme or get_theme_manager().get_current_theme()
+        self.colors = {
+            "Fulfillable": QColor(theme.status_success_bg),
+            "NotFulfillable": QColor(theme.status_danger_bg),
+            "SystemNoteHighlight": QColor(theme.status_warning_bg),
+        }
+        self.text_colors = {
+            "Fulfillable": QColor(theme.status_success),
+            "NotFulfillable": QColor(theme.status_danger),
+            "SystemNoteHighlight": QColor(theme.status_warning),
+        }
 
         # Rebuild per-row cache with new colors (if data already loaded)
         if hasattr(self, '_row_bg_cache'):

@@ -463,13 +463,9 @@ class RuleTestDialog(QDialog):
                 item = QTableWidgetItem(text_after)
 
                 # Highlight changed cells
-                # ponytail: literal diff-highlight yellow/green, not worth two
-                # new ThemeTokens fields for this one call site. The tints are
-                # light in both themes, so pin a dark foreground too -- dark
-                # theme's text_primary is near-white and vanishes on them.
                 if text_before != text_after:
-                    item.setBackground(QColor("#FFEB3B"))  # Yellow
-                    item.setForeground(QColor("#000000"))
+                    item.setBackground(QColor(theme.status_warning_bg))
+                    item.setForeground(QColor(theme.status_warning))
                     item.setToolTip(f"Changed from: {text_before}")
 
                 self.after_table.setItem(row_idx, col_idx, item)
@@ -480,8 +476,8 @@ class RuleTestDialog(QDialog):
             row_idx = len(matched_after) + offset
             for col_idx, col_name in enumerate(display_cols):
                 item = QTableWidgetItem(cell_display_text(row_added[col_name]))
-                item.setBackground(QColor("#C8E6C9"))  # Green
-                item.setForeground(QColor("#000000"))
+                item.setBackground(QColor(theme.status_success_bg))
+                item.setForeground(QColor(theme.status_success))
                 item.setToolTip("Added by rule")
                 self.after_table.setItem(row_idx, col_idx, item)
 

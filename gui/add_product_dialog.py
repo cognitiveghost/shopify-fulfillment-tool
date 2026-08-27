@@ -102,13 +102,11 @@ class AddProductDialog(QDialog):
         theme = get_theme_manager().get_current_theme()
         label = QLabel()
         label.setWordWrap(True)
-        # ponytail: literal validation-tint background, not worth a new
-        # ThemeTokens field for a handful of call sites.
         label.setStyleSheet(f"""
             QLabel {{
-                background-color: #FFEBEE;
-                color: #1A1A1A;
-                border: 2px solid {theme.accent_red};
+                background-color: {theme.status_danger_bg};
+                color: {theme.status_danger};
+                border: 2px solid {theme.status_danger};
                 border-radius: 5px;
                 padding: 10px;
             }}
@@ -214,13 +212,11 @@ class AddProductDialog(QDialog):
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
-            # ponytail: literal validation-tint background, not worth a new
-            # ThemeTokens field for a handful of call sites.
             self.warning_box.setStyleSheet(f"""
                 QLabel {{
-                    background-color: #FFEBEE;
-                    color: #1A1A1A;
-                    border: 2px solid {theme.accent_red};
+                    background-color: {theme.status_danger_bg};
+                    color: {theme.status_danger};
+                    border: 2px solid {theme.status_danger};
                     border-radius: 5px;
                     padding: 10px;
                 }}
@@ -232,13 +228,11 @@ class AddProductDialog(QDialog):
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
-            # ponytail: literal validation-tint background, not worth a new
-            # ThemeTokens field for a handful of call sites.
             self.warning_box.setStyleSheet(f"""
                 QLabel {{
-                    background-color: #FFF8E1;
-                    color: #1A1A1A;
-                    border: 2px solid {theme.accent_orange};
+                    background-color: {theme.status_warning_bg};
+                    color: {theme.status_warning};
+                    border: 2px solid {theme.status_warning};
                     border-radius: 5px;
                     padding: 10px;
                 }}

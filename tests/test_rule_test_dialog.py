@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from gui.rule_test_dialog import RuleTestDialog
+from gui.theme_manager import get_theme_manager
 
 
 @pytest.fixture
@@ -257,7 +258,8 @@ class TestMissingValuesRenderBlank:
         ].index("Order_Fulfillment_Status")
         item = dialog.after_table.item(0, col)
         assert item.text() == "Shipped"
-        assert item.background().color().name().lower() == "#ffeb3b"
+        theme = get_theme_manager().get_current_theme()
+        assert item.background().color().name().lower() == theme.status_warning_bg.lower()
 
     def test_an_unchanged_missing_cell_is_not_highlighted(
         self, qtbot, analysis_df, no_modals
@@ -273,4 +275,5 @@ class TestMissingValuesRenderBlank:
             for c in range(dialog.after_table.columnCount())
         ].index("Product_Name")
         item = dialog.after_table.item(0, col)
-        assert item.background().color().name().lower() != "#ffeb3b"
+        theme = get_theme_manager().get_current_theme()
+        assert item.background().color().name().lower() != theme.status_warning_bg.lower()

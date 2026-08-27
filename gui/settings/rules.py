@@ -962,12 +962,9 @@ class RulesPage(SettingsPage):
         """
         theme = get_theme_manager().get_current_theme()
 
-        # ponytail: literal validation-tint background colors, not worth new
-        # ThemeTokens fields for ~2 call sites; revisit if more validation
-        # states are added.
         border_css = {
-            "error": f"border: 1px solid {theme.accent_red}; background-color: #ffebee; color: #1A1A1A;",
-            "warning": f"border: 1px solid {theme.accent_orange}; background-color: #fff3e0; color: #1A1A1A;",
+            "error": f"border: 1px solid {theme.status_danger}; background-color: {theme.status_danger_bg}; color: {theme.status_danger};",
+            "warning": f"border: 1px solid {theme.status_warning}; background-color: {theme.status_warning_bg}; color: {theme.status_warning};",
             "success": f"border: 1px solid {theme.accent_green};",
         }
         text_color = {
