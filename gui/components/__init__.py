@@ -1,6 +1,7 @@
 """Shared UI components. See docs/superpowers/specs/2026-08-12-component-library-design.md."""
 
 from gui.components.card import Card
+from gui.components.commandbar import CommandBar
 from gui.components.filterbar import FilterBar
 from gui.components.form_section import FormSection
 from gui.components.navrail import NavRail
@@ -9,6 +10,7 @@ from gui.components.statcard import KpiStrip, StatCard
 
 __all__ = [
     "Card",
+    "CommandBar",
     "ContextualSelectionBar",
     "FilterBar",
     "FormSection",
