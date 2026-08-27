@@ -64,3 +64,70 @@ def test_the_bar_asks_its_owner_for_the_context_menu(main_window):
     main_window.profile_manager.create_client_profile("M", "Client M")
     menu = main_window.client_directory.menu_for("M", main_window)
     assert menu.actions()
+
+
+DESTINATIONS = (
+    "Session Setup",
+    "Analysis Results",
+    "Session Browser",
+    "Information",
+    "Tools",
+)
+
+
+def test_the_tab_bar_is_gone_and_the_rail_took_its_place(main_window):
+    assert not main_window.main_tabs.tabBar().isVisible()
+    assert main_window.nav_rail.button(4) is not None
+    with pytest.raises(IndexError):
+        main_window.nav_rail.set_current(5)
+
+
+def test_rail_labels_are_the_old_tab_titles_verbatim(main_window):
+    """Parent spec §6 guardrail 2: structure and labels never change together."""
+    labels = [main_window.nav_rail.button(i).text() for i in range(5)]
+    assert labels == list(DESTINATIONS)
+    assert [main_window.main_tabs.tabText(i) for i in range(5)] == list(DESTINATIONS)
+
+
+@pytest.mark.parametrize("index", range(5))
+def test_clicking_the_rail_moves_the_page(main_window, index):
+    main_window.nav_rail.button(index).click()
+    assert main_window.main_tabs.currentIndex() == index
+
+
+def test_a_programmatic_jump_moves_the_rail_back(main_window):
+    """actions_handler jumps to Analysis Results after a run; the rail follows."""
+    main_window.main_tabs.setCurrentIndex(1)
+    assert main_window.nav_rail.current_index() == 1
+
+
+def test_the_two_way_binding_does_not_recurse(main_window):
+    seen = []
+    main_window.nav_rail.currentChanged.connect(seen.append)
+
+    main_window.main_tabs.setCurrentIndex(3)
+
+    assert seen == [3]
+    assert main_window.nav_rail.current_index() == 3
+
+
+def test_rail_buttons_carry_the_old_tab_tooltips(main_window):
+    assert "Ctrl+1" in main_window.nav_rail.button(0).toolTip()
+    assert main_window.main_tabs.tabToolTip(0) == ""
+
+
+def test_the_connection_gear_is_a_rail_footer_action(main_window):
+    """It opens a modal dialog, so only its non-destination contract is
+    exercised here: it must never be able to steal the checked state."""
+    main_window.main_tabs.setCurrentIndex(2)
+
+    assert not main_window.connection_btn.isCheckable()
+    assert main_window.nav_rail._group.id(main_window.connection_btn) == -1
+    assert main_window.nav_rail.current_index() == 2
+
+
+def test_refresh_icons_reaches_the_rail(main_window):
+    main_window.ui_manager._refresh_icons()
+    for index in range(5):
+        assert not main_window.nav_rail.button(index).icon().isNull()
+    assert not main_window.connection_btn.icon().isNull()

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from gui.components.card import Card
 from gui.components.commandbar import CommandBar
+from gui.components.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
@@ -81,11 +82,27 @@ class UIManager:
     # menu in main_window_pyside.py is rebuilt on every right-click, so its
     # icons pick up the new colour for free.
     _TAB_ICONS = ("clipboard-list", "table", "folder-open", "info", "wrench")
+    # Labels are the five former tab titles, verbatim. Renaming a destination
+    # and moving it in the same release is what the parent spec's §6
+    # guardrail 2 forbids.
+    _TAB_LABELS = (
+        "Session Setup",
+        "Analysis Results",
+        "Session Browser",
+        "Information",
+        "Tools",
+    )
+    _TAB_TOOLTIPS = (
+        "Session setup and file loading (Ctrl+1)",
+        "View and edit analysis results (Ctrl+2)",
+        "Browse past sessions (Ctrl+3)",
+        "Statistics and logs (Ctrl+4)",
+        "PDF processing and utilities (Ctrl+5)",
+    )
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {
         "open_session_folder_button": "folder-open",
         "new_session_btn": "folder-plus",
         "clear_filter_button": "funnel-x",
-        "sidebar_toggle_btn": "menu",
         "connection_btn": "settings",
     }
 
@@ -129,6 +146,10 @@ class UIManager:
         self.mw.client_sidebar.hide()
         main_horizontal.addWidget(self.mw.client_sidebar)
 
+        # The rail is the outermost chrome, left of everything else.
+        self.mw.nav_rail = NavRail(self.mw)
+        main_horizontal.addWidget(self.mw.nav_rail)
+
         # Create right side container (header + tabs)
         right_side = QWidget()
         right_layout = QVBoxLayout(right_side)
@@ -158,26 +179,48 @@ class UIManager:
         )
 
     def _create_tabs(self):
-        """Create main tab widget with 5 tabs."""
+        """Create the page store and the rail that drives it.
+
+        main_tabs keeps being a QTabWidget with its tab bar hidden. A hidden
+        tab bar makes it exactly a QStackedWidget with the API 30 call sites
+        already speak -- swapping the class would rewrite all of them and the
+        five shortcuts to produce a screen no user can tell apart.
+        """
         self.mw.main_tabs = QTabWidget()
-        self.mw.main_tabs.setDocumentMode(True)  # Cleaner look
+        self.mw.main_tabs.setDocumentMode(True)
         self.mw.main_tabs.setTabPosition(QTabWidget.North)
-        self.mw.main_tabs.setMovable(False)  # Prevent accidental reorder
+        self.mw.main_tabs.setMovable(False)
+        self.mw.main_tabs.tabBar().hide()
 
-        # Create the 5 main tabs
-        tab1 = self._create_tab1_session_setup()
-        tab2 = self._create_tab2_analysis_results()
-        tab3 = self._create_tab3_session_browser()
-        tab4 = self._create_tab4_information()
-        tab5 = self._create_tab5_tools()
+        pages = (
+            self._create_tab1_session_setup(),
+            self._create_tab2_analysis_results(),
+            self._create_tab3_session_browser(),
+            self._create_tab4_information(),
+            self._create_tab5_tools(),
+        )
+        for page, label, icon_name, tip in zip(
+            pages, self._TAB_LABELS, self._TAB_ICONS, self._TAB_TOOLTIPS, strict=True
+        ):
+            self.mw.main_tabs.addTab(page, label)
+            index = self.mw.nav_rail.add_item(icon_name, label)
+            self.mw.nav_rail.button(index).setToolTip(tip)
 
-        self.mw.main_tabs.addTab(tab1, "Session Setup")
-        self.mw.main_tabs.addTab(tab2, "Analysis Results")
-        self.mw.main_tabs.addTab(tab3, "Session Browser")
-        self.mw.main_tabs.addTab(tab4, "Information")
-        self.mw.main_tabs.addTab(tab5, "Tools")
+        # Server Connection is an app setting, not a destination -- footer.
+        self.mw.connection_btn = self.mw.nav_rail.add_footer_item(
+            "settings", "Server Connection"
+        )
+        self.mw.connection_btn.setToolTip("Server Connection settings")
+        self.mw.connection_btn.clicked.connect(self._open_connection_settings)
 
-        # Add keyboard shortcuts for tab switching
+        # Two-way, and the back edge is load-bearing: actions_handler jumps
+        # straight to Analysis Results after a run, and without this the rail
+        # would keep highlighting the page the user left. It cannot loop --
+        # NavRail.set_current returns before emitting when the index is
+        # unchanged, and QTabWidget does not re-emit for the index it is on.
+        self.mw.nav_rail.currentChanged.connect(self.mw.main_tabs.setCurrentIndex)
+        self.mw.main_tabs.currentChanged.connect(self.mw.nav_rail.set_current)
+
         self._setup_tab_shortcuts()
 
     def _create_command_bar(self) -> CommandBar:
@@ -225,13 +268,6 @@ class UIManager:
             self.mw,
             lambda: self.mw.main_tabs.setCurrentIndex(4),
         )
-
-        # Set tooltips on tabs
-        self.mw.main_tabs.setTabToolTip(0, "Session setup and file loading (Ctrl+1)")
-        self.mw.main_tabs.setTabToolTip(1, "View and edit analysis results (Ctrl+2)")
-        self.mw.main_tabs.setTabToolTip(2, "Browse past sessions (Ctrl+3)")
-        self.mw.main_tabs.setTabToolTip(3, "Statistics and logs (Ctrl+4)")
-        self.mw.main_tabs.setTabToolTip(4, "PDF processing and utilities (Ctrl+5)")
 
     def _create_tab1_session_setup(self):
         """Create Tab 1: Session Setup with split layout.
@@ -1802,7 +1838,7 @@ class UIManager:
         background is invisible.
         """
         for index, name in enumerate(self._TAB_ICONS):
-            self.mw.main_tabs.setTabIcon(index, icon(name))
+            self.mw.nav_rail.button(index).setIcon(icon(name))
         for attr, name in self._BUTTON_ICONS.items():
             widget = getattr(self.mw, attr, None)
             if widget is not None:
