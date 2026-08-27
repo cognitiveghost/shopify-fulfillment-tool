@@ -659,7 +659,7 @@ class MainWindow(QMainWindow):
         if is_bulk_mode:
             self.toggle_bulk_mode_btn.setText("Exit Bulk Mode")
             self.toggle_bulk_mode_btn.setStyleSheet(
-                f"background-color: {theme.accent_green}; color: white;"
+                f"background-color: {theme.status_success}; color: {theme.on_accent};"
             )
             self._update_bulk_toolbar_state()
             logger.info("Bulk mode enabled")

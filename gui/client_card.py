@@ -131,7 +131,7 @@ class ClientCard(QWidget):
         # Base style with theme colors
         base_style = f"""
             ClientCard {{
-                background-color: {theme.background_elevated};
+                background-color: {theme.surface_raised};
                 border-radius: 8px;
                 color: {theme.text};
             }}
@@ -144,8 +144,8 @@ class ClientCard(QWidget):
         if self._is_active:
             active_style = f"""
                 ClientCard {{
-                    border-left: 4px solid {theme.active_border};
-                    background-color: {theme.active_background};
+                    border-left: 4px solid {theme.selection_border};
+                    background-color: {theme.selection_bg};
                 }}
             """
             self.setStyleSheet(base_style + active_style)
@@ -160,7 +160,7 @@ class ClientCard(QWidget):
 
         # Update badge color (always orange accent)
         if self.badges_label:
-            self.badges_label.setStyleSheet(f"{font_css('caption', bold=True)} color: {theme.accent_orange};")
+            self.badges_label.setStyleSheet(f"{font_css('caption', bold=True)} color: {theme.status_warning};")
 
     def set_active(self, is_active: bool):
         """Set active state.
@@ -242,7 +242,7 @@ class ClientCard(QWidget):
                 # Create badges label if it didn't exist
                 theme = get_theme_manager().get_current_theme()
                 self.badges_label = QLabel(badges_text)
-                self.badges_label.setStyleSheet(f"{font_css('caption', bold=True)} color: {theme.accent_orange};")
+                self.badges_label.setStyleSheet(f"{font_css('caption', bold=True)} color: {theme.status_warning};")
                 # Add to stats layout (last child of content layout)
                 content_layout = self.layout().itemAt(0).layout()
                 stats_layout = content_layout.itemAt(2).layout()

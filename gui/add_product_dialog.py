@@ -102,13 +102,11 @@ class AddProductDialog(QDialog):
         theme = get_theme_manager().get_current_theme()
         label = QLabel()
         label.setWordWrap(True)
-        # ponytail: literal validation-tint background, not worth a new
-        # ThemeTokens field for a handful of call sites.
         label.setStyleSheet(f"""
             QLabel {{
-                background-color: #FFEBEE;
-                color: #1A1A1A;
-                border: 2px solid {theme.accent_red};
+                background-color: {theme.status_danger_bg};
+                color: {theme.status_danger};
+                border: 2px solid {theme.status_danger};
                 border-radius: 5px;
                 padding: 10px;
             }}
@@ -162,6 +160,7 @@ class AddProductDialog(QDialog):
         order_numbers_str = self.analysis_df["Order_Number"].astype(str)
         order_exists = text_str in order_numbers_str.values
 
+        theme = get_theme_manager().get_current_theme()
         if order_exists:
             # Get order info - compare as strings
             order_rows = self.analysis_df[
@@ -173,10 +172,10 @@ class AddProductDialog(QDialog):
             self.order_status_label.setText(
                 f"Order found: {item_count} items, Status: {status}"
             )
-            self.order_status_label.setStyleSheet("color: green;")
+            self.order_status_label.setStyleSheet(f"color: {theme.status_success};")
         else:
             self.order_status_label.setText("Order not found")
-            self.order_status_label.setStyleSheet("color: red;")
+            self.order_status_label.setStyleSheet(f"color: {theme.status_danger};")
 
     def _on_sku_changed(self, text):
         """Handle SKU input change."""
@@ -192,7 +191,7 @@ class AddProductDialog(QDialog):
 
         if stock_row.empty:
             self.product_info_label.setText("SKU not found in stock")
-            self.product_info_label.setStyleSheet("color: red;")
+            self.product_info_label.setStyleSheet(f"color: {theme.status_danger};")
             return
 
         # Get product info
@@ -203,7 +202,7 @@ class AddProductDialog(QDialog):
         self.product_info_label.setText(
             f"{product_name} | Live stock: {current_stock}"
         )
-        self.product_info_label.setStyleSheet("color: green;")
+        self.product_info_label.setStyleSheet(f"color: {theme.status_success};")
 
         # Show warning if low/zero stock
         if current_stock == 0:
@@ -214,13 +213,11 @@ class AddProductDialog(QDialog):
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
-            # ponytail: literal validation-tint background, not worth a new
-            # ThemeTokens field for a handful of call sites.
             self.warning_box.setStyleSheet(f"""
                 QLabel {{
-                    background-color: #FFEBEE;
-                    color: #1A1A1A;
-                    border: 2px solid {theme.accent_red};
+                    background-color: {theme.status_danger_bg};
+                    color: {theme.status_danger};
+                    border: 2px solid {theme.status_danger};
                     border-radius: 5px;
                     padding: 10px;
                 }}
@@ -232,13 +229,11 @@ class AddProductDialog(QDialog):
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
-            # ponytail: literal validation-tint background, not worth a new
-            # ThemeTokens field for a handful of call sites.
             self.warning_box.setStyleSheet(f"""
                 QLabel {{
-                    background-color: #FFF8E1;
-                    color: #1A1A1A;
-                    border: 2px solid {theme.accent_orange};
+                    background-color: {theme.status_warning_bg};
+                    color: {theme.status_warning};
+                    border: 2px solid {theme.status_warning};
                     border-radius: 5px;
                     padding: 10px;
                 }}

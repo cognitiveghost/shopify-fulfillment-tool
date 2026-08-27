@@ -199,7 +199,7 @@ class OrdersMappingPage(_MappingPageBase):
         delete_btn.setFixedWidth(30)
         theme = get_theme_manager().get_current_theme()
         # Sets only `color`, so the secondary role's background still applies.
-        delete_btn.setStyleSheet(f"color: {theme.accent_red}; font-weight: bold;")
+        delete_btn.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
         delete_btn.setToolTip("Remove this courier mapping")
 
         row_layout.addWidget(code_label)

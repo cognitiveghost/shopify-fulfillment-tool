@@ -250,12 +250,12 @@ class BulkOperationsToolbar(QWidget):
         """Apply current theme colors. Re-runs on theme change."""
         theme = get_theme_manager().get_current_theme()
         self.selection_label.setStyleSheet(
-            f"font-weight: bold; color: {theme.accent_blue};"
+            f"font-weight: bold; color: {theme.accent_fill};"
         )
         # Destructive operations get a red accent so they're not mistaken for
         # the safe export/status buttons sitting next to them.
         self.delete_menu_btn.setStyleSheet(
-            f"QToolButton {{ color: {theme.accent_red}; font-weight: bold; }}"
+            f"QToolButton {{ color: {theme.status_danger}; font-weight: bold; }}"
         )
 
     def update_selection_count(self, orders_count: int, items_count: int):

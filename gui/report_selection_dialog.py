@@ -89,7 +89,7 @@ class _BaseReportDialog(QDialog):
         self.preview_filters_text.setReadOnly(True)
         self.preview_filters_text.setMaximumHeight(120)
         self.preview_filters_text.setStyleSheet(
-            f"background-color: {self.theme.background}; "
+            f"background-color: {self.theme.surface}; "
             f"color: {self.theme.text_secondary}; {font_css('caption')}"
         )
         preview_layout.addWidget(self.preview_filters_text)
@@ -107,14 +107,14 @@ class _BaseReportDialog(QDialog):
         self.generate_btn.setEnabled(False)
         self.generate_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {self.theme.accent_blue};
-                color: white;
+                background-color: {self.theme.accent_fill};
+                color: {self.theme.on_accent};
                 {font_css('body', bold=True)}
                 border: none;
                 border-radius: 4px;
             }}
-            QPushButton:hover {{ background-color: {self.theme.button_hover_light}; }}
-            QPushButton:pressed {{ background-color: {self.theme.button_hover_light}; }}
+            QPushButton:hover {{ background-color: {self.theme.accent_fill_active}; }}
+            QPushButton:pressed {{ background-color: {self.theme.accent_fill_active}; }}
             QPushButton:disabled {{ background-color: {self.theme.border}; color: {self.theme.text_secondary}; }}
         """)
         self.generate_btn.clicked.connect(self._on_generate)
@@ -257,14 +257,14 @@ class GenerateReportsDialog(_BaseReportDialog):
             theme = get_theme_manager().get_current_theme()
             self.writeoff_only_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {theme.accent_orange};
-                    color: white;
+                    background-color: {theme.status_warning};
+                    color: {theme.on_accent};
                     font-weight: bold;
                     border: none;
                     border-radius: 4px;
                 }}
-                QPushButton:hover {{ background-color: {theme.accent_orange}; }}
-                QPushButton:pressed {{ background-color: {theme.accent_orange}; }}
+                QPushButton:hover {{ background-color: {theme.status_warning}; }}
+                QPushButton:pressed {{ background-color: {theme.status_warning}; }}
             """)
             self.writeoff_only_btn.clicked.connect(self._on_writeoff_only)
             writeoff_layout.addWidget(self.writeoff_only_btn)

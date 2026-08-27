@@ -85,7 +85,7 @@ class ClientCreationDialog(QDialog):
         self.color_display = QLabel()
         self.color_display.setFixedSize(40, 30)
         theme = get_theme_manager().get_current_theme()
-        self.color_display.setStyleSheet(f"border: 1px solid {theme.border}; background-color: {theme.accent_green};")
+        self.color_display.setStyleSheet(f"border: 1px solid {theme.border}; background-color: {theme.status_success};")
         color_layout.addWidget(self.color_display)
 
         self.color_button = QPushButton("Choose Color")
@@ -93,7 +93,7 @@ class ClientCreationDialog(QDialog):
         color_layout.addWidget(self.color_button)
         color_layout.addStretch()
 
-        self.current_color = theme.accent_green  # Default
+        self.current_color = theme.status_success  # Default
         form_layout.addRow("Color:", color_layout)
 
         # Pin checkbox
@@ -539,7 +539,7 @@ class ClientSettingsDialog(QDialog):
                     self.group_combo.setCurrentIndex(index)
 
         # Color
-        custom_color = self.ui_settings.get("custom_color", theme.accent_green)
+        custom_color = self.ui_settings.get("custom_color", theme.status_success)
         self.current_color = custom_color
         self._update_color_display(custom_color)
 

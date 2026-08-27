@@ -124,9 +124,9 @@ class LogViewer(ctk.CTkFrame):
         # --- Tags for color-coding ---
         self.tree.tag_configure("DEBUG", foreground="gray")
         self.tree.tag_configure("INFO", foreground="white")
-        self.tree.tag_configure("WARNING", foreground=theme.accent_orange)
-        self.tree.tag_configure("ERROR", foreground=theme.accent_red)
-        self.tree.tag_configure("CRITICAL", background=theme.accent_red, foreground="white")
+        self.tree.tag_configure("WARNING", foreground=theme.status_warning)
+        self.tree.tag_configure("ERROR", foreground=theme.status_danger)
+        self.tree.tag_configure("CRITICAL", background=theme.status_danger, foreground="white")
 
     def _process_log_queue(self):
         """Periodically checks the queue for new log messages.

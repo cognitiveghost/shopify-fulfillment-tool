@@ -44,6 +44,10 @@ logger = logging.getLogger(__name__)
 
 _VALID_CATEGORY_ID = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 
+# A user's tag colour is data they chose, not a theme value; this is only the
+# fallback offered when a category has none.
+DEFAULT_TAG_COLOR = "#9E9E9E"  # style-lint: allow
+
 
 def is_valid_category_id(category_id: str) -> bool:
     """Category IDs are ASCII lowercase, digits and underscores, not all-underscore.
@@ -206,10 +210,7 @@ class TagCategoriesPanel(QWidget):
         color_layout.addWidget(self.color_button)
         color_layout.addStretch()
 
-        # ponytail: literal neutral swatch-fill default, not a text color —
-        # theme.text_secondary differs per theme and this is a badge/swatch
-        # fill, not text; no theme-invariant neutral-gray token exists.
-        self.current_color = "#9E9E9E"
+        self.current_color = DEFAULT_TAG_COLOR
         form_layout.addRow("Color:", color_layout)
 
         self.order_spin = QSpinBox()
@@ -337,9 +338,9 @@ class TagCategoriesPanel(QWidget):
                 item.setData(Qt.UserRole, category_id)
                 # ponytail: literal neutral swatch-fill default, not a text color —
                 # see _create_editor comment above for why no theme token fits.
-                color = category_config.get("color", "#9E9E9E")
+                color = category_config.get("color", DEFAULT_TAG_COLOR)
                 _cat = QColor(color)
-                _bg = QColor(get_theme_manager().get_current_theme().background)
+                _bg = QColor(get_theme_manager().get_current_theme().surface)
                 item.setBackground(QColor(
                     int(_cat.red() * 0.45 + _bg.red() * 0.55),
                     int(_cat.green() * 0.45 + _bg.green() * 0.55),
@@ -384,7 +385,7 @@ class TagCategoriesPanel(QWidget):
         self.label_input.setText(category.get("label", ""))
         # ponytail: literal neutral swatch-fill default, not a text color —
         # see _create_editor comment above for why no theme token fits.
-        self.current_color = category.get("color", "#9E9E9E")
+        self.current_color = category.get("color", DEFAULT_TAG_COLOR)
         self.color_display.setStyleSheet(f"border: 1px solid {self.theme.border}; background-color: {self.current_color};")
         self.order_spin.setValue(category.get("order", 1))
 
@@ -471,9 +472,7 @@ class TagCategoriesPanel(QWidget):
             self.tags_list.clear()
             self.writeoff_mappings_table.setRowCount(0)
             self.writeoff_enabled_checkbox.setChecked(False)
-            # ponytail: same literal neutral swatch fill as the editor default —
-            # see _create_category_editor_panel for why no theme token fits.
-            self.current_color = "#9E9E9E"
+            self.current_color = DEFAULT_TAG_COLOR
             self.color_display.setStyleSheet(
                 f"border: 1px solid {self.theme.border}; background-color: {self.current_color};"
             )
@@ -540,7 +539,7 @@ class TagCategoriesPanel(QWidget):
         if current_item:
             current_item.setText(category["label"])
             _cat = QColor(self.current_color)
-            _bg = QColor(get_theme_manager().get_current_theme().background)
+            _bg = QColor(get_theme_manager().get_current_theme().surface)
             current_item.setBackground(QColor(
                 int(_cat.red() * 0.45 + _bg.red() * 0.55),
                 int(_cat.green() * 0.45 + _bg.green() * 0.55),
@@ -770,12 +769,7 @@ class TagCategoriesPanel(QWidget):
 
         new_category = {
             "label": category_id.replace("_", " ").title(),
-            # ponytail: literal — this is a persisted config default (written
-            # to disk), not a live-rendered text color. theme.text_secondary
-            # is a different hex per theme, so using it here would bake a
-            # theme-at-creation-time-dependent color into saved config.
-            # No theme-invariant neutral-gray token exists.
-            "color": "#9E9E9E",
+            "color": DEFAULT_TAG_COLOR,
             "order": next_available_order(
                 c.get("order") for c in categories.values() if isinstance(c, dict)
             ),
