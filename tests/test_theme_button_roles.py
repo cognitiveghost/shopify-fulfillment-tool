@@ -1,8 +1,8 @@
 """The primary/secondary button hierarchy Track 3 said had to be built.
 
-shared/theme.py paints every QPushButton accent-blue, and it is sync-owned
-by packing-tool so it cannot be edited here. These rules are layered on in
-gui/theme_manager.py, the repo-owned seam.
+8.5 moved the button-role QSS into shared.theme.build_stylesheet (authored in
+packing-tool, pulled in by scripts/sync_shared.py) so both apps read one
+definition; gui.theme_manager re-exports set_button_role for existing callers.
 """
 import re
 
@@ -10,7 +10,7 @@ import pytest
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from gui.theme_manager import role_stylesheet, set_button_role
-from shared.theme import get_theme
+from shared.theme import build_stylesheet, get_theme
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -29,7 +29,8 @@ def _background_color(qss: str, role: str) -> str:
 
 @pytest.mark.parametrize("theme_name", ["light", "dark"])
 def test_both_roles_have_a_rule(theme_name):
-    qss = role_stylesheet(get_theme(theme_name))
+    # 8.5 moved the button hierarchy into shared.theme.build_stylesheet.
+    qss = build_stylesheet(get_theme(theme_name))
     assert 'QPushButton[role="primary"]' in qss
     assert 'QPushButton[role="secondary"]' in qss
 
@@ -39,7 +40,7 @@ def test_the_two_roles_do_not_render_the_same(theme_name):
     """A token that happens to resolve to the same colour in one theme is
     invisible on Linux and only shows up on the Windows machines that run
     this app."""
-    qss = role_stylesheet(get_theme(theme_name))
+    qss = build_stylesheet(get_theme(theme_name))
     primary = _background_color(qss, "primary")
     secondary = _background_color(qss, "secondary")
     assert primary != secondary, f"both roles render {primary} in the {theme_name} theme"

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QLabel, QWidget
 
 THEME_DARK = "dark"
 THEME_LIGHT = "light"
@@ -386,19 +386,30 @@ def clamp_geometry(
 class StatusDot(QWidget):
     """Small colored circle for status indicators in tables/lists.
 
-    Replaces emoji glyphs (previously concatenated into table-cell text,
-    e.g. packing-tool's sessions_list_widget.py STATUS_CONFIG icons) with a
-    theme-independent painted widget — consistent rendering across OS/fonts.
+    Takes a *token field name* plus the tokens to resolve it against -- never a
+    hex string. Constructing it with a colour is what let the palette escape
+    the theme; a name is checked by getattr, so a typo raises here rather than
+    rendering the wrong colour in production.
+
+    `role` is any ThemeTokens colour field, not only the four status roles:
+    packing-tool's STATUS_CONFIG maps "not_started" to text_secondary.
+
+    `theme` is explicit because shared/ cannot know which theme is live -- that
+    answer lives in each app (packing-tool's gui.theme.current_tokens(),
+    shopify's get_theme_manager()), and shared/ must not import either.
     """
 
-    def __init__(self, color: str, diameter: int = 10, parent=None):
+    def __init__(self, role: str, theme: ThemeTokens, diameter: int = 10, parent=None):
         super().__init__(parent)
-        self._color = QColor(color)
+        self._color = QColor(getattr(theme, role))
         self._diameter = diameter
         self.setFixedSize(diameter, diameter)
 
-    def set_color(self, color: str) -> None:
-        self._color = QColor(color)
+    def color(self) -> QColor:
+        return self._color
+
+    def set_role(self, role: str, theme: ThemeTokens) -> None:
+        self._color = QColor(getattr(theme, role))
         self.update()
 
     def paintEvent(self, event):
@@ -407,6 +418,58 @@ class StatusDot(QWidget):
         painter.setBrush(self._color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(0, 0, self._diameter, self._diameter)
+
+
+CHIP_VARIANTS = ("chip", "edge")
+
+
+class StatusChip(QLabel):
+    """A read-only status badge: a role name, a label, and the live tokens.
+
+    Two variants. `chip` is a pill filled with the role's own tint --
+    validate_theme already proves every status_* against its status_*_bg at
+    4.5:1, so the chip's contrast is guaranteed by the existing gate. `edge`
+    is a row/lane marker: a coloured left border on a transparent ground.
+
+    A role with no `<role>_bg` partner (text_secondary, for the "Not Started"
+    row) falls back to surface_sunken. That is the one place a missing token
+    is tolerated rather than raised -- the role itself is still resolved with
+    getattr, so a typo in the role name still fails loudly.
+
+    This is deliberately not the filter chip: a filter chip is interactive and
+    dismissible. Merging them would mean one widget with a `clickable` flag.
+    """
+
+    def __init__(
+        self,
+        role: str,
+        text: str,
+        theme: ThemeTokens,
+        variant: str = "chip",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        if variant not in CHIP_VARIANTS:
+            raise ValueError(
+                f"Unknown chip variant {variant!r}; expected one of {CHIP_VARIANTS}"
+            )
+        self._variant = variant
+        self.set_status(role, text, theme)
+
+    def set_status(self, role: str, text: str, theme: ThemeTokens) -> None:
+        fg = getattr(theme, role)
+        self.setText(text)
+        if self._variant == "edge":
+            self.setStyleSheet(
+                f"background-color: transparent; color: {theme.text}; "
+                f"border-left: 3px solid {fg}; padding: 2px 8px;"
+            )
+            return
+        tint = getattr(theme, f"{role}_bg", theme.surface_sunken)
+        self.setStyleSheet(
+            f"background-color: {tint}; color: {fg}; "
+            f"border: none; border-radius: {theme.radius}px; padding: 2px 8px;"
+        )
 
 
 def save_window_geometry(window, settings, key: str = "window_geometry") -> None:
@@ -439,6 +502,29 @@ def restore_window_geometry(window, settings, key: str = "window_geometry") -> b
     return True
 
 
+# Opt-in on purpose: a QPushButton with no `role` property keeps exactly its
+# current accent-filled appearance. Neutral-by-default is fewer edits but
+# restyles 147 buttons across both apps at once, leaving no screen with a
+# primary until 8.6/8.7 designate one. The flip belongs in the cycle that
+# touches screens, not here.
+BUTTON_ROLES = ("primary", "secondary", "ghost", "danger")
+
+
+def set_button_role(button, role: str) -> None:
+    """Mark a button primary / secondary / ghost / danger.
+
+    Qt does not restyle a widget when a dynamic property changes after the
+    stylesheet was applied -- the classic trap. Call sites set the role at
+    construction, where it would not matter, but unpolish/polish runs
+    unconditionally so a later live-flipping caller cannot step in it.
+    """
+    if role not in BUTTON_ROLES:
+        raise ValueError(f"Unknown button role {role!r}; expected one of {BUTTON_ROLES}")
+    button.setProperty("role", role)
+    button.style().unpolish(button)
+    button.style().polish(button)
+
+
 def build_stylesheet(theme: ThemeTokens) -> str:
     """Build the global Qt stylesheet (QSS) for one theme."""
     r = theme.radius
@@ -460,6 +546,52 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QPushButton:hover {{ background-color: {theme.accent_fill_hover}; }}
         QPushButton:pressed {{ background-color: {theme.accent_fill_active}; }}
         QPushButton:disabled {{
+            background-color: {theme.surface};
+            color: {theme.text_disabled};
+            border: 1px solid {theme.border_subtle};
+        }}
+
+        QPushButton[role="primary"] {{
+            background-color: {theme.accent_fill};
+            color: {theme.on_accent};
+            border: 1px solid {theme.accent_fill};
+            font-weight: bold;
+        }}
+        QPushButton[role="primary"]:hover {{ background-color: {theme.accent_fill_hover}; }}
+        QPushButton[role="primary"]:pressed {{ background-color: {theme.accent_fill_active}; }}
+
+        QPushButton[role="secondary"] {{
+            background-color: {theme.surface_raised};
+            color: {theme.text};
+            border: 1px solid {theme.border};
+        }}
+        QPushButton[role="secondary"]:hover {{ background-color: {theme.hover}; }}
+        /* the bare QPushButton rule presses to dark accent-blue, which reads as
+           primary for the fraction of a second it is held. */
+        QPushButton[role="secondary"]:pressed {{ background-color: {theme.selection_bg}; }}
+
+        QPushButton[role="ghost"] {{
+            background-color: transparent;
+            color: {theme.text};
+            border: none;
+        }}
+        QPushButton[role="ghost"]:hover {{ background-color: {theme.hover}; }}
+        QPushButton[role="ghost"]:pressed {{ background-color: {theme.selection_bg}; }}
+
+        /* danger is an outline, not a fill: a destructive action must be findable
+           without competing with the screen's one primary. */
+        QPushButton[role="danger"] {{
+            background-color: transparent;
+            color: {theme.status_danger};
+            border: 1px solid {theme.status_danger};
+        }}
+        QPushButton[role="danger"]:hover {{ background-color: {theme.status_danger_bg}; }}
+        QPushButton[role="danger"]:pressed {{ background-color: {theme.status_danger_bg}; }}
+
+        QPushButton[role="primary"]:disabled,
+        QPushButton[role="secondary"]:disabled,
+        QPushButton[role="ghost"]:disabled,
+        QPushButton[role="danger"]:disabled {{
             background-color: {theme.surface};
             color: {theme.text_disabled};
             border: 1px solid {theme.border_subtle};
@@ -672,14 +804,23 @@ if __name__ == "__main__":
     for theme in (LIGHT_THEME, DARK_THEME):
         sheet = build_stylesheet(theme)
         assert "QPushButton" in sheet and theme.accent_fill in sheet
+        for _role in BUTTON_ROLES:
+            assert f'QPushButton[role="{_role}"]' in sheet
         palette = build_palette(theme)
         assert palette.color(palette.ColorRole.Window).name().upper() == theme.surface.upper()
     apply_theme(app, "dark")
     assert (theme_app_stylesheet := app.styleSheet())
 
-    dot = StatusDot(DARK_THEME.accent_green)
+    dot = StatusDot("status_success", DARK_THEME)
     assert dot.width() == 10 and dot.height() == 10
-    dot.set_color(DARK_THEME.accent_red)
+    assert dot.color().name().upper() == DARK_THEME.status_success.upper()
+    dot.set_role("status_danger", DARK_THEME)
+    assert dot.color().name().upper() == DARK_THEME.status_danger.upper()
+
+    chip = StatusChip("status_success", "Completed", DARK_THEME)
+    assert DARK_THEME.status_success_bg in chip.styleSheet()
+    edge = StatusChip("status_danger", "Incomplete", DARK_THEME, variant="edge")
+    assert "border-left: 3px solid" in edge.styleSheet()
 
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QMainWindow
