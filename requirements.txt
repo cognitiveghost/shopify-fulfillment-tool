@@ -22,7 +22,10 @@ xlutils>=2.0.0         # Utilities for working with Excel files
 
 # GUI Framework
 # -------------
-PySide6>=6.5.0         # Qt6 for Python - cross-platform GUI framework
+PySide6>=6.7.0         # Qt6 for Python - cross-platform GUI framework
+                       # 6.7 is the floor for QFont.setFeature(), which is the
+                       # only working route to tabular numerals (Qt QSS has no
+                       # font-variant-numeric property).
 
 # Standard Library Enhancements
 # ------------------------------

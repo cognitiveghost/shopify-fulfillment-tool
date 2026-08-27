@@ -10,10 +10,33 @@ import re
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel, QListWidgetItem
+from PySide6.QtGui import QFont, QFontMetricsF, QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDateEdit,
+    QDoubleSpinBox,
+    QLabel,
+    QLineEdit,
+    QListWidgetItem,
+    QPushButton,
+    QSpinBox,
+)
 
-from gui.theme_manager import TYPE_SCALE, apply_font, font_css
+from gui.fonts import load_bundled_fonts
+from gui.theme_manager import (
+    DEFAULT_DENSITY,
+    DENSITY_PROFILES,
+    TYPE_SCALE,
+    apply_font,
+    density_stylesheet,
+    font_css,
+    get_density,
+    get_density_profile,
+    get_theme_manager,
+    set_density,
+    type_style,
+)
 from shared.theme import build_stylesheet, get_theme
 
 
@@ -22,8 +45,10 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
-def test_scale_has_exactly_the_five_documented_roles():
-    assert set(TYPE_SCALE) == {"caption", "body", "label", "heading", "display"}
+def test_scale_has_exactly_the_six_documented_roles():
+    assert set(TYPE_SCALE) == {
+        "caption", "body", "label", "heading", "display", "display_xl",
+    }
 
 
 @pytest.mark.parametrize("role,size_pt,bold", [
@@ -32,6 +57,7 @@ def test_scale_has_exactly_the_five_documented_roles():
     ("label", 12, True),
     ("heading", 14, True),
     ("display", 17, True),
+    ("display_xl", 28, True),
 ])
 def test_roles_resolve_to_expected_size_and_weight(role, size_pt, bold):
     assert TYPE_SCALE[role].size_pt == size_pt
@@ -113,3 +139,259 @@ def test_no_hardcoded_font_sizes_outside_theme_manager():
         "Use theme_manager.font_css()/apply_font() instead of hardcoding sizes:\n"
         + "\n".join(offenders)
     )
+
+
+def test_exactly_two_profiles_and_desk_is_the_default():
+    assert set(DENSITY_PROFILES) == {"desk", "floor"}
+    assert DEFAULT_DENSITY == "desk"
+    assert get_density() == "desk"
+
+
+@pytest.mark.parametrize("name,control,row,pad_v,pad_h", [
+    ("desk", 32, 28, 4, 8),
+    ("floor", 44, 40, 8, 12),
+])
+def test_profile_metrics_match_the_spec_table(name, control, row, pad_v, pad_h):
+    profile = DENSITY_PROFILES[name]
+    assert profile.control_height == control
+    assert profile.row_height == row
+    assert profile.padding_v == pad_v
+    assert profile.padding_h == pad_h
+
+
+def test_profile_padding_is_the_shared_spacing_scale():
+    """Spec C3 names spacing tokens, not raw pixels. shared/theme.py is
+    sync-owned by packing-tool, so if its spacing scale moves under us these
+    profiles silently stop meaning what the spec says."""
+    theme = get_theme("light")
+    assert DENSITY_PROFILES["desk"].padding_v == theme.spacing_xs
+    assert DENSITY_PROFILES["desk"].padding_h == theme.spacing_sm
+    assert DENSITY_PROFILES["floor"].padding_v == theme.spacing_sm
+    assert DENSITY_PROFILES["floor"].padding_h == theme.spacing_md
+
+
+def test_desk_is_the_identity_profile():
+    """TYPE_SCALE is the desk baseline, so desk overrides nothing."""
+    assert DENSITY_PROFILES["desk"].type_overrides == {}
+
+
+def test_floor_overrides_body_and_caption_and_nothing_else():
+    """Spec C3 overrides Parcker's 'density never changes type size' in exactly
+    one place. A third key here would be silent drift, which is the thing the
+    spec explicitly said it did not want."""
+    assert DENSITY_PROFILES["floor"].type_overrides == {"body": 12, "caption": 10}
+
+
+@pytest.mark.parametrize("name,expected", [("desk", 22), ("floor", 26)])
+def test_control_content_height_backs_out_padding_and_border(name, expected):
+    assert DENSITY_PROFILES[name].control_content_height == expected
+
+
+# The 3px the QAbstractSpinBox family adds on top of the rule. Its sizeHint()
+# reserves room for the up/down buttons *after* the QSS is applied, and
+# min-height is a floor, so it never claws that back -- max-height does not
+# clamp it either. See DensityProfile.control_content_height.
+_SPINBOX_CHROME_PX = 3
+
+
+@pytest.mark.parametrize("name", ["desk", "floor"])
+def test_density_lands_real_controls_on_the_profile_height(name):
+    """The assertion the spec actually makes -- 32px desk, 44px floor -- measured
+    on polished widgets rather than by restating the arithmetic.
+
+    control_content_height is a derived number that Qt is free to decline, and
+    for three of the six controls it partly does. Asserting the formula only
+    proves the formula; this proves the pixels, so 8.3 (which routes widgets
+    through the scale) builds on a verified baseline in both directions.
+    """
+    set_density(name)
+    get_theme_manager().apply_theme()
+    target = DENSITY_PROFILES[name].control_height
+
+    for cls in (QPushButton, QComboBox, QLineEdit):
+        widget = cls()
+        widget.ensurePolished()
+        assert widget.sizeHint().height() == target, (
+            f"{cls.__name__} is {widget.sizeHint().height()}px at '{name}' density, "
+            f"spec says {target}px"
+        )
+
+    for cls in (QSpinBox, QDoubleSpinBox, QDateEdit):
+        widget = cls()
+        widget.ensurePolished()
+        assert widget.sizeHint().height() == target + _SPINBOX_CHROME_PX, (
+            f"{cls.__name__} is {widget.sizeHint().height()}px at '{name}' density; "
+            f"expected {target} + {_SPINBOX_CHROME_PX}px of spin-box chrome"
+        )
+
+
+def test_set_density_switches_and_get_density_reports_it():
+    set_density("floor")
+    assert get_density() == "floor"
+    assert get_density_profile() is DENSITY_PROFILES["floor"]
+
+
+def test_unknown_density_raises_rather_than_falling_back():
+    with pytest.raises(KeyError):
+        set_density("comfortable")
+    assert get_density() == "desk"
+
+
+def test_type_style_is_the_baseline_at_desk():
+    for role, style in TYPE_SCALE.items():
+        assert type_style(role).size_pt == style.size_pt
+        assert type_style(role).bold is style.bold
+
+
+def test_floor_raises_body_and_caption():
+    set_density("floor")
+    assert type_style("body").size_pt == 12
+    assert type_style("caption").size_pt == 10
+
+
+def test_floor_leaves_every_other_rung_alone():
+    set_density("floor")
+    for role in ("label", "heading", "display", "display_xl"):
+        assert type_style(role).size_pt == TYPE_SCALE[role].size_pt
+
+
+def test_floor_never_changes_weight():
+    set_density("floor")
+    for role in TYPE_SCALE:
+        assert type_style(role).bold is TYPE_SCALE[role].bold
+
+
+def test_font_css_follows_the_density():
+    assert font_css("body") == "font-size: 10pt; font-weight: normal;"
+    set_density("floor")
+    assert font_css("body") == "font-size: 12pt; font-weight: normal;"
+
+
+def test_apply_font_follows_the_density():
+    label = QLabel("x")
+    set_density("floor")
+    apply_font(label, "caption")
+    assert label.font().pointSize() == 10
+
+
+def test_type_style_rejects_an_unknown_role():
+    with pytest.raises(KeyError):
+        type_style("subheading")
+
+
+def test_density_stylesheet_emits_the_derived_content_height():
+    """min-height is the content box, so the sheet must carry
+    control_content_height, not control_height."""
+    sheet = density_stylesheet()
+    assert "min-height: 22px;" in sheet
+    assert "min-height: 32px;" not in sheet
+    set_density("floor")
+    floor = density_stylesheet()
+    assert "min-height: 26px;" in floor
+
+
+def test_density_stylesheet_emits_the_profile_padding():
+    assert "padding: 4px 8px;" in density_stylesheet()
+    set_density("floor")
+    assert "padding: 8px 12px;" in density_stylesheet()
+
+
+def test_density_stylesheet_carries_the_body_size_but_not_a_weight():
+    """Density owns size. Weight belongs to role_stylesheet's primary rule,
+    which is an attribute selector and would otherwise be outranked here."""
+    sheet = density_stylesheet()
+    assert "font-size: 10pt;" in sheet
+    assert "font-weight" not in sheet
+    set_density("floor")
+    assert "font-size: 12pt;" in density_stylesheet()
+
+
+def test_density_stylesheet_touches_no_colour_or_radius():
+    """Spec C3's closing rule, asserted rather than trusted."""
+    for name in DENSITY_PROFILES:
+        set_density(name)
+        sheet = density_stylesheet()
+        for forbidden in ("color", "background", "border-radius", "#"):
+            assert forbidden not in sheet, f"{name} density leaked {forbidden!r}"
+
+
+def test_density_stylesheet_scope_is_the_interactive_controls():
+    sheet = density_stylesheet()
+    for selector in ("QPushButton", "QComboBox", "QLineEdit", "QSpinBox",
+                     "QDoubleSpinBox", "QDateEdit"):
+        assert selector in sheet
+    # Labels and table rows are 8.3/8.5 work -- restyling every QLabel here
+    # would put an unverified visual change across the whole Windows app in
+    # the same commit as the mechanism.
+    assert "QLabel" not in sheet
+    assert "QTableView" not in sheet
+
+
+def test_manager_density_property_reports_the_module_state():
+    manager = get_theme_manager()
+    assert manager.density == "desk"
+    set_density("floor")
+    assert manager.density == "floor"
+
+
+def test_manager_set_density_switches_and_signals():
+    manager = get_theme_manager()
+    seen = []
+    manager.theme_changed.connect(lambda: seen.append(manager.density))
+    try:
+        manager.set_density("floor")
+        assert manager.density == "floor"
+        assert seen == ["floor"]
+    finally:
+        manager.theme_changed.disconnect()
+
+
+def test_manager_set_density_to_the_current_value_is_a_no_op():
+    """Matches set_theme's early return -- a redundant call must not repaint
+    the whole app or fire the signal every widget is connected to."""
+    manager = get_theme_manager()
+    seen = []
+    manager.theme_changed.connect(lambda: seen.append(1))
+    try:
+        manager.set_density("desk")
+        assert seen == []
+    finally:
+        manager.theme_changed.disconnect()
+
+
+def test_manager_set_density_rejects_an_unknown_name():
+    manager = get_theme_manager()
+    with pytest.raises(KeyError):
+        manager.set_density("comfortable")
+    assert manager.density == "desk"
+
+
+def test_tabular_is_off_by_default():
+    label = QLabel("x")
+    apply_font(label, "body")
+    assert not label.font().isFeatureSet(QFont.Tag("tnum"))
+
+
+def test_tabular_flag_sets_the_opentype_feature():
+    label = QLabel("x")
+    apply_font(label, "display_xl", tabular=True)
+    assert label.font().isFeatureSet(QFont.Tag("tnum"))
+    assert label.font().featureValue(QFont.Tag("tnum")) == 1
+
+
+def test_tabular_actually_equalises_inter_numeral_widths():
+    """The reason the flag exists. Qt QSS has no font-variant-numeric -- it
+    prints 'Unknown property' -- and bundled Inter ships proportional numerals,
+    so numeral columns do not align without the feature tag."""
+    family = load_bundled_fonts()
+    if family is None:
+        pytest.skip("bundled fonts unavailable")
+
+    plain = QFont(family, 20)
+    tabular = QFont(plain)
+    tabular.setFeature(QFont.Tag("tnum"), 1)
+
+    proportional = {QFontMetricsF(plain).horizontalAdvance(d) for d in "0123456789"}
+    aligned = {QFontMetricsF(tabular).horizontalAdvance(d) for d in "0123456789"}
+    assert len(proportional) > 1, "Inter's numerals are unexpectedly monospaced already"
+    assert len(aligned) == 1, "tnum did not equalise the numeral advances"

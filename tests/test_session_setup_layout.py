@@ -113,18 +113,27 @@ def test_recent_sessions_panel_stays_compact(main_window):
     assert card.width() <= _RECENT_PANEL_MAX_WIDTH
 
 
-def test_setup_column_does_not_raise_the_app_minimum_window_width(main_window):
+def test_setup_column_does_not_dramatically_outgrow_the_rest_of_the_app(main_window):
     """Pinning Tab 1's minimum to its content is what stops buttons hiding --
-    but it also means anything added to that column widens that minimum. The
-    widest tab sets the whole app's minimum window width, and today that is
-    Tab 2 (Analysis Results), with Tab 1 ~30px behind it. Compare against the
-    other tabs rather than a pixel constant, so this fails when Tab 1 actually
-    takes over the floor and not when Windows font metrics shift everything.
+    but it also means anything added to that column widens that minimum.
+
+    Phase 8.2's `desk` density profile tightens QPushButton/QComboBox/etc.
+    padding app-wide (spec S2/C3: 4px 8px vs the old 6px 12px). Tab 2
+    (Analysis Results) carries far more of those controls than Tab 1, so it
+    now shrinks more -- Tab 1 (~1022px) has overtaken Tab 2 (~989px) as the
+    tab that sets the app's minimum width. That flip is an accepted,
+    deliberate side effect of the density change (see the 8.2 plan's Stage C
+    notes), not a regression by itself: the actual failure modes -- clipped
+    buttons, forced horizontal scroll -- are covered directly by
+    test_no_action_button_is_clipped_at_default_window_size and
+    test_setup_column_never_scrolls_horizontally. This test keeps a loose
+    ceiling so a *dramatic* future blowup still gets caught, without pinning
+    to the pre-8.2 ordering.
     """
     tabs = main_window.main_tabs
     widths = [tabs.widget(i).minimumSizeHint().width() for i in range(tabs.count())]
     setup, others = widths[0], max(widths[1:])
-    assert setup <= others, (
+    assert setup <= others + 100, (
         f"Tab 1 now sets the app's minimum window width ({setup}px vs {others}px "
         f"for the next widest tab) -- the whole app got harder to fit on screen."
     )
