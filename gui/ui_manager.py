@@ -1,7 +1,7 @@
 import logging
 from typing import ClassVar
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.card import Card
+from gui.components.commandbar import CommandBar
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
@@ -122,6 +123,10 @@ class UIManager:
             groups_manager=self.mw.groups_manager,
             parent=self.mw,
         )
+        # The dropdown is the selector from 8.6 on. The widget survives one
+        # more commit only so the navigation commit can be reverted without
+        # reasoning about a deleted file; Task 8 removes it.
+        self.mw.client_sidebar.hide()
         main_horizontal.addWidget(self.mw.client_sidebar)
 
         # Create right side container (header + tabs)
@@ -130,9 +135,9 @@ class UIManager:
         right_layout.setSpacing(5)
         right_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Step 1: Create global header (always visible)
-        header_widget = self._create_global_header()
-        right_layout.addWidget(header_widget)
+        # Step 1: The command bar — client selector, session, status, actions.
+        # Replaces the two-row header: its own border-bottom is the separator.
+        right_layout.addWidget(self._create_command_bar())
 
         # Step 2: Create main tab widget with 5 tabs
         self._create_tabs()
@@ -175,70 +180,16 @@ class UIManager:
         # Add keyboard shortcuts for tab switching
         self._setup_tab_shortcuts()
 
-    def _create_global_header(self):
-        """Create global header with sidebar toggle, current client, and session info.
+    def _create_command_bar(self) -> CommandBar:
+        """The one-row bar that replaces the two-row global header."""
+        bar = CommandBar(self.mw)
+        self.mw.command_bar = bar
 
-        Always visible above tabs.
-        """
-        header = QWidget()
-        header.setMaximumHeight(80)
-        layout = QVBoxLayout(header)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
-
-        # Row 1: Sidebar toggle + current client label
-        toggle_row = QHBoxLayout()
-
-        # No text: _refresh_icons() sets the icon here and again on every theme
-        # toggle, which is why connection_btn has to live on self.mw rather than
-        # stay a local -- _BUTTON_ICONS looks its widgets up by attribute name.
-        self.mw.sidebar_toggle_btn = QPushButton()
-        self.mw.sidebar_toggle_btn.setMaximumWidth(40)
-        self.mw.sidebar_toggle_btn.setToolTip("Toggle client sidebar")
-        self.mw.sidebar_toggle_btn.clicked.connect(
-            lambda: self.mw.client_sidebar.toggle_expanded()
-        )
-        toggle_row.addWidget(self.mw.sidebar_toggle_btn)
-
-        self.mw.current_client_label = QLabel("No client selected")
-        self.mw.current_client_label.setStyleSheet(
-            font_css("label")
-        )
-        toggle_row.addWidget(self.mw.current_client_label)
-
-        toggle_row.addStretch()
-
-        self.mw.connection_btn = QPushButton()
-        self.mw.connection_btn.setMaximumWidth(40)
-        self.mw.connection_btn.setToolTip("Server Connection settings")
-        self.mw.connection_btn.clicked.connect(self._open_connection_settings)
-        toggle_row.addWidget(self.mw.connection_btn)
-
-        layout.addLayout(toggle_row)
-
-        # Row 2: Session info
-        session_row = QHBoxLayout()
-
-        self.mw.session_folder_icon_label = QLabel()
-        session_row.addWidget(self.mw.session_folder_icon_label)
-
-        session_row.addWidget(QLabel("Session:"))
-
-        self.mw.session_info_label = QLabel("No session")
-        self.mw.session_info_label.setStyleSheet("font-weight: bold;")
-        session_row.addWidget(self.mw.session_info_label)
-
-        session_row.addStretch()
-
-        layout.addLayout(session_row)
-
-        # Separator line
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(line)
-
-        return header
+        # Same name the header's label had, so update_session_info_label()
+        # keeps working unchanged.
+        self.mw.session_info_label = bar.session_label
+        bar.set_session("No session")
+        return bar
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog."""
@@ -1856,13 +1807,6 @@ class UIManager:
             widget = getattr(self.mw, attr, None)
             if widget is not None:
                 widget.setIcon(icon(name))
-        label = getattr(self.mw, "session_folder_icon_label", None)
-        if label is not None:
-            # The one place an icon becomes a bare pixmap, so it is also the
-            # one place Qt will not pick the right resolution for us.
-            label.setPixmap(
-                icon("folder").pixmap(QSize(16, 16), label.devicePixelRatioF())
-            )
 
     def _update_theme_button_text(self):
         """Update theme toggle button text based on current theme."""
