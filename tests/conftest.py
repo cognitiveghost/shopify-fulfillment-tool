@@ -237,16 +237,34 @@ def reset_theme_and_density():
     every later test, including ones that never touch theming themselves.
     Removing the QSettings keys is not enough on its own: the singleton
     already has the leaked value cached in memory, so the in-memory state is
-    forced back to the desk/light baseline directly, both before and after."""
-    from gui.theme_manager import DEFAULT_DENSITY, get_theme_manager, set_density
+    forced back to the desk/light baseline directly, both before and after.
+
+    Resetting the flag is not enough either: ThemeManager.set_density() also
+    pushes a new app-wide stylesheet, and nothing else takes it back down. A
+    test that switched to floor would otherwise leave every later test file
+    asserting geometry against 44px controls."""
+    from gui.theme_manager import (
+        DEFAULT_DENSITY,
+        get_density,
+        get_theme_manager,
+        set_density,
+    )
 
     store = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
 
     def _reset():
         store.remove("theme")
         store.remove("density")
-        get_theme_manager()._current_theme_name = "light"
+        manager = get_theme_manager()
+        # Only restyle when a test actually moved something. apply_theme() sets
+        # an app-wide stylesheet, which re-polishes every live widget -- paid on
+        # all ~850 tests it would dwarf the suite, and almost none of them touch
+        # theming at all.
+        dirty = manager._current_theme_name != "light" or get_density() != DEFAULT_DENSITY
+        manager._current_theme_name = "light"
         set_density(DEFAULT_DENSITY)
+        if dirty and QApplication.instance():
+            manager.apply_theme()
 
     _reset()
     yield

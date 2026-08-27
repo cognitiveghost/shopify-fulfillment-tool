@@ -9,6 +9,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from functools import lru_cache
+from types import MappingProxyType
 from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
@@ -223,6 +224,18 @@ class DensityProfile:
         Qt's box model treats min-height as the *content* box -- padding and the
         1px border add on top of it. Emitting `control_height` directly would
         ship a 40px 'desk' control against a spec that says 32.
+
+        This lands QPushButton, QComboBox and QLineEdit on `control_height`
+        exactly. The QAbstractSpinBox family (QSpinBox, QDoubleSpinBox,
+        QDateEdit) comes out 3px taller: its sizeHint() adds room for the
+        up/down buttons *after* the rule is applied, and min-height is a floor,
+        so it never binds. max-height does not clamp it either (measured, Qt
+        6.11.1/Fusion). It is not a font problem -- the offset is a flat 3px in
+        both profiles, against a content box with 6px of slack over the text.
+        # ponytail: spin boxes run control_height + 3. Upgrade path is an
+        # explicit setFixedHeight() when 8.3 routes widgets through the scale --
+        # not a hardcoded -3 here, which is measured on Linux/Fusion and would
+        # make Windows *shorter* than the rest if its offset differs.
         """
         return self.control_height - 2 * self.padding_v - 2
 
@@ -235,11 +248,11 @@ class DensityProfile:
 DENSITY_PROFILES: dict[str, DensityProfile] = {
     "desk": DensityProfile(
         control_height=32, row_height=28, padding_v=4, padding_h=8,
-        type_overrides={},
+        type_overrides=MappingProxyType({}),
     ),
     "floor": DensityProfile(
         control_height=44, row_height=40, padding_v=8, padding_h=12,
-        type_overrides={"body": 12, "caption": 10},
+        type_overrides=MappingProxyType({"body": 12, "caption": 10}),
     ),
 }
 
@@ -320,13 +333,24 @@ def apply_font(target, role: str, bold: bool | None = None, tabular: bool = Fals
     tag, which needs Qt 6.7+. It is not cosmetic: bundled Inter ships
     proportional numerals, so at 20pt "1" advances 10.97px against "0" at
     17.03px.
+
+    Not usable to pin a rung on the six _DENSITY_CONTROLS types: the app sheet
+    emits `font-size` for those, and the app sheet outranks a widget font on the
+    next re-polish, so the rung is lost the moment the theme or density changes.
+    Give those a widget-level stylesheet with font_css() instead -- a widget
+    sheet does outrank the app sheet.
     """
     style = type_style(role)
     font = target.font()
     font.setPointSize(style.size_pt)
     font.setBold(style.bold if bold is None else bold)
+    # unset, not setFeature(..., 0): the font is read back off the target, so a
+    # tnum left over from an earlier call would otherwise be sticky, and
+    # setting it to 0 still counts as set.
     if tabular:
         font.setFeature(QFont.Tag("tnum"), 1)
+    else:
+        font.unsetFeature(QFont.Tag("tnum"))
     target.setFont(font)
 
 

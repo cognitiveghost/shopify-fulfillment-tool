@@ -11,7 +11,17 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtGui import QFont, QFontMetricsF, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel, QListWidgetItem
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDateEdit,
+    QDoubleSpinBox,
+    QLabel,
+    QLineEdit,
+    QListWidgetItem,
+    QPushButton,
+    QSpinBox,
+)
 
 from gui.fonts import load_bundled_fonts
 from gui.theme_manager import (
@@ -131,15 +141,6 @@ def test_no_hardcoded_font_sizes_outside_theme_manager():
     )
 
 
-@pytest.fixture(autouse=True)
-def reset_density():
-    """Density is module-global state. A test that switches it must not leak
-    into the next one, and the whole file assumes the desk baseline."""
-    set_density(DEFAULT_DENSITY)
-    yield
-    set_density(DEFAULT_DENSITY)
-
-
 def test_exactly_two_profiles_and_desk_is_the_default():
     assert set(DENSITY_PROFILES) == {"desk", "floor"}
     assert DEFAULT_DENSITY == "desk"
@@ -184,6 +185,44 @@ def test_floor_overrides_body_and_caption_and_nothing_else():
 @pytest.mark.parametrize("name,expected", [("desk", 22), ("floor", 26)])
 def test_control_content_height_backs_out_padding_and_border(name, expected):
     assert DENSITY_PROFILES[name].control_content_height == expected
+
+
+# The 3px the QAbstractSpinBox family adds on top of the rule. Its sizeHint()
+# reserves room for the up/down buttons *after* the QSS is applied, and
+# min-height is a floor, so it never claws that back -- max-height does not
+# clamp it either. See DensityProfile.control_content_height.
+_SPINBOX_CHROME_PX = 3
+
+
+@pytest.mark.parametrize("name", ["desk", "floor"])
+def test_density_lands_real_controls_on_the_profile_height(name):
+    """The assertion the spec actually makes -- 32px desk, 44px floor -- measured
+    on polished widgets rather than by restating the arithmetic.
+
+    control_content_height is a derived number that Qt is free to decline, and
+    for three of the six controls it partly does. Asserting the formula only
+    proves the formula; this proves the pixels, so 8.3 (which routes widgets
+    through the scale) builds on a verified baseline in both directions.
+    """
+    set_density(name)
+    get_theme_manager().apply_theme()
+    target = DENSITY_PROFILES[name].control_height
+
+    for cls in (QPushButton, QComboBox, QLineEdit):
+        widget = cls()
+        widget.ensurePolished()
+        assert widget.sizeHint().height() == target, (
+            f"{cls.__name__} is {widget.sizeHint().height()}px at '{name}' density, "
+            f"spec says {target}px"
+        )
+
+    for cls in (QSpinBox, QDoubleSpinBox, QDateEdit):
+        widget = cls()
+        widget.ensurePolished()
+        assert widget.sizeHint().height() == target + _SPINBOX_CHROME_PX, (
+            f"{cls.__name__} is {widget.sizeHint().height()}px at '{name}' density; "
+            f"expected {target} + {_SPINBOX_CHROME_PX}px of spin-box chrome"
+        )
 
 
 def test_set_density_switches_and_get_density_reports_it():
@@ -288,26 +327,15 @@ def test_density_stylesheet_scope_is_the_interactive_controls():
     assert "QTableView" not in sheet
 
 
-def _manager():
-    """The singleton, with density forced back to the desk baseline.
-
-    _load_density_preference() reads real QSettings on first construction, so
-    it can land after the reset_density fixture has already run.
-    """
-    manager = get_theme_manager()
-    set_density(DEFAULT_DENSITY)
-    return manager
-
-
 def test_manager_density_property_reports_the_module_state():
-    manager = _manager()
+    manager = get_theme_manager()
     assert manager.density == "desk"
     set_density("floor")
     assert manager.density == "floor"
 
 
 def test_manager_set_density_switches_and_signals():
-    manager = _manager()
+    manager = get_theme_manager()
     seen = []
     manager.theme_changed.connect(lambda: seen.append(manager.density))
     try:
@@ -321,7 +349,7 @@ def test_manager_set_density_switches_and_signals():
 def test_manager_set_density_to_the_current_value_is_a_no_op():
     """Matches set_theme's early return -- a redundant call must not repaint
     the whole app or fire the signal every widget is connected to."""
-    manager = _manager()
+    manager = get_theme_manager()
     seen = []
     manager.theme_changed.connect(lambda: seen.append(1))
     try:
@@ -332,7 +360,7 @@ def test_manager_set_density_to_the_current_value_is_a_no_op():
 
 
 def test_manager_set_density_rejects_an_unknown_name():
-    manager = _manager()
+    manager = get_theme_manager()
     with pytest.raises(KeyError):
         manager.set_density("comfortable")
     assert manager.density == "desk"
