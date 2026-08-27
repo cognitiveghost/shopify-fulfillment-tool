@@ -3,6 +3,14 @@
 from gui.components.card import Card
 from gui.components.form_section import FormSection
 from gui.components.navrail import NavRail
+from gui.components.selectionbar import ContextualSelectionBar
 from gui.components.statcard import KpiStrip, StatCard
 
-__all__ = ["Card", "FormSection", "KpiStrip", "NavRail", "StatCard"]
+__all__ = [
+    "Card",
+    "ContextualSelectionBar",
+    "FormSection",
+    "KpiStrip",
+    "NavRail",
+    "StatCard",
+]
