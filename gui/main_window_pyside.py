@@ -294,6 +294,10 @@ class MainWindow(QMainWindow):
         self.command_bar.manageGroupsRequested.connect(
             lambda: self.client_directory.open_groups_dialog(self)
         )
+        # The sidebar's refresh button is now a dropdown row: on the shared
+        # file server a client added from another PC has no other way in
+        # short of restarting the app.
+        self.command_bar.refreshRequested.connect(self.on_sidebar_refresh)
         self.client_directory.refresh()
 
         # Session browser (new architecture)
@@ -944,12 +948,12 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Error", f"Failed to change client: {value!s}")
 
     def on_sidebar_refresh(self):
-        """Handle manual sidebar refresh request."""
+        """Handle manual client list refresh request."""
         try:
             self.client_directory.refresh()
-            self.log_activity("UI", "Client sidebar refreshed")
+            self.log_activity("UI", "Client list refreshed")
         except Exception as e:
-            logger.exception("Sidebar refresh failed")
+            logger.exception("Client list refresh failed")
             QMessageBox.warning(self, "Refresh Error", str(e))
 
     def on_session_selected(self, session_path: str):

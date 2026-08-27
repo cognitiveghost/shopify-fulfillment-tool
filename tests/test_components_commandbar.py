@@ -101,6 +101,7 @@ def test_the_dropdown_is_pinned_then_groups_then_the_rest(qapp):
         (ROW_CLIENT, "B"),
         (ROW_SECTION, "All Clients"),
         (ROW_CLIENT, "Q"),
+        (ROW_ACTION, "Refresh clients"),
         (ROW_ACTION, "New client…"),
         (ROW_ACTION, "Manage groups…"),
     ]
@@ -167,3 +168,104 @@ def test_set_current_client_selects_the_first_matching_row(qapp):
     bar.set_current_client("B")
 
     assert bar.current_client() == "B"
+
+
+def _action_row(bar, label):
+    return next(i for i, (k, _p, t) in enumerate(_rows(bar))
+                if k == ROW_ACTION and t == label)
+
+
+def test_the_refresh_row_asks_for_a_refresh(qapp):
+    bar = CommandBar()
+    bar.set_clients_from(DATA)
+    seen = []
+    bar.refreshRequested.connect(lambda: seen.append(True))
+
+    bar.client_selector.activated.emit(_action_row(bar, "Refresh clients"))
+
+    assert seen == [True]
+
+
+def test_a_wheel_notch_never_changes_the_client_or_fires_an_action(qapp):
+    """A scroll over the bar used to reload the client -- which clears the
+    undo history -- and one row on, to open the modal create dialog."""
+    from PySide6.QtCore import QPoint, QPointF
+    from PySide6.QtGui import QWheelEvent
+
+    bar = CommandBar()
+    bar.set_clients_from(DATA)
+    bar.set_current_client("Q")
+    chosen, created = [], []
+    bar.clientChanged.connect(chosen.append)
+    bar.createClientRequested.connect(lambda: created.append(True))
+
+    for delta in (120, -120, -120, -120):
+        bar.client_selector.wheelEvent(
+            QWheelEvent(
+                QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, delta),
+                Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False,
+            )
+        )
+
+    assert bar.current_client() == "Q"
+    assert chosen == []
+    assert created == []
+
+
+def test_arrow_keys_on_a_closed_box_step_over_the_action_rows(qapp):
+    """Down from the last client used to land on "New client…" and open it."""
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QKeyEvent
+
+    bar = CommandBar()
+    bar.set_clients_from(DATA)
+    bar.set_current_client("Q")          # the last client row
+    created = []
+    bar.createClientRequested.connect(lambda: created.append(True))
+
+    down = QKeyEvent(QEvent.KeyPress, Qt.Key_Down, Qt.NoModifier)
+    bar.client_selector.keyPressEvent(down)
+    assert bar.current_client() == "Q"   # nowhere left to go
+    assert created == []
+
+    up = QKeyEvent(QEvent.KeyPress, Qt.Key_Up, Qt.NoModifier)
+    bar.client_selector.keyPressEvent(up)
+    assert bar.current_client() == "B"
+
+
+def test_a_fresh_dropdown_shows_no_selection(qapp):
+    """Row 0 is always a caption; QComboBox would display it as a choice."""
+    bar = CommandBar()
+    bar.set_clients_from(DATA)
+
+    assert bar.current_client() == ""
+    assert bar.client_selector.currentIndex() == -1
+
+
+def test_a_selection_made_before_the_rows_arrive_still_wins(qapp):
+    """refresh() is async: create-client selects the new id before its row
+    exists, and the rebuild must honour it rather than snap back."""
+    bar = CommandBar()
+    bar.set_clients_from(DATA)
+    bar.set_current_client("A")
+
+    bar.set_current_client("NEW")        # not in the model yet
+    assert bar.current_client() == "A"
+
+    with_new = dict(DATA, all_clients=[*DATA["all_clients"], "NEW"])
+    bar.set_clients_from(with_new)
+
+    assert bar.current_client() == "NEW"
+
+
+def test_a_theme_toggle_restyles_the_bar(qapp):
+    from gui.theme_manager import get_theme_manager
+
+    manager = get_theme_manager()
+    bar = CommandBar()
+    before = bar.styleSheet()
+    manager.toggle_theme()
+    try:
+        assert bar.styleSheet() != before
+    finally:
+        manager.toggle_theme()

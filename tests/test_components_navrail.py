@@ -120,3 +120,18 @@ def test_footer_rejects_an_unknown_glyph(qapp):
     rail = NavRail()
     with pytest.raises(KeyError):
         rail.add_footer_item("not-a-real-icon", "nope")
+
+
+def test_a_theme_toggle_restyles_the_rail(qapp):
+    """A widget sheet outranks the app's, so a rail that bakes its colours in
+    once stays light over dark pages."""
+    from gui.theme_manager import get_theme_manager
+
+    manager = get_theme_manager()
+    rail = NavRail()
+    before = rail.styleSheet()
+    manager.toggle_theme()
+    try:
+        assert rail.styleSheet() != before
+    finally:
+        manager.toggle_theme()

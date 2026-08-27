@@ -29,6 +29,39 @@ ROW_ACTION = "action"
 _DOT_PX = 10          # matches StatusDot's default diameter
 _NEW_CLIENT = "New client…"
 _MANAGE_GROUPS = "Manage groups…"
+_REFRESH = "Refresh clients"
+_ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS)
+
+
+class _ClientCombo(QComboBox):
+    """A client picker the wheel and the arrow keys cannot misfire.
+
+    QComboBox emits activated() for a wheel notch and for Up/Down on a closed
+    box, not only for a pick from the popup -- and the action rows live in the
+    same model as the clients. So an idle scroll over the bar opened the modal
+    create-client dialog, and one row earlier switched client, which reloads
+    the config and clears the undo history. Disabling the rows does not help:
+    QComboBox navigation only tests Qt.ItemIsEnabled.
+    """
+
+    def wheelEvent(self, event) -> None:
+        event.ignore()          # a client switch is never a scroll gesture
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key_Up, Qt.Key_Down) and not self.view().isVisible():
+            self._step(-1 if event.key() == Qt.Key_Up else 1)
+            return
+        super().keyPressEvent(event)
+
+    def _step(self, delta: int) -> None:
+        """Move to the next client row. setCurrentIndex, never activated()."""
+        model = self.model()
+        i = self.currentIndex() + delta
+        while 0 <= i < model.rowCount():
+            if model.item(i).data(Qt.UserRole) == ROW_CLIENT:
+                self.setCurrentIndex(i)
+                return
+            i += delta
 
 
 class CommandBar(QWidget):
@@ -38,19 +71,16 @@ class CommandBar(QWidget):
     clientMenuRequested = Signal(str, QPoint)
     createClientRequested = Signal()
     manageGroupsRequested = Signal()
+    refreshRequested = Signal()
     actionTriggered = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         theme = get_theme_manager().get_current_theme()
-        # Type-scoped, not bare: a selector-less sheet is wrapped into `* {}`
-        # and a parent's sheet outranks the app's, so `background-color` here
-        # would repaint every child -- flattening the button roles the app
-        # stylesheet sets. Same reason for the scoping in the other containers.
-        self.setStyleSheet(
-            f"CommandBar {{ background-color: {theme.surface_raised};"
-            f" border-bottom: 1px solid {theme.border_subtle}; }}"
-        )
+        self._apply_theme()
+        # A widget sheet outranks the app's, so baking the colours in once
+        # would leave a light bar over dark pages after a theme toggle.
+        get_theme_manager().theme_changed.connect(self._apply_theme)
 
         self._repopulating = False
         self._restore_client = ""
@@ -59,7 +89,7 @@ class CommandBar(QWidget):
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(12)
 
-        self.client_selector = QComboBox(self)
+        self.client_selector = _ClientCombo(self)
         self.client_selector.setModel(QStandardItemModel(self.client_selector))
         self.client_selector.currentTextChanged.connect(self._on_client_changed)
         self.client_selector.activated.connect(self._on_row_activated)
@@ -84,6 +114,17 @@ class CommandBar(QWidget):
         self.action_button.hide()
         layout.addWidget(self.action_button)
 
+    def _apply_theme(self) -> None:
+        theme = get_theme_manager().get_current_theme()
+        # Type-scoped, not bare: a selector-less sheet is wrapped into `* {}`
+        # and a parent's sheet outranks the app's, so `background-color` here
+        # would repaint every child -- flattening the button roles the app
+        # stylesheet sets. Same reason for the scoping in the other containers.
+        self.setStyleSheet(
+            f"CommandBar {{ background-color: {theme.surface_raised};"
+            f" border-bottom: 1px solid {theme.border_subtle}; }}"
+        )
+
     def set_clients(self, names: list[str]) -> None:
         """The flat case: no pins, no groups, just a list."""
         self.set_clients_from(
@@ -104,7 +145,10 @@ class CommandBar(QWidget):
         pinned client that is also in a group appears under both -- that is
         the sidebar's own behaviour, ported rather than corrected.
         """
-        keep = self.current_client()
+        # _restore_client, not current_client(): refresh() is async, so a
+        # set_current_client() for a client the model does not hold yet must
+        # still win when its row finally arrives.
+        keep = self._restore_client
         self._repopulating = True
         try:
             model = self.client_selector.model()
@@ -135,8 +179,12 @@ class CommandBar(QWidget):
                 for client_id in rest:
                     self._add_client(client_id, data)
 
-            self._add_action(_NEW_CLIENT)
-            self._add_action(_MANAGE_GROUPS)
+            for label in _ACTIONS:
+                self._add_action(label)
+            # The first appendRow drags currentIndex to row 0, which is always
+            # a section caption -- the bar would show "All Clients" as though
+            # the user had chosen it.
+            self.client_selector.setCurrentIndex(-1)
         finally:
             self._repopulating = False
 
@@ -185,20 +233,22 @@ class CommandBar(QWidget):
         item = self.client_selector.model().item(index)
         return None if item is None else item.data(Qt.UserRole)
 
-    def _on_client_changed(self, name: str) -> None:
+    def _on_client_changed(self, _text: str) -> None:
         # Repopulating fires currentTextChanged per removal/insert; a consumer
         # reloading a client per signal would thrash the network file server.
-        # An action row landing in the box is not a client change either.
+        # An action row or a caption landing in the box is not a change either.
+        # The id comes from the row's payload, never from the display text.
         if self._repopulating:
             return
-        if self._row_kind(self.client_selector.currentIndex()) != ROW_CLIENT:
+        client_id = self.current_client()
+        if not client_id:
             return
-        self._restore_client = name
-        self.clientChanged.emit(name)
+        self._restore_client = client_id
+        self.clientChanged.emit(client_id)
 
     def _on_row_activated(self, index: int) -> None:
-        """activated() is user-initiated only, so this never fires on a
-        programmatic setCurrentIndex."""
+        """activated() is user-initiated only, and _ClientCombo keeps the
+        wheel and the arrow keys from ever reaching these rows."""
         if self._row_kind(index) != ROW_ACTION:
             return
         label = self.client_selector.model().item(index).data(Qt.UserRole + 1)
@@ -207,8 +257,10 @@ class CommandBar(QWidget):
             self.set_current_client(self._restore_client)
         if label == _NEW_CLIENT:
             self.createClientRequested.emit()
-        else:
+        elif label == _MANAGE_GROUPS:
             self.manageGroupsRequested.emit()
+        else:
+            self.refreshRequested.emit()
 
     def _on_row_context_menu(self, position: QPoint) -> None:
         view = self.client_selector.view()
@@ -231,13 +283,15 @@ class CommandBar(QWidget):
 
     def set_current_client(self, client_id: str) -> None:
         """Select the first row for this client. Unknown ids are ignored."""
+        # Recorded before the search: an id the model does not hold yet is
+        # honoured by the next set_clients_from(), not silently dropped.
+        self._restore_client = client_id
         model = self.client_selector.model()
         for i in range(model.rowCount()):
             item = model.item(i)
             if (item.data(Qt.UserRole) == ROW_CLIENT
                     and item.data(Qt.UserRole + 1) == client_id):
                 self.client_selector.setCurrentIndex(i)
-                self._restore_client = client_id
                 return
 
     def set_session(self, text: str) -> None:
