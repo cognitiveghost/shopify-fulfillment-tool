@@ -1,7 +1,7 @@
 import logging
 from typing import ClassVar
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.card import Card
+from gui.components.commandbar import CommandBar
+from gui.components.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
@@ -80,11 +82,27 @@ class UIManager:
     # menu in main_window_pyside.py is rebuilt on every right-click, so its
     # icons pick up the new colour for free.
     _TAB_ICONS = ("clipboard-list", "table", "folder-open", "info", "wrench")
+    # Labels are the five former tab titles, verbatim. Renaming a destination
+    # and moving it in the same release is what the parent spec's §6
+    # guardrail 2 forbids.
+    _TAB_LABELS = (
+        "Session Setup",
+        "Analysis Results",
+        "Session Browser",
+        "Information",
+        "Tools",
+    )
+    _TAB_TOOLTIPS = (
+        "Session setup and file loading (Ctrl+1)",
+        "View and edit analysis results (Ctrl+2)",
+        "Browse past sessions (Ctrl+3)",
+        "Statistics and logs (Ctrl+4)",
+        "PDF processing and utilities (Ctrl+5)",
+    )
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {
         "open_session_folder_button": "folder-open",
         "new_session_btn": "folder-plus",
         "clear_filter_button": "funnel-x",
-        "sidebar_toggle_btn": "menu",
         "connection_btn": "settings",
     }
 
@@ -114,15 +132,9 @@ class UIManager:
         main_horizontal.setSpacing(0)
         main_horizontal.setContentsMargins(0, 0, 0, 0)
 
-        # Create sidebar
-        from gui.client_sidebar import ClientSidebar
-
-        self.mw.client_sidebar = ClientSidebar(
-            profile_manager=self.mw.profile_manager,
-            groups_manager=self.mw.groups_manager,
-            parent=self.mw,
-        )
-        main_horizontal.addWidget(self.mw.client_sidebar)
+        # The rail is the outermost chrome, left of everything else.
+        self.mw.nav_rail = NavRail(self.mw)
+        main_horizontal.addWidget(self.mw.nav_rail)
 
         # Create right side container (header + tabs)
         right_side = QWidget()
@@ -130,9 +142,9 @@ class UIManager:
         right_layout.setSpacing(5)
         right_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Step 1: Create global header (always visible)
-        header_widget = self._create_global_header()
-        right_layout.addWidget(header_widget)
+        # Step 1: The command bar — client selector, session, status, actions.
+        # Replaces the two-row header: its own border-bottom is the separator.
+        right_layout.addWidget(self._create_command_bar())
 
         # Step 2: Create main tab widget with 5 tabs
         self._create_tabs()
@@ -153,92 +165,60 @@ class UIManager:
         )
 
     def _create_tabs(self):
-        """Create main tab widget with 5 tabs."""
-        self.mw.main_tabs = QTabWidget()
-        self.mw.main_tabs.setDocumentMode(True)  # Cleaner look
-        self.mw.main_tabs.setTabPosition(QTabWidget.North)
-        self.mw.main_tabs.setMovable(False)  # Prevent accidental reorder
+        """Create the page store and the rail that drives it.
 
-        # Create the 5 main tabs
-        tab1 = self._create_tab1_session_setup()
-        tab2 = self._create_tab2_analysis_results()
-        tab3 = self._create_tab3_session_browser()
-        tab4 = self._create_tab4_information()
-        tab5 = self._create_tab5_tools()
-
-        self.mw.main_tabs.addTab(tab1, "Session Setup")
-        self.mw.main_tabs.addTab(tab2, "Analysis Results")
-        self.mw.main_tabs.addTab(tab3, "Session Browser")
-        self.mw.main_tabs.addTab(tab4, "Information")
-        self.mw.main_tabs.addTab(tab5, "Tools")
-
-        # Add keyboard shortcuts for tab switching
-        self._setup_tab_shortcuts()
-
-    def _create_global_header(self):
-        """Create global header with sidebar toggle, current client, and session info.
-
-        Always visible above tabs.
+        main_tabs keeps being a QTabWidget with its tab bar hidden. A hidden
+        tab bar makes it exactly a QStackedWidget with the API 30 call sites
+        already speak -- swapping the class would rewrite all of them and the
+        five shortcuts to produce a screen no user can tell apart.
         """
-        header = QWidget()
-        header.setMaximumHeight(80)
-        layout = QVBoxLayout(header)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
+        self.mw.main_tabs = QTabWidget()
+        self.mw.main_tabs.setDocumentMode(True)
+        self.mw.main_tabs.setTabPosition(QTabWidget.North)
+        self.mw.main_tabs.setMovable(False)
+        self.mw.main_tabs.tabBar().hide()
 
-        # Row 1: Sidebar toggle + current client label
-        toggle_row = QHBoxLayout()
-
-        # No text: _refresh_icons() sets the icon here and again on every theme
-        # toggle, which is why connection_btn has to live on self.mw rather than
-        # stay a local -- _BUTTON_ICONS looks its widgets up by attribute name.
-        self.mw.sidebar_toggle_btn = QPushButton()
-        self.mw.sidebar_toggle_btn.setMaximumWidth(40)
-        self.mw.sidebar_toggle_btn.setToolTip("Toggle client sidebar")
-        self.mw.sidebar_toggle_btn.clicked.connect(
-            lambda: self.mw.client_sidebar.toggle_expanded()
+        pages = (
+            self._create_tab1_session_setup(),
+            self._create_tab2_analysis_results(),
+            self._create_tab3_session_browser(),
+            self._create_tab4_information(),
+            self._create_tab5_tools(),
         )
-        toggle_row.addWidget(self.mw.sidebar_toggle_btn)
+        for page, label, icon_name, tip in zip(
+            pages, self._TAB_LABELS, self._TAB_ICONS, self._TAB_TOOLTIPS, strict=True
+        ):
+            self.mw.main_tabs.addTab(page, label)
+            index = self.mw.nav_rail.add_item(icon_name, label)
+            self.mw.nav_rail.button(index).setToolTip(tip)
 
-        self.mw.current_client_label = QLabel("No client selected")
-        self.mw.current_client_label.setStyleSheet(
-            font_css("label")
+        # Server Connection is an app setting, not a destination -- footer.
+        self.mw.connection_btn = self.mw.nav_rail.add_footer_item(
+            "settings", "Server Connection"
         )
-        toggle_row.addWidget(self.mw.current_client_label)
-
-        toggle_row.addStretch()
-
-        self.mw.connection_btn = QPushButton()
-        self.mw.connection_btn.setMaximumWidth(40)
         self.mw.connection_btn.setToolTip("Server Connection settings")
         self.mw.connection_btn.clicked.connect(self._open_connection_settings)
-        toggle_row.addWidget(self.mw.connection_btn)
 
-        layout.addLayout(toggle_row)
+        # Two-way, and the back edge is load-bearing: actions_handler jumps
+        # straight to Analysis Results after a run, and without this the rail
+        # would keep highlighting the page the user left. It cannot loop --
+        # NavRail.set_current returns before emitting when the index is
+        # unchanged, and QTabWidget does not re-emit for the index it is on.
+        self.mw.nav_rail.currentChanged.connect(self.mw.main_tabs.setCurrentIndex)
+        self.mw.main_tabs.currentChanged.connect(self.mw.nav_rail.set_current)
 
-        # Row 2: Session info
-        session_row = QHBoxLayout()
+        self._setup_tab_shortcuts()
 
-        self.mw.session_folder_icon_label = QLabel()
-        session_row.addWidget(self.mw.session_folder_icon_label)
+    def _create_command_bar(self) -> CommandBar:
+        """The one-row bar that replaces the two-row global header."""
+        bar = CommandBar(self.mw)
+        self.mw.command_bar = bar
 
-        session_row.addWidget(QLabel("Session:"))
-
-        self.mw.session_info_label = QLabel("No session")
-        self.mw.session_info_label.setStyleSheet("font-weight: bold;")
-        session_row.addWidget(self.mw.session_info_label)
-
-        session_row.addStretch()
-
-        layout.addLayout(session_row)
-
-        # Separator line
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(line)
-
-        return header
+        # Same name the header's label had, so update_session_info_label()
+        # keeps working unchanged.
+        self.mw.session_info_label = bar.session_label
+        bar.set_session("No session")
+        return bar
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog."""
@@ -274,13 +254,6 @@ class UIManager:
             self.mw,
             lambda: self.mw.main_tabs.setCurrentIndex(4),
         )
-
-        # Set tooltips on tabs
-        self.mw.main_tabs.setTabToolTip(0, "Session setup and file loading (Ctrl+1)")
-        self.mw.main_tabs.setTabToolTip(1, "View and edit analysis results (Ctrl+2)")
-        self.mw.main_tabs.setTabToolTip(2, "Browse past sessions (Ctrl+3)")
-        self.mw.main_tabs.setTabToolTip(3, "Statistics and logs (Ctrl+4)")
-        self.mw.main_tabs.setTabToolTip(4, "PDF processing and utilities (Ctrl+5)")
 
     def _create_tab1_session_setup(self):
         """Create Tab 1: Session Setup with split layout.
@@ -1851,18 +1824,11 @@ class UIManager:
         background is invisible.
         """
         for index, name in enumerate(self._TAB_ICONS):
-            self.mw.main_tabs.setTabIcon(index, icon(name))
+            self.mw.nav_rail.button(index).setIcon(icon(name))
         for attr, name in self._BUTTON_ICONS.items():
             widget = getattr(self.mw, attr, None)
             if widget is not None:
                 widget.setIcon(icon(name))
-        label = getattr(self.mw, "session_folder_icon_label", None)
-        if label is not None:
-            # The one place an icon becomes a bare pixmap, so it is also the
-            # one place Qt will not pick the right resolution for us.
-            label.setPixmap(
-                icon("folder").pixmap(QSize(16, 16), label.devicePixelRatioF())
-            )
 
     def _update_theme_button_text(self):
         """Update theme toggle button text based on current theme."""

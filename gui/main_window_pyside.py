@@ -278,12 +278,27 @@ class MainWindow(QMainWindow):
         window, including button clicks, text changes, and custom signals
         from handler classes. This makes the UI event flow easier to trace.
         """
-        # Client selection (new architecture) - use sidebar if it exists, otherwise fallback to client_selector
-        if hasattr(self, "client_sidebar"):
-            self.client_sidebar.client_selected.connect(self.on_client_changed)
-            self.client_sidebar.refresh_requested.connect(self.on_sidebar_refresh)
-        elif hasattr(self, "client_selector"):
-            self.client_selector.client_changed.connect(self.on_client_changed)
+        # Client selection
+        from gui.client_directory import ClientDirectory
+
+        self.client_directory = ClientDirectory(
+            self.profile_manager, self.groups_manager, parent=self
+        )
+        self.client_directory.loaded.connect(self.command_bar.set_clients_from)
+        self.client_directory.clientCreated.connect(self.on_client_changed)
+        self.command_bar.clientChanged.connect(self.on_client_changed)
+        self.command_bar.clientMenuRequested.connect(self._on_client_menu_requested)
+        self.command_bar.createClientRequested.connect(
+            lambda: self.client_directory.open_create_client_dialog(self)
+        )
+        self.command_bar.manageGroupsRequested.connect(
+            lambda: self.client_directory.open_groups_dialog(self)
+        )
+        # The sidebar's refresh button is now a dropdown row: on the shared
+        # file server a client added from another PC has no other way in
+        # short of restarting the app.
+        self.command_bar.refreshRequested.connect(self.on_sidebar_refresh)
+        self.client_directory.refresh()
 
         # Session browser (new architecture)
         self.session_browser.session_selected.connect(self.on_session_selected)
@@ -821,6 +836,10 @@ class MainWindow(QMainWindow):
             table_config = self.table_config_manager.load_config(client_id)
         return shopify_config, table_config
 
+    def _on_client_menu_requested(self, client_id: str, position):
+        """The bar has no ProfileManager, so it asks for the menu here."""
+        self.client_directory.menu_for(client_id, self).exec(position)
+
     def on_client_changed(self, client_id: str):
         """Handle client selection change.
 
@@ -832,11 +851,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "statusBar"):
             self.statusBar().showMessage(f"Loading CLIENT_{client_id}...", 5000)
 
-        if hasattr(self, "client_sidebar"):
-            self.client_sidebar.set_active_client(client_id)
-
-        if hasattr(self, "current_client_label"):
-            self.current_client_label.setText(f"CLIENT_{client_id}")
+        if hasattr(self, "command_bar") and (
+            self.command_bar.current_client() != client_id
+        ):
+            self.command_bar.set_current_client(client_id)
 
         self.current_client_id = client_id
 
@@ -930,13 +948,12 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Error", f"Failed to change client: {value!s}")
 
     def on_sidebar_refresh(self):
-        """Handle manual sidebar refresh request."""
+        """Handle manual client list refresh request."""
         try:
-            if hasattr(self, "client_sidebar"):
-                self.client_sidebar.refresh()
-                self.log_activity("UI", "Client sidebar refreshed")
+            self.client_directory.refresh()
+            self.log_activity("UI", "Client list refreshed")
         except Exception as e:
-            logger.exception("Sidebar refresh failed")
+            logger.exception("Client list refresh failed")
             QMessageBox.warning(self, "Refresh Error", str(e))
 
     def on_session_selected(self, session_path: str):

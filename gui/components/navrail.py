@@ -30,18 +30,10 @@ class NavRail(QWidget):
         super().__init__(parent)
         self.setFixedWidth(RAIL_WIDTH)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        theme = get_theme_manager().get_current_theme()
-        # No border: the rail is separated by its own darker plane, not a line.
-        # Scoped to NavRail: a bare rule would repaint the buttons too, leaving
-        # the checked item indistinguishable from the rest of the rail.
-        self.setStyleSheet(
-            f"NavRail {{ background-color: {theme.surface_sunken}; border: none; }}"
-            f"NavRail QToolButton {{ background-color: transparent; border: none;"
-            f" color: {theme.text_secondary}; }}"
-            f"NavRail QToolButton:hover {{ background-color: {theme.hover}; }}"
-            f"NavRail QToolButton:checked {{ background-color: {theme.surface_raised};"
-            f" color: {theme.text}; }}"
-        )
+        self._apply_theme()
+        # A widget sheet outranks the app's, so baking the colours in once
+        # would leave a light rail over dark pages after a theme toggle.
+        get_theme_manager().theme_changed.connect(self._apply_theme)
 
         self._buttons: list[QToolButton] = []
         self._group = QButtonGroup(self)
@@ -56,6 +48,20 @@ class NavRail(QWidget):
         layout.setSpacing(4)
         layout.addStretch()
         self._layout = layout
+
+    def _apply_theme(self) -> None:
+        theme = get_theme_manager().get_current_theme()
+        # No border: the rail is separated by its own darker plane, not a line.
+        # Scoped to NavRail: a bare rule would repaint the buttons too, leaving
+        # the checked item indistinguishable from the rest of the rail.
+        self.setStyleSheet(
+            f"NavRail {{ background-color: {theme.surface_sunken}; border: none; }}"
+            f"NavRail QToolButton {{ background-color: transparent; border: none;"
+            f" color: {theme.text_secondary}; }}"
+            f"NavRail QToolButton:hover {{ background-color: {theme.hover}; }}"
+            f"NavRail QToolButton:checked {{ background-color: {theme.surface_raised};"
+            f" color: {theme.text}; }}"
+        )
 
     def add_item(self, icon_name: str, label: str) -> int:
         """Append an item and return its index. Unknown glyph raises KeyError."""
@@ -79,6 +85,25 @@ class NavRail(QWidget):
             button.setChecked(True)
             self._current = 0
         return index
+
+    def add_footer_item(self, icon_name: str, label: str) -> QToolButton:
+        """Append an app-level action below the destinations.
+
+        Deliberately outside self._group and not checkable: an exclusive
+        group has exactly one checked member, so a checkable gear would
+        un-check the current destination and leave the rail lit nowhere
+        while the page behind it had not moved.
+        """
+        glyph = icon(icon_name)                  # raises KeyError on a typo
+        button = QToolButton(self)
+        button.setIcon(glyph)
+        button.setText(label)
+        button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        button.setAutoRaise(True)
+        button.setFixedWidth(RAIL_WIDTH)
+        button.setStyleSheet(font_css("caption"))
+        self._layout.addWidget(button)
+        return button
 
     def button(self, index: int) -> QToolButton:
         return self._buttons[index]
