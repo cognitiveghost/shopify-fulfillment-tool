@@ -71,7 +71,7 @@ def build_app_icon():
     """
     return icon(
         "package",
-        color=get_theme_manager().get_current_theme().accent_blue,
+        color=get_theme_manager().get_current_theme().accent_fill,
         sizes=(16, 32, 48, 256),
     )
 

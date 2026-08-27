@@ -32,6 +32,7 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 from .bulk_operations_toolbar import BulkOperationsToolbar
 from .icons import icon
 from .pandas_model import PandasModel
+from .tag_categories_dialog import DEFAULT_TAG_COLOR
 from .tag_management_panel import TagManagementPanel
 from .theme_manager import font_css, get_theme_manager
 from .wheel_ignore_combobox import WheelIgnoreComboBox
@@ -1488,8 +1489,8 @@ class UIManager:
         self.mw.hidden_columns_indicator = QPushButton("")
         self.mw.hidden_columns_indicator.setFlat(True)
         self.mw.hidden_columns_indicator.setStyleSheet(
-            f"QPushButton {{ color: {theme.accent_blue}; text-decoration: underline; border: none; padding: 0 5px; }}"
-            f"QPushButton:hover {{ color: {theme.accent_blue}; }}"
+            f"QPushButton {{ color: {theme.accent_fill}; text-decoration: underline; border: none; padding: 0 5px; }}"
+            f"QPushButton:hover {{ color: {theme.accent_fill}; }}"
         )
         self.mw.hidden_columns_indicator.setToolTip(
             "Click to show/restore hidden columns"
@@ -1635,10 +1636,7 @@ class UIManager:
     def _make_tag_card(self, tag: str, count: str, color: str | None = None) -> Card:
         """Tag card: colored count badge on top, tag name below."""
         if color is None:
-            # ponytail: literal neutral badge-fill default, not a text color —
-            # theme.text_secondary differs per theme; this is a background
-            # fill, and no theme-invariant neutral-gray token exists.
-            color = "#9E9E9E"
+            color = DEFAULT_TAG_COLOR
         # Denser than the default on purpose: these sit 60px wide in a
         # horizontal scroll strip.
         card = Card(min_width=60, margins=(6, 4, 6, 4))

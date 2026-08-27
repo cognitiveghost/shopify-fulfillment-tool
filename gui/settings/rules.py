@@ -337,7 +337,7 @@ class RulesPage(SettingsPage):
         # Priority label (e.g., "Article #1", "Order #2")
         priority_label = QLabel("")
         priority_label.setMinimumWidth(70)
-        priority_label.setStyleSheet(f"{font_css('label')} color: {theme.accent_blue};")
+        priority_label.setStyleSheet(f"{font_css('label')} color: {theme.accent_fill};")
         header_layout.addWidget(priority_label)
 
         # Up button
@@ -363,12 +363,12 @@ class RulesPage(SettingsPage):
         # deliberate and overrides the secondary role's background.
         test_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.accent_green};
+                background-color: {theme.status_success};
                 color: {theme.on_accent};
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {theme.accent_green};
+                background-color: {theme.status_success};
             }}
             QPushButton:disabled {{
                 background-color: {theme.border_subtle};
@@ -390,7 +390,7 @@ class RulesPage(SettingsPage):
         # The per-widget background wins over the role on purpose: destructive
         # red stays. The role is here so the Hub's inventory guard sees it
         # marked, and so it picks up the secondary border/disabled treatment.
-        delete_rule_btn.setStyleSheet(f"background-color: {theme.accent_red}; color: {theme.on_accent};")
+        delete_rule_btn.setStyleSheet(f"background-color: {theme.status_danger}; color: {theme.on_accent};")
         header_layout.addWidget(delete_rule_btn)
         rule_layout.addLayout(header_layout)
 
@@ -434,7 +434,7 @@ class RulesPage(SettingsPage):
             "order rules: each step is a gate on the whole order - if it does not\n"
             "match, the rule stops and later steps do not run."
         )
-        add_step_btn.setStyleSheet(f"color: {theme.accent_blue}; font-weight: bold;")
+        add_step_btn.setStyleSheet(f"color: {theme.accent_fill}; font-weight: bold;")
 
         body = QWidget()
         body_layout = QVBoxLayout(body)
@@ -525,7 +525,7 @@ class RulesPage(SettingsPage):
             separator_label = QLabel("   ↓ THEN CHECK ↓")
             separator_label.setAlignment(Qt.AlignCenter)
             separator_label.setStyleSheet(
-                f"color: {theme.accent_orange}; {font_css('label')} "
+                f"color: {theme.status_warning}; {font_css('label')} "
                 "padding: 4px; margin: 2px 0;"
             )
             steps_container.addWidget(separator_label)
@@ -572,7 +572,7 @@ class RulesPage(SettingsPage):
         if step_number > 1:
             delete_step_btn = QPushButton("Delete Step")
             set_button_role(delete_step_btn, "secondary")
-            delete_step_btn.setStyleSheet(f"color: {theme.accent_red};")
+            delete_step_btn.setStyleSheet(f"color: {theme.status_danger};")
             step_layout.addWidget(delete_step_btn, 0, Qt.AlignRight)
 
         steps_container.addWidget(step_box)
@@ -965,12 +965,12 @@ class RulesPage(SettingsPage):
         border_css = {
             "error": f"border: 1px solid {theme.status_danger}; background-color: {theme.status_danger_bg}; color: {theme.status_danger};",
             "warning": f"border: 1px solid {theme.status_warning}; background-color: {theme.status_warning_bg}; color: {theme.status_warning};",
-            "success": f"border: 1px solid {theme.accent_green};",
+            "success": f"border: 1px solid {theme.status_success};",
         }
         text_color = {
-            "error": theme.accent_red,
-            "warning": theme.accent_orange,
-            "success": theme.accent_green,
+            "error": theme.status_danger,
+            "warning": theme.status_warning,
+            "success": theme.status_success,
         }
         if status not in text_color:
             status = "clear"
@@ -1028,7 +1028,7 @@ class RulesPage(SettingsPage):
         if resolvable:
             combo.setStyleSheet("")
         else:
-            combo.setStyleSheet(f"border: 1px solid {theme.accent_red};")
+            combo.setStyleSheet(f"border: 1px solid {theme.status_danger};")
             self._show_validation_feedback(
                 condition_refs,
                 "error",
@@ -1285,7 +1285,7 @@ class RulesPage(SettingsPage):
             else "ADD_INTERNAL_TAG"
         )
         theme = get_theme_manager().get_current_theme()
-        label.setStyleSheet(f"color: {theme.accent_orange}; {font_css('caption')}")
+        label.setStyleSheet(f"color: {theme.status_warning}; {font_css('caption')}")
         label.setText(
             f"Writes the Status_Note text column, not tags. "
             f"Replace with {replacement} to add a real tag."

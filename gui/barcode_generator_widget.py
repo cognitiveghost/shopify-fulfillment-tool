@@ -249,12 +249,12 @@ class BarcodeGeneratorWidget(QWidget):
         self.generate_btn.setStyleSheet(f"""
             QPushButton {{
                 {font_css('label')}
-                background-color: {theme.accent_green};
+                background-color: {theme.status_success};
                 color: {theme.on_accent};
                 border-radius: 5px;
             }}
             QPushButton:hover {{
-                background-color: {theme.accent_green};
+                background-color: {theme.status_success};
             }}
             QPushButton:disabled {{
                 background-color: {theme.border};

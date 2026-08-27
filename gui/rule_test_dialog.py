@@ -322,7 +322,7 @@ class RuleTestDialog(QDialog):
         step_info = f"{len(steps)} step(s)" if len(steps) > 1 else "1 step"
 
         summary = f"Final Result ({step_info}, narrowing): "
-        summary += f"<span style='color: {theme.accent_green}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
+        summary += f"<span style='color: {theme.status_success}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
         summary += f"({self.changed_count} of {total_rows} existing rows, {percentage:.1f}%)"
         if len(self.added_rows):
             summary += f" — {len(self.added_rows)} added by rule"

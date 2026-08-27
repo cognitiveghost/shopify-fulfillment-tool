@@ -382,7 +382,7 @@ class ClientSidebar(QWidget):
             for group in custom_groups:
                 group_id = group.get("id")
                 group_name = group.get("name", "Unknown")
-                group_color = group.get("color", theme.accent_blue)
+                group_color = group.get("color", theme.accent_fill)
                 group_section = self._create_group_section(group_id, group_name, group_color, all_clients, data)
                 if group_section.card_count() > 0:
                     self.sections_layout.insertWidget(self.sections_layout.count() - 1, group_section)
@@ -427,7 +427,7 @@ class ClientSidebar(QWidget):
         theme = get_theme_manager().get_current_theme()
         section = SectionWidget(
             config.get("name", "Pinned"),
-            config.get("color", theme.accent_orange)
+            config.get("color", theme.status_warning)
         )
 
         for client_id in all_clients:
@@ -559,7 +559,7 @@ class ClientSidebar(QWidget):
             self.collapsed_indicator.deleteLater()
             config = self.profile_manager.get_client_config_extended(client_id)
             ui_settings = config.get("ui_settings", {})
-            color = ui_settings.get("custom_color", theme.accent_green)
+            color = ui_settings.get("custom_color", theme.status_success)
             self.collapsed_indicator = CollapsedClientIndicator(client_id, color)
             self.layout().insertWidget(1, self.collapsed_indicator)
 
@@ -639,7 +639,7 @@ class ClientSidebar(QWidget):
                 theme = get_theme_manager().get_current_theme()
                 config = self.profile_manager.get_client_config_extended(self.active_client_id)
                 ui_settings = config.get("ui_settings", {})
-                color = ui_settings.get("custom_color", theme.accent_green)
+                color = ui_settings.get("custom_color", theme.status_success)
                 self.collapsed_indicator = CollapsedClientIndicator(self.active_client_id, color)
                 self.layout().insertWidget(1, self.collapsed_indicator)
         else:
@@ -820,12 +820,11 @@ class ClientSidebar(QWidget):
     def _update_styles(self):
         """Update sidebar styles based on current theme."""
         theme = get_theme_manager().get_current_theme()
-        is_dark = get_theme_manager().is_dark_theme()
-        button_hover = theme.button_hover_dark if is_dark else theme.button_hover_light
+        button_hover = theme.accent_fill_active
 
         # Update header widget background
         if hasattr(self, 'header_widget'):
-            self.header_widget.setStyleSheet(f"background-color: {theme.background_elevated};")
+            self.header_widget.setStyleSheet(f"background-color: {theme.surface_raised};")
 
         # Update title label
         if hasattr(self, 'title_label'):
@@ -834,7 +833,7 @@ class ClientSidebar(QWidget):
         # Update header buttons with explicit theme-aware styling
         button_style = f"""
             QPushButton {{
-                background-color: {theme.accent_blue};
+                background-color: {theme.accent_fill};
                 color: {theme.on_accent};
                 border: 1px solid {theme.border};
                 border-radius: 6px;
@@ -845,7 +844,7 @@ class ClientSidebar(QWidget):
                 background-color: {button_hover};
             }}
             QPushButton:pressed {{
-                background-color: {theme.accent_blue};
+                background-color: {theme.accent_fill};
             }}
         """
 

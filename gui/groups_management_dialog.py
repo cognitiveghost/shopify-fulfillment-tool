@@ -125,7 +125,7 @@ class GroupsManagementDialog(QDialog):
             for group in groups:
                 group_id = group.get("id")
                 name = group.get("name", "Unknown")
-                color = group.get("color", theme.accent_blue)
+                color = group.get("color", theme.accent_fill)
 
                 # Count clients in this group
                 clients_in_group = self.groups_manager.get_clients_in_group(
@@ -203,7 +203,7 @@ class GroupsManagementDialog(QDialog):
 
         # Get color
         color = QColorDialog.getColor(
-            QColor(theme.accent_blue),  # Default blue
+            QColor(theme.accent_fill),  # Default blue
             self,
             "Select Group Color"
         )
@@ -255,7 +255,7 @@ class GroupsManagementDialog(QDialog):
             return
 
         current_name = group.get("name", "")
-        current_color = group.get("color", theme.accent_blue)
+        current_color = group.get("color", theme.accent_fill)
 
         # Get new name
         name, ok = QInputDialog.getText(

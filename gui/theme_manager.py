@@ -372,32 +372,32 @@ def role_stylesheet(theme: ThemeTokens) -> str:
     """
     return f"""
         QPushButton[role="primary"] {{
-            background-color: {theme.accent_blue};
+            background-color: {theme.accent_fill};
             color: {theme.on_accent};
-            border: 1px solid {theme.accent_blue};
+            border: 1px solid {theme.accent_fill};
             font-weight: bold;
         }}
         QPushButton[role="primary"]:hover {{ background-color: {theme.accent_fill_hover}; }}
         QPushButton[role="primary"]:pressed {{ background-color: {theme.accent_fill_active}; }}
 
         QPushButton[role="secondary"] {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border: 1px solid {theme.border};
         }}
         QPushButton[role="secondary"]:hover {{ background-color: {theme.hover}; }}
         /* shared/theme.py presses every QPushButton to dark accent-blue, which
            reads as primary for the fraction of a second it is held. */
-        QPushButton[role="secondary"]:pressed {{ background-color: {theme.active_background}; }}
+        QPushButton[role="secondary"]:pressed {{ background-color: {theme.selection_bg}; }}
 
         QPushButton[role="primary"]:disabled, QPushButton[role="secondary"]:disabled {{
-            background-color: {theme.background};
+            background-color: {theme.surface};
             color: {theme.text_disabled};
             border: 1px solid {theme.border_subtle};
         }}
 
         QListWidget#settingsNav {{
-            background-color: {theme.background};
+            background-color: {theme.surface};
             border: none;
             border-right: 1px solid {theme.border_subtle};
             outline: none;
@@ -410,9 +410,9 @@ def role_stylesheet(theme: ThemeTokens) -> str:
         }}
         QListWidget#settingsNav::item:hover {{ background-color: {theme.hover}; }}
         QListWidget#settingsNav::item:selected {{
-            background-color: {theme.active_background};
+            background-color: {theme.selection_bg};
             color: {theme.text};
-            border-left: 2px solid {theme.accent_blue};
+            border-left: 2px solid {theme.accent_fill};
         }}
         QListWidget#settingsNav::item:disabled {{
             color: {theme.text_secondary};
