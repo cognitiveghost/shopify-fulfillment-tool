@@ -1,9 +1,11 @@
 """The 8.6 shell contract: one command bar, a rail, no global header."""
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from gui.components import CommandBar
+from gui.components.commandbar import ROW_CLIENT
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -131,3 +133,31 @@ def test_refresh_icons_reaches_the_rail(main_window):
     for index in range(5):
         assert not main_window.nav_rail.button(index).icon().isNull()
     assert not main_window.connection_btn.icon().isNull()
+
+
+def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
+    # connect_signals() (Task 4) already wired this signal to the real
+    # MainWindow._on_client_menu_requested, which calls menu.exec() -- a
+    # blocking call with nothing around to dismiss it headless. Disconnected
+    # for this one assertion: what's under test is the signal itself
+    # carrying the right client id, not the production dialog.
+    main_window.command_bar.clientMenuRequested.disconnect(
+        main_window._on_client_menu_requested
+    )
+
+    main_window.profile_manager.create_client_profile("M", "Client M")
+    main_window.command_bar.set_clients_from(main_window.client_directory.gather())
+
+    seen = []
+    main_window.command_bar.clientMenuRequested.connect(
+        lambda client_id, _pos: seen.append(client_id)
+    )
+    bar = main_window.command_bar
+    model = bar.client_selector.model()
+    row = next(i for i in range(model.rowCount())
+               if model.item(i).data(Qt.UserRole) == ROW_CLIENT)
+
+    view = bar.client_selector.view()
+    bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center())
+
+    assert seen == ["M"]
