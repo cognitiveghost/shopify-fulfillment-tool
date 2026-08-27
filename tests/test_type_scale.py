@@ -22,6 +22,7 @@ from gui.theme_manager import (
     font_css,
     get_density,
     get_density_profile,
+    get_theme_manager,
     set_density,
     type_style,
 )
@@ -284,3 +285,53 @@ def test_density_stylesheet_scope_is_the_interactive_controls():
     # the same commit as the mechanism.
     assert "QLabel" not in sheet
     assert "QTableView" not in sheet
+
+
+def _manager():
+    """The singleton, with density forced back to the desk baseline.
+
+    _load_density_preference() reads real QSettings on first construction, so
+    it can land after the reset_density fixture has already run.
+    """
+    manager = get_theme_manager()
+    set_density(DEFAULT_DENSITY)
+    return manager
+
+
+def test_manager_density_property_reports_the_module_state():
+    manager = _manager()
+    assert manager.density == "desk"
+    set_density("floor")
+    assert manager.density == "floor"
+
+
+def test_manager_set_density_switches_and_signals():
+    manager = _manager()
+    seen = []
+    manager.theme_changed.connect(lambda: seen.append(manager.density))
+    try:
+        manager.set_density("floor")
+        assert manager.density == "floor"
+        assert seen == ["floor"]
+    finally:
+        manager.theme_changed.disconnect()
+
+
+def test_manager_set_density_to_the_current_value_is_a_no_op():
+    """Matches set_theme's early return -- a redundant call must not repaint
+    the whole app or fire the signal every widget is connected to."""
+    manager = _manager()
+    seen = []
+    manager.theme_changed.connect(lambda: seen.append(1))
+    try:
+        manager.set_density("desk")
+        assert seen == []
+    finally:
+        manager.theme_changed.disconnect()
+
+
+def test_manager_set_density_rejects_an_unknown_name():
+    manager = _manager()
+    with pytest.raises(KeyError):
+        manager.set_density("comfortable")
+    assert manager.density == "desk"

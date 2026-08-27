@@ -40,7 +40,11 @@ class ThemeManager(QObject):
         self._initialized = True
         self._current_theme_name = "light"
         self._load_theme_preference()
-        logger.info(f"ThemeManager initialized with theme: {self._current_theme_name}")
+        self._load_density_preference()
+        logger.info(
+            f"ThemeManager initialized with theme: {self._current_theme_name}, "
+            f"density: {get_density()}"
+        )
 
     def get_current_theme(self) -> ThemeTokens:
         return _themed_tokens(self._current_theme_name)
@@ -50,6 +54,28 @@ class ThemeManager(QObject):
 
     def get_current_theme_name(self) -> str:
         return self._current_theme_name
+
+    @property
+    def density(self) -> str:
+        """Name of the active density profile ("desk" or "floor")."""
+        return get_density()
+
+    def set_density(self, name: str) -> None:
+        """Switch density, persist it, and repaint.
+
+        Raises KeyError on an unknown name -- the module-level set_density()
+        validates before anything is persisted, so a bad name leaves both the
+        flag and QSettings untouched.
+        """
+        if name == get_density():
+            return
+        # module-level set_density(), not this method: methods are not in
+        # lexical scope inside a method body.
+        set_density(name)
+        self._save_density_preference()
+        self.apply_theme()
+        self.theme_changed.emit()
+        logger.info(f"Density changed to: {name}")
 
     def toggle_theme(self):
         self.set_theme("dark" if self._current_theme_name == "light" else "light")
@@ -94,6 +120,23 @@ class ThemeManager(QObject):
         except Exception:
             logger.exception("Failed to load theme preference")
             self._current_theme_name = "light"
+
+    def _save_density_preference(self):
+        try:
+            settings = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
+            settings.setValue("density", get_density())
+            settings.sync()
+        except Exception:
+            logger.exception("Failed to save density preference")
+
+    def _load_density_preference(self):
+        try:
+            settings = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
+            saved = settings.value("density", DEFAULT_DENSITY)
+            set_density(saved if saved in DENSITY_PROFILES else DEFAULT_DENSITY)
+        except Exception:
+            logger.exception("Failed to load density preference")
+            set_density(DEFAULT_DENSITY)
 
 
 _theme_manager_instance: ThemeManager | None = None
