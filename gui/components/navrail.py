@@ -32,7 +32,16 @@ class NavRail(QWidget):
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         theme = get_theme_manager().get_current_theme()
         # No border: the rail is separated by its own darker plane, not a line.
-        self.setStyleSheet(f"background-color: {theme.surface_sunken}; border: none;")
+        # Scoped to NavRail: a bare rule would repaint the buttons too, leaving
+        # the checked item indistinguishable from the rest of the rail.
+        self.setStyleSheet(
+            f"NavRail {{ background-color: {theme.surface_sunken}; border: none; }}"
+            f"NavRail QToolButton {{ background-color: transparent; border: none;"
+            f" color: {theme.text_secondary}; }}"
+            f"NavRail QToolButton:hover {{ background-color: {theme.hover}; }}"
+            f"NavRail QToolButton:checked {{ background-color: {theme.surface_raised};"
+            f" color: {theme.text}; }}"
+        )
 
         self._buttons: list[QToolButton] = []
         self._group = QButtonGroup(self)
@@ -50,8 +59,9 @@ class NavRail(QWidget):
 
     def add_item(self, icon_name: str, label: str) -> int:
         """Append an item and return its index. Unknown glyph raises KeyError."""
+        glyph = icon(icon_name)                  # raises KeyError on a typo
         button = QToolButton(self)
-        button.setIcon(icon(icon_name))          # raises KeyError on a typo
+        button.setIcon(glyph)
         button.setText(label)
         button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button.setCheckable(True)

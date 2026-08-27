@@ -62,3 +62,16 @@ def test_an_unknown_icon_name_fails_at_add_time(qapp):
     rail = NavRail()
     with pytest.raises(KeyError):
         rail.add_item("no-such-glyph", "Nope")
+
+
+def test_clicking_the_current_item_again_emits_nothing(qapp):
+    """The path self._current exists for: Qt has already flipped the group's
+    checked state by the time clicked() runs, so checkedId() cannot see this."""
+    rail = NavRail()
+    rail.add_item("package", "Orders")
+    rail.add_item("settings", "Settings")
+    seen = []
+    rail.currentChanged.connect(seen.append)
+    rail.button(1).click()
+    rail.button(1).click()
+    assert seen == [1]

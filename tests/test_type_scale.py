@@ -297,7 +297,7 @@ def test_density_stylesheet_emits_the_profile_padding():
 
 
 def test_density_stylesheet_carries_the_body_size_but_not_a_weight():
-    """Density owns size. Weight belongs to role_stylesheet's primary rule,
+    """Density owns size. Weight belongs to build_stylesheet's primary rule,
     which is an attribute selector and would otherwise be outranked here."""
     sheet = density_stylesheet()
     assert "font-size: 10pt;" in sheet

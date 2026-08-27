@@ -60,7 +60,7 @@ def test_set_button_role_rejects_an_unknown_role():
         set_button_role(button, "tertiary")
 
 
-def test_the_suffix_is_actually_applied_to_the_app():
+def test_the_roles_are_actually_applied_to_the_app():
     from gui.theme_manager import get_theme_manager
 
     get_theme_manager().apply_theme()

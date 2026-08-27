@@ -22,10 +22,16 @@ class CommandBar(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         theme = get_theme_manager().get_current_theme()
+        # Type-scoped, not bare: a selector-less sheet is wrapped into `* {}`
+        # and a parent's sheet outranks the app's, so `background-color` here
+        # would repaint every child -- flattening the button roles the app
+        # stylesheet sets. Same reason for the scoping in the other containers.
         self.setStyleSheet(
-            f"background-color: {theme.surface_raised}; "
-            f"border-bottom: 1px solid {theme.border_subtle};"
+            f"CommandBar {{ background-color: {theme.surface_raised};"
+            f" border-bottom: 1px solid {theme.border_subtle}; }}"
         )
+
+        self._repopulating = False
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
@@ -40,6 +46,7 @@ class CommandBar(QWidget):
         layout.addWidget(self.session_label)
 
         self.status_chip = StatusChip("text_secondary", "", theme, parent=self)
+        self.status_chip.hide()   # an empty chip still paints a tinted pill
         layout.addWidget(self.status_chip)
 
         layout.addStretch()
@@ -49,8 +56,6 @@ class CommandBar(QWidget):
         self.action_button.clicked.connect(self.actionTriggered.emit)
         self.action_button.hide()
         layout.addWidget(self.action_button)
-
-        self._repopulating = False
 
     def _on_client_changed(self, name: str) -> None:
         # Repopulating fires currentTextChanged per removal/insert; a consumer
@@ -76,6 +81,7 @@ class CommandBar(QWidget):
         self.status_chip.set_status(
             role, text, get_theme_manager().get_current_theme()
         )
+        self.status_chip.setVisible(bool(text))
 
     def set_action(self, label: str) -> QPushButton:
         """Label and reveal the screen's single primary action."""

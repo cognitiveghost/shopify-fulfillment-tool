@@ -19,8 +19,8 @@ class ContextualSelectionBar(QWidget):
         super().__init__(parent)
         theme = get_theme_manager().get_current_theme()
         self.setStyleSheet(
-            f"background-color: {theme.surface_raised}; "
-            f"border-top: 1px solid {theme.border_subtle};"
+            f"ContextualSelectionBar {{ background-color: {theme.surface_raised};"
+            f" border-top: 1px solid {theme.border_subtle}; }}"
         )
 
         layout = QHBoxLayout(self)

@@ -30,7 +30,7 @@ class FilterBar(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         theme = get_theme_manager().get_current_theme()
-        self.setStyleSheet(f"background-color: {theme.surface};")
+        self.setStyleSheet(f"FilterBar {{ background-color: {theme.surface}; }}")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

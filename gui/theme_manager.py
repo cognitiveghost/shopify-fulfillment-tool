@@ -415,13 +415,12 @@ _DENSITY_CONTROLS = (
 def density_stylesheet() -> str:
     """QSS for the active density profile's box metrics.
 
-    Appended after shared.theme's sheet and role_stylesheet, so it outranks the
-    equal-specificity `padding: 6px 12px; font-size: 10pt` that shared/theme.py
-    sets on QPushButton. shared/theme.py is sync-owned by packing-tool and
-    cannot be edited here -- this is the same layering seam the font override
-    and the button hierarchy already use.
+    Appended after shared.theme's sheet, so it outranks the equal-specificity
+    `padding: 6px 12px; font-size: 10pt` that shared/theme.py sets on
+    QPushButton. shared/theme.py is sync-owned by packing-tool -- change it
+    there and re-run scripts/sync_shared.py, never here.
 
-    Emits size but never weight: role_stylesheet's QPushButton[role="primary"]
+    Emits size but never weight: build_stylesheet's QPushButton[role="primary"]
     rule is an attribute selector and outranks this one anyway, but emitting a
     weight here would still fight it for every other control.
     """
