@@ -4,10 +4,6 @@ ui_manager.py hand-rolled this same QFrame + centred-label stack three times
 (_make_stat_card, _make_courier_card, _make_tag_card). The differences between
 them were per-instance data -- margins, minimum width, which TYPE_SCALE role
 each row uses -- not three different widgets.
-
-gui/client_card.py is deliberately NOT built on this: it is an interactive list
-item with hover/active states, a fixed height and its own border-radius QSS.
-See the design doc for that call.
 """
 
 from PySide6.QtCore import Qt

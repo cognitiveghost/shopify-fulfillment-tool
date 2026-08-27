@@ -296,10 +296,6 @@ class MainWindow(QMainWindow):
         )
         self.client_directory.refresh()
 
-        if hasattr(self, "client_sidebar"):
-            self.client_sidebar.client_selected.connect(self.on_client_changed)
-            self.client_sidebar.refresh_requested.connect(self.on_sidebar_refresh)
-
         # Session browser (new architecture)
         self.session_browser.session_selected.connect(self.on_session_selected)
         self.session_browser.multi_export_requested.connect(
@@ -851,9 +847,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "statusBar"):
             self.statusBar().showMessage(f"Loading CLIENT_{client_id}...", 5000)
 
-        if hasattr(self, "client_sidebar"):
-            self.client_sidebar.set_active_client(client_id)
-
         if hasattr(self, "command_bar") and (
             self.command_bar.current_client() != client_id
         ):
@@ -953,9 +946,8 @@ class MainWindow(QMainWindow):
     def on_sidebar_refresh(self):
         """Handle manual sidebar refresh request."""
         try:
-            if hasattr(self, "client_sidebar"):
-                self.client_sidebar.refresh()
-                self.log_activity("UI", "Client sidebar refreshed")
+            self.client_directory.refresh()
+            self.log_activity("UI", "Client sidebar refreshed")
         except Exception as e:
             logger.exception("Sidebar refresh failed")
             QMessageBox.warning(self, "Refresh Error", str(e))

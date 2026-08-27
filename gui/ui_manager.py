@@ -132,20 +132,6 @@ class UIManager:
         main_horizontal.setSpacing(0)
         main_horizontal.setContentsMargins(0, 0, 0, 0)
 
-        # Create sidebar
-        from gui.client_sidebar import ClientSidebar
-
-        self.mw.client_sidebar = ClientSidebar(
-            profile_manager=self.mw.profile_manager,
-            groups_manager=self.mw.groups_manager,
-            parent=self.mw,
-        )
-        # The dropdown is the selector from 8.6 on. The widget survives one
-        # more commit only so the navigation commit can be reverted without
-        # reasoning about a deleted file; Task 8 removes it.
-        self.mw.client_sidebar.hide()
-        main_horizontal.addWidget(self.mw.client_sidebar)
-
         # The rail is the outermost chrome, left of everything else.
         self.mw.nav_rail = NavRail(self.mw)
         main_horizontal.addWidget(self.mw.nav_rail)
