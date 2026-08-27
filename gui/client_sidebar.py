@@ -86,9 +86,9 @@ class SectionWidget(QWidget):
         """
         super().__init__(parent)
         self.title = title
+        theme = get_theme_manager().get_current_theme()
         # Use theme border color as default if no color specified
         if color is None:
-            theme = get_theme_manager().get_current_theme()
             color = theme.border
         self.color = color
 
@@ -99,7 +99,6 @@ class SectionWidget(QWidget):
 
         # Header
         header = QLabel(title)
-        theme = get_theme_manager().get_current_theme()
         header.setStyleSheet(f"""
             QLabel {{
                 background-color: {color};

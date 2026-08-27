@@ -444,13 +444,13 @@ def build_stylesheet(theme: ThemeTokens) -> str:
     r = theme.radius
     return f"""
         QWidget {{
-            background-color: {theme.background};
+            background-color: {theme.surface};
             color: {theme.text};
             font-family: {theme.font_family};
         }}
 
         QPushButton {{
-            background-color: {theme.accent_blue};
+            background-color: {theme.accent_fill};
             color: {theme.on_accent};
             border: 1px solid {theme.border};
             border-radius: {r}px;
@@ -460,45 +460,45 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QPushButton:hover {{ background-color: {theme.accent_fill_hover}; }}
         QPushButton:pressed {{ background-color: {theme.accent_fill_active}; }}
         QPushButton:disabled {{
-            background-color: {theme.background};
+            background-color: {theme.surface};
             color: {theme.text_disabled};
             border: 1px solid {theme.border_subtle};
         }}
 
         QLineEdit, QTextEdit, QPlainTextEdit {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border: 1px solid {theme.border};
             border-radius: {r}px;
             padding: 4px 8px;
         }}
         QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
-            border: 2px solid {theme.accent_blue};
+            border: 2px solid {theme.accent_fill};
         }}
         QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled {{
-            background-color: {theme.background};
+            background-color: {theme.surface};
             color: {theme.text_disabled};
             border-color: {theme.border_subtle};
         }}
 
         QComboBox {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border: 1px solid {theme.border};
             border-radius: {r}px;
             padding: 4px 8px;
         }}
-        QComboBox:hover {{ border: 1px solid {theme.accent_blue}; }}
+        QComboBox:hover {{ border: 1px solid {theme.accent_fill}; }}
         QComboBox::drop-down {{ border: none; }}
         QComboBox QAbstractItemView {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
-            selection-background-color: {theme.accent_blue};
+            selection-background-color: {theme.accent_fill};
             selection-color: {theme.on_accent};
         }}
 
         QSpinBox, QDoubleSpinBox, QDateEdit {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border: 1px solid {theme.border};
             border-radius: {r}px;
@@ -514,14 +514,14 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             width: 18px; height: 18px;
             border: 2px solid {theme.border};
             border-radius: {r}px;
-            background-color: {theme.background};
+            background-color: {theme.surface};
         }}
         QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
-            border: 2px solid {theme.accent_blue};
+            border: 2px solid {theme.accent_fill};
         }}
         QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
-            background-color: {theme.accent_blue};
-            border: 2px solid {theme.accent_blue};
+            background-color: {theme.accent_fill};
+            border: 2px solid {theme.accent_fill};
         }}
 
         QGroupBox {{
@@ -541,83 +541,83 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QLabel {{ color: {theme.text}; background-color: transparent; }}
 
         QTableView {{
-            background-color: {theme.background};
+            background-color: {theme.surface};
             color: {theme.text};
             gridline-color: {theme.border_subtle};
             border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
-        QTableView::item:selected {{ background-color: {theme.accent_blue}; color: {theme.on_accent}; }}
+        QTableView::item:selected {{ background-color: {theme.accent_fill}; color: {theme.on_accent}; }}
         QTableView::item:hover {{ background-color: {theme.hover}; }}
         QHeaderView::section {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border: 1px solid {theme.border};
             padding: 4px; font-weight: bold;
         }}
         QTableCornerButton::section {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             border: 1px solid {theme.border};
         }}
 
         QListWidget {{
-            background-color: {theme.background};
+            background-color: {theme.surface};
             color: {theme.text};
             border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
-        QListWidget::item:selected {{ background-color: {theme.accent_blue}; color: {theme.on_accent}; }}
+        QListWidget::item:selected {{ background-color: {theme.accent_fill}; color: {theme.on_accent}; }}
         QListWidget::item:hover {{ background-color: {theme.hover}; }}
 
-        QScrollBar:vertical {{ background-color: {theme.background}; width: 12px; border: none; }}
+        QScrollBar:vertical {{ background-color: {theme.surface}; width: 12px; border: none; }}
         QScrollBar::handle:vertical {{
             background-color: {theme.border}; min-height: 20px; border-radius: {r}px;
         }}
         QScrollBar::handle:vertical:hover {{ background-color: {theme.text_secondary}; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
-        QScrollBar:horizontal {{ background-color: {theme.background}; height: 12px; border: none; }}
+        QScrollBar:horizontal {{ background-color: {theme.surface}; height: 12px; border: none; }}
         QScrollBar::handle:horizontal {{
             background-color: {theme.border}; min-width: 20px; border-radius: {r}px;
         }}
         QScrollBar::handle:horizontal:hover {{ background-color: {theme.text_secondary}; }}
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; }}
 
-        QTabWidget::pane {{ border: 1px solid {theme.border}; background-color: {theme.background}; }}
+        QTabWidget::pane {{ border: 1px solid {theme.border}; background-color: {theme.surface}; }}
         QTabBar::tab {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border: 1px solid {theme.border};
             padding: 8px 16px; margin-right: 2px;
         }}
         QTabBar::tab:selected {{
-            background-color: {theme.background};
-            border-bottom-color: {theme.background};
+            background-color: {theme.surface};
+            border-bottom-color: {theme.surface};
             font-weight: bold;
         }}
         QTabBar::tab:hover {{ background-color: {theme.hover}; }}
 
         QStatusBar {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border-top: 1px solid {theme.border};
         }}
 
-        QMenuBar {{ background-color: {theme.background}; color: {theme.text}; }}
+        QMenuBar {{ background-color: {theme.surface}; color: {theme.text}; }}
         QMenuBar::item:selected {{ background-color: {theme.hover}; }}
         QMenu {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             color: {theme.text};
             border: 1px solid {theme.border};
         }}
-        QMenu::item:selected {{ background-color: {theme.accent_blue}; color: {theme.on_accent}; }}
+        QMenu::item:selected {{ background-color: {theme.accent_fill}; color: {theme.on_accent}; }}
 
         QToolBar {{
-            background-color: {theme.background_elevated};
+            background-color: {theme.surface_raised};
             border: 1px solid {theme.border};
             spacing: {theme.spacing_xs}px;
         }}
 
-        QDialog {{ background-color: {theme.background}; color: {theme.text}; }}
+        QDialog {{ background-color: {theme.surface}; color: {theme.text}; }}
     """
 
 
@@ -627,26 +627,26 @@ def build_palette(theme: ThemeTokens):
     from PySide6.QtGui import QColor, QPalette
 
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(theme.background))
+    palette.setColor(QPalette.ColorRole.Window, QColor(theme.surface))
     palette.setColor(QPalette.ColorRole.WindowText, QColor(theme.text))
-    palette.setColor(QPalette.ColorRole.Base, QColor(theme.background_elevated))
+    palette.setColor(QPalette.ColorRole.Base, QColor(theme.surface_raised))
     palette.setColor(QPalette.ColorRole.AlternateBase, QColor(theme.hover))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(theme.background_elevated))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(theme.surface_raised))
     palette.setColor(QPalette.ColorRole.ToolTipText, QColor(theme.text))
     palette.setColor(QPalette.ColorRole.Text, QColor(theme.text))
-    palette.setColor(QPalette.ColorRole.Button, QColor(theme.background_elevated))
+    palette.setColor(QPalette.ColorRole.Button, QColor(theme.surface_raised))
     palette.setColor(QPalette.ColorRole.ButtonText, QColor(theme.text))
-    palette.setColor(QPalette.ColorRole.BrightText, QColor(theme.accent_red))
-    palette.setColor(QPalette.ColorRole.Link, QColor(theme.accent_blue))
+    palette.setColor(QPalette.ColorRole.BrightText, QColor(theme.status_danger))
+    palette.setColor(QPalette.ColorRole.Link, QColor(theme.accent_fill))
     palette.setColor(QPalette.ColorRole.LinkVisited, QColor("#9C27B0"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(theme.accent_blue))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(theme.accent_fill))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
     palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(theme.text_placeholder))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(theme.text_disabled))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(theme.text_disabled))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(theme.text_disabled))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor(theme.background_elevated))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor(theme.background_elevated))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor(theme.surface_raised))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor(theme.surface_raised))
     return palette
 
 
@@ -671,9 +671,9 @@ if __name__ == "__main__":
     app = QApplication.instance() or QApplication([])
     for theme in (LIGHT_THEME, DARK_THEME):
         sheet = build_stylesheet(theme)
-        assert "QPushButton" in sheet and theme.accent_blue in sheet
+        assert "QPushButton" in sheet and theme.accent_fill in sheet
         palette = build_palette(theme)
-        assert palette.color(palette.ColorRole.Window).name().upper() == theme.background.upper()
+        assert palette.color(palette.ColorRole.Window).name().upper() == theme.surface.upper()
     apply_theme(app, "dark")
     assert (theme_app_stylesheet := app.styleSheet())
 
