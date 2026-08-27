@@ -169,8 +169,14 @@ Two rules both sources agree on, neither yet implemented:
 - **Mono is load-bearing.** SKUs, session IDs, barcodes and PC names use
   `font_family_mono` so `O`/`0` and `l`/`1` stay separable when read aloud. The token
   exists; no widget uses it.
-- **`font-variant-numeric: tabular-nums`** on every numeral column (Depot), so quantities
-  and stock align down the column.
+- **Tabular numerals** on every numeral column (Depot), so quantities and stock align
+  down the column. **Not via QSS:** Qt implements no `font-variant-numeric` property —
+  setting it prints `Unknown property font-variant-numeric` and does nothing (measured,
+  PySide6 6.11.1). The mechanism is the OpenType feature tag,
+  `QFont.setFeature(QFont.Tag("tnum"), 1)`, exposed as `apply_font(..., tabular=True)`
+  and requiring Qt ≥ 6.7. Load-bearing, not cosmetic: bundled Inter ships proportional
+  numerals — at 20pt `1` advances 10.97px against `0` at 17.03px, and `tnum` takes every
+  digit to 17.5px.
 
 ### C3 — Density: different numbers, and a direct contradiction on type
 

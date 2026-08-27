@@ -12,6 +12,7 @@ from functools import lru_cache
 from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
 from shared.theme import ThemeTokens, build_palette, build_stylesheet, get_theme
@@ -305,17 +306,27 @@ def font_css(role: str, bold: bool | None = None) -> str:
     return f"font-size: {style.size_pt}pt; font-weight: {weight};"
 
 
-def apply_font(target, role: str, bold: bool | None = None) -> None:
+def apply_font(target, role: str, bold: bool | None = None, tabular: bool = False) -> None:
     """Apply a scale role to anything exposing .font()/.setFont().
 
     Covers QWidget, QListWidgetItem and QPainter with one helper. Reads the
     target's existing font so the inherited family survives -- building a bare
     QFont() instead would silently drop it.
+
+    `tabular` turns on the `tnum` OpenType feature for numeral columns, so
+    quantities and stock align down the column. Spec S2/C2 asked for this as a
+    QSS helper, but Qt has no `font-variant-numeric` property -- it warns
+    "Unknown property" and does nothing -- so it has to come from the feature
+    tag, which needs Qt 6.7+. It is not cosmetic: bundled Inter ships
+    proportional numerals, so at 20pt "1" advances 10.97px against "0" at
+    17.03px.
     """
     style = type_style(role)
     font = target.font()
     font.setPointSize(style.size_pt)
     font.setBold(style.bold if bold is None else bold)
+    if tabular:
+        font.setFeature(QFont.Tag("tnum"), 1)
     target.setFont(font)
 
 

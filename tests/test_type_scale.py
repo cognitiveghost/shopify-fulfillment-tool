@@ -10,9 +10,10 @@ import re
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtGui import QFont, QFontMetricsF, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QLabel, QListWidgetItem
 
+from gui.fonts import load_bundled_fonts
 from gui.theme_manager import (
     DEFAULT_DENSITY,
     DENSITY_PROFILES,
@@ -335,3 +336,34 @@ def test_manager_set_density_rejects_an_unknown_name():
     with pytest.raises(KeyError):
         manager.set_density("comfortable")
     assert manager.density == "desk"
+
+
+def test_tabular_is_off_by_default():
+    label = QLabel("x")
+    apply_font(label, "body")
+    assert not label.font().isFeatureSet(QFont.Tag("tnum"))
+
+
+def test_tabular_flag_sets_the_opentype_feature():
+    label = QLabel("x")
+    apply_font(label, "display_xl", tabular=True)
+    assert label.font().isFeatureSet(QFont.Tag("tnum"))
+    assert label.font().featureValue(QFont.Tag("tnum")) == 1
+
+
+def test_tabular_actually_equalises_inter_numeral_widths():
+    """The reason the flag exists. Qt QSS has no font-variant-numeric -- it
+    prints 'Unknown property' -- and bundled Inter ships proportional numerals,
+    so numeral columns do not align without the feature tag."""
+    family = load_bundled_fonts()
+    if family is None:
+        pytest.skip("bundled fonts unavailable")
+
+    plain = QFont(family, 20)
+    tabular = QFont(plain)
+    tabular.setFeature(QFont.Tag("tnum"), 1)
+
+    proportional = {QFontMetricsF(plain).horizontalAdvance(d) for d in "0123456789"}
+    aligned = {QFontMetricsF(tabular).horizontalAdvance(d) for d in "0123456789"}
+    assert len(proportional) > 1, "Inter's numerals are unexpectedly monospaced already"
+    assert len(aligned) == 1, "tnum did not equalise the numeral advances"
