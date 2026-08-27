@@ -16,7 +16,14 @@ from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
-from shared.theme import ThemeTokens, build_palette, build_stylesheet, get_theme
+from shared.theme import (
+    BUTTON_ROLES,  # noqa: F401 -- re-exported for existing `from gui.theme_manager import` call sites
+    ThemeTokens,
+    build_palette,
+    build_stylesheet,
+    get_theme,
+    set_button_role,  # noqa: F401 -- re-exported, see BUTTON_ROLES above
+)
 
 from .fonts import load_bundled_fonts
 
@@ -354,48 +361,16 @@ def apply_font(target, role: str, bold: bool | None = None, tabular: bool = Fals
     target.setFont(font)
 
 
-BUTTON_ROLES = ("primary", "secondary")
-
-
 def role_stylesheet(theme: ThemeTokens) -> str:
-    """QSS for the button hierarchy, appended after shared.theme's sheet.
+    """QSS this app layers on after shared.theme's sheet.
 
-    shared/theme.py paints every QPushButton accent-blue and is sync-owned
-    by packing-tool, so it cannot be edited here -- these rules layer on in
-    this module, the same seam Track 1 used for the font override.
-
-    Deliberately opt-in: a button with no `role` property keeps exactly its
-    current appearance. The opposite arrangement (neutral by default, mark
-    the primaries) is fewer edits but restyles every button in the app at
-    once, and this is a Windows-only app with three tracks of visual change
-    not yet verified on Windows.
+    The button hierarchy used to live here because shared/theme.py is
+    sync-owned by packing-tool and could not be edited from this repo. 8.5
+    moved it into shared/theme.py's build_stylesheet -- authored in
+    packing-tool, pulled here by scripts/sync_shared.py -- so both apps read
+    one definition. What is left is genuinely shopify-only chrome.
     """
     return f"""
-        QPushButton[role="primary"] {{
-            background-color: {theme.accent_fill};
-            color: {theme.on_accent};
-            border: 1px solid {theme.accent_fill};
-            font-weight: bold;
-        }}
-        QPushButton[role="primary"]:hover {{ background-color: {theme.accent_fill_hover}; }}
-        QPushButton[role="primary"]:pressed {{ background-color: {theme.accent_fill_active}; }}
-
-        QPushButton[role="secondary"] {{
-            background-color: {theme.surface_raised};
-            color: {theme.text};
-            border: 1px solid {theme.border};
-        }}
-        QPushButton[role="secondary"]:hover {{ background-color: {theme.hover}; }}
-        /* shared/theme.py presses every QPushButton to dark accent-blue, which
-           reads as primary for the fraction of a second it is held. */
-        QPushButton[role="secondary"]:pressed {{ background-color: {theme.selection_bg}; }}
-
-        QPushButton[role="primary"]:disabled, QPushButton[role="secondary"]:disabled {{
-            background-color: {theme.surface};
-            color: {theme.text_disabled};
-            border: 1px solid {theme.border_subtle};
-        }}
-
         QListWidget#settingsNav {{
             background-color: {theme.surface};
             border: none;
@@ -440,13 +415,12 @@ _DENSITY_CONTROLS = (
 def density_stylesheet() -> str:
     """QSS for the active density profile's box metrics.
 
-    Appended after shared.theme's sheet and role_stylesheet, so it outranks the
-    equal-specificity `padding: 6px 12px; font-size: 10pt` that shared/theme.py
-    sets on QPushButton. shared/theme.py is sync-owned by packing-tool and
-    cannot be edited here -- this is the same layering seam the font override
-    and the button hierarchy already use.
+    Appended after shared.theme's sheet, so it outranks the equal-specificity
+    `padding: 6px 12px; font-size: 10pt` that shared/theme.py sets on
+    QPushButton. shared/theme.py is sync-owned by packing-tool -- change it
+    there and re-run scripts/sync_shared.py, never here.
 
-    Emits size but never weight: role_stylesheet's QPushButton[role="primary"]
+    Emits size but never weight: build_stylesheet's QPushButton[role="primary"]
     rule is an attribute selector and outranks this one anyway, but emitting a
     weight here would still fight it for every other control.
     """
@@ -459,18 +433,3 @@ def density_stylesheet() -> str:
             font-size: {type_style('body').size_pt}pt;
         }}
     """
-
-
-def set_button_role(button, role: str) -> None:
-    """Mark a button primary or secondary.
-
-    Qt does not restyle a widget when a dynamic property changes after the
-    stylesheet was applied -- the classic trap. Every call site here sets
-    the role at construction, where it would not matter, but unpolish/polish
-    runs unconditionally so a later live-flipping caller cannot step in it.
-    """
-    if role not in BUTTON_ROLES:
-        raise ValueError(f"Unknown button role {role!r}; expected one of {BUTTON_ROLES}")
-    button.setProperty("role", role)
-    button.style().unpolish(button)
-    button.style().polish(button)
