@@ -84,11 +84,27 @@ def test_the_tab_bar_is_gone_and_the_rail_took_its_place(main_window):
         main_window.nav_rail.set_current(5)
 
 
-def test_rail_labels_are_the_old_tab_titles_verbatim(main_window):
-    """Parent spec §6 guardrail 2: structure and labels never change together."""
-    labels = [main_window.nav_rail.button(i).text() for i in range(5)]
-    assert labels == list(DESTINATIONS)
+def test_the_pages_keep_the_old_tab_titles(main_window):
+    """Guardrail 2 governs the destinations, and they have not moved again."""
     assert [main_window.main_tabs.tabText(i) for i in range(5)] == list(DESTINATIONS)
+
+
+def test_the_rail_shows_short_labels_not_the_full_titles(main_window):
+    """8.6 put the full titles on a 56px rail and Qt elided five of six.
+
+    Guardrail 2 forbids renaming a destination and moving it in the *same*
+    release; the move shipped in 8.6, so the rename is allowed now. See
+    tests/test_navrail_labels_fit.py for the width check that forced it.
+    """
+    labels = [main_window.nav_rail.button(i).text() for i in range(5)]
+    assert labels == ["Setup", "Results", "Browse", "Info", "Tools"]
+
+
+def test_the_full_destination_name_survives_in_the_tooltip(main_window):
+    """The rail label is abbreviated, so hover is the only place the full name
+    still appears -- and _TAB_TOOLTIPS holds descriptions, not names."""
+    for index, full_name in enumerate(DESTINATIONS):
+        assert full_name in main_window.nav_rail.button(index).toolTip()
 
 
 @pytest.mark.parametrize("index", range(5))
