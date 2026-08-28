@@ -12,7 +12,9 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -22,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.background_worker import BackgroundWorker
+from gui.components import ContextualSelectionBar
 from gui.icons import icon
 from gui.session_row_delegates import (
     ROLE_MANUAL,
@@ -228,25 +231,28 @@ class SessionBrowserWidget(QWidget):
 
         group_layout.addWidget(self.sessions_table)
 
-        # Action buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
+        self.selection_bar = ContextualSelectionBar(self)
 
-        self.combined_export_btn = QPushButton("Export Combined Stock")
-        self.combined_export_btn.setEnabled(False)
-        self.combined_export_btn.setToolTip(
-            "Select 2+ sessions to export a combined stock summary"
+        self.comment_btn = self.selection_bar.add_action(
+            "Comment…", self._edit_comment_for_selection
         )
-        self.combined_export_btn.clicked.connect(self._on_combined_export)
-        button_layout.addWidget(self.combined_export_btn)
+        self.status_btn = self.selection_bar.add_action("Status ▾", lambda: None)
+        status_menu = QMenu(self.status_btn)
+        for label in ("Active", "Completed", "Abandoned", "Archived"):
+            status_menu.addAction(
+                label,
+                lambda _checked=False, value=label: self._apply_status_to_selection(value),
+            )
+        self.status_btn.setMenu(status_menu)
 
-        self.open_btn = QPushButton("Open Selected Session")
-        self.open_btn.setToolTip("Load the selected session")
-        self.open_btn.clicked.connect(self._on_open_clicked)
-        self.open_btn.setEnabled(False)
-        button_layout.addWidget(self.open_btn)
+        self.combined_export_btn = self.selection_bar.add_action(
+            "Export Combined Stock", self._on_combined_export
+        )
+        self.open_btn = self.selection_bar.add_action(
+            "Open", self._on_open_clicked, role="primary"
+        )
 
-        group_layout.addLayout(button_layout)
+        group_layout.addWidget(self.selection_bar)
 
         main_layout.addWidget(group)
 
@@ -500,21 +506,18 @@ Comments: {comments if comments else "None"}"""
         self._is_dirty = True
 
     def _on_selection_changed(self, current=None, previous=None):
-        """Handle table selection change (fires on click/keyboard, not hover)."""
-        has_selection = self.sessions_table.currentRow() >= 0
-        self.open_btn.setEnabled(has_selection)
-        selected_count = len(self.sessions_table.selectionModel().selectedRows())
-        self.combined_export_btn.setEnabled(selected_count >= 2)
+        """Fires on click and keyboard navigation, not hover."""
+        selected = len(self.sessions_table.selectionModel().selectedRows())
+        self.open_btn.setEnabled(selected == 1)
+        self.comment_btn.setEnabled(selected == 1)
+        self.status_btn.setEnabled(selected >= 1)
+        self.combined_export_btn.setEnabled(selected >= 2)
+        noun = "session" if selected == 1 else "sessions"
+        self.selection_bar.set_selection(f"{selected} {noun} selected" if selected else "")
 
     def _on_combined_export(self):
         """Emit multi_export_requested with session paths for all selected rows."""
-        selected_rows = self.sessions_table.selectionModel().selectedRows()
-        session_paths = []
-        for idx in selected_rows:
-            item = self.sessions_table.item(idx.row(), 0)
-            path = item.data(Qt.UserRole) if item else None
-            if path:
-                session_paths.append(path)
+        session_paths = self._selected_session_paths()
         if len(session_paths) >= 2:
             self.multi_export_requested.emit(session_paths)
 
@@ -540,6 +543,54 @@ Comments: {comments if comments else "None"}"""
             self.session_selected.emit(session_path)
         else:
             QMessageBox.warning(self, "Error", "Selected session has no valid path.")
+
+    def _selected_session_paths(self) -> list[str]:
+        """Session paths for every selected row, in table order."""
+        paths = []
+        for index in self.sessions_table.selectionModel().selectedRows():
+            item = self.sessions_table.item(index.row(), 0)
+            path = item.data(Qt.UserRole) if item else None
+            if path:
+                paths.append(path)
+        return paths
+
+    def _apply_status_to_selection(self, status: str):
+        """Bulk status write -- the capability the per-row combobox never had.
+
+        Each write goes through _on_status_changed, so manual=True and the
+        error handling stay in one place. One refresh at the end, not one per
+        row: on the production file server that is the difference between one
+        round trip and six.
+        """
+        paths = self._selected_session_paths()
+        if not paths:
+            return
+        for path in paths:
+            self._on_status_changed(path, status)
+        self.refresh_sessions()
+
+    def _edit_comment_for_selection(self):
+        """Comments left the grid in 1e; this is where editing them lives now."""
+        paths = self._selected_session_paths()
+        if len(paths) != 1:
+            return
+        row = self.sessions_table.selectionModel().selectedRows()[0].row()
+        session_name = self.sessions_table.item(row, 0).text()
+        current = next(
+            (
+                s.get("comments", "")
+                for s in self.sessions_data
+                if s.get("session_path") == paths[0]
+            ),
+            "",
+        )
+        text, accepted = QInputDialog.getMultiLineText(
+            self, "Session comment", session_name, current
+        )
+        if not accepted:
+            return
+        self._on_comments_changed(paths[0], text)
+        self.refresh_sessions()
 
     def get_selected_session_path(self) -> str:
         """Get the path of the currently selected session.

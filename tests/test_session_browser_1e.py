@@ -183,3 +183,68 @@ def test_hovering_does_not_move_the_selection(browser):
         ),
     )
     assert browser.sessions_table.currentRow() == 0
+
+
+class TestSelectionBar:
+    def test_it_is_hidden_until_something_is_selected(self, browser):
+        browser.sessions_data = [_session("s1")]
+        browser._populate_table()
+        assert not browser.selection_bar.isVisibleTo(browser)
+
+    def test_one_row_enables_open_but_not_combined_export(self, browser):
+        browser.sessions_data = [_session("s1"), _session("s2")]
+        browser._populate_table()
+        browser.sessions_table.selectRow(0)
+        assert browser.open_btn.isEnabled()
+        assert not browser.combined_export_btn.isEnabled()
+        assert browser.comment_btn.isEnabled()
+
+    def test_two_rows_enable_combined_export_and_disable_the_comment(self, browser):
+        browser.sessions_data = [_session("s1"), _session("s2")]
+        browser._populate_table()
+        browser.sessions_table.selectAll()
+        assert browser.combined_export_btn.isEnabled()
+        assert not browser.comment_btn.isEnabled()
+
+    def test_status_applies_to_every_selected_row(self, browser):
+        browser.sessions_data = [_session("s1"), _session("s2"), _session("s3")]
+        browser._populate_table()
+        browser.sessions_table.selectAll()
+        browser.refresh_sessions = Mock()
+
+        browser._apply_status_to_selection("Archived")
+
+        calls = browser.session_manager.update_session_status.call_args_list
+        assert len(calls) == 3
+        assert all(c.kwargs["manual"] is True for c in calls)
+        assert {c.args[1] for c in calls} == {"archived"}
+        browser.refresh_sessions.assert_called_once()
+
+    def test_the_comment_action_writes_through_the_existing_path(self, browser, monkeypatch):
+        from PySide6.QtWidgets import QInputDialog
+
+        browser.sessions_data = [_session("s1")]
+        browser._populate_table()
+        browser.sessions_table.selectRow(0)
+        monkeypatch.setattr(
+            QInputDialog, "getMultiLineText", lambda *a, **k: ("late courier", True)
+        )
+        browser.refresh_sessions = Mock()
+
+        browser._edit_comment_for_selection()
+
+        browser.session_manager.update_session_info.assert_called_once_with(
+            "/srv/s1", {"comments": "late courier"}
+        )
+
+    def test_cancelling_the_comment_dialog_writes_nothing(self, browser, monkeypatch):
+        from PySide6.QtWidgets import QInputDialog
+
+        browser.sessions_data = [_session("s1")]
+        browser._populate_table()
+        browser.sessions_table.selectRow(0)
+        monkeypatch.setattr(QInputDialog, "getMultiLineText", lambda *a, **k: ("", False))
+
+        browser._edit_comment_for_selection()
+
+        browser.session_manager.update_session_info.assert_not_called()
