@@ -9,11 +9,9 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
-    QLabel,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -24,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.background_worker import BackgroundWorker
-from gui.components import ContextualSelectionBar
+from gui.components import ContextualSelectionBar, FilterBar
 from gui.icons import icon
 from gui.session_row_delegates import (
     ROLE_MANUAL,
@@ -33,6 +31,7 @@ from gui.session_row_delegates import (
     PackingProgressDelegate,
     SessionStatusDelegate,
 )
+from gui.theme_manager import get_density_profile
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.session_lifecycle import derive_status_updates, packing_completion
 from shopify_tool.session_manager import SessionManager
@@ -157,6 +156,7 @@ class SessionBrowserWidget(QWidget):
         self.sessions_data = []
         self.worker = None  # Track active background worker
         self._show_archived = False
+        self._search = ""
         self._is_dirty = True  # forces one load on first show
 
         self._init_ui()
@@ -166,15 +166,23 @@ class SessionBrowserWidget(QWidget):
         """Initialize the UI components."""
         main_layout = QVBoxLayout(self)
 
-        # Create group box
-        group = QGroupBox("Existing Sessions")
-        group_layout = QVBoxLayout(group)
+        # No group box: regions separate by elevation and space (Phase 8 fault
+        # #1). The NavRail destination already names this screen.
+        group_layout = main_layout
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(8)
 
-        # Filter and actions bar
         filter_layout = QHBoxLayout()
 
-        filter_layout.addWidget(QLabel("Status:"))
+        self.filter_bar = FilterBar(self)
+        self.filter_bar.search_field.setPlaceholderText("Search sessions")
+        self.filter_bar.searchChanged.connect(self._on_search_changed)
+        filter_layout.addWidget(self.filter_bar, 1)
 
+        # Status is a server-side query -- it triggers a real refresh -- so it
+        # is not the same kind of control as the search box and stays outside
+        # it. Skipped: a dismissible filter chip; with one filter dimension it
+        # would draw the same state twice. Add chips at a second dimension.
         self.status_filter = WheelIgnoreComboBox()
         self.status_filter.addItems(
             ["All", "Active", "Completed", "Abandoned", "Archived"]
@@ -182,8 +190,6 @@ class SessionBrowserWidget(QWidget):
         self.status_filter.setToolTip("Filter sessions by status")
         self.status_filter.currentTextChanged.connect(self._apply_filter)
         filter_layout.addWidget(self.status_filter)
-
-        filter_layout.addStretch()
 
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.setToolTip("Reload sessions from server")
@@ -220,6 +226,10 @@ class SessionBrowserWidget(QWidget):
         self.sessions_table.doubleClicked.connect(self._on_session_double_clicked)
         self.sessions_table.setSortingEnabled(True)
 
+        vertical = self.sessions_table.verticalHeader()
+        vertical.setDefaultSectionSize(get_density_profile().row_height)
+        vertical.setVisible(False)
+
         self.sessions_table.setItemDelegateForColumn(2, SessionStatusDelegate(self))
         self.sessions_table.setItemDelegateForColumn(6, PackingProgressDelegate(self))
 
@@ -253,8 +263,6 @@ class SessionBrowserWidget(QWidget):
         )
 
         group_layout.addWidget(self.selection_bar)
-
-        main_layout.addWidget(group)
 
         # Enable open/export buttons on actual click or keyboard navigation.
         self.sessions_table.clicked.connect(lambda _: self._on_selection_changed())
@@ -402,6 +410,17 @@ class SessionBrowserWidget(QWidget):
             visible_sessions = [
                 s for s in self.sessions_data if s.get("status") != "archived"
             ]
+        if self._search:
+            visible_sessions = [
+                s
+                for s in visible_sessions
+                if self._search in s.get("session_name", "").lower()
+            ]
+        total = len(self.sessions_data)
+        shown = len(visible_sessions)
+        self.filter_bar.set_count(
+            f"{shown} sessions" if shown == total else f"{shown} of {total} sessions"
+        )
         self.sessions_table.setSortingEnabled(False)
         self.sessions_table.setRowCount(len(visible_sessions))
 
@@ -497,6 +516,12 @@ Comments: {comments if comments else "None"}"""
         """Toggling this only re-filters the already-loaded self.sessions_data --
         no new file-server call, since the whole index is already in memory."""
         self._show_archived = checked
+        self._populate_table()
+
+    def _on_search_changed(self, text: str):
+        """Client-side: 42 sessions are already in memory, so searching them
+        must not cost a file-server round trip the way the status filter does."""
+        self._search = text.strip().lower()
         self._populate_table()
 
     def mark_dirty(self):

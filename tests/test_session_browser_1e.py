@@ -248,3 +248,51 @@ class TestSelectionBar:
         browser._edit_comment_for_selection()
 
         browser.session_manager.update_session_info.assert_not_called()
+
+
+class TestFilterRow:
+    def test_search_narrows_rows_without_hitting_the_file_server(self, browser):
+        browser.sessions_data = [_session("alpha"), _session("beta"), _session("alphabet")]
+        browser._populate_table()
+        assert browser.sessions_table.rowCount() == 3
+
+        browser.filter_bar.search_field.setText("alpha")
+
+        assert browser.sessions_table.rowCount() == 2
+        browser.session_manager.list_client_sessions.assert_not_called()
+
+    def test_search_is_case_insensitive(self, browser):
+        browser.sessions_data = [_session("Alpha"), _session("beta")]
+        browser._populate_table()
+        browser.filter_bar.search_field.setText("ALPHA")
+        assert browser.sessions_table.rowCount() == 1
+
+    def test_the_count_says_how_many_of_how_many(self, browser):
+        browser.sessions_data = [_session("alpha"), _session("beta")]
+        browser._populate_table()
+        assert browser.filter_bar.count_label.text() == "2 sessions"
+        browser.filter_bar.search_field.setText("alpha")
+        assert browser.filter_bar.count_label.text() == "1 of 2 sessions"
+
+    def test_there_is_no_group_box(self, browser):
+        from PySide6.QtWidgets import QGroupBox
+
+        # Regions separate by elevation and space, not by a border drawing a
+        # label the NavRail destination already shows.
+        assert browser.findChildren(QGroupBox) == []
+
+
+def test_row_height_follows_the_density_profile(qapp):
+    from gui.theme_manager import get_density, get_density_profile, set_density
+
+    original = get_density()
+    try:
+        for name in ("desk", "floor"):
+            set_density(name)
+            widget = SessionBrowserWidget(Mock(), parent=None)
+            assert (
+                widget.sessions_table.verticalHeader().defaultSectionSize()
+                == get_density_profile().row_height
+            )
+    finally:
+        set_density(original)
