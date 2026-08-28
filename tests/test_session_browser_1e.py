@@ -79,3 +79,107 @@ class TestPackingProgressDelegate:
 
         assert PackingProgressDelegate().bar_fraction(-1.0) == 0.0
         assert PackingProgressDelegate().bar_fraction(None) == 0.0
+
+
+from unittest.mock import Mock
+
+from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtGui import QMouseEvent
+
+from gui.session_browser_widget import SessionBrowserWidget
+from gui.session_row_delegates import ROLE_MANUAL, ROLE_TOKEN
+
+
+@pytest.fixture
+def browser(qapp):
+    widget = SessionBrowserWidget(Mock(), parent=None)
+    widget.current_client_id = "M"
+    return widget
+
+
+def _session(name, **overrides):
+    data = {
+        "session_name": name,
+        "session_path": f"/srv/{name}",
+        "status": "active",
+        "created_at": "2026-08-27T14:02:00",
+        "comments": "",
+        "statistics": {"packing_lists": [], "total_orders": 3, "total_items": 9},
+        "packing_progress": {},
+    }
+    data.update(overrides)
+    return data
+
+
+class TestNoCellWidgets:
+    def test_every_cell_is_a_plain_item(self, browser):
+        browser.sessions_data = [_session("s1"), _session("s2", status="completed")]
+        browser._populate_table()
+        table = browser.sessions_table
+        assert table.columnCount() == 7
+        for row in range(table.rowCount()):
+            for col in range(table.columnCount()):
+                assert table.cellWidget(row, col) is None, (row, col)
+                assert table.item(row, col) is not None, (row, col)
+
+    def test_the_status_cell_carries_its_role_and_authorship(self, browser):
+        browser.sessions_data = [
+            _session("manual", status="completed", status_manually_set=True),
+            _session("derived", status="completed"),
+        ]
+        browser._populate_table()
+        by_name = {
+            browser.sessions_table.item(r, 0).text(): browser.sessions_table.item(r, 2)
+            for r in range(browser.sessions_table.rowCount())
+        }
+        assert by_name["manual"].data(ROLE_TOKEN) == "status_success"
+        assert by_name["manual"].data(ROLE_MANUAL) is True
+        assert by_name["derived"].data(ROLE_MANUAL) is False
+
+    def test_the_tooltip_now_reaches_the_status_cell(self, browser):
+        # It did not before: item(row, 2) was None because a combobox sat there.
+        browser.sessions_data = [_session("s1")]
+        browser._populate_table()
+        assert "Session: s1" in browser.sessions_table.item(0, 2).toolTip()
+
+
+class TestCommentMarker:
+    def test_a_comment_shows_a_marker_and_stays_in_the_tooltip(self, browser):
+        browser.sessions_data = [_session("s1", comments="short pick, ask Dana")]
+        browser._populate_table()
+        name = browser.sessions_table.item(0, 0)
+        assert not name.icon().isNull()
+        assert "short pick, ask Dana" in name.toolTip()
+
+    def test_no_comment_means_no_marker(self, browser):
+        browser.sessions_data = [_session("s1")]
+        browser._populate_table()
+        assert browser.sessions_table.item(0, 0).icon().isNull()
+
+    def test_the_marker_does_not_touch_the_display_text(self, browser):
+        # Sorting and every existing name assertion depend on this.
+        browser.sessions_data = [_session("s1", comments="x")]
+        browser._populate_table()
+        assert browser.sessions_table.item(0, 0).text() == "s1"
+
+
+def test_hovering_does_not_move_the_selection(browser):
+    # The viewport eventFilter existed only because interactive cell widgets
+    # forwarded mouse-move. With no cell widgets a plain QTableWidget already
+    # leaves the selection alone -- this proves it before the filter is deleted.
+    browser.sessions_data = [_session("s1"), _session("s2"), _session("s3")]
+    browser._populate_table()
+    browser.sessions_table.setCurrentCell(0, 0)
+    viewport = browser.sessions_table.viewport()
+    target = browser.sessions_table.visualRect(browser.sessions_table.model().index(2, 0))
+    QApplication.sendEvent(
+        viewport,
+        QMouseEvent(
+            QEvent.Type.MouseMove,
+            QPoint(target.center()),
+            Qt.NoButton,
+            Qt.NoButton,
+            Qt.NoModifier,
+        ),
+    )
+    assert browser.sessions_table.currentRow() == 0

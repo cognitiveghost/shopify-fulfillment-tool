@@ -7,13 +7,12 @@ with filtering by status and the ability to open existing sessions.
 import logging
 from datetime import datetime
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -23,7 +22,14 @@ from PySide6.QtWidgets import (
 )
 
 from gui.background_worker import BackgroundWorker
-from gui.theme_manager import get_theme_manager
+from gui.icons import icon
+from gui.session_row_delegates import (
+    ROLE_MANUAL,
+    ROLE_TOKEN,
+    STATUS_ROLES,
+    PackingProgressDelegate,
+    SessionStatusDelegate,
+)
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shopify_tool.session_lifecycle import derive_status_updates, packing_completion
 from shopify_tool.session_manager import SessionManager
@@ -193,7 +199,7 @@ class SessionBrowserWidget(QWidget):
 
         # Sessions table
         self.sessions_table = QTableWidget()
-        self.sessions_table.setColumnCount(8)
+        self.sessions_table.setColumnCount(7)
         self.sessions_table.setHorizontalHeaderLabels(
             [
                 "Session Name",
@@ -203,7 +209,6 @@ class SessionBrowserWidget(QWidget):
                 "Items",
                 "Packing Lists",
                 "Packing",
-                "Comments",
             ]
         )
         self.sessions_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -212,23 +217,14 @@ class SessionBrowserWidget(QWidget):
         self.sessions_table.doubleClicked.connect(self._on_session_double_clicked)
         self.sessions_table.setSortingEnabled(True)
 
-        # Set column widths
+        self.sessions_table.setItemDelegateForColumn(2, SessionStatusDelegate(self))
+        self.sessions_table.setItemDelegateForColumn(6, PackingProgressDelegate(self))
+
         header = self.sessions_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 150)  # Session Name
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(1, 150)  # Created
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 100)  # Status
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 80)  # Orders
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(4, 80)  # Items
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 120)  # Packing Lists
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(6, 90)  # Packing
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)  # Comments
+        for column, width in ((1, 150), (2, 130), (3, 80), (4, 80), (5, 120), (6, 130)):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+            header.resizeSection(column, width)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
 
         group_layout.addWidget(self.sessions_table)
 
@@ -253,12 +249,6 @@ class SessionBrowserWidget(QWidget):
         group_layout.addLayout(button_layout)
 
         main_layout.addWidget(group)
-
-        # Block mouse-move-only events on the viewport so Qt does not change the
-        # current/selected row while the user is just hovering (no button pressed).
-        # Without this, cell widgets (ComboBox, LineEdit) forward hover events that
-        # cause the table to visually jump selection to whichever row the cursor is over.
-        self.sessions_table.viewport().installEventFilter(self)
 
         # Enable open/export buttons on actual click or keyboard navigation.
         self.sessions_table.clicked.connect(lambda _: self._on_selection_changed())
@@ -412,10 +402,13 @@ class SessionBrowserWidget(QWidget):
         for row, session_info in enumerate(visible_sessions):
             session_path = session_info.get("session_path", "")
             stats = session_info.get("statistics", {})
+            comments = session_info.get("comments", "")
 
             # Column 0: Session name
             name_item = QTableWidgetItem(session_info.get("session_name", ""))
             name_item.setData(Qt.UserRole, session_path)
+            if comments:
+                name_item.setIcon(icon("message-square"))
             self.sessions_table.setItem(row, 0, name_item)
 
             # Column 1: Created at
@@ -432,29 +425,15 @@ class SessionBrowserWidget(QWidget):
             created_item = QTableWidgetItem(created_str)
             self.sessions_table.setItem(row, 1, created_item)
 
-            # Column 2: Status (EDITABLE COMBOBOX)
+            # Column 2: Status -- painted by SessionStatusDelegate. The role and
+            # the authorship flag ride on the item; the delegate owns the paint.
             status = session_info.get("status", "active")
-            status_combo = WheelIgnoreComboBox()
-            status_combo.addItems(["Active", "Completed", "Abandoned", "Archived"])
-            status_combo.setCurrentText(status.capitalize())
-            # Color code by status
-            theme = get_theme_manager().get_current_theme()
-            if status == "active":
-                status_combo.setStyleSheet(f"QComboBox {{ color: {theme.status_info}; }}")
-            elif status == "completed":
-                status_combo.setStyleSheet(f"QComboBox {{ color: {theme.status_success}; }}")
-            elif status == "abandoned":
-                status_combo.setStyleSheet(f"QComboBox {{ color: {theme.status_danger}; }}")
-            elif status == "archived":
-                status_combo.setStyleSheet(
-                    f"QComboBox {{ color: {theme.text_secondary}; }}"
-                )
-            status_combo.currentTextChanged.connect(
-                lambda new_status, path=session_path: self._on_status_changed(
-                    path, new_status
-                )
+            status_item = QTableWidgetItem(status.capitalize())
+            status_item.setData(ROLE_TOKEN, STATUS_ROLES.get(status, "text_secondary"))
+            status_item.setData(
+                ROLE_MANUAL, bool(session_info.get("status_manually_set", False))
             )
-            self.sessions_table.setCellWidget(row, 2, status_combo)
+            self.sessions_table.setItem(row, 2, status_item)
 
             # Column 3: Orders (READ-ONLY)
             orders_count = stats.get("total_orders", 0)
@@ -485,16 +464,6 @@ class SessionBrowserWidget(QWidget):
             packing_item.setTextAlignment(Qt.AlignCenter)
             self.sessions_table.setItem(row, 6, packing_item)
 
-            # Column 7: Comments (EDITABLE LINE EDIT)
-            comments = session_info.get("comments", "")
-            comments_edit = QLineEdit(comments)
-            comments_edit.setPlaceholderText("Add comments...")
-            comments_edit.editingFinished.connect(
-                lambda path=session_path,
-                widget=comments_edit: self._on_comments_changed(path, widget.text())
-            )
-            self.sessions_table.setCellWidget(row, 7, comments_edit)
-
             # Build tooltip with full info
             packing_lists_str = ", ".join(stats.get("packing_lists", [])) or "None"
             tooltip = f"""Session: {session_info.get("session_name", "")}
@@ -507,10 +476,8 @@ Packed: {packed}/{total} lists completed in Packing Tool
 Comments: {comments if comments else "None"}"""
 
             # Apply tooltip to all cells in row
-            for col in range(8):
-                item = self.sessions_table.item(row, col)
-                if item:
-                    item.setToolTip(tooltip)
+            for col in range(self.sessions_table.columnCount()):
+                self.sessions_table.item(row, col).setToolTip(tooltip)
 
         self.sessions_table.setSortingEnabled(True)
         # Sort by created date descending (newest first)
@@ -631,21 +598,6 @@ Comments: {comments if comments else "None"}"""
             logger.exception("Failed to update comments")
             # Don't show error dialog for comments (less critical)
             # Just log the error
-
-    def eventFilter(self, watched, event):
-        """Block hover-only mouse moves on the table viewport.
-
-        Prevents Qt from changing the selected row when the user moves the mouse
-        over sessions without clicking. Only mouseMoveEvent with no button pressed
-        is blocked — drag-selection (button held) still works normally.
-        """
-        if (
-            watched is self.sessions_table.viewport()
-            and event.type() == QEvent.Type.MouseMove
-            and not event.buttons()
-        ):
-            return True  # consume event — no selection change on hover
-        return super().eventFilter(watched, event)
 
     def showEvent(self, event):
         """Refresh only if something changed since the last load -- avoids
