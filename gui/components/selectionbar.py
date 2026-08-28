@@ -39,10 +39,14 @@ class ContextualSelectionBar(QWidget):
         self.count_label.setText(count_text)
         self.setVisible(bool(count_text))
 
-    def add_action(self, label: str, slot, role: str = "secondary") -> QPushButton:
-        """Append an action button. Raises ValueError on an unknown role."""
+    def add_action(self, label: str, slot=None, role: str = "secondary") -> QPushButton:
+        """Append an action button. Raises ValueError on an unknown role.
+
+        slot is optional: a button that opens a QMenu has no clicked handler.
+        """
         button = QPushButton(label, self)
         set_button_role(button, role)   # raises ValueError on a typo
-        button.clicked.connect(slot)
+        if slot is not None:
+            button.clicked.connect(slot)
         self.layout().addWidget(button)
         return button
