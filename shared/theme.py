@@ -278,6 +278,14 @@ _MIN_CONTRAST_ON_PLANES = {
 
 _STATUS_ROLES = ("info", "success", "warning", "danger")
 
+# Foregrounds that can land on a selected row. Selection is selection_bg with
+# a selection_border ring, so the selected row is a fifth plane -- it is just
+# not a `surface_*` one, which is exactly why it escaped _SURFACE_PLANES.
+_SELECTION_FOREGROUNDS = (
+    "text", "text_secondary",
+    "status_info", "status_success", "status_warning", "status_danger",
+)
+
 
 def validate_theme(theme: ThemeTokens) -> None:
     """Raise ValueError if a theme violates the design-system contract.
@@ -309,6 +317,21 @@ def validate_theme(theme: ThemeTokens) -> None:
                 f"{getattr(theme, canonical)!r}"
             )
 
+    for token in _SELECTION_FOREGROUNDS:
+        ratio = contrast_ratio(getattr(theme, token), theme.selection_bg)
+        if ratio < 4.5:
+            raise ValueError(
+                f"{theme.name}.{token} has {ratio:.2f}:1 contrast against "
+                f"selection_bg, below the 4.5:1 minimum"
+            )
+
+    ring = contrast_ratio(theme.selection_border, theme.selection_bg)
+    if ring < 3.0:
+        raise ValueError(
+            f"{theme.name}.selection_border has {ring:.2f}:1 contrast against "
+            f"selection_bg, below the 3.0:1 minimum"
+        )
+
     for token, floor in _MIN_CONTRAST_ON_PLANES.items():
         value = getattr(theme, token)
         for plane in _SURFACE_PLANES:
@@ -335,13 +358,6 @@ def validate_theme(theme: ThemeTokens) -> None:
                 f"{theme.name}.on_accent has {ratio:.2f}:1 contrast against "
                 f"{fill}, below the 4.5:1 minimum"
             )
-
-    selected_text = contrast_ratio(theme.text, theme.selection_bg)
-    if selected_text < 4.5:
-        raise ValueError(
-            f"{theme.name}.text has {selected_text:.2f}:1 contrast against "
-            f"selection_bg, below the 4.5:1 minimum"
-        )
 
 
 def _relative_luminance(hex_color: str) -> float:
@@ -426,10 +442,14 @@ CHIP_VARIANTS = ("chip", "edge")
 class StatusChip(QLabel):
     """A read-only status badge: a role name, a label, and the live tokens.
 
-    Two variants. `chip` is a pill filled with the role's own tint --
-    validate_theme already proves every status_* against its status_*_bg at
-    4.5:1, so the chip's contrast is guaranteed by the existing gate. `edge`
-    is a row/lane marker: a coloured left border on a transparent ground.
+    Two variants. `chip` is a pill filled with the role's own tint and
+    outlined in the role's own foreground. The fill alone cannot be trusted
+    to carry the pill's shape: status_info_bg is identical to selection_bg in
+    dark, and a role with no `<role>_bg` partner (text_secondary, for the
+    "Not Started" row) falls back to surface_sunken at 1.05:1 on surface.
+    The outline is validated everywhere the fill is not -- validate_theme
+    proves every status_* on all four planes and on selection_bg. `edge` is a
+    row/lane marker: a coloured left border on a transparent ground.
 
     A role with no `<role>_bg` partner (text_secondary, for the "Not Started"
     row) falls back to surface_sunken. That is the one place a missing token
@@ -468,7 +488,8 @@ class StatusChip(QLabel):
         tint = getattr(theme, f"{role}_bg", theme.surface_sunken)
         self.setStyleSheet(
             f"background-color: {tint}; color: {fg}; "
-            f"border: none; border-radius: {theme.radius}px; padding: 2px 8px;"
+            f"border: 1px solid {fg}; border-radius: {theme.radius}px; "
+            f"padding: 2px 8px;"
         )
 
 
@@ -679,7 +700,17 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
-        QTableView::item:selected {{ background-color: {theme.accent_fill}; color: {theme.on_accent}; }}
+        QTableView::item {{
+            border-top: 2px solid transparent;
+            border-bottom: 2px solid transparent;
+        }}
+        QTableView::item:selected {{
+            background-color: {theme.selection_bg};
+            color: {theme.text};
+            border-top: 2px solid {theme.selection_border};
+            border-bottom: 2px solid {theme.selection_border};
+        }}
+        QTableView::item:selected:hover {{ background-color: {theme.selection_bg}; }}
         QTableView::item:hover {{ background-color: {theme.hover}; }}
         QHeaderView::section {{
             background-color: {theme.surface_raised};
@@ -698,7 +729,14 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
-        QListWidget::item:selected {{ background-color: {theme.accent_fill}; color: {theme.on_accent}; }}
+        QListWidget::item {{ border: 2px solid transparent; }}
+        QListWidget::item:selected {{
+            background-color: {theme.selection_bg};
+            color: {theme.text};
+            border: 2px solid {theme.selection_border};
+            border-radius: {r}px;
+        }}
+        QListWidget::item:selected:hover {{ background-color: {theme.selection_bg}; }}
         QListWidget::item:hover {{ background-color: {theme.hover}; }}
 
         QScrollBar:vertical {{ background-color: {theme.surface}; width: 12px; border: none; }}
