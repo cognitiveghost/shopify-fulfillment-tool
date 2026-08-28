@@ -100,6 +100,14 @@ class SessionStatusDelegate(QStyledItemDelegate):
                 # surface (5.4:1+ both themes) whereas status_success on white
                 # is only 2.8:1. The chip form needs no equivalent -- its tint
                 # clears 4.3:1 on accent_fill unaided.
+                #
+                # ponytail: this whole branch is a workaround for a selection
+                # style the design system does not actually want. shared/theme.py
+                # :682 paints QTableView::item:selected with accent_fill, but
+                # 8.9's brief specifies "a 2px selection_border ring on
+                # selection_bg, not an accent fill". Under that style the dot is
+                # status_info on selection_bg = 4.8:1 and needs no disc at all.
+                # Delete this branch when selection moves to the ring.
                 painter.setBrush(QColor(theme.surface))
                 painter.drawEllipse(
                     rect.left() - 2, top - 2, diameter + 4, diameter + 4
