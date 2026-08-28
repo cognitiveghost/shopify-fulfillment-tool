@@ -286,6 +286,12 @@ _SELECTION_FOREGROUNDS = (
     "status_info", "status_success", "status_warning", "status_danger",
 )
 
+# Non-text marks drawn on a selected row: the ring itself, and `border`, which
+# PackingProgressDelegate uses for the progress track. 3:1 is the WCAG floor
+# for non-text; `border` measures ~3.2:1 on selection_bg and cannot join the
+# 4.5 tuple above.
+_SELECTION_NON_TEXT = ("selection_border", "border")
+
 
 def validate_theme(theme: ThemeTokens) -> None:
     """Raise ValueError if a theme violates the design-system contract.
@@ -325,12 +331,13 @@ def validate_theme(theme: ThemeTokens) -> None:
                 f"selection_bg, below the 4.5:1 minimum"
             )
 
-    ring = contrast_ratio(theme.selection_border, theme.selection_bg)
-    if ring < 3.0:
-        raise ValueError(
-            f"{theme.name}.selection_border has {ring:.2f}:1 contrast against "
-            f"selection_bg, below the 3.0:1 minimum"
-        )
+    for token in _SELECTION_NON_TEXT:
+        ratio = contrast_ratio(getattr(theme, token), theme.selection_bg)
+        if ratio < 3.0:
+            raise ValueError(
+                f"{theme.name}.{token} has {ratio:.2f}:1 contrast against "
+                f"selection_bg, below the 3.0:1 minimum"
+            )
 
     for token, floor in _MIN_CONTRAST_ON_PLANES.items():
         value = getattr(theme, token)
@@ -451,10 +458,9 @@ class StatusChip(QLabel):
     proves every status_* on all four planes and on selection_bg. `edge` is a
     row/lane marker: a coloured left border on a transparent ground.
 
-    A role with no `<role>_bg` partner (text_secondary, for the "Not Started"
-    row) falls back to surface_sunken. That is the one place a missing token
-    is tolerated rather than raised -- the role itself is still resolved with
-    getattr, so a typo in the role name still fails loudly.
+    That fallback is the one place a missing token is tolerated rather than
+    raised -- the role itself is still resolved with getattr, so a typo in the
+    role name still fails loudly.
 
     This is deliberately not the filter chip: a filter chip is interactive and
     dismissible. Merging them would mean one widget with a `clickable` flag.

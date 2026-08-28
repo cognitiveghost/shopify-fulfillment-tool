@@ -99,9 +99,8 @@ class SessionStatusDelegate(QStyledItemDelegate):
                 height,
             )
             painter.setBrush(QColor(tint))
-            painter.setPen(QColor(fg))
+            painter.setPen(QColor(fg))          # the pill's outline, then its label
             painter.drawRoundedRect(pill, height / 2, height / 2)
-            painter.setPen(QColor(fg))
             painter.drawText(pill, Qt.AlignCenter, text)
 
         painter.restore()

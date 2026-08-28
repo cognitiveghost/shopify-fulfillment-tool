@@ -2,7 +2,12 @@
 
 from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPen
-from PySide6.QtWidgets import QStyle, QStyledItemDelegate
+from PySide6.QtWidgets import (
+    QApplication,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+)
 
 from gui.theme_manager import apply_font
 from shopify_tool.tag_manager import get_tag_color, parse_tags
@@ -17,13 +22,16 @@ class TagDelegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         """Paint tags as colored badges while respecting row background and selection."""
-        # Handle selection highlight; fall back to model background color
-        if option.state & QStyle.State_Selected:
-            painter.fillRect(option.rect, option.palette.highlight())
-        else:
-            bg_color = index.data(Qt.BackgroundRole)
-            if bg_color:
-                painter.fillRect(option.rect, bg_color)
+        # Let the style paint the background -- it resolves the selected row
+        # (selection_bg plus its share of the selection_border ring) and the
+        # model's BackgroundRole alike. Not palette.highlight(): that is still
+        # accent_fill, which would punch an accent block through the row and
+        # drop this cell's segment of the ring.
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        style = opt.widget.style() if opt.widget else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
 
         # Get tags to render
         tags_value = index.data(Qt.DisplayRole)

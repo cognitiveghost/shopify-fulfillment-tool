@@ -380,13 +380,19 @@ def role_stylesheet(theme: ThemeTokens) -> str:
         QListWidget#settingsNav::item {{
             padding: 6px 10px;
             border-radius: {theme.radius}px;
-            /* matches :selected's accent bar so selecting does not shift text */
+            /* The generic QListWidget::item:selected ring is a `border`
+               shorthand, so it wins on all four sides unless this rule
+               restates them. This nav marks position, not data selection:
+               the bar is left-only, and transparent here so selecting does
+               not shift the text. */
+            border: 2px solid transparent;
             border-left: 2px solid transparent;
         }}
         QListWidget#settingsNav::item:hover {{ background-color: {theme.hover}; }}
         QListWidget#settingsNav::item:selected {{
             background-color: {theme.selection_bg};
             color: {theme.text};
+            border: 2px solid transparent;
             border-left: 2px solid {theme.accent_fill};
         }}
         QListWidget#settingsNav::item:disabled {{

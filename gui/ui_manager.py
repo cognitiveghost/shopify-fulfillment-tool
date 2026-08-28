@@ -57,8 +57,12 @@ def _recent_list_height(widget: QListWidget) -> int:
     empty -- and it is empty when the panel is built. The trailing +4 is the
     slack that makes the fifth row fit whole rather than clipped (the viewport
     otherwise lands at 5.23 rows).
+
+    The +4 on the row itself is the transparent 2px top/bottom border every
+    QListWidget::item carries so that selecting one does not shift its text
+    (shared/theme.py). Without it the fifth row clips again.
     """
-    row = QFontMetrics(widget.font()).height()
+    row = QFontMetrics(widget.font()).height() + 4
     return row * _RECENT_SESSIONS_ROWS + 2 * widget.frameWidth() + 4
 
 

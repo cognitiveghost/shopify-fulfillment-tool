@@ -12,12 +12,11 @@ checkbox appearance -- a plain box that doesn't match the surrounding
 themed row, i.e. exactly the reported "blank white box".
 """
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pandas as pd
 import pytest
 from PySide6.QtCore import QRect
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage, QPainter, QStandardItemModel
 from PySide6.QtWidgets import QApplication, QStyle, QStyleOptionViewItem, QTableView
 
 from gui.checkbox_delegate import CheckboxDelegate
@@ -44,6 +43,9 @@ def qapp():
 @pytest.fixture
 def table(qapp):
     t = QTableView()
+    # A real model, so paint() gets a real QModelIndex. It has no mapToSource,
+    # which is the branch the delegate takes here (falls back to index.row()).
+    t.setModel(QStandardItemModel(1, 1))
     t.show()
     return t
 
@@ -56,9 +58,7 @@ def _paint_checkbox(table):
     )
     delegate = CheckboxDelegate(selection_helper)
 
-    index = Mock()
-    index.model.return_value = object()  # no mapToSource -> falls back to index.row()
-    index.row.return_value = 0
+    index = table.model().index(0, 0)
 
     option = QStyleOptionViewItem()
     option.rect = QRect(0, 0, 30, 30)

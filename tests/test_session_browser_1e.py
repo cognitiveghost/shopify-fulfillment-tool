@@ -308,7 +308,7 @@ def test_row_height_follows_the_density_profile(qapp):
 
 
 class TestASelectedRowStaysReadable:
-    """Was three workarounds; is now one property of the theme.
+    """Was two workarounds; is now one property of the theme.
 
     Selection is selection_bg with a selection_border ring, and every
     foreground a delegate can draw is validated against selection_bg by
@@ -336,14 +336,15 @@ class TestASelectedRowStaysReadable:
         finally:
             manager.set_theme(before)
 
-    def test_the_delegate_has_no_selected_state_branch_left(self):
-        import inspect
-
+    def test_the_selected_state_helper_is_gone(self):
+        # An interface fact, not a substring scan of the source: label_color()
+        # existed only to swap in on_accent on a selected row, and the ring
+        # removes the reason for it. Sibling delegates elsewhere in the app may
+        # still legitimately read State_Selected, so this asserts the helper is
+        # gone rather than that the phrase is absent.
         from gui import session_row_delegates
 
-        source = inspect.getsource(session_row_delegates)
-        assert "State_Selected" not in source
-        assert "label_color" not in source
+        assert not hasattr(session_row_delegates, "label_color")
 
 
 class TestTheDelegatesActuallyPaint:
