@@ -62,3 +62,20 @@ class TestAuthorshipPicksTheForm:
         kind, _fg, tint = SessionStatusDelegate().form("status_info", manual=False)
         assert kind == "chip"
         assert tint == get_theme_manager().get_current_theme().status_info_bg
+
+
+class TestPackingProgressDelegate:
+    def test_a_ratio_becomes_a_clamped_fraction(self, qapp):
+        from gui.session_row_delegates import PackingProgressDelegate
+
+        delegate = PackingProgressDelegate()
+        assert delegate.bar_fraction(0.75) == 0.75
+        assert delegate.bar_fraction(1.0) == 1.0
+
+    def test_no_packing_lists_draws_no_bar(self, qapp):
+        # _RatioSortItem stores -1.0 for "no lists at all", which must not
+        # render as an empty-but-present bar -- the cell reads a dash.
+        from gui.session_row_delegates import PackingProgressDelegate
+
+        assert PackingProgressDelegate().bar_fraction(-1.0) == 0.0
+        assert PackingProgressDelegate().bar_fraction(None) == 0.0

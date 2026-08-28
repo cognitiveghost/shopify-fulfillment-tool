@@ -105,3 +105,53 @@ class SessionStatusDelegate(QStyledItemDelegate):
             painter.drawText(pill, Qt.AlignCenter, text)
 
         painter.restore()
+
+
+class PackingProgressDelegate(QStyledItemDelegate):
+    """Draws `packed/total` as a bar beside its own text.
+
+    The bar takes the left two thirds and the text sits to its right --
+    deliberately not text-over-bar, which would put theme.text on a
+    status_success fill, a pairing no contrast test covers.
+    """
+
+    def bar_fraction(self, ratio) -> float:
+        """0.0 when there is nothing to show. -1.0 means "no packing lists"."""
+        if not isinstance(ratio, (int, float)) or ratio < 0:
+            return 0.0
+        return min(1.0, float(ratio))
+
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        text = opt.text
+        opt.text = ""
+        style = opt.widget.style() if opt.widget else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+
+        theme = get_theme_manager().get_current_theme()
+        fraction = self.bar_fraction(index.data(Qt.UserRole))
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        cell = option.rect.adjusted(8, 0, -8, 0)
+        bar_width = int(cell.width() * 0.6)
+
+        if fraction > 0 or index.data(Qt.UserRole) == 0.0:
+            track = QRect(cell.left(), cell.center().y() - 3, bar_width, 6)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(theme.surface_sunken))
+            painter.drawRoundedRect(track, 3, 3)
+            filled = QRect(track)
+            filled.setWidth(int(track.width() * fraction))
+            if filled.width() > 0:
+                painter.setBrush(QColor(theme.status_success))
+                painter.drawRoundedRect(filled, 3, 3)
+
+        painter.setPen(QColor(theme.text))
+        painter.drawText(
+            cell.adjusted(bar_width + 8, 0, 0, 0),
+            Qt.AlignVCenter | Qt.AlignRight,
+            text,
+        )
+        painter.restore()
