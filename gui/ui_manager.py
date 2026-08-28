@@ -82,9 +82,8 @@ class UIManager:
     # menu in main_window_pyside.py is rebuilt on every right-click, so its
     # icons pick up the new colour for free.
     _TAB_ICONS = ("clipboard-list", "table", "folder-open", "info", "wrench")
-    # Labels are the five former tab titles, verbatim. Renaming a destination
-    # and moving it in the same release is what the parent spec's §6
-    # guardrail 2 forbids.
+    # The five former tab titles. Still the pages' own titles; the rail uses
+    # _RAIL_LABELS instead -- see below.
     _TAB_LABELS = (
         "Session Setup",
         "Analysis Results",
@@ -92,6 +91,13 @@ class UIManager:
         "Information",
         "Tools",
     )
+    # 8.6 shipped the rail with _TAB_LABELS verbatim, because guardrail 2 of
+    # the parent spec's §6 forbids renaming a destination and moving it in the
+    # same release. The move has shipped, so the rename is allowed now -- and
+    # needed: at 56px the rail elides five of the six to "Ses...tup" /
+    # "Anal...ults" / "Ses...ser", which is worse than no label. The full names
+    # survive as the tooltips in _TAB_TOOLTIPS.
+    _RAIL_LABELS = ("Setup", "Results", "Browse", "Info", "Tools")
     _TAB_TOOLTIPS = (
         "Session setup and file loading (Ctrl+1)",
         "View and edit analysis results (Ctrl+2)",
@@ -185,16 +191,24 @@ class UIManager:
             self._create_tab4_information(),
             self._create_tab5_tools(),
         )
-        for page, label, icon_name, tip in zip(
-            pages, self._TAB_LABELS, self._TAB_ICONS, self._TAB_TOOLTIPS, strict=True
+        for page, label, rail_label, icon_name, tip in zip(
+            pages,
+            self._TAB_LABELS,
+            self._RAIL_LABELS,
+            self._TAB_ICONS,
+            self._TAB_TOOLTIPS,
+            strict=True,
         ):
             self.mw.main_tabs.addTab(page, label)
-            index = self.mw.nav_rail.add_item(icon_name, label)
-            self.mw.nav_rail.button(index).setToolTip(tip)
+            index = self.mw.nav_rail.add_item(icon_name, rail_label)
+            # The rail label is abbreviated, so the tooltip is the only place
+            # the destination's full name still appears. _TAB_TOOLTIPS holds
+            # descriptions ("Statistics and logs"), not names, so lead with it.
+            self.mw.nav_rail.button(index).setToolTip(f"{label} — {tip}")
 
         # Server Connection is an app setting, not a destination -- footer.
         self.mw.connection_btn = self.mw.nav_rail.add_footer_item(
-            "settings", "Server Connection"
+            "settings", "Server"
         )
         self.mw.connection_btn.setToolTip("Server Connection settings")
         self.mw.connection_btn.clicked.connect(self._open_connection_settings)
