@@ -46,6 +46,17 @@ def chip_colors(role: str, theme) -> tuple[str, str]:
     return getattr(theme, role), getattr(theme, f"{role}_bg", theme.surface_sunken)
 
 
+def label_color(option, theme) -> str:
+    """Text colour for a delegate that draws its own label.
+
+    A selected row is painted accent_fill by shared/theme.py, and accent_fill is
+    the same blue in both themes while theme.text is not -- so theme.text lands
+    at 3.3:1 on a selected row in light. on_accent is the partner token.
+    """
+    selected = bool(option.state & QStyle.State_Selected)
+    return theme.on_accent if selected else theme.text
+
+
 class SessionStatusDelegate(QStyledItemDelegate):
     """Paints the Status cell as a dot plus label, or as a tinted pill.
 
@@ -81,11 +92,21 @@ class SessionStatusDelegate(QStyledItemDelegate):
 
         if kind == "dot":
             diameter = 8
+            top = rect.center().y() - diameter // 2
+            if opt.state & QStyle.State_Selected:
+                # The dot's own colour measures ~1.05:1 against accent_fill, so
+                # it needs a disc behind it to read at all. surface, not
+                # on_accent: the status tokens are already validated against
+                # surface (5.4:1+ both themes) whereas status_success on white
+                # is only 2.8:1. The chip form needs no equivalent -- its tint
+                # clears 4.3:1 on accent_fill unaided.
+                painter.setBrush(QColor(theme.surface))
+                painter.drawEllipse(
+                    rect.left() - 2, top - 2, diameter + 4, diameter + 4
+                )
             painter.setBrush(QColor(fg))
-            painter.drawEllipse(
-                rect.left(), rect.center().y() - diameter // 2, diameter, diameter
-            )
-            painter.setPen(QColor(theme.text))
+            painter.drawEllipse(rect.left(), top, diameter, diameter)
+            painter.setPen(QColor(label_color(opt, theme)))
             painter.drawText(
                 rect.adjusted(diameter + 6, 0, 0, 0),
                 Qt.AlignVCenter | Qt.AlignLeft,
@@ -140,7 +161,9 @@ class PackingProgressDelegate(QStyledItemDelegate):
         if fraction > 0 or index.data(Qt.UserRole) == 0.0:
             track = QRect(cell.left(), cell.center().y() - 3, bar_width, 6)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(theme.surface_sunken))
+            # Not surface_sunken: it measures 1.05:1 against surface in dark,
+            # so an empty bar showed no denominator at all. border is 3.69:1.
+            painter.setBrush(QColor(theme.border))
             painter.drawRoundedRect(track, 3, 3)
             filled = QRect(track)
             filled.setWidth(int(track.width() * fraction))
@@ -148,7 +171,7 @@ class PackingProgressDelegate(QStyledItemDelegate):
                 painter.setBrush(QColor(theme.status_success))
                 painter.drawRoundedRect(filled, 3, 3)
 
-        painter.setPen(QColor(theme.text))
+        painter.setPen(QColor(label_color(opt, theme)))
         painter.drawText(
             cell.adjusted(bar_width + 8, 0, 0, 0),
             Qt.AlignVCenter | Qt.AlignRight,

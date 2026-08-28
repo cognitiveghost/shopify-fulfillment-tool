@@ -3,12 +3,22 @@
 Spec: docs/superpowers/specs/2026-08-28-phase8.7-1e-session-browser-design.md
 """
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QApplication,
+    QStyle,
+    QStyleOptionViewItem,
+    QTableWidget,
+    QTableWidgetItem,
+)
 
 from gui.session_row_delegates import (
     STATUS_ROLES,
+    PackingProgressDelegate,
     SessionStatusDelegate,
     chip_colors,
+    label_color,
 )
 from gui.theme_manager import get_theme_manager
 
@@ -296,3 +306,126 @@ def test_row_height_follows_the_density_profile(qapp):
             )
     finally:
         set_density(original)
+
+
+class TestASelectedRowStaysReadable:
+    """The gap that shipped issues 1 and 2 in review.
+
+    Selection is painted `accent_fill`, which is the *same* blue in both themes
+    while the status tokens are not -- so a delegate that draws its own text and
+    reads only `theme.text` lands at 3.3:1 on a selected row in light, and the
+    status dot at 1.05:1. form() can never catch that; only the painted pairing
+    can. Task 6 Step 4 was meant to catch it by eye and the VM had no display.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_theme(self):
+        manager = get_theme_manager()
+        before = manager.get_current_theme().name
+        yield
+        manager.set_theme(before)
+
+    @pytest.mark.parametrize("theme_name", ["light", "dark"])
+    def test_the_label_switches_to_on_accent_on_a_selected_row(self, qapp, theme_name):
+        from shared.theme import contrast_ratio
+
+        manager = get_theme_manager()
+        manager.set_theme(theme_name)
+        theme = manager.get_current_theme()
+
+        option = QStyleOptionViewItem()
+        option.state = QStyle.State_Enabled
+        assert label_color(option, theme) == theme.text
+
+        option.state |= QStyle.State_Selected
+        assert label_color(option, theme) == theme.on_accent
+        assert contrast_ratio(theme.on_accent, theme.accent_fill) >= 4.5
+
+    @pytest.mark.parametrize("theme_name", ["light", "dark"])
+    def test_the_dot_gets_a_surface_backing_disc(self, qapp, theme_name):
+        # The dot keeps its role colour so urgency still reads. The disc behind
+        # it does two jobs, and both are non-text contrast (3:1): separate the
+        # dot from the selection blue, and give the dot the plane its token was
+        # actually designed against.
+        from shared.theme import contrast_ratio
+
+        manager = get_theme_manager()
+        manager.set_theme(theme_name)
+        theme = manager.get_current_theme()
+        assert contrast_ratio(theme.surface, theme.accent_fill) >= 3.0
+        for role in STATUS_ROLES.values():
+            fg, _tint = chip_colors(role, theme)
+            assert contrast_ratio(fg, theme.surface) >= 3.0, role
+
+    @pytest.mark.parametrize("theme_name", ["light", "dark"])
+    def test_the_packing_track_is_visible_against_the_row(self, qapp, theme_name):
+        # surface_sunken measured 1.05:1 here in dark: an empty bar showed no
+        # denominator at all, which is the whole point of a progress track.
+        from shared.theme import contrast_ratio
+
+        manager = get_theme_manager()
+        manager.set_theme(theme_name)
+        theme = manager.get_current_theme()
+        assert contrast_ratio(theme.border, theme.surface) >= 3.0
+
+
+class TestTheDelegatesActuallyPaint:
+    """paint() had no coverage at all: offscreen widgets that are never shown
+    never repaint, so the painting code shipped without ever being executed."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_theme(self):
+        manager = get_theme_manager()
+        before = manager.get_current_theme().name
+        yield
+        manager.set_theme(before)
+
+    @pytest.mark.parametrize("theme_name", ["light", "dark"])
+    @pytest.mark.parametrize("selected", [False, True])
+    @pytest.mark.parametrize("manual", [False, True])
+    def test_status_delegate_paints(self, qapp, theme_name, selected, manual):
+        get_theme_manager().set_theme(theme_name)
+
+        table = QTableWidget(1, 1)
+        item = QTableWidgetItem("Active")
+        item.setData(ROLE_TOKEN, "status_info")
+        item.setData(ROLE_MANUAL, manual)
+        table.setItem(0, 0, item)
+
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 130, 28)
+        option.state = QStyle.State_Enabled
+        if selected:
+            option.state |= QStyle.State_Selected
+
+        pixmap = QPixmap(130, 28)
+        painter = QPainter(pixmap)
+        try:
+            SessionStatusDelegate(table).paint(
+                painter, option, table.model().index(0, 0)
+            )
+        finally:
+            painter.end()
+
+    @pytest.mark.parametrize("theme_name", ["light", "dark"])
+    @pytest.mark.parametrize("ratio", [-1.0, 0.0, 0.5, 1.0, None])
+    def test_packing_delegate_paints(self, qapp, theme_name, ratio):
+        get_theme_manager().set_theme(theme_name)
+
+        table = QTableWidget(1, 1)
+        item = QTableWidgetItem("2/4")
+        item.setData(Qt.UserRole, ratio)
+        table.setItem(0, 0, item)
+
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, 130, 28)
+        option.state = QStyle.State_Enabled | QStyle.State_Selected
+
+        pixmap = QPixmap(130, 28)
+        painter = QPainter(pixmap)
+        try:
+            PackingProgressDelegate(table).paint(
+                painter, option, table.model().index(0, 0)
+            )
+        finally:
+            painter.end()

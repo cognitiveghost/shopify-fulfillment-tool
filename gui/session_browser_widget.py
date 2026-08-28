@@ -168,7 +168,6 @@ class SessionBrowserWidget(QWidget):
 
         # No group box: regions separate by elevation and space (Phase 8 fault
         # #1). The NavRail destination already names this screen.
-        group_layout = main_layout
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(8)
 
@@ -204,7 +203,7 @@ class SessionBrowserWidget(QWidget):
         self.show_archived_btn.toggled.connect(self._on_show_archived_toggled)
         filter_layout.addWidget(self.show_archived_btn)
 
-        group_layout.addLayout(filter_layout)
+        main_layout.addLayout(filter_layout)
 
         # Sessions table
         self.sessions_table = QTableWidget()
@@ -227,6 +226,9 @@ class SessionBrowserWidget(QWidget):
         self.sessions_table.setSortingEnabled(True)
 
         vertical = self.sessions_table.verticalHeader()
+        # ponytail: read once. theme_manager has no density_changed signal, so a
+        # desk<->floor switch lands on this table at next restart. Wire a signal
+        # if a second painted table needs it.
         vertical.setDefaultSectionSize(get_density_profile().row_height)
         vertical.setVisible(False)
 
@@ -239,14 +241,11 @@ class SessionBrowserWidget(QWidget):
             header.resizeSection(column, width)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
 
-        group_layout.addWidget(self.sessions_table)
+        main_layout.addWidget(self.sessions_table)
 
         self.selection_bar = ContextualSelectionBar(self)
 
-        self.comment_btn = self.selection_bar.add_action(
-            "Comment…", self._edit_comment_for_selection
-        )
-        self.status_btn = self.selection_bar.add_action("Status ▾", lambda: None)
+        self.status_btn = self.selection_bar.add_action("Status ▾")
         status_menu = QMenu(self.status_btn)
         for label in ("Active", "Completed", "Abandoned", "Archived"):
             status_menu.addAction(
@@ -254,15 +253,25 @@ class SessionBrowserWidget(QWidget):
                 lambda _checked=False, value=label: self._apply_status_to_selection(value),
             )
         self.status_btn.setMenu(status_menu)
+        self.status_btn.setToolTip("Set the status of every selected session")
+
+        self.comment_btn = self.selection_bar.add_action(
+            "Comment…", self._edit_comment_for_selection
+        )
+        self.comment_btn.setToolTip("Edit this session's comment")
 
         self.combined_export_btn = self.selection_bar.add_action(
             "Export Combined Stock", self._on_combined_export
         )
+        self.combined_export_btn.setToolTip(
+            "Select 2+ sessions to export a combined stock summary"
+        )
         self.open_btn = self.selection_bar.add_action(
             "Open", self._on_open_clicked, role="primary"
         )
+        self.open_btn.setToolTip("Load the selected session")
 
-        group_layout.addWidget(self.selection_bar)
+        main_layout.addWidget(self.selection_bar)
 
         # Enable open/export buttons on actual click or keyboard navigation.
         self.sessions_table.clicked.connect(lambda _: self._on_selection_changed())
@@ -421,6 +430,9 @@ class SessionBrowserWidget(QWidget):
         self.filter_bar.set_count(
             f"{shown} sessions" if shown == total else f"{shown} of {total} sessions"
         )
+        header = self.sessions_table.horizontalHeader()
+        sort_column = header.sortIndicatorSection()
+        sort_order = header.sortIndicatorOrder()
         self.sessions_table.setSortingEnabled(False)
         self.sessions_table.setRowCount(len(visible_sessions))
 
@@ -505,8 +517,12 @@ Comments: {comments if comments else "None"}"""
                 self.sessions_table.item(row, col).setToolTip(tooltip)
 
         self.sessions_table.setSortingEnabled(True)
-        # Sort by created date descending (newest first)
-        self.sessions_table.sortItems(1, Qt.DescendingOrder)
+        # Created descending is the default, but this method now runs on every
+        # search keystroke -- hardcoding the sort here would snap the table back
+        # to column 1 mid-word after the user sorted by something else.
+        if sort_column < 0:
+            sort_column, sort_order = 1, Qt.DescendingOrder
+        self.sessions_table.sortItems(sort_column, sort_order)
 
     def _apply_filter(self):
         """Apply the status filter."""
@@ -590,8 +606,16 @@ Comments: {comments if comments else "None"}"""
         paths = self._selected_session_paths()
         if not paths:
             return
-        for path in paths:
-            self._on_status_changed(path, status)
+        failed = [
+            p for p in paths if not self._on_status_changed(p, status, quiet=True)
+        ]
+        if failed:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to update status on {len(failed)} of {len(paths)} sessions.\n"
+                "See the log for details.",
+            )
         self.refresh_sessions()
 
     def _edit_comment_for_selection(self):
@@ -630,12 +654,16 @@ Comments: {comments if comments else "None"}"""
         item = self.sessions_table.item(current_row, 0)
         return item.data(Qt.UserRole) if item else ""
 
-    def _on_status_changed(self, session_path: str, new_status: str):
-        """Handle status change in table.
+    def _on_status_changed(
+        self, session_path: str, new_status: str, *, quiet: bool = False
+    ) -> bool:
+        """Handle status change in table. Returns True on success.
 
         Args:
             session_path: Full path to session directory
             new_status: New status text (capitalized)
+            quiet: report failure by return value only -- a bulk write shows one
+                dialog for the whole selection, not one per row.
         """
         try:
             # Convert to lowercase for storage
@@ -648,12 +676,16 @@ Comments: {comments if comments else "None"}"""
             self.session_manager.update_session_status(session_path, status, manual=True)
 
             logger.info(f"Updated session status: {session_path} -> {status}")
+            return True
 
         except Exception as e:
             logger.exception("Failed to update status")
+            if quiet:
+                return False
             QMessageBox.critical(self, "Error", f"Failed to update status:\n{e!s}")
             # Revert to previous value
             self.refresh_sessions()
+            return False
 
     def _on_comments_changed(self, session_path: str, comments: str):
         """Handle comments change in table.
