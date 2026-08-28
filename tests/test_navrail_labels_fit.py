@@ -24,16 +24,23 @@ def qapp():
 # QToolButton keeps a few px of padding either side of the label.
 TEXT_BUDGET = RAIL_WIDTH - 8
 
-# The dev machine falls back to a narrower "Sans Serif" than the Inter/Segoe UI
-# the production Windows build resolves, so a label that exactly fills the
-# budget here still elides there. Demand real headroom, not a bare fit.
-HEADROOM = 0.10
+# The "Sans Serif" alias resolves to whatever font is installed on the box
+# running the test -- Noto Sans on this dev machine, DejaVu Sans on the CI
+# runner -- so measuring it made the test's result depend on which fonts a
+# given Linux machine happens to have, not on the label. Pin a specific,
+# widely-available font so every machine measures the same thing, and add a
+# little headroom on top since it's still a Linux proxy for the Inter/Segoe UI
+# the production Windows build actually resolves.
+MEASURING_FONT = "DejaVu Sans"
+HEADROOM = 0.05
 
 
 @pytest.fixture
 def metrics(qapp):
     rail = NavRail()
-    return QFontMetrics(rail.button(rail.add_item("clipboard-list", "x")).font())
+    font = rail.button(rail.add_item("clipboard-list", "x")).font()
+    font.setFamily(MEASURING_FONT)
+    return QFontMetrics(font)
 
 
 @pytest.mark.parametrize("label", [*UIManager._RAIL_LABELS, "Server"])
