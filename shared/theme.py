@@ -529,11 +529,8 @@ def restore_window_geometry(window, settings, key: str = "window_geometry") -> b
     return True
 
 
-# Opt-in on purpose: a QPushButton with no `role` property keeps exactly its
-# current accent-filled appearance. Neutral-by-default is fewer edits but
-# restyles 147 buttons across both apps at once, leaving no screen with a
-# primary until 8.6/8.7 designate one. The flip belongs in the cycle that
-# touches screens, not here.
+# A QPushButton with no `role` property is secondary. Primary is opt-in via
+# set_button_role -- see build_stylesheet's bare QPushButton rule.
 BUTTON_ROLES = ("primary", "secondary", "ghost", "danger")
 
 
@@ -562,16 +559,21 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             font-family: {theme.font_family};
         }}
 
+        /* The default is secondary. A button is primary only where a screen or
+           dialog says so -- see set_button_role. Before 2026-08-29 this rule was
+           the [role="primary"] rule minus font-weight, which made every one of
+           the ~103 unmarked buttons across both apps render as the screen's
+           primary action. */
         QPushButton {{
-            background-color: {theme.accent_fill};
-            color: {theme.on_accent};
+            background-color: {theme.surface_raised};
+            color: {theme.text};
             border: 1px solid {theme.border};
             border-radius: {r}px;
             padding: 6px 12px;
             font-size: 10pt;
         }}
-        QPushButton:hover {{ background-color: {theme.accent_fill_hover}; }}
-        QPushButton:pressed {{ background-color: {theme.accent_fill_active}; }}
+        QPushButton:hover {{ background-color: {theme.hover}; }}
+        QPushButton:pressed {{ background-color: {theme.selection_bg}; }}
         QPushButton:disabled {{
             background-color: {theme.surface};
             color: {theme.text_disabled};
@@ -593,8 +595,6 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             border: 1px solid {theme.border};
         }}
         QPushButton[role="secondary"]:hover {{ background-color: {theme.hover}; }}
-        /* the bare QPushButton rule presses to dark accent-blue, which reads as
-           primary for the fraction of a second it is held. */
         QPushButton[role="secondary"]:pressed {{ background-color: {theme.selection_bg}; }}
 
         QPushButton[role="ghost"] {{
@@ -848,6 +848,7 @@ if __name__ == "__main__":
     for theme in (LIGHT_THEME, DARK_THEME):
         sheet = build_stylesheet(theme)
         assert "QPushButton" in sheet and theme.accent_fill in sheet
+        assert theme.accent_fill not in sheet.split("QPushButton {", 1)[1].split("}", 1)[0]
         for _role in BUTTON_ROLES:
             assert f'QPushButton[role="{_role}"]' in sheet
         palette = build_palette(theme)
