@@ -1,12 +1,18 @@
-"""The 56px vertical navigation rail that replaces the tab bar.
+"""The vertical navigation rail that replaces a tab bar.
 
 Owns selection state and emits an index -- it knows nothing about tabs,
-stacks or pages. 8.6 connects currentChanged to whatever it replaces, and
-ships the rail with the existing labels verbatim: structure and labels never
-change in the same release.
+stacks or pages. The app connects currentChanged to whatever it replaces,
+and ships the rail with the existing labels verbatim: structure and labels
+never change in the same release.
+
+Canonical source -- see
+docs/superpowers/specs/2026-07-26-unified-ui-design-system-design.md.
+Never hand-edit shopify-fulfillment-tool/shared/navrail.py; run
+shopify-fulfillment-tool/scripts/sync_shared.py after changing this file.
 """
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QButtonGroup,
     QSizePolicy,
@@ -15,9 +21,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.icons import icon
-from gui.theme_manager import font_css, get_theme_manager
+from shared.theme import current_tokens, font_css, theme_notifier
 
+# Depot's desk-density rail. An app whose labels do not fit passes its own
+# width: packing-tool passes 76, because "Statistics" measures 59px against
+# this width's 45.6px budget. Spec 2026-08-29 §4.
 RAIL_WIDTH = 56
 
 
@@ -26,14 +34,15 @@ class NavRail(QWidget):
 
     currentChanged = Signal(int)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, width: int = RAIL_WIDTH) -> None:
         super().__init__(parent)
-        self.setFixedWidth(RAIL_WIDTH)
+        self._width = width
+        self.setFixedWidth(width)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._apply_theme()
         # A widget sheet outranks the app's, so baking the colours in once
         # would leave a light rail over dark pages after a theme toggle.
-        get_theme_manager().theme_changed.connect(self._apply_theme)
+        theme_notifier.changed.connect(self._apply_theme)
 
         self._buttons: list[QToolButton] = []
         self._group = QButtonGroup(self)
@@ -49,8 +58,10 @@ class NavRail(QWidget):
         layout.addStretch()
         self._layout = layout
 
-    def _apply_theme(self) -> None:
-        theme = get_theme_manager().get_current_theme()
+    def _apply_theme(self, _name: str | None = None) -> None:
+        # Takes the signal's argument and ignores it, so the same method can
+        # be the slot and the constructor's direct call.
+        theme = current_tokens()
         # No border: the rail is separated by its own darker plane, not a line.
         # Scoped to NavRail: a bare rule would repaint the buttons too, leaving
         # the checked item indistinguishable from the rest of the rail.
@@ -63,17 +74,27 @@ class NavRail(QWidget):
             f" color: {theme.text}; }}"
         )
 
-    def add_item(self, icon_name: str, label: str) -> int:
-        """Append an item and return its index. Unknown glyph raises KeyError."""
-        glyph = icon(icon_name)                  # raises KeyError on a typo
+    def _make_button(self, glyph: QIcon, label: str) -> QToolButton:
         button = QToolButton(self)
         button.setIcon(glyph)
         button.setText(label)
         button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        button.setCheckable(True)
         button.setAutoRaise(True)
-        button.setFixedWidth(RAIL_WIDTH)
+        button.setFixedWidth(self._width)
         button.setStyleSheet(font_css("caption"))
+        return button
+
+    def add_item(self, glyph: QIcon, label: str) -> int:
+        """Append a destination and return its index.
+
+        Takes a rendered QIcon rather than a glyph name: the icon registry and
+        its SVGs live beside each app's fonts in gui/assets/, and splitting
+        that directory to reach them from here would mean a second datas entry
+        in every frozen build. The caller's icon("name") still raises KeyError
+        on a typo, one frame earlier.
+        """
+        button = self._make_button(glyph, label)
+        button.setCheckable(True)
 
         index = len(self._buttons)
         self._buttons.append(button)
@@ -86,7 +107,7 @@ class NavRail(QWidget):
             self._current = 0
         return index
 
-    def add_footer_item(self, icon_name: str, label: str) -> QToolButton:
+    def add_footer_item(self, glyph: QIcon, label: str) -> QToolButton:
         """Append an app-level action below the destinations.
 
         Deliberately outside self._group and not checkable: an exclusive
@@ -94,14 +115,7 @@ class NavRail(QWidget):
         un-check the current destination and leave the rail lit nowhere
         while the page behind it had not moved.
         """
-        glyph = icon(icon_name)                  # raises KeyError on a typo
-        button = QToolButton(self)
-        button.setIcon(glyph)
-        button.setText(label)
-        button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        button.setAutoRaise(True)
-        button.setFixedWidth(RAIL_WIDTH)
-        button.setStyleSheet(font_css("caption"))
+        button = self._make_button(glyph, label)
         self._layout.addWidget(button)
         return button
 
