@@ -110,9 +110,12 @@ Flipping the default with no other change leaves both apps with **no primary any
 which trades one wrong hierarchy for a flat one. Each app therefore marks its genuine
 primaries in the same commit:
 
-- **packing-tool** — the screen and dialog heroes: `Start Packing`, `Load Session`, `Scan`,
-  `Save & Close`, and each modal's accept button. Estimated 4–6 call sites across 10 files
-  holding 41 buttons.
+- **packing-tool** — four, across 10 files holding 41 buttons: `Start Packing`
+  (`gui/main_window.py:385`), `Load Session` (`gui/session_selector.py:222`),
+  `Restore Selected` (`gui/restore_session_dialog.py:72`) and `Save & Close`
+  (`gui/sku_mapping_dialog.py:132`). Note `Scan` (`gui/packer_mode_widget.py:299`) is
+  **not** one: it is a developer scan simulator beside a `QLineEdit`, not the screen's
+  action.
 - **shopify** — dialog accept buttons, principally. `gui/settings/window.py:186` already
   marks its save button primary and needs nothing. The audit is concentrated in six files:
   `ui_manager.py` (20 buttons), `column_config_dialog.py` (11), `settings/weight.py` (10),
