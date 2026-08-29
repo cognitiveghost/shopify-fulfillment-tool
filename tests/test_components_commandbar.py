@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QPushButton
 
 from gui.components.commandbar import ROW_ACTION, ROW_CLIENT, ROW_SECTION, CommandBar
 
@@ -256,6 +257,63 @@ def test_a_selection_made_before_the_rows_arrive_still_wins(qapp):
     bar.set_clients_from(with_new)
 
     assert bar.current_client() == "NEW"
+
+
+def test_bind_action_mirrors_the_bound_buttons_label_and_state(qapp):
+    source = QPushButton("▶ Run Analysis")
+    source.setToolTip("Start the fulfillment analysis")
+    source.setEnabled(False)
+
+    bar = CommandBar()
+    bar.bind_action(source)
+
+    assert bar.action_button.text() == "▶ Run Analysis"
+    assert bar.action_button.toolTip() == "Start the fulfillment analysis"
+    assert not bar.action_button.isEnabled()
+    assert not bar.action_button.isHidden()
+
+
+def test_a_later_setEnabled_on_the_source_reaches_the_bar(qapp):
+    """QWidget has no enabledChanged signal; EnabledChange is the only notice."""
+    source = QPushButton("Run")
+    source.setEnabled(False)
+    bar = CommandBar()
+    bar.bind_action(source)
+
+    source.setEnabled(True)
+
+    assert bar.action_button.isEnabled()
+
+
+def test_the_bars_click_fires_the_bound_buttons_own_connections(qapp):
+    source = QPushButton("Run")
+    seen = []
+    source.clicked.connect(lambda: seen.append(1))
+    bar = CommandBar()
+    bar.bind_action(source)
+
+    bar.action_button.click()
+
+    assert seen == [1]
+
+
+def test_binding_none_hides_the_slot(qapp):
+    bar = CommandBar()
+    bar.bind_action(QPushButton("Run"))
+    bar.bind_action(None)
+    assert bar.action_button.isHidden()
+
+
+def test_rebinding_stops_the_old_button_reaching_the_bar(qapp):
+    first, second = QPushButton("First"), QPushButton("Second")
+    bar = CommandBar()
+    bar.bind_action(first)
+    bar.bind_action(second)
+
+    first.setEnabled(False)
+
+    assert bar.action_button.text() == "Second"
+    assert bar.action_button.isEnabled()
 
 
 def test_a_theme_toggle_restyles_the_bar(qapp):
