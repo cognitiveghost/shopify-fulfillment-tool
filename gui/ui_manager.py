@@ -49,6 +49,19 @@ _SETUP_COLUMN_SLACK = 24
 _RECENT_PANEL_MAX_WIDTH = 320
 _RECENT_SESSIONS_ROWS = 5
 
+# Tab index -> (main_window attribute holding that screen's primary button,
+# whether the button lives on this screen and should stop painting itself).
+#
+# Screen 2 is the exception: SessionBrowserWidget has no New Session control of
+# its own, so it borrows Session Setup's -- which must keep rendering there,
+# where Run Analysis is the primary and this is not. Hence an explicit flag
+# rather than inferring hiding from the mapping.
+_SCREEN_ACTIONS = {
+    0: ("run_analysis_button", True),
+    1: ("generate_reports_button_tab2", True),
+    2: ("new_session_btn", False),
+}
+
 
 def _recent_list_height(widget: QListWidget) -> int:
     """Height of exactly _RECENT_SESSIONS_ROWS rows.
@@ -232,6 +245,13 @@ class UIManager:
 
         self._setup_tab_shortcuts()
 
+        # The screen's primary action moves into the command bar's one slot.
+        for attribute, hide_in_page in _SCREEN_ACTIONS.values():
+            if hide_in_page:
+                getattr(self.mw, attribute).hide()
+        self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
+        self._bind_screen_action(self.mw.main_tabs.currentIndex())
+
     def _create_command_bar(self) -> CommandBar:
         """The one-row bar that replaces the two-row global header."""
         bar = CommandBar(self.mw)
@@ -242,6 +262,13 @@ class UIManager:
         self.mw.session_info_label = bar.session_label
         bar.set_session("No session")
         return bar
+
+    def _bind_screen_action(self, index: int) -> None:
+        """Point the command bar's one primary at this screen's primary button."""
+        entry = _SCREEN_ACTIONS.get(index)
+        self.mw.command_bar.bind_action(
+            None if entry is None else getattr(self.mw, entry[0])
+        )
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog."""
