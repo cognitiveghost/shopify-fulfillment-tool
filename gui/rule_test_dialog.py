@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 logger = logging.getLogger(__name__)
 from gui.pandas_model import cell_display_text
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
 
 
 class RuleTestDialog(QDialog):
@@ -97,6 +97,7 @@ class RuleTestDialog(QDialog):
         # Close button. Same accept()-not-reject() preservation as
         # groups_management_dialog: this dialog has always closed via accept().
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        apply_dialog_button_roles(button_box)
         button_box.rejected.connect(self.accept)
         layout.addWidget(button_box)
 

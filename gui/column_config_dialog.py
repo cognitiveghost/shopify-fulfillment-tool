@@ -28,7 +28,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import (
+    apply_dialog_button_roles,
+    get_theme_manager,
+    set_button_role,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +272,7 @@ class ColumnConfigPanel(QWidget):
         action_layout.addStretch()
         self.apply_button = QPushButton("Apply Column Configuration")
         self.apply_button.setDefault(True)
+        set_button_role(self.apply_button, "primary")
         action_layout.addWidget(self.apply_button)
         main_layout.addLayout(action_layout)
 
@@ -1049,6 +1054,7 @@ class ColumnConfigDialog(QDialog):
         button_box = QDialogButtonBox(
             QDialogButtonBox.Reset | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
         )
+        apply_dialog_button_roles(button_box)
         self.reset_button = button_box.button(QDialogButtonBox.Reset)
         self.reset_button.setToolTip("Reset all columns to default visibility and order")
         self.reset_button.clicked.connect(self.panel._on_reset)

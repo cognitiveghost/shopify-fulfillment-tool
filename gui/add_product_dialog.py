@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import apply_dialog_button_roles, get_theme_manager
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,7 @@ class AddProductDialog(QDialog):
         accept() itself once the input is good.
         """
         box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        apply_dialog_button_roles(box)
         self.add_btn = box.button(QDialogButtonBox.Ok)
         self.add_btn.setText("Add Product")
         box.accepted.connect(self._on_add_clicked)

@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
 from shopify_tool.tag_manager import validate_tag_categories_v2
 
 logger = logging.getLogger(__name__)
@@ -684,6 +684,7 @@ class TagCategoriesPanel(QWidget):
         dialog_layout.addRow("Quantity:", quantity_spin)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        apply_dialog_button_roles(button_box)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
         dialog_layout.addRow(button_box)
@@ -842,6 +843,7 @@ class TagCategoriesDialog(QDialog):
         button_box = QDialogButtonBox(
             QDialogButtonBox.Save | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
         )
+        apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self._on_save)
         button_box.rejected.connect(self._on_cancel)
         button_box.button(QDialogButtonBox.Apply).clicked.connect(self._on_apply)
