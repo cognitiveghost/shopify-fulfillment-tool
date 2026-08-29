@@ -327,3 +327,22 @@ def test_a_theme_toggle_restyles_the_bar(qapp):
         assert bar.styleSheet() != before
     finally:
         manager.toggle_theme()
+
+
+def test_set_action_after_a_bind_stops_mirroring_the_old_button(qapp):
+    """packing-tool's 8.6b uses set_action on a screen with no button to bind."""
+    source = QPushButton("Run")
+    source.setToolTip("Start the run")
+    source.setEnabled(False)
+    seen = []
+    source.clicked.connect(lambda: seen.append(1))
+    bar = CommandBar()
+    bar.bind_action(source)
+
+    bar.set_action("Pack")
+    bar.action_button.click()
+
+    assert bar.action_button.text() == "Pack"
+    assert bar.action_button.toolTip() == ""
+    assert bar.action_button.isEnabled()
+    assert seen == []

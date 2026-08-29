@@ -272,7 +272,6 @@ class ColumnConfigPanel(QWidget):
         action_layout.addStretch()
         self.apply_button = QPushButton("Apply Column Configuration")
         self.apply_button.setDefault(True)
-        set_button_role(self.apply_button, "primary")
         action_layout.addWidget(self.apply_button)
         main_layout.addLayout(action_layout)
 
@@ -1063,6 +1062,9 @@ class ColumnConfigDialog(QDialog):
 
         self.apply_button = button_box.button(QDialogButtonBox.Apply)
         self.apply_button.setDefault(True)
+        # ApplyRole, so apply_dialog_button_roles above does not reach it -- but
+        # applying the configuration is the only thing this dialog does.
+        set_button_role(self.apply_button, "primary")
         self.apply_button.clicked.connect(self._on_apply)
 
         button_box.rejected.connect(self.reject)

@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from shared.theme import set_button_role
+
 _SETTINGS_KEY = "server_path"
 
 
@@ -144,6 +146,7 @@ class ConnectionSettingsDialog(QDialog):
         )
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        set_button_role(buttons.button(QDialogButtonBox.Save), "primary")
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -181,6 +184,7 @@ def prompt_for_recovery_path(parent, attempted_path: str, org: str) -> bool:
     button_row.addStretch()
     exit_btn = QPushButton("Exit")
     retry_btn = QPushButton("Retry")
+    set_button_role(retry_btn, "primary")
     button_row.addWidget(exit_btn)
     button_row.addWidget(retry_btn)
     layout.addLayout(button_row)
