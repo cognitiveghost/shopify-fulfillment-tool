@@ -22,12 +22,26 @@ from shared.theme import (
     build_palette,
     build_stylesheet,
     get_theme,
-    set_button_role,  # noqa: F401 -- re-exported, see BUTTON_ROLES above
+    set_button_role,
 )
 
 from .fonts import load_bundled_fonts
 
 logger = logging.getLogger(__name__)
+
+
+def apply_dialog_button_roles(box) -> None:
+    """Mark a dialog's accept button primary. Everything else keeps the default.
+
+    Since the default role became secondary, only the one button that commits the
+    dialog needs marking. AcceptRole is Qt's own answer to "which button is that",
+    so a Close-only box correctly comes out with no primary at all.
+    """
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    for button in box.buttons():
+        if box.buttonRole(button) == QDialogButtonBox.ButtonRole.AcceptRole:
+            set_button_role(button, "primary")
 
 
 class ThemeManager(QObject):

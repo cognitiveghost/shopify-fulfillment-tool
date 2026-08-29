@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import apply_dialog_button_roles, get_theme_manager
 from shopify_tool.groups_manager import GroupsManager, GroupsManagerError
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,7 @@ class GroupsManagementDialog(QDialog):
         # has always closed via accept(), and callers may read exec()'s result.
         # Preserving accept() keeps that contract; changing it is out of scope.
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        apply_dialog_button_roles(button_box)
         self.close_btn = button_box.button(QDialogButtonBox.Close)
         button_box.rejected.connect(self.accept)
         layout.addWidget(button_box)

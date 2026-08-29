@@ -26,7 +26,7 @@ from gui.settings.reports import ReportsPage
 from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
 from gui.settings.weight import WeightPage
-from gui.theme_manager import apply_font, set_button_role
+from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
 
 logger = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ class SettingsWindow(QDialog):
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = button_box.button(QDialogButtonBox.Save)
-        set_button_role(self.save_button, "primary")
+        apply_dialog_button_roles(button_box)
         set_button_role(button_box.button(QDialogButtonBox.Cancel), "secondary")
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)

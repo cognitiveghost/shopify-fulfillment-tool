@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import font_css, get_theme_manager, set_button_role
 
 
 class _BaseReportDialog(QDialog):
@@ -105,18 +105,7 @@ class _BaseReportDialog(QDialog):
         self.generate_btn = QPushButton("Generate Report")
         self.generate_btn.setMinimumHeight(40)
         self.generate_btn.setEnabled(False)
-        self.generate_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {self.theme.accent_fill};
-                color: {self.theme.on_accent};
-                {font_css('body', bold=True)}
-                border: none;
-                border-radius: 4px;
-            }}
-            QPushButton:hover {{ background-color: {self.theme.accent_fill_active}; }}
-            QPushButton:pressed {{ background-color: {self.theme.accent_fill_active}; }}
-            QPushButton:disabled {{ background-color: {self.theme.border}; color: {self.theme.text_secondary}; }}
-        """)
+        set_button_role(self.generate_btn, "primary")
         self.generate_btn.clicked.connect(self._on_generate)
         layout.addWidget(self.generate_btn)
 

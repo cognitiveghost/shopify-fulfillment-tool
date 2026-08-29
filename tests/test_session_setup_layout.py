@@ -137,11 +137,18 @@ def test_setup_column_does_not_dramatically_outgrow_the_rest_of_the_app(main_win
     test_setup_column_never_scrolls_horizontally. This test keeps a loose
     ceiling so a *dramatic* future blowup still gets caught, without pinning
     to the pre-8.2 ordering.
+
+    2026-08-29: Tab 1's own primary (Run Analysis) and Tab 2's own primary
+    (Generate Reports) both moved into the CommandBar and hid their in-page
+    copies (see _SCREEN_ACTIONS in ui_manager.py). Tab 2 carried more of the
+    controls that shrank, so it dropped further -- 989px to ~857px -- widening
+    the gap past the old +100 ceiling even though Tab 1 itself (~1022px) did
+    not move. Widened to +200; still loose, not a pin to today's numbers.
     """
     tabs = main_window.main_tabs
     widths = [tabs.widget(i).minimumSizeHint().width() for i in range(tabs.count())]
     setup, others = widths[0], max(widths[1:])
-    assert setup <= others + 100, (
+    assert setup <= others + 200, (
         f"Tab 1 now sets the app's minimum window width ({setup}px vs {others}px "
         f"for the next widest tab) -- the whole app got harder to fit on screen."
     )

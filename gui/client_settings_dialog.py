@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.theme_manager import font_css, get_theme_manager
+from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
 from shopify_tool.groups_manager import GroupsManager
@@ -118,6 +118,7 @@ class ClientCreationDialog(QDialog):
         button_box = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
+        apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self.validate_and_accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
@@ -412,6 +413,7 @@ class ClientSettingsDialog(QDialog):
             QDialogButtonBox.Save | QDialogButtonBox.Cancel
         )
         self.save_button = button_box.button(QDialogButtonBox.Save)
+        apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self._save_and_accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)

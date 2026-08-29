@@ -6,7 +6,7 @@ and it is the only place in the component library that marks a button primary.
 Replaces the sidebar of 70px client cards with a dropdown.
 """
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QIcon,
@@ -113,6 +113,9 @@ class CommandBar(QWidget):
         self.action_button.clicked.connect(self.actionTriggered.emit)
         self.action_button.hide()
         layout.addWidget(self.action_button)
+
+        self._bound_action = None
+        self.action_button.clicked.connect(self._forward_action_click)
 
     def _apply_theme(self) -> None:
         theme = get_theme_manager().get_current_theme()
@@ -304,7 +307,57 @@ class CommandBar(QWidget):
         self.status_chip.setVisible(bool(text))
 
     def set_action(self, label: str) -> QPushButton:
-        """Label and reveal the screen's single primary action."""
+        """Label and reveal the screen's single primary action.
+
+        Drops any bind_action mirroring, and resets what the mirror had set --
+        otherwise a set_action screen following a bind_action one inherits the
+        old button's tooltip and enabled state, and one click fires both
+        actionTriggered and the button that is no longer on screen.
+        """
+        self._unbind()
+        self.action_button.setToolTip("")
+        self.action_button.setEnabled(True)
         self.action_button.setText(label)
         self.action_button.show()
         return self.action_button
+
+    def _unbind(self) -> None:
+        if self._bound_action is not None:
+            self._bound_action.removeEventFilter(self)
+            self._bound_action = None
+
+    def bind_action(self, button: QPushButton | None) -> None:
+        """Mirror a screen's own primary button in the bar's action slot.
+
+        The bound button stays the command: its clicked connections and the
+        setEnabled call sites in file_handler and main_window_pyside keep working
+        untouched, and the bar is a second presentation of it rather than a
+        replacement. Passing None hides the slot, for a screen with no primary.
+
+        ponytail: a hidden QPushButton as the command's model is what QAction
+        does properly, but QPushButton cannot consume a QAction -- only
+        QToolButton can, via setDefaultAction -- so retrofitting one would change
+        the widget class at every call site that touches these three buttons.
+        Revisit if a third presentation of the same command ever appears.
+        """
+        self._unbind()
+        if button is None:
+            self.action_button.hide()
+            return
+        self._bound_action = button
+        button.installEventFilter(self)
+        self.action_button.setToolTip(button.toolTip())
+        self.action_button.setEnabled(button.isEnabled())
+        self.action_button.setText(button.text())
+        self.action_button.show()
+
+    def _forward_action_click(self) -> None:
+        if self._bound_action is not None:
+            self._bound_action.click()
+
+    def eventFilter(self, watched, event):
+        # QWidget has no enabledChanged signal; this event is Qt's only notice.
+        if (watched is self._bound_action
+                and event.type() == QEvent.Type.EnabledChange):
+            self.action_button.setEnabled(watched.isEnabled())
+        return super().eventFilter(watched, event)

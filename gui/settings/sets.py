@@ -27,7 +27,12 @@ from PySide6.QtWidgets import (
 
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
-from gui.theme_manager import font_css, get_theme_manager, set_button_role
+from gui.theme_manager import (
+    apply_dialog_button_roles,
+    font_css,
+    get_theme_manager,
+    set_button_role,
+)
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
 
 
@@ -391,6 +396,7 @@ class SetEditorDialog(QDialog):
 
         # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self._validate_and_save)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)

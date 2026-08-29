@@ -112,3 +112,45 @@ def test_search_still_matches_the_raw_column_name():
 
     assert panel.column_list.item(1).isHidden() is False
     assert panel.column_list.item(2).isHidden() is True
+
+
+def test_the_panels_apply_button_is_not_a_primary():
+    """The panel is embedded twice, and marking its Apply primary is wrong in both.
+
+    In ColumnConfigDialog the panel's Apply is hidden in favour of the button
+    box's; on Settings -> Column Configuration it would sit beside the settings
+    window's own Save, giving that page two primaries.
+    """
+    panel = _make_panel(["Order_Number", "SKU"])
+    assert panel.apply_button.property("role") is None
+
+
+def test_apply_is_the_column_dialogs_one_primary():
+    from PySide6.QtWidgets import QPushButton
+
+    from gui.column_config_dialog import ColumnConfigDialog
+
+    tcm = Mock()
+    tcm.get_current_config.return_value = TableConfig(
+        visible_columns={"Order_Number": True},
+        column_order=["Order_Number"],
+        locked_columns=["Order_Number"],
+    )
+    tcm.get_current_view_name.return_value = "Default"
+    tcm.list_views.return_value = ["Default"]
+    tcm.pm.load_client_config.return_value = {}
+    main_window = Mock()
+    main_window.current_client_id = "TESTCLIENT"
+    main_window.analysis_results_df = None
+
+    dialog = ColumnConfigDialog(tcm, main_window=main_window)
+    try:
+        primaries = [
+            b.text() for b in dialog.findChildren(QPushButton)
+            if b.property("role") == "primary"
+        ]
+        # Reset/Cancel/Apply carry no AcceptRole, so the shared dialog helper
+        # cannot reach Apply -- it is marked directly.
+        assert primaries == ["Apply"]
+    finally:
+        dialog.deleteLater()
