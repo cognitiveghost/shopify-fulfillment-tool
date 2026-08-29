@@ -512,34 +512,6 @@ class UIManager:
 
         return group
 
-    def _create_session_management_group(self):
-        """Creates the 'Session Management' QGroupBox."""
-        from gui.session_browser_widget import SessionBrowserWidget
-
-        group = QGroupBox("Session Management")
-        layout = QVBoxLayout()
-        group.setLayout(layout)
-
-        # Create new session row
-        session_row = QHBoxLayout()
-        self.mw.new_session_btn = QPushButton("Create New Session")
-        self.mw.new_session_btn.setToolTip(
-            "Creates a new session for the current client."
-        )
-        self.mw.new_session_btn.setEnabled(False)  # Enabled when client is selected
-        self.mw.session_path_label = QLabel("No client/session selected.")
-
-        session_row.addWidget(self.mw.new_session_btn)
-        session_row.addWidget(self.mw.session_path_label, 1)
-
-        layout.addLayout(session_row)
-
-        # Add session browser
-        self.mw.session_browser = SessionBrowserWidget(self.mw.session_manager, self.mw)
-        layout.addWidget(self.mw.session_browser)
-
-        return group
-
     def _create_files_group(self):
         """Creates the 'Load Data' QGroupBox with folder support."""
         group = QGroupBox("Load Data")
@@ -749,13 +721,6 @@ class UIManager:
         self.mw.stock_file_path_label.setText("Stock file not selected")
         self.mw.stock_file_status_label.setText("")
         self.mw.stock_file_list_widget.clear()
-
-    def _create_actions_layout(self):
-        """Creates the QHBoxLayout containing the 'Reports' and 'Actions' groups."""
-        layout = QHBoxLayout()
-        layout.addWidget(self._create_reports_group(), 1)
-        layout.addWidget(self._create_main_actions_group(), 3)
-        return layout
 
     def _create_reports_group(self):
         """Creates the 'Reports' QGroupBox."""
