@@ -53,12 +53,21 @@ _RECENT_SESSIONS_ROWS = 5
 def _recent_list_height(widget: QListWidget) -> int:
     """Height of exactly _RECENT_SESSIONS_ROWS rows.
 
-    From font metrics, not sizeHintForRow(), which returns -1 while the list is
-    empty -- and it is empty when the panel is built. The trailing +4 is the
-    slack that makes the fifth row fit whole rather than clipped (the viewport
-    otherwise lands at 5.23 rows).
+    Prefers sizeHintForRow(), Qt's own measurement of an actual row -- it
+    returns -1 while the list is empty, which it is when the panel is first
+    built, so that case falls back to a font-metrics estimate. The +4 on the
+    fallback is the transparent 2px top/bottom border every QListWidget::item
+    carries so selecting one does not shift its text (shared/theme.py);
+    without it the fifth row clips. The trailing +4 is slack for the frame.
+
+    Font-metric estimates drift a pixel from the real row height across
+    Qt/font builds (it did between the dev machine and CI), so
+    refresh_recent_sessions() re-calls this once real items exist to correct
+    the fixed height to the true measurement.
     """
-    row = QFontMetrics(widget.font()).height()
+    row = widget.sizeHintForRow(0)
+    if row < 0:
+        row = QFontMetrics(widget.font()).height() + 4
     return row * _RECENT_SESSIONS_ROWS + 2 * widget.frameWidth() + 4
 
 
@@ -401,6 +410,9 @@ class UIManager:
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, info.get("session_path"))
             self.mw.recent_sessions_list.addItem(item)
+        self.mw.recent_sessions_list.setFixedHeight(
+            _recent_list_height(self.mw.recent_sessions_list)
+        )
 
     def _create_tab2_analysis_results(self):
         """Create Tab 2: Analysis Results

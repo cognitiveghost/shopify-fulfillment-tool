@@ -15,13 +15,21 @@ Two unrelated regressions pinned in one file (same area of the codebase):
 import pytest
 from PySide6.QtWidgets import (
     QApplication,
+    QListWidget,
     QMainWindow,
     QPushButton,
     QScrollArea,
     QSplitter,
 )
 
-from gui.ui_manager import _RECENT_PANEL_MAX_WIDTH, UIManager
+from gui.theme_manager import get_theme_manager
+from gui.ui_manager import (
+    _RECENT_PANEL_MAX_WIDTH,
+    _RECENT_SESSIONS_ROWS,
+    UIManager,
+    _recent_list_height,
+)
+from shared.theme import build_stylesheet
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -136,4 +144,27 @@ def test_setup_column_does_not_dramatically_outgrow_the_rest_of_the_app(main_win
     assert setup <= others + 100, (
         f"Tab 1 now sets the app's minimum window width ({setup}px vs {others}px "
         f"for the next widest tab) -- the whole app got harder to fit on screen."
+    )
+
+
+def test_the_fifth_recent_session_row_fits_whole(qapp):
+    """_recent_list_height() derives a fixed height from font metrics, so any
+    change to what a QListWidget::item costs vertically silently clips a row.
+
+    The selection ring did exactly that: items carry a transparent 2px
+    top/bottom border so selecting one does not shift its text, which put the
+    viewport at 4.24 rows until the helper accounted for it.
+    """
+    widget = QListWidget()
+    widget.setStyleSheet(build_stylesheet(get_theme_manager().get_current_theme()))
+    for i in range(_RECENT_SESSIONS_ROWS):
+        widget.addItem(f"session {i}")
+    widget.setFixedHeight(_recent_list_height(widget))
+    widget.show()
+    QApplication.processEvents()
+
+    row = widget.sizeHintForRow(0)
+    assert widget.viewport().height() >= row * _RECENT_SESSIONS_ROWS, (
+        f"{widget.viewport().height() / row:.2f} rows fit, need "
+        f"{_RECENT_SESSIONS_ROWS}"
     )

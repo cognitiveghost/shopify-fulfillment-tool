@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyledItemDelegate,
     QStyleOptionButton,
+    QStyleOptionViewItem,
 )
 
 
@@ -77,9 +78,17 @@ class CheckboxDelegate(QStyledItemDelegate):
         else:
             source_row = index.row()
 
-        # Draw background first (to match row color)
-        if option.state & QStyle.State_Selected:
-            painter.fillRect(option.rect, option.palette.highlight())
+        # Let the style paint the background. Not palette.highlight(): that is
+        # still accent_fill (QPalette.Highlight drives text selection, and
+        # packing-tool's Packer Mode derives a cell colour from it), while a
+        # selected row is now selection_bg plus a selection_border ring. Filling
+        # it here would punch an accent block through the row and drop this
+        # cell's segment of the ring.
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        style = opt.widget.style() if opt.widget else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
 
         # Only show checkbox for the first row of each order
         if not self._is_first_row_of_order(source_row):

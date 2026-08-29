@@ -18,7 +18,6 @@ from gui.session_row_delegates import (
     PackingProgressDelegate,
     SessionStatusDelegate,
     chip_colors,
-    label_color,
 )
 from gui.theme_manager import get_theme_manager
 
@@ -309,64 +308,43 @@ def test_row_height_follows_the_density_profile(qapp):
 
 
 class TestASelectedRowStaysReadable:
-    """The gap that shipped issues 1 and 2 in review.
+    """Was two workarounds; is now one property of the theme.
 
-    Selection is painted `accent_fill`, which is the *same* blue in both themes
-    while the status tokens are not -- so a delegate that draws its own text and
-    reads only `theme.text` lands at 3.3:1 on a selected row in light, and the
-    status dot at 1.05:1. form() can never catch that; only the painted pairing
-    can. Task 6 Step 4 was meant to catch it by eye and the VM had no display.
+    Selection is selection_bg with a selection_border ring, and every
+    foreground a delegate can draw is validated against selection_bg by
+    validate_theme. So the delegate needs no selected-state branch at all --
+    that is what deleted label_color() and the backing disc.
     """
 
-    @pytest.fixture(autouse=True)
-    def _restore_theme(self):
+    @pytest.mark.parametrize("theme_name", ["light", "dark"])
+    def test_every_painted_foreground_clears_aa_on_a_selected_row(
+        self, qapp, theme_name
+    ):
+        from shared.theme import contrast_ratio
+
         manager = get_theme_manager()
         before = manager.get_current_theme().name
-        yield
-        manager.set_theme(before)
+        try:
+            manager.set_theme(theme_name)
+            theme = manager.get_current_theme()
+            painted = [theme.text] + [
+                getattr(theme, role) for role in STATUS_ROLES.values()
+            ]
+            for fg in painted:
+                ratio = contrast_ratio(fg, theme.selection_bg)
+                assert ratio >= 4.5, f"{theme_name}: {fg} on selection_bg = {ratio:.2f}"
+        finally:
+            manager.set_theme(before)
 
-    @pytest.mark.parametrize("theme_name", ["light", "dark"])
-    def test_the_label_switches_to_on_accent_on_a_selected_row(self, qapp, theme_name):
-        from shared.theme import contrast_ratio
+    def test_the_selected_state_helper_is_gone(self):
+        # An interface fact, not a substring scan of the source: label_color()
+        # existed only to swap in on_accent on a selected row, and the ring
+        # removes the reason for it. Sibling delegates elsewhere in the app may
+        # still legitimately read State_Selected, so this asserts the helper is
+        # gone rather than that the phrase is absent.
+        from gui import session_row_delegates
 
-        manager = get_theme_manager()
-        manager.set_theme(theme_name)
-        theme = manager.get_current_theme()
-
-        option = QStyleOptionViewItem()
-        option.state = QStyle.State_Enabled
-        assert label_color(option, theme) == theme.text
-
-        option.state |= QStyle.State_Selected
-        assert label_color(option, theme) == theme.on_accent
-        assert contrast_ratio(theme.on_accent, theme.accent_fill) >= 4.5
-
-    @pytest.mark.parametrize("theme_name", ["light", "dark"])
-    def test_the_dot_gets_a_surface_backing_disc(self, qapp, theme_name):
-        # The dot keeps its role colour so urgency still reads. The disc behind
-        # it does two jobs, and both are non-text contrast (3:1): separate the
-        # dot from the selection blue, and give the dot the plane its token was
-        # actually designed against.
-        from shared.theme import contrast_ratio
-
-        manager = get_theme_manager()
-        manager.set_theme(theme_name)
-        theme = manager.get_current_theme()
-        assert contrast_ratio(theme.surface, theme.accent_fill) >= 3.0
-        for role in STATUS_ROLES.values():
-            fg, _tint = chip_colors(role, theme)
-            assert contrast_ratio(fg, theme.surface) >= 3.0, role
-
-    @pytest.mark.parametrize("theme_name", ["light", "dark"])
-    def test_the_packing_track_is_visible_against_the_row(self, qapp, theme_name):
-        # surface_sunken measured 1.05:1 here in dark: an empty bar showed no
-        # denominator at all, which is the whole point of a progress track.
-        from shared.theme import contrast_ratio
-
-        manager = get_theme_manager()
-        manager.set_theme(theme_name)
-        theme = manager.get_current_theme()
-        assert contrast_ratio(theme.border, theme.surface) >= 3.0
+        assert not hasattr(session_row_delegates, "label_color")
 
 
 class TestTheDelegatesActuallyPaint:

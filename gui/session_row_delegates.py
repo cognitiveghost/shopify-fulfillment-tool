@@ -46,17 +46,6 @@ def chip_colors(role: str, theme) -> tuple[str, str]:
     return getattr(theme, role), getattr(theme, f"{role}_bg", theme.surface_sunken)
 
 
-def label_color(option, theme) -> str:
-    """Text colour for a delegate that draws its own label.
-
-    A selected row is painted accent_fill by shared/theme.py, and accent_fill is
-    the same blue in both themes while theme.text is not -- so theme.text lands
-    at 3.3:1 on a selected row in light. on_accent is the partner token.
-    """
-    selected = bool(option.state & QStyle.State_Selected)
-    return theme.on_accent if selected else theme.text
-
-
 class SessionStatusDelegate(QStyledItemDelegate):
     """Paints the Status cell as a dot plus label, or as a tinted pill.
 
@@ -93,28 +82,9 @@ class SessionStatusDelegate(QStyledItemDelegate):
         if kind == "dot":
             diameter = 8
             top = rect.center().y() - diameter // 2
-            if opt.state & QStyle.State_Selected:
-                # The dot's own colour measures ~1.05:1 against accent_fill, so
-                # it needs a disc behind it to read at all. surface, not
-                # on_accent: the status tokens are already validated against
-                # surface (5.4:1+ both themes) whereas status_success on white
-                # is only 2.8:1. The chip form needs no equivalent -- its tint
-                # clears 4.3:1 on accent_fill unaided.
-                #
-                # ponytail: this whole branch is a workaround for a selection
-                # style the design system does not actually want. shared/theme.py
-                # :682 paints QTableView::item:selected with accent_fill, but
-                # 8.9's brief specifies "a 2px selection_border ring on
-                # selection_bg, not an accent fill". Under that style the dot is
-                # status_info on selection_bg = 4.8:1 and needs no disc at all.
-                # Delete this branch when selection moves to the ring.
-                painter.setBrush(QColor(theme.surface))
-                painter.drawEllipse(
-                    rect.left() - 2, top - 2, diameter + 4, diameter + 4
-                )
             painter.setBrush(QColor(fg))
             painter.drawEllipse(rect.left(), top, diameter, diameter)
-            painter.setPen(QColor(label_color(opt, theme)))
+            painter.setPen(QColor(theme.text))
             painter.drawText(
                 rect.adjusted(diameter + 6, 0, 0, 0),
                 Qt.AlignVCenter | Qt.AlignLeft,
@@ -129,8 +99,8 @@ class SessionStatusDelegate(QStyledItemDelegate):
                 height,
             )
             painter.setBrush(QColor(tint))
+            painter.setPen(QColor(fg))          # the pill's outline, then its label
             painter.drawRoundedRect(pill, height / 2, height / 2)
-            painter.setPen(QColor(fg))
             painter.drawText(pill, Qt.AlignCenter, text)
 
         painter.restore()
@@ -179,7 +149,7 @@ class PackingProgressDelegate(QStyledItemDelegate):
                 painter.setBrush(QColor(theme.status_success))
                 painter.drawRoundedRect(filled, 3, 3)
 
-        painter.setPen(QColor(label_color(opt, theme)))
+        painter.setPen(QColor(theme.text))
         painter.drawText(
             cell.adjusted(bar_width + 8, 0, 0, 0),
             Qt.AlignVCenter | Qt.AlignRight,
