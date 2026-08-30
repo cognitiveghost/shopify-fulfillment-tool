@@ -352,7 +352,6 @@ class MainWindow(QMainWindow):
         self.filter_input.textChanged.connect(self._filter_debounce.start)
         self.filter_column_selector.currentIndexChanged.connect(self.filter_table)
         self.case_sensitive_checkbox.stateChanged.connect(self.filter_table)
-        self.clear_filter_button.clicked.connect(self.clear_filter)
         self.tag_filter_combo.currentIndexChanged.connect(self.filter_table)
 
         # Inventory memory toggle
@@ -1141,6 +1140,7 @@ class MainWindow(QMainWindow):
             case_sensitive=self.case_sensitive_checkbox.isChecked(),
         )
         self.proxy_model.set_tag_filter(selected_tag)
+        self.ui_manager.update_filter_count()
 
     def _update_all_views(self):
         """Central slot to refresh all UI components after data changes.

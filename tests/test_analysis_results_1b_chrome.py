@@ -91,3 +91,21 @@ def test_the_kpi_strip_counts_orders_fulfillable_blocked_and_items(loaded):
 
 def test_the_summary_label_is_gone(main_window):
     assert not hasattr(main_window, "summary_label")
+
+
+def test_filter_input_is_the_filter_bars_search_field(main_window):
+    assert main_window.filter_input is main_window.filter_bar.search_field
+
+
+def test_the_count_shows_the_total_with_no_filter(loaded):
+    assert loaded.filter_bar.count_label.text() == "3 orders"
+
+
+def test_the_count_narrows_while_a_filter_is_active(loaded):
+    loaded.filter_input.setText("DPD")
+    loaded.filter_table()
+    assert loaded.filter_bar.count_label.text() == "1 of 3 orders"
+
+
+def test_the_clear_button_is_gone(main_window):
+    assert not hasattr(main_window, "clear_filter_button")

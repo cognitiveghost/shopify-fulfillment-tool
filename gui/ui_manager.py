@@ -131,7 +131,6 @@ class UIManager:
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {
         "open_session_folder_button": "folder-open",
         "new_session_btn": "folder-plus",
-        "clear_filter_button": "funnel-x",
         "connection_btn": "settings",
     }
 
@@ -1007,6 +1006,7 @@ class UIManager:
         self.mw.on_results_selection_changed()
 
         self.update_hidden_columns_indicator()
+        self.update_filter_count()
 
     def _selected_order_numbers(self) -> set:
         """The order numbers currently selected, or an empty set."""
@@ -1189,42 +1189,52 @@ class UIManager:
         return group
 
     def _create_filter_controls(self):
-        """Create filter controls for Tab 2 (Analysis Results)."""
+        """Search, scope, case and tag -- 1e's arrangement, on this screen.
+
+        FilterBar owns the search field and the result count; the other three
+        controls sit beside it, not inside it. No filter chips: the two combos
+        already draw their own state and a chip would draw it twice.
+        """
+        from gui.components import FilterBar
+
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
-        layout.addWidget(QLabel("Filter by:"))
+        self.mw.filter_bar = FilterBar(widget)
+        self.mw.filter_bar.search_field.setPlaceholderText("Search orders")
+        # Kept so apply_filter(), Ctrl+F and the 1b tests address it unchanged.
+        self.mw.filter_input = self.mw.filter_bar.search_field
+        layout.addWidget(self.mw.filter_bar, 1)
 
-        # Column selector
         self.mw.filter_column_selector = WheelIgnoreComboBox()
         self.mw.filter_column_selector.addItem("All Columns")
+        self.mw.filter_column_selector.setToolTip("Limit the search to one column")
         layout.addWidget(self.mw.filter_column_selector)
 
-        # Filter input
-        self.mw.filter_input = QLineEdit()
-        self.mw.filter_input.setPlaceholderText("Enter filter text...")
-        self.mw.filter_input.setClearButtonEnabled(True)  # Built-in clear button!
-        layout.addWidget(self.mw.filter_input, 1)
-
-        # Case sensitive checkbox
         self.mw.case_sensitive_checkbox = QCheckBox("Case Sensitive")
         layout.addWidget(self.mw.case_sensitive_checkbox)
 
-        # Clear button
-        self.mw.clear_filter_button = QPushButton("Clear")
-        layout.addWidget(self.mw.clear_filter_button)
-
-        # Separator
-        layout.addWidget(QLabel(" | "))
-
-        # Tag filter
-        layout.addWidget(QLabel("Tag:"))
         self.mw.tag_filter_combo = WheelIgnoreComboBox()
         self.mw.tag_filter_combo.addItem("All Tags", None)
+        self.mw.tag_filter_combo.setToolTip("Show only orders carrying this tag")
         layout.addWidget(self.mw.tag_filter_combo)
 
         return widget
+
+    def update_filter_count(self):
+        """"312 orders", or "48 of 312 orders" while a filter narrows it."""
+        bar = getattr(self.mw, "filter_bar", None)
+        if bar is None:
+            return
+        total = self.mw.proxy_model.sourceModel()
+        total_rows = total.rowCount() if total is not None else 0
+        shown = self.mw.proxy_model.rowCount()
+        bar.set_count(
+            f"{total_rows} orders" if shown == total_rows
+            else f"{shown} of {total_rows} orders"
+        )
 
     def _create_results_actions(self):
         """Create action buttons for Tab 2 (Analysis Results)."""
