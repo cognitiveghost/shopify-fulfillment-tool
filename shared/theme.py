@@ -7,9 +7,11 @@ shopify-fulfillment-tool/scripts/sync_shared.py after changing this file.
 """
 
 import re
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from types import MappingProxyType
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QLabel, QWidget
 
@@ -203,9 +205,205 @@ DARK_THEME = ThemeTokens(
 THEMES: dict = {"light": LIGHT_THEME, "dark": DARK_THEME}
 
 
-def get_theme(name: str) -> ThemeTokens:
+def get_theme(name: str | None) -> ThemeTokens:
     """Look up a theme by name, falling back to light for an unknown name."""
     return THEMES.get(name, LIGHT_THEME)
+
+
+# --- The live theme, and the one place a change is announced ---------------
+
+
+class _ThemeNotifier(QObject):
+    """Signal source for theme changes.
+
+    An instance, not a class each app subclasses: two subclasses would be two
+    independent signals, and a shared widget connected to one would never hear
+    the other app's toggle.
+    """
+
+    changed = Signal(str)
+
+
+theme_notifier = _ThemeNotifier()
+
+# None until an app applies a theme. Each app's apply_theme() is the only
+# writer; nothing here reads QSettings, because the organisation name differs
+# per app ("PackingTool" vs the shopify one) and shared/ must not know it.
+_current: str | None = None
+
+
+def current_theme_name() -> str | None:
+    """The applied theme's name, or None if no app has applied one yet."""
+    return _current
+
+
+def set_current(name: str) -> None:
+    """Record the applied theme and announce the change.
+
+    Call this *last* in an app's apply path, after the stylesheet and palette
+    are on the QApplication: a listener that restyles itself must not run
+    while the app sheet is still the old one.
+    """
+    global _current
+    if name == _current:
+        return                      # re-applying the same theme is not a change
+    _current = name
+    theme_notifier.changed.emit(name)
+
+
+def current_tokens() -> ThemeTokens:
+    """Tokens for the live theme, without any app's bundled font family.
+
+    Shared widgets read colours from here and never font_family: the family
+    arrives through the QApplication stylesheet each app builds from its own
+    font-layered tokens. A widget sheet restating it would pin the fallback
+    family on the one widget that did.
+
+    Before any app has applied a theme this falls back exactly as get_theme()
+    does. It is deliberately not a second, different default: an app that
+    forgets to seed _current should render one app's wrong theme, not two.
+    """
+    return get_theme(_current)
+
+
+@dataclass(frozen=True)
+class TypeStyle:
+    """One rung of the type scale: a point size and a default weight."""
+    size_pt: int
+    bold: bool
+
+
+# 1.20 modular ratio anchored on a 10pt body: 10 -> 12 -> 14.4 -> 17.28,
+# rounded to integers because Qt's QSS parser is unreliable on fractional pt.
+# `caption` is 9pt rather than the geometric 8.33pt -- a deliberate legibility
+# floor for warehouse-floor use. See the 2026-08-12 design spec.
+# `display_xl` (28pt) sits off the ratio on purpose: it is a single-glance
+# numeral read across an aisle, not the next rung up. Spec 2026-08-26 §2/C2.
+# This dict is the *desk* baseline -- see DENSITY_PROFILES for floor's overrides.
+TYPE_SCALE: dict[str, TypeStyle] = {
+    "caption": TypeStyle(9, False),   # hints, tips, feedback, dense card labels
+    "body": TypeStyle(10, False),     # default text and button labels
+    "label": TypeStyle(12, True),     # emphasis, sub-headers, count badges
+    "heading": TypeStyle(14, True),   # dialog and section headers
+    "display": TypeStyle(17, True),   # stat-card numbers
+    "display_xl": TypeStyle(28, True),  # KPI numerals, Packer Mode scan verdict
+}
+
+
+@dataclass(frozen=True)
+class DensityProfile:
+    """One density profile: how tall a control is, how much air it gets, and
+    the two type rungs that move with it.
+
+    Spec 2026-08-26 §2/C3. Colour and radius are deliberately absent -- density
+    never touches them.
+    """
+
+    control_height: int          # px, the finished height of an interactive control
+    row_height: int              # px, table and list row height
+    padding_v: int               # px, must equal a shared.theme spacing token
+    padding_h: int               # px, must equal a shared.theme spacing token
+    type_overrides: Mapping[str, int]  # role -> pt, overriding the TYPE_SCALE baseline
+
+    @property
+    def control_content_height(self) -> int:
+        """What to put in QSS `min-height:` to land on `control_height`.
+
+        Qt's box model treats min-height as the *content* box -- padding and the
+        1px border add on top of it. Emitting `control_height` directly would
+        ship a 40px 'desk' control against a spec that says 32.
+
+        This lands QPushButton, QComboBox and QLineEdit on `control_height`
+        exactly. The QAbstractSpinBox family (QSpinBox, QDoubleSpinBox,
+        QDateEdit) comes out 3px taller: its sizeHint() adds room for the
+        up/down buttons *after* the rule is applied, and min-height is a floor,
+        so it never binds. max-height does not clamp it either (measured, Qt
+        6.11.1/Fusion). It is not a font problem -- the offset is a flat 3px in
+        both profiles, against a content box with 6px of slack over the text.
+        # ponytail: spin boxes run control_height + 3. Upgrade path is an
+        # explicit setFixedHeight() when 8.3 routes widgets through the scale --
+        # not a hardcoded -3 here, which is measured on Linux/Fusion and would
+        # make Windows *shorter* than the rest if its offset differs.
+        """
+        return self.control_height - 2 * self.padding_v - 2
+
+
+# Spec 2026-08-26 §2/C3. Padding values are the spacing tokens (spacing_xs 4 /
+# spacing_sm 8 / spacing_md 12) written as literals rather than read off a
+# ThemeTokens instance: these profiles are frozen module constants and the
+# tokens are per-theme. tests/test_type_scale.py asserts they still match.
+DENSITY_PROFILES: dict[str, DensityProfile] = {
+    "desk": DensityProfile(
+        control_height=32, row_height=28, padding_v=4, padding_h=8,
+        type_overrides=MappingProxyType({}),
+    ),
+    "floor": DensityProfile(
+        control_height=44, row_height=40, padding_v=8, padding_h=12,
+        type_overrides=MappingProxyType({"body": 12, "caption": 10}),
+    ),
+}
+
+# Per-app default, not a global one: a supervisor at a desk with a mouse. Packing
+# Tool defaults to "floor" when it gains a theme manager of its own (8.5/8.9) --
+# "a station that has not been told otherwise is a scan station".
+DEFAULT_DENSITY = "desk"
+
+_active_density: str = DEFAULT_DENSITY
+
+
+def get_density() -> str:
+    """Name of the active density profile."""
+    return _active_density
+
+
+def get_density_profile() -> DensityProfile:
+    """The active density profile."""
+    return DENSITY_PROFILES[_active_density]
+
+
+def set_density(name: str) -> None:
+    """Switch the active profile. Pure -- no QSettings, no restyle, no Qt.
+
+    ThemeManager.set_density() is the call site that also persists and repaints.
+    This one exists so tests (and any non-Qt caller) can move the flag without
+    standing up an application.
+
+    Raises KeyError on an unknown name, matching font_css()'s behaviour on an
+    unknown role: a typo must fail during development, not render at some
+    default density in a warehouse.
+    """
+    global _active_density
+    if name not in DENSITY_PROFILES:
+        raise KeyError(
+            f"Unknown density {name!r}; expected one of {tuple(DENSITY_PROFILES)}"
+        )
+    _active_density = name
+
+
+def type_style(role: str) -> TypeStyle:
+    """The scale rung as the active density renders it.
+
+    TYPE_SCALE is the desk baseline; `floor` overrides `body` and `caption`
+    only. That is spec §2/C3's one deliberate exception to Parcker's "density
+    changes control height and padding only, never type size" -- at arm's
+    length a 10pt body is the failure.
+
+    Raises KeyError on an unknown role.
+    """
+    style = TYPE_SCALE[role]
+    override = get_density_profile().type_overrides.get(role)
+    return style if override is None else replace(style, size_pt=override)
+
+
+def font_css(role: str, bold: bool | None = None) -> str:
+    """QSS fragment for f-string stylesheets, e.g. 'font-size: 12pt; font-weight: bold;'.
+
+    Raises KeyError on an unknown role -- a typo must fail during development
+    rather than silently render at some default size in production.
+    """
+    style = type_style(role)
+    weight = "bold" if (style.bold if bold is None else bold) else "normal"
+    return f"font-size: {style.size_pt}pt; font-weight: {weight};"
 
 
 _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")

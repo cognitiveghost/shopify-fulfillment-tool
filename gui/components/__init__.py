@@ -4,9 +4,9 @@ from gui.components.card import Card
 from gui.components.commandbar import CommandBar
 from gui.components.filterbar import FilterBar
 from gui.components.form_section import FormSection
-from gui.components.navrail import NavRail
 from gui.components.selectionbar import ContextualSelectionBar
 from gui.components.statcard import KpiStrip, StatCard
+from shared.navrail import NavRail
 
 __all__ = [
     "Card",

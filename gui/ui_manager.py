@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 
 from gui.components.card import Card
 from gui.components.commandbar import CommandBar
-from gui.components.navrail import NavRail
+from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
@@ -222,7 +222,7 @@ class UIManager:
             strict=True,
         ):
             self.mw.main_tabs.addTab(page, label)
-            index = self.mw.nav_rail.add_item(icon_name, rail_label)
+            index = self.mw.nav_rail.add_item(icon(icon_name), rail_label)
             # The rail label is abbreviated, so the tooltip is the only place
             # the destination's full name still appears. _TAB_TOOLTIPS holds
             # descriptions ("Statistics and logs"), not names, so lead with it.
@@ -230,7 +230,7 @@ class UIManager:
 
         # Server Connection is an app setting, not a destination -- footer.
         self.mw.connection_btn = self.mw.nav_rail.add_footer_item(
-            "settings", "Server"
+            icon("settings"), "Server"
         )
         self.mw.connection_btn.setToolTip("Server Connection settings")
         self.mw.connection_btn.clicked.connect(self._open_connection_settings)

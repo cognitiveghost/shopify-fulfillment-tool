@@ -13,8 +13,9 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from gui.components.commandbar import CommandBar
-from gui.components.navrail import NavRail
+from gui.icons import icon
 from gui.theme_manager import get_theme_manager
+from shared.navrail import NavRail
 from shared.theme import build_stylesheet
 
 
@@ -56,8 +57,8 @@ def test_the_command_bar_action_still_renders_primary(styled_app):
 
 def test_the_nav_rail_shows_which_item_is_current(styled_app):
     rail = NavRail()
-    rail.add_item("package", "One")
-    rail.add_item("settings", "Two")
+    rail.add_item(icon("package"), "One")
+    rail.add_item(icon("settings"), "Two")
     rail.resize(56, 200)
     rail.show()
     QApplication.processEvents()

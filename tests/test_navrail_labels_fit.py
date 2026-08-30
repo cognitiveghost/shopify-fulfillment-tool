@@ -12,8 +12,9 @@ import pytest
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QApplication
 
-from gui.components.navrail import RAIL_WIDTH, NavRail
+from gui.icons import icon
 from gui.ui_manager import UIManager
+from shared.navrail import RAIL_WIDTH, NavRail
 
 
 @pytest.fixture(scope="module")
@@ -38,7 +39,7 @@ HEADROOM = 0.05
 @pytest.fixture
 def metrics(qapp):
     rail = NavRail()
-    font = rail.button(rail.add_item("clipboard-list", "x")).font()
+    font = rail.button(rail.add_item(icon("clipboard-list"), "x")).font()
     font.setFamily(MEASURING_FONT)
     return QFontMetrics(font)
 
