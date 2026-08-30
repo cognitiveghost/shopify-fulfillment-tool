@@ -460,10 +460,6 @@ class UIManager:
         filter_widget = self._create_filter_controls()
         layout.addWidget(filter_widget)
 
-        # Section 2: Action buttons
-        actions_widget = self._create_results_actions()
-        layout.addWidget(actions_widget)
-
         # Section 2.5: Bulk Operations Toolbar (NEW - hidden by default)
         self.mw.bulk_toolbar = BulkOperationsToolbar()
         self.mw.bulk_toolbar.setVisible(False)
@@ -1221,6 +1217,22 @@ class UIManager:
         self.mw.tag_filter_combo.setToolTip("Show only orders carrying this tag")
         layout.addWidget(self.mw.tag_filter_combo)
 
+        # The screen's one primary action. _SCREEN_ACTIONS[1] binds it into the
+        # CommandBar; it is never shown in the page itself.
+        self.mw.generate_reports_button_tab2 = QPushButton("Generate Reports", widget)
+        self.mw.generate_reports_button_tab2.setEnabled(False)
+        self.mw.generate_reports_button_tab2.setToolTip(
+            "Generate packing lists and stock exports based on pre-defined filters"
+        )
+        self.mw.generate_reports_button_tab2.clicked.connect(
+            lambda: self.mw.actions_handler.open_generate_reports_dialog()
+            if hasattr(self.mw, "actions_handler")
+            else None
+        )
+        self.mw.generate_reports_button_tab2.hide()
+
+        layout.addWidget(self._create_results_overflow(widget))
+
         return widget
 
     def update_filter_count(self):
@@ -1236,92 +1248,70 @@ class UIManager:
             else f"{shown} of {total_rows} orders"
         )
 
-    def _create_results_actions(self):
-        """Create action buttons for Tab 2 (Analysis Results)."""
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
+    def _create_results_overflow(self, parent):
+        """The screen-level actions that are not the screen's one primary.
 
-        # Undo button (left side)
-        self.mw.undo_button = QPushButton("Undo")
-        self.mw.undo_button.setToolTip("Undo last operation (Ctrl+Z)")
-        self.mw.undo_button.setEnabled(False)  # Enabled by undo_manager
-        self.mw.undo_button.clicked.connect(self.mw.undo_last_operation)
-        layout.addWidget(self.mw.undo_button)
+        Generate Reports is the primary (_SCREEN_ACTIONS[1]) and stays a hidden
+        QPushButton bound into the CommandBar. These five are QActions under
+        their old attribute names: every caller reaches them through
+        setEnabled / setToolTip / setText, which QAction has too.
+        """
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu, QToolButton
 
-        # Add separator
-        layout.addSpacing(20)
+        button = QToolButton(parent)
+        button.setText("⋯")
+        button.setToolTip("More actions for this screen")
+        button.setPopupMode(QToolButton.InstantPopup)
+        menu = QMenu(button)
 
-        # Add Product button (Tab 2 version - keep reference for signal connection)
-        self.mw.add_product_button_tab2 = QPushButton("Add Product to Order")
-        self.mw.add_product_button_tab2.setEnabled(False)
-        self.mw.add_product_button_tab2.setToolTip(
-            "Manually add a product to an existing order"
-        )
-        # Connect to same handler as Tab 1 button
-        self.mw.add_product_button_tab2.clicked.connect(
+        def action(label, slot, tooltip, enabled=False):
+            item = QAction(label, menu)
+            item.setToolTip(tooltip)
+            item.setEnabled(enabled)
+            item.triggered.connect(slot)
+            menu.addAction(item)
+            return item
+
+        self.mw.add_product_button_tab2 = action(
+            "Add Product to Order",
             lambda: self.mw.actions_handler.show_add_product_dialog()
             if hasattr(self.mw, "actions_handler")
-            else None
+            else None,
+            "Manually add a product to an existing order",
         )
-        layout.addWidget(self.mw.add_product_button_tab2)
-
-        # Generate Reports button (Tab 2 version)
-        self.mw.generate_reports_button_tab2 = QPushButton("Generate Reports")
-        self.mw.generate_reports_button_tab2.setEnabled(False)
-        self.mw.generate_reports_button_tab2.setToolTip(
-            "Generate packing lists and stock exports based on pre-defined filters"
-        )
-        self.mw.generate_reports_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_generate_reports_dialog()
-            if hasattr(self.mw, "actions_handler")
-            else None
-        )
-        layout.addWidget(self.mw.generate_reports_button_tab2)
-
-        # Settings button (Tab 2 version)
-        self.mw.settings_button_tab2 = QPushButton("Settings")
-        self.mw.settings_button_tab2.setEnabled(False)
-        self.mw.settings_button_tab2.setToolTip(
-            "Open settings for the active client"
-        )
-        self.mw.settings_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_settings_window()
-            if hasattr(self.mw, "actions_handler")
-            else None
-        )
-        layout.addWidget(self.mw.settings_button_tab2)
-
-        # Configure Columns button (Tab 2 version)
-        self.mw.configure_columns_button_tab2 = QPushButton("Configure Columns")
-        self.mw.configure_columns_button_tab2.setEnabled(False)
-        self.mw.configure_columns_button_tab2.setToolTip(
-            "Customize table column visibility and order"
-        )
-        self.mw.configure_columns_button_tab2.clicked.connect(
+        self.mw.configure_columns_button_tab2 = action(
+            "Configure Columns",
             lambda: self.mw.open_column_config_dialog()
             if hasattr(self.mw, "open_column_config_dialog")
-            else None
+            else None,
+            "Customize table column visibility and order",
         )
-        layout.addWidget(self.mw.configure_columns_button_tab2)
+        self.mw.settings_button_tab2 = action(
+            "Settings",
+            lambda: self.mw.actions_handler.open_settings_window()
+            if hasattr(self.mw, "actions_handler")
+            else None,
+            "Open settings for the active client",
+        )
+        # Enabled by undo_manager, like the button it replaces. Ctrl+Z is still
+        # how this is actually invoked, and the tooltip has always said so.
+        self.mw.undo_button = action(
+            "Undo", self.mw.undo_last_operation, "Undo last operation (Ctrl+Z)"
+        )
 
-        # Add separator
-        layout.addSpacing(20)
-
-        # Theme toggle button
+        menu.addSeparator()
         theme_manager = get_theme_manager()
-        self.mw.theme_toggle_btn = QPushButton()
-        self._update_theme_button_text()  # Set initial text based on current theme
-        self.mw.theme_toggle_btn.setToolTip("Toggle between light and dark theme")
-        self.mw.theme_toggle_btn.clicked.connect(self._on_theme_toggle_clicked)
-        layout.addWidget(self.mw.theme_toggle_btn)
-
-        # Connect to theme_changed signal to update button text
+        self.mw.theme_toggle_btn = action(
+            "", self._on_theme_toggle_clicked, "Toggle between light and dark theme",
+            enabled=True,
+        )
+        self._update_theme_button_text()
         theme_manager.theme_changed.connect(self._update_theme_button_text)
 
-        layout.addStretch()
-
-        return widget
+        button.setMenu(menu)
+        self.mw.results_overflow_button = button
+        return button
 
     def _create_results_table(self):
         """Create results table for Tab 2 (Analysis Results) with tag panel."""
