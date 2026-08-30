@@ -137,3 +137,29 @@ def test_generate_reports_stays_a_button_bound_to_the_command_bar(main_window):
 
     assert isinstance(main_window.generate_reports_button_tab2, QPushButton)
     assert main_window.generate_reports_button_tab2.isHidden()
+
+
+def test_the_selection_bar_is_hidden_with_nothing_selected(loaded):
+    loaded._update_selection_bar_state()
+    assert loaded.selection_bar.isHidden()
+
+
+def test_selecting_a_row_shows_the_bar_and_names_the_selection(loaded):
+    loaded.tableView.selectRow(0)
+    loaded._update_selection_bar_state()
+    assert not loaded.selection_bar.isHidden()
+    assert "order" in loaded.selection_bar.count_label.text()
+
+
+def test_select_all_is_gone_and_ctrl_a_does_the_job(loaded):
+    assert not hasattr(loaded, "_on_bulk_select_all")
+    loaded.tableView.selectAll()
+    orders, _items = loaded.selection_helper.get_selection_summary()
+    assert orders == 3
+
+
+def test_the_bulk_operations_toolbar_module_is_gone():
+    import importlib
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("gui.bulk_operations_toolbar")

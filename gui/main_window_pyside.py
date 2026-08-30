@@ -377,32 +377,6 @@ class MainWindow(QMainWindow):
         # Add Ctrl+Z shortcut for Undo
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_operation)
 
-        # Bulk operations toolbar signals
-        if hasattr(self, "bulk_toolbar"):
-            self.bulk_toolbar.select_all_clicked.connect(self._on_bulk_select_all)
-            self.bulk_toolbar.clear_selection_clicked.connect(
-                self._on_bulk_clear_selection
-            )
-            self.bulk_toolbar.change_status_clicked.connect(
-                self.actions_handler.bulk_change_status
-            )
-            self.bulk_toolbar.add_tag_clicked.connect(self.actions_handler.bulk_add_tag)
-            self.bulk_toolbar.remove_tag_clicked.connect(
-                self.actions_handler.bulk_remove_tag
-            )
-            self.bulk_toolbar.remove_sku_from_orders_clicked.connect(
-                self.actions_handler.bulk_remove_sku_from_orders
-            )
-            self.bulk_toolbar.remove_orders_with_sku_clicked.connect(
-                self.actions_handler.bulk_remove_orders_with_sku
-            )
-            self.bulk_toolbar.delete_orders_clicked.connect(
-                self.actions_handler.bulk_delete_orders
-            )
-            self.bulk_toolbar.export_selection_clicked.connect(
-                self.actions_handler.bulk_export_selection
-            )
-
     def clear_filter(self):
         """Clears the filter input text box, tag filter, and resets proxy model."""
         self.filter_input.clear()
@@ -539,7 +513,7 @@ class MainWindow(QMainWindow):
         if orders_df is None or orders_df.empty:
             self.order_detail_pane.clear()
             self.selection_helper.clear_selection()
-            self._update_bulk_toolbar_state()
+            self._update_selection_bar_state()
             return
 
         column = orders_df.columns.get_loc(ORDER_KEY)
@@ -549,7 +523,7 @@ class MainWindow(QMainWindow):
             selected.append(orders_df.iat[source_row, column])
 
         self.selection_helper.set_selected_orders(selected)
-        self._update_bulk_toolbar_state()
+        self._update_selection_bar_state()
 
         current = self.tableView.selectionModel().currentIndex()
         if not selected or not current.isValid():
@@ -607,23 +581,16 @@ class MainWindow(QMainWindow):
         if hasattr(self, "ui_manager"):
             self.ui_manager.update_hidden_columns_indicator()
 
-    def _update_bulk_toolbar_state(self):
-        """Update bulk toolbar selection counter and button states."""
-        if not hasattr(self, "bulk_toolbar"):
+    def _update_selection_bar_state(self):
+        """Show the bar, and name what is selected, or hide it."""
+        if not hasattr(self, "selection_bar"):
             return
 
         orders_count, items_count = self.selection_helper.get_selection_summary()
-        self.bulk_toolbar.update_selection_count(orders_count, items_count)
-        self.bulk_toolbar.set_enabled(orders_count > 0)
-        self.bulk_toolbar.setVisible(orders_count > 0)
-
-    def _on_bulk_select_all(self):
-        """Handle Select All button in bulk toolbar."""
-        self.tableView.selectAll()
-
-    def _on_bulk_clear_selection(self):
-        """Handle Clear button in bulk toolbar."""
-        self.tableView.clearSelection()
+        self.selection_bar.set_selection(
+            "" if orders_count == 0
+            else f"{orders_count} orders · {items_count} items selected"
+        )
 
     def update_session_info_label(self):
         """Update global header session info label."""

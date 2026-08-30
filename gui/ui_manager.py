@@ -32,7 +32,6 @@ from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
-from .bulk_operations_toolbar import BulkOperationsToolbar
 from .icons import icon
 from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
 from .pandas_model import PandasModel
@@ -446,10 +445,10 @@ class UIManager:
 
         Contains:
         - Filter controls
-        - Action buttons
-        - Bulk operations toolbar (hidden by default)
+        - KPI strip
         - Results table
-        - Summary bar
+        - Selection bar (hidden until rows are selected)
+        - Footer
         """
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -460,23 +459,64 @@ class UIManager:
         filter_widget = self._create_filter_controls()
         layout.addWidget(filter_widget)
 
-        # Section 2.5: Bulk Operations Toolbar (NEW - hidden by default)
-        self.mw.bulk_toolbar = BulkOperationsToolbar()
-        self.mw.bulk_toolbar.setVisible(False)
-        layout.addWidget(self.mw.bulk_toolbar)
-
         # Section 2.7: KPI strip
         layout.addWidget(self._create_kpi_strip())
 
         # Section 3: Results table (MAIN content)
         table_widget = self._create_results_table()
         layout.addWidget(table_widget, 1)  # Stretch factor: 1
+        layout.addWidget(self._create_selection_bar())
 
         # Section 4: Footer
         footer_widget = self._create_footer()
         layout.addWidget(footer_widget)
 
         return tab
+
+    def _create_selection_bar(self):
+        """The actions that only mean something once rows are selected.
+
+        Below the table, as on Session Browser 1e: a bar above it would push
+        every row down at the moment the user is pointing at one.
+        """
+        from PySide6.QtWidgets import QMenu
+
+        from gui.components import ContextualSelectionBar
+
+        handler = self.mw.actions_handler
+        bar = ContextualSelectionBar()
+        self.mw.selection_bar = bar
+
+        bar.add_action(
+            "Set Fulfillable", lambda: handler.bulk_change_status(True)
+        )
+        bar.add_action(
+            "Set Not Fulfillable", lambda: handler.bulk_change_status(False)
+        )
+        bar.add_action("Add Tag", handler.bulk_add_tag)
+        bar.add_action("Remove Tag", handler.bulk_remove_tag)
+
+        delete_btn = bar.add_action("Delete ▾", role="danger")
+        delete_menu = QMenu(delete_btn)
+        delete_menu.addAction(
+            "Remove SKU from Orders", handler.bulk_remove_sku_from_orders
+        )
+        delete_menu.addAction(
+            "Remove Orders with SKU", handler.bulk_remove_orders_with_sku
+        )
+        delete_menu.addSeparator()
+        delete_menu.addAction("Delete Selected Orders", handler.bulk_delete_orders)
+        delete_btn.setMenu(delete_menu)
+
+        # One decision, not two buttons.
+        export_btn = bar.add_action("Export ▾")
+        export_menu = QMenu(export_btn)
+        export_menu.addAction("XLSX", lambda: handler.bulk_export_selection("xlsx"))
+        export_menu.addAction("CSV", lambda: handler.bulk_export_selection("csv"))
+        export_btn.setMenu(export_menu)
+
+        bar.add_action("Clear", self.mw.tableView.clearSelection, role="ghost")
+        return bar
 
     def _create_kpi_strip(self):
         """The four numbers the screen is about, above the table it counts."""
