@@ -46,3 +46,15 @@ def test_an_unknown_role_raises(qapp):
     bar = ContextualSelectionBar()
     with pytest.raises(ValueError):
         bar.add_action("Nope", lambda: None, role="tertiary")
+
+
+def test_the_bar_restyles_when_the_theme_changes(qapp):
+    from gui.theme_manager import get_theme_manager
+
+    bar = ContextualSelectionBar()
+    before = bar.styleSheet()
+    get_theme_manager().toggle_theme()
+    try:
+        assert bar.styleSheet() != before
+    finally:
+        get_theme_manager().toggle_theme()

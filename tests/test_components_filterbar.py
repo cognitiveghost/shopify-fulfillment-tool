@@ -55,3 +55,16 @@ def test_chip_raises_for_an_unknown_key(qapp):
     bar = FilterBar()
     with pytest.raises(KeyError):
         bar.chip("nope")
+
+
+def test_the_bar_restyles_when_the_theme_changes(qapp):
+    from gui.components.filterbar import FilterBar
+    from gui.theme_manager import get_theme_manager
+
+    bar = FilterBar()
+    before = bar.styleSheet()
+    get_theme_manager().toggle_theme()
+    try:
+        assert bar.styleSheet() != before
+    finally:
+        get_theme_manager().toggle_theme()

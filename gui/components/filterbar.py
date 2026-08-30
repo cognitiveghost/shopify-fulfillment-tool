@@ -29,8 +29,8 @@ class FilterBar(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        theme = get_theme_manager().get_current_theme()
-        self.setStyleSheet(f"FilterBar {{ background-color: {theme.surface}; }}")
+        self._apply_theme()
+        get_theme_manager().theme_changed.connect(self._apply_theme)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -51,6 +51,10 @@ class FilterBar(QWidget):
         self.count_label = QLabel("", self)
         self.count_label.setStyleSheet(font_css("caption"))
         layout.addWidget(self.count_label)
+
+    def _apply_theme(self) -> None:
+        theme = get_theme_manager().get_current_theme()
+        self.setStyleSheet(f"FilterBar {{ background-color: {theme.surface}; }}")
 
     def add_filter(self, key: str, text: str) -> None:
         """Add or replace the chip for `key`."""
