@@ -7,9 +7,7 @@ from PySide6.QtWidgets import QTableView
 from gui.orders_view import REPEAT_COLUMN
 from gui.pandas_model import PandasModel
 from gui.status_edge_delegate import StatusEdgeDelegate
-from gui.theme_manager import get_theme_manager
 from shared.theme import DARK_THEME, LIGHT_THEME
-
 
 # setModel() does not take ownership of the model, and nothing else holds a
 # Python reference to either object once _index() returns -- without this,

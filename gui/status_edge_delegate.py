@@ -12,7 +12,12 @@ Spec: docs/superpowers/specs/2026-08-30-phase8.8b-analysis-results-chrome-design
 """
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem
+from PySide6.QtWidgets import (
+    QApplication,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+)
 
 from gui.pandas_model import ROLE_STATUS
 from gui.theme_manager import get_theme_manager
