@@ -1156,8 +1156,6 @@ class MainWindow(QMainWindow):
                 self.analysis_stats = recalculate_statistics(self.analysis_results_df)
                 self.ui_manager.update_results_table(self.analysis_results_df)
                 self.update_statistics_tab()
-                # Update summary bar in Tab 2
-                self.ui_manager.update_summary_bar()
             except Exception:
                 logger.exception("Failed to recalculate statistics")
                 self.analysis_stats = None
@@ -1167,6 +1165,8 @@ class MainWindow(QMainWindow):
             self.analysis_stats = None
             self._clear_statistics_view()
             self.ui_manager.update_results_table(pd.DataFrame())
+
+        self.ui_manager.update_kpi_strip()
 
         # Populate filter dropdown
         # Offer the columns the table actually shows. Line-level columns are not

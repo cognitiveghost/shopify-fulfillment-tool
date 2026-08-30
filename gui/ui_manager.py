@@ -470,15 +470,37 @@ class UIManager:
         self.mw.bulk_toolbar.setVisible(False)
         layout.addWidget(self.mw.bulk_toolbar)
 
+        # Section 2.7: KPI strip
+        layout.addWidget(self._create_kpi_strip())
+
         # Section 3: Results table (MAIN content)
         table_widget = self._create_results_table()
         layout.addWidget(table_widget, 1)  # Stretch factor: 1
 
-        # Section 4: Summary bar
-        summary_widget = self._create_summary_bar()
-        layout.addWidget(summary_widget)
+        # Section 4: Footer
+        footer_widget = self._create_footer()
+        layout.addWidget(footer_widget)
 
         return tab
+
+    def _create_kpi_strip(self):
+        """The four numbers the screen is about, above the table it counts."""
+        from gui.components import KpiStrip
+
+        strip = KpiStrip()
+        self.mw.kpi_strip = strip
+        # Em dash, not zero: an empty warehouse day and an unloaded screen are
+        # different facts, and the label this replaces distinguished them.
+        self.mw.kpi_cards = {
+            key: strip.add("—", label)
+            for key, label in (
+                ("orders", "Orders"),
+                ("fulfillable", "Fulfillable"),
+                ("blocked", "Blocked"),
+                ("items", "Items"),
+            )
+        }
+        return strip
 
     def _create_tab3_session_browser(self):
         """Create Tab 3: Session Browser
@@ -1486,17 +1508,13 @@ class UIManager:
         # Show menu at cursor position
         menu.exec(header.mapToGlobal(position))
 
-    def _create_summary_bar(self):
-        """Create summary bar at bottom of Tab 2."""
+    def _create_footer(self):
+        """Create the footer bar at the bottom of Tab 2."""
         theme = get_theme_manager().get_current_theme()
         widget = QWidget()
         widget.setMaximumHeight(30)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(5, 5, 5, 5)
-
-        self.mw.summary_label = QLabel("No analysis data")
-        self.mw.summary_label.setStyleSheet("font-weight: bold;")
-        layout.addWidget(self.mw.summary_label)
 
         layout.addStretch()
 
@@ -1518,36 +1536,32 @@ class UIManager:
 
         return widget
 
-    def update_summary_bar(self):
-        """Update summary bar with current analysis stats."""
-        if (
-            not hasattr(self.mw, "analysis_results_df")
-            or self.mw.analysis_results_df is None
-        ):
-            self.mw.summary_label.setText("No analysis data")
+    def update_kpi_strip(self):
+        """Orders, fulfillable, blocked, items -- from the line frame.
+
+        Quantity is line-level, so the item count cannot come off the order
+        frame. Orders are counted by nunique for the same reason.
+        """
+        cards = getattr(self.mw, "kpi_cards", None)
+        if cards is None:
             return
 
-        df = self.mw.analysis_results_df
+        df = getattr(self.mw, "analysis_results_df", None)
+        if df is None or df.empty:
+            for card in cards.values():
+                card.set_value("—")
+            return
 
-        # Get unique order counts
         total_orders = df["Order_Number"].nunique()
-        fulfillable_orders = df[df["Order_Fulfillment_Status"] == "Fulfillable"][
+        fulfillable = df[df["Order_Fulfillment_Status"] == "Fulfillable"][
             "Order_Number"
         ].nunique()
+        items = int(df["Quantity"].sum()) if "Quantity" in df.columns else len(df)
 
-        # Get item quantity sums (not row counts)
-        total_items = int(df["Quantity"].sum()) if "Quantity" in df.columns else len(df)
-        fulfillable_items = (
-            int(df[df["Order_Fulfillment_Status"] == "Fulfillable"]["Quantity"].sum())
-            if "Quantity" in df.columns
-            else 0
-        )
-
-        # Display format: total (fulfillable)
-        self.mw.summary_label.setText(
-            f"{total_orders} orders ({fulfillable_orders} fulfillable) │ "
-            f"{total_items} items ({fulfillable_items} fulfillable)"
-        )
+        cards["orders"].set_value(f"{total_orders}")
+        cards["fulfillable"].set_value(f"{fulfillable}")
+        cards["blocked"].set_value(f"{total_orders - fulfillable}")
+        cards["items"].set_value(f"{items}")
 
     def update_hidden_columns_indicator(self):
         """Update the hidden columns indicator in the summary bar."""

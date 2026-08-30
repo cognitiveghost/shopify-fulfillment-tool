@@ -73,3 +73,21 @@ def test_the_derived_columns_are_not_offered_as_filter_scopes(loaded):
     offered = {selector.itemData(i) for i in range(selector.count())}
     for name in HIDDEN_COLUMNS:
         assert name not in offered
+
+
+def test_the_kpi_strip_reads_em_dashes_before_any_load(main_window):
+    for card in main_window.kpi_cards.values():
+        assert card.value_label.text() == "—"
+
+
+def test_the_kpi_strip_counts_orders_fulfillable_blocked_and_items(loaded):
+    """The fixture: 3 orders, 1 fulfillable, 2 blocked, 4 lines summing to 8."""
+    cards = loaded.kpi_cards
+    assert cards["orders"].value_label.text() == "3"
+    assert cards["fulfillable"].value_label.text() == "1"
+    assert cards["blocked"].value_label.text() == "2"
+    assert cards["items"].value_label.text() == "8"
+
+
+def test_the_summary_label_is_gone(main_window):
+    assert not hasattr(main_window, "summary_label")
