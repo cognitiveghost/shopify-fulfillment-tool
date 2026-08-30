@@ -377,15 +377,6 @@ class MainWindow(QMainWindow):
         # Add Ctrl+Z shortcut for Undo
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_operation)
 
-    def clear_filter(self):
-        """Clears the filter input text box, tag filter, and resets proxy model."""
-        self.filter_input.clear()
-        if hasattr(self, "tag_filter_combo"):
-            self.tag_filter_combo.setCurrentIndex(0)  # Reset to "All Tags"
-
-        # Reset proxy model filter state
-        self.proxy_model.clear_filters()
-
     def undo_last_operation(self):
         """Undo the last DataFrame modification."""
         if not self.undo_manager.can_undo():

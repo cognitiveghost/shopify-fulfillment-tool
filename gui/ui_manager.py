@@ -1304,6 +1304,10 @@ class UIManager:
         button.setToolTip("More actions for this screen")
         button.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(button)
+        # Off by default in Qt, which would silently swallow every setToolTip
+        # below -- including the undo tooltip actions_handler recomputes to say
+        # what Ctrl+Z would actually undo.
+        menu.setToolTipsVisible(True)
 
         def action(label, slot, tooltip, enabled=False):
             item = QAction(label, menu)
@@ -1351,7 +1355,38 @@ class UIManager:
 
         button.setMenu(menu)
         self.mw.results_overflow_button = button
+        # build_stylesheet has a QPushButton rule but no QToolButton one, so the
+        # global `QWidget { background-color: surface }` leaves this flat text
+        # with no border and no hover -- and it is the only way to reach five
+        # actions, Settings among them. Styled here rather than in shared/theme.py:
+        # that file is one-way synced from packing-tool and must not be hand-edited.
+        self._style_results_overflow()
+        get_theme_manager().theme_changed.connect(self._style_results_overflow)
         return button
+
+    def _style_results_overflow(self):
+        """Give the overflow button a border and a hover, in the current theme.
+
+        Re-run on theme_changed: the theme toggle lives *inside* this menu, so a
+        one-shot stylesheet here would go stale the moment it is used.
+        """
+        button = getattr(self.mw, "results_overflow_button", None)
+        if button is None:
+            return
+        theme = get_theme_manager().get_current_theme()
+        button.setStyleSheet(
+            f"""
+            QToolButton {{
+                background-color: {theme.surface_raised};
+                border: 1px solid {theme.border};
+                border-radius: 4px;
+                padding: 4px 8px;
+                color: {theme.text};
+            }}
+            QToolButton:hover {{ background-color: {theme.hover}; }}
+            QToolButton::menu-indicator {{ image: none; }}
+            """
+        )
 
     def _create_results_table(self):
         """Create results table for Tab 2 (Analysis Results) with tag panel."""
@@ -1587,7 +1622,11 @@ class UIManager:
             return
 
         df = getattr(self.mw, "analysis_results_df", None)
-        if df is None or df.empty:
+        # The column guard is not paranoia: this runs outside _update_all_views'
+        # try/except, so a KeyError here would skip set_ui_busy(False) and leave
+        # the whole window stuck busy. Blank the cards instead.
+        needed = {"Order_Number", "Order_Fulfillment_Status"}
+        if df is None or df.empty or not needed <= set(df.columns):
             for card in cards.values():
                 card.set_value("—")
             return
@@ -1604,7 +1643,7 @@ class UIManager:
         cards["items"].set_value(f"{items}")
 
     def update_hidden_columns_indicator(self):
-        """Update the hidden columns indicator in the summary bar."""
+        """Update the hidden columns indicator in the filter bar."""
         if not hasattr(self.mw, "hidden_columns_indicator"):
             return
 
