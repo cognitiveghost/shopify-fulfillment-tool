@@ -1251,7 +1251,11 @@ class MainWindow(QMainWindow):
         self.filter_column_selector.clear()
         self.filter_column_selector.addItem("All Columns")
         if self.analysis_results_df is not None and not self.analysis_results_df.empty:
-            self.filter_column_selector.addItems(self.all_columns)
+            from gui.orders_view import SEARCH_COLUMN
+
+            self.filter_column_selector.addItems(
+                [col for col in self.all_columns if col != SEARCH_COLUMN]
+            )
         self.ui_manager.set_ui_busy(False)
         # The column manager button is enabled within update_results_table
 

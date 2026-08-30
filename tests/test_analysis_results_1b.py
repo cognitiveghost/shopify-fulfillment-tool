@@ -66,3 +66,41 @@ def test_pane_clear_empties_everything(app, lines_df):
 
     assert pane.lines_table.model() is None or pane.lines_table.model().rowCount() == 0
     assert pane.tag_panel.selected_order is None
+
+
+@pytest.fixture
+def main_window(app):
+    from gui.main_window_pyside import MainWindow
+
+    window = MainWindow()
+    yield window
+    window.close()
+
+
+def test_order_frame_row_count_reaches_the_view(app, lines_df, main_window):
+    """Spec §10 test 9."""
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+
+    assert main_window.tableView.model().rowCount() == 2  # orders, not lines
+
+
+def test_filtering_by_a_sku_keeps_its_order_visible(app, lines_df, main_window):
+    """Spec §10 test 10: SKU is not a column any more, but still findable."""
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+
+    main_window.proxy_model.set_text_filter("BBB")
+
+    assert main_window.tableView.model().rowCount() == 1
+
+
+def test_search_column_is_hidden_from_the_view(app, lines_df, main_window):
+    from gui.orders_view import SEARCH_COLUMN
+
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+
+    frame = main_window.proxy_model.sourceModel()._dataframe
+    column = frame.columns.get_loc(SEARCH_COLUMN)
+    assert main_window.tableView.isColumnHidden(column)

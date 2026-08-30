@@ -33,6 +33,7 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .bulk_operations_toolbar import BulkOperationsToolbar
 from .icons import icon
+from .orders_view import SEARCH_COLUMN, orders_frame
 from .pandas_model import PandasModel
 from .tag_categories_dialog import DEFAULT_TAG_COLOR
 from .tag_management_panel import TagManagementPanel
@@ -899,81 +900,48 @@ class UIManager:
         )
 
     def update_results_table(self, data_df):
-        """Populates the main results table with new data from a DataFrame.
+        """Populate the results table -- one row per *order*.
 
-        It sets up a `PandasModel` and a `QSortFilterProxyModel` to efficiently
-        display and filter the potentially large dataset of analysis results.
-
-        Args:
-            data_df (pd.DataFrame): The DataFrame containing the analysis
-                results to display.
+        ``data_df`` is the line-level ``analysis_results_df``; the table shows
+        ``orders_frame(data_df)``. The line frame is untouched and stays the
+        source of truth for every action, report and export.
         """
         self.log.info("Updating results table with new data.")
         if data_df.empty:
             self.log.warning("Received empty dataframe, clearing tables.")
 
-        # Reset columns if this is the first data load
+        orders_df = orders_frame(data_df)
+        self.mw.orders_df = orders_df
+
+        # Column configuration is still saved against the line frame's names;
+        # the order table applies the order-level half of it. See spec section 4.
         if not self.mw.all_columns:
             self.mw.all_columns = data_df.columns.tolist()
             self.mw.visible_columns = self.mw.all_columns[:]
 
-        # Use all columns from the dataframe, visibility is handled by the view
-        main_df = data_df.copy()
-
-        # Check if bulk mode is active
-        bulk_mode_enabled = (
-            hasattr(self.mw, "toggle_bulk_mode_btn")
-            and self.mw.toggle_bulk_mode_btn.isChecked()
-        )
-
-        # Create model with checkbox support if bulk mode is active
-        source_model = PandasModel(main_df, enable_checkboxes=bulk_mode_enabled)
+        source_model = PandasModel(orders_df)
         self.mw.proxy_model.setSourceModel(source_model)
         self.mw.tableView.setModel(self.mw.proxy_model)
 
-        # Set order group delegate for visual borders between orders
-        from gui.order_group_delegate import OrderGroupDelegate
+        # _search_text exists so a SKU search still finds the order that
+        # contains it (spec section 6). It is not for reading.
+        if SEARCH_COLUMN in orders_df.columns:
+            self.mw.tableView.setColumnHidden(
+                orders_df.columns.get_loc(SEARCH_COLUMN), True
+            )
 
-        if (
-            not hasattr(self.mw, "order_group_delegate")
-            or self.mw.order_group_delegate is None
-        ):
-            self.mw.order_group_delegate = OrderGroupDelegate(self.mw)
-        self.mw.tableView.setItemDelegate(self.mw.order_group_delegate)
-
-        # Set checkbox delegate for first column if bulk mode is active
-        if bulk_mode_enabled:
-            from gui.checkbox_delegate import CheckboxDelegate
-
-            checkbox_delegate = CheckboxDelegate(self.mw.selection_helper)
-            self.mw.tableView.setItemDelegateForColumn(0, checkbox_delegate)
-            # Set checkbox column width
-            self.mw.tableView.setColumnWidth(0, 30)
-        else:
-            # Reset column 0 delegate to default (order group delegate) when bulk mode is off
-            self.mw.tableView.setItemDelegateForColumn(0, self.mw.order_group_delegate)
-
-        # Set tag delegate for Internal_Tags column if it exists
-        # This overrides the order group delegate for this specific column
-        if "Internal_Tags" in main_df.columns:
+        if "Internal_Tags" in orders_df.columns:
             from gui.tag_delegate import TagDelegate
 
             tag_categories = self.mw.active_profile_config.get("tag_categories", {})
             self.mw.tag_delegate = TagDelegate(tag_categories, self.mw)
-
-            # Adjust column index for checkbox column if enabled
-            col_index = main_df.columns.get_loc("Internal_Tags")
-            if bulk_mode_enabled:
-                col_index += 1  # Account for checkbox column
-            self.mw.tableView.setItemDelegateForColumn(col_index, self.mw.tag_delegate)
-
-            # Populate tag filter combo box
+            self.mw.tableView.setItemDelegateForColumn(
+                orders_df.columns.get_loc("Internal_Tags"), self.mw.tag_delegate
+            )
             self._populate_tag_filter()
 
-        # Auto-fit columns to content only when no saved config exists.
-        # resizeColumnsToContents() is O(n*m) — expensive on large DataFrames.
-        # If the config manager has saved widths it will apply them right after,
-        # so we skip the full scan when saved widths are available.
+        # Auto-fit only when no saved config exists: resizeColumnsToContents()
+        # is O(n*m), and a saved config overwrites the widths straight after.
         has_saved_config = (
             hasattr(self.mw, "table_config_manager")
             and self.mw.table_config_manager.has_saved_column_widths()
@@ -981,13 +949,17 @@ class UIManager:
         if not has_saved_config:
             self.mw.tableView.resizeColumnsToContents()
 
-        # Apply table configuration (column visibility, order, widths)
         if hasattr(self.mw, "table_config_manager"):
             self.mw.table_config_manager.apply_config_to_view(
-                self.mw.tableView, data_df
+                self.mw.tableView, orders_df
             )
 
-        # Update hidden columns indicator
+        # apply_config_to_view walks the frame it is given, so re-hide after it.
+        if SEARCH_COLUMN in orders_df.columns:
+            self.mw.tableView.setColumnHidden(
+                orders_df.columns.get_loc(SEARCH_COLUMN), True
+            )
+
         self.update_hidden_columns_indicator()
 
     def _populate_tag_filter(self):
