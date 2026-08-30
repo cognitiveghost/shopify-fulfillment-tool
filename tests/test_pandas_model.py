@@ -205,3 +205,24 @@ def test_tag_filter_matches_the_normal_json_string_form():
     assert proxy.rowCount() == 0
 
 
+
+def test_all_columns_search_ignores_the_derived_repeat_column():
+    """8.8b added a hidden bool column; "all columns" must not match through it.
+
+    cell_search_text(True) renders "True", so before this guard a needle of
+    "f", "al", "true" -- the first keystrokes of most real searches -- matched
+    every row through a column the user cannot see, and the table stopped
+    narrowing. _search_text is derived too, but exists to be searched.
+    """
+    from gui.pandas_model import REPEAT_COLUMN
+
+    df = pd.DataFrame({"SKU": ["A1", "B2"], REPEAT_COLUMN: [True, False]})
+    proxy = FulfillmentFilterProxy()
+    proxy.setSourceModel(PandasModel(df))
+
+    for needle in ("false", "true", "als", "ru"):
+        proxy.set_text_filter(needle)
+        assert proxy.rowCount() == 0, f"{needle!r} matched through {REPEAT_COLUMN}"
+
+    proxy.set_text_filter("a1")  # a real column still matches
+    assert proxy.rowCount() == 1

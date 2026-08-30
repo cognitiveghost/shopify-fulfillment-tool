@@ -78,7 +78,11 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
             return True
 
         if self._df_col < 0:
-            col_indices = range(len(df.columns))
+            # Every column *except* REPEAT_COLUMN: it is a derived bool, so
+            # cell_search_text renders it "True"/"False" and a needle of "f",
+            # "al" or "true" would match every row through a column the user
+            # cannot see. _search_text is derived too, but exists to be searched.
+            col_indices = [c for c, name in enumerate(df.columns) if name != REPEAT_COLUMN]
         elif self._df_col < len(df.columns):
             col_indices = (self._df_col,)
         else:
@@ -226,8 +230,9 @@ class PandasModel(QAbstractTableModel):
         This method is called by the view to get the data to display. It
         handles:
         - `DisplayRole`: The text to be displayed in a cell.
-        - `BackgroundRole`: The background color of a row, based on the
-          'System_note' or 'Order_Fulfillment_Status' columns.
+        - `ROLE_STATUS`: The row's status token, derived from the
+          'System_note' or 'Order_Fulfillment_Status' columns. A token, not a
+          colour: StatusEdgeDelegate resolves and paints it as a left edge.
 
         Args:
             index (QModelIndex): The index of the item to retrieve data for.
