@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.pandas_model import PandasModel
+from gui.status_edge_delegate import StatusEdgeDelegate
 from gui.tag_management_panel import TagManagementPanel
 from gui.theme_manager import font_css, get_theme_manager
 
@@ -50,6 +51,7 @@ class OrderDetailPane(QWidget):
         self.lines_table.setHorizontalScrollMode(QTableView.ScrollPerPixel)
         self.lines_table.verticalHeader().hide()
         self.lines_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.lines_table.setItemDelegate(StatusEdgeDelegate(self.lines_table))
         layout.addWidget(self.lines_table, 1)
 
         self.tag_panel = TagManagementPanel(self)

@@ -56,7 +56,7 @@ def test_selecting_a_row_shows_the_orders_tags_in_the_pane(mw):
 
     mw.selection_helper = Mock()
     mw.order_detail_pane = MagicMock()
-    mw._update_bulk_toolbar_state = Mock()
+    mw._update_selection_bar_state = Mock()
 
     # Select order 1001's row (row 0 of the order frame) in the table
     fake_index = MagicMock()

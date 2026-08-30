@@ -32,9 +32,8 @@ from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
-from .bulk_operations_toolbar import BulkOperationsToolbar
 from .icons import icon
-from .orders_view import ORDER_KEY, SEARCH_COLUMN, orders_frame
+from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
 from .pandas_model import PandasModel
 from .tag_categories_dialog import DEFAULT_TAG_COLOR
 from .theme_manager import font_css, get_theme_manager
@@ -131,7 +130,6 @@ class UIManager:
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {
         "open_session_folder_button": "folder-open",
         "new_session_btn": "folder-plus",
-        "clear_filter_button": "funnel-x",
         "connection_btn": "settings",
     }
 
@@ -447,10 +445,10 @@ class UIManager:
 
         Contains:
         - Filter controls
-        - Action buttons
-        - Bulk operations toolbar (hidden by default)
+        - KPI strip
         - Results table
-        - Summary bar
+        - Selection bar (hidden until rows are selected)
+        - Footer
         """
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -461,24 +459,83 @@ class UIManager:
         filter_widget = self._create_filter_controls()
         layout.addWidget(filter_widget)
 
-        # Section 2: Action buttons
-        actions_widget = self._create_results_actions()
-        layout.addWidget(actions_widget)
-
-        # Section 2.5: Bulk Operations Toolbar (NEW - hidden by default)
-        self.mw.bulk_toolbar = BulkOperationsToolbar()
-        self.mw.bulk_toolbar.setVisible(False)
-        layout.addWidget(self.mw.bulk_toolbar)
+        # Section 2.7: KPI strip
+        layout.addWidget(self._create_kpi_strip())
 
         # Section 3: Results table (MAIN content)
         table_widget = self._create_results_table()
         layout.addWidget(table_widget, 1)  # Stretch factor: 1
+        layout.addWidget(self._create_selection_bar())
 
-        # Section 4: Summary bar
-        summary_widget = self._create_summary_bar()
-        layout.addWidget(summary_widget)
+        # Section 4: Footer
+        footer_widget = self._create_footer()
+        layout.addWidget(footer_widget)
 
         return tab
+
+    def _create_selection_bar(self):
+        """The actions that only mean something once rows are selected.
+
+        Below the table, as on Session Browser 1e: a bar above it would push
+        every row down at the moment the user is pointing at one.
+        """
+        from PySide6.QtWidgets import QMenu
+
+        from gui.components import ContextualSelectionBar
+
+        handler = self.mw.actions_handler
+        bar = ContextualSelectionBar()
+        self.mw.selection_bar = bar
+
+        bar.add_action(
+            "Set Fulfillable", lambda: handler.bulk_change_status(True)
+        )
+        bar.add_action(
+            "Set Not Fulfillable", lambda: handler.bulk_change_status(False)
+        )
+        bar.add_action("Add Tag", handler.bulk_add_tag)
+        bar.add_action("Remove Tag", handler.bulk_remove_tag)
+
+        delete_btn = bar.add_action("Delete ▾", role="danger")
+        delete_menu = QMenu(delete_btn)
+        delete_menu.addAction(
+            "Remove SKU from Orders", handler.bulk_remove_sku_from_orders
+        )
+        delete_menu.addAction(
+            "Remove Orders with SKU", handler.bulk_remove_orders_with_sku
+        )
+        delete_menu.addSeparator()
+        delete_menu.addAction("Delete Selected Orders", handler.bulk_delete_orders)
+        delete_btn.setMenu(delete_menu)
+
+        # One decision, not two buttons.
+        export_btn = bar.add_action("Export ▾")
+        export_menu = QMenu(export_btn)
+        export_menu.addAction("XLSX", lambda: handler.bulk_export_selection("xlsx"))
+        export_menu.addAction("CSV", lambda: handler.bulk_export_selection("csv"))
+        export_btn.setMenu(export_menu)
+
+        bar.add_action("Clear", self.mw.tableView.clearSelection, role="ghost")
+        return bar
+
+    def _create_kpi_strip(self):
+        """The four numbers the screen is about, above the table it counts."""
+        from gui.components import KpiStrip
+
+        strip = KpiStrip()
+        self.mw.kpi_strip = strip
+        # Em dash, not zero: an empty warehouse day and an unloaded screen are
+        # different facts, and the label this replaces distinguished them.
+        self.mw.kpi_cards = {
+            key: strip.add("—", label)
+            for key, label in (
+                ("orders", "Orders"),
+                ("fulfillable", "Fulfillable"),
+                ("blocked", "Blocked"),
+                ("items", "Items"),
+            )
+        }
+        return strip
 
     def _create_tab3_session_browser(self):
         """Create Tab 3: Session Browser
@@ -923,12 +980,14 @@ class UIManager:
         self.mw.proxy_model.setSourceModel(source_model)
         self.mw.tableView.setModel(self.mw.proxy_model)
 
-        # _search_text exists so a SKU search still finds the order that
-        # contains it (spec section 6). It is not for reading.
-        if SEARCH_COLUMN in orders_df.columns:
-            self.mw.tableView.setColumnHidden(
-                orders_df.columns.get_loc(SEARCH_COLUMN), True
-            )
+        # Derived, not data: hidden from the view but still scanned by the
+        # filter proxy. apply_config_to_view re-walks the frame, so this runs
+        # again after it.
+        for name in HIDDEN_COLUMNS:
+            if name in orders_df.columns:
+                self.mw.tableView.setColumnHidden(
+                    orders_df.columns.get_loc(name), True
+                )
 
         # No client selected yet -> no profile config; this runs on every
         # client switch, before one is loaded.
@@ -963,10 +1022,11 @@ class UIManager:
             )
 
         # apply_config_to_view walks the frame it is given, so re-hide after it.
-        if SEARCH_COLUMN in orders_df.columns:
-            self.mw.tableView.setColumnHidden(
-                orders_df.columns.get_loc(SEARCH_COLUMN), True
-            )
+        for name in HIDDEN_COLUMNS:
+            if name in orders_df.columns:
+                self.mw.tableView.setColumnHidden(
+                    orders_df.columns.get_loc(name), True
+                )
 
         # setModel() above replaced the selection model, so the connection
         # must be remade every call rather than once at widget-creation time.
@@ -982,6 +1042,7 @@ class UIManager:
         self.mw.on_results_selection_changed()
 
         self.update_hidden_columns_indicator()
+        self.update_filter_count()
 
     def _selected_order_numbers(self) -> set:
         """The order numbers currently selected, or an empty set."""
@@ -1032,16 +1093,16 @@ class UIManager:
         Column configuration addresses the view by column *index*, so every
         call that touches ``tableView`` must walk the order frame -- not the
         line-level ``analysis_results_df`` the two frames disagree with.
-        SEARCH_COLUMN is dropped: it is always last, so no other column moves,
-        and carrying it would let "Show All Columns" reveal an internal column
-        and write its name into the client's saved config.
+        HIDDEN_COLUMNS is dropped: both are always last, so no other column
+        moves, and carrying them would let "Show All Columns" reveal an
+        internal column and write its name into the client's saved config.
         """
         orders_df = getattr(self.mw, "orders_df", None)
         if orders_df is None:
             orders_df = self.mw.analysis_results_df
         if orders_df is None:
             return pd.DataFrame()
-        return orders_df.drop(columns=[SEARCH_COLUMN], errors="ignore")
+        return orders_df.drop(columns=list(HIDDEN_COLUMNS), errors="ignore")
 
     def _populate_tag_filter(self):
         """Populate the tag filter combo box with tags from current DataFrame.
@@ -1164,75 +1225,41 @@ class UIManager:
         return group
 
     def _create_filter_controls(self):
-        """Create filter controls for Tab 2 (Analysis Results)."""
+        """Search, scope, case and tag -- 1e's arrangement, on this screen.
+
+        FilterBar owns the search field and the result count; the other three
+        controls sit beside it, not inside it. No filter chips: the two combos
+        already draw their own state and a chip would draw it twice.
+        """
+        from gui.components import FilterBar
+
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
-        layout.addWidget(QLabel("Filter by:"))
+        self.mw.filter_bar = FilterBar(widget)
+        self.mw.filter_bar.search_field.setPlaceholderText("Search orders")
+        # Kept so apply_filter(), Ctrl+F and the 1b tests address it unchanged.
+        self.mw.filter_input = self.mw.filter_bar.search_field
+        layout.addWidget(self.mw.filter_bar, 1)
 
-        # Column selector
         self.mw.filter_column_selector = WheelIgnoreComboBox()
         self.mw.filter_column_selector.addItem("All Columns")
+        self.mw.filter_column_selector.setToolTip("Limit the search to one column")
         layout.addWidget(self.mw.filter_column_selector)
 
-        # Filter input
-        self.mw.filter_input = QLineEdit()
-        self.mw.filter_input.setPlaceholderText("Enter filter text...")
-        self.mw.filter_input.setClearButtonEnabled(True)  # Built-in clear button!
-        layout.addWidget(self.mw.filter_input, 1)
-
-        # Case sensitive checkbox
         self.mw.case_sensitive_checkbox = QCheckBox("Case Sensitive")
         layout.addWidget(self.mw.case_sensitive_checkbox)
 
-        # Clear button
-        self.mw.clear_filter_button = QPushButton("Clear")
-        layout.addWidget(self.mw.clear_filter_button)
-
-        # Separator
-        layout.addWidget(QLabel(" | "))
-
-        # Tag filter
-        layout.addWidget(QLabel("Tag:"))
         self.mw.tag_filter_combo = WheelIgnoreComboBox()
         self.mw.tag_filter_combo.addItem("All Tags", None)
+        self.mw.tag_filter_combo.setToolTip("Show only orders carrying this tag")
         layout.addWidget(self.mw.tag_filter_combo)
 
-        return widget
-
-    def _create_results_actions(self):
-        """Create action buttons for Tab 2 (Analysis Results)."""
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Undo button (left side)
-        self.mw.undo_button = QPushButton("Undo")
-        self.mw.undo_button.setToolTip("Undo last operation (Ctrl+Z)")
-        self.mw.undo_button.setEnabled(False)  # Enabled by undo_manager
-        self.mw.undo_button.clicked.connect(self.mw.undo_last_operation)
-        layout.addWidget(self.mw.undo_button)
-
-        # Add separator
-        layout.addSpacing(20)
-
-        # Add Product button (Tab 2 version - keep reference for signal connection)
-        self.mw.add_product_button_tab2 = QPushButton("Add Product to Order")
-        self.mw.add_product_button_tab2.setEnabled(False)
-        self.mw.add_product_button_tab2.setToolTip(
-            "Manually add a product to an existing order"
-        )
-        # Connect to same handler as Tab 1 button
-        self.mw.add_product_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.show_add_product_dialog()
-            if hasattr(self.mw, "actions_handler")
-            else None
-        )
-        layout.addWidget(self.mw.add_product_button_tab2)
-
-        # Generate Reports button (Tab 2 version)
-        self.mw.generate_reports_button_tab2 = QPushButton("Generate Reports")
+        # The screen's one primary action. _SCREEN_ACTIONS[1] binds it into the
+        # CommandBar; it is never shown in the page itself.
+        self.mw.generate_reports_button_tab2 = QPushButton("Generate Reports", widget)
         self.mw.generate_reports_button_tab2.setEnabled(False)
         self.mw.generate_reports_button_tab2.setToolTip(
             "Generate packing lists and stock exports based on pre-defined filters"
@@ -1242,51 +1269,124 @@ class UIManager:
             if hasattr(self.mw, "actions_handler")
             else None
         )
-        layout.addWidget(self.mw.generate_reports_button_tab2)
+        self.mw.generate_reports_button_tab2.hide()
 
-        # Settings button (Tab 2 version)
-        self.mw.settings_button_tab2 = QPushButton("Settings")
-        self.mw.settings_button_tab2.setEnabled(False)
-        self.mw.settings_button_tab2.setToolTip(
-            "Open settings for the active client"
-        )
-        self.mw.settings_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_settings_window()
-            if hasattr(self.mw, "actions_handler")
-            else None
-        )
-        layout.addWidget(self.mw.settings_button_tab2)
-
-        # Configure Columns button (Tab 2 version)
-        self.mw.configure_columns_button_tab2 = QPushButton("Configure Columns")
-        self.mw.configure_columns_button_tab2.setEnabled(False)
-        self.mw.configure_columns_button_tab2.setToolTip(
-            "Customize table column visibility and order"
-        )
-        self.mw.configure_columns_button_tab2.clicked.connect(
-            lambda: self.mw.open_column_config_dialog()
-            if hasattr(self.mw, "open_column_config_dialog")
-            else None
-        )
-        layout.addWidget(self.mw.configure_columns_button_tab2)
-
-        # Add separator
-        layout.addSpacing(20)
-
-        # Theme toggle button
-        theme_manager = get_theme_manager()
-        self.mw.theme_toggle_btn = QPushButton()
-        self._update_theme_button_text()  # Set initial text based on current theme
-        self.mw.theme_toggle_btn.setToolTip("Toggle between light and dark theme")
-        self.mw.theme_toggle_btn.clicked.connect(self._on_theme_toggle_clicked)
-        layout.addWidget(self.mw.theme_toggle_btn)
-
-        # Connect to theme_changed signal to update button text
-        theme_manager.theme_changed.connect(self._update_theme_button_text)
-
-        layout.addStretch()
+        layout.addWidget(self._create_results_overflow(widget))
 
         return widget
+
+    def update_filter_count(self):
+        """"312 orders", or "48 of 312 orders" while a filter narrows it."""
+        bar = getattr(self.mw, "filter_bar", None)
+        if bar is None:
+            return
+        total = self.mw.proxy_model.sourceModel()
+        total_rows = total.rowCount() if total is not None else 0
+        shown = self.mw.proxy_model.rowCount()
+        bar.set_count(
+            f"{total_rows} orders" if shown == total_rows
+            else f"{shown} of {total_rows} orders"
+        )
+
+    def _create_results_overflow(self, parent):
+        """The screen-level actions that are not the screen's one primary.
+
+        Generate Reports is the primary (_SCREEN_ACTIONS[1]) and stays a hidden
+        QPushButton bound into the CommandBar. These five are QActions under
+        their old attribute names: every caller reaches them through
+        setEnabled / setToolTip / setText, which QAction has too.
+        """
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu, QToolButton
+
+        button = QToolButton(parent)
+        button.setText("⋯")
+        button.setToolTip("More actions for this screen")
+        button.setPopupMode(QToolButton.InstantPopup)
+        menu = QMenu(button)
+        # Off by default in Qt, which would silently swallow every setToolTip
+        # below -- including the undo tooltip actions_handler recomputes to say
+        # what Ctrl+Z would actually undo.
+        menu.setToolTipsVisible(True)
+
+        def action(label, slot, tooltip, enabled=False):
+            item = QAction(label, menu)
+            item.setToolTip(tooltip)
+            item.setEnabled(enabled)
+            item.triggered.connect(slot)
+            menu.addAction(item)
+            return item
+
+        self.mw.add_product_button_tab2 = action(
+            "Add Product to Order",
+            lambda: self.mw.actions_handler.show_add_product_dialog()
+            if hasattr(self.mw, "actions_handler")
+            else None,
+            "Manually add a product to an existing order",
+        )
+        self.mw.configure_columns_button_tab2 = action(
+            "Configure Columns",
+            lambda: self.mw.open_column_config_dialog()
+            if hasattr(self.mw, "open_column_config_dialog")
+            else None,
+            "Customize table column visibility and order",
+        )
+        self.mw.settings_button_tab2 = action(
+            "Settings",
+            lambda: self.mw.actions_handler.open_settings_window()
+            if hasattr(self.mw, "actions_handler")
+            else None,
+            "Open settings for the active client",
+        )
+        # Enabled by undo_manager, like the button it replaces. Ctrl+Z is still
+        # how this is actually invoked, and the tooltip has always said so.
+        self.mw.undo_button = action(
+            "Undo", self.mw.undo_last_operation, "Undo last operation (Ctrl+Z)"
+        )
+
+        menu.addSeparator()
+        theme_manager = get_theme_manager()
+        self.mw.theme_toggle_btn = action(
+            "", self._on_theme_toggle_clicked, "Toggle between light and dark theme",
+            enabled=True,
+        )
+        self._update_theme_button_text()
+        theme_manager.theme_changed.connect(self._update_theme_button_text)
+
+        button.setMenu(menu)
+        self.mw.results_overflow_button = button
+        # build_stylesheet has a QPushButton rule but no QToolButton one, so the
+        # global `QWidget { background-color: surface }` leaves this flat text
+        # with no border and no hover -- and it is the only way to reach five
+        # actions, Settings among them. Styled here rather than in shared/theme.py:
+        # that file is one-way synced from packing-tool and must not be hand-edited.
+        self._style_results_overflow()
+        get_theme_manager().theme_changed.connect(self._style_results_overflow)
+        return button
+
+    def _style_results_overflow(self):
+        """Give the overflow button a border and a hover, in the current theme.
+
+        Re-run on theme_changed: the theme toggle lives *inside* this menu, so a
+        one-shot stylesheet here would go stale the moment it is used.
+        """
+        button = getattr(self.mw, "results_overflow_button", None)
+        if button is None:
+            return
+        theme = get_theme_manager().get_current_theme()
+        button.setStyleSheet(
+            f"""
+            QToolButton {{
+                background-color: {theme.surface_raised};
+                border: 1px solid {theme.border};
+                border-radius: 4px;
+                padding: 4px 8px;
+                color: {theme.text};
+            }}
+            QToolButton:hover {{ background-color: {theme.hover}; }}
+            QToolButton::menu-indicator {{ image: none; }}
+            """
+        )
 
     def _create_results_table(self):
         """Create results table for Tab 2 (Analysis Results) with tag panel."""
@@ -1307,6 +1407,12 @@ class UIManager:
         # Scroll performance optimizations
         self.mw.tableView.setVerticalScrollMode(QTableView.ScrollPerPixel)
         self.mw.tableView.setHorizontalScrollMode(QTableView.ScrollPerPixel)
+
+        from gui.status_edge_delegate import StatusEdgeDelegate
+
+        # View-wide. setItemDelegateForColumn() wins over this, so TagDelegate
+        # keeps the Internal_Tags column and simply never paints an edge there.
+        self.mw.tableView.setItemDelegate(StatusEdgeDelegate(self.mw.tableView))
 
         # Add table to layout
         layout.addWidget(self.mw.tableView, 1)  # Stretch factor: 1
@@ -1477,17 +1583,13 @@ class UIManager:
         # Show menu at cursor position
         menu.exec(header.mapToGlobal(position))
 
-    def _create_summary_bar(self):
-        """Create summary bar at bottom of Tab 2."""
+    def _create_footer(self):
+        """Create the footer bar at the bottom of Tab 2."""
         theme = get_theme_manager().get_current_theme()
         widget = QWidget()
         widget.setMaximumHeight(30)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(5, 5, 5, 5)
-
-        self.mw.summary_label = QLabel("No analysis data")
-        self.mw.summary_label.setStyleSheet("font-weight: bold;")
-        layout.addWidget(self.mw.summary_label)
 
         layout.addStretch()
 
@@ -1509,39 +1611,39 @@ class UIManager:
 
         return widget
 
-    def update_summary_bar(self):
-        """Update summary bar with current analysis stats."""
-        if (
-            not hasattr(self.mw, "analysis_results_df")
-            or self.mw.analysis_results_df is None
-        ):
-            self.mw.summary_label.setText("No analysis data")
+    def update_kpi_strip(self):
+        """Orders, fulfillable, blocked, items -- from the line frame.
+
+        Quantity is line-level, so the item count cannot come off the order
+        frame. Orders are counted by nunique for the same reason.
+        """
+        cards = getattr(self.mw, "kpi_cards", None)
+        if cards is None:
             return
 
-        df = self.mw.analysis_results_df
+        df = getattr(self.mw, "analysis_results_df", None)
+        # The column guard is not paranoia: this runs outside _update_all_views'
+        # try/except, so a KeyError here would skip set_ui_busy(False) and leave
+        # the whole window stuck busy. Blank the cards instead.
+        needed = {"Order_Number", "Order_Fulfillment_Status"}
+        if df is None or df.empty or not needed <= set(df.columns):
+            for card in cards.values():
+                card.set_value("—")
+            return
 
-        # Get unique order counts
         total_orders = df["Order_Number"].nunique()
-        fulfillable_orders = df[df["Order_Fulfillment_Status"] == "Fulfillable"][
+        fulfillable = df[df["Order_Fulfillment_Status"] == "Fulfillable"][
             "Order_Number"
         ].nunique()
+        items = int(df["Quantity"].sum()) if "Quantity" in df.columns else len(df)
 
-        # Get item quantity sums (not row counts)
-        total_items = int(df["Quantity"].sum()) if "Quantity" in df.columns else len(df)
-        fulfillable_items = (
-            int(df[df["Order_Fulfillment_Status"] == "Fulfillable"]["Quantity"].sum())
-            if "Quantity" in df.columns
-            else 0
-        )
-
-        # Display format: total (fulfillable)
-        self.mw.summary_label.setText(
-            f"{total_orders} orders ({fulfillable_orders} fulfillable) │ "
-            f"{total_items} items ({fulfillable_items} fulfillable)"
-        )
+        cards["orders"].set_value(f"{total_orders}")
+        cards["fulfillable"].set_value(f"{fulfillable}")
+        cards["blocked"].set_value(f"{total_orders - fulfillable}")
+        cards["items"].set_value(f"{items}")
 
     def update_hidden_columns_indicator(self):
-        """Update the hidden columns indicator in the summary bar."""
+        """Update the hidden columns indicator in the filter bar."""
         if not hasattr(self.mw, "hidden_columns_indicator"):
             return
 

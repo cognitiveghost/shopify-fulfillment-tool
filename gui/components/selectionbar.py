@@ -17,11 +17,8 @@ class ContextualSelectionBar(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        theme = get_theme_manager().get_current_theme()
-        self.setStyleSheet(
-            f"ContextualSelectionBar {{ background-color: {theme.surface_raised};"
-            f" border-top: 1px solid {theme.border_subtle}; }}"
-        )
+        self._apply_theme()
+        get_theme_manager().theme_changed.connect(self._apply_theme)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
@@ -33,6 +30,13 @@ class ContextualSelectionBar(QWidget):
         layout.addStretch()
 
         self.hide()
+
+    def _apply_theme(self) -> None:
+        theme = get_theme_manager().get_current_theme()
+        self.setStyleSheet(
+            f"ContextualSelectionBar {{ background-color: {theme.surface_raised};"
+            f" border-top: 1px solid {theme.border_subtle}; }}"
+        )
 
     def set_selection(self, count_text: str) -> None:
         """Non-empty text shows the bar; "" hides it."""

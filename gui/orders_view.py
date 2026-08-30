@@ -8,7 +8,7 @@ computed on demand, never persisted, never written back to. See
 
 import pandas as pd
 
-from gui.pandas_model import cell_search_text
+from gui.pandas_model import REPEAT_COLUMN, cell_search_text, is_repeat
 
 # Constant across every line of an order, by construction in analysis.py's
 # output_columns (analysis.py:1119).
@@ -49,6 +49,10 @@ BLOCKER_PREFIX = "Cannot fulfill: "
 # Hidden column carrying the order's line text so a SKU search still finds the
 # order that contains it. The view hides it; the filter proxy still scans it.
 SEARCH_COLUMN = "_search_text"
+
+# Derived, and hidden from every surface that walks the frame's columns: the
+# table view, the column-config dialog, and the filter-scope dropdown.
+HIDDEN_COLUMNS = (SEARCH_COLUMN, REPEAT_COLUMN)
 
 ORDER_KEY = "Order_Number"
 
@@ -141,6 +145,13 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
         out["Blocker"] = out[ORDER_KEY].map(grouped["System_note"].apply(_first_blocker))
     else:
         out["Blocker"] = ""
+
+    if "System_note" in df.columns:
+        out[REPEAT_COLUMN] = out[ORDER_KEY].map(
+            grouped["System_note"].apply(lambda notes: any(is_repeat(n) for n in notes))
+        )
+    else:
+        out[REPEAT_COLUMN] = False
 
     if line_level:
         # Series.map, not DataFrame.map: the latter only exists from pandas 2.1

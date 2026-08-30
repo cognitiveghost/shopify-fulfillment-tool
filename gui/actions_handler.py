@@ -1863,8 +1863,8 @@ class ActionsHandler(QObject):
         )
 
         # Update toolbar state
-        if hasattr(self.mw, "_update_bulk_toolbar_state"):
-            self.mw._update_bulk_toolbar_state()
+        if hasattr(self.mw, "_update_selection_bar_state"):
+            self.mw._update_selection_bar_state()
 
         # Update undo button
         self._update_undo_button()
@@ -1959,8 +1959,8 @@ class ActionsHandler(QObject):
         )
 
         # Update toolbar state
-        if hasattr(self.mw, "_update_bulk_toolbar_state"):
-            self.mw._update_bulk_toolbar_state()
+        if hasattr(self.mw, "_update_selection_bar_state"):
+            self.mw._update_selection_bar_state()
 
         # Update undo button
         self._update_undo_button()
@@ -2016,8 +2016,8 @@ class ActionsHandler(QObject):
         )
 
         # Update toolbar state
-        if hasattr(self.mw, "_update_bulk_toolbar_state"):
-            self.mw._update_bulk_toolbar_state()
+        if hasattr(self.mw, "_update_selection_bar_state"):
+            self.mw._update_selection_bar_state()
 
         # Update undo button
         self._update_undo_button()

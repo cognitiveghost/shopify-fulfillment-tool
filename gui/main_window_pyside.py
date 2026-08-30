@@ -352,7 +352,6 @@ class MainWindow(QMainWindow):
         self.filter_input.textChanged.connect(self._filter_debounce.start)
         self.filter_column_selector.currentIndexChanged.connect(self.filter_table)
         self.case_sensitive_checkbox.stateChanged.connect(self.filter_table)
-        self.clear_filter_button.clicked.connect(self.clear_filter)
         self.tag_filter_combo.currentIndexChanged.connect(self.filter_table)
 
         # Inventory memory toggle
@@ -377,41 +376,6 @@ class MainWindow(QMainWindow):
 
         # Add Ctrl+Z shortcut for Undo
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_operation)
-
-        # Bulk operations toolbar signals
-        if hasattr(self, "bulk_toolbar"):
-            self.bulk_toolbar.select_all_clicked.connect(self._on_bulk_select_all)
-            self.bulk_toolbar.clear_selection_clicked.connect(
-                self._on_bulk_clear_selection
-            )
-            self.bulk_toolbar.change_status_clicked.connect(
-                self.actions_handler.bulk_change_status
-            )
-            self.bulk_toolbar.add_tag_clicked.connect(self.actions_handler.bulk_add_tag)
-            self.bulk_toolbar.remove_tag_clicked.connect(
-                self.actions_handler.bulk_remove_tag
-            )
-            self.bulk_toolbar.remove_sku_from_orders_clicked.connect(
-                self.actions_handler.bulk_remove_sku_from_orders
-            )
-            self.bulk_toolbar.remove_orders_with_sku_clicked.connect(
-                self.actions_handler.bulk_remove_orders_with_sku
-            )
-            self.bulk_toolbar.delete_orders_clicked.connect(
-                self.actions_handler.bulk_delete_orders
-            )
-            self.bulk_toolbar.export_selection_clicked.connect(
-                self.actions_handler.bulk_export_selection
-            )
-
-    def clear_filter(self):
-        """Clears the filter input text box, tag filter, and resets proxy model."""
-        self.filter_input.clear()
-        if hasattr(self, "tag_filter_combo"):
-            self.tag_filter_combo.setCurrentIndex(0)  # Reset to "All Tags"
-
-        # Reset proxy model filter state
-        self.proxy_model.clear_filters()
 
     def undo_last_operation(self):
         """Undo the last DataFrame modification."""
@@ -540,7 +504,7 @@ class MainWindow(QMainWindow):
         if orders_df is None or orders_df.empty:
             self.order_detail_pane.clear()
             self.selection_helper.clear_selection()
-            self._update_bulk_toolbar_state()
+            self._update_selection_bar_state()
             return
 
         column = orders_df.columns.get_loc(ORDER_KEY)
@@ -550,7 +514,7 @@ class MainWindow(QMainWindow):
             selected.append(orders_df.iat[source_row, column])
 
         self.selection_helper.set_selected_orders(selected)
-        self._update_bulk_toolbar_state()
+        self._update_selection_bar_state()
 
         current = self.tableView.selectionModel().currentIndex()
         if not selected or not current.isValid():
@@ -608,23 +572,16 @@ class MainWindow(QMainWindow):
         if hasattr(self, "ui_manager"):
             self.ui_manager.update_hidden_columns_indicator()
 
-    def _update_bulk_toolbar_state(self):
-        """Update bulk toolbar selection counter and button states."""
-        if not hasattr(self, "bulk_toolbar"):
+    def _update_selection_bar_state(self):
+        """Show the bar, and name what is selected, or hide it."""
+        if not hasattr(self, "selection_bar"):
             return
 
         orders_count, items_count = self.selection_helper.get_selection_summary()
-        self.bulk_toolbar.update_selection_count(orders_count, items_count)
-        self.bulk_toolbar.set_enabled(orders_count > 0)
-        self.bulk_toolbar.setVisible(orders_count > 0)
-
-    def _on_bulk_select_all(self):
-        """Handle Select All button in bulk toolbar."""
-        self.tableView.selectAll()
-
-    def _on_bulk_clear_selection(self):
-        """Handle Clear button in bulk toolbar."""
-        self.tableView.clearSelection()
+        self.selection_bar.set_selection(
+            "" if orders_count == 0
+            else f"{orders_count} orders · {items_count} items selected"
+        )
 
     def update_session_info_label(self):
         """Update global header session info label."""
@@ -1141,6 +1098,7 @@ class MainWindow(QMainWindow):
             case_sensitive=self.case_sensitive_checkbox.isChecked(),
         )
         self.proxy_model.set_tag_filter(selected_tag)
+        self.ui_manager.update_filter_count()
 
     def _update_all_views(self):
         """Central slot to refresh all UI components after data changes.
@@ -1156,8 +1114,6 @@ class MainWindow(QMainWindow):
                 self.analysis_stats = recalculate_statistics(self.analysis_results_df)
                 self.ui_manager.update_results_table(self.analysis_results_df)
                 self.update_statistics_tab()
-                # Update summary bar in Tab 2
-                self.ui_manager.update_summary_bar()
             except Exception:
                 logger.exception("Failed to recalculate statistics")
                 self.analysis_stats = None
@@ -1168,6 +1124,8 @@ class MainWindow(QMainWindow):
             self._clear_statistics_view()
             self.ui_manager.update_results_table(pd.DataFrame())
 
+        self.ui_manager.update_kpi_strip()
+
         # Populate filter dropdown
         # Offer the columns the table actually shows. Line-level columns are not
         # here on purpose -- they are in the pane, and "All Columns" still finds
@@ -1176,10 +1134,10 @@ class MainWindow(QMainWindow):
         self.filter_column_selector.addItem("All Columns", None)
         orders_df = getattr(self, "orders_df", None)
         if orders_df is not None and not orders_df.empty:
-            from gui.orders_view import SEARCH_COLUMN
+            from gui.orders_view import HIDDEN_COLUMNS
 
             for col in orders_df.columns:
-                if col != SEARCH_COLUMN:
+                if col not in HIDDEN_COLUMNS:
                     self.filter_column_selector.addItem(col, col)
         self.ui_manager.set_ui_busy(False)
         # The column manager button is enabled within update_results_table

@@ -23,8 +23,9 @@ class TagDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         """Paint tags as colored badges while respecting row background and selection."""
         # Let the style paint the background -- it resolves the selected row
-        # (selection_bg plus its share of the selection_border ring) and the
-        # model's BackgroundRole alike. Not palette.highlight(): that is still
+        # (selection_bg plus its share of the selection_border ring). The model
+        # no longer answers BackgroundRole at all since 8.8b; letting the style
+        # own the background is what keeps this cell's segment of the ring. Not palette.highlight(): that is still
         # accent_fill, which would punch an accent block through the row and
         # drop this cell's segment of the ring.
         opt = QStyleOptionViewItem(option)

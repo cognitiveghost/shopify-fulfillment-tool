@@ -2,9 +2,13 @@ import json
 
 import pandas as pd
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
-from PySide6.QtGui import QColor
 
 from gui.theme_manager import get_theme_manager
+
+# The row's status as a theme role token name -- resolved against the live
+# theme by StatusEdgeDelegate, not here. Qt.UserRole is unused on this model
+# and TagDelegate reads none; +20 leaves room for both.
+ROLE_STATUS = Qt.ItemDataRole.UserRole + 20
 
 
 class FulfillmentFilterProxy(QSortFilterProxyModel):
@@ -74,7 +78,11 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
             return True
 
         if self._df_col < 0:
-            col_indices = range(len(df.columns))
+            # Every column *except* REPEAT_COLUMN: it is a derived bool, so
+            # cell_search_text renders it "True"/"False" and a needle of "f",
+            # "al" or "true" would match every row through a column the user
+            # cannot see. _search_text is derived too, but exists to be searched.
+            col_indices = [c for c, name in enumerate(df.columns) if name != REPEAT_COLUMN]
         elif self._df_col < len(df.columns):
             col_indices = (self._df_col,)
         else:
@@ -98,6 +106,26 @@ def _format_lot(lot: dict) -> str:
     batch = lot.get("batch")
     batch_str = f", Batch {batch}" if batch else ""
     return f"{qty_str}x, {expiry_str}{batch_str}"
+
+
+# The order-frame column carrying "does any line of this order read as a
+# repeat?". Named here rather than in orders_view because the status cache
+# below reads it and orders_view already imports from this module -- the
+# reverse import would make the two circular.
+REPEAT_COLUMN = "_repeat"
+
+
+def is_repeat(note) -> bool:
+    """The row tint's own test: mentions a repeat, and is not purely a blocker.
+
+    A compound note ("Repeat customer; Cannot fulfill: ...") is both, and the
+    tint showed it amber rather than red -- its "Repeat" branch `continue`d
+    before the status branch was reached. Preserved deliberately, not chosen.
+    """
+    if note is None or (isinstance(note, float) and pd.isna(note)):
+        return False
+    text = str(note)
+    return "Repeat" in text and not text.startswith("Cannot fulfill")
 
 
 def cell_display_text(value) -> str:
@@ -160,13 +188,11 @@ class PandasModel(QAbstractTableModel):
     displayed and manipulated in a Qt view (like QTableView) while adhering to
     the Qt Model/View programming paradigm.
 
-    It handles data retrieval, header information, and custom styling (e.g.,
-    row colors) based on the DataFrame's content.
+    It handles data retrieval, header information, and a per-row status token
+    (ROLE_STATUS) that StatusEdgeDelegate resolves against the live theme.
 
     Attributes:
         _dataframe (pd.DataFrame): The underlying pandas DataFrame.
-        colors (dict): A mapping of status strings to QColor objects for row
-                       styling.
     """
 
     def __init__(self, dataframe: pd.DataFrame, parent=None):
@@ -179,15 +205,12 @@ class PandasModel(QAbstractTableModel):
         super().__init__(parent)
         self._dataframe = dataframe
 
-        # Initialize colors based on current theme
-        self._update_colors()
-
-        # Pre-compute per-row color caches to avoid repeated column lookups in data()
-        self._build_row_color_cache()
+        # Pre-compute per-row status token cache to avoid repeated column lookups in data()
+        self._build_row_status_cache()
 
         # Connect to theme changes
         theme_manager = get_theme_manager()
-        theme_manager.theme_changed.connect(self._update_colors)
+        theme_manager.theme_changed.connect(self._on_theme_changed)
 
     def rowCount(self, parent=QModelIndex()) -> int:
         """Returns the number of rows in the model."""
@@ -207,8 +230,9 @@ class PandasModel(QAbstractTableModel):
         This method is called by the view to get the data to display. It
         handles:
         - `DisplayRole`: The text to be displayed in a cell.
-        - `BackgroundRole`: The background color of a row, based on the
-          'System_note' or 'Order_Fulfillment_Status' columns.
+        - `ROLE_STATUS`: The row's status token, derived from the
+          'System_note' or 'Order_Fulfillment_Status' columns. A token, not a
+          colour: StatusEdgeDelegate resolves and paints it as a left edge.
 
         Args:
             index (QModelIndex): The index of the item to retrieve data for.
@@ -236,11 +260,8 @@ class PandasModel(QAbstractTableModel):
 
             return cell_display_text(value)
 
-        if role == Qt.ItemDataRole.BackgroundRole:
-            return self._row_bg_cache[row]
-
-        if role == Qt.ItemDataRole.ForegroundRole:
-            return self._row_fg_cache[row]
+        if role == ROLE_STATUS:
+            return self._row_status_cache[row]
 
         return None
 
@@ -295,76 +316,57 @@ class PandasModel(QAbstractTableModel):
         self.hidden_columns = [col for col in all_columns_in_order if col not in visible_columns]
         self.endResetModel()
 
-    def _build_row_color_cache(self):
-        """Pre-compute background/foreground color for each row.
+    def _build_row_status_cache(self):
+        """Pre-compute each row's status token: "status_warning" / "_success"
+        / "_danger", or None.
 
-        Called once at init and after theme changes. Avoids per-cell column
-        lookups in data() which were causing scroll lag on large DataFrames.
+        Token names, not colours, so the cache survives a theme change --
+        StatusEdgeDelegate resolves them against the live theme at paint time.
 
-        Assumption: the underlying DataFrame is treated as immutable after
-        the model is created. If row data changes in-place (status or note
-        updated without recreating the model), call _build_row_color_cache()
-        manually afterwards so the cache stays in sync.
+        Serves both tables this model backs. The order frame answers "is this a
+        repeat?" from the derived `_repeat` column (System_note is line-level
+        and does not survive the fold); the detail pane's lines table has
+        System_note itself and no Order_Fulfillment_Status. Presence checks,
+        not two code paths.
+
+        Assumption unchanged from the colour cache it replaces: the DataFrame
+        is immutable after the model is created. Mutate rows in place and you
+        must call this again.
         """
         n = len(self._dataframe)
-        bg = [None] * n
-        fg = [None] * n
+        columns = self._dataframe.columns
 
-        has_system_note = "System_note" in self._dataframe.columns
-        has_status = "Order_Fulfillment_Status" in self._dataframe.columns
+        repeat_col = columns.get_loc(REPEAT_COLUMN) if REPEAT_COLUMN in columns else -1
+        note_col = columns.get_loc("System_note") if "System_note" in columns else -1
+        status_col = (
+            columns.get_loc("Order_Fulfillment_Status")
+            if "Order_Fulfillment_Status" in columns
+            else -1
+        )
 
-        # Pre-compute column indices so the hot loop uses iat (scalar, ~5-10x faster than iloc[i]["col"])
-        sn_col = self._dataframe.columns.get_loc("System_note") if has_system_note else -1
-        st_col = self._dataframe.columns.get_loc("Order_Fulfillment_Status") if has_status else -1
-
+        cache = [None] * n
         for i in range(n):
             try:
-                if has_system_note:
-                    sn_val = self._dataframe.iat[i, sn_col]
-                    if pd.notna(sn_val):
-                        sn = str(sn_val)
-                        if "Repeat" in sn and not sn.startswith("Cannot fulfill"):
-                            bg[i] = self.colors["SystemNoteHighlight"]
-                            fg[i] = self.text_colors["SystemNoteHighlight"]
-                            continue
-
-                if has_status:
-                    status = self._dataframe.iat[i, st_col]
+                if repeat_col >= 0 and bool(self._dataframe.iat[i, repeat_col]):
+                    cache[i] = "status_warning"
+                    continue
+                if note_col >= 0 and is_repeat(self._dataframe.iat[i, note_col]):
+                    cache[i] = "status_warning"
+                    continue
+                if status_col >= 0:
+                    status = self._dataframe.iat[i, status_col]
                     if status == "Fulfillable":
-                        bg[i] = self.colors["Fulfillable"]
-                        fg[i] = self.text_colors["Fulfillable"]
+                        cache[i] = "status_success"
                     elif status == "Not Fulfillable":
-                        bg[i] = self.colors["NotFulfillable"]
-                        fg[i] = self.text_colors["NotFulfillable"]
+                        cache[i] = "status_danger"
             except (IndexError, KeyError):
                 pass
 
-        self._row_bg_cache = bg
-        self._row_fg_cache = fg
+        self._row_status_cache = cache
 
-    def _update_colors(self, theme=None):
-        """Update row colors based on current theme.
-
-        Sets background and text colors for table rows based on fulfillment status.
-        """
-        theme = theme or get_theme_manager().get_current_theme()
-        self.colors = {
-            "Fulfillable": QColor(theme.status_success_bg),
-            "NotFulfillable": QColor(theme.status_danger_bg),
-            "SystemNoteHighlight": QColor(theme.status_warning_bg),
-        }
-        self.text_colors = {
-            "Fulfillable": QColor(theme.status_success),
-            "NotFulfillable": QColor(theme.status_danger),
-            "SystemNoteHighlight": QColor(theme.status_warning),
-        }
-
-        # Rebuild per-row cache with new colors (if data already loaded)
-        if hasattr(self, '_row_bg_cache'):
-            self._build_row_color_cache()
-
-        # Notify views that data has changed (triggers repaint)
+    def _on_theme_changed(self, theme=None):
+        """Repaint. The cache holds token names, so nothing needs rebuilding."""
         if self.rowCount() > 0:
             top_left = self.index(0, 0)
             bottom_right = self.index(self.rowCount() - 1, self.columnCount() - 1)
-            self.dataChanged.emit(top_left, bottom_right, [Qt.BackgroundRole, Qt.ForegroundRole])
+            self.dataChanged.emit(top_left, bottom_right, [ROLE_STATUS])
