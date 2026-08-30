@@ -48,7 +48,18 @@ def main_window(app):
 
 @pytest.fixture
 def loaded(main_window, lines_df):
-    """The window with the frame loaded, exactly as _update_all_views does it."""
+    """The window with the frame loaded, exactly as _update_all_views does it.
+
+    The in-memory TableConfig is load-bearing, not decoration: without it
+    apply_config_to_view() returns early on "No config loaded", so the second
+    hide loop in results_view_frame() -- the one that exists *because* the
+    config re-walks the frame -- is never reached and the hidden-column test
+    passes on the first loop alone.
+    """
+    from gui.table_config_manager import TableConfig
+
+    main_window.table_config_manager._current_config = TableConfig()
+    main_window.table_config_manager._current_client_id = None
     main_window.analysis_results_df = lines_df
     main_window.ui_manager.update_results_table(lines_df)
     main_window.ui_manager.update_kpi_strip()

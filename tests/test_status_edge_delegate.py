@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QTableView
 from gui.orders_view import REPEAT_COLUMN
 from gui.pandas_model import PandasModel
 from gui.status_edge_delegate import StatusEdgeDelegate
+from gui.theme_manager import get_theme_manager
 from shared.theme import DARK_THEME, LIGHT_THEME
 
 # setModel() does not take ownership of the model, and nothing else holds a
@@ -77,10 +78,87 @@ def test_the_edge_only_paints_on_the_leftmost_visible_column(qapp):
 
 
 def test_role_status_collides_with_no_other_custom_role():
-    """Spec §10. These are every custom item role in the repo."""
+    """Spec §10. These are every custom item role in the repo.
+
+    session_row_delegates' roles live on a different table, so they cannot
+    actually collide here. The delegate that *does* share this table is
+    TagDelegate, and it is safe for a different reason: it reads only
+    Qt.DisplayRole (gui/tag_delegate.py), never a custom role.
+    """
     from PySide6.QtCore import Qt
 
     from gui.pandas_model import ROLE_STATUS
     from gui.session_row_delegates import ROLE_MANUAL, ROLE_TOKEN
 
     assert ROLE_STATUS not in (Qt.ItemDataRole.UserRole, ROLE_TOKEN, ROLE_MANUAL)
+
+
+def _rendered(view):
+    """Render the viewport to an image so paint() output can be sampled."""
+    from PySide6.QtGui import QImage
+
+    image = QImage(view.viewport().size(), QImage.Format.Format_ARGB32)
+    image.fill(0)
+    view.viewport().render(image)
+    return image
+
+
+def _edge_pixel(view, image, row):
+    from PySide6.QtGui import QColor
+
+    rect = view.visualRect(view.model().index(row, 0))
+    return QColor(image.pixel(rect.left() + 1, rect.center().y())).name().upper()
+
+
+def test_paint_actually_draws_the_edge(qapp):
+    """The other tests stop at edge_token(); this one proves a pixel lands.
+
+    Task 10's "eyeball it in both themes" step could not run (no display on the
+    build VM), so the paint path itself was uncovered -- edge_token() and
+    paints_edge() can both be right while nothing is ever drawn.
+    """
+    theme = get_theme_manager().get_current_theme()
+
+    view = QTableView()
+    model = PandasModel(
+        pd.DataFrame(
+            [
+                {"Order_Number": "1", "Order_Fulfillment_Status": "Fulfillable"},
+                {"Order_Number": "2", "Order_Fulfillment_Status": "Not Fulfillable"},
+                {"Order_Number": "3", "Order_Fulfillment_Status": ""},
+            ]
+        )
+    )
+    view.setModel(model)
+    view.setItemDelegate(StatusEdgeDelegate(view))
+    view.resize(400, 200)
+    _KEEPALIVE.append((view, model))
+
+    image = _rendered(view)
+    assert _edge_pixel(view, image, 0) == theme.status_success.upper()
+    assert _edge_pixel(view, image, 1) == theme.status_danger.upper()
+    # No status token -> no edge, so the row background shows through.
+    assert _edge_pixel(view, image, 2) not in (
+        theme.status_success.upper(),
+        theme.status_danger.upper(),
+    )
+
+
+def test_a_selected_row_keeps_its_edge(qapp):
+    """The whole point of the edge: *selected* and *blocked* at once.
+
+    The filled row tint this replaced could show only one of the two.
+    """
+    theme = get_theme_manager().get_current_theme()
+
+    view = QTableView()
+    model = PandasModel(
+        pd.DataFrame([{"Order_Number": "1", "Order_Fulfillment_Status": "Not Fulfillable"}])
+    )
+    view.setModel(model)
+    view.setItemDelegate(StatusEdgeDelegate(view))
+    view.resize(400, 200)
+    view.selectRow(0)
+    _KEEPALIVE.append((view, model))
+
+    assert _edge_pixel(view, _rendered(view), 0) == theme.status_danger.upper()

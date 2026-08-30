@@ -12,12 +12,7 @@ Spec: docs/superpowers/specs/2026-08-30-phase8.8b-analysis-results-chrome-design
 """
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (
-    QApplication,
-    QStyle,
-    QStyledItemDelegate,
-    QStyleOptionViewItem,
-)
+from PySide6.QtWidgets import QStyledItemDelegate
 
 from gui.pandas_model import ROLE_STATUS
 from gui.theme_manager import get_theme_manager
@@ -41,23 +36,23 @@ class StatusEdgeDelegate(QStyledItemDelegate):
         return header is not None and header.visualIndex(column) == 0
 
     def paint(self, painter, option, index):
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-        style = opt.widget.style() if opt.widget else QApplication.style()
-        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        super().paint(painter, option, index)
 
-        token = self.edge_token(index)
-        if not token:
-            return
-        widget = opt.widget
+        # Column check first: it is a C++ visualIndex lookup, where edge_token
+        # is a data() round-trip through the proxy. Only one column of N draws
+        # an edge, so the cheap test skips the model call for the other N-1.
+        widget = option.widget
         header = widget.horizontalHeader() if hasattr(widget, "horizontalHeader") else None
         if not self.paints_edge(header, index.column()):
             return
+        token = self.edge_token(index)
+        if not token:
+            return
 
         theme = get_theme_manager().get_current_theme()
-        edge = option.rect
-        edge.setWidth(EDGE_WIDTH)
-
+        rect = option.rect
         painter.save()
-        painter.fillRect(edge, QColor(getattr(theme, token)))
+        # Not `rect.setWidth()`: PySide6 hands back a reference to the option's
+        # own field, so narrowing it would mutate the caller's const option.
+        painter.fillRect(rect.x(), rect.y(), EDGE_WIDTH, rect.height(), QColor(getattr(theme, token)))
         painter.restore()
