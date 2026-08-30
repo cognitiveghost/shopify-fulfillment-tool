@@ -74,6 +74,12 @@ class ThemeManager(QObject):
         self._current_theme_name = "light"
         self._load_theme_preference()
         self._load_density_preference()
+        # Seed shared.theme now, not at the first apply_theme(). Shared widgets
+        # read current_tokens(), so any of them built before the first apply
+        # would paint the unseeded fallback while this manager reports the
+        # saved theme. gui_main.py happens to apply first today; that ordering
+        # is not something a shared widget should have to rely on.
+        set_current(self._current_theme_name)
         logger.info(
             f"ThemeManager initialized with theme: {self._current_theme_name}, "
             f"density: {get_density()}"

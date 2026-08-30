@@ -205,7 +205,7 @@ DARK_THEME = ThemeTokens(
 THEMES: dict = {"light": LIGHT_THEME, "dark": DARK_THEME}
 
 
-def get_theme(name: str) -> ThemeTokens:
+def get_theme(name: str | None) -> ThemeTokens:
     """Look up a theme by name, falling back to light for an unknown name."""
     return THEMES.get(name, LIGHT_THEME)
 
@@ -258,8 +258,12 @@ def current_tokens() -> ThemeTokens:
     arrives through the QApplication stylesheet each app builds from its own
     font-layered tokens. A widget sheet restating it would pin the fallback
     family on the one widget that did.
+
+    Before any app has applied a theme this falls back exactly as get_theme()
+    does. It is deliberately not a second, different default: an app that
+    forgets to seed _current should render one app's wrong theme, not two.
     """
-    return get_theme(_current or THEME_DARK)
+    return get_theme(_current)
 
 
 @dataclass(frozen=True)

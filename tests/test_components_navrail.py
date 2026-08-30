@@ -134,3 +134,22 @@ def test_a_theme_toggle_restyles_the_rail(qapp):
         assert rail.styleSheet() != before
     finally:
         manager.toggle_theme()
+
+
+def test_the_manager_seeds_shared_theme_at_construction(qapp):
+    """Shared widgets read shared.theme.current_tokens(), so the manager must
+    record the live theme when it is built, not at the first apply_theme():
+    anything constructed in between would paint the unseeded fallback while
+    the manager reports the saved theme."""
+    import shared.theme as shared_theme
+    from gui import theme_manager as tm
+
+    saved_instance, saved_current = tm.ThemeManager._instance, shared_theme._current
+    tm.ThemeManager._instance = None
+    shared_theme._current = None
+    try:
+        manager = tm.ThemeManager()
+        assert shared_theme.current_theme_name() == manager.get_current_theme_name()
+    finally:
+        tm.ThemeManager._instance = saved_instance
+        shared_theme._current = saved_current

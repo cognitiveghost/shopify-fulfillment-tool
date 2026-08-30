@@ -81,6 +81,10 @@ class NavRail(QWidget):
         button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         button.setAutoRaise(True)
         button.setFixedWidth(self._width)
+        # ponytail: caption size is baked in once, so a density switch does not
+        # resize the labels -- set_current() no-ops on an unchanged theme name,
+        # so set_density() never reaches the notifier. Re-apply from a density
+        # signal when 8.9 moves packing-tool to floor density.
         button.setStyleSheet(font_css("caption"))
         return button
 
