@@ -1,7 +1,8 @@
 import logging
 from typing import ClassVar
 
-from PySide6.QtCore import Qt
+import pandas as pd
+from PySide6.QtCore import QItemSelection, QItemSelectionModel, Qt
 from PySide6.QtGui import QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -33,7 +34,7 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .bulk_operations_toolbar import BulkOperationsToolbar
 from .icons import icon
-from .orders_view import SEARCH_COLUMN, orders_frame
+from .orders_view import ORDER_KEY, SEARCH_COLUMN, orders_frame
 from .pandas_model import PandasModel
 from .tag_categories_dialog import DEFAULT_TAG_COLOR
 from .theme_manager import font_css, get_theme_manager
@@ -905,6 +906,10 @@ class UIManager:
         if data_df.empty:
             self.log.warning("Received empty dataframe, clearing tables.")
 
+        # Every tag add, status change and undo re-enters here, and setModel()
+        # below throws the selection away. Capture it before the rebuild.
+        previously_selected = self._selected_order_numbers()
+
         orders_df = orders_frame(data_df)
         self.mw.orders_df = orders_df
 
@@ -925,10 +930,18 @@ class UIManager:
                 orders_df.columns.get_loc(SEARCH_COLUMN), True
             )
 
+        # No client selected yet -> no profile config; this runs on every
+        # client switch, before one is loaded.
+        profile = getattr(self.mw, "active_profile_config", None) or {}
+        tag_categories = profile.get("tag_categories", {})
+        # toggle_tag_panel() used to do this; the pane is always on screen now,
+        # so the dropdown is loaded wherever tag_categories is already read.
+        if hasattr(self.mw, "tag_management_panel"):
+            self.mw.tag_management_panel.load_predefined_tags(tag_categories)
+
         if "Internal_Tags" in orders_df.columns:
             from gui.tag_delegate import TagDelegate
 
-            tag_categories = self.mw.active_profile_config.get("tag_categories", {})
             self.mw.tag_delegate = TagDelegate(tag_categories, self.mw)
             self.mw.tableView.setItemDelegateForColumn(
                 orders_df.columns.get_loc("Internal_Tags"), self.mw.tag_delegate
@@ -946,7 +959,7 @@ class UIManager:
 
         if hasattr(self.mw, "table_config_manager"):
             self.mw.table_config_manager.apply_config_to_view(
-                self.mw.tableView, orders_df
+                self.mw.tableView, self.results_view_frame()
             )
 
         # apply_config_to_view walks the frame it is given, so re-hide after it.
@@ -965,9 +978,70 @@ class UIManager:
         except (RuntimeError, TypeError):
             pass  # not connected yet -- the first load
         selection_model.selectionChanged.connect(self.mw.on_results_selection_changed)
+        self._reselect_orders(previously_selected)
         self.mw.on_results_selection_changed()
 
         self.update_hidden_columns_indicator()
+
+    def _selected_order_numbers(self) -> set:
+        """The order numbers currently selected, or an empty set."""
+        helper = getattr(self.mw, "selection_helper", None)
+        if helper is None or not helper.has_selection():
+            return set()
+        selected = helper.get_selected_orders_data()
+        if selected.empty or ORDER_KEY not in selected.columns:
+            return set()
+        return set(selected[ORDER_KEY])
+
+    def _reselect_orders(self, order_numbers) -> None:
+        """Re-select the rows for ``order_numbers`` after a model rebuild."""
+        if not order_numbers:
+            return
+        orders_df = self.mw.orders_df
+        if orders_df is None or orders_df.empty or ORDER_KEY not in orders_df.columns:
+            return
+
+        column = orders_df.columns.get_loc(ORDER_KEY)
+        proxy = self.mw.proxy_model
+        last_col = proxy.columnCount() - 1
+        selection = QItemSelection()
+        for proxy_row in range(proxy.rowCount()):
+            source_row = proxy.mapToSource(proxy.index(proxy_row, 0)).row()
+            if orders_df.iat[source_row, column] in order_numbers:
+                selection.merge(
+                    QItemSelection(
+                        proxy.index(proxy_row, 0), proxy.index(proxy_row, last_col)
+                    ),
+                    QItemSelectionModel.Select,
+                )
+        if selection.isEmpty():
+            return
+        selection_model = self.mw.tableView.selectionModel()
+        selection_model.select(
+            selection, QItemSelectionModel.Select | QItemSelectionModel.Rows
+        )
+        # select() leaves currentIndex invalid, and the detail pane reads it to
+        # decide which of the selected orders to show.
+        selection_model.setCurrentIndex(
+            selection.indexes()[0], QItemSelectionModel.NoUpdate
+        )
+
+    def results_view_frame(self):
+        """The frame the results table actually renders.
+
+        Column configuration addresses the view by column *index*, so every
+        call that touches ``tableView`` must walk the order frame -- not the
+        line-level ``analysis_results_df`` the two frames disagree with.
+        SEARCH_COLUMN is dropped: it is always last, so no other column moves,
+        and carrying it would let "Show All Columns" reveal an internal column
+        and write its name into the client's saved config.
+        """
+        orders_df = getattr(self.mw, "orders_df", None)
+        if orders_df is None:
+            orders_df = self.mw.analysis_results_df
+        if orders_df is None:
+            return pd.DataFrame()
+        return orders_df.drop(columns=[SEARCH_COLUMN], errors="ignore")
 
     def _populate_tag_filter(self):
         """Populate the tag filter combo box with tags from current DataFrame.
@@ -1313,24 +1387,11 @@ class UIManager:
         if model is None:
             return
 
-        # Get source model (unwrap proxy if present)
-        source_model = model
-        if hasattr(model, "sourceModel") and model.sourceModel() is not None:
-            source_model = model.sourceModel()
-
-        # Adjust index if checkbox column exists
+        # Header sections map straight onto the order frame's columns: the
+        # checkbox column that used to offset them is gone.
         col_index = logical_index
-        if (
-            hasattr(source_model, "enable_checkboxes")
-            and source_model.enable_checkboxes
-        ):
-            if col_index == 0:
-                # Checkbox column, no menu
-                return
-            col_index -= 1  # Adjust for checkbox column
-
-        # Get DataFrame columns
-        df_columns = self.mw.analysis_results_df.columns.tolist()
+        view_df = self.results_view_frame()
+        df_columns = view_df.columns.tolist()
 
         if col_index >= len(df_columns):
             return
@@ -1365,7 +1426,7 @@ class UIManager:
             action.triggered.connect(
                 lambda: (
                     self.mw.table_config_manager.toggle_column_visibility(
-                        self.mw.tableView, column_name, self.mw.analysis_results_df
+                        self.mw.tableView, column_name, view_df
                     ),
                     self.update_hidden_columns_indicator(),
                 )
@@ -1379,7 +1440,7 @@ class UIManager:
         show_all_action.triggered.connect(
             lambda: (
                 self.mw.table_config_manager.show_all_columns(
-                    self.mw.tableView, self.mw.analysis_results_df
+                    self.mw.tableView, view_df
                 ),
                 self.update_hidden_columns_indicator(),
             )
@@ -1387,9 +1448,7 @@ class UIManager:
         menu.addAction(show_all_action)
 
         # Add submenu for showing hidden columns
-        hidden_columns = self.mw.table_config_manager.get_hidden_columns(
-            self.mw.analysis_results_df
-        )
+        hidden_columns = self.mw.table_config_manager.get_hidden_columns(view_df)
         if hidden_columns:
             show_menu = menu.addMenu("Show Column")
             for hidden_col in hidden_columns:
@@ -1397,7 +1456,7 @@ class UIManager:
                 col_action.triggered.connect(
                     lambda checked=False, col=hidden_col: (
                         self.mw.table_config_manager.set_column_visibility(
-                            self.mw.tableView, col, True, self.mw.analysis_results_df
+                            self.mw.tableView, col, True, view_df
                         ),
                         self.update_hidden_columns_indicator(),
                     )
@@ -1410,7 +1469,7 @@ class UIManager:
         auto_fit_action = QAction("Auto-Fit Column Widths", self.mw)
         auto_fit_action.triggered.connect(
             lambda: self.mw.table_config_manager.auto_fit_column_widths(
-                self.mw.tableView, self.mw.analysis_results_df
+                self.mw.tableView, view_df
             )
         )
         menu.addAction(auto_fit_action)
@@ -1495,7 +1554,7 @@ class UIManager:
             return
 
         hidden = self.mw.table_config_manager.get_hidden_columns(
-            self.mw.analysis_results_df
+            self.results_view_frame()
         )
         if hidden:
             self.mw.hidden_columns_indicator.setText(f"{len(hidden)} columns hidden")
@@ -1515,7 +1574,7 @@ class UIManager:
             return
 
         hidden = self.mw.table_config_manager.get_hidden_columns(
-            self.mw.analysis_results_df
+            self.results_view_frame()
         )
         if not hidden:
             return
@@ -1549,7 +1608,7 @@ class UIManager:
             and self.mw.analysis_results_df is not None
         ):
             self.mw.table_config_manager.set_column_visibility(
-                self.mw.tableView, column_name, True, self.mw.analysis_results_df
+                self.mw.tableView, column_name, True, self.results_view_frame()
             )
             self.update_hidden_columns_indicator()
 
@@ -1561,7 +1620,7 @@ class UIManager:
             and self.mw.analysis_results_df is not None
         ):
             self.mw.table_config_manager.show_all_columns(
-                self.mw.tableView, self.mw.analysis_results_df
+                self.mw.tableView, self.results_view_frame()
             )
             self.update_hidden_columns_indicator()
 

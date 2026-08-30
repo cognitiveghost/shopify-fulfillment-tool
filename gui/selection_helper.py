@@ -106,31 +106,6 @@ class SelectionHelper:
 
         self.checked_rows = set(df.index[df["Order_Number"].isin(wanted)])
 
-    def select_all(self):
-        """Check every order currently visible in the table.
-
-        Reads Order_Number out of whatever frame the proxy is showing, so it is
-        correct for the order frame without knowing that is what it is looking
-        at.
-        """
-        self.checked_rows = set()
-        if self.proxy_model is None:
-            return
-
-        source = self.proxy_model.sourceModel()
-        frame = getattr(source, "_dataframe", None)
-        if frame is None or "Order_Number" not in frame.columns:
-            return
-
-        col = frame.columns.get_loc("Order_Number")
-        orders = set()
-        for proxy_row in range(self.proxy_model.rowCount()):
-            source_row = self.proxy_model.mapToSource(
-                self.proxy_model.index(proxy_row, 0)
-            ).row()
-            orders.add(frame.iat[source_row, col])
-        self.set_selected_orders(orders)
-
     def clear_selection(self):
         """Uncheck all rows."""
         self.checked_rows.clear()

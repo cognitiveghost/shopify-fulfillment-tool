@@ -8,7 +8,7 @@ computed on demand, never persisted, never written back to. See
 
 import pandas as pd
 
-from gui.pandas_model import cell_display_text
+from gui.pandas_model import cell_search_text
 
 # Constant across every line of an order, by construction in analysis.py's
 # output_columns (analysis.py:1119).
@@ -126,6 +126,9 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
     order_level, line_level = classify_columns(df)
     carried = [col for col in order_level if col != ORDER_KEY]
 
+    # groupby drops null keys. analysis.py writes Order_Number for every line,
+    # so there are none; carrying them would mean a null-keyed order row whose
+    # Items count cannot be mapped back, which is worse than the status quo.
     grouped = df.groupby(ORDER_KEY, sort=False)
     if carried:
         out = grouped[carried].first().reset_index()
@@ -142,7 +145,9 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
     if line_level:
         # Series.map, not DataFrame.map: the latter only exists from pandas 2.1
         # and this stays readable either way.
-        parts = [df[col].map(cell_display_text) for col in line_level]
+        # cell_search_text, not cell_display_text: a Lot_Details cell displays
+        # as "1 lot" but must stay findable by its batch number and expiry.
+        parts = [df[col].map(cell_search_text) for col in line_level]
         line_text = parts[0]
         for part in parts[1:]:
             line_text = line_text.str.cat(part, sep=" ")

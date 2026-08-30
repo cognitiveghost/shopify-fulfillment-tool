@@ -19,7 +19,7 @@ class FulfillmentFilterProxy(QSortFilterProxyModel):
 
     Columns are addressed by *DataFrame* index (``-1`` = all columns); the
     proxy reads the source ``PandasModel``'s frame directly via ``iat``, so it
-    is unaffected by the checkbox column offset present in bulk mode.
+    addresses the source frame's own column positions.
     """
 
     def __init__(self, parent=None):

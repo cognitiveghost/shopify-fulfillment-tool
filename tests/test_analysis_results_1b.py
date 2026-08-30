@@ -147,3 +147,120 @@ def test_no_bulk_mode_and_no_tag_panel_toggle(app, main_window):
     assert not hasattr(main_window, "toggle_tag_panel")
     assert not hasattr(main_window, "toggle_bulk_mode_btn")
     assert not hasattr(main_window, "toggle_tags_panel_btn")
+
+
+def _with_config(main_window):
+    """An in-memory TableConfig. load_config() would need a real client on disk."""
+    from gui.table_config_manager import TableConfig
+
+    main_window.table_config_manager._current_config = TableConfig()
+    main_window.table_config_manager._current_client_id = None
+    return main_window.table_config_manager
+
+
+# --- Stage C review regressions -------------------------------------------
+# Each of these covers a surface that kept addressing the *line* frame after
+# the view switched to the order frame.
+
+
+def test_filtering_by_a_named_column_searches_that_column(app, lines_df, main_window):
+    """The combo carries column names; positions differ between the frames."""
+    main_window.analysis_results_df = lines_df
+    main_window._update_all_views()
+
+    selector = main_window.filter_column_selector
+    index = selector.findData("Shipping_Provider")
+    assert index > 0, "Shipping_Provider must be offered as a filter column"
+    selector.setCurrentIndex(index)
+    main_window.filter_input.setText("DHL")
+    main_window.filter_table()
+
+    assert main_window.tableView.model().rowCount() == 1
+
+    # A line-level column is not offered: it lives in the pane now.
+    assert selector.findData("SKU") == -1
+
+
+def test_hiding_a_column_from_the_header_menu_hides_that_column(
+    app, lines_df, main_window
+):
+    """The header section index must resolve against the order frame."""
+    from gui.orders_view import SEARCH_COLUMN
+
+    _with_config(main_window)
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+
+    view_df = main_window.ui_manager.results_view_frame()
+    assert SEARCH_COLUMN not in view_df.columns
+
+    column_name = "Shipping_Provider"
+    section = view_df.columns.get_loc(column_name)
+    main_window.table_config_manager.toggle_column_visibility(
+        main_window.tableView, column_name, view_df
+    )
+
+    assert main_window.tableView.isColumnHidden(section)
+
+
+def test_selection_survives_a_data_refresh(app, lines_df, main_window):
+    """Every tag add and status change rebuilds the model underneath."""
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+    main_window.tableView.selectRow(0)
+    assert set(main_window.selection_helper.get_selected_orders_data()["Order_Number"]) == {"1001"}
+
+    main_window.ui_manager.update_results_table(lines_df)
+
+    selected = main_window.selection_helper.get_selected_orders_data()
+    assert set(selected["Order_Number"]) == {"1001"}
+    assert "1001" in main_window.order_detail_pane.header_label.text()
+
+
+def test_the_pane_tag_dropdown_is_populated(app, lines_df, main_window):
+    """load_predefined_tags lost its only caller when toggle_tag_panel went."""
+    main_window.active_profile_config = {
+        "tag_categories": {"Priority": {"tags": ["RUSH", "VIP"]}}
+    }
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+
+    combo = main_window.tag_management_panel.predefined_combo
+    labels = [combo.itemText(i) for i in range(combo.count())]
+    assert any("RUSH" in label for label in labels), labels
+
+
+def test_the_pane_hides_a_line_column_the_client_hid(app, lines_df, main_window):
+    """Spec §4: the saved config keeps its meaning, split across two surfaces."""
+    _with_config(main_window)
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+    main_window.table_config_manager.set_column_visibility(
+        main_window.tableView, "Product_Name", False, main_window.ui_manager.results_view_frame()
+    )
+
+    lines = main_window._pane_lines("1001")
+
+    assert "Product_Name" not in lines.columns
+    assert "SKU" in lines.columns
+
+
+def test_a_lot_batch_number_is_still_findable(app):
+    """cell_search_text, not cell_display_text: a lot cell renders as "1 lot"."""
+    import json
+
+    df = pd.DataFrame(
+        [
+            {
+                "Order_Number": "1001",
+                "SKU": "AAA",
+                "Lot_Details": json.dumps([{"batch": "B7", "expiry": "2026-12-30"}]),
+            },
+            {"Order_Number": "1002", "SKU": "BBB", "Lot_Details": "[]"},
+        ]
+    )
+
+    orders = orders_frame(df)
+    from gui.orders_view import SEARCH_COLUMN
+
+    assert "B7" in orders.loc[orders["Order_Number"] == "1001", SEARCH_COLUMN].iloc[0]

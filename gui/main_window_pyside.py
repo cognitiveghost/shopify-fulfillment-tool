@@ -83,6 +83,8 @@ class MainWindow(QMainWindow):
         self.orders_file_path = None
         self.stock_file_path = None
         self.analysis_results_df = None
+        # The display projection of analysis_results_df, one row per order.
+        self.orders_df = None
         self.analysis_stats = None
         self.threadpool = QThreadPool()
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
@@ -465,26 +467,6 @@ class MainWindow(QMainWindow):
             self.undo_button.setEnabled(True)
             self.undo_button.setToolTip(f"Undo: {description} (Ctrl+Z)")
 
-    def _add_internal_tag(self, order_number: str, sku: str, tag: str):
-        """Add internal tag to the whole order containing the clicked SKU line.
-
-        Internal_Tags is order-level -- the click identifies which order via
-        its SKU line, but the tag applies to every row of that order (see
-        tag_manager.expand_to_order_rows).
-        """
-        from shopify_tool.tag_manager import expand_to_order_rows
-
-        clicked_mask = (self.analysis_results_df["Order_Number"] == order_number) & (
-            self.analysis_results_df["SKU"] == sku
-        )
-        mask = expand_to_order_rows(self.analysis_results_df, clicked_mask)
-        self._apply_tag_operation(
-            mask,
-            description=f"Add Internal Tag: {tag} to order {order_number}",
-            params={"order_number": order_number, "sku": sku, "tag": tag},
-            tag=tag,
-        )
-
     def add_internal_tag_to_order(self, order_number, tag):
         """Add an Internal Tag to all rows of an order (called from tag_management_panel signal)."""
         if self.analysis_results_df is None or self.analysis_results_df.empty:
@@ -552,7 +534,7 @@ class MainWindow(QMainWindow):
     def on_results_selection_changed(self):
         """One order row selected -> pane shows it; every selected order's
         lines go into SelectionHelper, which is what the bulk actions read."""
-        from gui.orders_view import ORDER_KEY, order_lines
+        from gui.orders_view import ORDER_KEY
 
         orders_df = getattr(self, "orders_df", None)
         if orders_df is None or orders_df.empty:
@@ -580,8 +562,24 @@ class MainWindow(QMainWindow):
         self.order_detail_pane.set_order(
             order_number,
             orders_df.iloc[source_row],
-            order_lines(self.analysis_results_df, order_number),
+            self._pane_lines(order_number),
         )
+
+    def _pane_lines(self, order_number):
+        """The order's lines, minus any line-level column the client hid.
+
+        Spec section 4: the saved column config keeps its meaning, split across
+        the order table and the pane. Falls back to every column rather than
+        showing an empty table if the config hides all of them.
+        """
+        from gui.orders_view import order_lines
+
+        lines = order_lines(self.analysis_results_df, order_number)
+        manager = getattr(self, "table_config_manager", None)
+        if manager is None or lines.empty:
+            return lines
+        keep = [col for col in lines.columns if manager.get_column_visibility(col)]
+        return lines[keep] if keep else lines
 
     def open_column_config_dialog(self):
         """Open the Column Configuration Dialog."""
@@ -1128,8 +1126,14 @@ class MainWindow(QMainWindow):
         if hasattr(self, "tag_filter_combo"):
             selected_tag = self.tag_filter_combo.currentData()
 
-        # Column combo: index 0 = "All Columns" (-1), index k = DataFrame col k-1.
-        df_col = self.filter_column_selector.currentIndex() - 1
+        # The proxy resolves df_col positionally against the frame the table
+        # shows -- the order frame. Resolve by name, never by combo position:
+        # the two frames have different column sets and different order.
+        df_col = -1
+        column_name = self.filter_column_selector.currentData()
+        orders_df = getattr(self, "orders_df", None)
+        if column_name and orders_df is not None and column_name in orders_df.columns:
+            df_col = orders_df.columns.get_loc(column_name)
 
         self.proxy_model.set_text_filter(
             self.filter_input.text(),
@@ -1165,14 +1169,18 @@ class MainWindow(QMainWindow):
             self.ui_manager.update_results_table(pd.DataFrame())
 
         # Populate filter dropdown
+        # Offer the columns the table actually shows. Line-level columns are not
+        # here on purpose -- they are in the pane, and "All Columns" still finds
+        # an order by its SKUs through the hidden search column.
         self.filter_column_selector.clear()
-        self.filter_column_selector.addItem("All Columns")
-        if self.analysis_results_df is not None and not self.analysis_results_df.empty:
+        self.filter_column_selector.addItem("All Columns", None)
+        orders_df = getattr(self, "orders_df", None)
+        if orders_df is not None and not orders_df.empty:
             from gui.orders_view import SEARCH_COLUMN
 
-            self.filter_column_selector.addItems(
-                [col for col in self.all_columns if col != SEARCH_COLUMN]
-            )
+            for col in orders_df.columns:
+                if col != SEARCH_COLUMN:
+                    self.filter_column_selector.addItem(col, col)
         self.ui_manager.set_ui_busy(False)
         # The column manager button is enabled within update_results_table
 
@@ -1501,6 +1509,13 @@ class MainWindow(QMainWindow):
             )
         )
         menu.addAction(remove_item_action)
+
+        copy_sku_action = QAction(icon("copy"), f"Copy SKU {sku}", self)
+        copy_sku_action.triggered.connect(
+            lambda: QApplication.clipboard().setText(str(sku))
+        )
+        menu.addAction(copy_sku_action)
+
         menu.exec(table.viewport().mapToGlobal(pos))
 
     def closeEvent(self, event):

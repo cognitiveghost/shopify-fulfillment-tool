@@ -37,17 +37,8 @@ def mw():
         _update_all_views=Mock(),
     )
     fake._apply_tag_operation = types.MethodType(MainWindow._apply_tag_operation, fake)
-    fake._add_internal_tag = types.MethodType(MainWindow._add_internal_tag, fake)
+    fake._pane_lines = types.MethodType(MainWindow._pane_lines, fake)
     return fake
-
-
-def test_add_internal_tag_from_right_click_tags_every_line_of_the_order(mw):
-    mw._add_internal_tag("1001", "A1", "GIFT")
-
-    tags = mw.analysis_results_df.set_index("SKU")["Internal_Tags"]
-    assert '"GIFT"' in tags.loc["A1"]  # the clicked line
-    assert '"GIFT"' in tags.loc["A2"]  # the order's other line -- must ALSO be tagged
-    assert '"GIFT"' not in tags.loc["B1"]  # different order, untouched
 
 
 def test_selecting_a_row_shows_the_orders_tags_in_the_pane(mw):
