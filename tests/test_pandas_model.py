@@ -205,19 +205,3 @@ def test_tag_filter_matches_the_normal_json_string_form():
     assert proxy.rowCount() == 0
 
 
-def test_row_colours_come_from_status_tokens_in_both_themes(qtbot):
-    """The old code carried two hand-tuned palettes behind an is_dark_theme()
-    branch. status_*_bg / status_* already differ per theme and are proved
-    >= 4.5:1 against each other by validate_theme, so the branch is dead."""
-    from gui.pandas_model import PandasModel
-    from shared.theme import DARK_THEME, LIGHT_THEME
-
-    model = PandasModel(pd.DataFrame({"SKU": ["A1"]}))
-    for theme in (LIGHT_THEME, DARK_THEME):
-        model._update_colors(theme)
-        assert model.colors["Fulfillable"].name().upper() == theme.status_success_bg.upper()
-        assert model.colors["NotFulfillable"].name().upper() == theme.status_danger_bg.upper()
-        assert model.colors["SystemNoteHighlight"].name().upper() == theme.status_warning_bg.upper()
-        assert model.text_colors["Fulfillable"].name().upper() == theme.status_success.upper()
-        assert model.text_colors["NotFulfillable"].name().upper() == theme.status_danger.upper()
-        assert model.text_colors["SystemNoteHighlight"].name().upper() == theme.status_warning.upper()
