@@ -19,7 +19,8 @@ class SelectionHelper:
         table_view: Reference to the QTableView widget
         proxy_model: Reference to the QSortFilterProxyModel
         main_window: Reference to the MainWindow instance
-        checked_rows: Set of source DataFrame indexes that are checked
+        checked_rows: Set of analysis_results_df index labels for the lines of
+            the selected orders.
     """
 
     def __init__(self, table_view, proxy_model, main_window):
@@ -82,87 +83,57 @@ class SelectionHelper:
 
         return (unique_orders, total_items)
 
-    def toggle_row(self, source_row_index: int):
-        """Toggle checkbox state for an order (all rows with same Order_Number).
+    def set_selected_orders(self, order_numbers) -> None:
+        """Check exactly the line rows belonging to ``order_numbers``.
 
-        When a row is toggled, all rows belonging to the same order are
-        toggled together. This ensures bulk operations work at the order level.
+        Replaces the previous selection rather than adding to it: the table's
+        own selection is now the whole truth, so there is nothing to merge with.
 
-        Args:
-            source_row_index: Index in the source DataFrame (not proxy)
+        ``checked_rows`` holds DataFrame index *labels*, matching
+        ``get_selected_orders_data``'s ``df.loc[...]``. The old line-level
+        toggle mixed labels with view row positions, which only agreed while
+        the frame happened to have a contiguous index.
         """
-        df = self.main_window.analysis_results_df
-        if df is None or df.empty or source_row_index not in df.index:
-            # Fallback to single row toggle if no DataFrame
-            if source_row_index in self.checked_rows:
-                self.checked_rows.remove(source_row_index)
-            else:
-                self.checked_rows.add(source_row_index)
+        self.checked_rows = set()
+
+        wanted = set(order_numbers)
+        if not wanted:
             return
-
-        # Get the Order_Number for the clicked row
-        order_number = df.loc[source_row_index, 'Order_Number']
-
-        # Find all rows with the same Order_Number
-        order_rows = df[df['Order_Number'] == order_number].index.tolist()
-
-        # Check if any row of this order is currently checked
-        is_order_checked = any(row in self.checked_rows for row in order_rows)
-
-        # Toggle all rows of this order
-        if is_order_checked:
-            # Uncheck all rows of this order
-            for row in order_rows:
-                self.checked_rows.discard(row)
-        else:
-            # Check all rows of this order
-            for row in order_rows:
-                self.checked_rows.add(row)
-
-    def select_all(self):
-        """Check all visible rows (respecting current filter), expanded to
-        every row of the same order.
-
-        A filter can hide some line items of a multi-item order (e.g. a SKU
-        search). Checking only the visible rows would let a bulk action write
-        a new status/tag to part of an order while leaving its hidden
-        sibling rows on the old value. Every row sharing an Order_Number with
-        a visible row is checked too, mirroring toggle_row()'s expansion.
-        """
-        self.checked_rows.clear()
-
-        if self.proxy_model is None:
-            return
-
-        visible_rows = set()
-        for proxy_row in range(self.proxy_model.rowCount()):
-            proxy_index = self.proxy_model.index(proxy_row, 0)
-            source_index = self.proxy_model.mapToSource(proxy_index)
-            visible_rows.add(source_index.row())
 
         df = self.main_window.analysis_results_df
         if df is None or df.empty or "Order_Number" not in df.columns:
-            self.checked_rows = visible_rows
             return
 
-        visible_indexes = [row for row in visible_rows if row in df.index]
-        visible_orders = df.loc[visible_indexes, "Order_Number"].unique()
-        self.checked_rows = set(df[df["Order_Number"].isin(visible_orders)].index)
+        self.checked_rows = set(df.index[df["Order_Number"].isin(wanted)])
+
+    def select_all(self):
+        """Check every order currently visible in the table.
+
+        Reads Order_Number out of whatever frame the proxy is showing, so it is
+        correct for the order frame without knowing that is what it is looking
+        at.
+        """
+        self.checked_rows = set()
+        if self.proxy_model is None:
+            return
+
+        source = self.proxy_model.sourceModel()
+        frame = getattr(source, "_dataframe", None)
+        if frame is None or "Order_Number" not in frame.columns:
+            return
+
+        col = frame.columns.get_loc("Order_Number")
+        orders = set()
+        for proxy_row in range(self.proxy_model.rowCount()):
+            source_row = self.proxy_model.mapToSource(
+                self.proxy_model.index(proxy_row, 0)
+            ).row()
+            orders.add(frame.iat[source_row, col])
+        self.set_selected_orders(orders)
 
     def clear_selection(self):
         """Uncheck all rows."""
         self.checked_rows.clear()
-
-    def is_row_checked(self, source_row_index: int) -> bool:
-        """Check if row is checked.
-
-        Args:
-            source_row_index: Index in the source DataFrame (not proxy)
-
-        Returns:
-            True if the row is checked, False otherwise
-        """
-        return source_row_index in self.checked_rows
 
     def set_table_view(self, table_view):
         """Set the table view reference.
