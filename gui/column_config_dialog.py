@@ -746,12 +746,14 @@ class ColumnConfigPanel(QWidget):
                         f"({', '.join([col['csv_name'] for col in enabled_cols])})"
                     )
 
+                # The order frame, not analysis_results_df: apply_config_to_view
+                # addresses tableView's sections by position.
                 if hasattr(self.parent_window, 'tableView') and \
-                   hasattr(self.parent_window, 'analysis_results_df') and \
+                   hasattr(self.parent_window, 'ui_manager') and \
                    self.parent_window.analysis_results_df is not None:
                     self.table_config_manager.apply_config_to_view(
                         self.parent_window.tableView,
-                        self.parent_window.analysis_results_df
+                        self.parent_window.ui_manager.results_view_frame()
                     )
 
                 logger.info("Column configuration applied successfully")

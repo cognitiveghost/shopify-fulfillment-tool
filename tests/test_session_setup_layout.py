@@ -144,11 +144,17 @@ def test_setup_column_does_not_dramatically_outgrow_the_rest_of_the_app(main_win
     controls that shrank, so it dropped further -- 989px to ~857px -- widening
     the gap past the old +100 ceiling even though Tab 1 itself (~1022px) did
     not move. Widened to +200; still loose, not a pin to today's numbers.
+
+    2026-08-30: Phase 8.8a deleted Tab 2's "Tags Manager" and "Bulk
+    Operations" toggle buttons (the checkbox column and bulk-mode workarounds
+    they drove are gone -- selection is order-level now, see the 8.8a plan).
+    Tab 2 dropped further still -- ~857px to ~583px -- again without Tab 1
+    itself moving. Widened to +450; still loose, not a pin to today's numbers.
     """
     tabs = main_window.main_tabs
     widths = [tabs.widget(i).minimumSizeHint().width() for i in range(tabs.count())]
     setup, others = widths[0], max(widths[1:])
-    assert setup <= others + 200, (
+    assert setup <= others + 450, (
         f"Tab 1 now sets the app's minimum window width ({setup}px vs {others}px "
         f"for the next widest tab) -- the whole app got harder to fit on screen."
     )

@@ -110,20 +110,15 @@ def test_the_accent_fill_is_gone_from_a_selected_row(selected_row):
 
 
 def test_the_analysis_table_delegates_do_not_punch_an_accent_block(qapp):
-    """The two delegates that shipped the bug this change had to find.
+    """The delegate that shipped the bug this change had to find.
 
-    CheckboxDelegate and TagDelegate both filled a selected cell with
-    `palette.highlight()`. That is still accent_fill -- QPalette.Highlight
-    drives text selection, and packing-tool derives a Packer Mode cell colour
-    from it -- so once selection stopped being an accent fill, those two
-    columns of the Analysis Results table would have rendered solid blue
-    blocks with no ring segment, breaking the band the tests above protect.
+    TagDelegate filled a selected cell with `palette.highlight()`. That is
+    still accent_fill -- QPalette.Highlight drives text selection, and
+    packing-tool derives a Packer Mode cell colour from it -- so once
+    selection stopped being an accent fill, its column of the Analysis
+    Results table would have rendered a solid blue block with no ring
+    segment, breaking the band the tests above protect.
     """
-    from types import SimpleNamespace
-
-    import pandas as pd
-
-    from gui.checkbox_delegate import CheckboxDelegate
     from gui.tag_delegate import TagDelegate
 
     manager = get_theme_manager()
@@ -138,12 +133,6 @@ def test_the_analysis_table_delegates_do_not_punch_an_accent_block(qapp):
             table.verticalHeader().hide()
             table.setShowGrid(False)
             table.setSelectionBehavior(QTableWidget.SelectRows)
-            df = pd.DataFrame([{"Order_Number": f"100{r}"} for r in range(3)])
-            helper = SimpleNamespace(
-                main_window=SimpleNamespace(analysis_results_df=df),
-                is_row_checked=lambda row: False,
-            )
-            table.setItemDelegateForColumn(0, CheckboxDelegate(helper))
             table.setItemDelegateForColumn(1, TagDelegate({}))
             for r in range(3):
                 for c in range(4):
@@ -161,7 +150,7 @@ def test_the_analysis_table_delegates_do_not_punch_an_accent_block(qapp):
             for y in range(row.top(), row.bottom() + 1):
                 for x in range(0, 400, 5):
                     assert _hex_at(image, x, y) != accent, f"{name}: accent at {x},{y}"
-            # and the band still crosses both delegate-painted columns
+            # and the band still crosses the delegate-painted column
             edge = table.visualRect(table.model().index(1, 0)).right()
             for x in (edge - 20, edge, edge + 1, edge + 20):
                 assert _hex_at(image, x, row.top() + 1) == ring, f"{name}: gap at {x}"

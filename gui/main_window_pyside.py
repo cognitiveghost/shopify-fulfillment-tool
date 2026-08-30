@@ -23,7 +23,6 @@ from gui.icons import icon
 from gui.log_handler import QtLogHandler
 from gui.pandas_model import FulfillmentFilterProxy
 from gui.selection_helper import SelectionHelper
-from gui.theme_manager import get_theme_manager
 from gui.ui_manager import UIManager
 from gui.worker import Worker
 from shared.server_connection import prompt_for_recovery_path
@@ -31,7 +30,7 @@ from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import NetworkError, ProfileManager
 from shopify_tool.session_manager import SessionManager
-from shopify_tool.tag_manager import _normalize_tag_categories, merge_tags
+from shopify_tool.tag_manager import _normalize_tag_categories
 from shopify_tool.undo_manager import UndoManager
 
 logger = logging.getLogger(__name__)
@@ -84,6 +83,8 @@ class MainWindow(QMainWindow):
         self.orders_file_path = None
         self.stock_file_path = None
         self.analysis_results_df = None
+        # The display projection of analysis_results_df, one row per order.
+        self.orders_df = None
         self.analysis_stats = None
         self.threadpool = QThreadPool()
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
@@ -335,6 +336,9 @@ class MainWindow(QMainWindow):
         # Table interactions
         self.tableView.customContextMenuRequested.connect(self.show_context_menu)
         self.tableView.doubleClicked.connect(self.on_table_double_clicked)
+        self.order_detail_pane.lines_table.customContextMenuRequested.connect(
+            self.show_line_context_menu
+        )
 
         # Custom signals
         self.actions_handler.data_changed.connect(self._update_all_views)
@@ -463,26 +467,6 @@ class MainWindow(QMainWindow):
             self.undo_button.setEnabled(True)
             self.undo_button.setToolTip(f"Undo: {description} (Ctrl+Z)")
 
-    def _add_internal_tag(self, order_number: str, sku: str, tag: str):
-        """Add internal tag to the whole order containing the clicked SKU line.
-
-        Internal_Tags is order-level -- the click identifies which order via
-        its SKU line, but the tag applies to every row of that order (see
-        tag_manager.expand_to_order_rows).
-        """
-        from shopify_tool.tag_manager import expand_to_order_rows
-
-        clicked_mask = (self.analysis_results_df["Order_Number"] == order_number) & (
-            self.analysis_results_df["SKU"] == sku
-        )
-        mask = expand_to_order_rows(self.analysis_results_df, clicked_mask)
-        self._apply_tag_operation(
-            mask,
-            description=f"Add Internal Tag: {tag} to order {order_number}",
-            params={"order_number": order_number, "sku": sku, "tag": tag},
-            tag=tag,
-        )
-
     def add_internal_tag_to_order(self, order_number, tag):
         """Add an Internal Tag to all rows of an order (called from tag_management_panel signal)."""
         if self.analysis_results_df is None or self.analysis_results_df.empty:
@@ -498,7 +482,7 @@ class MainWindow(QMainWindow):
             hasattr(self, "tag_management_panel")
             and self.tag_management_panel.isVisible()
         ):
-            self.on_selection_changed_for_tags()
+            self.on_results_selection_changed()
 
     def remove_internal_tag_from_order(self, order_number, tag):
         """Remove an Internal Tag from all items in an order.
@@ -545,76 +529,57 @@ class MainWindow(QMainWindow):
             hasattr(self, "tag_management_panel")
             and self.tag_management_panel.isVisible()
         ):
-            self.on_selection_changed_for_tags()
+            self.on_results_selection_changed()
 
-    def on_selection_changed_for_tags(self):
-        """Update tag management panel when table selection changes."""
-        if (
-            not hasattr(self, "tag_management_panel")
-            or not self.tag_management_panel.isVisible()
-        ):
+    def on_results_selection_changed(self):
+        """One order row selected -> pane shows it; every selected order's
+        lines go into SelectionHelper, which is what the bulk actions read."""
+        from gui.orders_view import ORDER_KEY
+
+        orders_df = getattr(self, "orders_df", None)
+        if orders_df is None or orders_df.empty:
+            self.order_detail_pane.clear()
+            self.selection_helper.clear_selection()
+            self._update_bulk_toolbar_state()
             return
 
-        if self.analysis_results_df is None or self.analysis_results_df.empty:
-            self.tag_management_panel.set_selected_order(None, "[]")
+        column = orders_df.columns.get_loc(ORDER_KEY)
+        selected = []
+        for index in self.tableView.selectionModel().selectedRows():
+            source_row = self.proxy_model.mapToSource(index).row()
+            selected.append(orders_df.iat[source_row, column])
+
+        self.selection_helper.set_selected_orders(selected)
+        self._update_bulk_toolbar_state()
+
+        current = self.tableView.selectionModel().currentIndex()
+        if not selected or not current.isValid():
+            self.order_detail_pane.clear()
             return
 
-        # Get selected rows
-        selected_indexes = self.tableView.selectionModel().selectedRows()
-        if not selected_indexes:
-            self.tag_management_panel.set_selected_order(None, "[]")
-            return
-
-        # Get first selected row
-        source_index = self.proxy_model.mapToSource(selected_indexes[0])
-        row = source_index.row()
-
-        if row < 0 or row >= len(self.analysis_results_df):
-            self.tag_management_panel.set_selected_order(None, "[]")
-            return
-
-        # Get order number, then merge Internal_Tags across every row of that
-        # order (Internal_Tags is order-level -- a single selected line may
-        # not carry the order's full tag set).
-        order_number = self.analysis_results_df.iloc[row]["Order_Number"]
-        order_mask = self.analysis_results_df["Order_Number"] == order_number
-        current_tags = merge_tags(
-            self.analysis_results_df.loc[order_mask, "Internal_Tags"].tolist()
+        source_row = self.proxy_model.mapToSource(current).row()
+        order_number = orders_df.iat[source_row, column]
+        self.order_detail_pane.set_order(
+            order_number,
+            orders_df.iloc[source_row],
+            self._pane_lines(order_number),
         )
 
-        self.tag_management_panel.set_selected_order(order_number, current_tags)
+    def _pane_lines(self, order_number):
+        """The order's lines, minus any line-level column the client hid.
 
-    def toggle_tag_panel(self):
-        """Toggle tag management panel visibility."""
-        if not hasattr(self, "tag_management_panel"):
-            return
+        Spec section 4: the saved column config keeps its meaning, split across
+        the order table and the pane. Falls back to every column rather than
+        showing an empty table if the config hides all of them.
+        """
+        from gui.orders_view import order_lines
 
-        if self.tag_management_panel.isVisible():
-            self.tag_management_panel.hide()
-            self.toggle_tags_panel_btn.setChecked(False)
-        else:
-            self.tag_management_panel.show()
-            self.toggle_tags_panel_btn.setChecked(True)
-
-            # Load predefined tags from config
-            if self.active_profile_config:
-                tag_categories = self.active_profile_config.get("tag_categories", {})
-                self.tag_management_panel.load_predefined_tags(tag_categories)
-
-            # Update panel with current selection
-            self.on_selection_changed_for_tags()
-
-            # Connect table selection changed signal if not already connected
-            if hasattr(self, "tableView") and hasattr(self.tableView, "selectionModel"):
-                try:
-                    self.tableView.selectionModel().selectionChanged.disconnect(
-                        self.on_selection_changed_for_tags
-                    )
-                except Exception as disconnect_exc:
-                    logger.debug(f"selectionChanged not connected yet: {disconnect_exc}")
-                self.tableView.selectionModel().selectionChanged.connect(
-                    self.on_selection_changed_for_tags
-                )
+        lines = order_lines(self.analysis_results_df, order_number)
+        manager = getattr(self, "table_config_manager", None)
+        if manager is None or lines.empty:
+            return lines
+        keep = [col for col in lines.columns if manager.get_column_visibility(col)]
+        return lines[keep] if keep else lines
 
     def open_column_config_dialog(self):
         """Open the Column Configuration Dialog."""
@@ -643,46 +608,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "ui_manager"):
             self.ui_manager.update_hidden_columns_indicator()
 
-    def toggle_bulk_mode(self):
-        """Toggle bulk operations mode.
-
-        When bulk mode is enabled:
-        - Checkbox column is shown in the table
-        - Bulk operations toolbar is visible
-        - Selection state is tracked via SelectionHelper
-
-        When bulk mode is disabled:
-        - Checkbox column is hidden
-        - Bulk operations toolbar is hidden
-        - Selection is cleared
-        """
-        theme = get_theme_manager().get_current_theme()
-        is_bulk_mode = self.toggle_bulk_mode_btn.isChecked()
-
-        # Show/hide bulk toolbar
-        if hasattr(self, "bulk_toolbar"):
-            self.bulk_toolbar.setVisible(is_bulk_mode)
-
-        # Clear selection when toggling
-        self.selection_helper.clear_selection()
-
-        # Refresh table to show/hide checkboxes
-        if self.analysis_results_df is not None and not self.analysis_results_df.empty:
-            self.ui_manager.update_results_table(self.analysis_results_df)
-
-        # Update button styling
-        if is_bulk_mode:
-            self.toggle_bulk_mode_btn.setText("Exit Bulk Mode")
-            self.toggle_bulk_mode_btn.setStyleSheet(
-                f"background-color: {theme.status_success}; color: {theme.on_accent};"
-            )
-            self._update_bulk_toolbar_state()
-            logger.info("Bulk mode enabled")
-        else:
-            self.toggle_bulk_mode_btn.setText("Bulk Operations")
-            self.toggle_bulk_mode_btn.setStyleSheet("")
-            logger.info("Bulk mode disabled")
-
     def _update_bulk_toolbar_state(self):
         """Update bulk toolbar selection counter and button states."""
         if not hasattr(self, "bulk_toolbar"):
@@ -691,18 +616,15 @@ class MainWindow(QMainWindow):
         orders_count, items_count = self.selection_helper.get_selection_summary()
         self.bulk_toolbar.update_selection_count(orders_count, items_count)
         self.bulk_toolbar.set_enabled(orders_count > 0)
+        self.bulk_toolbar.setVisible(orders_count > 0)
 
     def _on_bulk_select_all(self):
         """Handle Select All button in bulk toolbar."""
-        self.selection_helper.select_all()
-        self._update_bulk_toolbar_state()
-        self.tableView.viewport().update()  # Force repaint
+        self.tableView.selectAll()
 
     def _on_bulk_clear_selection(self):
         """Handle Clear button in bulk toolbar."""
-        self.selection_helper.clear_selection()
-        self._update_bulk_toolbar_state()
-        self.tableView.viewport().update()  # Force repaint
+        self.tableView.clearSelection()
 
     def update_session_info_label(self):
         """Update global header session info label."""
@@ -777,13 +699,6 @@ class MainWindow(QMainWindow):
             self.add_product_button_tab2.setEnabled(has_analysis)
         if hasattr(self, "configure_columns_button_tab2"):
             self.configure_columns_button_tab2.setEnabled(has_analysis)
-        # Tags Manager button
-        if hasattr(self, "toggle_tags_panel_btn"):
-            self.toggle_tags_panel_btn.setEnabled(has_analysis)
-
-        # Bulk Operations button
-        if hasattr(self, "toggle_bulk_mode_btn"):
-            self.toggle_bulk_mode_btn.setEnabled(has_analysis)
 
         # Open Session Folder button (enabled when session exists)
         if hasattr(self, "open_session_folder_button"):
@@ -1211,8 +1126,14 @@ class MainWindow(QMainWindow):
         if hasattr(self, "tag_filter_combo"):
             selected_tag = self.tag_filter_combo.currentData()
 
-        # Column combo: index 0 = "All Columns" (-1), index k = DataFrame col k-1.
-        df_col = self.filter_column_selector.currentIndex() - 1
+        # The proxy resolves df_col positionally against the frame the table
+        # shows -- the order frame. Resolve by name, never by combo position:
+        # the two frames have different column sets and different order.
+        df_col = -1
+        column_name = self.filter_column_selector.currentData()
+        orders_df = getattr(self, "orders_df", None)
+        if column_name and orders_df is not None and column_name in orders_df.columns:
+            df_col = orders_df.columns.get_loc(column_name)
 
         self.proxy_model.set_text_filter(
             self.filter_input.text(),
@@ -1248,10 +1169,18 @@ class MainWindow(QMainWindow):
             self.ui_manager.update_results_table(pd.DataFrame())
 
         # Populate filter dropdown
+        # Offer the columns the table actually shows. Line-level columns are not
+        # here on purpose -- they are in the pane, and "All Columns" still finds
+        # an order by its SKUs through the hidden search column.
         self.filter_column_selector.clear()
-        self.filter_column_selector.addItem("All Columns")
-        if self.analysis_results_df is not None and not self.analysis_results_df.empty:
-            self.filter_column_selector.addItems(self.all_columns)
+        self.filter_column_selector.addItem("All Columns", None)
+        orders_df = getattr(self, "orders_df", None)
+        if orders_df is not None and not orders_df.empty:
+            from gui.orders_view import SEARCH_COLUMN
+
+            for col in orders_df.columns:
+                if col != SEARCH_COLUMN:
+                    self.filter_column_selector.addItem(col, col)
         self.ui_manager.set_ui_busy(False)
         # The column manager button is enabled within update_results_table
 
@@ -1429,14 +1358,12 @@ class MainWindow(QMainWindow):
         if not index.isValid():
             return
 
-        source_index = self.proxy_model.mapToSource(index)
-        source_model = self.proxy_model.sourceModel()
+        orders_df = getattr(self, "orders_df", None)
+        if orders_df is None or orders_df.empty:
+            return
 
-        # We need the original, unfiltered dataframe for this operation
-        order_number_col_idx = source_model.get_column_index("Order_Number")
-        order_number = source_model.index(
-            source_index.row(), order_number_col_idx
-        ).data()
+        source_row = self.proxy_model.mapToSource(index).row()
+        order_number = orders_df.iat[source_row, orders_df.columns.get_loc("Order_Number")]
 
         if order_number:
             self.actions_handler.toggle_fulfillment_status_for_order(order_number)
@@ -1455,129 +1382,141 @@ class MainWindow(QMainWindow):
             return
         table = self.sender()
         index = table.indexAt(pos)
-        if index.isValid():
-            source_index = self.proxy_model.mapToSource(index)
-            source_model = self.proxy_model.sourceModel()
+        if not index.isValid():
+            return
 
-            order_col_idx = source_model.get_column_index("Order_Number")
-            sku_col_idx = source_model.get_column_index("SKU")
+        orders_df = getattr(self, "orders_df", None)
+        if orders_df is None or orders_df.empty:
+            return
 
-            order_number = source_model.index(source_index.row(), order_col_idx).data()
-            sku = source_model.index(source_index.row(), sku_col_idx).data()
+        source_row = self.proxy_model.mapToSource(index).row()
+        order_number = orders_df.iat[source_row, orders_df.columns.get_loc("Order_Number")]
 
-            if not order_number:
-                return
+        if not order_number:
+            return
 
-            # Full-row snapshot so remove_item_from_order can detect if the
-            # table changed between menu-open and click, even when another
-            # duplicate-SKU line has since taken this same row position.
-            row_snapshot = self.analysis_results_df.iloc[source_index.row()].to_dict()
+        from functools import partial
 
-            from functools import partial
+        menu = QMenu()
 
-            menu = QMenu()
-
-            # Change Status
-            change_status_action = QAction(
-                icon("refresh-cw"),
-                "Change Status",
-                self,
+        # Change Status
+        change_status_action = QAction(
+            icon("refresh-cw"),
+            "Change Status",
+            self,
+        )
+        change_status_action.triggered.connect(
+            partial(
+                self.actions_handler.toggle_fulfillment_status_for_order,
+                order_number,
             )
-            change_status_action.triggered.connect(
-                partial(
-                    self.actions_handler.toggle_fulfillment_status_for_order,
-                    order_number,
+        )
+        menu.addAction(change_status_action)
+
+        # Add Tag
+        add_tag_action = QAction(
+            icon("tag"),
+            "Add Tag Manually...",
+            self,
+        )
+        add_tag_action.triggered.connect(
+            partial(self.actions_handler.add_tag_manually, order_number)
+        )
+        menu.addAction(add_tag_action)
+
+        # Internal Tags submenu
+        tags_menu = menu.addMenu("Internal Tags")
+        tags_menu.setIcon(icon("tags"))
+
+        # Get tag categories from config
+        tag_categories = self.active_profile_config.get("tag_categories", {})
+        # Normalize to handle both v1 and v2 formats
+        tag_categories = _normalize_tag_categories(tag_categories)
+
+        for category, config in tag_categories.items():
+            category_label = config.get("label", category)
+            category_menu = tags_menu.addMenu(category_label)
+
+            for tag in config.get("tags", []):
+                add_tag_action = QAction(f"Add {tag}", self)
+                add_tag_action.triggered.connect(
+                    partial(self.add_internal_tag_to_order, order_number, tag)
                 )
+                category_menu.addAction(add_tag_action)
+
+        menu.addSeparator()
+
+        # Remove Order
+        remove_order_action = QAction(
+            icon("trash-2"),
+            f"Remove Entire Order {order_number}",
+            self,
+        )
+        remove_order_action.triggered.connect(
+            partial(self.actions_handler.remove_entire_order, order_number)
+        )
+        menu.addAction(remove_order_action)
+
+        menu.addSeparator()
+
+        # Copy Order Number
+        copy_order_action = QAction(
+            icon("copy"),
+            "Copy Order Number",
+            self,
+        )
+        copy_order_action.triggered.connect(
+            partial(QApplication.clipboard().setText, str(order_number))
+        )
+        menu.addAction(copy_order_action)
+
+        menu.exec(table.viewport().mapToGlobal(pos))
+
+    def show_line_context_menu(self, pos: QPoint):
+        """Per-line actions, on the line itself.
+
+        The old table-level version had to guess which line a right-click on an
+        order meant, and carried a row snapshot to notice when it had guessed on
+        a row that moved. The snapshot guard stays -- it now guards a click on
+        the thing it acts on.
+        """
+        from functools import partial
+
+        table = self.order_detail_pane.lines_table
+        index = table.indexAt(pos)
+        if not index.isValid():
+            return
+
+        lines = table.model()._dataframe
+        row = index.row()
+        sku = lines.iloc[row]["SKU"]
+        order_number = self.order_detail_pane._order_number
+        row_label = lines.index[row]
+        row_position = self.analysis_results_df.index.get_loc(row_label)
+        row_snapshot = self.analysis_results_df.loc[row_label].to_dict()
+
+        menu = QMenu()
+        remove_item_action = QAction(
+            icon("circle-minus"), f"Remove Item {sku} from Order", self
+        )
+        remove_item_action.triggered.connect(
+            partial(
+                self.actions_handler.remove_item_from_order,
+                order_number,
+                sku,
+                row_position,
+                row_snapshot,
             )
-            menu.addAction(change_status_action)
+        )
+        menu.addAction(remove_item_action)
 
-            # Add Tag
-            add_tag_action = QAction(
-                icon("tag"),
-                "Add Tag Manually...",
-                self,
-            )
-            add_tag_action.triggered.connect(
-                partial(self.actions_handler.add_tag_manually, order_number)
-            )
-            menu.addAction(add_tag_action)
+        copy_sku_action = QAction(icon("copy"), f"Copy SKU {sku}", self)
+        copy_sku_action.triggered.connect(
+            lambda: QApplication.clipboard().setText(str(sku))
+        )
+        menu.addAction(copy_sku_action)
 
-            # Internal Tags submenu
-            tags_menu = menu.addMenu("Internal Tags")
-            tags_menu.setIcon(icon("tags"))
-
-            # Get tag categories from config
-            tag_categories = self.active_profile_config.get("tag_categories", {})
-            # Normalize to handle both v1 and v2 formats
-            tag_categories = _normalize_tag_categories(tag_categories)
-
-            for category, config in tag_categories.items():
-                category_label = config.get("label", category)
-                category_menu = tags_menu.addMenu(category_label)
-
-                for tag in config.get("tags", []):
-                    add_tag_action = QAction(f"Add {tag}", self)
-                    # Use partial to properly bind order_number, sku and tag values
-                    add_tag_action.triggered.connect(
-                        partial(self._add_internal_tag, order_number, sku, tag)
-                    )
-                    category_menu.addAction(add_tag_action)
-
-            menu.addSeparator()
-
-            # Remove Item
-            remove_item_action = QAction(
-                icon("circle-minus"),
-                f"Remove Item {sku} from Order",
-                self,
-            )
-            remove_item_action.triggered.connect(
-                partial(
-                    self.actions_handler.remove_item_from_order,
-                    order_number,
-                    sku,
-                    source_index.row(),
-                    row_snapshot,
-                )
-            )
-            menu.addAction(remove_item_action)
-
-            # Remove Order
-            remove_order_action = QAction(
-                icon("trash-2"),
-                f"Remove Entire Order {order_number}",
-                self,
-            )
-            remove_order_action.triggered.connect(
-                partial(self.actions_handler.remove_entire_order, order_number)
-            )
-            menu.addAction(remove_order_action)
-
-            menu.addSeparator()
-
-            # Copy Order Number
-            copy_order_action = QAction(
-                icon("copy"),
-                "Copy Order Number",
-                self,
-            )
-            copy_order_action.triggered.connect(
-                partial(QApplication.clipboard().setText, str(order_number))
-            )
-            menu.addAction(copy_order_action)
-
-            # Copy SKU
-            copy_sku_action = QAction(
-                icon("copy"),
-                "Copy SKU",
-                self,
-            )
-            copy_sku_action.triggered.connect(
-                partial(QApplication.clipboard().setText, str(sku))
-            )
-            menu.addAction(copy_sku_action)
-
-            menu.exec(table.viewport().mapToGlobal(pos))
+        menu.exec(table.viewport().mapToGlobal(pos))
 
     def closeEvent(self, event):
         """Handles the application window being closed.
