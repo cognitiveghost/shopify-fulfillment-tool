@@ -36,7 +36,6 @@ from .icons import icon
 from .orders_view import SEARCH_COLUMN, orders_frame
 from .pandas_model import PandasModel
 from .tag_categories_dialog import DEFAULT_TAG_COLOR
-from .tag_management_panel import TagManagementPanel
 from .theme_manager import font_css, get_theme_manager
 from .wheel_ignore_combobox import WheelIgnoreComboBox
 
@@ -960,6 +959,18 @@ class UIManager:
                 orders_df.columns.get_loc(SEARCH_COLUMN), True
             )
 
+        # setModel() above replaced the selection model, so the connection
+        # must be remade every call rather than once at widget-creation time.
+        selection_model = self.mw.tableView.selectionModel()
+        try:
+            selection_model.selectionChanged.disconnect(
+                self.mw.on_results_selection_changed
+            )
+        except (RuntimeError, TypeError):
+            pass  # not connected yet -- the first load
+        selection_model.selectionChanged.connect(self.mw.on_results_selection_changed)
+        self.mw.on_results_selection_changed()
+
         self.update_hidden_columns_indicator()
 
     def _populate_tag_filter(self):
@@ -1256,12 +1267,16 @@ class UIManager:
         # Add table to layout
         layout.addWidget(self.mw.tableView, 1)  # Stretch factor: 1
 
-        # Create tag management panel
-        self.mw.tag_management_panel = TagManagementPanel(self.mw)
-        self.mw.tag_management_panel.setMaximumWidth(300)
-        self.mw.tag_management_panel.hide()  # Hidden by default
+        from gui.order_detail_pane import OrderDetailPane
 
-        # Connect tag panel signals
+        self.mw.order_detail_pane = OrderDetailPane(self.mw)
+        self.mw.order_detail_pane.setMinimumWidth(320)
+        self.mw.order_detail_pane.setMaximumWidth(420)
+
+        # The two existing connections and load_predefined_tags() call sites in
+        # main_window_pyside.py speak to tag_management_panel; the pane owns the
+        # panel now, so keep the name pointing at it.
+        self.mw.tag_management_panel = self.mw.order_detail_pane.tag_panel
         self.mw.tag_management_panel.tag_added.connect(
             self.mw.add_internal_tag_to_order
         )
@@ -1269,8 +1284,7 @@ class UIManager:
             self.mw.remove_internal_tag_from_order
         )
 
-        # Add tag panel to layout
-        layout.addWidget(self.mw.tag_management_panel)
+        layout.addWidget(self.mw.order_detail_pane)
 
         # Setup header context menu for column visibility
         self._setup_header_context_menu()

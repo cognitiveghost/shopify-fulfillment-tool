@@ -104,3 +104,30 @@ def test_search_column_is_hidden_from_the_view(app, lines_df, main_window):
     frame = main_window.proxy_model.sourceModel()._dataframe
     column = frame.columns.get_loc(SEARCH_COLUMN)
     assert main_window.tableView.isColumnHidden(column)
+
+
+def test_selecting_a_row_fills_the_pane_and_the_selection_helper(
+    app, lines_df, main_window
+):
+    """Spec §10 test 11, at the window level."""
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+
+    main_window.tableView.selectRow(0)
+
+    assert "1001" in main_window.order_detail_pane.header_label.text()
+    assert main_window.order_detail_pane.lines_table.model().rowCount() == 2
+
+    selected = main_window.selection_helper.get_selected_orders_data()
+    assert set(selected["Order_Number"]) == {"1001"}
+
+
+def test_clearing_the_selection_clears_the_pane(app, lines_df, main_window):
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.update_results_table(lines_df)
+    main_window.tableView.selectRow(0)
+
+    main_window.tableView.clearSelection()
+
+    assert main_window.order_detail_pane.header_label.text() == "No order selected"
+    assert not main_window.selection_helper.has_selection()

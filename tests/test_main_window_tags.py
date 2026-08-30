@@ -50,26 +50,36 @@ def test_add_internal_tag_from_right_click_tags_every_line_of_the_order(mw):
     assert '"GIFT"' not in tags.loc["B1"]  # different order, untouched
 
 
-def test_selection_changed_shows_merged_tags_across_the_orders_lines(mw):
-    mw.on_selection_changed_for_tags = types.MethodType(
-        MainWindow.on_selection_changed_for_tags, mw
+def test_selecting_a_row_shows_the_orders_tags_in_the_pane(mw):
+    """Internal_Tags is now an order-level column (Phase 8.8a): every line of
+    an order carries the same value by construction (writes always go through
+    expand_to_order_rows / an Order_Number mask), so the order frame's
+    orders_frame() folds it with .first() rather than merging across lines."""
+    from gui.orders_view import orders_frame
+
+    mw.on_results_selection_changed = types.MethodType(
+        MainWindow.on_results_selection_changed, mw
     )
-    mw.analysis_results_df.loc[0, "Internal_Tags"] = '["A"]'  # order 1001, line 1
-    mw.analysis_results_df.loc[1, "Internal_Tags"] = '["B"]'  # order 1001, line 2 (different tag)
+    mw.analysis_results_df["Internal_Tags"] = '["A"]'
+    mw.orders_df = orders_frame(mw.analysis_results_df)
 
-    mw.tag_management_panel = MagicMock()
-    mw.tag_management_panel.isVisible.return_value = True
+    mw.selection_helper = Mock()
+    mw.order_detail_pane = MagicMock()
+    mw._update_bulk_toolbar_state = Mock()
 
-    # Select row 1 (the line carrying only "B") in the table
+    # Select order 1001's row (row 0 of the order frame) in the table
     fake_index = MagicMock()
-    fake_index.row.return_value = 1
+    fake_index.row.return_value = 0
+    fake_index.isValid.return_value = True
     mw.proxy_model = MagicMock()
     mw.proxy_model.mapToSource.return_value = fake_index
     mw.tableView = MagicMock()
     mw.tableView.selectionModel.return_value.selectedRows.return_value = [MagicMock()]
+    mw.tableView.selectionModel.return_value.currentIndex.return_value = fake_index
 
-    mw.on_selection_changed_for_tags()
+    mw.on_results_selection_changed()
 
-    order_number, current_tags = mw.tag_management_panel.set_selected_order.call_args[0]
+    order_number, order_row, lines = mw.order_detail_pane.set_order.call_args[0]
     assert order_number == "1001"
-    assert set(json.loads(current_tags)) == {"A", "B"}  # merged, not just line 2's "B"
+    assert json.loads(order_row["Internal_Tags"]) == ["A"]
+    assert list(lines["SKU"]) == ["A1", "A2"]
