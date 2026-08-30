@@ -890,10 +890,6 @@ class UIManager:
         if hasattr(self.mw, "add_product_button"):
             self.mw.add_product_button.setEnabled(not is_busy and is_data_loaded)
 
-        # Enable "Bulk Operations" button after analysis
-        if hasattr(self.mw, "toggle_bulk_mode_btn"):
-            self.mw.toggle_bulk_mode_btn.setEnabled(not is_busy and is_data_loaded)
-
         self.log.debug(
             f"UI busy state set to: {is_busy}, data_loaded: {is_data_loaded}"
         )
@@ -1199,32 +1195,6 @@ class UIManager:
             else None
         )
         layout.addWidget(self.mw.configure_columns_button_tab2)
-
-        # Add separator
-        layout.addSpacing(20)
-
-        # Tag Management Panel toggle button
-        self.mw.toggle_tags_panel_btn = QPushButton("Tags Manager")
-        self.mw.toggle_tags_panel_btn.setCheckable(True)
-        self.mw.toggle_tags_panel_btn.setEnabled(False)
-        self.mw.toggle_tags_panel_btn.setToolTip(
-            "Show/hide Internal Tags management panel"
-        )
-        self.mw.toggle_tags_panel_btn.clicked.connect(self.mw.toggle_tag_panel)
-        layout.addWidget(self.mw.toggle_tags_panel_btn)
-
-        # Add separator
-        layout.addSpacing(20)
-
-        # Bulk Operations toggle button (NEW)
-        self.mw.toggle_bulk_mode_btn = QPushButton("Bulk Operations")
-        self.mw.toggle_bulk_mode_btn.setCheckable(True)
-        self.mw.toggle_bulk_mode_btn.setEnabled(False)
-        self.mw.toggle_bulk_mode_btn.setToolTip(
-            "Enable bulk selection and operations on multiple orders"
-        )
-        self.mw.toggle_bulk_mode_btn.clicked.connect(self.mw.toggle_bulk_mode)
-        layout.addWidget(self.mw.toggle_bulk_mode_btn)
 
         # Add separator
         layout.addSpacing(20)

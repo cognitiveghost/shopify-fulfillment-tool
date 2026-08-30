@@ -23,7 +23,6 @@ from gui.icons import icon
 from gui.log_handler import QtLogHandler
 from gui.pandas_model import FulfillmentFilterProxy
 from gui.selection_helper import SelectionHelper
-from gui.theme_manager import get_theme_manager
 from gui.ui_manager import UIManager
 from gui.worker import Worker
 from shared.server_connection import prompt_for_recovery_path
@@ -584,38 +583,6 @@ class MainWindow(QMainWindow):
             order_lines(self.analysis_results_df, order_number),
         )
 
-    def toggle_tag_panel(self):
-        """Toggle tag management panel visibility."""
-        if not hasattr(self, "tag_management_panel"):
-            return
-
-        if self.tag_management_panel.isVisible():
-            self.tag_management_panel.hide()
-            self.toggle_tags_panel_btn.setChecked(False)
-        else:
-            self.tag_management_panel.show()
-            self.toggle_tags_panel_btn.setChecked(True)
-
-            # Load predefined tags from config
-            if self.active_profile_config:
-                tag_categories = self.active_profile_config.get("tag_categories", {})
-                self.tag_management_panel.load_predefined_tags(tag_categories)
-
-            # Update panel with current selection
-            self.on_results_selection_changed()
-
-            # Connect table selection changed signal if not already connected
-            if hasattr(self, "tableView") and hasattr(self.tableView, "selectionModel"):
-                try:
-                    self.tableView.selectionModel().selectionChanged.disconnect(
-                        self.on_results_selection_changed
-                    )
-                except Exception as disconnect_exc:
-                    logger.debug(f"selectionChanged not connected yet: {disconnect_exc}")
-                self.tableView.selectionModel().selectionChanged.connect(
-                    self.on_results_selection_changed
-                )
-
     def open_column_config_dialog(self):
         """Open the Column Configuration Dialog."""
         if not hasattr(self, "table_config_manager"):
@@ -643,46 +610,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "ui_manager"):
             self.ui_manager.update_hidden_columns_indicator()
 
-    def toggle_bulk_mode(self):
-        """Toggle bulk operations mode.
-
-        When bulk mode is enabled:
-        - Checkbox column is shown in the table
-        - Bulk operations toolbar is visible
-        - Selection state is tracked via SelectionHelper
-
-        When bulk mode is disabled:
-        - Checkbox column is hidden
-        - Bulk operations toolbar is hidden
-        - Selection is cleared
-        """
-        theme = get_theme_manager().get_current_theme()
-        is_bulk_mode = self.toggle_bulk_mode_btn.isChecked()
-
-        # Show/hide bulk toolbar
-        if hasattr(self, "bulk_toolbar"):
-            self.bulk_toolbar.setVisible(is_bulk_mode)
-
-        # Clear selection when toggling
-        self.selection_helper.clear_selection()
-
-        # Refresh table to show/hide checkboxes
-        if self.analysis_results_df is not None and not self.analysis_results_df.empty:
-            self.ui_manager.update_results_table(self.analysis_results_df)
-
-        # Update button styling
-        if is_bulk_mode:
-            self.toggle_bulk_mode_btn.setText("Exit Bulk Mode")
-            self.toggle_bulk_mode_btn.setStyleSheet(
-                f"background-color: {theme.status_success}; color: {theme.on_accent};"
-            )
-            self._update_bulk_toolbar_state()
-            logger.info("Bulk mode enabled")
-        else:
-            self.toggle_bulk_mode_btn.setText("Bulk Operations")
-            self.toggle_bulk_mode_btn.setStyleSheet("")
-            logger.info("Bulk mode disabled")
-
     def _update_bulk_toolbar_state(self):
         """Update bulk toolbar selection counter and button states."""
         if not hasattr(self, "bulk_toolbar"):
@@ -691,6 +618,7 @@ class MainWindow(QMainWindow):
         orders_count, items_count = self.selection_helper.get_selection_summary()
         self.bulk_toolbar.update_selection_count(orders_count, items_count)
         self.bulk_toolbar.set_enabled(orders_count > 0)
+        self.bulk_toolbar.setVisible(orders_count > 0)
 
     def _on_bulk_select_all(self):
         """Handle Select All button in bulk toolbar."""
@@ -773,13 +701,6 @@ class MainWindow(QMainWindow):
             self.add_product_button_tab2.setEnabled(has_analysis)
         if hasattr(self, "configure_columns_button_tab2"):
             self.configure_columns_button_tab2.setEnabled(has_analysis)
-        # Tags Manager button
-        if hasattr(self, "toggle_tags_panel_btn"):
-            self.toggle_tags_panel_btn.setEnabled(has_analysis)
-
-        # Bulk Operations button
-        if hasattr(self, "toggle_bulk_mode_btn"):
-            self.toggle_bulk_mode_btn.setEnabled(has_analysis)
 
         # Open Session Folder button (enabled when session exists)
         if hasattr(self, "open_session_folder_button"):

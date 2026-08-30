@@ -131,3 +131,19 @@ def test_clearing_the_selection_clears_the_pane(app, lines_df, main_window):
 
     assert main_window.order_detail_pane.header_label.text() == "No order selected"
     assert not main_window.selection_helper.has_selection()
+
+
+def test_the_workaround_code_is_gone():
+    """These existed only to fake order-level behaviour over a line table."""
+    import importlib
+
+    for module in ("gui.checkbox_delegate", "gui.order_group_delegate"):
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(module)
+
+
+def test_no_bulk_mode_and_no_tag_panel_toggle(app, main_window):
+    assert not hasattr(main_window, "toggle_bulk_mode")
+    assert not hasattr(main_window, "toggle_tag_panel")
+    assert not hasattr(main_window, "toggle_bulk_mode_btn")
+    assert not hasattr(main_window, "toggle_tags_panel_btn")
