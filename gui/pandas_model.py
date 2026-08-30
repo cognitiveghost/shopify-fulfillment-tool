@@ -100,6 +100,26 @@ def _format_lot(lot: dict) -> str:
     return f"{qty_str}x, {expiry_str}{batch_str}"
 
 
+# The order-frame column carrying "does any line of this order read as a
+# repeat?". Named here rather than in orders_view because the status cache
+# below reads it and orders_view already imports from this module -- the
+# reverse import would make the two circular.
+REPEAT_COLUMN = "_repeat"
+
+
+def is_repeat(note) -> bool:
+    """The row tint's own test: mentions a repeat, and is not purely a blocker.
+
+    A compound note ("Repeat customer; Cannot fulfill: ...") is both, and the
+    tint showed it amber rather than red -- its "Repeat" branch `continue`d
+    before the status branch was reached. Preserved deliberately, not chosen.
+    """
+    if note is None or (isinstance(note, float) and pd.isna(note)):
+        return False
+    text = str(note)
+    return "Repeat" in text and not text.startswith("Cannot fulfill")
+
+
 def cell_display_text(value) -> str:
     """Render one DataFrame cell as the text the user sees in a table.
 

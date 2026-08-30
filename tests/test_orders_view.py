@@ -4,6 +4,8 @@ import pandas as pd
 import pytest
 
 from gui.orders_view import (
+    HIDDEN_COLUMNS,
+    REPEAT_COLUMN,
     SEARCH_COLUMN,
     classify_columns,
     order_lines,
@@ -109,3 +111,48 @@ def test_order_lines_returns_only_that_orders_lines(three_orders):
 
 def test_empty_frame_gives_empty_frame():
     assert orders_frame(pd.DataFrame()).empty
+
+
+def test_repeat_column_is_true_for_a_repeat_order(three_orders):
+    out = orders_frame(three_orders).set_index("Order_Number")
+    assert bool(out.loc["1003", REPEAT_COLUMN]) is True
+
+
+def test_repeat_column_is_false_for_a_plain_order(three_orders):
+    out = orders_frame(three_orders).set_index("Order_Number")
+    assert bool(out.loc["1001", REPEAT_COLUMN]) is False
+
+
+def test_a_cannot_fulfill_note_alone_is_not_a_repeat():
+    df = pd.DataFrame(
+        [
+            {"Order_Number": "1", "Order_Fulfillment_Status": "Not Fulfillable",
+             "SKU": "AAA", "System_note": "Cannot fulfill: out of stock"},
+        ]
+    )
+    out = orders_frame(df)
+    assert bool(out[REPEAT_COLUMN].iloc[0]) is False
+
+
+def test_the_compound_note_is_both_a_repeat_and_a_blocker():
+    """Amber beats red -- the row tint's own precedence, preserved."""
+    df = pd.DataFrame(
+        [
+            {"Order_Number": "1", "Order_Fulfillment_Status": "Not Fulfillable",
+             "SKU": "AAA",
+             "System_note": "Repeat customer; Cannot fulfill: out of stock"},
+        ]
+    )
+    out = orders_frame(df)
+    assert bool(out[REPEAT_COLUMN].iloc[0]) is True
+    assert out["Blocker"].iloc[0] == "out of stock"
+
+
+def test_repeat_column_is_false_when_the_frame_has_no_system_note():
+    df = pd.DataFrame([{"Order_Number": "1", "SKU": "AAA"}])
+    out = orders_frame(df)
+    assert bool(out[REPEAT_COLUMN].iloc[0]) is False
+
+
+def test_hidden_columns_are_both_derived_and_not_in_the_line_frame():
+    assert HIDDEN_COLUMNS == (SEARCH_COLUMN, REPEAT_COLUMN)
