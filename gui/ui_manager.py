@@ -34,7 +34,7 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .bulk_operations_toolbar import BulkOperationsToolbar
 from .icons import icon
-from .orders_view import ORDER_KEY, SEARCH_COLUMN, orders_frame
+from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
 from .pandas_model import PandasModel
 from .tag_categories_dialog import DEFAULT_TAG_COLOR
 from .theme_manager import font_css, get_theme_manager
@@ -923,12 +923,14 @@ class UIManager:
         self.mw.proxy_model.setSourceModel(source_model)
         self.mw.tableView.setModel(self.mw.proxy_model)
 
-        # _search_text exists so a SKU search still finds the order that
-        # contains it (spec section 6). It is not for reading.
-        if SEARCH_COLUMN in orders_df.columns:
-            self.mw.tableView.setColumnHidden(
-                orders_df.columns.get_loc(SEARCH_COLUMN), True
-            )
+        # Derived, not data: hidden from the view but still scanned by the
+        # filter proxy. apply_config_to_view re-walks the frame, so this runs
+        # again after it.
+        for name in HIDDEN_COLUMNS:
+            if name in orders_df.columns:
+                self.mw.tableView.setColumnHidden(
+                    orders_df.columns.get_loc(name), True
+                )
 
         # No client selected yet -> no profile config; this runs on every
         # client switch, before one is loaded.
@@ -963,10 +965,11 @@ class UIManager:
             )
 
         # apply_config_to_view walks the frame it is given, so re-hide after it.
-        if SEARCH_COLUMN in orders_df.columns:
-            self.mw.tableView.setColumnHidden(
-                orders_df.columns.get_loc(SEARCH_COLUMN), True
-            )
+        for name in HIDDEN_COLUMNS:
+            if name in orders_df.columns:
+                self.mw.tableView.setColumnHidden(
+                    orders_df.columns.get_loc(name), True
+                )
 
         # setModel() above replaced the selection model, so the connection
         # must be remade every call rather than once at widget-creation time.
@@ -1032,16 +1035,16 @@ class UIManager:
         Column configuration addresses the view by column *index*, so every
         call that touches ``tableView`` must walk the order frame -- not the
         line-level ``analysis_results_df`` the two frames disagree with.
-        SEARCH_COLUMN is dropped: it is always last, so no other column moves,
-        and carrying it would let "Show All Columns" reveal an internal column
-        and write its name into the client's saved config.
+        HIDDEN_COLUMNS is dropped: both are always last, so no other column
+        moves, and carrying them would let "Show All Columns" reveal an
+        internal column and write its name into the client's saved config.
         """
         orders_df = getattr(self.mw, "orders_df", None)
         if orders_df is None:
             orders_df = self.mw.analysis_results_df
         if orders_df is None:
             return pd.DataFrame()
-        return orders_df.drop(columns=[SEARCH_COLUMN], errors="ignore")
+        return orders_df.drop(columns=list(HIDDEN_COLUMNS), errors="ignore")
 
     def _populate_tag_filter(self):
         """Populate the tag filter combo box with tags from current DataFrame.
@@ -1307,6 +1310,12 @@ class UIManager:
         # Scroll performance optimizations
         self.mw.tableView.setVerticalScrollMode(QTableView.ScrollPerPixel)
         self.mw.tableView.setHorizontalScrollMode(QTableView.ScrollPerPixel)
+
+        from gui.status_edge_delegate import StatusEdgeDelegate
+
+        # View-wide. setItemDelegateForColumn() wins over this, so TagDelegate
+        # keeps the Internal_Tags column and simply never paints an edge there.
+        self.mw.tableView.setItemDelegate(StatusEdgeDelegate(self.mw.tableView))
 
         # Add table to layout
         layout.addWidget(self.mw.tableView, 1)  # Stretch factor: 1

@@ -1176,10 +1176,10 @@ class MainWindow(QMainWindow):
         self.filter_column_selector.addItem("All Columns", None)
         orders_df = getattr(self, "orders_df", None)
         if orders_df is not None and not orders_df.empty:
-            from gui.orders_view import SEARCH_COLUMN
+            from gui.orders_view import HIDDEN_COLUMNS
 
             for col in orders_df.columns:
-                if col != SEARCH_COLUMN:
+                if col not in HIDDEN_COLUMNS:
                     self.filter_column_selector.addItem(col, col)
         self.ui_manager.set_ui_busy(False)
         # The column manager button is enabled within update_results_table
