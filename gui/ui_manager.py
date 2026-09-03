@@ -31,6 +31,7 @@ from gui.components.commandbar import CommandBar
 from shared.icons import icon
 from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
+from shared.theme import on_theme_changed
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
@@ -133,25 +134,6 @@ class UIManager:
         "connection_btn": "settings",
     }
 
-    def _connect_theme_change(self, slot):
-        """Subscribe to the theme singleton for as long as the window lives.
-
-        UIManager is a plain Python object, not a QObject, so Qt has no receiver
-        whose destruction would drop these connections. Left alone they outlive
-        the window that made them and the next theme toggle calls back into its
-        freed QActions and QToolButtons ("Internal C++ object already deleted").
-        """
-        signal = get_theme_manager().theme_changed
-        signal.connect(slot)
-
-        def _drop(*_):
-            try:
-                signal.disconnect(slot)
-            except RuntimeError:
-                pass  # already dropped
-
-        self.mw.destroyed.connect(_drop)
-
     def __init__(self, main_window):
         """Initializes the UIManager.
 
@@ -201,7 +183,7 @@ class UIManager:
 
         # Every widget exists by now, so one pass sets every long-lived icon.
         self._refresh_icons()
-        self._connect_theme_change(self._refresh_icons)
+        on_theme_changed(self.mw, lambda _t: self._refresh_icons())
 
         # Setup status bar
         self.mw.statusBar().showMessage("Ready")
@@ -1369,7 +1351,7 @@ class UIManager:
             enabled=True,
         )
         self._update_theme_button_text()
-        self._connect_theme_change(self._update_theme_button_text)
+        on_theme_changed(self.mw, lambda _t: self._update_theme_button_text())
 
         button.setMenu(menu)
         self.mw.results_overflow_button = button
@@ -1379,7 +1361,7 @@ class UIManager:
         # actions, Settings among them. Styled here rather than in shared/theme.py:
         # that file is one-way synced from packing-tool and must not be hand-edited.
         self._style_results_overflow()
-        self._connect_theme_change(self._style_results_overflow)
+        on_theme_changed(self.mw, lambda _t: self._style_results_overflow())
         return button
 
     def _style_results_overflow(self):

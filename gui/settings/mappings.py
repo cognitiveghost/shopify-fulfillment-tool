@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (
 from gui.column_mapping_widget import ColumnMappingWidget
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
-from gui.theme_manager import get_theme_manager, set_button_role
+from gui.theme_manager import set_button_role
+from shared.theme import on_theme_changed
 from shopify_tool.csv_utils import read_csv_headers
 
 
@@ -197,9 +198,11 @@ class OrdersMappingPage(_MappingPageBase):
         delete_btn = QPushButton("✕")
         set_button_role(delete_btn, "secondary")
         delete_btn.setFixedWidth(30)
-        theme = get_theme_manager().get_current_theme()
         # Sets only `color`, so the secondary role's background still applies.
-        delete_btn.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
+        on_theme_changed(
+            delete_btn,
+            lambda t: delete_btn.setStyleSheet(f"color: {t.status_danger}; font-weight: bold;"),
+        )
         delete_btn.setToolTip("Remove this courier mapping")
 
         row_layout.addWidget(code_label)

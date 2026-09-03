@@ -33,6 +33,7 @@ from gui.session_row_delegates import (
 from gui.theme_manager import get_density_profile
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shared.icons import icon
+from shared.theme import on_theme_changed
 from shopify_tool.session_lifecycle import derive_status_updates, packing_completion
 from shopify_tool.session_manager import SessionManager
 
@@ -279,6 +280,13 @@ class SessionBrowserWidget(QWidget):
         self.sessions_table.selectionModel().selectionChanged.connect(
             lambda *_: self._on_selection_changed()
         )
+
+        # A comment icon is a QIcon snapshot handed to a QTableWidgetItem, not
+        # a live style -- it does not follow a toggle on its own. Re-running
+        # the whole population pass is one connection for the widget's life,
+        # rather than one per icon per refresh (which _populate_table() calls
+        # on every keystroke in the search box).
+        on_theme_changed(self, lambda _t: self._populate_table())
 
     def set_client(self, client_id: str, auto_refresh: bool = True):
         """Set the client to show sessions for.

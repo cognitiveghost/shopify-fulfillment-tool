@@ -53,7 +53,7 @@ def test_theme_tokens_lead_with_inter_and_keep_segoe_as_fallback():
     generic default."""
     from gui import theme_manager
 
-    theme_manager._themed_tokens.cache_clear()
+    theme_manager.themed_tokens.cache_clear()
     family = theme_manager.get_theme_manager().get_current_theme().font_family
     assert family == "'Inter', Segoe UI, sans-serif"
 
@@ -63,13 +63,13 @@ def test_theme_tokens_are_untouched_when_fonts_are_unavailable(monkeypatch, tmp_
 
     monkeypatch.setattr(fonts, "FONTS_DIR", tmp_path)
     fonts.load_bundled_fonts.cache_clear()
-    theme_manager._themed_tokens.cache_clear()
+    theme_manager.themed_tokens.cache_clear()
     try:
         family = theme_manager.get_theme_manager().get_current_theme().font_family
         assert family == "Segoe UI, sans-serif"
     finally:
         fonts.load_bundled_fonts.cache_clear()
-        theme_manager._themed_tokens.cache_clear()
+        theme_manager.themed_tokens.cache_clear()
 
 
 def test_theme_is_readable_before_a_qapplication_exists():
@@ -99,7 +99,7 @@ def test_a_pre_qapplication_call_does_not_pin_the_app_to_the_fallback_font():
     from gui import theme_manager
 
     fonts.load_bundled_fonts.cache_clear()
-    theme_manager._themed_tokens.cache_clear()
+    theme_manager.themed_tokens.cache_clear()
 
     # Fake "no Qt app yet" rather than tearing down the real QApplication,
     # which cannot be un-created within a process.
@@ -122,6 +122,6 @@ def test_tokens_are_memoized_not_rebuilt_per_call():
     allocates a fresh ThemeTokens every time without this."""
     from gui import theme_manager
 
-    theme_manager._themed_tokens.cache_clear()
+    theme_manager.themed_tokens.cache_clear()
     manager = theme_manager.get_theme_manager()
     assert manager.get_current_theme() is manager.get_current_theme()

@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (
 )
 
 from gui.settings.base import SettingsPage
-from gui.theme_manager import font_css, get_theme_manager, set_button_role
+from gui.theme_manager import font_css, set_button_role
+from shared.theme import on_theme_changed
 
 
 class WeightPage(SettingsPage):
@@ -35,8 +36,6 @@ class WeightPage(SettingsPage):
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(6)
         main_layout.setContentsMargins(8, 8, 8, 8)
-
-        theme = get_theme_manager().get_current_theme()
 
         weight_cfg = weight_config or {
             "volumetric_divisor": 6000,
@@ -63,7 +62,9 @@ class WeightPage(SettingsPage):
             "5000 = DHL/FedEx standard"
         )
         hint = QLabel("(6000 = DPD/Speedy · 5000 = DHL/FedEx)")
-        hint.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
+        on_theme_changed(
+            hint, lambda t: hint.setStyleSheet(f"color: {t.text_secondary}; {font_css('caption')}")
+        )
         global_row.addWidget(div_label)
         global_row.addWidget(self.weight_divisor_spin)
         global_row.addWidget(hint)
@@ -225,7 +226,9 @@ class WeightPage(SettingsPage):
             "No Packaging skips box selection · "
             "Values: box name / NO_BOX_NEEDED / NO_BOX_FITS / UNKNOWN_DIMS"
         )
-        tips_box.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
+        on_theme_changed(
+            tips_box, lambda t: tips_box.setStyleSheet(f"color: {t.text_secondary}; {font_css('caption')}")
+        )
         tips_box.setWordWrap(True)
         boxes_layout.addWidget(tips_box)
 

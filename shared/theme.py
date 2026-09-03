@@ -9,6 +9,7 @@ shopify-fulfillment-tool/scripts/sync_shared.py after changing this file.
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from types import MappingProxyType
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -117,47 +118,44 @@ class ThemeTokens:
 
 LIGHT_THEME = ThemeTokens(
     name="light",
-    # Binding plane for light since 8.1: border lands at 3.02 and status_warning
-    # at 4.52 against this, both 0.02 above their floors. Darkening it fails
-    # validate_theme -- retune those two tokens with it, not after.
-    surface_sunken="#E8E8EB",
+    surface_sunken="#DADADF",
     surface="#FFFFFF",
-    surface_raised="#F4F4F5",
-    surface_overlay="#EAEAEC",
+    surface_raised="#F2F2F4",
+    surface_overlay="#E6E6EA",
     text="#1A1A1A",
-    text_secondary="#5A5A5A",
-    text_disabled="#808080",
-    text_placeholder="#686868",
-    border="#858585",
-    border_subtle="#D8D8D8",
+    text_secondary="#50505A",
+    text_disabled="#6B6B73",
+    text_placeholder="#5C5C64",
+    border="#70707A",
+    border_subtle="#C6C6CC",
     border_strong="#1A1A1A",
-    status_info="#006BB5",
-    status_info_bg="#E3F2FD",
-    status_success="#337635",
-    status_success_bg="#EAF6EA",
-    status_warning="#985A00",
-    status_warning_bg="#FDF2E3",
-    status_danger="#CF180A",
-    status_danger_bg="#FDE4E3",
+    status_info="#005B99",
+    status_info_bg="#DCEBFA",
+    status_success="#2C6630",
+    status_success_bg="#E2F0E3",
+    status_warning="#7A4A00",
+    status_warning_bg="#F8EBD8",
+    status_danger="#B31308",
+    status_danger_bg="#FADFDD",
     accent_fill="#006FBA",
-    accent_fill_hover="#0A78C4",
-    accent_fill_active="#005A9E",
+    accent_fill_hover="#005F9F",
+    accent_fill_active="#004B80",
     on_accent="#FFFFFF",
-    selection_border="#006DB7",
-    selection_bg="#E3F2FD",
-    focus_ring="#0064AB",
-    hover="#EEEEEE",
-    button_hover_light="#005A9E",
-    button_hover_dark="#005A9E",
+    selection_border="#005B99",
+    selection_bg="#DCEBFA",
+    focus_ring="#005B99",
+    hover="#E6E6EA",
+    button_hover_light="#004B80",
+    button_hover_dark="#004B80",
     # aliases
     background="#FFFFFF",
-    background_elevated="#F4F4F5",
+    background_elevated="#F2F2F4",
     accent_blue="#006FBA",
-    accent_green="#337635",
-    accent_orange="#985A00",
-    accent_red="#CF180A",
-    active_background="#E3F2FD",
-    active_border="#006DB7",
+    accent_green="#2C6630",
+    accent_orange="#7A4A00",
+    accent_red="#B31308",
+    active_background="#DCEBFA",
+    active_border="#005B99",
 )
 
 DARK_THEME = ThemeTokens(
@@ -168,38 +166,38 @@ DARK_THEME = ThemeTokens(
     surface_overlay="#232327",
     text="#F2F2F2",
     text_secondary="#B0B0B0",
-    text_disabled="#6E6E6E",
-    text_placeholder="#8A8A8A",
-    border="#6D6D6D",
+    text_disabled="#787878",
+    text_placeholder="#949494",
+    border="#787878",
     border_subtle="#2E2E2E",
     border_strong="#F2F2F2",
-    status_info="#008EEE",
+    status_info="#29A0F0",
     status_info_bg="#042134",
     status_success="#4CAF50",
     status_success_bg="#112712",
     status_warning="#FF9800",
     status_warning_bg="#342104",
-    status_danger="#F54E42",
+    status_danger="#FF6659",
     status_danger_bg="#340704",
     accent_fill="#006FBA",
-    accent_fill_hover="#0A78C4",
-    accent_fill_active="#005A9E",
+    accent_fill_hover="#005F9F",
+    accent_fill_active="#004B80",
     on_accent="#FFFFFF",
-    selection_border="#008EEE",
+    selection_border="#29A0F0",
     selection_bg="#042134",
     focus_ring="#4DA9E8",
-    hover="#1A1A1A",
-    button_hover_light="#005A9E",
-    button_hover_dark="#005A9E",
+    hover="#232327",
+    button_hover_light="#004B80",
+    button_hover_dark="#004B80",
     # aliases
     background="#101014",
     background_elevated="#17171A",
     accent_blue="#006FBA",
     accent_green="#4CAF50",
     accent_orange="#FF9800",
-    accent_red="#F54E42",
+    accent_red="#FF6659",
     active_background="#042134",
-    active_border="#008EEE",
+    active_border="#29A0F0",
 )
 
 THEMES: dict = {"light": LIGHT_THEME, "dark": DARK_THEME}
@@ -264,6 +262,53 @@ def current_tokens() -> ThemeTokens:
     forgets to seed _current should render one app's wrong theme, not two.
     """
     return get_theme(_current)
+
+
+def on_theme_changed(widget, apply) -> None:
+    """Run `apply(tokens)` now, and again whenever the rendering inputs change.
+
+    A widget that styles itself with an interpolated string --
+    `setStyleSheet(f"color: {tokens.text}")` -- bakes that hex in at build time
+    and keeps it forever. Qt re-polishes the tree on an application stylesheet
+    change, but re-polishing re-applies the same stale literal, so the fix is
+    to re-run the recipe rather than to re-polish. See ADR 0003, which records
+    the measurement.
+
+    The connection is dropped when `widget` is destroyed. Without that, a
+    closure holding a freed QWidget is called on the next toggle and Qt raises
+    "Internal C++ object already deleted".
+    """
+    apply(current_tokens())
+
+    def _reapply(_name: str) -> None:
+        apply(current_tokens())
+
+    theme_notifier.changed.connect(_reapply)
+    widget.destroyed.connect(lambda *_: theme_notifier.changed.disconnect(_reapply))
+
+
+@lru_cache(maxsize=2)
+def _tokens_with_font(theme_name: str, family: str) -> "ThemeTokens":
+    theme = get_theme(theme_name)
+    return replace(theme, font_family=f"'{family}', {theme.font_family}")
+
+
+def themed_tokens(theme_name: str, family: str | None) -> "ThemeTokens":
+    """Tokens with an app's bundled family layered on, when there is one.
+
+    Memoised because current_tokens() runs twice per table row on the scan
+    path and replace() re-runs __init__ over all 50 fields every call.
+
+    Only the success path is memoised: an app's font loader returns None
+    before a QApplication exists, and caching that would leave the app on the
+    fallback font for the rest of the process over one early call.
+    """
+    if family is None:
+        return get_theme(theme_name)
+    return _tokens_with_font(theme_name, family)
+
+
+themed_tokens.cache_clear = _tokens_with_font.cache_clear
 
 
 @dataclass(frozen=True)
@@ -883,8 +928,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
 
         QGroupBox {{
             color: {theme.text};
-            border: 1px solid {theme.border};
-            border-radius: {r + 4}px;
+            border-radius: {theme.radius_md}px;
             padding-top: 24px; padding-bottom: 8px;
             padding-left: 8px; padding-right: 8px;
             font-weight: bold;
@@ -901,7 +945,6 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             background-color: {theme.surface};
             color: {theme.text};
             gridline-color: {theme.border_subtle};
-            border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
         QTableView::item {{
@@ -919,7 +962,6 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QHeaderView::section {{
             background-color: {theme.surface_raised};
             color: {theme.text};
-            border: 1px solid {theme.border};
             padding: 4px; font-weight: bold;
         }}
         QTableCornerButton::section {{
@@ -930,7 +972,6 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QListWidget {{
             background-color: {theme.surface};
             color: {theme.text};
-            border: 1px solid {theme.border};
             border-radius: {r + 4}px;
         }}
         QListWidget::item {{ border: 2px solid transparent; }}
@@ -987,11 +1028,16 @@ def build_stylesheet(theme: ThemeTokens) -> str:
 
         QToolBar {{
             background-color: {theme.surface_raised};
-            border: 1px solid {theme.border};
             spacing: {theme.spacing_xs}px;
         }}
 
         QDialog {{ background-color: {theme.surface}; color: {theme.text}; }}
+
+        Card {{
+            background-color: {theme.surface_raised};
+            border: none;
+            border-radius: {theme.radius_md}px;
+        }}
     """
 
 
