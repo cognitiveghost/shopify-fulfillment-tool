@@ -33,6 +33,7 @@ from gui.session_row_delegates import (
 from gui.theme_manager import get_density_profile
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shared.icons import icon
+from shared.theme import on_theme_changed
 from shopify_tool.session_lifecycle import derive_status_updates, packing_completion
 from shopify_tool.session_manager import SessionManager
 
@@ -280,6 +281,14 @@ class SessionBrowserWidget(QWidget):
             lambda *_: self._on_selection_changed()
         )
 
+        # A comment icon is a QIcon snapshot handed to a QTableWidgetItem, not
+        # a live style -- it does not follow a toggle on its own. One
+        # connection for the widget's life, re-drawing only the icons:
+        # connecting per icon would leak one per keystroke in the search box
+        # (which re-runs _populate_table()), and re-populating would clear the
+        # selection out from under whoever toggled the theme.
+        on_theme_changed(self, lambda _t: self._refresh_comment_icons())
+
     def set_client(self, client_id: str, auto_refresh: bool = True):
         """Set the client to show sessions for.
 
@@ -523,6 +532,17 @@ Comments: {comments if comments else "None"}"""
         if sort_column < 0:
             sort_column, sort_order = 1, Qt.DescendingOrder
         self.sessions_table.sortItems(sort_column, sort_order)
+
+    def _refresh_comment_icons(self):
+        """Re-draw the comment icons in the theme that is current now.
+
+        Every other colour in this table is live QSS; the icons are the one
+        snapshot, so this is all a theme toggle has to redo here.
+        """
+        for row in range(self.sessions_table.rowCount()):
+            item = self.sessions_table.item(row, 0)
+            if item is not None and not item.icon().isNull():
+                item.setIcon(icon("message-square"))
 
     def _apply_filter(self):
         """Apply the status filter."""

@@ -6,8 +6,6 @@ token definitions and stylesheet/palette builders.
 """
 
 import logging
-from dataclasses import replace
-from functools import lru_cache
 from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
@@ -28,10 +26,11 @@ from shared.theme import (
     font_css,  # noqa: F401
     get_density,
     get_density_profile,
-    get_theme,
     set_button_role,
     set_current,
     set_density,
+    theme_notifier,
+    themed_tokens,
     type_style,
     validate_theme,  # noqa: F401
 )
@@ -85,7 +84,7 @@ class ThemeManager(QObject):
         )
 
     def get_current_theme(self) -> ThemeTokens:
-        return _themed_tokens(self._current_theme_name)
+        return themed_tokens(self._current_theme_name, load_bundled_fonts())
 
     def is_dark_theme(self) -> bool:
         return self._current_theme_name == "dark"
@@ -113,6 +112,10 @@ class ThemeManager(QObject):
         self._save_density_preference()
         self.apply_theme()
         self.theme_changed.emit()
+        # A density change moves the type scale without moving the theme name,
+        # so set_current() inside apply_theme() returns early and announces
+        # nothing. Listeners restyle from both -- see ADR 0003.
+        theme_notifier.changed.emit(self._current_theme_name)
         logger.info(f"Density changed to: {name}")
 
     def toggle_theme(self):
@@ -189,32 +192,6 @@ def get_theme_manager() -> ThemeManager:
         _theme_manager_instance = ThemeManager()
     return _theme_manager_instance
 
-
-def _themed_tokens(theme_name: str) -> ThemeTokens:
-    """shared.theme's tokens with the bundled font family layered on top.
-
-    shared/theme.py is sync-owned by packing-tool and must not be hand-edited,
-    so the override happens here -- dataclasses.replace() on the frozen
-    ThemeTokens it hands back. Memoized because get_current_theme() runs on
-    roughly 180 call sites and replace() allocates.
-
-    Only the success path is memoized. load_bundled_fonts() returns None
-    before a QApplication exists, and caching that would leave the app on the
-    fallback font for the rest of the process over one early call.
-    """
-    family = load_bundled_fonts()
-    if family is None:
-        return get_theme(theme_name)
-    return _tokens_with_font(theme_name, family)
-
-
-@lru_cache(maxsize=2)
-def _tokens_with_font(theme_name: str, family: str) -> ThemeTokens:
-    theme = get_theme(theme_name)
-    return replace(theme, font_family=f"'{family}', {theme.font_family}")
-
-
-_themed_tokens.cache_clear = _tokens_with_font.cache_clear
 
 
 def apply_font(target, role: str, bold: bool | None = None, tabular: bool = False) -> None:

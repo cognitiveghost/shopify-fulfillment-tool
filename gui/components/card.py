@@ -13,7 +13,11 @@ from gui.theme_manager import font_css
 
 
 class Card(QFrame):
-    """A framed panel holding a vertical stack of centred labels."""
+    """A raised panel holding a vertical stack of centred labels.
+
+    Raised by plane, not by an outline -- Qt has no box-shadow, so elevation
+    is a surface colour (F1). Styled by the `Card` rule in build_stylesheet.
+    """
 
     def __init__(
         self,
@@ -24,8 +28,10 @@ class Card(QFrame):
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setFrameShadow(QFrame.Raised)
+        # StyledPanel + Raised draws an OS frame *underneath* the stylesheet,
+        # so the card ends up outlined no matter what QSS says. F1: regions
+        # separate by plane, and a border is reserved for inputs and focus.
+        self.setFrameShape(QFrame.NoFrame)
         if min_width:
             self.setMinimumWidth(min_width)
         layout = QVBoxLayout(self)

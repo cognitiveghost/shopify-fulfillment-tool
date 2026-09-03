@@ -97,6 +97,7 @@ from PySide6.QtGui import QMouseEvent
 
 from gui.session_browser_widget import SessionBrowserWidget
 from gui.session_row_delegates import ROLE_MANUAL, ROLE_TOKEN
+from shared.theme import current_theme_name, set_current
 
 
 @pytest.fixture
@@ -407,3 +408,26 @@ class TestTheDelegatesActuallyPaint:
             )
         finally:
             painter.end()
+
+
+def test_a_theme_toggle_redraws_the_markers_without_dropping_the_selection(browser):
+    """The comment marker is a QIcon snapshot, so a toggle has to redraw it --
+    but re-populating the table to get there would clear the row the person
+    who flipped the theme had selected."""
+    browser.sessions_data = [_session("s1", comments="x"), _session("s2")]
+    browser._populate_table()
+    table = browser.sessions_table
+    marked = next(r for r in range(table.rowCount()) if table.item(r, 0).text() == "s1")
+    table.setCurrentCell(marked, 0)
+    before = table.item(marked, 0).icon().cacheKey()
+
+    other = 1 - marked
+
+    was = current_theme_name()
+    try:
+        set_current("dark" if was != "dark" else "light")
+        assert table.currentRow() == marked
+        assert table.item(marked, 0).icon().cacheKey() != before
+        assert table.item(other, 0).icon().isNull()
+    finally:
+        set_current(was or "light")

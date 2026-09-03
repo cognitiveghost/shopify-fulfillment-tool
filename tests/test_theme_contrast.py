@@ -9,6 +9,7 @@ test_type_scale.py::test_body_role_matches_shared_button_size.
 import pytest
 
 from shared.theme import (
+    _MIN_CONTRAST_ON_PLANES,
     _SURFACE_PLANES,
     DARK_THEME,
     LIGHT_THEME,
@@ -78,3 +79,13 @@ def test_the_tokens_gui_reads_by_name_all_still_exist():
     for field in legacy:
         assert hasattr(LIGHT_THEME, field), field
         assert hasattr(DARK_THEME, field), field
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=["light", "dark"])
+def test_no_foreground_sits_within_a_tenth_of_its_floor(theme):
+    """9.1's completion criterion. A sync that re-tightened a token would
+    otherwise surface as an unreadable badge on a warehouse screen."""
+    for token, floor in _MIN_CONTRAST_ON_PLANES.items():
+        for plane in _SURFACE_PLANES:
+            ratio = contrast_ratio(getattr(theme, token), getattr(theme, plane))
+            assert ratio >= floor + 0.1, f"{theme.name}.{token} on {plane}: {ratio:.2f}"

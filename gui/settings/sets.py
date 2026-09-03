@@ -30,9 +30,9 @@ from gui.settings.base import SettingsPage
 from gui.theme_manager import (
     apply_dialog_button_roles,
     font_css,
-    get_theme_manager,
     set_button_role,
 )
+from shared.theme import on_theme_changed
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
 
 
@@ -101,8 +101,12 @@ class SetsPage(SettingsPage):
             "• Sets are expanded before fulfillment simulation\n"
             "• Components must exist in your stock file"
         )
-        theme = get_theme_manager().get_current_theme()
-        tips_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} margin-top: 10px;")
+        on_theme_changed(
+            tips_label,
+            lambda t: tips_label.setStyleSheet(
+                f"color: {t.text_secondary}; {font_css('caption')} margin-top: 10px;"
+            ),
+        )
         tips_label.setWordWrap(True)
         main_layout.addWidget(tips_label)
 
@@ -389,8 +393,12 @@ class SetEditorDialog(QDialog):
             "Tip: Components are SKUs that exist in your stock file.\n"
             "Quantity indicates how many of each component are in one set."
         )
-        theme = get_theme_manager().get_current_theme()
-        tips_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('caption')} margin-top: 10px;")
+        on_theme_changed(
+            tips_label,
+            lambda t: tips_label.setStyleSheet(
+                f"color: {t.text_secondary}; font-style: italic; {font_css('caption')} margin-top: 10px;"
+            ),
+        )
         tips_label.setWordWrap(True)
         layout.addWidget(tips_label)
 

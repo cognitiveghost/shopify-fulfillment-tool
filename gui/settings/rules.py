@@ -22,6 +22,7 @@ from gui.settings.base import SettingsPage
 from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS, LEGACY_ACTION_TYPES
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from shared.theme import on_theme_changed
 from shopify_tool.core import get_unique_column_values
 from shopify_tool.rules import RuleEngine
 
@@ -64,8 +65,12 @@ class RulesPage(SettingsPage):
 
         header_row.addStretch()
         self.rules_count_label = QLabel("")
-        theme = get_theme_manager().get_current_theme()
-        self.rules_count_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
+        on_theme_changed(
+            self.rules_count_label,
+            lambda t: self.rules_count_label.setStyleSheet(
+                f"color: {t.text_secondary}; {font_css('caption')}"
+            ),
+        )
         header_row.addWidget(self.rules_count_label)
         main_layout.addLayout(header_row)
 
@@ -319,7 +324,6 @@ class RulesPage(SettingsPage):
                 rule to load into the widgets. If None, creates a new,
                 blank rule.
         """
-        theme = get_theme_manager().get_current_theme()
         config_was_none = not isinstance(config, dict)
         if not isinstance(config, dict):
             config = {"name": "New Rule", "level": "article", "match": "ALL", "conditions": [], "actions": []}
@@ -337,7 +341,10 @@ class RulesPage(SettingsPage):
         # Priority label (e.g., "Article #1", "Order #2")
         priority_label = QLabel("")
         priority_label.setMinimumWidth(70)
-        priority_label.setStyleSheet(f"{font_css('label')} color: {theme.accent_fill};")
+        on_theme_changed(
+            priority_label,
+            lambda t: priority_label.setStyleSheet(f"{font_css('label')} color: {t.accent_fill};"),
+        )
         header_layout.addWidget(priority_label)
 
         # Up button
@@ -361,20 +368,20 @@ class RulesPage(SettingsPage):
         test_btn.setToolTip("Test this rule against current analysis data")
         # As with Delete Rule below: the per-widget green background is
         # deliberate and overrides the secondary role's background.
-        test_btn.setStyleSheet(f"""
+        on_theme_changed(test_btn, lambda t: test_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {theme.status_success};
-                color: {theme.on_accent};
+                background-color: {t.status_success};
+                color: {t.on_accent};
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {theme.status_success};
+                background-color: {t.status_success};
             }}
             QPushButton:disabled {{
-                background-color: {theme.border_subtle};
-                color: {theme.text_secondary};
+                background-color: {t.border_subtle};
+                color: {t.text_secondary};
             }}
-        """)
+        """))
         header_layout.addWidget(test_btn)
 
         header_layout.addWidget(QLabel("Rule Name:"))
@@ -382,7 +389,10 @@ class RulesPage(SettingsPage):
         header_layout.addWidget(name_edit)
 
         summary_label = QLabel("")
-        summary_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')}")
+        on_theme_changed(
+            summary_label,
+            lambda t: summary_label.setStyleSheet(f"color: {t.text_secondary}; {font_css('caption')}"),
+        )
         header_layout.addWidget(summary_label)
 
         delete_rule_btn = QPushButton("Delete Rule")
@@ -390,7 +400,12 @@ class RulesPage(SettingsPage):
         # The per-widget background wins over the role on purpose: destructive
         # red stays. The role is here so the Hub's inventory guard sees it
         # marked, and so it picks up the secondary border/disabled treatment.
-        delete_rule_btn.setStyleSheet(f"background-color: {theme.status_danger}; color: {theme.on_accent};")
+        on_theme_changed(
+            delete_rule_btn,
+            lambda t: delete_rule_btn.setStyleSheet(
+                f"background-color: {t.status_danger}; color: {t.on_accent};"
+            ),
+        )
         header_layout.addWidget(delete_rule_btn)
         rule_layout.addLayout(header_layout)
 
@@ -434,7 +449,10 @@ class RulesPage(SettingsPage):
             "order rules: each step is a gate on the whole order - if it does not\n"
             "match, the rule stops and later steps do not run."
         )
-        add_step_btn.setStyleSheet(f"color: {theme.accent_fill}; font-weight: bold;")
+        on_theme_changed(
+            add_step_btn,
+            lambda t: add_step_btn.setStyleSheet(f"color: {t.accent_fill}; font-weight: bold;"),
+        )
 
         body = QWidget()
         body_layout = QVBoxLayout(body)
@@ -511,7 +529,6 @@ class RulesPage(SettingsPage):
             rule_widget_refs (dict): Rule widget references containing steps list
             step_config (dict, optional): Step configuration with conditions/match/actions
         """
-        theme = get_theme_manager().get_current_theme()
         if not isinstance(step_config, dict):
             step_config = {"conditions": [], "match": "ALL", "actions": []}
 
@@ -524,18 +541,18 @@ class RulesPage(SettingsPage):
         if step_number > 1:
             separator_label = QLabel("   ↓ THEN CHECK ↓")
             separator_label.setAlignment(Qt.AlignCenter)
-            separator_label.setStyleSheet(
-                f"color: {theme.status_warning}; {font_css('label')} "
+            on_theme_changed(separator_label, lambda t: separator_label.setStyleSheet(
+                f"color: {t.status_warning}; {font_css('label')} "
                 "padding: 4px; margin: 2px 0;"
-            )
+            ))
             steps_container.addWidget(separator_label)
 
         # Step wrapper
         step_box = QGroupBox(f"Step {step_number}")
-        step_box.setStyleSheet(
-            f"QGroupBox {{ font-weight: bold; border: 1px solid {theme.border}; "
+        on_theme_changed(step_box, lambda t: step_box.setStyleSheet(
+            f"QGroupBox {{ font-weight: bold; border: 1px solid {t.border}; "
             f"border-radius: 4px; margin-top: 6px; padding-top: 10px; }}"
-        )
+        ))
         step_layout = QVBoxLayout(step_box)
 
         # Conditions box ("IF")
@@ -572,7 +589,10 @@ class RulesPage(SettingsPage):
         if step_number > 1:
             delete_step_btn = QPushButton("Delete Step")
             set_button_role(delete_step_btn, "secondary")
-            delete_step_btn.setStyleSheet(f"color: {theme.status_danger};")
+            on_theme_changed(
+                delete_step_btn,
+                lambda t: delete_step_btn.setStyleSheet(f"color: {t.status_danger};"),
+            )
             step_layout.addWidget(delete_step_btn, 0, Qt.AlignRight)
 
         steps_container.addWidget(step_box)

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="20" viewBox="0 0 36 20" fill="none">
+  <!-- The thumb is the one literal in the asset library. glyph_url substitutes
+       a single colour, so on a full-opacity track a currentColor thumb at any
+       fill-opacity is the track's own colour; the thumb has to be on_accent,
+       which is #FFFFFF in both themes. See spec 8. -->
+  <rect x="1" y="1" width="34" height="18" rx="9" fill="currentColor"/>
+  <circle cx="26" cy="10" r="6" fill="#FFFFFF"/>
+</svg>
