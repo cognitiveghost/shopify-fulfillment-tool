@@ -13,8 +13,8 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from gui.components.commandbar import CommandBar
-from gui.icons import icon
 from gui.theme_manager import get_theme_manager
+from shared.icons import icon
 from shared.navrail import NavRail
 from shared.theme import build_stylesheet
 

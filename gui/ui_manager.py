@@ -28,11 +28,11 @@ from PySide6.QtWidgets import (
 
 from gui.components.card import Card
 from gui.components.commandbar import CommandBar
+from shared.icons import icon
 from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
-from .icons import icon
 from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
 from .pandas_model import PandasModel
 from .tag_categories_dialog import DEFAULT_TAG_COLOR

@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
 
 from gui.background_worker import BackgroundWorker
 from gui.components import ContextualSelectionBar, FilterBar
-from gui.icons import icon
 from gui.session_row_delegates import (
     ROLE_MANUAL,
     ROLE_TOKEN,
@@ -33,6 +32,7 @@ from gui.session_row_delegates import (
 )
 from gui.theme_manager import get_density_profile
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from shared.icons import icon
 from shopify_tool.session_lifecycle import derive_status_updates, packing_completion
 from shopify_tool.session_manager import SessionManager
 

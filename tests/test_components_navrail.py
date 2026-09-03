@@ -1,6 +1,6 @@
 import pytest
 
-from gui.icons import icon
+from shared.icons import icon
 from shared.navrail import RAIL_WIDTH, NavRail
 
 

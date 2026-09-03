@@ -2,12 +2,14 @@
 source before rasterizing, so these tests assert on actual rendered pixels --
 a QIcon that is merely non-null proves nothing about whether it is visible
 against the current theme."""
+from pathlib import Path
+
 import pytest
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from gui.icons import icon
 from gui.theme_manager import get_theme_manager
+from shared.icons import glyph_url, icon
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -92,11 +94,37 @@ def test_every_long_lived_icon_name_resolves():
 def test_context_menu_no_longer_reaches_for_stock_icons():
     """Three separate menu actions shared SP_FileDialogDetailedView, which is
     why the app's icons carried no meaning. Each gets its own glyph now."""
-    from pathlib import Path
-
     source = (
         Path(__file__).resolve().parent.parent / "gui" / "main_window_pyside.py"
     ).read_text(encoding="utf-8")
     assert "QStyle.SP_" not in source
     for name in ("refresh-cw", "tag", "tags", "circle-minus", "trash-2", "copy"):
         assert f'icon("{name}")' in source
+
+
+def _path_from_token(token: str) -> Path:
+    assert token.startswith('url("') and token.endswith('")')
+    return Path(token[len('url("'):-len('")')])
+
+
+def test_glyph_url_writes_a_readable_png():
+    path = _path_from_token(glyph_url("check"))
+    assert path.is_file()
+    assert path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_glyph_url_path_is_posix_spelled():
+    assert "\\" not in glyph_url("check")
+
+
+def test_glyph_url_colour_is_part_of_the_cache_key():
+    red = glyph_url("check", color="#ff0000")
+    blue = glyph_url("check", color="#0000ff")
+    red_again = glyph_url("check", color="#ff0000")
+    assert red != blue
+    assert red == red_again
+
+
+def test_glyph_url_unknown_name_raises():
+    with pytest.raises(KeyError):
+        glyph_url("no-such-glyph")

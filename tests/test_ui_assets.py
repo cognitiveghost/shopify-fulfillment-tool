@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pytest
 
-ASSETS_DIR = Path(__file__).resolve().parent.parent / "gui" / "assets"
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "shared" / "assets"
 
 EXPECTED_ICONS = [
     "circle-minus", "clipboard-list", "copy", "folder", "folder-open",
-    "folder-plus", "funnel-x", "info", "package", "refresh-cw", "table",
-    "tag", "tags", "trash-2", "wrench",
+    "folder-plus", "funnel-x", "info", "menu", "message-square", "package",
+    "refresh-cw", "settings", "table", "tag", "tags", "trash-2", "wrench",
+    "plus", "ellipsis-vertical", "check", "chevron-up", "chevron-down",
 ]
 
 
@@ -22,7 +23,7 @@ def test_every_expected_icon_is_vendored(name):
 
 @pytest.mark.parametrize("name", EXPECTED_ICONS)
 def test_every_icon_uses_the_currentcolor_token(name):
-    """gui/icons.py recolours by substituting this exact string. A glyph
+    """shared/icons.py recolours by substituting this exact string. A glyph
     drawn with a literal colour would render in Lucide's default black and
     vanish against the dark theme."""
     source = (ASSETS_DIR / "icons" / f"{name}.svg").read_text(encoding="utf-8")

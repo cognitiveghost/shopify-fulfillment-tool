@@ -5,7 +5,7 @@ import pytest
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication
 
-from gui import fonts
+from shared import fonts
 
 
 @pytest.fixture(scope="module", autouse=True)

@@ -12,8 +12,8 @@ import pytest
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QApplication
 
-from gui.icons import icon
 from gui.ui_manager import UIManager
+from shared.icons import icon
 from shared.navrail import RAIL_WIDTH, NavRail
 
 

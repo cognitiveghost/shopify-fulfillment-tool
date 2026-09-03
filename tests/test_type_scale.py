@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QSpinBox,
 )
 
-from gui.fonts import load_bundled_fonts
 from gui.theme_manager import (
     DEFAULT_DENSITY,
     DENSITY_PROFILES,
@@ -37,6 +36,7 @@ from gui.theme_manager import (
     set_density,
     type_style,
 )
+from shared.fonts import load_bundled_fonts
 from shared.theme import build_stylesheet, get_theme
 
 
