@@ -19,12 +19,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from gui.actions_handler import ActionsHandler
 from gui.file_handler import FileHandler
-from gui.icons import icon
 from gui.log_handler import QtLogHandler
 from gui.pandas_model import FulfillmentFilterProxy
 from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
 from gui.worker import Worker
+from shared.icons import icon
 from shared.server_connection import prompt_for_recovery_path
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager

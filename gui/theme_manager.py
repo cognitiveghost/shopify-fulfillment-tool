@@ -14,6 +14,7 @@ from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
+from shared.fonts import load_bundled_fonts
 from shared.theme import (
     BUTTON_ROLES,  # noqa: F401 -- re-exported for existing `from gui.theme_manager import` call sites
     DEFAULT_DENSITY,
@@ -34,8 +35,6 @@ from shared.theme import (
     type_style,
     validate_theme,  # noqa: F401
 )
-
-from .fonts import load_bundled_fonts
 
 logger = logging.getLogger(__name__)
 

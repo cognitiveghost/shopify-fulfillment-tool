@@ -53,9 +53,9 @@ def configure_windows_fontconfig_env() -> None:
 configure_frozen_weasyprint_env()
 configure_windows_fontconfig_env()
 
-from gui.icons import icon
 from gui.main_window_pyside import MainWindow
 from gui.theme_manager import get_theme_manager
+from shared.icons import icon
 
 
 def build_app_icon():

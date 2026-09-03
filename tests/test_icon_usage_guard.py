@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GUI_DIR = REPO_ROOT / "gui"
-ICONS_DIR = GUI_DIR / "assets" / "icons"
+ICONS_DIR = REPO_ROOT / "shared" / "assets" / "icons"
 
 # rglob, not glob: gui/ is flat today but Track 3 adds gui/components/, and a
 # non-recursive scan would let the first package inside it escape silently.
@@ -27,21 +27,19 @@ def test_no_stock_icons_remain_anywhere_in_the_gui():
             if "QStyle.SP_" in line:
                 offenders.append(f"{path.name}:{lineno}: {line.strip()}")
     assert not offenders, (
-        "Use gui.icons.icon() instead of OS-native stock icons:\n" + "\n".join(offenders)
+        "Use shared.icons.icon() instead of OS-native stock icons:\n" + "\n".join(offenders)
     )
 
 
 def test_every_referenced_icon_name_is_vendored():
     missing = []
     for path in _PY_FILES:
-        if path.name == "icons.py":
-            continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for name in _ICON_CALL.findall(line):
                 if not (ICONS_DIR / f"{name}.svg").is_file():
                     missing.append(f"{path.name}:{lineno}: {name}")
     assert not missing, (
-        "Referenced icons with no vendored SVG (see gui/assets/README.md to add "
+        "Referenced icons with no vendored SVG (see shared/assets/README.md to add "
         "one):\n" + "\n".join(missing)
     )
 

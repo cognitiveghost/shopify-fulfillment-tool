@@ -93,12 +93,12 @@ jobs:
         run: >
           pyinstaller --name ShopifyFulfillmentTool --onedir --windowed --noconfirm
           --add-data "shopify_tool/templates;shopify_tool/templates"
-          --add-data "gui/assets;gui/assets"
+          --add-data "shared/assets;shared/assets"
           --collect-data blabel
           --collect-submodules reportlab.graphics.barcode
           gui_main.py
       - name: Verify bundled assets shipped
-        # A missing gui/assets does not degrade: icon() raises during
+        # A missing shared/assets does not degrade: icon() raises during
         # MainWindow construction, and --windowed means the user double-clicks
         # an exe that silently never opens. This is the only part of the icon
         # work that cannot be tested from the Linux dev machine.

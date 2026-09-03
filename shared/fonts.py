@@ -3,7 +3,7 @@
 Windows always ships Segoe UI, so embedding a font buys visual consistency
 and dev/prod parity rather than availability. That is exactly why nothing
 here raises: a machine that cannot read the bundled TTF falls back to Segoe
-UI and keeps working. Contrast gui/icons.py, which fails loudly on an
+UI and keeps working. Contrast shared/icons.py, which fails loudly on an
 unknown name -- that is a developer typo caught in seconds, this would be a
 production outage.
 """
