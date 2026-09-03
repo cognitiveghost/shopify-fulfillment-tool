@@ -4,13 +4,20 @@ This script initializes the QApplication, creates the main window, and
 starts the application's event loop. It also handles setting the platform
 to 'offscreen' for testing or continuous integration (CI) environments.
 """
+import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 __version__ = "1.9.9.1"
+
+# Wall clock starts as early as the module loads -- everything below this,
+# including the MainWindow import, is part of what the operator experiences
+# as startup.
+_PROCESS_START = time.perf_counter()
 
 # Ensure the gui directory is on the path if running this as a script
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -102,6 +109,9 @@ def main():
         window.show()
         window.raise_()
         window.activateWindow()
+        logging.getLogger(__name__).info(
+            "Startup complete in %.2fs", time.perf_counter() - _PROCESS_START
+        )
         sys.exit(app.exec())
     else:
         # In offscreen mode, the window is created but not shown.
