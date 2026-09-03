@@ -6,8 +6,10 @@ Code that must behave identically in both **Shopify Fulfillment Tool** and
 ## The sync rule
 
 **`packing-tool/shared/` is canonical.** `shopify-fulfillment-tool/shared/`
-is a one-way copy, refreshed by running `python scripts/sync_shared.py` from
-that repo's root (see its own `CLAUDE.md`). A `shared/` file hand-edited in
+is a one-way copy, refreshed by running `python scripts/sync_shared.py
+/path/to/packing-tool` from that repo's root (see its own `CLAUDE.md`; the
+bare sibling default resolves wrongly from a worktree, so pass the path). A
+`shared/` file hand-edited in
 the Shopify repo is silently overwritten by the next sync — author every
 change here, in `packing-tool`, and sync it across afterward.
 

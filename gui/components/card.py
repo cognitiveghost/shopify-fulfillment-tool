@@ -13,7 +13,11 @@ from gui.theme_manager import font_css
 
 
 class Card(QFrame):
-    """A framed panel holding a vertical stack of centred labels."""
+    """A raised panel holding a vertical stack of centred labels.
+
+    Raised by plane, not by an outline -- Qt has no box-shadow, so elevation
+    is a surface colour (F1). Styled by the `Card` rule in build_stylesheet.
+    """
 
     def __init__(
         self,

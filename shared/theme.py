@@ -283,8 +283,14 @@ def on_theme_changed(widget, apply) -> None:
     def _reapply(_name: str) -> None:
         apply(current_tokens())
 
+    def _drop(*_) -> None:
+        try:
+            theme_notifier.changed.disconnect(_reapply)
+        except RuntimeError:
+            pass  # notifier already freed, or the connection already dropped
+
     theme_notifier.changed.connect(_reapply)
-    widget.destroyed.connect(lambda *_: theme_notifier.changed.disconnect(_reapply))
+    widget.destroyed.connect(_drop)
 
 
 @lru_cache(maxsize=2)
@@ -296,8 +302,9 @@ def _tokens_with_font(theme_name: str, family: str) -> "ThemeTokens":
 def themed_tokens(theme_name: str, family: str | None) -> "ThemeTokens":
     """Tokens with an app's bundled family layered on, when there is one.
 
-    Memoised because current_tokens() runs twice per table row on the scan
-    path and replace() re-runs __init__ over all 50 fields every call.
+    Memoised because its callers -- gui/theme.py's current_tokens() here and
+    ThemeManager.get_current_theme() in shopify -- run twice per table row on
+    the scan path, and replace() re-runs __init__ over all 50 fields.
 
     Only the success path is memoised: an app's font loader returns None
     before a QApplication exists, and caching that would leave the app on the
@@ -794,7 +801,13 @@ def set_button_role(button, role: str) -> None:
 
 
 def build_stylesheet(theme: ThemeTokens) -> str:
-    """Build the global Qt stylesheet (QSS) for one theme."""
+    """Build the global Qt stylesheet (QSS) for one theme.
+
+    Needs a live QGuiApplication: the checkbox tick and the toggle track reach
+    QSS as rasterised PNGs (ADR 0002), and QPixmap aborts the process without
+    one. Every call site is on the GUI thread after app construction; the test
+    suites get it from the session-scoped `qapp` fixture.
+    """
     r = theme.radius
     # Local import: shared.icons imports current_tokens from this module, so a
     # top-level import here would be circular.
@@ -935,6 +948,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QCheckBox::indicator:checked {{
             background-color: {theme.accent_fill};
             border: 2px solid {theme.accent_fill};
+            image: {glyph_url("check", theme.on_accent, size=14)};
         }}
 
         QRadioButton::indicator {{
@@ -944,14 +958,25 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         }}
         /* A filled dot, not a ring: Lucide draws in stroke="currentColor", so
            its circle glyph would give an outline. border-radius draws the dot
-           in one rule and needs no asset. */
+           in one rule and needs no asset. The border stays 1px so the checked
+           dot is the same 18px box as the unchecked ring -- width/height are
+           the *content* box in QSS, so a thicker border grows the control and
+           shifts the row it sits in. */
         QRadioButton::indicator:checked {{
             background-color: {theme.accent_fill};
-            border: 4px solid {theme.surface};
+            border: 1px solid {theme.accent_fill};
         }}
 
+        /* The toggle is one drawn glyph, not a box with a mark in it, so it
+           has to switch off everything QCheckBox::indicator above sets. Qt
+           resolves equal specificity by source order, and these rules come
+           later -- but only for the properties they name, which is why the
+           frame, the fill and the radius are all spelled out. */
         QCheckBox[role="toggle"]::indicator {{
             width: 36px; height: 20px;
+            border: none;
+            border-radius: 0;
+            background-color: transparent;
         }}
         QCheckBox[role="toggle"]::indicator:unchecked {{
             image: {glyph_url("toggle-off", theme.border, size=36, height=20)};
@@ -1067,6 +1092,10 @@ def build_stylesheet(theme: ThemeTokens) -> str:
 
         QDialog {{ background-color: {theme.surface}; color: {theme.text}; }}
 
+        /* Card is a shopify-only widget, styled here because build_stylesheet
+           is shared and shopify's copy of shared/ is overwritten by the next
+           sync. Not dead code there. QSS type selectors match className()
+           exactly, so a future subclass needs its own selector. */
         Card {{
             background-color: {theme.surface_raised};
             border: none;

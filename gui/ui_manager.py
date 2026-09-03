@@ -182,7 +182,7 @@ class UIManager:
         main_horizontal.addWidget(right_side, 1)  # Stretch tabs
 
         # Every widget exists by now, so one pass sets every long-lived icon.
-        self._refresh_icons()
+        # on_theme_changed applies immediately, so this is that first pass too.
         on_theme_changed(self.mw, lambda _t: self._refresh_icons())
 
         # Setup status bar
@@ -1350,7 +1350,6 @@ class UIManager:
             "", self._on_theme_toggle_clicked, "Toggle between light and dark theme",
             enabled=True,
         )
-        self._update_theme_button_text()
         on_theme_changed(self.mw, lambda _t: self._update_theme_button_text())
 
         button.setMenu(menu)
@@ -1360,7 +1359,6 @@ class UIManager:
         # with no border and no hover -- and it is the only way to reach five
         # actions, Settings among them. Styled here rather than in shared/theme.py:
         # that file is one-way synced from packing-tool and must not be hand-edited.
-        self._style_results_overflow()
         on_theme_changed(self.mw, lambda _t: self._style_results_overflow())
         return button
 

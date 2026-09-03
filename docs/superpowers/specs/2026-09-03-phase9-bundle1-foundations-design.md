@@ -328,6 +328,8 @@ Named per Stage A's standing amendment.
 | The delegate regression test becomes a converted-widget test | §2.1 — the delegate path has no defect to regress against |
 | `glyph_url()` gains a `height` parameter | §2.2 — it renders squares, and the toggle track is 36×20 |
 | The radio dot is QSS, not a bundled glyph | §5.2 — Lucide's stroke convention draws a ring; `border-radius` draws the dot in one rule |
+| `toggle-on.svg`'s thumb is a literal `#FFFFFF`, not `currentColor` | §5.2 says both glyphs are drawn entirely in `currentColor`. `glyph_url()` substitutes one colour, so on a full-opacity track a `currentColor` thumb at any `fill-opacity` is the track's own colour. The thumb has to be `on_accent`, which is `#FFFFFF` in both themes. Added at Stage C. |
+| The session browser re-draws its comment icons on a toggle, not its whole table | §6 names the stale icon at `session_browser_widget.py:448` as the fault. Re-populating clears the selection, so the narrower closure is both the correct fix and the cheaper one. Added at Stage C. |
 
 Everything else follows F0, F0b, F1, F2 and F3 exactly.
 
