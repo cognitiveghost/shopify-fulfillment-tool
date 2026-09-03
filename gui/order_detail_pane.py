@@ -102,7 +102,7 @@ class OrderDetailPane(QWidget):
         self.blocker_label.setText(blocker)
         self.blocker_label.setVisible(bool(blocker))
 
-        self.lines_table.setModel(PandasModel(lines))
+        self.lines_table.setModel(PandasModel(lines, self.lines_table))
         self.lines_table.resizeColumnsToContents()
 
         notes = self._text(order_row, "Notes")

@@ -96,7 +96,9 @@ class MainWindow(QMainWindow):
         self.is_syncing_selection = False
 
         # Models
-        self.proxy_model = FulfillmentFilterProxy()
+        # Parented: an unowned proxy outlives the window that made it and
+        # keeps pointing at the source PandasModel Qt already freed.
+        self.proxy_model = FulfillmentFilterProxy(self)
 
         # Initialize new architecture managers
         self._init_managers()

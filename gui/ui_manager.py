@@ -133,6 +133,25 @@ class UIManager:
         "connection_btn": "settings",
     }
 
+    def _connect_theme_change(self, slot):
+        """Subscribe to the theme singleton for as long as the window lives.
+
+        UIManager is a plain Python object, not a QObject, so Qt has no receiver
+        whose destruction would drop these connections. Left alone they outlive
+        the window that made them and the next theme toggle calls back into its
+        freed QActions and QToolButtons ("Internal C++ object already deleted").
+        """
+        signal = get_theme_manager().theme_changed
+        signal.connect(slot)
+
+        def _drop(*_):
+            try:
+                signal.disconnect(slot)
+            except RuntimeError:
+                pass  # already dropped
+
+        self.mw.destroyed.connect(_drop)
+
     def __init__(self, main_window):
         """Initializes the UIManager.
 
@@ -182,7 +201,7 @@ class UIManager:
 
         # Every widget exists by now, so one pass sets every long-lived icon.
         self._refresh_icons()
-        get_theme_manager().theme_changed.connect(self._refresh_icons)
+        self._connect_theme_change(self._refresh_icons)
 
         # Setup status bar
         self.mw.statusBar().showMessage("Ready")
@@ -976,7 +995,7 @@ class UIManager:
             self.mw.all_columns = data_df.columns.tolist()
             self.mw.visible_columns = self.mw.all_columns[:]
 
-        source_model = PandasModel(orders_df)
+        source_model = PandasModel(orders_df, self.mw.proxy_model)
         self.mw.proxy_model.setSourceModel(source_model)
         self.mw.tableView.setModel(self.mw.proxy_model)
 
@@ -1345,13 +1364,12 @@ class UIManager:
         )
 
         menu.addSeparator()
-        theme_manager = get_theme_manager()
         self.mw.theme_toggle_btn = action(
             "", self._on_theme_toggle_clicked, "Toggle between light and dark theme",
             enabled=True,
         )
         self._update_theme_button_text()
-        theme_manager.theme_changed.connect(self._update_theme_button_text)
+        self._connect_theme_change(self._update_theme_button_text)
 
         button.setMenu(menu)
         self.mw.results_overflow_button = button
@@ -1361,7 +1379,7 @@ class UIManager:
         # actions, Settings among them. Styled here rather than in shared/theme.py:
         # that file is one-way synced from packing-tool and must not be hand-edited.
         self._style_results_overflow()
-        get_theme_manager().theme_changed.connect(self._style_results_overflow)
+        self._connect_theme_change(self._style_results_overflow)
         return button
 
     def _style_results_overflow(self):
