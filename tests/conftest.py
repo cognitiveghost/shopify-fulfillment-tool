@@ -8,11 +8,13 @@ The SettingsWindow fixtures at the bottom are here rather than in a test
 module because three test files need them and `tests/` is not a package --
 conftest is the only sharing mechanism that does not depend on sys.path.
 """
+import gc
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
-from PySide6.QtCore import QSettings
+import shiboken6
+from PySide6.QtCore import QEvent, QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from gui.settings.window import SettingsWindow
@@ -218,6 +220,22 @@ def started_workers(monkeypatch):
     return started
 
 
+@pytest.fixture(scope="session", autouse=True)
+def isolate_server_path(tmp_path_factory):
+    """Point the app at a throwaway share instead of the real one.
+
+    ProfileManager falls back to the production fulfillment share when
+    FULFILLMENT_SERVER_PATH is unset, and on this dev box that path resolves to
+    a real directory holding four clients' profiles and session history. Every
+    MainWindow a test builds then reads all of it (~3s in create_widgets alone)
+    and appends a run log to its Logs/ShopifyTool/ directory. Three test files
+    already redirect it per-test; four others did not.
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path_factory.mktemp("server")))
+        yield
+
+
 @pytest.fixture(autouse=True)
 def clean_nav_setting():
     """QSettings is process-global and writes to the real ~/.config store, so
@@ -281,3 +299,36 @@ def window(qapp, no_modals, started_workers):
     )
     yield win
     win.deleteLater()
+
+
+@pytest.fixture(autouse=True)
+def destroy_leaked_widgets():
+    """Delete every widget a test leaves behind.
+
+    Nothing here holds a widget across tests, but Qt does: a QWidget with no
+    parent stays alive under the QApplication after Python drops its last
+    reference, so every test's windows, dialogs and pages pile up for the whole
+    session (~100 per GUI test, ~900MB RSS by the end).
+
+    That pile is what makes the suite quadratic. `app.setStyleSheet()` -- which
+    every `set_theme()`/`set_density()` call reaches -- re-polishes *all* live
+    widgets, so its cost is the running total. test_selection_ring_renders.py
+    takes 0.16s on its own and 12.6s after one other GUI file.
+
+    Autouse fixtures set up first and therefore tear down last, so per-test
+    fixtures have already released their widgets by the time this runs.
+    """
+    yield
+    deleted = False
+    for widget in QApplication.topLevelWidgets():
+        if shiboken6.isValid(widget):  # a parent's delete may have taken it
+            widget.deleteLater()
+            deleted = True
+    if not deleted:
+        return
+    # deleteLater() only queues; nothing pumps an event loop in a test run.
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    # Deleted widgets sit in reference cycles until collected, and PySide6 keeps
+    # their connections to the ThemeManager singleton alive that whole time --
+    # the next theme toggle then calls into freed C++ objects.
+    gc.collect()
