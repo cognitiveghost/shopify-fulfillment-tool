@@ -10,6 +10,30 @@ this file is the sequencing.
 
 ---
 
+## Execution order
+
+The tracks below group items by **kind**. This list is the order they are
+**worked**, and it is what the Todoist section holds. When the two appear to
+disagree, this list wins.
+
+```
+ 1  9.0   asset library          10  9.8   overflow menu       19  9.25  toast + confirm
+ 2  9.1   token retune           11  9.9   first run           20  9.11  theme_css_vars
+ 3  9.10  BUILD GATE  ← spike    12  9.18  session setup       21  9.12  QWebChannel bridge
+ 4  9.2   border discipline      13  9.19  session browser     22  9.13  results document
+ 5  9.3   status chip            14  9.20  statistics deleted  23  9.14  detail pane
+ 6  9.4   selection ring         15  9.21  log viewer          24  9.15  responsive
+ 7  9.5   control inventory      16  9.22  tools               25  9.16  column manager
+ 8  9.6   state panel            17  9.23  settings save       26  9.17  selection + bulk
+ 9  9.7   shell + command bar    18  9.24  reports page
+```
+
+**The build gate runs third, out of its track.** It produces nothing a user can
+see, so it looks like a poor third choice — that is the point. It is the only
+item whose failure changes the plan rather than the schedule, and learning that
+after two tasks is far cheaper than after eighteen. Positions 1 and 2 go first
+only because both are safe and everything else reads their output.
+
 ## How to read an item
 
 Each item is **one task, one worktree, one PR**. Track Q items are independent
