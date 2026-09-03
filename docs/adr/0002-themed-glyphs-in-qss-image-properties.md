@@ -75,7 +75,18 @@ blank glyph. This is asserted by a test, not by a comment.
 
 - Two rendering routes for one glyph set: `icon()` for `QIcon` consumers,
   `glyph_url()` for QSS `image:`. Both read the same SVGs and the same tokens,
-  so they cannot drift in appearance — only in call site.
+  and both rasterise through the same `_pixmap()` helper, so they cannot drift
+  in appearance — only in call site.
+- **`glyph_url()` writes one resolution; `icon()` writes four.** `icon()`
+  hands `QIcon` a pixmap at each of `_RENDER_SIZES` so Qt can pick the one
+  matching the screen's device pixel ratio; a QSS `image:` url has no such
+  ladder, so `glyph_url(size=18)` is an 18px raster and a 150%-scaled warehouse
+  PC upscales it. Not fixed here, because 9.0 has no call site to measure:
+  the whole point of the PNG route is that a caller can be added without
+  reopening this decision. **If 9.4 or 9.5 sees a soft caret or checkmark, the
+  fix is Qt's `@2x` filename convention** — write `<name>-<sha>-<size>@2x.png`
+  at `size * 2` beside the 1x and Qt's stylesheet image loader picks it up.
+  That is a change inside `glyph_url()`, invisible to its callers.
 - The app writes files to the user cache directory at startup. Small (a
   186-byte PNG at 18px), bounded by glyphs × colours × sizes, and a wiped cache
   directory self-heals on the next paint.

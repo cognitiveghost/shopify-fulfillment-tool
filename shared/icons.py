@@ -33,21 +33,28 @@ def _source(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _pixmap(source: str, size: int) -> QPixmap:
+    """Rasterise recoloured SVG source at one size.
+
+    One renderer per call: QSvgRenderer keeps view state across render()
+    calls, and reusing it across sizes skews the later ones.
+    """
+    renderer = QSvgRenderer(QByteArray(source.encode()))
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    renderer.render(painter)
+    painter.end()
+    return pixmap
+
+
 @cache
 def _render(name: str, color: str, sizes: tuple[int, ...]) -> QIcon:
-    data = QByteArray(_source(name).replace("currentColor", color).encode())
+    source = _source(name).replace("currentColor", color)
     result = QIcon()
     for size in sizes:
-        # One renderer per size: QSvgRenderer keeps view state across render()
-        # calls, and reusing it across sizes skews the later ones.
-        renderer = QSvgRenderer(data)
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        renderer.render(painter)
-        painter.end()
-        result.addPixmap(pixmap)
+        result.addPixmap(_pixmap(source, size))
     return result
 
 
@@ -89,7 +96,13 @@ def glyph_url(name: str, color: str | None = None, size: int = 18) -> str:
     The path is always spelled with as_posix(): a backslash-spelled path
     draws nothing in Qt's QSS url(), silently, on Windows only.
 
+    One resolution only, unlike icon() -- see ADR 0002's Consequences.
+
     Raises KeyError on an unknown name, matching icon().
+
+    Deliberately not @cache'd, unlike icon(): the default colour is resolved
+    from the active theme *inside* the call, so an entry keyed on color=None
+    would keep returning the old theme's PNG after a toggle.
     """
     if color is None:
         color = current_tokens().text
@@ -99,12 +112,9 @@ def glyph_url(name: str, color: str | None = None, size: int = 18) -> str:
     path = cache_dir / f"{name}-{digest}-{size}.png"
     if not path.is_file():
         cache_dir.mkdir(parents=True, exist_ok=True)
-        renderer = QSvgRenderer(QByteArray(source.encode()))
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        renderer.render(painter)
-        painter.end()
-        pixmap.save(str(path), "PNG")
+        # Fail loudly: a url() pointing at a file that was never written draws
+        # nothing at all, silently, which is exactly what this module exists
+        # to avoid.
+        if not _pixmap(source, size).save(str(path), "PNG"):
+            raise OSError(f"Could not write glyph cache entry {path}")
     return f'url("{path.as_posix()}")'

@@ -91,11 +91,9 @@ class NavRail(QWidget):
     def add_item(self, glyph: QIcon, label: str) -> int:
         """Append a destination and return its index.
 
-        Takes a rendered QIcon rather than a glyph name: the icon registry and
-        its SVGs live beside each app's fonts in gui/assets/, and splitting
-        that directory to reach them from here would mean a second datas entry
-        in every frozen build. The caller's icon("name") still raises KeyError
-        on a typo, one frame earlier.
+        Takes a rendered QIcon rather than a glyph name: the caller owns the
+        colour, which is the active theme's at call time, and its icon("name")
+        still raises KeyError on a typo, one frame earlier.
         """
         button = self._make_button(glyph, label)
         button.setCheckable(True)

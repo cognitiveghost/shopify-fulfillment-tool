@@ -34,8 +34,6 @@ def test_no_stock_icons_remain_anywhere_in_the_gui():
 def test_every_referenced_icon_name_is_vendored():
     missing = []
     for path in _PY_FILES:
-        if path.name == "icons.py":
-            continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for name in _ICON_CALL.findall(line):
                 if not (ICONS_DIR / f"{name}.svg").is_file():
