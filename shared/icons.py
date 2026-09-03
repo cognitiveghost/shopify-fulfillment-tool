@@ -33,14 +33,18 @@ def _source(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _pixmap(source: str, size: int) -> QPixmap:
+def _pixmap(source: str, size: int, height: int | None = None) -> QPixmap:
     """Rasterise recoloured SVG source at one size.
 
     One renderer per call: QSvgRenderer keeps view state across render()
     calls, and reusing it across sizes skews the later ones.
+
+    `height` defaults to `size`, giving a square render; pass it to draw a
+    non-square sub-control like a toggle track.
     """
+    height = height or size
     renderer = QSvgRenderer(QByteArray(source.encode()))
-    pixmap = QPixmap(size, size)
+    pixmap = QPixmap(size, height)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
@@ -83,20 +87,25 @@ def icon(
     return _render(name, color, sizes)
 
 
-def glyph_url(name: str, color: str | None = None, size: int = 18) -> str:
+def glyph_url(name: str, color: str | None = None, size: int = 18, height: int | None = None) -> str:
     """A QSS-ready `url("...")` token for a themed glyph.
 
     QSS `image:` resolves its url() through QImageReader, not QSvgRenderer,
     so handing it an .svg would reintroduce the qsvg imageformats plugin
     dependency that icon() exists to avoid. This rasterises the recoloured
     SVG once, through the same renderer icon() uses, and caches the PNG on
-    disk under a name keyed to (name, colour, size) -- a re-vendored glyph or
-    a retuned token invalidates its own cache entry; nothing else does.
+    disk under a name keyed to (name, colour, size, height) -- a re-vendored
+    glyph or a retuned token invalidates its own cache entry; nothing else
+    does.
 
     The path is always spelled with as_posix(): a backslash-spelled path
     draws nothing in Qt's QSS url(), silently, on Windows only.
 
     One resolution only, unlike icon() -- see ADR 0002's Consequences.
+
+    `height` defaults to `size`, giving a square render as before; pass it
+    for a non-square sub-control like the 36x20 toggle track, which a square
+    render would squash.
 
     Raises KeyError on an unknown name, matching icon().
 
@@ -109,12 +118,12 @@ def glyph_url(name: str, color: str | None = None, size: int = 18) -> str:
     source = _source(name).replace("currentColor", color)
     digest = hashlib.sha256(source.encode()).hexdigest()[:8]
     cache_dir = Path(QStandardPaths.writableLocation(QStandardPaths.CacheLocation)) / "glyphs"
-    path = cache_dir / f"{name}-{digest}-{size}.png"
+    path = cache_dir / f"{name}-{digest}-{size}x{height or size}.png"
     if not path.is_file():
         cache_dir.mkdir(parents=True, exist_ok=True)
         # Fail loudly: a url() pointing at a file that was never written draws
         # nothing at all, silently, which is exactly what this module exists
         # to avoid.
-        if not _pixmap(source, size).save(str(path), "PNG"):
+        if not _pixmap(source, size, height).save(str(path), "PNG"):
             raise OSError(f"Could not write glyph cache entry {path}")
     return f'url("{path.as_posix()}")'

@@ -360,11 +360,12 @@ class DensityProfile:
 
         This lands QPushButton, QComboBox and QLineEdit on `control_height`
         exactly. The QAbstractSpinBox family (QSpinBox, QDoubleSpinBox,
-        QDateEdit) comes out 3px taller: its sizeHint() adds room for the
-        up/down buttons *after* the rule is applied, and min-height is a floor,
-        so it never binds. max-height does not clamp it either (measured, Qt
-        6.11.1/Fusion). It is not a font problem -- the offset is a flat 3px in
-        both profiles, against a content box with 6px of slack over the text.
+        QDateEdit) comes out 3px taller -- 35px at desk, 47px at floor: its
+        sizeHint() adds room for the up/down buttons *after* the rule is
+        applied, and min-height is a floor, so it never binds. max-height
+        does not clamp it either (measured, Qt 6.11.1/Fusion). It is not a
+        font problem -- the offset is a flat 3px in both profiles, against a
+        content box with 6px of slack over the text.
         # ponytail: spin boxes run control_height + 3. Upgrade path is an
         # explicit setFixedHeight() when 8.3 routes widgets through the scale --
         # not a hardcoded -3 here, which is measured on Linux/Fusion and would
@@ -795,6 +796,10 @@ def set_button_role(button, role: str) -> None:
 def build_stylesheet(theme: ThemeTokens) -> str:
     """Build the global Qt stylesheet (QSS) for one theme."""
     r = theme.radius
+    # Local import: shared.icons imports current_tokens from this module, so a
+    # top-level import here would be circular.
+    from shared.icons import glyph_url
+
     return f"""
         QWidget {{
             background-color: {theme.surface};
@@ -813,7 +818,7 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             border: 1px solid {theme.border};
             border-radius: {r}px;
             padding: 6px 12px;
-            font-size: 10pt;
+            {font_css("body")}
         }}
         QPushButton:hover {{ background-color: {theme.hover}; }}
         QPushButton:pressed {{ background-color: {theme.selection_bg}; }}
@@ -831,6 +836,12 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         }}
         QPushButton[role="primary"]:hover {{ background-color: {theme.accent_fill_hover}; }}
         QPushButton[role="primary"]:pressed {{ background-color: {theme.accent_fill_active}; }}
+        /* A focus_ring border on an accent fill is invisible: the ring and the
+           fill are the same blue since 9.1 folded them together. Primary alone
+           focuses against border_strong. Every other variant keeps focus_ring. */
+        QPushButton[role="primary"]:focus {{
+            border: 2px solid {theme.border_strong};
+        }}
 
         QPushButton[role="secondary"] {{
             background-color: {theme.surface_raised};
@@ -912,18 +923,41 @@ def build_stylesheet(theme: ThemeTokens) -> str:
             spacing: {theme.spacing_sm}px;
             background-color: transparent;
         }}
-        QCheckBox::indicator, QRadioButton::indicator {{
+        QCheckBox::indicator {{
             width: 18px; height: 18px;
             border: 2px solid {theme.border};
             border-radius: {r}px;
             background-color: {theme.surface};
         }}
-        QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
+        QCheckBox::indicator:hover {{
             border: 2px solid {theme.accent_fill};
         }}
-        QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+        QCheckBox::indicator:checked {{
             background-color: {theme.accent_fill};
             border: 2px solid {theme.accent_fill};
+        }}
+
+        QRadioButton::indicator {{
+            width: 16px; height: 16px; border-radius: 8px;
+            border: 1px solid {theme.border};
+            background-color: {theme.surface};
+        }}
+        /* A filled dot, not a ring: Lucide draws in stroke="currentColor", so
+           its circle glyph would give an outline. border-radius draws the dot
+           in one rule and needs no asset. */
+        QRadioButton::indicator:checked {{
+            background-color: {theme.accent_fill};
+            border: 4px solid {theme.surface};
+        }}
+
+        QCheckBox[role="toggle"]::indicator {{
+            width: 36px; height: 20px;
+        }}
+        QCheckBox[role="toggle"]::indicator:unchecked {{
+            image: {glyph_url("toggle-off", theme.border, size=36, height=20)};
+        }}
+        QCheckBox[role="toggle"]::indicator:checked {{
+            image: {glyph_url("toggle-on", theme.accent_fill, size=36, height=20)};
         }}
 
         QGroupBox {{
