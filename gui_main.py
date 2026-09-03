@@ -91,6 +91,14 @@ def main():
     or in a CI environment) to set the Qt platform to 'offscreen', which
     prevents a GUI from being shown during automated testing.
     """
+    if "--webengine-gate" in sys.argv:
+        # Phase 9 build gate (roadmap 9.10). Deleted when the gate closes.
+        # This import must stay statically visible to PyInstaller -- it is
+        # what pulls Chromium into the frozen bundle.
+        from gui.webengine_gate import run_gate
+
+        sys.exit(run_gate(_PROCESS_START))
+
     # Set platform to offscreen for CI/testing environments
     if "pytest" in sys.modules or os.environ.get("CI"):
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
