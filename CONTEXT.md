@@ -111,6 +111,18 @@ One boolean, from `ProfileManager.is_network_available`, carried by one
 signal. Every control that would touch the share is disabled from it; that
 disabling is the guard, not a decoration on top of one.
 
+## Session setup
+
+**File slot** — the widget holding one of the two input files. One slot per
+file, three states (empty, loaded, invalid), and the only thing that knows
+whether its file is usable. Not a **file picker**, which is the dialog a slot
+opens: the slot persists and changes state, the picker appears and closes.
+
+**Strategy** — how a run allocates stock across competing orders, either
+`multi-item-first` or `fifo`. Supersedes "analysis mode", which named the
+combo rather than the thing it chose and collided with the Orders/Stock
+"Load Mode" on the same screen.
+
 ## Repos
 
 **Canonical source** — `packing-tool`. Every `shared/` change is authored
