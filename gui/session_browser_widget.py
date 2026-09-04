@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from gui.background_worker import BackgroundWorker
 from gui.components import ContextualSelectionBar, FilterBar
 from gui.session_row_delegates import (
+    ROLE_LIVE,
     ROLE_MANUAL,
     ROLE_TOKEN,
     STATUS_ROLES,
@@ -474,8 +475,10 @@ class SessionBrowserWidget(QWidget):
             # Column 2: Status -- painted by SessionStatusDelegate. The role and
             # the authorship flag ride on the item; the delegate owns the paint.
             status = session_info.get("status", "active")
+            role, live = STATUS_ROLES.get(status, ("text_secondary", False))
             status_item = QTableWidgetItem(status.capitalize())
-            status_item.setData(ROLE_TOKEN, STATUS_ROLES.get(status, "text_secondary"))
+            status_item.setData(ROLE_TOKEN, role)
+            status_item.setData(ROLE_LIVE, live)
             status_item.setData(
                 ROLE_MANUAL, bool(session_info.get("status_manually_set", False))
             )

@@ -7,7 +7,7 @@ clicks never reach the row and hover events move the selection.
 Spec: docs/superpowers/specs/2026-08-28-phase8.7-1e-session-browser-design.md
 """
 
-from PySide6.QtCore import QRect, Qt
+from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QApplication,
@@ -16,93 +16,89 @@ from PySide6.QtWidgets import (
     QStyleOptionViewItem,
 )
 
+from gui.selection_ring import paint_selection_ring
 from gui.theme_manager import get_theme_manager
+from shared.theme import MARK_LEFT_PX, MARK_PX, paint_status_mark, status_style
 
 # Item-data roles. Qt.UserRole itself is already taken on this table: column 0
 # carries the session path, column 6 the packing ratio.
 ROLE_TOKEN = Qt.UserRole + 1     # str -- theme token name for the status
 ROLE_MANUAL = Qt.UserRole + 2    # bool -- status_manually_set
+ROLE_LIVE = Qt.UserRole + 3      # bool -- someone still has to act
 
-# Spec section 3. `archived` amends the parent spec's section 4 table, which
-# had no key for it.
-STATUS_ROLES: dict[str, str] = {
-    "active": "status_info",
-    "completed": "status_success",
-    "abandoned": "status_danger",
-    "archived": "text_secondary",
+# 9.3 §3.5: live-ness is data about a state, so it rides with the role rather
+# than in a second table keyed by the same thing. 9.19 extends this to seven
+# statuses plus archived; it owns that expansion because it is gated on the
+# `blocked_orders` data change.
+STATUS_ROLES: dict[str, tuple[str, bool]] = {
+    "active": ("status_info", True),
+    "completed": ("status_success", False),
+    "abandoned": ("status_danger", False),
+    "archived": ("text_secondary", False),
 }
 
 
-def chip_colors(role: str, theme) -> tuple[str, str]:
-    """`(foreground, tint)` for a status role.
-
-    The same two lines shared/theme.py's StatusChip.set_status uses. Copied
-    rather than shared: hoisting a helper into shared/theme.py means authoring
-    it in packing-tool and running scripts/sync_shared.py, which drags a second
-    repo into a single-screen cycle for two lines. 8.9 gives packing-tool its
-    own painted status column -- that is the second call site and the moment to
-    hoist. Until then a test asserts this stays equal to StatusChip's result.
-    """
-    return getattr(theme, role), getattr(theme, f"{role}_bg", theme.surface_sunken)
-
-
 class SessionStatusDelegate(QStyledItemDelegate):
-    """Paints the Status cell as a dot plus label, or as a tinted pill.
+    """Paints the Status cell as one silhouette: an outlined pill, a mark, a label.
 
-    Which form appears is authorship, not state: "colour carries urgency, tint
-    carries authorship". A person who set the status by hand gets a plain dot;
-    a status session_lifecycle derived gets a tinted chip.
+    Colour is the role, fill is live-vs-resting, and the mark is authorship --
+    solid for a person, hollow for the system. Before 9.3 authorship chose
+    between a bare dot and a tinted pill, which read as two components and made
+    the authorship difference disappear into "the design is inconsistent".
+
+    A delegate, not a cell widget: a QLabel in a cell covers it, so clicks
+    never reach the row and hover moves the selection.
     """
-
-    def form(self, role: str, manual: bool) -> tuple[str, str, str]:
-        """`(kind, fg, tint)` -- pure, so the rule is testable without painting."""
-        fg, tint = chip_colors(role, get_theme_manager().get_current_theme())
-        return ("dot" if manual else "chip"), fg, tint
 
     def paint(self, painter, option, index):
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         text = opt.text
         opt.text = ""                      # the row background, not the label
-        style = opt.widget.style() if opt.widget else QApplication.style()
-        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        style_ = opt.widget.style() if opt.widget else QApplication.style()
+        style_.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        paint_selection_ring(painter, option, index)
 
         role = index.data(ROLE_TOKEN)
         if not role:
             return
-        kind, fg, tint = self.form(role, bool(index.data(ROLE_MANUAL)))
-        theme = get_theme_manager().get_current_theme()
+        status = status_style(
+            role,
+            get_theme_manager().get_current_theme(),
+            live=bool(index.data(ROLE_LIVE)),
+            manual=bool(index.data(ROLE_MANUAL)),
+        )
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(Qt.NoPen)
         rect = option.rect.adjusted(8, 0, -8, 0)
         metrics = painter.fontMetrics()
-
-        if kind == "dot":
-            diameter = 8
-            top = rect.center().y() - diameter // 2
-            painter.setBrush(QColor(fg))
-            painter.drawEllipse(rect.left(), top, diameter, diameter)
-            painter.setPen(QColor(theme.text))
-            painter.drawText(
-                rect.adjusted(diameter + 6, 0, 0, 0),
-                Qt.AlignVCenter | Qt.AlignLeft,
-                text,
-            )
-        else:
-            height = metrics.height() + 4
-            pill = QRect(
-                rect.left(),
-                rect.center().y() - height // 2,
-                min(metrics.horizontalAdvance(text) + 16, rect.width()),
-                height,
-            )
-            painter.setBrush(QColor(tint))
-            painter.setPen(QColor(fg))          # the pill's outline, then its label
-            painter.drawRoundedRect(pill, height / 2, height / 2)
-            painter.drawText(pill, Qt.AlignCenter, text)
-
+        label_left = MARK_LEFT_PX + MARK_PX + 4
+        height = metrics.height() + 4
+        pill = QRect(
+            rect.left(),
+            rect.center().y() - height // 2,
+            min(label_left + metrics.horizontalAdvance(text) + 8, rect.width()),
+            height,
+        )
+        painter.setBrush(QColor(status.fill) if status.fill else Qt.NoBrush)
+        painter.setPen(QColor(status.fg))       # the outline, then the mark and label
+        painter.drawRoundedRect(pill, height / 2, height / 2)
+        paint_status_mark(
+            painter,
+            QRectF(
+                pill.left() + MARK_LEFT_PX,
+                pill.center().y() - MARK_PX / 2,
+                MARK_PX,
+                MARK_PX,
+            ),
+            status,
+        )
+        painter.drawText(
+            pill.adjusted(label_left, 0, -8, 0),
+            Qt.AlignVCenter | Qt.AlignLeft,
+            text,
+        )
         painter.restore()
 
 
@@ -127,6 +123,7 @@ class PackingProgressDelegate(QStyledItemDelegate):
         opt.text = ""
         style = opt.widget.style() if opt.widget else QApplication.style()
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        paint_selection_ring(painter, option, index)
 
         theme = get_theme_manager().get_current_theme()
         fraction = self.bar_fraction(index.data(Qt.UserRole))

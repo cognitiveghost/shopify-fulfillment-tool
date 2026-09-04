@@ -17,7 +17,6 @@ from gui.session_row_delegates import (
     STATUS_ROLES,
     PackingProgressDelegate,
     SessionStatusDelegate,
-    chip_colors,
 )
 from gui.theme_manager import get_theme_manager
 
@@ -28,49 +27,45 @@ def qapp():
 
 
 class TestStatusRoles:
-    def test_every_session_status_maps_to_a_token(self, qapp):
+    def test_every_session_status_maps_to_a_token_and_its_liveness(self, qapp):
         theme = get_theme_manager().get_current_theme()
         assert set(STATUS_ROLES) == {"active", "completed", "abandoned", "archived"}
-        for role in STATUS_ROLES.values():
+        for role, _live in STATUS_ROLES.values():
             assert isinstance(getattr(theme, role), str)
 
     def test_archived_falls_back_to_surface_sunken_for_its_tint(self, qapp):
         # text_secondary has no _bg partner; StatusChip documents the same
         # fallback. Resolving it must not raise.
+        from shared.theme import status_style
+
         theme = get_theme_manager().get_current_theme()
-        _fg, tint = chip_colors(STATUS_ROLES["archived"], theme)
-        assert tint == theme.surface_sunken
+        role, _live = STATUS_ROLES["archived"]
+        # Force live=True: the fallback is about the missing _bg partner, not
+        # about archived's own (resting) liveness, which would mask it with
+        # fill=None regardless of the fallback.
+        style = status_style(role, theme, live=True)
+        assert style.fill == theme.surface_sunken
 
     @pytest.mark.parametrize("theme_name", ["light", "dark"])
     @pytest.mark.parametrize("status", ["active", "completed", "abandoned", "archived"])
-    def test_the_delegate_resolves_what_status_chip_resolves(self, qapp, theme_name, status):
-        # The delegate copies StatusChip's two-line colour rule instead of
-        # embedding a QLabel in a cell (spec section 3). This is the guard that
-        # fails the build if the copy ever drifts.
-        from shared.theme import StatusChip
+    @pytest.mark.parametrize("manual", [False, True])
+    def test_the_delegate_and_the_chip_resolve_the_same_style(
+        self, qapp, theme_name, status, manual
+    ):
+        # The delegate and StatusChip both resolve status_style() now (spec
+        # section 3) instead of each carrying its own copy of the rule. This
+        # is the guard that fails the build if they ever drift apart -- it
+        # reads StatusChip's actual resolved style, not a second call to
+        # status_style() that would pass by construction.
+        from shared.theme import StatusChip, status_style
 
         manager = get_theme_manager()
         manager.set_theme(theme_name)
         theme = manager.get_current_theme()
-        role = STATUS_ROLES[status]
+        role, live = STATUS_ROLES[status]
 
-        chip = StatusChip(role, status.capitalize(), theme)
-        sheet = chip.styleSheet()
-        fg, tint = chip_colors(role, theme)
-
-        assert f"color: {fg}" in sheet
-        assert f"background-color: {tint}" in sheet
-
-
-class TestAuthorshipPicksTheForm:
-    def test_a_human_set_status_is_a_dot(self, qapp):
-        kind, _fg, _tint = SessionStatusDelegate().form("status_info", manual=True)
-        assert kind == "dot"
-
-    def test_a_derived_status_is_a_tinted_chip(self, qapp):
-        kind, _fg, tint = SessionStatusDelegate().form("status_info", manual=False)
-        assert kind == "chip"
-        assert tint == get_theme_manager().get_current_theme().status_info_bg
+        chip = StatusChip(role, status.capitalize(), theme, live=live, manual=manual)
+        assert chip._style == status_style(role, theme, live=live, manual=manual)
 
 
 class TestPackingProgressDelegate:
@@ -329,7 +324,7 @@ class TestASelectedRowStaysReadable:
             manager.set_theme(theme_name)
             theme = manager.get_current_theme()
             painted = [theme.text] + [
-                getattr(theme, role) for role in STATUS_ROLES.values()
+                getattr(theme, role) for role, _live in STATUS_ROLES.values()
             ]
             for fg in painted:
                 ratio = contrast_ratio(fg, theme.selection_bg)

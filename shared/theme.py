@@ -11,9 +11,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from types import MappingProxyType
+from typing import NamedTuple
 
-from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import QObject, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QWidget
 
 THEME_DARK = "dark"
@@ -657,6 +658,73 @@ def clamp_geometry(
     return (x, y, w, h)
 
 
+class StatusStyle(NamedTuple):
+    """How one status renders, resolved once for both renderers.
+
+    Three independent channels. `fg` is the role's colour -- the outline, the
+    mark and the label all take it. `fill` is the tint when the status is
+    live (someone has to act) and None when it is resting or terminal. Mark
+    is authorship: solid when a person set the status, hollow when the system
+    derived it.
+
+    Supersedes the older "tint carries authorship" rule, which left nothing to
+    carry urgency. One silhouette, three channels.
+    """
+
+    fg: str
+    fill: str | None
+    mark_filled: bool
+
+
+def status_style(
+    role: str, theme: ThemeTokens, *, live: bool = True, manual: bool = False
+) -> StatusStyle:
+    """Resolve a role plus the two flags into the three channels.
+
+    The one place the rule is written. StatusChip renders it as QSS and
+    SessionStatusDelegate paints it, and they must not drift -- a copied
+    two-line rule was tolerable, a three-channel rule with geometry is not.
+
+    `role` is any ThemeTokens colour field, not only the four status roles:
+    packing-tool's STATUS_CONFIG maps "not_started" to text_secondary. It is
+    resolved with getattr, so a typo raises here rather than rendering the
+    wrong colour in production.
+
+    A role with no `<role>_bg` partner falls back to surface_sunken -- the one
+    place a missing token is tolerated, and unchanged from StatusChip's
+    original rule.
+    """
+    fg = getattr(theme, role)
+    fill = getattr(theme, f"{role}_bg", theme.surface_sunken) if live else None
+    return StatusStyle(fg, fill, manual)
+
+
+# The chip's mark: an 8px disc or ring in the role colour. Painted, never a
+# character -- nothing may depend on a font shipping a filled and a hollow
+# circle that read as the same silhouette.
+MARK_PX = 8
+MARK_RING_WIDTH = 1.5
+
+
+def paint_status_mark(painter: QPainter, rect: QRectF, style: StatusStyle) -> None:
+    """Paint one mark into `rect`, an MARK_PX-square QRectF."""
+    color = QColor(style.fg)
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    if style.mark_filled:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawEllipse(rect)
+    else:
+        pen = QPen(color)
+        pen.setWidthF(MARK_RING_WIDTH)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        inset = MARK_RING_WIDTH / 2
+        painter.drawEllipse(rect.adjusted(inset, inset, -inset, -inset))
+    painter.restore()
+
+
 class StatusDot(QWidget):
     """Small colored circle for status indicators in tables/lists.
 
@@ -671,12 +739,17 @@ class StatusDot(QWidget):
     `theme` is explicit because shared/ cannot know which theme is live -- that
     answer lives in each app (packing-tool's gui.theme.current_tokens(),
     shopify's get_theme_manager()), and shared/ must not import either.
+
+    `filled` is the **mark** channel -- this widget is the chip's mark, not a
+    status form of its own.
     """
 
-    def __init__(self, role: str, theme: ThemeTokens, diameter: int = 10, parent=None):
+    def __init__(self, role: str, theme: ThemeTokens, diameter: int = 10,
+                 parent=None, *, filled: bool = True):
         super().__init__(parent)
         self._color = QColor(getattr(theme, role))
         self._diameter = diameter
+        self._filled = filled
         self.setFixedSize(diameter, diameter)
 
     def color(self) -> QColor:
@@ -686,15 +759,19 @@ class StatusDot(QWidget):
         self._color = QColor(getattr(theme, role))
         self.update()
 
+    def set_filled(self, filled: bool) -> None:
+        """Solid when a person set the status, hollow when the system did."""
+        self._filled = filled
+        self.update()
+
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(self._color)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(0, 0, self._diameter, self._diameter)
+        style = StatusStyle(self._color.name(), None, self._filled)
+        paint_status_mark(painter, QRectF(0, 0, self._diameter, self._diameter), style)
 
 
 CHIP_VARIANTS = ("chip", "edge")
+MARK_LEFT_PX = 8
 
 
 class StatusChip(QLabel):
@@ -724,6 +801,9 @@ class StatusChip(QLabel):
         theme: ThemeTokens,
         variant: str = "chip",
         parent=None,
+        *,
+        live: bool = True,
+        manual: bool = False,
     ) -> None:
         super().__init__(parent)
         if variant not in CHIP_VARIANTS:
@@ -731,22 +811,43 @@ class StatusChip(QLabel):
                 f"Unknown chip variant {variant!r}; expected one of {CHIP_VARIANTS}"
             )
         self._variant = variant
-        self.set_status(role, text, theme)
+        self._style = None
+        self.set_status(role, text, theme, live=live, manual=manual)
 
-    def set_status(self, role: str, text: str, theme: ThemeTokens) -> None:
-        fg = getattr(theme, role)
+    def set_status(self, role: str, text: str, theme: ThemeTokens,
+                   *, live: bool = True, manual: bool = False) -> None:
+        """Three channels: colour is the role, fill is live, mark is authorship.
+
+        Keyword-only and defaulted to the shipped behaviour, so every existing
+        call site keeps its tinted pill.
+        """
+        self._style = status_style(role, theme, live=live, manual=manual)
         self.setText(text)
         if self._variant == "edge":
+            # A lane marker, not a status badge: it carries no authorship of
+            # its own and takes no mark.
             self.setStyleSheet(
                 f"background-color: transparent; color: {theme.text}; "
-                f"border-left: 3px solid {fg}; padding: 2px 8px;"
+                f"border-left: 3px solid {self._style.fg}; padding: 2px 8px;"
             )
             return
-        tint = getattr(theme, f"{role}_bg", theme.surface_sunken)
+        fill = self._style.fill or "transparent"
         self.setStyleSheet(
-            f"background-color: {tint}; color: {fg}; "
-            f"border: 1px solid {fg}; border-radius: {theme.radius}px; "
-            f"padding: 2px 8px;"
+            f"background-color: {fill}; color: {self._style.fg}; "
+            f"border: 1px solid {self._style.fg}; "
+            f"border-radius: {theme.radius}px; "
+            f"padding: 2px 8px 2px {MARK_LEFT_PX + MARK_PX + 4}px;"
+        )
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._variant != "chip" or self._style is None:
+            return
+        painter = QPainter(self)
+        top = (self.height() - MARK_PX) / 2
+        paint_status_mark(
+            painter, QRectF(MARK_LEFT_PX, top, MARK_PX, MARK_PX), self._style
         )
 
 
