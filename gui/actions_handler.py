@@ -1281,6 +1281,9 @@ class ActionsHandler(QObject):
             analysis_df=self.mw.analysis_results_df,
             stock_df=stock_df,
             live_stock=live_stock,
+            low_stock_threshold=self.mw.active_profile_config.get(
+                "settings", {}
+            ).get("low_stock_threshold", 5),
         )
 
         if dialog.exec() == QDialog.Accepted:

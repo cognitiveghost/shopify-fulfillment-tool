@@ -44,12 +44,19 @@ class AddProductDialog(QDialog):
     → NO full re-analysis!
     """
 
-    def __init__(self, parent, analysis_df, stock_df, live_stock):
+    def __init__(
+        self, parent, analysis_df, stock_df, live_stock, low_stock_threshold=5
+    ):
         super().__init__(parent)
 
         self.analysis_df = analysis_df
         self.stock_df = stock_df
         self.live_stock = live_stock  # Current stock tracking dict
+        # The client's own setting, edited on Settings > General. The 5 is
+        # only the fallback for a config written before the setting existed
+        # -- it used to be hardcoded here, so every client who changed it
+        # saw the wrong warning.
+        self.low_stock_threshold = low_stock_threshold
         self.result = None
 
         self.setup_ui()
@@ -223,7 +230,7 @@ class AddProductDialog(QDialog):
                     padding: 10px;
                 }}
             """)
-        elif current_stock < 5:
+        elif current_stock < self.low_stock_threshold:
             warning_text = (
                 "WARNING\n\n"
                 f"Product {text} has low stock ({current_stock} units)."
