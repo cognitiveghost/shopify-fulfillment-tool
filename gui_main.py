@@ -4,13 +4,20 @@ This script initializes the QApplication, creates the main window, and
 starts the application's event loop. It also handles setting the platform
 to 'offscreen' for testing or continuous integration (CI) environments.
 """
+import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 __version__ = "1.9.9.1"
+
+# Wall clock starts as early as the module loads -- everything below this,
+# including the MainWindow import, is part of what the operator experiences
+# as startup.
+_PROCESS_START = time.perf_counter()
 
 # Ensure the gui directory is on the path if running this as a script
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -84,6 +91,14 @@ def main():
     or in a CI environment) to set the Qt platform to 'offscreen', which
     prevents a GUI from being shown during automated testing.
     """
+    if "--webengine-gate" in sys.argv:
+        # Phase 9 build gate (roadmap 9.10). Deleted when the gate closes.
+        # This import must stay statically visible to PyInstaller -- it is
+        # what pulls Chromium into the frozen bundle.
+        from gui.webengine_gate import run_gate
+
+        sys.exit(run_gate(_PROCESS_START))
+
     # Set platform to offscreen for CI/testing environments
     if "pytest" in sys.modules or os.environ.get("CI"):
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -102,6 +117,9 @@ def main():
         window.show()
         window.raise_()
         window.activateWindow()
+        logging.getLogger(__name__).info(
+            "Startup complete in %.2fs", time.perf_counter() - _PROCESS_START
+        )
         sys.exit(app.exec())
     else:
         # In offscreen mode, the window is created but not shown.

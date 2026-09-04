@@ -26,6 +26,10 @@ PySide6>=6.7.0         # Qt6 for Python - cross-platform GUI framework
                        # 6.7 is the floor for QFont.setFeature(), which is the
                        # only working route to tabular numerals (Qt QSS has no
                        # font-variant-numeric property).
+                       # Keep the METAPACKAGE, not PySide6-Essentials: QtWebEngine
+                       # (the web tier, ADR 0001) ships in PySide6-Addons, which only
+                       # the metapackage pulls in. tests/test_webengine_available.py
+                       # guards this.
 
 # Standard Library Enhancements
 # ------------------------------
