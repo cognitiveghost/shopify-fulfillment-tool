@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from gui.components.card import Card
 from gui.components.commandbar import BarState, CommandBar
+from gui.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
@@ -212,7 +213,10 @@ class UIManager:
         if not connected:
             self.mw.nav_rail.set_current(0)
 
-        self.mw.setup_stack.setCurrentIndex(1 if connected else 0)
+        self._refresh_setup_panel()
+        self.mw.setup_stack.setCurrentIndex(
+            1 if connected and self.mw.current_client_id else 0
+        )
 
         # Resting when connected -- nothing to act on. Live when not.
         # Hollow either way: the system derived it, no person set it.
@@ -413,23 +417,45 @@ class UIManager:
 
         from PySide6.QtWidgets import QStackedWidget
 
-        from gui.components.state_panel import StatePanel
-
         stack = QStackedWidget()
-        self.mw.setup_state_panel = StatePanel.failed(
-            "This PC can't reach the fulfilment server",
-            "Clients, stock files and past sessions all live on the server. "
-            "Until this PC reaches it, there is nothing to set up.",
-            str(self.mw.profile_manager.base_path),
-            "Server connection…",
-        )
-        self.mw.setup_state_panel.button.clicked.connect(
-            self._open_connection_settings
-        )
-        stack.addWidget(self.mw.setup_state_panel)   # page 0
-        stack.addWidget(tab)                         # page 1, the form
+        # Page 0 starts empty -- _refresh_setup_panel fills it, and is the
+        # only place either of its two forms is built.
+        stack.addWidget(QWidget())    # page 0, replaced by _refresh_setup_panel
+        stack.addWidget(tab)          # page 1, the form
         self.mw.setup_stack = stack
+        self._refresh_setup_panel()
         return stack
+
+    def _refresh_setup_panel(self) -> None:
+        """Page 0's two forms. Connection first, then client. No third one.
+
+        A new panel each time rather than mutating one: StatePanel's four
+        constructors differ in whether they have a button at all, and a
+        widget that grows and loses a button is two widgets wearing one name.
+        """
+        if not self.mw.is_connected():
+            panel = StatePanel.failed(
+                "This PC can't reach the fulfilment server",
+                "Clients, stock files and past sessions all live on the "
+                "server. Until this PC reaches it, there is nothing to set up.",
+                str(self.mw.profile_manager.base_path),
+                "Server connection…",
+            )
+            panel.button.clicked.connect(self._open_connection_settings)
+        else:
+            panel = StatePanel.nothing_loaded(
+                "Choose a client to begin",
+                "Pick a client in the bar above. Sessions, stock and reports "
+                "all belong to one client.",
+                "",
+            )
+            self.mw.command_bar.client_selector.setFocus()
+
+        old = self.mw.setup_stack.widget(0)
+        self.mw.setup_stack.insertWidget(0, panel)
+        self.mw.setup_stack.removeWidget(old)
+        old.deleteLater()
+        self.mw.setup_state_panel = panel
 
     def _create_session_setup_panel(self):
         """Create left panel with Session Setup content.

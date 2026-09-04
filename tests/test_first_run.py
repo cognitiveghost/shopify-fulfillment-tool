@@ -104,3 +104,40 @@ def test_the_rail_has_five_items_and_no_footer(offline_window):
     rail = offline_window.nav_rail
     assert len(rail.findChildren(QToolButton)) == 5
     assert not hasattr(offline_window, "connection_btn")
+
+
+@pytest.fixture
+def online_window(tmp_path, monkeypatch):
+    monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
+    from gui.main_window_pyside import MainWindow
+
+    win = MainWindow()
+    win.resize(1366, 768)
+    win.show()
+    QApplication.processEvents()
+    yield win
+    win.close()
+
+
+def test_a_reachable_share_with_no_clients_asks_for_one(online_window):
+    from PySide6.QtWidgets import QLabel
+
+    assert online_window.is_connected() is True
+    assert online_window.setup_stack.currentIndex() == 0
+    rendered = " ".join(
+        label.text()
+        for label in online_window.setup_state_panel.findChildren(QLabel)
+    )
+    assert "Choose a client to begin" in rendered
+
+
+def test_the_second_beat_has_no_accent_pixel_of_its_own(online_window):
+    # The action is the selector, which takes focus; the primary reappears in
+    # the command bar as New Session once a client exists. No third layout.
+    assert online_window.setup_state_panel.button is None
+    assert online_window.command_bar.client_selector.hasFocus()
+
+
+def test_every_rail_item_is_enabled_once_the_share_answers(online_window):
+    rail = online_window.nav_rail
+    assert all(rail.button(i).isEnabled() for i in range(5))

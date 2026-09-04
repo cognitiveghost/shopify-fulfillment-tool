@@ -47,6 +47,9 @@ def mw(qapp):
     # names profile_manager.base_path (Bundle 4) -- this fixture predates
     # that and builds a bare QMainWindow with no ProfileManager at all.
     window.profile_manager = SimpleNamespace(base_path=Path("/fake/server"))
+    # Degraded, so _refresh_setup_panel's StatePanel.failed() branch runs and
+    # never reaches into a command_bar this bare fixture does not build.
+    window.is_connected = lambda: False
     ui = UIManager(window)
     window.setCentralWidget(ui._create_tab1_session_setup())
     window.setGeometry(100, 100, 1100, 900)
@@ -87,6 +90,10 @@ def main_window(tmp_path, monkeypatch):
     win.show()
     QApplication.processEvents()
     win.main_tabs.setCurrentIndex(0)
+    # This file measures the form's own layout (page 1), not page 0's empty
+    # state -- and a QStackedWidget page that has never been current is
+    # never laid out, so every button in it would read back as (0, 0).
+    win.setup_stack.setCurrentIndex(1)
     QApplication.processEvents()
     yield win
     win.close()
@@ -102,18 +109,18 @@ def _clipped_buttons(tab):
 
 
 def test_no_action_button_is_clipped_at_default_window_size(main_window):
-    tab = main_window.main_tabs.widget(0)
+    tab = main_window.setup_stack.widget(1)
     assert _clipped_buttons(tab) == []
 
 
 def test_setup_column_never_scrolls_horizontally(main_window):
-    tab = main_window.main_tabs.widget(0)
+    tab = main_window.setup_stack.widget(1)
     scroll = tab.findChild(QScrollArea)
     assert not scroll.horizontalScrollBar().isVisible()
 
 
 def test_recent_sessions_panel_stays_compact(main_window):
-    tab = main_window.main_tabs.widget(0)
+    tab = main_window.setup_stack.widget(1)
     card = tab.findChild(QSplitter).widget(1)
     assert card.width() <= _RECENT_PANEL_MAX_WIDTH
     assert main_window.recent_sessions_list.height() <= 200

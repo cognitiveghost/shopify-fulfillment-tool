@@ -166,3 +166,16 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
     bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center())
 
     assert seen == ["M"]
+
+
+def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
+    """1366x768 minus rail 56, command bar 48 and status bar 28."""
+    main_window.resize(1366, 768)
+    QApplication.processEvents()
+
+    assert main_window.nav_rail.width() == 56
+    assert main_window.command_bar.height() == 48
+    assert main_window.statusBar().height() == 28
+
+    page = main_window.width() - main_window.nav_rail.width()
+    assert page == 1310

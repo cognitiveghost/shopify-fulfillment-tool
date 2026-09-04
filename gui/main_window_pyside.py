@@ -222,6 +222,10 @@ class MainWindow(QMainWindow):
                 self.analysis_stats = None
                 self.session_path = None
                 self.command_bar.set_state(BarState.NO_SESSION)
+                self.ui_manager._refresh_setup_panel()
+                self.setup_stack.setCurrentIndex(
+                    1 if self.is_connected() and self.current_client_id else 0
+                )
                 # Clear undo history when switching clients
                 if hasattr(self, "undo_manager"):
                     self.undo_manager.reset_for_session()
