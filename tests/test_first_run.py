@@ -141,3 +141,15 @@ def test_the_second_beat_has_no_accent_pixel_of_its_own(online_window):
 def test_every_rail_item_is_enabled_once_the_share_answers(online_window):
     rail = online_window.nav_rail
     assert all(rail.button(i).isEnabled() for i in range(5))
+
+
+def test_the_rail_cannot_grow_a_footer_again():
+    """The rail is for destinations, so there is no API for anything else.
+
+    tests/test_components_navrail.py held four tests for add_footer_item;
+    they were deleted with the method. This asserts the deletion rather than
+    the behaviour, because the behaviour no longer exists to assert.
+    """
+    from shared.navrail import NavRail
+
+    assert not hasattr(NavRail, "add_footer_item")

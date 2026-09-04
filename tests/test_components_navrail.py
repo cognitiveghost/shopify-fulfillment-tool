@@ -77,50 +77,6 @@ def test_clicking_the_current_item_again_emits_nothing(qapp):
     assert seen == [1]
 
 
-def test_a_footer_item_is_an_action_not_a_destination(qapp):
-    rail = NavRail()
-    rail.add_item(icon("table"), "Analysis Results")
-    rail.add_item(icon("wrench"), "Tools")
-
-    gear = rail.add_footer_item(icon("settings"), "Server Connection")
-
-    assert not gear.isCheckable()
-    assert rail._group.id(gear) == -1        # never joins the exclusive group
-    assert not gear.icon().isNull()
-
-
-def test_clicking_the_footer_leaves_the_destination_alone(qapp):
-    rail = NavRail()
-    rail.add_item(icon("table"), "Analysis Results")
-    rail.add_item(icon("wrench"), "Tools")
-    rail.set_current(1)
-    seen = []
-    rail.currentChanged.connect(seen.append)
-
-    rail.add_footer_item(icon("settings"), "Server Connection").click()
-
-    assert rail.current_index() == 1
-    assert seen == []
-    assert rail.button(1).isChecked()
-
-
-def test_the_footer_sits_below_the_stretch(qapp):
-    rail = NavRail()
-    rail.add_item(icon("table"), "Analysis Results")
-    gear = rail.add_footer_item(icon("settings"), "Server Connection")
-
-    layout = rail.layout()
-    stretch_at = next(
-        i for i in range(layout.count()) if layout.itemAt(i).spacerItem() is not None
-    )
-    assert layout.indexOf(gear) > stretch_at
-
-
-def test_footer_rejects_an_unknown_glyph(qapp):
-    with pytest.raises(KeyError):
-        icon("not-a-real-icon")
-
-
 def test_a_theme_toggle_restyles_the_rail(qapp):
     """A widget sheet outranks the app's, so a rail that bakes its colours in
     once stays light over dark pages."""
