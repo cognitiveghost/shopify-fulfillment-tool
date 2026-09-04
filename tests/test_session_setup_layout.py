@@ -12,6 +12,9 @@ Two unrelated regressions pinned in one file (same area of the codebase):
    app's own default 1100x900 geometry. See
    docs/superpowers/specs/2026-08-23-session-setup-layout-design.md.
 """
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 from PySide6.QtWidgets import (
     QApplication,
@@ -40,6 +43,10 @@ def qapp():
 @pytest.fixture
 def mw(qapp):
     window = QMainWindow()
+    # _create_tab1_session_setup wraps page 0 in a StatePanel.failed() that
+    # names profile_manager.base_path (Bundle 4) -- this fixture predates
+    # that and builds a bare QMainWindow with no ProfileManager at all.
+    window.profile_manager = SimpleNamespace(base_path=Path("/fake/server"))
     ui = UIManager(window)
     window.setCentralWidget(ui._create_tab1_session_setup())
     window.setGeometry(100, 100, 1100, 900)

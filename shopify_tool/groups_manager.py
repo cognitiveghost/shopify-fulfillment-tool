@@ -55,8 +55,17 @@ class GroupsManager:
         self.clients_dir = self.base_path / "Clients"
         self.groups_path = self.clients_dir / "groups.json"
 
-        # Ensure Clients directory exists
-        self.clients_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure Clients directory exists. Best-effort: MainWindow can now
+        # construct this against an unreachable share (ProfileManager's
+        # require_connection=False, Bundle 4), and a raise here would
+        # re-introduce the quit-on-launch bug that keyword exists to remove.
+        # load_groups() already tolerates a missing groups_path -- it is the
+        # mkdir itself that has no guard.
+        try:
+            self.clients_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning(f"Cannot reach clients directory at {self.clients_dir}")
+            return
 
         # Initialize groups file
         # Always call load_groups to validate and handle corruption

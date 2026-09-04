@@ -34,19 +34,15 @@ def test_client_profile_dialog_is_titled_client_profile():
 
 
 def test_settings_buttons_are_labelled_settings():
-    """Both settings entry points open SettingsWindow, so neither may say
-    "Client Settings" -- that named the other dialog. Tab 2's is a QAction
-    in the overflow menu (Phase 8.8b), not a QPushButton like Tab 1's."""
-    import re
+    """Both settings entry points open SettingsWindow. Tab 1's stays a
+    QPushButton; Tab 2's moved into the command-bar overflow as "Client
+    settings…" (Bundle 4, spec §4.2) -- object config, not a screen action."""
     from pathlib import Path
 
     import gui.ui_manager as mod
 
     source = Path(mod.__file__).read_text()
     assert source.count('QPushButton("Settings")') == 1
-    tab2_label = re.search(
-        r'self\.mw\.settings_button_tab2 = action\(\s*"([^"]*)"', source
-    )
-    assert tab2_label and tab2_label.group(1) == "Settings"
+    assert '"Client settings…"' in source
     assert 'QPushButton("Client Settings")' not in source
     assert '"Client Settings",' not in source

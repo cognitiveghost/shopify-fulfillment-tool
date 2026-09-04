@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gui.actions_handler import ActionsHandler
+from gui.components.commandbar import BarState
 from gui.file_handler import FileHandler
 from gui.log_handler import QtLogHandler
 from gui.pandas_model import FulfillmentFilterProxy
@@ -220,6 +221,7 @@ class MainWindow(QMainWindow):
                 self.analysis_results_df = None
                 self.analysis_stats = None
                 self.session_path = None
+                self.command_bar.set_state(BarState.NO_SESSION)
                 # Clear undo history when switching clients
                 if hasattr(self, "undo_manager"):
                     self.undo_manager.reset_for_session()
@@ -295,6 +297,9 @@ class MainWindow(QMainWindow):
         self.client_directory.loaded.connect(self.command_bar.set_clients_from)
         self.client_directory.clientCreated.connect(self.on_client_changed)
         self.command_bar.clientChanged.connect(self.on_client_changed)
+        self.command_bar.clientChanged.connect(
+            lambda _c: self.ui_manager._populate_overflow(self.command_bar)
+        )
         self.command_bar.clientMenuRequested.connect(self._on_client_menu_requested)
         self.command_bar.createClientRequested.connect(
             lambda: self.client_directory.open_create_client_dialog(self)

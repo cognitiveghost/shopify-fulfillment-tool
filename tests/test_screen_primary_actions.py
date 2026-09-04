@@ -28,10 +28,12 @@ def test_each_screen_puts_its_own_primary_in_the_bar(main_window, qapp):
     # A bound button is only the bar's visible primary in SESSION -- the
     # state decides whether a right-hand primary exists at all (Bundle 4).
     main_window.command_bar.set_state(BarState.SESSION)
+    # Screen 2 (Browse) no longer borrows Setup's New Session -- it is
+    # state-owned and always in the left group under BarState.NO_SESSION
+    # (Bundle 4, spec §3.2), so it has no entry in _SCREEN_ACTIONS any more.
     expected = {
         0: "▶ Run Analysis",
         1: "Generate Reports",
-        2: "Create New Session",
     }
     for index, label in expected.items():
         main_window.main_tabs.setCurrentIndex(index)
@@ -65,9 +67,9 @@ def test_the_moved_buttons_stop_rendering_in_the_page(main_window, qapp):
     assert main_window.generate_reports_button_tab2.isHidden()
 
 
-def test_session_setups_new_session_button_keeps_rendering(main_window, qapp):
-    """SessionBrowserWidget has no New Session control, so screen 2 borrows Session
-    Setup's -- where it is not the primary and must stay visible."""
+def test_session_setups_new_session_button_never_renders_in_the_page(main_window, qapp):
+    """New Session is state-owned in the command bar now (BarState.NO_SESSION,
+    Bundle 4) -- the page's own copy never draws, on any screen."""
     main_window.main_tabs.setCurrentIndex(0)
     QApplication.processEvents()
-    assert not main_window.new_session_btn.isHidden()
+    assert main_window.new_session_btn.isHidden()

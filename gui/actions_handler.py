@@ -6,6 +6,7 @@ import pandas as pd
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
+from gui.components.commandbar import BarState
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
@@ -83,6 +84,7 @@ class ActionsHandler(QObject):
                 progress.close()
 
             self.mw.session_path = session_path
+            self.mw.command_bar.set_state(BarState.SESSION)
 
             # Update session info labels
             if hasattr(self.mw, "update_session_info_label"):
@@ -160,6 +162,7 @@ class ActionsHandler(QObject):
             return
 
         self.mw._analysis_running = True
+        self.mw.command_bar.set_state(BarState.RUNNING)
         self.mw.ui_manager.set_ui_busy(True)
         self.log.info("Starting analysis thread.")
         stock_delimiter = self.mw.active_profile_config.get("settings", {}).get(
@@ -190,6 +193,7 @@ class ActionsHandler(QObject):
     def _on_analysis_finished(self):
         """Reset analysis-running guard and update UI after analysis finishes."""
         self.mw._analysis_running = False
+        self.mw.command_bar.set_state(BarState.SESSION)
         self.mw.ui_manager.set_ui_busy(False)
 
     def on_analysis_complete(self, result):

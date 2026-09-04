@@ -43,3 +43,64 @@ def test_require_connection_false_returns_a_usable_object(unreachable):
 def test_a_reachable_share_is_unaffected_by_the_keyword(tmp_path, monkeypatch):
     monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
     assert ProfileManager(require_connection=False).is_network_available is True
+
+
+@pytest.fixture
+def offline_window(unreachable):
+    from gui.main_window_pyside import MainWindow
+
+    win = MainWindow()
+    win.resize(1366, 768)
+    win.show()
+    QApplication.processEvents()
+    yield win
+    win.close()
+
+
+def test_the_window_opens_at_all(offline_window):
+    # The contract this bundle changed: an unreachable share used to quit.
+    assert offline_window.isVisible()
+    assert offline_window.is_connected() is False
+
+
+def test_only_setup_and_info_stay_enabled(offline_window):
+    rail = offline_window.nav_rail
+    enabled = [i for i in range(5) if rail.button(i).isEnabled()]
+    # Disabled, never hidden: a rail that grows items as you configure the
+    # app never lets you learn its shape.
+    assert enabled == [0, 3]
+    assert all(rail.button(i).isVisible() for i in range(5))
+
+
+def test_setup_shows_the_panel_and_names_the_path(offline_window, unreachable):
+    from PySide6.QtWidgets import QLabel
+
+    assert offline_window.setup_stack.currentIndex() == 0
+    rendered = " ".join(
+        label.text()
+        for label in offline_window.setup_state_panel.findChildren(QLabel)
+    )
+    assert "can't reach the fulfilment server" in rendered
+    assert str(unreachable) in rendered
+    assert "!" not in rendered
+    assert "sorry" not in rendered.lower()
+
+
+def test_the_one_accent_pixel_is_the_way_out(offline_window):
+    button = offline_window.setup_state_panel.button
+    assert button.text() == "Server connection…"
+    assert button.property("role") == "primary"
+
+
+def test_the_status_bar_says_so_too(offline_window):
+    chip = offline_window.connection_chip
+    assert chip.isVisible()
+    assert "unreachable" in chip.text().lower()
+
+
+def test_the_rail_has_five_items_and_no_footer(offline_window):
+    from PySide6.QtWidgets import QToolButton
+
+    rail = offline_window.nav_rail
+    assert len(rail.findChildren(QToolButton)) == 5
+    assert not hasattr(offline_window, "connection_btn")

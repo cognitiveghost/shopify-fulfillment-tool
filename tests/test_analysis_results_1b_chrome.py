@@ -123,24 +123,24 @@ def test_the_clear_button_is_gone(main_window):
     assert not hasattr(main_window, "clear_filter_button")
 
 
-def test_the_overflow_holds_the_five_screen_level_actions(main_window):
+def test_the_overflow_holds_the_screen_level_actions(main_window):
+    """Client settings and theme moved to the command-bar overflow (Bundle 4,
+    spec §4.2) -- this screen overflow keeps only what is scoped to it."""
     actions = main_window.results_overflow_button.menu().actions()
     assert [a for a in actions if not a.isSeparator()] == [
         main_window.add_product_button_tab2,
         main_window.configure_columns_button_tab2,
-        main_window.settings_button_tab2,
         main_window.undo_button,
-        main_window.theme_toggle_btn,
     ]
     assert all(isinstance(a, QAction) for a in actions if not a.isSeparator())
 
 
 def test_the_existing_enable_calls_still_drive_the_overflow(main_window):
     """main_window_pyside.py:662-701 sets these; QAction takes setEnabled too."""
-    main_window.settings_button_tab2.setEnabled(False)
-    assert not main_window.settings_button_tab2.isEnabled()
-    main_window.settings_button_tab2.setEnabled(True)
-    assert main_window.settings_button_tab2.isEnabled()
+    main_window.add_product_button_tab2.setEnabled(False)
+    assert not main_window.add_product_button_tab2.isEnabled()
+    main_window.add_product_button_tab2.setEnabled(True)
+    assert main_window.add_product_button_tab2.isEnabled()
 
 
 def test_generate_reports_stays_a_button_bound_to_the_command_bar(main_window):

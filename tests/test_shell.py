@@ -134,21 +134,10 @@ def test_rail_buttons_carry_the_old_tab_tooltips(main_window):
     assert main_window.main_tabs.tabToolTip(0) == ""
 
 
-def test_the_connection_gear_is_a_rail_footer_action(main_window):
-    """It opens a modal dialog, so only its non-destination contract is
-    exercised here: it must never be able to steal the checked state."""
-    main_window.main_tabs.setCurrentIndex(2)
-
-    assert not main_window.connection_btn.isCheckable()
-    assert main_window.nav_rail._group.id(main_window.connection_btn) == -1
-    assert main_window.nav_rail.current_index() == 2
-
-
 def test_refresh_icons_reaches_the_rail(main_window):
     main_window.ui_manager._refresh_icons()
     for index in range(5):
         assert not main_window.nav_rail.button(index).icon().isNull()
-    assert not main_window.connection_btn.icon().isNull()
 
 
 def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
