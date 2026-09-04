@@ -85,6 +85,22 @@ def _recent_list_height(widget: QListWidget) -> int:
     return row * _RECENT_SESSIONS_ROWS + 2 * widget.frameWidth() + 4
 
 
+class _SessionLabelShim:
+    """`mw.session_info_label.setText(...)` forwards to the bar's picker.
+
+    update_session_info_label() in main_window_pyside.py writes through this
+    attribute; the write target moved from a QLabel to CommandBar's session
+    picker button, so this shim forwards the call rather than editing that
+    method's body.
+    """
+
+    def __init__(self, bar: CommandBar) -> None:
+        self._bar = bar
+
+    def setText(self, text: str) -> None:
+        self._bar.set_session_text(text)
+
+
 class UIManager:
     """Handles the creation, layout, and state of all UI widgets.
 
@@ -297,10 +313,12 @@ class UIManager:
         bar = CommandBar(self.mw)
         self.mw.command_bar = bar
 
-        # Same name the header's label had, so update_session_info_label()
-        # keeps working unchanged.
-        self.mw.session_info_label = bar.session_label
-        bar.set_session("No session")
+        # update_session_info_label() still writes through this attribute --
+        # the write target moved from a QLabel to the bar's picker button,
+        # so the shim forwards .setText() to set_session_text() instead of
+        # editing that method's body.
+        self.mw.session_info_label = _SessionLabelShim(bar)
+        bar.set_session_text("No session")
 
         bar.newSessionRequested.connect(
             lambda: self.mw.actions_handler.create_new_session()

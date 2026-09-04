@@ -41,8 +41,11 @@ def test_command_bar_replaces_the_global_header(main_window):
 
 
 def test_session_label_keeps_its_name_so_its_writer_needs_no_edit(main_window):
+    from gui.components import BarState
+
+    main_window.command_bar.set_state(BarState.SESSION)
     main_window.session_info_label.setText("SESSION_7")
-    assert main_window.command_bar.session_label.text() == "SESSION_7"
+    assert main_window.command_bar.session_button.text() == "SESSION_7"
 
 
 def test_choosing_a_client_in_the_dropdown_drives_on_client_changed(main_window):

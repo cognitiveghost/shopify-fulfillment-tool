@@ -91,7 +91,7 @@ _WORST_SESSION = "Session 2026-09-04_18-45-02"
 def _loaded(bar):
     bar.set_clients([_WORST_CLIENT])
     bar.set_current_client(_WORST_CLIENT)
-    bar.set_session(_WORST_SESSION)
+    bar.set_session_text(_WORST_SESSION)
     bar.set_status("status_warning", "Analysis complete")
     bar.set_action("Generate Reports")
     bar.set_state(BarState.SESSION)
@@ -103,7 +103,7 @@ def test_the_never_truncate_four_survive_the_design_width(bar):
     bar.resize(1310, 48)
     QApplication.processEvents()
 
-    assert bar.session_label.text() == _WORST_SESSION
+    assert bar.session_button.text() == _WORST_SESSION
     assert bar.action_button.text() == "Generate Reports"
     assert bar.overflow_button.isVisible()
     assert bar.status_chip.isVisible()
@@ -119,7 +119,7 @@ def test_the_client_name_is_what_gives_way_first(bar):
     # 120, not "<= 200": the selector is setFixedWidth to one of exactly
     # two values, so a <= assertion passes whether or not the rung fired.
     assert bar.client_selector.width() == 120
-    assert bar.session_label.text() == _WORST_SESSION
+    assert bar.session_button.text() == _WORST_SESSION
 
 
 def test_progress_keeps_the_percentage_and_drops_the_phase(bar):
@@ -146,3 +146,53 @@ def test_new_session_goes_icon_only_last(bar):
     bar.resize(420, 48)
     QApplication.processEvents()
     assert bar.new_session_button.text() == ""
+
+
+def test_the_session_button_reads_open_recent_with_no_session(qapp):
+    bar = CommandBar()
+    bar.set_recent_sessions([("Tuesday restock", "/s/1")])
+    bar.set_state(BarState.NO_SESSION)
+    assert bar.session_button.isVisible() or not bar.isVisible()
+    assert bar.session_button.text() == "Open recent"
+    assert bar.session_button.isEnabled()
+
+
+def test_the_session_button_is_disabled_when_the_client_has_no_sessions(qapp):
+    bar = CommandBar()
+    bar.set_recent_sessions([])
+    bar.set_state(BarState.NO_SESSION)
+    assert not bar.session_button.isEnabled()
+
+
+def test_the_session_id_is_never_elided(qapp):
+    bar = CommandBar()
+    bar.set_session_text("2026-09-04_tuesday-restock")
+    bar.set_state(BarState.SESSION)
+    assert bar.session_button.text() == "2026-09-04_tuesday-restock"
+    assert bar.session_button.maximumWidth() >= 16777215
+
+
+def test_the_picker_is_disabled_while_a_run_holds_the_turn(qapp):
+    bar = CommandBar()
+    bar.set_session_text("2026-09-04_tuesday-restock")
+    bar.set_state(BarState.RUNNING)
+    assert bar.session_button.text() == "2026-09-04_tuesday-restock"
+    assert not bar.session_button.isEnabled()
+
+
+def test_choosing_a_session_emits_its_path(qapp, qtbot):
+    bar = CommandBar()
+    bar.set_recent_sessions([("Tuesday restock", "/s/1"), ("Monday", "/s/2")])
+    actions = [a for a in bar.session_menu.actions() if a.data()]
+    with qtbot.waitSignal(bar.sessionChosen) as caught:
+        actions[0].trigger()
+    assert caught.args == ["/s/1"]
+
+
+def test_the_menu_ends_with_a_route_to_the_browser(qapp, qtbot):
+    bar = CommandBar()
+    bar.set_recent_sessions([("Tuesday restock", "/s/1")])
+    last = bar.session_menu.actions()[-1]
+    assert "Browse all sessions" in last.text()
+    with qtbot.waitSignal(bar.browseAllRequested):
+        last.trigger()

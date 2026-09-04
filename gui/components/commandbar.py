@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLayout,
+    QMenu,
     QPushButton,
     QToolButton,
     QWidget,
@@ -115,6 +116,8 @@ class CommandBar(QWidget):
     newSessionRequested = Signal()
     openFolderRequested = Signal()
     cancelRequested = Signal()
+    sessionChosen = Signal(str)
+    browseAllRequested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -154,9 +157,21 @@ class CommandBar(QWidget):
         self.new_session_button.hide()
         layout.addWidget(self.new_session_button)
 
-        self.session_label = QLabel("", self)
-        self.session_label.setStyleSheet(font_css("caption"))
-        layout.addWidget(self.session_label)
+        # A menu button, not a label: the recent-sessions strip Bundle 5
+        # deletes from the Setup page was the only route back to yesterday's
+        # work, and navigation belongs in the shell. Bundle 4 §3.3 forbids
+        # eliding the session ID at any width, so no maximum width is set
+        # and the style is TextBesideIcon with no icon.
+        self.session_button = QToolButton(self)
+        self.session_button.setAutoRaise(True)
+        self.session_button.setPopupMode(QToolButton.InstantPopup)
+        self.session_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.session_button.setStyleSheet(font_css("caption"))
+        self.session_menu = QMenu(self.session_button)
+        self.session_button.setMenu(self.session_menu)
+        layout.addWidget(self.session_button)
+        self._recent: list[tuple[str, str]] = []
+        self._session_text = ""
 
         # Icon-only: its target is the string to its left. The glyph is
         # re-rendered on a theme change -- a QIcon is a snapshot, and the
@@ -386,8 +401,27 @@ class CommandBar(QWidget):
                 self.client_selector.setCurrentIndex(i)
                 return
 
-    def set_session(self, text: str) -> None:
-        self.session_label.setText(text)
+    def set_recent_sessions(self, items: list[tuple[str, str]]) -> None:
+        """Fill the picker. `items` is (display name, session path), newest
+        first -- the caller caps the list, because how many sessions are
+        "recent" is the screen's decision, not the bar's."""
+        self._recent = list(items)
+        self.session_menu.clear()
+        for name, path in self._recent:
+            action = self.session_menu.addAction(name)
+            action.setData(path)
+            action.triggered.connect(
+                lambda _checked=False, p=path: self.sessionChosen.emit(p)
+            )
+        if self._recent:
+            self.session_menu.addSeparator()
+        browse = self.session_menu.addAction("Browse all sessions…\tCtrl+3")
+        browse.triggered.connect(lambda _checked=False: self.browseAllRequested.emit())
+        self._refresh()
+
+    def set_session_text(self, text: str) -> None:
+        self._session_text = text
+        self._refresh()
 
     def set_status(self, role: str, text: str) -> None:
         self.status_chip.set_status(
@@ -473,7 +507,16 @@ class CommandBar(QWidget):
         state = self._state
         has_session = state in (BarState.SESSION, BarState.RUNNING)
 
-        self.session_label.setVisible(has_session)
+        if state is BarState.NO_CLIENT:
+            self.session_button.hide()
+        else:
+            self.session_button.show()
+            if state is BarState.NO_SESSION:
+                self.session_button.setText("Open recent")
+                self.session_button.setEnabled(bool(self._recent))
+            else:
+                self.session_button.setText(self._session_text)
+                self.session_button.setEnabled(state is BarState.SESSION)
         self.open_folder_button.setVisible(has_session)
         self.status_chip.setVisible(has_session and bool(self.status_chip.text()))
 

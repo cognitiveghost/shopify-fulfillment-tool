@@ -49,8 +49,9 @@ def test_choosing_a_client_emits_its_name(qapp):
 
 def test_session_id_is_shown_verbatim(qapp):
     bar = CommandBar()
-    bar.set_session("PL-2026-08-27-004")
-    assert bar.session_label.text() == "PL-2026-08-27-004"
+    bar.set_session_text("PL-2026-08-27-004")
+    bar.set_state(BarState.SESSION)
+    assert bar.session_button.text() == "PL-2026-08-27-004"
 
 
 def test_status_uses_a_shared_status_chip(qapp):
