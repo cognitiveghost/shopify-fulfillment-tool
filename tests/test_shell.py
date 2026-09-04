@@ -208,3 +208,25 @@ def test_resuming_a_past_session_reaches_the_session_state(main_window, tmp_path
 
     assert main_window.command_bar._state is BarState.SESSION
     assert main_window.command_bar.open_folder_button.isVisible()
+
+
+def test_new_session_is_reachable_from_the_overflow_with_a_session_open(main_window):
+    """The bar's own New Session button is state-owned (BarState.NO_SESSION
+    only). PR #317 review: with a session already open, the only way back to
+    it was switching clients first -- the overflow is the fix.
+    """
+    from gui.components.commandbar import BarState
+
+    main_window.profile_manager.create_client_profile("M", "Client M")
+    main_window.command_bar.set_clients(["M"])
+    main_window.command_bar.set_current_client("M")
+    main_window.command_bar.set_state(BarState.SESSION)
+
+    menu = main_window.command_bar.overflow
+    item = next(a for a in menu.actions() if a.text() == "New session…")
+    assert item.isEnabled()
+
+    calls = []
+    main_window.actions_handler.create_new_session = lambda: calls.append(1)
+    item.trigger()
+    assert calls == [1]

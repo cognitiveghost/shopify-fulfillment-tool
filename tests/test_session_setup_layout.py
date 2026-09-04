@@ -102,12 +102,13 @@ def test_the_label_gutter_is_208(main_window):
     assert label.width() == 208
 
 
-def test_the_session_name_field_is_the_first_row_of_the_card(main_window):
-    """Named for what it checks. Spec §8 also wants this field pre-filled,
-    selected on focus, and focused when the page becomes current -- none of
-    which is built, because nothing reads the field yet (see the PR body).
-    The old name claimed to test focus and passed while focus never moved.
-    """
+def test_there_is_no_session_name_row(main_window):
+    """PR #317 review picked dropping the row over wiring an inert field
+    sight unseen (design call 1, option (c))."""
+    assert not hasattr(main_window, "session_name_edit")
+
+
+def test_orders_file_is_the_first_row_of_the_card(main_window):
     from PySide6.QtWidgets import QFormLayout
 
     from gui.components import FormSection
@@ -115,5 +116,59 @@ def test_the_session_name_field_is_the_first_row_of_the_card(main_window):
     page = main_window.setup_stack.widget(1)
     section = page.findChildren(FormSection)[0]
     assert section.form.itemAt(0, QFormLayout.FieldRole).widget() is (
-        main_window.session_name_edit
+        main_window.orders_slot
     )
+
+
+def test_inventory_memory_is_its_own_row_not_folded_into_stock_file(main_window):
+    """PR #317 review: the checkbox should be a labelled option on the card,
+    not a second widget squeezed into the Stock file row's field column."""
+    from PySide6.QtWidgets import QCheckBox, QFormLayout
+
+    from gui.components import FormSection
+
+    page = main_window.setup_stack.widget(1)
+    section = page.findChildren(FormSection)[0]
+    labels = [
+        section.form.itemAt(row, QFormLayout.LabelRole).widget().text()
+        for row in range(section.form.rowCount())
+    ]
+    assert "Inventory memory" in labels
+    row = labels.index("Inventory memory")
+    field = section.form.itemAt(row, QFormLayout.FieldRole).widget()
+    assert field is main_window.inventory_memory_checkbox
+    assert isinstance(field, QCheckBox)
+
+
+def test_the_gutter_degrades_below_1024_and_flattens_below_840(qapp):
+    """Spec §8: 208 above 1024px, 96 down to the card's 840px cap, then 0
+    with labels stacked above their fields. Unreachable on the 1366px
+    Windows floor, but this page also runs on Linux, in dev and in tests --
+    tested standalone rather than through the full shell, where the page's
+    width is the stack's, not something a test can dial to an exact number.
+    """
+    from PySide6.QtWidgets import QFormLayout, QLineEdit
+
+    from gui.components import FormSection
+    from gui.ui_manager import _SetupPage
+
+    section = FormSection("", label_width=208)
+    section.add_row("Orders file", QLineEdit())
+    page = _SetupPage(section)
+    page.show()
+    label = section.form.itemAt(0, QFormLayout.LabelRole).widget()
+
+    page.resize(1200, 400)
+    QApplication.processEvents()
+    assert label.width() == 208
+
+    page.resize(900, 400)
+    QApplication.processEvents()
+    assert label.width() == 96
+
+    page.resize(700, 400)
+    QApplication.processEvents()
+    assert label.maximumWidth() > 208
+    assert section.form.rowWrapPolicy() == QFormLayout.WrapAllRows
+
+    page.close()

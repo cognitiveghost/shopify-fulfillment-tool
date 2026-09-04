@@ -89,6 +89,28 @@ class FormSection(QFrame):
         self.form.addRow(row_label, widget)
         return row_label
 
+    def set_label_width(self, width: int) -> None:
+        """Slide the gutter at runtime. Spec §8's degradation ladder: 208 ->
+        96 -> 0, where 0 stacks the label above its field instead of beside
+        it -- WrapAllRows wraps unconditionally, DontWrapRows never does.
+        """
+        if width == self._label_width:
+            return
+        self._label_width = width
+        self.form.setRowWrapPolicy(
+            QFormLayout.WrapAllRows if width == 0 else QFormLayout.DontWrapRows
+        )
+        for row in range(self.form.rowCount()):
+            item = self.form.itemAt(row, QFormLayout.LabelRole)
+            label = item.widget() if item else None
+            if label is None:
+                continue
+            if width:
+                label.setFixedWidth(width)
+            else:
+                label.setMinimumWidth(0)
+                label.setMaximumWidth(16777215)
+
     def add_widget(self, widget: QWidget) -> None:
         """Append a widget below the form rows.
 

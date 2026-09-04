@@ -56,6 +56,32 @@ _SCREEN_ACTIONS = {
 }
 
 
+class _SetupPage(QWidget):
+    """Slides the setup card's label gutter with window width.
+
+    Spec §8's ladder: 208px above 1024, 96 down to the card's own 840px cap,
+    0 (labels above fields) below that. Production never resizes below its
+    1366px floor, but this page also runs in tests and in dev at whatever
+    width Linux gives it, so the ladder has a trigger there even without one
+    on Windows.
+    """
+
+    def __init__(self, section) -> None:
+        super().__init__()
+        self._section = section
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        width = self.width()
+        if width >= 1024:
+            gutter = _SETUP_LABEL_GUTTER
+        elif width >= _SETUP_CARD_MAX_WIDTH:
+            gutter = 96
+        else:
+            gutter = 0
+        self._section.set_label_width(gutter)
+
+
 class _SessionLabelShim:
     """`mw.session_info_label.setText(...)` forwards to the bar's picker.
 
@@ -306,6 +332,14 @@ class UIManager:
 
         client = self.mw.current_client_id or "No client"
         menu.add_section(client)
+        # The bar's own New Session button is state-owned (BarState.NO_SESSION
+        # only) -- with a session already open, the overflow was the only
+        # scope-appropriate place left to reach it without switching clients.
+        item = menu.add_item(
+            "New session…",
+            lambda: self.mw.actions_handler.create_new_session(),
+        )
+        item.setEnabled(bool(self.mw.current_client_id))
         item = menu.add_item(
             "Client settings…",
             lambda: self.mw.actions_handler.open_settings_window(),
@@ -360,12 +394,16 @@ class UIManager:
             self.mw.main_tabs.setCurrentIndex(index)
 
     def _create_tab1_session_setup(self):
-        """Session Setup: one card, three rows, above a state-panel page 0.
+        """Session Setup: one card, above a state-panel page 0.
 
         Four group boxes, a splitter and a recent-sessions strip became one
         card in Bundle 5. Run Analysis is not a row -- Bundle 4 made it this
         screen's command-bar primary (_SCREEN_ACTIONS[0]), and drawing it
         again here would be the fourth duplicate this screen just deleted.
+
+        No Session name row: the field was inert (nothing read it -- see the
+        PR body's design call) and PR #317 review picked dropping it over
+        wiring it up sight unseen.
         """
         from PySide6.QtWidgets import QButtonGroup, QStackedWidget
 
@@ -376,43 +414,40 @@ class UIManager:
         )
         self.mw.stock_slot = FileSlot("Stock file", "Drop the stock export here")
 
-        tab = QWidget()
+        section = FormSection("", label_width=_SETUP_LABEL_GUTTER)
+
+        tab = _SetupPage(section)
         outer = QVBoxLayout(tab)
         outer.setContentsMargins(0, 0, 0, 0)
 
         card = Card(margins=(16, 16, 16, 16), spacing=8)
-        card.setMaximumWidth(_SETUP_CARD_MAX_WIDTH)
-
-        section = FormSection("", label_width=_SETUP_LABEL_GUTTER)
-
-        self.mw.session_name_edit = QLineEdit()
-        self.mw.session_name_edit.setPlaceholderText("Tuesday restock")
-        section.add_row("Session name", self.mw.session_name_edit)
+        # Fixed, not maximum: a QVBoxLayout fills its cross-axis by default,
+        # which is how the card reached 840px before -- but centring it
+        # needs an alignment flag on addWidget, and that switches sizing
+        # from "fill the cross-axis" to "use sizeHint", which without a
+        # fixed width would shrink the card to its unexpanded content size.
+        card.setFixedWidth(_SETUP_CARD_MAX_WIDTH)
 
         section.add_row("Orders file", self.mw.orders_slot)
+        section.add_row("Stock file", self.mw.stock_slot)
 
-        stock_row = QWidget()
-        stock_row_layout = QVBoxLayout(stock_row)
-        stock_row_layout.setContentsMargins(0, 0, 0, 0)
-        stock_row_layout.setSpacing(get_theme_manager().get_current_theme().spacing_xs)
-        stock_row_layout.addWidget(self.mw.stock_slot)
-        # Not a fourth row: the memory toggle only ever matters for the
-        # stock file it substitutes for, so it lives in that row's own
-        # field column rather than claiming a row of its own (spec's card
-        # is three content rows).
+        # Its own row, not folded into the stock row's field column: PR #317
+        # review flagged the card as showing a control the three-row mockup
+        # doesn't, and the fix is to let it be the option it actually is.
         self.mw.inventory_memory_checkbox = QCheckBox("Use Inventory Memory")
         self.mw.inventory_memory_checkbox.setToolTip(
             "When enabled, analysis starts from the final stock of the last "
             "session instead of requiring a new stock file."
         )
         self.mw.inventory_memory_checkbox.setEnabled(False)  # enabled after client load
-        stock_row_layout.addWidget(self.mw.inventory_memory_checkbox)
-        section.add_row("Stock file", stock_row)
+        section.add_row("Inventory memory", self.mw.inventory_memory_checkbox)
 
         section.add_row("Allocation", self._create_strategy_picker(QButtonGroup))
 
         card.add_widget(section)
-        outer.addWidget(card)
+        # Centred, not pinned to the page's top-left corner -- the page is
+        # 1310px wide and an 840px card left-aligned in it reads as stranded.
+        outer.addWidget(card, alignment=Qt.AlignHCenter)
         outer.addStretch()
 
         # The screen's primary, bound into the command bar by _SCREEN_ACTIONS.
