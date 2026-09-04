@@ -1,7 +1,7 @@
 """Shared UI components. See docs/superpowers/specs/2026-08-12-component-library-design.md."""
 
 from gui.components.card import Card
-from gui.components.commandbar import CommandBar
+from gui.components.commandbar import BarState, CommandBar
 from gui.components.filterbar import FilterBar
 from gui.components.form_section import FormSection
 from gui.components.overflow import OverflowMenu, overflow_button
@@ -11,6 +11,7 @@ from gui.components.state_panel import StatePanel
 from shared.navrail import NavRail
 
 __all__ = [
+    "BarState",
     "Card",
     "CommandBar",
     "ContextualSelectionBar",

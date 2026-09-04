@@ -6,6 +6,8 @@ and it is the only place in the component library that marks a button primary.
 Replaces the sidebar of 70px client cards with a dropdown.
 """
 
+import enum
+
 from PySide6.QtCore import QEvent, QPoint, Qt, Signal
 from PySide6.QtGui import (
     QColor,
@@ -15,10 +17,35 @@ from PySide6.QtGui import (
     QStandardItem,
     QStandardItemModel,
 )
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QToolButton,
+    QWidget,
+)
 
+from gui.components.overflow import OverflowMenu, overflow_button
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from shared.theme import StatusChip
+
+BAR_HEIGHT = 48
+_CLIENT_NAME_WIDTH = 200
+
+
+class BarState(enum.Enum):
+    """What the bar knows about, which decides where the one primary sits.
+
+    Orthogonal to which screen is showing: the state decides *whether* a
+    right-hand primary exists, bind_action decides *which button* it is.
+    Collapsing the two would leave Generate Reports with no home.
+    """
+
+    NO_CLIENT = "no_client"
+    NO_SESSION = "no_session"
+    SESSION = "session"
+    RUNNING = "running"
 
 # What a dropdown row is, at Qt.UserRole. The payload at Qt.UserRole + 1 is a
 # client id for ROW_CLIENT and the action's own label for ROW_ACTION.
@@ -73,6 +100,9 @@ class CommandBar(QWidget):
     manageGroupsRequested = Signal()
     refreshRequested = Signal()
     actionTriggered = Signal()
+    newSessionRequested = Signal()
+    openFolderRequested = Signal()
+    cancelRequested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -98,21 +128,56 @@ class CommandBar(QWidget):
         view.customContextMenuRequested.connect(self._on_row_context_menu)
         layout.addWidget(self.client_selector)
 
+        self.setFixedHeight(BAR_HEIGHT)
+        self.client_selector.setFixedWidth(_CLIENT_NAME_WIDTH)
+
+        self.new_session_button = QPushButton("New Session", self)
+        set_button_role(self.new_session_button, "primary")
+        self.new_session_button.clicked.connect(self.newSessionRequested.emit)
+        self.new_session_button.hide()
+        layout.addWidget(self.new_session_button)
+
         self.session_label = QLabel("", self)
         self.session_label.setStyleSheet(font_css("caption"))
         layout.addWidget(self.session_label)
+
+        # Icon-only: its target is the string to its left.
+        self.open_folder_button = QToolButton(self)
+        self.open_folder_button.setAutoRaise(True)
+        self.open_folder_button.setToolTip("Open session folder")
+        self.open_folder_button.clicked.connect(self.openFolderRequested.emit)
+        self.open_folder_button.hide()
+        layout.addWidget(self.open_folder_button)
 
         self.status_chip = StatusChip("text_secondary", "", theme, parent=self)
         self.status_chip.hide()   # an empty chip still paints a tinted pill
         layout.addWidget(self.status_chip)
 
-        layout.addStretch()
+        self.progress_label = QLabel("", self)
+        self.progress_label.setStyleSheet(font_css("caption"))
+        self.progress_label.hide()
+        layout.addWidget(self.progress_label)
+
+        self._spacer = layout.addStretch()
 
         self.action_button = QPushButton("", self)
         set_button_role(self.action_button, "primary")
         self.action_button.clicked.connect(self.actionTriggered.emit)
         self.action_button.hide()
         layout.addWidget(self.action_button)
+
+        self.cancel_button = QPushButton("Cancel", self)
+        set_button_role(self.cancel_button, "danger")
+        self.cancel_button.clicked.connect(self.cancelRequested.emit)
+        self.cancel_button.hide()
+        layout.addWidget(self.cancel_button)
+
+        self.overflow = OverflowMenu(self)
+        self.overflow_button = overflow_button(self.overflow, self)
+        layout.addWidget(self.overflow_button)
+
+        self._state = BarState.NO_CLIENT
+        self._progress = (0, "")
 
         self._bound_action = None
         self.action_button.clicked.connect(self._forward_action_click)
@@ -319,6 +384,7 @@ class CommandBar(QWidget):
         self.action_button.setEnabled(True)
         self.action_button.setText(label)
         self.action_button.show()
+        self._refresh()
         return self.action_button
 
     def _unbind(self) -> None:
@@ -343,6 +409,7 @@ class CommandBar(QWidget):
         self._unbind()
         if button is None:
             self.action_button.hide()
+            self._refresh()
             return
         self._bound_action = button
         button.installEventFilter(self)
@@ -350,6 +417,7 @@ class CommandBar(QWidget):
         self.action_button.setEnabled(button.isEnabled())
         self.action_button.setText(button.text())
         self.action_button.show()
+        self._refresh()
 
     def _forward_action_click(self) -> None:
         if self._bound_action is not None:
@@ -361,3 +429,38 @@ class CommandBar(QWidget):
                 and event.type() == QEvent.Type.EnabledChange):
             self.action_button.setEnabled(watched.isEnabled())
         return super().eventFilter(watched, event)
+
+    def set_state(self, state: BarState) -> None:
+        """Which of the four situations the bar is in. See BarState."""
+        self._state = state
+        self._refresh()
+
+    def set_progress(self, percent: int, phase: str) -> None:
+        self._progress = (percent, phase)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        """Resolve state and bound button into what is actually visible.
+
+        One method rather than two setters that each hide things: with two,
+        whichever ran last won, and ui_manager calls them from a connection
+        change and a screen change that do not know about each other.
+        """
+        state = self._state
+        has_session = state in (BarState.SESSION, BarState.RUNNING)
+
+        self.session_label.setVisible(has_session)
+        self.open_folder_button.setVisible(has_session)
+        self.status_chip.setVisible(has_session and bool(self.status_chip.text()))
+
+        self.new_session_button.setVisible(state is BarState.NO_SESSION)
+        self.cancel_button.setVisible(state is BarState.RUNNING)
+        self.action_button.setVisible(
+            state is BarState.SESSION and bool(self.action_button.text())
+        )
+
+        percent, phase = self._progress
+        self.progress_label.setVisible(state is BarState.RUNNING)
+        self.progress_label.setText(
+            f"{phase} {percent}%" if phase else f"{percent}%"
+        )

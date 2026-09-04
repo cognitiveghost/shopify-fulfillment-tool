@@ -23,6 +23,11 @@ def main_window(tmp_path, monkeypatch):
 
 
 def test_each_screen_puts_its_own_primary_in_the_bar(main_window, qapp):
+    from gui.components.commandbar import BarState
+
+    # A bound button is only the bar's visible primary in SESSION -- the
+    # state decides whether a right-hand primary exists at all (Bundle 4).
+    main_window.command_bar.set_state(BarState.SESSION)
     expected = {
         0: "▶ Run Analysis",
         1: "Generate Reports",

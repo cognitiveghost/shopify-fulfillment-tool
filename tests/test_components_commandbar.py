@@ -1,7 +1,13 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QPushButton
 
-from gui.components.commandbar import ROW_ACTION, ROW_CLIENT, ROW_SECTION, CommandBar
+from gui.components.commandbar import (
+    ROW_ACTION,
+    ROW_CLIENT,
+    ROW_SECTION,
+    BarState,
+    CommandBar,
+)
 
 
 def _rows(bar):
@@ -265,6 +271,9 @@ def test_bind_action_mirrors_the_bound_buttons_label_and_state(qapp):
     source.setEnabled(False)
 
     bar = CommandBar()
+    # A bound button only becomes the bar's visible primary in SESSION -- the
+    # state decides whether a right-hand primary exists at all (Bundle 4).
+    bar.set_state(BarState.SESSION)
     bar.bind_action(source)
 
     assert bar.action_button.text() == "▶ Run Analysis"
