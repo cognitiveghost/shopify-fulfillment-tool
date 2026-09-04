@@ -27,11 +27,12 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.card import Card
-from gui.components.commandbar import CommandBar
+from gui.components.commandbar import BarState, CommandBar
+from gui.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
-from shared.theme import on_theme_changed
+from shared.theme import StatusChip, on_theme_changed
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
@@ -53,14 +54,13 @@ _RECENT_SESSIONS_ROWS = 5
 # Tab index -> (main_window attribute holding that screen's primary button,
 # whether the button lives on this screen and should stop painting itself).
 #
-# Screen 2 is the exception: SessionBrowserWidget has no New Session control of
-# its own, so it borrows Session Setup's -- which must keep rendering there,
-# where Run Analysis is the primary and this is not. Hence an explicit flag
-# rather than inferring hiding from the mapping.
+# New Session used to be entry 2, borrowed by the Browse screen from Session
+# Setup. Under Bundle 4 it is state-owned (BarState.NO_SESSION) and always
+# present in the command bar, so the borrow is dead -- new_session_btn is
+# hidden unconditionally below instead.
 _SCREEN_ACTIONS = {
     0: ("run_analysis_button", True),
     1: ("generate_reports_button_tab2", True),
-    2: ("new_session_btn", False),
 }
 
 
@@ -131,7 +131,6 @@ class UIManager:
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {
         "open_session_folder_button": "folder-open",
         "new_session_btn": "folder-plus",
-        "connection_btn": "settings",
     }
 
     def __init__(self, main_window):
@@ -185,12 +184,57 @@ class UIManager:
         # on_theme_changed applies immediately, so this is that first pass too.
         on_theme_changed(self.mw, lambda _t: self._refresh_icons())
 
-        # Setup status bar
-        self.mw.statusBar().showMessage("Ready")
+        # Status bar: a fixed-height chip reporting connection state, in
+        # place of the free-text "Ready" message it replaces.
+        self.mw.statusBar().setFixedHeight(28)
+        self.mw.connection_chip = StatusChip(
+            "status_success", "Server connected",
+            get_theme_manager().get_current_theme(), parent=self.mw,
+        )
+        self.mw.statusBar().addPermanentWidget(self.mw.connection_chip)
+
+        self.mw.connectionChanged.connect(self._on_connection_changed)
 
         self.log.info(
             "UI widgets created successfully with tab-based structure and sidebar."
         )
+
+    _OFFLINE_RAIL_ITEMS = (1, 2, 4)   # Results, Browse, Tools
+
+    def _on_connection_changed(self, connected: bool) -> None:
+        """The one signal that drives every control which touches the share.
+
+        The disabling is the guard, not decoration on top of one: no call site
+        below carries a None-check, because none of them is reachable while
+        this is False. Spec §5.1.
+        """
+        for index in self._OFFLINE_RAIL_ITEMS:
+            self.mw.nav_rail.button(index).setEnabled(connected)
+        if not connected:
+            self.mw.nav_rail.set_current(0)
+
+        # The selector is not just empty while disconnected, it is disabled:
+        # its "New client..." and "Manage groups..." rows are appended by the
+        # component itself and would still write to the unreachable share.
+        self.mw.command_bar.client_selector.setEnabled(connected)
+
+        self._refresh_setup_panel()
+        self.mw.setup_stack.setCurrentIndex(
+            1 if connected and self.mw.current_client_id else 0
+        )
+
+        # Resting when connected -- nothing to act on. Live when not.
+        # Hollow either way: the system derived it, no person set it.
+        self.mw.connection_chip.set_status(
+            "status_success" if connected else "status_danger",
+            "Server connected" if connected else "Server unreachable",
+            get_theme_manager().get_current_theme(),
+            live=not connected,
+            manual=False,
+        )
+
+        if not connected:
+            self.mw.command_bar.set_state(BarState.NO_CLIENT)
 
     def _create_tabs(self):
         """Create the page store and the rail that drives it.
@@ -228,13 +272,6 @@ class UIManager:
             # descriptions ("Statistics and logs"), not names, so lead with it.
             self.mw.nav_rail.button(index).setToolTip(f"{label} — {tip}")
 
-        # Server Connection is an app setting, not a destination -- footer.
-        self.mw.connection_btn = self.mw.nav_rail.add_footer_item(
-            icon("settings"), "Server"
-        )
-        self.mw.connection_btn.setToolTip("Server Connection settings")
-        self.mw.connection_btn.clicked.connect(self._open_connection_settings)
-
         # Two-way, and the back edge is load-bearing: actions_handler jumps
         # straight to Analysis Results after a run, and without this the rail
         # would keep highlighting the page the user left. It cannot loop --
@@ -249,6 +286,9 @@ class UIManager:
         for attribute, hide_in_page in _SCREEN_ACTIONS.values():
             if hide_in_page:
                 getattr(self.mw, attribute).hide()
+        # New Session is state-owned now (BarState.NO_SESSION); the page's
+        # own copy never renders.
+        self.mw.new_session_btn.hide()
         self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
         self._bind_screen_action(self.mw.main_tabs.currentIndex())
 
@@ -261,7 +301,40 @@ class UIManager:
         # keeps working unchanged.
         self.mw.session_info_label = bar.session_label
         bar.set_session("No session")
+
+        bar.newSessionRequested.connect(
+            lambda: self.mw.actions_handler.create_new_session()
+        )
+        bar.openFolderRequested.connect(self._open_session_folder)
+        self._populate_overflow(bar)
         return bar
+
+    def _populate_overflow(self, bar) -> None:
+        """The client's own scope, then this PC. Spec §4.1.
+
+        Rebuilt on a client change, because the first section's header is the
+        client's name and a stale header points at the wrong profile.
+        """
+        menu = bar.overflow
+        menu.clear()
+
+        client = self.mw.current_client_id or "No client"
+        menu.add_section(client)
+        item = menu.add_item(
+            "Client settings…",
+            lambda: self.mw.actions_handler.open_settings_window(),
+        )
+        item.setEnabled(bool(self.mw.current_client_id))
+
+        menu.add_section("THIS PC")
+        menu.add_item("Server connection…", self._open_connection_settings)
+
+        current = "Dark" if get_theme_manager().is_dark_theme() else "Light"
+        menu.add_choice_group(
+            ["Light", "Dark"],
+            current,
+            lambda name: get_theme_manager().set_theme(name.lower()),
+        )
 
     def _bind_screen_action(self, index: int) -> None:
         """Point the command bar's one primary at this screen's primary button."""
@@ -271,39 +344,34 @@ class UIManager:
         )
 
     def _open_connection_settings(self):
-        """Open the Server Connection settings dialog."""
+        """Open the Server Connection settings dialog.
+
+        Re-checks afterwards: this dialog is the only way back from a
+        degraded launch, so the shell has to hear about a success.
+        """
         ConnectionSettingsDialog(
             self.mw, "ShopifyTool", "FULFILLMENT_SERVER_PATH", PROD_SERVER_PATH
         ).exec()
+        self.mw.recheck_connection()
 
     def _setup_tab_shortcuts(self):
-        """Setup keyboard shortcuts for tab switching."""
-        # Tab switching shortcuts
-        QShortcut(
-            QKeySequence("Ctrl+1"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(0),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+2"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(1),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+3"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(2),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+4"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(3),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+5"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(4),
-        )
+        """Ctrl+1..5 go to the five destinations, through the same gate the rail uses.
+
+        Bound to the rail rather than straight to main_tabs: a disabled rail
+        button that a keystroke walks past is not a guard, and while
+        disconnected three of these destinations touch the share.
+        """
+        for number, index in enumerate(range(5), start=1):
+            QShortcut(
+                QKeySequence(f"Ctrl+{number}"),
+                self.mw,
+                lambda index=index: self._go_to_destination(index),
+            )
+
+    def _go_to_destination(self, index: int) -> None:
+        """Navigate to a rail destination, if the rail is offering it."""
+        if self.mw.nav_rail.button(index).isEnabled():
+            self.mw.main_tabs.setCurrentIndex(index)
 
     def _create_tab1_session_setup(self):
         """Create Tab 1: Session Setup with split layout.
@@ -338,7 +406,53 @@ class UIManager:
         splitter.setStretchFactor(1, 0)
 
         main_layout.addWidget(splitter)
-        return tab
+
+        from PySide6.QtWidgets import QStackedWidget
+
+        stack = QStackedWidget()
+        # Page 0 starts empty -- _refresh_setup_panel fills it, and is the
+        # only place either of its two forms is built.
+        stack.addWidget(QWidget())    # page 0, replaced by _refresh_setup_panel
+        stack.addWidget(tab)          # page 1, the form
+        self.mw.setup_stack = stack
+        self._refresh_setup_panel()
+        return stack
+
+    def _refresh_setup_panel(self) -> None:
+        """Page 0's two forms. Connection first, then client. No third one.
+
+        A new panel each time rather than mutating one: StatePanel's four
+        constructors differ in whether they have a button at all, and a
+        widget that grows and loses a button is two widgets wearing one name.
+        """
+        if not self.mw.is_connected():
+            panel = StatePanel.failed(
+                "This PC can't reach the fulfilment server",
+                "Clients, stock files and past sessions all live on the "
+                "server. Until this PC reaches it, there is nothing to set up.",
+                str(self.mw.profile_manager.base_path),
+                "Server connection…",
+            )
+            panel.button.clicked.connect(self._open_connection_settings)
+        else:
+            panel = StatePanel.nothing_loaded(
+                "Choose a client to begin",
+                "Pick a client in the bar above. Sessions, stock and reports "
+                "all belong to one client.",
+                "",
+            )
+            # This form's action is the selector, so it takes focus -- but
+            # only while it is still the thing to act on. Once a client is
+            # chosen the stack moves to page 1 and stealing focus back would
+            # yank it out of whatever the user just clicked.
+            if not self.mw.current_client_id:
+                self.mw.command_bar.client_selector.setFocus()
+
+        old = self.mw.setup_stack.widget(0)
+        self.mw.setup_stack.insertWidget(0, panel)
+        self.mw.setup_stack.removeWidget(old)
+        old.deleteLater()
+        self.mw.setup_state_panel = panel
 
     def _create_session_setup_panel(self):
         """Create left panel with Session Setup content.
@@ -1332,25 +1446,11 @@ class UIManager:
             else None,
             "Customize table column visibility and order",
         )
-        self.mw.settings_button_tab2 = action(
-            "Settings",
-            lambda: self.mw.actions_handler.open_settings_window()
-            if hasattr(self.mw, "actions_handler")
-            else None,
-            "Open settings for the active client",
-        )
         # Enabled by undo_manager, like the button it replaces. Ctrl+Z is still
         # how this is actually invoked, and the tooltip has always said so.
         self.mw.undo_button = action(
             "Undo", self.mw.undo_last_operation, "Undo last operation (Ctrl+Z)"
         )
-
-        menu.addSeparator()
-        self.mw.theme_toggle_btn = action(
-            "", self._on_theme_toggle_clicked, "Toggle between light and dark theme",
-            enabled=True,
-        )
-        on_theme_changed(self.mw, lambda _t: self._update_theme_button_text())
 
         button.setMenu(menu)
         self.mw.results_overflow_button = button
@@ -1960,17 +2060,3 @@ class UIManager:
             if widget is not None:
                 widget.setIcon(icon(name))
 
-    def _update_theme_button_text(self):
-        """Update theme toggle button text based on current theme."""
-        theme_manager = get_theme_manager()
-        if theme_manager.is_dark_theme():
-            # Currently dark, button shows "switch to light"
-            self.mw.theme_toggle_btn.setText("☀️ Light Mode")
-        else:
-            # Currently light, button shows "switch to dark"
-            self.mw.theme_toggle_btn.setText("🌙 Dark Mode")
-
-    def _on_theme_toggle_clicked(self):
-        """Handle theme toggle button click."""
-        theme_manager = get_theme_manager()
-        theme_manager.toggle_theme()

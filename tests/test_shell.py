@@ -134,21 +134,10 @@ def test_rail_buttons_carry_the_old_tab_tooltips(main_window):
     assert main_window.main_tabs.tabToolTip(0) == ""
 
 
-def test_the_connection_gear_is_a_rail_footer_action(main_window):
-    """It opens a modal dialog, so only its non-destination contract is
-    exercised here: it must never be able to steal the checked state."""
-    main_window.main_tabs.setCurrentIndex(2)
-
-    assert not main_window.connection_btn.isCheckable()
-    assert main_window.nav_rail._group.id(main_window.connection_btn) == -1
-    assert main_window.nav_rail.current_index() == 2
-
-
 def test_refresh_icons_reaches_the_rail(main_window):
     main_window.ui_manager._refresh_icons()
     for index in range(5):
         assert not main_window.nav_rail.button(index).icon().isNull()
-    assert not main_window.connection_btn.icon().isNull()
 
 
 def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
@@ -177,3 +166,42 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
     bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center())
 
     assert seen == ["M"]
+
+
+def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
+    """1366x768 minus rail 56, command bar 48 and status bar 28."""
+    main_window.resize(1366, 768)
+    QApplication.processEvents()
+
+    assert main_window.nav_rail.width() == 56
+    assert main_window.command_bar.height() == 48
+    assert main_window.statusBar().height() == 28
+
+    # The real page widget, not width() minus a constant already asserted
+    # above -- the point is that the chrome leaves this much for a screen.
+    #
+    # 1300, not the spec's 1310: right_layout carries a 5px margin either
+    # side that predates this bundle, and the spec's number is rail
+    # subtracted from window with no allowance for it. This assertion is the
+    # measurement, so later screens design to 1300 until someone removes
+    # that margin -- which is a layout change, not a test change.
+    # Width only: the page's height is already pinned by the two fixed
+    # heights above, and an offscreen resize does not settle reliably enough
+    # to assert the remainder.
+    assert main_window.main_tabs.width() == 1300
+
+
+def test_resuming_a_past_session_reaches_the_session_state(main_window, tmp_path):
+    """The second way into SESSION, and the one the wiring first missed.
+
+    Creating a session says so; loading an existing one has to say so too,
+    or the bar offers New Session while a session is open. Spec 3.1.
+    """
+    from gui.components.commandbar import BarState
+
+    session = tmp_path / "Sessions" / "SESSION_OLD"
+    session.mkdir(parents=True)
+    main_window.load_existing_session(str(session))
+
+    assert main_window.command_bar._state is BarState.SESSION
+    assert main_window.command_bar.open_folder_button.isVisible()

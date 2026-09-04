@@ -92,6 +92,25 @@ is nothing to show: nothing-loaded, working, no-results, or failed. Names the
 cause, names the file or filter that caused it, and offers the action that
 resolves it.
 
+## Shell
+
+**Shell** — the chrome around every screen: the rail, the command bar, the
+page, and the status bar. Not a screen itself, and it never scrolls.
+
+**Destination** — a place the rail navigates to and stays on. The rail holds
+destinations and nothing else. Anything that *configures* an object is not a
+destination, which is why the rail has no footer.
+
+**Overflow** — the menu beside an object holding what configures it.
+Qualified when the scope matters: the **command-bar overflow** holds what
+configures the client and this PC; the **screen overflow** holds actions
+scoped to the screen you are on. Two menus, two scopes, two bands of chrome.
+
+**Connection state** — whether this PC can currently reach the file server.
+One boolean, from `ProfileManager.is_network_available`, carried by one
+signal. Every control that would touch the share is disabled from it; that
+disabling is the guard, not a decoration on top of one.
+
 ## Repos
 
 **Canonical source** — `packing-tool`. Every `shared/` change is authored
