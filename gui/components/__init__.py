@@ -5,6 +5,7 @@ from gui.components.commandbar import BarState, CommandBar
 from gui.components.filterbar import FilterBar
 from gui.components.form_section import FormSection
 from gui.components.overflow import OverflowMenu, overflow_button
+from gui.components.radio_card import RadioCard
 from gui.components.selectionbar import ContextualSelectionBar
 from gui.components.statcard import KpiStrip, StatCard
 from gui.components.state_panel import StatePanel
@@ -20,6 +21,7 @@ __all__ = [
     "KpiStrip",
     "NavRail",
     "OverflowMenu",
+    "RadioCard",
     "StatCard",
     "StatePanel",
     "overflow_button",
