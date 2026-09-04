@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QToolButton,
     QWidget,
@@ -58,6 +59,16 @@ _NEW_CLIENT = "New client…"
 _MANAGE_GROUPS = "Manage groups…"
 _REFRESH = "Refresh clients"
 _ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS)
+
+# The ladder, widest trigger first. Qt's own elision has no order and would
+# take the session ID first because it is the longest string in the row --
+# and an elided ID is a wrong ID.
+_LADDER = (
+    (1100, "spacer"),      # inter-group spacer collapses to 8px
+    (900, "client"),       # client name elides inside its 200px
+    (700, "progress"),     # progress drops the phase name, keeps the percent
+    (500, "new_session"),  # New Session goes icon-only
+)
 
 
 class _ClientCombo(QComboBox):
@@ -118,6 +129,11 @@ class CommandBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(12)
+        # The ladder shrinks this bar below its content's natural width when
+        # the window narrows. SetDefaultConstraint would instead push that
+        # width onto the widget as a hard minimum, so resize() below it (and
+        # therefore the ladder's own resizeEvent) would never fire.
+        layout.setSizeConstraint(QLayout.SetNoConstraint)
 
         self.client_selector = _ClientCombo(self)
         self.client_selector.setModel(QStandardItemModel(self.client_selector))
@@ -459,8 +475,28 @@ class CommandBar(QWidget):
             state is BarState.SESSION and bool(self.action_button.text())
         )
 
-        percent, phase = self._progress
         self.progress_label.setVisible(state is BarState.RUNNING)
-        self.progress_label.setText(
-            f"{phase} {percent}%" if phase else f"{percent}%"
+        self._apply_ladder(self.width())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_ladder(self.width())
+
+    def _apply_ladder(self, width: int) -> None:
+        fired = {name for trigger, name in _LADDER if width < trigger}
+
+        self.layout().setSpacing(8 if "spacer" in fired else 12)
+
+        self.client_selector.setFixedWidth(
+            120 if "client" in fired else _CLIENT_NAME_WIDTH
+        )
+
+        percent, phase = self._progress
+        if "progress" in fired or not phase:
+            self.progress_label.setText(f"{percent}%")
+        else:
+            self.progress_label.setText(f"{phase} {percent}%")
+
+        self.new_session_button.setText(
+            "" if "new_session" in fired else "New Session"
         )

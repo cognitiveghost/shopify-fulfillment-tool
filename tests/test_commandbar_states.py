@@ -80,3 +80,67 @@ def test_open_folder_appears_only_once_a_session_exists(bar):
 
 def test_the_bar_is_the_height_every_later_screen_assumes(bar):
     assert bar.height() == 48
+
+
+# The worst realistic content: the longest client name a validated id can
+# produce (20 chars, profile_manager.validate_client_id) and a session id.
+_WORST_CLIENT = "CLIENT_WAREHOUSE_NTH"
+_WORST_SESSION = "Session 2026-09-04_18-45-02"
+
+
+def _loaded(bar):
+    bar.set_clients([_WORST_CLIENT])
+    bar.set_current_client(_WORST_CLIENT)
+    bar.set_session(_WORST_SESSION)
+    bar.set_status("status_warning", "Analysis complete")
+    bar.set_action("Generate Reports")
+    bar.set_state(BarState.SESSION)
+    return bar
+
+
+def test_the_never_truncate_four_survive_the_design_width(bar):
+    _loaded(bar)
+    bar.resize(1310, 48)
+    QApplication.processEvents()
+
+    assert bar.session_label.text() == _WORST_SESSION
+    assert bar.action_button.text() == "Generate Reports"
+    assert bar.overflow_button.isVisible()
+    assert bar.status_chip.isVisible()
+
+
+def test_the_client_name_is_what_gives_way_first(bar):
+    _loaded(bar)
+    bar.resize(700, 48)
+    QApplication.processEvents()
+
+    # Step 2 of the ladder fired; step 4 did not, because New Session is not
+    # even shown in this state.
+    assert bar.client_selector.width() <= 200
+    assert bar.session_label.text() == _WORST_SESSION
+
+
+def test_progress_keeps_the_percentage_and_drops_the_phase(bar):
+    _loaded(bar)
+    bar.set_state(BarState.RUNNING)
+    bar.set_progress(62, "Allocating stock")
+    bar.resize(1310, 48)
+    QApplication.processEvents()
+    assert bar.progress_label.text() == "Allocating stock 62%"
+
+    bar.resize(620, 48)
+    QApplication.processEvents()
+    assert bar.progress_label.text() == "62%"
+
+
+def test_new_session_goes_icon_only_last(bar):
+    bar.set_clients([_WORST_CLIENT])
+    bar.set_current_client(_WORST_CLIENT)
+    bar.set_state(BarState.NO_SESSION)
+    bar.resize(1310, 48)
+    QApplication.processEvents()
+    assert bar.new_session_button.text() == "New Session"
+
+    bar.resize(420, 48)
+    QApplication.processEvents()
+    assert bar.new_session_button.text() == ""
