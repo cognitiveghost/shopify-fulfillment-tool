@@ -23,7 +23,7 @@ unreachable share, so "a launch with an unreachable share renders this
 screen" is not a layout task — it is a change to the startup contract.
 
 None of the three briefs mention this. It is the largest thing in the bundle
-and it is **Q1** in §8.
+and §8 Q1 settles it: the window opens degraded. ADR 0004.
 
 The rest of the bundle is smaller than it reads:
 
@@ -203,9 +203,16 @@ something other than an order.
 and its handler moves to the overflow's "Server connection…" — the same
 `ConnectionSettingsDialog`, the same label, one name through the whole flow.
 
-Whether `add_footer_item` is also deleted from `shared/navrail.py` — which
-would make this a two-repo, two-PR cycle for a dead-code deletion — is **Q2**
-in §8.
+`add_footer_item` is also deleted from `shared/navrail.py`, which makes this
+a **two-repo, two-PR cycle**: the method and packing-tool's own test for it
+go in a packing-tool PR, and arrive here through `scripts/sync_shared.py`.
+The brief reads "delete the widget rather than hiding it, so nothing can be
+added back by accident", and a method that still exists is a thing that can
+be added back. Decided 2026-09-04, §8 Q2.
+
+The shopify-side test asserting the rail has five buttons and no footer is
+still written — it guards the call site, which is a different failure from
+the method existing.
 
 ---
 
@@ -341,52 +348,33 @@ that does not exist.
 
 ---
 
-## 8. Open — for the repo owner
+## 8. Decisions — answered by the repo owner, 2026-09-04
 
-**Q1 — What happens on a launch that cannot reach the share?** Today the app
-shows a modal recovery prompt and quits if you decline; 9.9's `Done when`
-requires the window to open. Options:
+**Q1 — A launch that cannot reach the share opens degraded, always.**
+`ProfileManager(require_connection=False)`, the window builds,
+`connectionChanged(False)` drives the disabled rail and the Setup panel. The
+modal recovery prompt stops being the first thing you see and becomes what
+"Server connection…" opens.
 
-- **(a) Open degraded, always.** `ProfileManager(require_connection=False)`,
-  the window builds, `connectionChanged(False)` drives the disabled rail and
-  the Setup panel. The recovery prompt stops being the first thing you see
-  and becomes what "Server connection…" opens.
-- **(b) Keep the modal, open degraded only if you decline it.** Smaller diff,
-  but the first thing a first-run user sees is still a modal — which is
-  precisely what S4 exists to replace.
-- **(c) Defer 9.9.** It is 40% of the bundle.
+Rejected: keeping the modal and degrading only on decline, which ships the
+artboard's outcome only for the user who dismisses something first; and
+deferring 9.9, which is 40% of the bundle. This is ADR 0004.
 
-➡️ **(a).** S4 is drawn as a screen, not as a screen behind a dialog, and
-option (b) ships the artboard's outcome only for the user who dismisses
-something first. The plan is written for (a); under (b) only §5.1 changes and
-the plan says so at that task.
+**Q2 — `add_footer_item` is deleted from `shared/navrail.py` too.** The
+method is dead in both apps — packing-tool's only reference is its own test —
+and the brief's "so nothing can be added back by accident" is not satisfied
+by a method that still exists.
 
-**Q2 — Does `add_footer_item` get deleted from `shared/navrail.py`?** 9.8
-says "delete the widget rather than hiding it, so nothing can be added back
-by accident". The method is dead in both apps — packing-tool's only reference
-is its own test. Deleting it makes this a two-repo, two-PR cycle (a
-packing-tool PR, then `scripts/sync_shared.py`) for about twenty lines.
+**This makes Bundle 4 a two-repo, two-PR cycle**, like Bundle 1 and Bundle 3:
+a packing-tool PR deleting the method and its test, then
+`scripts/sync_shared.py` into this worktree. The shopify-only alternative was
+recommended here and rejected; do not re-argue it. The cross-repo gotchas
+Bundle 3 paid for are carried into the plan's packing-tool task.
 
-- **(a) Shopify only.** Delete the call site and `mw.connection_btn`; add a
-  test asserting the rail has five buttons and no footer child. The method
-  stays in `shared/` until packing-tool next touches the rail (8.9).
-- **(b) Both repos.** Delete the method and packing-tool's test too, exactly
-  as the brief reads.
-
-➡️ **(a).** The accident the brief guards against is a shopify accident, and
-a shopify test forbidding a footer prevents it more directly than deleting a
-method someone could re-add. Bundle 3's two-repo cycle cost a Stage C run to
-cross-repo confusion; spending that again on dead code is the wrong trade. If
-you prefer (b), only §4.4 and one plan task change.
-
-**Q3 — `Server connected` / `Server unreachable`, or something shorter?**
-The status-bar chip is the only permanent text in the 28px band, and the
-label has to work for a supervisor glancing at it, not reading it. The
-alternative is a bare `Server` whose colour carries everything, which fails
-the moment someone photographs the screen in greyscale.
-
-➡️ **Keep both words.** Colour is the fast channel and the label is the
-correct one; the chip already has room at 28px.
+**Q3 — the status-bar chip reads `Server connected` / `Server unreachable`.**
+Colour is the fast channel and the label is the correct one. A bare `Server`
+whose colour carries everything fails the moment someone photographs the
+screen in greyscale.
 
 ---
 

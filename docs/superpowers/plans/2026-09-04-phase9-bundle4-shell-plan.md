@@ -25,8 +25,13 @@ reasoning.
 ## Global Constraints
 
 - **Never hand-edit `shared/`.** It is one-way synced from `../packing-tool`.
-  This plan touches nothing under `shared/` (see Task 6 for the one place
-  that was considered and rejected).
+  This plan changes exactly one `shared/` file, `navrail.py`, and it does so
+  in Task 7 by editing packing-tool and running `scripts/sync_shared.py`.
+  Every other task treats `shared/` as read-only.
+- **Two repos, two PRs.** The packing-tool PR merges first. Check
+  `gh pr list` in **both** repos when orienting — Bundle 3 lost a run to a
+  Stage C that saw an empty list in one repo and concluded there were no
+  open PRs.
 - **No hardcoded colours.** Every colour comes from a `ThemeTokens` field.
   `tests/test_no_hardcoded_colors.py` enforces it.
 - **No `font-size:` literal anywhere under `gui/`** — including inside raw
@@ -61,8 +66,17 @@ reasoning.
 | `shopify_tool/profile_manager.py` | **Modify.** `require_connection` keyword. |
 | `tests/test_components_overflow.py` | **Create.** The menu in isolation. |
 | `tests/test_commandbar_states.py` | **Create.** State × bound-button matrix, and the degradation ladder. |
-| `tests/test_first_run.py` | **Create.** The whole-window test that is 9.9's `Done when`. |
+| `tests/test_first_run.py` | **Create.** The whole-window test that is 9.9's `Done when`, plus the footer-deletion guard. |
+| `tests/test_components_navrail.py` | **Modify.** Four `add_footer_item` tests deleted with the method. |
+| `shared/navrail.py` | **Synced, never hand-edited.** Task 7. |
 | `CONTEXT.md` | Already updated at Stage A — Shell, Destination, Overflow, Connection state. |
+
+In `../packing-tool`, on its own worktree and its own PR (Task 7):
+
+| File | Responsibility |
+|---|---|
+| `shared/navrail.py` | **Modify.** Delete `NavRail.add_footer_item`. |
+| `tests/test_navrail.py` | **Modify.** Delete its footer test. |
 
 ---
 
@@ -73,15 +87,15 @@ Task 4 is the startup change, which Task 5 needs. Task 6 deletes the footer
 and can only run once the overflow exists. Task 7 is the whole-window test.
 Task 8 is the PR.
 
-**If the repo owner answered Q1 with option (b)** — keep the modal, open
-degraded only on decline — then **only Task 4 changes**: keep the
-`while True` / `prompt_for_recovery_path` loop and replace the
-`QApplication.quit()` branch with `require_connection=False`. Every other
-task is unaffected. Do not restructure the plan for it.
+Task 7 is the packing-tool half. It must run **after** Task 5, which removes
+the only call site — deleting the method first would break this repo's suite
+between two tasks for no reason.
 
-**If the repo owner answered Q2 with option (b)** — delete
-`add_footer_item` from `shared/` too — then Task 6 gains a packing-tool half.
-Read the two cross-repo gotchas at the end of Task 6 before starting it.
+All three of the spec's questions were answered on 2026-09-04 and the plan
+below is written for the answers, with no conditional branches left in it.
+The two rejected paths — keeping the modal recovery prompt, and leaving
+`add_footer_item` alive in `shared/` — are not options here. If a step seems
+to want one of them, re-read spec §8 rather than improvising.
 
 ---
 
@@ -759,11 +773,10 @@ git commit -m "feat(shell): a fixed degradation order, and four things that neve
   - `MainWindow.connectionChanged = Signal(bool)`
   - `MainWindow.is_connected() -> bool`
 
-**If Q1 was answered (b)** — keep the modal, degrade only on decline — then in
-Step 3 keep the `while True` loop and `prompt_for_recovery_path` exactly as
-they are, and replace only the `QApplication.quit(); return` branch with the
-`require_connection=False` construction. Everything else in this task is
-unchanged, including every test.
+The `while True` loop and `prompt_for_recovery_path` come out entirely. The
+recovery prompt is not lost — it is what `ConnectionSettingsDialog` offers,
+and Task 5 puts that dialog in the overflow and in the empty state's one
+button. Spec §8 Q1.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1383,28 +1396,132 @@ git add gui/ui_manager.py tests/test_first_run.py tests/test_shell.py
 git commit -m "feat(shell): first run's second beat, and the page size later screens assume"
 ```
 
-**If Q2 was answered (b)** — also delete `add_footer_item` from `shared/`.
-Two gotchas, both learned the hard way in Bundle 3:
+---
 
-1. `scripts/sync_shared.py` must be given the packing-tool **worktree** path,
-   not the packing-tool repo root, while the packing-tool half is unmerged:
-   `python scripts/sync_shared.py /path/to/packing-tool/.claude/worktrees/<name>`.
-   The repo root silently syncs `main`'s `shared/` with no error.
-2. packing-tool has no `scripts/setup_venv.sh`. Symlink the venv by hand:
-   `ln -s <packing-tool>/.venv <worktree>/.venv`.
+### Task 7: Delete `add_footer_item` from `shared/` (the packing-tool half)
 
-Delete `NavRail.add_footer_item` and packing-tool's
-`tests/test_navrail.py` footer test, open the packing-tool PR, then sync and
-commit the synced `shared/navrail.py` here.
+**Files (in `../packing-tool`, a separate worktree — see Step 1):**
+- Modify: `shared/navrail.py` — delete `NavRail.add_footer_item`
+- Modify: `tests/test_navrail.py:63` — delete the footer test
+
+**Files (here, after the sync):**
+- Modify: `shared/navrail.py` — written by `scripts/sync_shared.py`, never by hand
+
+**Interfaces:**
+- Consumes: Task 5 Step 3b, which removed this repo's only call site.
+- Produces: nothing. This task removes API; it adds none.
+
+**Why this is a second PR.** `shared/` is owned by `packing-tool` and is
+one-way synced. A `shared/` file edited in this repo is silently overwritten
+by the next sync, so the deletion has to be authored there. Spec §4.4, §8 Q2.
+
+- [ ] **Step 1: Create the packing-tool worktree**
+
+This bundle's shopify worktree already exists. packing-tool needs its own,
+and it has **no `scripts/setup_venv.sh`** — unlike this repo, its worktrees
+need `.venv` linked by hand or every pytest call fails with "command not
+found". Both facts cost Bundle 3 real time.
+
+```bash
+cd /home/cognitiveghost/Desktop/Projects/packing-tool
+git worktree add .claude/worktrees/phase9-bundle4-shell -b worktree-phase9-bundle4-shell
+ln -s /home/cognitiveghost/Desktop/Projects/packing-tool/.venv \
+      .claude/worktrees/phase9-bundle4-shell/.venv
+```
+
+- [ ] **Step 2: Delete packing-tool's footer test and watch it fail**
+
+In the packing-tool worktree, delete the test at `tests/test_navrail.py:63`
+that calls `rail.add_footer_item(QIcon(), "Server")` — read the whole test
+function first and delete it entirely, not just the line.
+
+Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_navrail.py -v`
+Expected: PASS, with one fewer test than before. This is the inverse of the
+usual red-green order because the deliverable *is* a deletion: the test that
+proves the change is the one that stops existing, and what must stay green is
+everything else.
+
+- [ ] **Step 3: Delete the method**
+
+In the packing-tool worktree, delete `NavRail.add_footer_item` from
+`shared/navrail.py` — the whole method including its docstring, which
+explains why a footer item was deliberately outside the exclusive group.
+That reasoning dies with the method; the rail is for destinations now.
+
+- [ ] **Step 4: Run packing-tool's suite and lint**
+
+Run, from the packing-tool worktree:
+`QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q && .venv/bin/ruff check .`
+Expected: PASS. If anything else in packing-tool referenced the method, it
+did not at the time this plan was written — grep `add_footer_item` across
+that repo before assuming a failure is unrelated.
+
+- [ ] **Step 5: Commit and open the packing-tool PR**
+
+```bash
+git add shared/navrail.py tests/test_navrail.py
+git commit -m "refactor(navrail): drop add_footer_item, the rail is for destinations"
+git push -u origin worktree-phase9-bundle4-shell
+gh pr create --draft --title "Phase 9.8 (packing-tool half): the rail loses its footer slot" --body-file <path>
+```
+
+The PR body must say that shopify's Bundle 4 PR is the consumer, that the
+method was dead in both apps, and that the rule is "the rail is for
+destinations" — a reviewer seeing only a deletion cannot otherwise tell
+whether something was lost.
+
+- [ ] **Step 6: Sync back into this repo**
+
+**Pass the packing-tool worktree path, not the packing-tool repo root.** The
+repo root resolves to `main`'s `shared/`, syncs it with no error, and the
+deletion silently does not arrive. This is the single most expensive trap in
+a two-repo bundle and it cost Bundle 3 a run.
+
+```bash
+.venv/bin/python scripts/sync_shared.py \
+  /home/cognitiveghost/Desktop/Projects/packing-tool/.claude/worktrees/phase9-bundle4-shell
+grep -c add_footer_item shared/navrail.py   # must print 0
+```
+
+- [ ] **Step 7: Prove the method is gone from this repo too**
+
+Append to `tests/test_first_run.py`:
+
+```python
+def test_the_rail_cannot_grow_a_footer_again():
+    """The rail is for destinations, so there is no API for anything else.
+
+    tests/test_components_navrail.py held four tests for add_footer_item;
+    they were deleted with the method. This asserts the deletion rather than
+    the behaviour, because the behaviour no longer exists to assert.
+    """
+    from shared.navrail import NavRail
+
+    assert not hasattr(NavRail, "add_footer_item")
+```
+
+Delete the four `add_footer_item` tests in
+`tests/test_components_navrail.py` (around lines 81–130) — read each in full
+and remove the whole function, not the calling line.
+
+- [ ] **Step 8: Run the gate and commit the sync**
+
+Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q && .venv/bin/ruff check . --exclude shared`
+Expected: PASS.
+
+```bash
+git add shared/navrail.py tests/test_first_run.py tests/test_components_navrail.py
+git commit -m "chore(shared): sync navrail without add_footer_item"
+```
 
 ---
 
-### Task 7: Gate, docs, and the PR
+### Task 8: Gate, docs, and the PR
 
 **Files:**
 - Modify: `README.md:3`, `gui_main.py:11`, `shopify_tool/__init__.py:7` — only
   if the repo owner is cutting a version with this bundle; otherwise skip.
-- Create: `docs/adr/0004-*.md` — only under Q1 answer (a) or (b). See below.
+- Create: `docs/adr/0004-opening-without-a-reachable-server.md`
 
 - [ ] **Step 1: Run the gate**
 
@@ -1438,9 +1555,10 @@ The body must carry, or a reviewer will ask for each:
 - the two departures from the artboards: section headers are not mono until
   9.11, and S4 is built as a startup change rather than a layout (spec §9)
 - what left the Analysis Results screen overflow, and why (spec §4.2)
-- the answers to Q1, Q2 and Q3 as decided
+- the three decisions from spec §8, and that the shopify-only footer option
+  was recommended and overruled — a reviewer should not re-open it
 - the test count from Step 1
-- whether Q2 produced a packing-tool PR, and its link if so
+- the packing-tool PR link, and that it **merges first**
 
 ```bash
 git push -u origin worktree-phase9-bundle4-shell
@@ -1455,12 +1573,18 @@ gh pr create --draft --title "Phase 9 Bundle 4: the shell" --body-file <path>
 §3.3 degradation → Task 3. §4 overflow → Tasks 1, 5. §4.1 the five controls →
 Tasks 2 (New Session, Open folder), 5 (the other three). §4.2 what leaves the
 screen overflow → Task 5 Step 3c. §4.3 the indicator → Task 5 Step 3e. §4.4
-rail footer → Task 5 Step 3b, plus Task 6's tail under Q2(b). §5.1 degraded
-launch → Task 4. §5.2 the two forms → Tasks 5, 6. §5.3 the duplicated action
-→ covered by both call sites using the identical string, asserted in Task 5.
-§6 the five seams → Tasks 1, 3, 1, 4, 5 respectively. §7 decisions → carried
-in the code comments each task writes. §8 Q1/Q2 → branch notes in Tasks 4 and
-6. §9 departures → Task 7's PR body.
+rail footer → Task 5 Step 3b (the call site) and Task 7 (the method). §5.1
+degraded launch → Task 4. §5.2 the two forms → Tasks 5, 6. §5.3 the
+duplicated action → covered by both call sites using the identical string,
+asserted in Task 5. §6 the five seams → Tasks 1, 3, 1, 4, 5 respectively. §7
+decisions → carried in the code comments each task writes. §8 the three
+answers → Task 4 (Q1), Task 7 (Q2), Task 5 Step 3e (Q3). §9 departures →
+Task 8's PR body.
+
+**No branches left.** Every "if the owner answered…" note is gone, replaced
+by the decided path. A step that appears to offer a choice between the modal
+prompt and a degraded launch, or between deleting `add_footer_item` and
+leaving it, is a plan bug — spec §8 has the answers.
 
 **Placeholders.** None. Three places name a signature this plan could not
 read (`StatusChip.set_status`, `StatePanel.nothing_loaded`'s `action_text`,
