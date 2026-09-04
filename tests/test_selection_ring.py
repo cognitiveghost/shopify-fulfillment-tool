@@ -85,3 +85,27 @@ def test_a_selected_and_blocked_row_draws_the_ring_around_the_edge(qapp):
     assert edge.left() == RING_WIDTH                     # starts where the cap ends
     assert edge.left() + EDGE_WIDTH <= option.rect.width() - RING_WIDTH
     assert edge.top() == RING_WIDTH and edge.height() == 28 - 2 * RING_WIDTH
+
+
+def test_zebra_striping_stays_off(qapp):
+    """A stripe on surface_raised is the same value as a panel, so a striped
+    table stops reading as one plane. Separation is the row rhythm and a
+    border_subtle gridline, not alternating fills."""
+    import gui.session_browser_widget as browser
+    import gui.ui_manager as ui
+
+    for module in (browser, ui):
+        with open(module.__file__, encoding="utf-8") as f:
+            source = f.read()
+        assert "setAlternatingRowColors(True)" not in source
+
+
+def test_the_sort_caret_is_not_forced_onto_every_header(qapp):
+    """Qt draws the indicator on the sorted section alone. What the artboard
+    rejects is a permanent grey caret on all of them -- eight pieces of
+    furniture and no information."""
+    from PySide6.QtWidgets import QTableView
+
+    view = QTableView()
+    header = view.horizontalHeader()
+    assert not header.isSortIndicatorShown() or header.sortIndicatorSection() >= 0

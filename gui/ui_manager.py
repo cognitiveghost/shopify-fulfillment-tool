@@ -1398,7 +1398,6 @@ class UIManager:
         self.mw.tableView = QTableView()
         self.mw.tableView.setSelectionBehavior(QTableView.SelectRows)
         self.mw.tableView.setSelectionMode(QTableView.ExtendedSelection)
-        self.mw.tableView.setAlternatingRowColors(True)
         self.mw.tableView.setSortingEnabled(True)
         self.mw.tableView.setContextMenuPolicy(Qt.CustomContextMenu)
 
@@ -1888,7 +1887,6 @@ class UIManager:
         )
         self.mw.sku_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.mw.sku_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.mw.sku_table.setAlternatingRowColors(True)
         self.mw.sku_table.verticalHeader().setVisible(False)
         self.mw.sku_table.setSortingEnabled(True)
         self.mw.sku_table.setMinimumHeight(200)
@@ -1913,7 +1911,6 @@ class UIManager:
         self.mw.activity_log_table.horizontalHeader().setStretchLastSection(True)
         self.mw.activity_log_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.mw.activity_log_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.mw.activity_log_table.setAlternatingRowColors(True)
 
         layout.addWidget(self.mw.activity_log_table)
 
