@@ -7,7 +7,7 @@ each row uses -- not three different widgets.
 """
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from gui.theme_manager import font_css
 
@@ -57,3 +57,10 @@ class Card(QFrame):
         label.setStyleSheet(f"{font_css(role)} {css}".strip())
         self.layout().addWidget(label)
         return label
+
+    def add_widget(self, widget: QWidget) -> None:
+        """Append a widget as-is, without the centring add_text applies.
+
+        The setup card holds a form, not a stack of centred numbers.
+        """
+        self.layout().addWidget(widget)

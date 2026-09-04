@@ -25,7 +25,14 @@ class FormSection(QFrame):
             empty -- an empty QLabel still takes vertical space.
     """
 
-    def __init__(self, title: str, description: str = "", parent=None) -> None:
+    def __init__(
+        self,
+        title: str,
+        description: str = "",
+        *,
+        label_width: int = 0,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         theme = get_theme_manager().get_current_theme()
 
@@ -50,6 +57,14 @@ class FormSection(QFrame):
         self.form = QFormLayout()
         self.form.setContentsMargins(0, 0, 0, 0)
         self.form.setSpacing(theme.spacing_sm)
+        # A pinned label column is what the setup card's "208px gutter" is:
+        # QFormLayout already lays each row out as label + field, so fixing
+        # the label's width and letting the field grow gives that geometry
+        # without a second row idiom in the app.
+        self._label_width = label_width
+        if label_width:
+            self.form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+            self.form.setRowWrapPolicy(QFormLayout.DontWrapRows)
         layout.addLayout(self.form)
 
     def add_row(self, label: str, widget: QWidget, tooltip: str = "") -> QLabel:
@@ -64,6 +79,8 @@ class FormSection(QFrame):
         own tooltip keeps it.
         """
         row_label = QLabel(label)
+        if self._label_width:
+            row_label.setFixedWidth(self._label_width)
         if tooltip:
             row_label.setToolTip(tooltip)
             if not widget.toolTip():
