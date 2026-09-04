@@ -19,9 +19,13 @@ bottom. `StatePanel` is a `QWidget` **holding** a `Card`, not subclassing one.
 **Tech Stack:** PySide6 6.11, pytest, ruff. Windows 10/11 target, Ubuntu dev.
 
 **Spec:** `docs/superpowers/specs/2026-09-04-phase9-bundle3-components-design.md`
-— read it first. It carries the reasoning this plan only executes, including
-three open questions (§8) that each have a default written into the tasks
-below.
+— read it first. It carries the reasoning this plan only executes.
+
+**The three questions in spec §8 were answered by the repo owner on
+2026-09-04, all as recommended.** Every task below is therefore final: keep
+the QSS top/bottom rule and paint only the end caps, ship the packing-tool
+half as the shared component alone, and use the live/resting table exactly as
+§3.5 has it. Nothing in this plan is conditional any more.
 
 ## Global Constraints
 
@@ -428,11 +432,10 @@ still places a standalone `StatusDot`; converting it needs a painted delegate
 and belongs to packing-tool 8.9 (spec §7). The defaults keep every
 packing-tool screen pixel-identical.
 
-**If the user answered Q2 with "convert packing-tool too":** add a task here
-that replaces `sessions_list_widget.py`'s `StatusDot` cell widget with a
-painted delegate modelled on this repo's `SessionStatusDelegate`, and map its
-seven states through the §3.5 table. Do not ship a cell widget — it swallows
-clicks and moves selection on hover.
+**Decided (spec §8, Q2):** shared component only. Do **not** touch
+`sessions_list_widget.py` in this bundle — its standalone `StatusDot` stays,
+the new defaults keep it rendering exactly as it does today, and converting it
+to a painted delegate belongs to packing-tool 8.9.
 
 ---
 
@@ -865,13 +868,11 @@ git add gui/selection_ring.py tests/test_selection_ring.py
 git commit -m "Phase 9.4: the end caps that close a selection ring"
 ```
 
-**If the user answered Q1 with "drop the QSS rule":** additionally paint top
-and bottom on every cell in `paint_selection_ring` (unconditionally, not only
-on cap columns), remove the `border-top`/`border-bottom` declarations from
-`QTableView::item` and `QTableView::item:selected` in `shared/theme.py` — a
-**packing-tool** edit, so it joins the Task 2 PR — and install
-`SelectionRingDelegate` on the twelve tables listed in spec §4.3 or accept that
-they show a tint-only selection.
+**Decided (spec §8, Q1):** the QSS rule stays. Do **not** remove the
+`border-top`/`border-bottom` declarations from `QTableView::item` or
+`QTableView::item:selected` in `shared/theme.py`, and do not paint the
+horizontal sides here — the caps are the whole delegate's job. The twelve
+tables without a delegate keep the selection they have today.
 
 ---
 
@@ -1381,8 +1382,8 @@ git push -u origin worktree-phase9-bundle3-components
 
 The PR body must carry: the packing-tool PR link (Tasks 1–2), the two
 deliberate departures from the artboards (no mono yet, §5.3; zero StatePanel
-call sites, §5.4), the eleven-not-thirteen state count (§3.6), and which of
-spec §8's three questions the user answered.
+call sites, §5.4), the eleven-not-thirteen state count (§3.6), and the three
+decisions the repo owner took on 2026-09-04 (spec §8).
 
 ---
 

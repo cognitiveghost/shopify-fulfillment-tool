@@ -362,31 +362,30 @@ technical constraint.
 
 ---
 
-## 8. Open questions for the user
+## 8. Decisions taken by the user, 2026-09-04
 
-**Q1 — the selection ring's blast radius.** Keep the QSS top/bottom rule and
-paint only the two end caps (recommended, §4.3), or drop the QSS rule and
-paint all four sides in the helper? The second is one source of truth for the
-ring; it also removes the selection border from the twelve tables in the app
-that have no delegate, leaving them a plain tint.
-➡️ **Recommended: keep QSS, paint the caps.** Same drawn result, no regression
-outside the two tables 9.4 names.
+Three questions were put to the repo owner at Stage A. All three came back as
+recommended, so every default written into the plan stands and no task
+changes. Recorded here as decisions, not options — do not reopen them.
 
-**Q2 — how far does the packing-tool PR go?** Shared component only
-(recommended, §7), or also convert `packing-tool`'s session list to the new
-chip?
-➡️ **Recommended: shared only.** It matches Bundle 1's precedent, the
-defaults keep packing-tool pixel-identical, and the conversion is a painted
-delegate that belongs to packing-tool 8.9.
+**Q1 — the selection ring's blast radius. → Keep the QSS top/bottom rule and
+paint only the two end caps** (§4.3). The alternative — dropping the QSS rule
+and painting all four sides in the helper — was rejected: it is one source of
+truth for the ring, but it silently removes the selection border from the
+twelve tables in this app that have no delegate, leaving them a plain tint.
+Same drawn result for ~20 lines instead of ~35, and no blast radius outside
+the two tables 9.4 names.
 
-**Q3 — the live/resting table in §3.5.** Derived from the brief's own wording
-rather than given by an artboard, and it is what every status in both apps
-will look like for the rest of the phase.
-➡️ **Recommended: as tabled.** The only judgement calls are `paused` and
-`stale` live (a supervisor must do something), and `archived` resting.
+**Q2 — how far the packing-tool PR goes. → Shared component only** (§7).
+`packing-tool`'s `sessions_list_widget.py` keeps its standalone `StatusDot`.
+The new defaults (`live=True, manual=False`, `filled=True`) reproduce today's
+rendering exactly, so no packing-tool screen moves. Converting that screen
+properly means a painted delegate — a cell widget swallows clicks and moves
+selection on hover — and belongs to packing-tool 8.9, which already exists.
 
-None of the three blocks Stage B. Each has a default that is written into the
-plan; an answer changes one task.
+**Q3 — the live/resting table. → As tabled in §3.5.** `paused` and `stale`
+are live because a supervisor must do something about them; `archived` is
+resting.
 
 ---
 
