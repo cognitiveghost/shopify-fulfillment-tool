@@ -25,27 +25,42 @@ class RadioCard(QRadioButton):
     _INDENT = 22  # indicator width + its spacing, so the description lines up
 
     def __init__(self, title: str, description: str, parent=None) -> None:
-        super().__init__(title, parent)
+        # Native text stays empty: the indicator needs somewhere to align
+        # to, but the title itself is a QLabel below so its height is known
+        # to the layout instead of guessed at from the button's own paint
+        # metrics, which is what caused it to overlap the description.
+        super().__init__("", parent)
         theme = get_theme_manager().get_current_theme()
 
         self.title_text = title
         self.description_text = description
 
-        self.setStyleSheet(font_css("label"))
+        # The native indicator centres on the whole widget by default, which
+        # is fine for a one-line button but drifts down to the description
+        # once a second line joins it. Pin it to the title's row instead.
+        self.setStyleSheet(
+            "QRadioButton::indicator { subcontrol-position: left top; "
+            f"margin-top: {theme.spacing_xs}px; }}"
+        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(
-            self._INDENT, theme.spacing_lg, theme.spacing_sm, theme.spacing_sm
+            self._INDENT, theme.spacing_sm, theme.spacing_sm, theme.spacing_sm
         )
-        layout.setSpacing(0)
+        layout.setSpacing(theme.spacing_xs)
+
+        self._title = QLabel(title, self)
+        self._title.setStyleSheet(font_css("label"))
+        # Clicks on the title/description must still choose the option -- a
+        # transparent label forwards them to the radio button underneath.
+        self._title.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        layout.addWidget(self._title)
 
         self._description = QLabel(description, self)
         self._description.setWordWrap(True)
         self._description.setStyleSheet(
             f"color: {theme.text_secondary}; {font_css('caption')}"
         )
-        # Clicks on the description must still choose the option -- a
-        # transparent label forwards them to the radio button underneath.
         self._description.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         layout.addWidget(self._description)
 
@@ -53,3 +68,13 @@ class RadioCard(QRadioButton):
         # QRadioButton's own sizeHint ignores the description below its
         # text -- the layout's hint is what actually fits both lines.
         return self.layout().sizeHint().expandedTo(super().sizeHint())
+
+    def hasHeightForWidth(self) -> bool:
+        # Without this, a parent layout uses sizeHint()'s height at every
+        # width -- which is the *unwrapped* description's height, far too
+        # short once a narrow column (the card's 208px-gutter form) forces
+        # the real text onto three lines instead of sizeHint()'s one.
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return self.layout().totalHeightForWidth(width)

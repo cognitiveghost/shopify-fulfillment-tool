@@ -3,7 +3,7 @@ from typing import ClassVar
 
 import pandas as pd
 from PySide6.QtCore import QItemSelection, QItemSelectionModel, Qt
-from PySide6.QtGui import QFontMetrics, QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -12,13 +12,9 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
-    QRadioButton,
     QScrollArea,
-    QSplitter,
     QTableView,
     QTableWidget,
     QTabWidget,
@@ -38,18 +34,14 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
 from .pandas_model import PandasModel
 from .tag_categories_dialog import DEFAULT_TAG_COLOR
-from .theme_manager import font_css, get_theme_manager
+from .theme_manager import get_theme_manager
 from .wheel_ignore_combobox import WheelIgnoreComboBox
 
-# Tab 1 layout. The setup column is inside a QScrollArea, which is always
-# willing to scroll rather than ask the splitter for room -- so it must declare
-# the width its content needs, or action buttons get hidden. See
-# docs/superpowers/specs/2026-08-23-session-setup-layout-design.md.
-# Frame + vertical scrollbar. Measured: frame 0 (the scroll area is NoFrame)
-# and a 12px scrollbar from the theme -- 24 is deliberate slack over that.
-_SETUP_COLUMN_SLACK = 24
-_RECENT_PANEL_MAX_WIDTH = 320
-_RECENT_SESSIONS_ROWS = 5
+# The setup card. 208 is the label gutter W1 specifies; the 840 cap stops a
+# three-row form stretching to the page's full 1310, which turns a gutter
+# into a horizon.
+_SETUP_LABEL_GUTTER = 208
+_SETUP_CARD_MAX_WIDTH = 840
 
 # Tab index -> (main_window attribute holding that screen's primary button,
 # whether the button lives on this screen and should stop painting itself).
@@ -62,27 +54,6 @@ _SCREEN_ACTIONS = {
     0: ("run_analysis_button", True),
     1: ("generate_reports_button_tab2", True),
 }
-
-
-def _recent_list_height(widget: QListWidget) -> int:
-    """Height of exactly _RECENT_SESSIONS_ROWS rows.
-
-    Prefers sizeHintForRow(), Qt's own measurement of an actual row -- it
-    returns -1 while the list is empty, which it is when the panel is first
-    built, so that case falls back to a font-metrics estimate. The +4 on the
-    fallback is the transparent 2px top/bottom border every QListWidget::item
-    carries so selecting one does not shift its text (shared/theme.py);
-    without it the fifth row clips. The trailing +4 is slack for the frame.
-
-    Font-metric estimates drift a pixel from the real row height across
-    Qt/font builds (it did between the dev machine and CI), so
-    refresh_recent_sessions() re-calls this once real items exist to correct
-    the fixed height to the true measurement.
-    """
-    row = widget.sizeHintForRow(0)
-    if row < 0:
-        row = QFontMetrics(widget.font()).height() + 4
-    return row * _RECENT_SESSIONS_ROWS + 2 * widget.frameWidth() + 4
 
 
 class _SessionLabelShim:
@@ -144,10 +115,10 @@ class UIManager:
         "Statistics and logs (Ctrl+4)",
         "PDF processing and utilities (Ctrl+5)",
     )
-    _BUTTON_ICONS: ClassVar[dict[str, str]] = {
-        "open_session_folder_button": "folder-open",
-        "new_session_btn": "folder-plus",
-    }
+    # Both former entries (open_session_folder_button, new_session_btn) were
+    # duplicates of shell controls Bundle 5 deleted; the command bar's own
+    # open_folder_button re-renders its icon directly (commandbar.py).
+    _BUTTON_ICONS: ClassVar[dict[str, str]] = {}
 
     def __init__(self, main_window):
         """Initializes the UIManager.
@@ -302,9 +273,6 @@ class UIManager:
         for attribute, hide_in_page in _SCREEN_ACTIONS.values():
             if hide_in_page:
                 getattr(self.mw, attribute).hide()
-        # New Session is state-owned now (BarState.NO_SESSION); the page's
-        # own copy never renders.
-        self.mw.new_session_btn.hide()
         self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
         self._bind_screen_action(self.mw.main_tabs.currentIndex())
 
@@ -392,58 +360,147 @@ class UIManager:
             self.mw.main_tabs.setCurrentIndex(index)
 
     def _create_tab1_session_setup(self):
-        """Create Tab 1: Session Setup with split layout.
+        """Session Setup: one card, three rows, above a state-panel page 0.
 
-        Contains:
-        - Left panel: Session management, File loading, Actions, Reports. Takes
-          all width the quick-pick does not need, and never less than its
-          content requires.
-        - Right panel: Recent Sessions quick-pick, capped at
-          _RECENT_PANEL_MAX_WIDTH (full browser is on Tab 3).
+        Four group boxes, a splitter and a recent-sessions strip became one
+        card in Bundle 5. Run Analysis is not a row -- Bundle 4 made it this
+        screen's command-bar primary (_SCREEN_ACTIONS[0]), and drawing it
+        again here would be the fourth duplicate this screen just deleted.
         """
-        from gui.components import FileSlot
+        from PySide6.QtWidgets import QButtonGroup, QStackedWidget
 
-        # Task 6 wires these into the rebuilt card; created here first so
-        # FileHandler (Task 5) has something correct to address by name.
+        from gui.components import Card, FileSlot, FormSection
+
         self.mw.orders_slot = FileSlot(
             "Orders file", "Drop the Shopify orders export here"
         )
         self.mw.stock_slot = FileSlot("Stock file", "Drop the stock export here")
 
         tab = QWidget()
-        main_layout = QHBoxLayout(tab)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(0, 0, 0, 0)
 
-        # Create horizontal splitter
-        splitter = QSplitter(Qt.Horizontal)
+        card = Card(margins=(16, 16, 16, 16), spacing=8)
+        card.setMaximumWidth(_SETUP_CARD_MAX_WIDTH)
 
-        # Left panel - Session Setup content
-        left_panel = self._create_session_setup_panel()
-        splitter.addWidget(left_panel)
+        section = FormSection("", label_width=_SETUP_LABEL_GUTTER)
 
-        # Right panel - Session Browser
-        right_panel = self._create_session_browser_panel()
-        splitter.addWidget(right_panel)
+        self.mw.session_name_edit = QLineEdit()
+        self.mw.session_name_edit.setPlaceholderText("Tuesday restock")
+        section.add_row("Session name", self.mw.session_name_edit)
 
-        # All extra width goes to the setup content, not the quick-pick card --
-        # a 6:4 stretch re-inflates the card to 642px on a wide monitor for a
-        # five-row list.
-        splitter.setSizes([1100, _RECENT_PANEL_MAX_WIDTH])
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
+        section.add_row("Orders file", self.mw.orders_slot)
 
-        main_layout.addWidget(splitter)
+        stock_row = QWidget()
+        stock_row_layout = QVBoxLayout(stock_row)
+        stock_row_layout.setContentsMargins(0, 0, 0, 0)
+        stock_row_layout.setSpacing(get_theme_manager().get_current_theme().spacing_xs)
+        stock_row_layout.addWidget(self.mw.stock_slot)
+        # Not a fourth row: the memory toggle only ever matters for the
+        # stock file it substitutes for, so it lives in that row's own
+        # field column rather than claiming a row of its own (spec's card
+        # is three content rows).
+        self.mw.inventory_memory_checkbox = QCheckBox("Use Inventory Memory")
+        self.mw.inventory_memory_checkbox.setToolTip(
+            "When enabled, analysis starts from the final stock of the last "
+            "session instead of requiring a new stock file."
+        )
+        self.mw.inventory_memory_checkbox.setEnabled(False)  # enabled after client load
+        stock_row_layout.addWidget(self.mw.inventory_memory_checkbox)
+        section.add_row("Stock file", stock_row)
 
-        from PySide6.QtWidgets import QStackedWidget
+        section.add_row("Allocation", self._create_strategy_picker(QButtonGroup))
+
+        card.add_widget(section)
+        outer.addWidget(card)
+        outer.addStretch()
+
+        # The screen's primary, bound into the command bar by _SCREEN_ACTIONS.
+        # Never rendered here -- Bundle 4 hides it.
+        self.mw.run_analysis_button = QPushButton("Run analysis", tab)
+        self.mw.run_analysis_button.setEnabled(False)
+        self.mw.run_analysis_button.hide()
+
+        # Written by update_session_info_label() for compatibility; never
+        # shown -- the command bar's session picker is the visible
+        # presentation now.
+        self.mw.session_path_label = QLabel("No session", tab)
+        self.mw.session_path_label.hide()
+
+        self.mw.strategy_multi_item.toggled.connect(
+            lambda checked: self.mw._on_analysis_mode_changed(0) if checked else None
+        )
+        self.mw.strategy_fifo.toggled.connect(
+            lambda checked: self.mw._on_analysis_mode_changed(1) if checked else None
+        )
+
+        self.mw.command_bar.sessionChosen.connect(self.mw.on_session_selected)
+        self.mw.command_bar.browseAllRequested.connect(
+            lambda: self.mw.main_tabs.setCurrentIndex(2)
+        )
+        for slot, kind in (
+            (self.mw.orders_slot, "orders"),
+            (self.mw.stock_slot, "stock"),
+        ):
+            slot.chooseFileRequested.connect(
+                getattr(self.mw.file_handler, f"select_{kind}_file")
+            )
+            slot.pathDropped.connect(
+                lambda p, k=kind: self.mw.file_handler.accept_dropped_path(k, p)
+            )
+            slot.mapColumnsRequested.connect(
+                lambda: self.mw.actions_handler.open_settings_window()
+            )
+            slot.changed.connect(self.mw.file_handler.check_files_ready)
 
         stack = QStackedWidget()
         # Page 0 starts empty -- _refresh_setup_panel fills it, and is the
         # only place either of its two forms is built.
         stack.addWidget(QWidget())    # page 0, replaced by _refresh_setup_panel
-        stack.addWidget(tab)          # page 1, the form
+        stack.addWidget(tab)          # page 1, the card
         self.mw.setup_stack = stack
         self._refresh_setup_panel()
         return stack
+
+    def _create_strategy_picker(self, QButtonGroup):
+        """The two allocation strategies, each stating its consequence."""
+        from gui.components import RadioCard
+
+        holder = QWidget()
+        layout = QVBoxLayout(holder)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.mw.strategy_multi_item = RadioCard(
+            "Multi-item first",
+            "Fills orders that can go out whole before partial ones. A few "
+            "old orders wait longer for stock instead.",
+        )
+        self.mw.strategy_fifo = RadioCard(
+            "Oldest first",
+            "Fills strictly by order date, whatever it contains. No order "
+            "waits behind a newer one; more leave part-filled.",
+        )
+        self.mw.strategy_multi_item.setChecked(True)
+
+        # QFormLayout's field-growth negotiation, once nested this deep
+        # (Card > FormSection > QFormLayout > holder > RadioCard), does not
+        # reliably re-query RadioCard's own (correct) heightForWidth after
+        # the first layout pass -- a known QFormLayout limitation, not a
+        # RadioCard bug (heightForWidth() is right when called directly; see
+        # docs/superpowers/plans/2026-09-04-phase9-bundle5-session-setup-plan.md
+        # Task 6 notes). A hard floor at the height each card itself knows it
+        # needs sidesteps the stale negotiation instead of fighting it.
+        for card in (self.mw.strategy_multi_item, self.mw.strategy_fifo):
+            card.setMinimumHeight(card.heightForWidth(card.sizeHint().width()))
+
+        group = QButtonGroup(holder)
+        group.addButton(self.mw.strategy_multi_item)
+        group.addButton(self.mw.strategy_fifo)
+        self.mw.strategy_group = group
+
+        layout.addWidget(self.mw.strategy_multi_item)
+        layout.addWidget(self.mw.strategy_fifo)
+        return holder
 
     def _refresh_setup_panel(self) -> None:
         """Page 0's two forms. Connection first, then client. No third one.
@@ -481,105 +538,21 @@ class UIManager:
         old.deleteLater()
         self.mw.setup_state_panel = panel
 
-    def _create_session_setup_panel(self):
-        """Create left panel with Session Setup content.
-
-        Wrapped in a QScrollArea (same pattern as _create_statistics_subtab)
-        because switching Orders/Stock 'Load Mode' to Folder reveals extra
-        widgets that were previously hidden. Without a scroll area to absorb
-        that growth, the panel's minimum height jumps and forces the whole
-        top-level window to resize/reflow instead of just this panel.
-        """
-        panel = QWidget()
-        outer_layout = QVBoxLayout(panel)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-
-        scroll_widget = QWidget()
-        layout = QVBoxLayout(scroll_widget)
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        # Existing sections (no changes to logic)
-        layout.addWidget(self._create_session_management_section())
-        layout.addWidget(self._create_files_group())
-        layout.addWidget(self._create_main_actions_group())
-        layout.addWidget(self._create_reports_group())
-        layout.addStretch()
-
-        scroll.setWidget(scroll_widget)
-        outer_layout.addWidget(scroll)
-
-        # A QScrollArea's own minimum is tiny -- it would rather scroll than ask
-        # for room, which let the splitter squeeze this column below the 706px
-        # its content needs and hide action buttons behind a horizontal
-        # scrollbar. Pin the minimum to what the content actually reports; the
-        # hint is already correct here, before show().
-        panel.setMinimumWidth(
-            scroll_widget.minimumSizeHint().width() + _SETUP_COLUMN_SLACK
-        )
-
-        return panel
-
-    def _create_session_browser_panel(self):
-        """Create right panel with a compact 'Recent Sessions' quick-pick.
-
-        The full SessionBrowserWidget lives exclusively on Tab 3 ("Session
-        Browser") — this panel used to embed a second full copy of it squeezed
-        into 40% width, which was too narrow to be useful. See
-        2026-07-26-unified-ui-design-system-design.md.
-        """
-        panel = QWidget()
-        # The stretch factors already size the card; this cap is what stops the
-        # user dragging the splitter and re-inflating it.
-        panel.setMaximumWidth(_RECENT_PANEL_MAX_WIDTH)
-        layout = QVBoxLayout(panel)
-        layout.setSpacing(5)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        title = QLabel("Recent Sessions")
-        title.setStyleSheet(font_css("label"))
-        layout.addWidget(title)
-
-        self.mw.recent_sessions_list = QListWidget()
-        self.mw.recent_sessions_list.itemDoubleClicked.connect(self._on_recent_session_double_clicked)
-        self.mw.recent_sessions_list.setFixedHeight(
-            _recent_list_height(self.mw.recent_sessions_list)
-        )
-        layout.addWidget(self.mw.recent_sessions_list)
-
-        open_full_link = QPushButton("Open full Session Browser →")
-        open_full_link.setFlat(True)
-        open_full_link.clicked.connect(lambda: self.mw.main_tabs.setCurrentIndex(2))
-        layout.addWidget(open_full_link)
-        layout.addStretch()  # keep the list and its link together at the top
-
-        return panel
-
-    def _on_recent_session_double_clicked(self, item):
-        session_path = item.data(Qt.ItemDataRole.UserRole)
-        if session_path:
-            self.mw.on_session_selected(session_path)
-
     def refresh_recent_sessions(self, client_id: str):
-        """Populate the Tab 1 quick-pick list — call this whenever the current
-        client changes (wire into wherever current_client_id is set)."""
-        self.mw.recent_sessions_list.clear()
+        """Fill the command bar's session picker — call this whenever the
+        current client changes (wire into wherever current_client_id is
+        set). Bundle 5 deleted the Setup page's own quick-pick strip; this
+        method kept its name across three call sites but now writes to the
+        bar instead of a QListWidget."""
         if not client_id:
+            self.mw.command_bar.set_recent_sessions([])
             return
-        sessions = self.mw.session_manager.list_client_sessions(client_id)[
-            :_RECENT_SESSIONS_ROWS
-        ]
-        for info in sessions:
-            label = f"{info.get('session_name', '?')} — {info.get('status', '?')}"
-            item = QListWidgetItem(label)
-            item.setData(Qt.ItemDataRole.UserRole, info.get("session_path"))
-            self.mw.recent_sessions_list.addItem(item)
-        self.mw.recent_sessions_list.setFixedHeight(
-            _recent_list_height(self.mw.recent_sessions_list)
+        sessions = self.mw.session_manager.list_client_sessions(client_id)[:5]
+        self.mw.command_bar.set_recent_sessions(
+            [
+                (info.get("session_name", "?"), info.get("session_path"))
+                for info in sessions
+            ]
         )
 
     def _create_tab2_analysis_results(self):
@@ -724,257 +697,6 @@ class UIManager:
 
         return sub_tabs
 
-    def _create_client_selector_group(self):
-        """Creates the 'Client Selection' QGroupBox with ClientSelectorWidget."""
-        from gui.client_settings_dialog import ClientSelectorWidget
-
-        group = QGroupBox("Client Selection")
-        layout = QHBoxLayout()
-        group.setLayout(layout)
-
-        # Add client selector widget
-        self.mw.client_selector = ClientSelectorWidget(self.mw.profile_manager, self.mw)
-        layout.addWidget(self.mw.client_selector)
-        layout.addStretch()
-
-        return group
-
-    def _create_files_group(self):
-        """Creates the 'Load Data' QGroupBox with folder support."""
-        group = QGroupBox("Load Data")
-        layout = QHBoxLayout()
-        group.setLayout(layout)
-
-        # Orders section
-        # ponytail: Orders and Stock side by side set this page's 706px floor,
-        # so the setup column stops shrinking at 730px. That is inert today --
-        # the window cannot go below 1221px anyway, a floor Tab 2 sets, not this
-        # one. No responsive stacking is built; if Tab 2's floor ever drops,
-        # stack these two vertically below a width threshold.
-        layout.addWidget(self._create_orders_file_section())
-
-        # Stock section
-        layout.addWidget(self._create_stock_file_section())
-
-        return group
-
-    def _create_orders_file_section(self):
-        """Creates Orders file selection with folder support."""
-        group_box = QGroupBox("Orders File")
-        layout = QVBoxLayout()
-
-        # Mode selector (Radio buttons)
-        mode_layout = QHBoxLayout()
-        mode_label = QLabel("Load Mode:")
-
-        self.mw.orders_single_radio = QRadioButton("Single File")
-        self.mw.orders_folder_radio = QRadioButton("Folder (Multiple Files)")
-        self.mw.orders_single_radio.setChecked(True)  # Default
-
-        mode_layout.addWidget(mode_label)
-        mode_layout.addWidget(self.mw.orders_single_radio)
-        mode_layout.addWidget(self.mw.orders_folder_radio)
-        mode_layout.addStretch()
-
-        layout.addLayout(mode_layout)
-
-        # Select button (text changes based on mode)
-        self.mw.load_orders_btn = QPushButton("Load Orders File (.csv)")
-        self.mw.load_orders_btn.setToolTip(
-            "Select the orders_export.csv file from Shopify."
-        )
-        self.mw.load_orders_btn.setEnabled(False)
-        layout.addWidget(self.mw.load_orders_btn)
-
-        # File path label (shows filename or "X files merged")
-        path_layout = QHBoxLayout()
-        path_layout.addWidget(QLabel("Selected:"))
-        self.mw.orders_file_path_label = QLabel("Orders file not selected")
-        self.mw.orders_file_status_label = QLabel("")
-        path_layout.addWidget(self.mw.orders_file_path_label)
-        path_layout.addWidget(self.mw.orders_file_status_label)
-        path_layout.addStretch()
-
-        layout.addLayout(path_layout)
-
-        # File list preview (only visible in folder mode)
-        self.mw.orders_file_list_widget = QListWidget()
-        self.mw.orders_file_list_widget.setMaximumHeight(120)
-        self.mw.orders_file_list_widget.setVisible(False)
-        layout.addWidget(self.mw.orders_file_list_widget)
-
-        # File count label
-        self.mw.orders_file_count_label = QLabel("")
-        self.mw.orders_file_count_label.setVisible(False)
-        layout.addWidget(self.mw.orders_file_count_label)
-
-        # Options (only visible in folder mode)
-        self.mw.orders_options_widget = QWidget()
-        options_layout = QVBoxLayout()
-
-        self.mw.orders_recursive_checkbox = QCheckBox("Include subfolders")
-        self.mw.orders_remove_duplicates_checkbox = QCheckBox("Remove duplicate orders")
-        self.mw.orders_remove_duplicates_checkbox.setChecked(True)
-        self.mw.orders_remove_duplicates_checkbox.setToolTip(
-            "Remove orders with same Order Number + SKU (keeps first occurrence)"
-        )
-
-        options_layout.addWidget(self.mw.orders_recursive_checkbox)
-        options_layout.addWidget(self.mw.orders_remove_duplicates_checkbox)
-        self.mw.orders_options_widget.setLayout(options_layout)
-        self.mw.orders_options_widget.setVisible(False)
-
-        layout.addWidget(self.mw.orders_options_widget)
-
-        group_box.setLayout(layout)
-        return group_box
-
-    def _create_stock_file_section(self):
-        """Creates Stock file selection with folder support."""
-        group_box = QGroupBox("Stock File")
-        layout = QVBoxLayout()
-
-        # Mode selector (Radio buttons)
-        mode_layout = QHBoxLayout()
-        mode_label = QLabel("Load Mode:")
-
-        self.mw.stock_single_radio = QRadioButton("Single File")
-        self.mw.stock_folder_radio = QRadioButton("Folder (Multiple Files)")
-        self.mw.stock_single_radio.setChecked(True)  # Default
-
-        mode_layout.addWidget(mode_label)
-        mode_layout.addWidget(self.mw.stock_single_radio)
-        mode_layout.addWidget(self.mw.stock_folder_radio)
-        mode_layout.addStretch()
-
-        layout.addLayout(mode_layout)
-
-        # Select button (text changes based on mode)
-        self.mw.load_stock_btn = QPushButton("Load Stock File (.csv)")
-        self.mw.load_stock_btn.setToolTip("Select the inventory/stock CSV file.")
-        self.mw.load_stock_btn.setEnabled(False)
-        layout.addWidget(self.mw.load_stock_btn)
-
-        # File path label (shows filename or "X files merged")
-        path_layout = QHBoxLayout()
-        path_layout.addWidget(QLabel("Selected:"))
-        self.mw.stock_file_path_label = QLabel("Stock file not selected")
-        self.mw.stock_file_status_label = QLabel("")
-        path_layout.addWidget(self.mw.stock_file_path_label)
-        path_layout.addWidget(self.mw.stock_file_status_label)
-        path_layout.addStretch()
-
-        layout.addLayout(path_layout)
-
-        # Inventory memory toggle
-        self.mw.inventory_memory_checkbox = QCheckBox("Use Inventory Memory")
-        self.mw.inventory_memory_checkbox.setToolTip(
-            "When enabled, analysis starts from the final stock of the last session "
-            "instead of requiring a new stock file."
-        )
-        self.mw.inventory_memory_checkbox.setEnabled(False)  # enabled after client load
-        layout.addWidget(self.mw.inventory_memory_checkbox)
-
-        # File list preview (only visible in folder mode)
-        self.mw.stock_file_list_widget = QListWidget()
-        self.mw.stock_file_list_widget.setMaximumHeight(120)
-        self.mw.stock_file_list_widget.setVisible(False)
-        layout.addWidget(self.mw.stock_file_list_widget)
-
-        # File count label
-        self.mw.stock_file_count_label = QLabel("")
-        self.mw.stock_file_count_label.setVisible(False)
-        layout.addWidget(self.mw.stock_file_count_label)
-
-        # Options (only visible in folder mode)
-        self.mw.stock_options_widget = QWidget()
-        options_layout = QVBoxLayout()
-
-        self.mw.stock_recursive_checkbox = QCheckBox("Include subfolders")
-        self.mw.stock_remove_duplicates_checkbox = QCheckBox("Remove duplicate items")
-        self.mw.stock_remove_duplicates_checkbox.setChecked(True)
-        self.mw.stock_remove_duplicates_checkbox.setToolTip(
-            "Remove items with same SKU (keeps first occurrence)"
-        )
-
-        options_layout.addWidget(self.mw.stock_recursive_checkbox)
-        options_layout.addWidget(self.mw.stock_remove_duplicates_checkbox)
-        self.mw.stock_options_widget.setLayout(options_layout)
-        self.mw.stock_options_widget.setVisible(False)
-
-        layout.addWidget(self.mw.stock_options_widget)
-
-        group_box.setLayout(layout)
-        return group_box
-
-    def on_orders_mode_changed(self, checked):
-        """Handle mode change between Single and Folder for Orders."""
-        is_folder_mode = self.mw.orders_folder_radio.isChecked()
-
-        # Update button text
-        if is_folder_mode:
-            self.mw.load_orders_btn.setText("Select Orders Folder...")
-        else:
-            self.mw.load_orders_btn.setText("Load Orders File (.csv)")
-
-        # Show/hide folder-specific widgets
-        self.mw.orders_file_list_widget.setVisible(is_folder_mode)
-        self.mw.orders_file_count_label.setVisible(is_folder_mode)
-        self.mw.orders_options_widget.setVisible(is_folder_mode)
-
-        # Clear selection when switching modes
-        self.mw.orders_file_path = None
-        self.mw.orders_file_path_label.setText("Orders file not selected")
-        self.mw.orders_file_status_label.setText("")
-        self.mw.orders_file_list_widget.clear()
-
-    def on_stock_mode_changed(self, checked):
-        """Handle mode change between Single and Folder for Stock."""
-        is_folder_mode = self.mw.stock_folder_radio.isChecked()
-
-        # Update button text
-        if is_folder_mode:
-            self.mw.load_stock_btn.setText("Select Stock Folder...")
-        else:
-            self.mw.load_stock_btn.setText("Load Stock File (.csv)")
-
-        # Show/hide folder-specific widgets
-        self.mw.stock_file_list_widget.setVisible(is_folder_mode)
-        self.mw.stock_file_count_label.setVisible(is_folder_mode)
-        self.mw.stock_options_widget.setVisible(is_folder_mode)
-
-        # Clear selection when switching modes
-        self.mw.stock_file_path = None
-        self.mw.stock_file_path_label.setText("Stock file not selected")
-        self.mw.stock_file_status_label.setText("")
-        self.mw.stock_file_list_widget.clear()
-
-    def _create_reports_group(self):
-        """Creates the 'Reports' QGroupBox."""
-        group = QGroupBox("Reports")
-        layout = QVBoxLayout()
-        group.setLayout(layout)
-
-        self.mw.generate_reports_button = QPushButton("Generate Reports")
-        self.mw.generate_reports_button.setToolTip(
-            "Generate packing lists and stock exports based on pre-defined filters."
-        )
-        self.mw.generate_reports_button.setEnabled(False)
-
-        layout.addWidget(self.mw.generate_reports_button)
-
-        # Add "Open Session Folder" button
-        self.mw.open_session_folder_button = QPushButton("Open Session Folder")
-        self.mw.open_session_folder_button.setEnabled(False)
-        self.mw.open_session_folder_button.setToolTip(
-            "Open the current session folder in file explorer"
-        )
-        self.mw.open_session_folder_button.clicked.connect(self._open_session_folder)
-        layout.addWidget(self.mw.open_session_folder_button)
-
-        layout.addStretch()
-        return group
-
     def _open_session_folder(self):
         """Open session folder in file explorer."""
         import platform
@@ -1003,68 +725,6 @@ class UIManager:
                 self.mw, "Error", f"Failed to open session folder:\n{e!s}"
             )
 
-    def _create_main_actions_group(self):
-        """Create Actions section with logical button grouping."""
-        group = QGroupBox("Actions")
-        main_layout = QVBoxLayout(group)
-
-        # === Row 1: Primary Actions ===
-        primary_layout = QHBoxLayout()
-
-        # Run Analysis - largest button
-        self.mw.run_analysis_button = QPushButton("▶ Run Analysis")
-        self.mw.run_analysis_button.setMinimumHeight(70)
-        self.mw.run_analysis_button.setMinimumWidth(180)
-        self.mw.run_analysis_button.setEnabled(False)
-        self.mw.run_analysis_button.setToolTip("Start the fulfillment analysis")
-        self.mw.run_analysis_button.setStyleSheet(f"""
-            QPushButton {{
-                {font_css('label')}
-            }}
-        """)
-        primary_layout.addWidget(self.mw.run_analysis_button, 2)
-
-        # Add Product to Order
-        self.mw.add_product_button = QPushButton("Add Product to Order")
-        self.mw.add_product_button.setMinimumHeight(70)
-        self.mw.add_product_button.setEnabled(False)
-        self.mw.add_product_button.setToolTip(
-            "Manually add a product to an existing order"
-        )
-        primary_layout.addWidget(self.mw.add_product_button, 1)
-
-        main_layout.addLayout(primary_layout)
-
-        # === Row 2: Analysis mode ===
-        mode_layout = QHBoxLayout()
-        mode_layout.addWidget(QLabel("Analysis mode:"))
-        self.mw.analysis_mode_combo = WheelIgnoreComboBox()
-        self.mw.analysis_mode_combo.addItems(
-            ["Multi-item first", "FIFO (oldest first)"]
-        )
-        self.mw.analysis_mode_combo.setToolTip(
-            "Multi-item first: maximizes complete orders fulfilled.\n"
-            "FIFO: processes strictly oldest orders first, regardless of item count."
-        )
-        mode_layout.addWidget(self.mw.analysis_mode_combo)
-        mode_layout.addStretch()
-        main_layout.addLayout(mode_layout)
-
-        # === Row 3: Settings ===
-        settings_layout = QHBoxLayout()
-
-        # Client Settings
-        self.mw.settings_button = QPushButton("Settings")
-        self.mw.settings_button.setToolTip("Open settings for the active client")
-        self.mw.settings_button.setEnabled(False)
-        settings_layout.addWidget(self.mw.settings_button)
-
-        # (Tag Categories and Configure Columns moved to Settings window tabs)
-
-        main_layout.addLayout(settings_layout)
-
-        return group
-
     def set_ui_busy(self, is_busy):
         """Enables or disables key UI elements based on application state.
 
@@ -1084,11 +744,10 @@ class UIManager:
             and not self.mw.analysis_results_df.empty
         )
 
-        self.mw.generate_reports_button.setEnabled(not is_busy and is_data_loaded)
-
-        # Enable "Add Product" button after analysis
-        if hasattr(self.mw, "add_product_button"):
-            self.mw.add_product_button.setEnabled(not is_busy and is_data_loaded)
+        if hasattr(self.mw, "generate_reports_button_tab2"):
+            self.mw.generate_reports_button_tab2.setEnabled(
+                not is_busy and is_data_loaded
+            )
 
         self.log.debug(
             f"UI busy state set to: {is_busy}, data_loaded: {is_data_loaded}"
@@ -1343,28 +1002,6 @@ class UIManager:
         return grouped
 
     # ========== NEW TAB-SPECIFIC METHODS ==========
-
-    def _create_session_management_section(self):
-        """Create session management UI for Tab 1."""
-        group = QGroupBox("Session Management")
-        layout = QHBoxLayout(group)
-
-        # Create new session button
-        self.mw.new_session_btn = QPushButton("Create New Session")
-        self.mw.new_session_btn.setToolTip(
-            "Create a new analysis session for the selected client"
-        )
-        self.mw.new_session_btn.setEnabled(False)
-        layout.addWidget(self.mw.new_session_btn)
-
-        # Session path label
-        layout.addWidget(QLabel("Current:"))
-        self.mw.session_path_label = QLabel("No session")
-        layout.addWidget(self.mw.session_path_label)
-
-        layout.addStretch()
-
-        return group
 
     def _create_filter_controls(self):
         """Search, scope, case and tag -- 1e's arrangement, on this screen.

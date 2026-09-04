@@ -1,5 +1,10 @@
 # Session Setup layout: stop the quick-pick panel starving the content column
 
+> **Superseded by Bundle 5** (2026-09-04,
+> `2026-09-04-phase9-bundle5-session-setup-design.md`). The splitter, the
+> scroll area and the 706px column floor this document solves belong to a
+> layout that no longer exists. Kept for the reasoning, not the shape.
+
 Date: 2026-08-23
 Roadmap: Phase 7, subtask `6h8v4VqJwWpJ2Pf3`
 Status: approved (layout chosen by the user 2026-08-23)

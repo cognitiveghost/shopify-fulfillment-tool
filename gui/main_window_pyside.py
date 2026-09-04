@@ -214,22 +214,22 @@ class MainWindow(QMainWindow):
                 self.current_client_id = client_id
                 logger.info(f"Loaded configuration for CLIENT_{client_id}")
 
-                # Sync analysis mode combo (block signals to avoid spurious saves)
-                if hasattr(self, "analysis_mode_combo"):
+                # Sync the strategy radios (block signals to avoid spurious saves)
+                if hasattr(self, "strategy_multi_item"):
                     mode = config.get("analysis_mode", "multi_first")
-                    idx = 1 if mode == "fifo" else 0
-                    self.analysis_mode_combo.blockSignals(True)
-                    self.analysis_mode_combo.setCurrentIndex(idx)
-                    self.analysis_mode_combo.blockSignals(False)
+                    self.strategy_multi_item.blockSignals(True)
+                    self.strategy_fifo.blockSignals(True)
+                    if mode == "fifo":
+                        self.strategy_fifo.setChecked(True)
+                    else:
+                        self.strategy_multi_item.setChecked(True)
+                    self.strategy_multi_item.blockSignals(False)
+                    self.strategy_fifo.blockSignals(False)
 
                 # Update UI to reflect new client
                 self.session_path_label.setText(
                     f"Client: CLIENT_{client_id} - No session started"
                 )
-
-                # Enable client-specific buttons
-                self.new_session_btn.setEnabled(True)
-                self.settings_button.setEnabled(True)
 
                 # Reset analysis data when switching clients
                 self.analysis_results_df = None
@@ -255,16 +255,20 @@ class MainWindow(QMainWindow):
                     self.inventory_memory_checkbox.setEnabled(True)
                     self.inventory_memory_checkbox.blockSignals(False)
 
-                # Disable file loading buttons until a session is created/selected
-                self.load_orders_btn.setEnabled(False)
-                self.load_stock_btn.setEnabled(False)
+                # Disable starting a new file pick until a session exists --
+                # not the whole slot, which would also grey out an invalid
+                # slot's recovery buttons.
+                self.orders_slot.choose_button.setEnabled(False)
+                self.orders_slot.choose_folder_button.setEnabled(False)
+                self.stock_slot.choose_button.setEnabled(False)
+                self.stock_slot.choose_folder_button.setEnabled(False)
 
                 # Disable report buttons until new analysis
                 self.run_analysis_button.setEnabled(False)
-                if hasattr(self, "generate_reports_button"):
-                    self.generate_reports_button.setEnabled(False)
-                if hasattr(self, "add_product_button"):
-                    self.add_product_button.setEnabled(False)
+                if hasattr(self, "generate_reports_button_tab2"):
+                    self.generate_reports_button_tab2.setEnabled(False)
+                if hasattr(self, "add_product_button_tab2"):
+                    self.add_product_button_tab2.setEnabled(False)
 
                 self.log_activity("Client", f"Switched to CLIENT_{client_id}")
             else:
@@ -337,31 +341,8 @@ class MainWindow(QMainWindow):
             self.actions_handler.handle_multi_session_stock_export
         )
 
-        # Session and file loading
-        self.new_session_btn.clicked.connect(self.actions_handler.create_new_session)
-
-        # Connect mode change signals
-        self.orders_single_radio.toggled.connect(self.ui_manager.on_orders_mode_changed)
-        self.stock_single_radio.toggled.connect(self.ui_manager.on_stock_mode_changed)
-
-        # Connect file/folder selection buttons (will handle both modes)
-        self.load_orders_btn.clicked.connect(self.file_handler.on_orders_select_clicked)
-        self.load_stock_btn.clicked.connect(self.file_handler.on_stock_select_clicked)
-
         # Main actions
         self.run_analysis_button.clicked.connect(self.actions_handler.run_analysis)
-        self.settings_button.clicked.connect(self.actions_handler.open_settings_window)
-        self.add_product_button.clicked.connect(
-            self.actions_handler.show_add_product_dialog
-        )
-        self.analysis_mode_combo.currentIndexChanged.connect(
-            self._on_analysis_mode_changed
-        )
-
-        # Reports
-        self.generate_reports_button.clicked.connect(
-            self.actions_handler.open_generate_reports_dialog
-        )
 
         # Table interactions
         self.tableView.customContextMenuRequested.connect(self.show_context_menu)
@@ -639,18 +620,16 @@ class MainWindow(QMainWindow):
             and self.analysis_results_df is not None
         )
 
-        # Session management
-        self.new_session_btn.setEnabled(has_client)
+        # Session management and Settings both live in the command bar now --
+        # New Session is state-owned (BarState.NO_SESSION) and Settings is in
+        # the overflow, gated in _populate_overflow.
 
-        # Settings button (Tab 1 version)
-        if hasattr(self, "settings_button"):
-            self.settings_button.setEnabled(has_client)
-        # The Tab 2 copy is gone -- client settings live in the command bar's
-        # overflow now, whose own item is gated in _populate_overflow.
-
-        # File loading
-        self.load_orders_btn.setEnabled(has_session)
-        self.load_stock_btn.setEnabled(has_session)
+        # File loading -- gate the pick, not the whole slot (an invalid
+        # slot's recovery buttons must stay usable regardless).
+        self.orders_slot.choose_button.setEnabled(has_session)
+        self.orders_slot.choose_folder_button.setEnabled(has_session)
+        self.stock_slot.choose_button.setEnabled(has_session)
+        self.stock_slot.choose_folder_button.setEnabled(has_session)
 
         # Run Analysis button — memory mode allows skipping the stock file ONLY
         # when memory is enabled AND actually holds a stored stock snapshot.
@@ -669,26 +648,15 @@ class MainWindow(QMainWindow):
             has_session and has_orders and (has_stock or inv_memory_has_skus)
         )
 
-        # Reports and actions (both Tab 1 and Tab 2 versions)
+        # Reports and actions
         reports_enabled = has_session and has_analysis
 
-        # Tab 1 buttons
-        if hasattr(self, "generate_reports_button"):
-            self.generate_reports_button.setEnabled(reports_enabled)
-        if hasattr(self, "add_product_button"):
-            self.add_product_button.setEnabled(has_analysis)
-
-        # Tab 2 buttons
         if hasattr(self, "generate_reports_button_tab2"):
             self.generate_reports_button_tab2.setEnabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
             self.add_product_button_tab2.setEnabled(has_analysis)
         if hasattr(self, "configure_columns_button_tab2"):
             self.configure_columns_button_tab2.setEnabled(has_analysis)
-
-        # Open Session Folder button (enabled when session exists)
-        if hasattr(self, "open_session_folder_button"):
-            self.open_session_folder_button.setEnabled(has_session)
 
         # Update status bar
         if has_analysis:
@@ -801,7 +769,7 @@ class MainWindow(QMainWindow):
             # load_client_config() re-reads shopify_config via profile_manager --
             # now a cache hit, since _load_client_data() already warmed the mtime
             # cache above -- and applies every widget-facing side effect this
-            # class depends on (active_profile_config, analysis_mode_combo sync,
+            # class depends on (active_profile_config, strategy radio sync,
             # inventory_memory_checkbox restore, per-client button enable/disable,
             # _update_all_views()). Dropping it (as a naive port of this method
             # might) would leave active_profile_config stale after every client
@@ -815,10 +783,8 @@ class MainWindow(QMainWindow):
             # Clear currently loaded files (they're for different client)
             self.orders_file_path = None
             self.stock_file_path = None
-            self.orders_file_path_label.setText("No file loaded")
-            self.stock_file_path_label.setText("No file loaded")
-            self.orders_file_status_label.setText("")
-            self.stock_file_status_label.setText("")
+            self.orders_slot.clear()
+            self.stock_slot.clear()
 
             # Clear session
             self.session_path = None

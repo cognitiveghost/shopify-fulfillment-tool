@@ -48,7 +48,6 @@ class FileHandler:
             return
 
         self.mw.orders_file_path = filepath
-        self.mw.orders_file_path_label.setText(os.path.basename(filepath))
         self.log.info(f"Orders file selected: {filepath}")
 
         # Get delimiter from config (default to comma for Shopify exports)
@@ -154,7 +153,6 @@ class FileHandler:
             return
 
         self.mw.stock_file_path = filepath
-        self.mw.stock_file_path_label.setText(os.path.basename(filepath))
         self.log.info(f"Stock file selected: {filepath}")
 
         # Get delimiter from config
@@ -300,8 +298,7 @@ class FileHandler:
                         if reply != QMessageBox.Yes:
                             # Cancel: clear the stock selection
                             self.mw.stock_file_path = None
-                            self.mw.stock_file_path_label.setText("Stock file not selected")
-                            self.mw.stock_file_status_label.setText("")
+                            self.mw.stock_slot.clear()
                             self.check_files_ready()
                             return
 
@@ -469,6 +466,19 @@ class FileHandler:
         else:
             self.mw.run_analysis_button.setEnabled(False)
         return orders_ok and stock_ok
+
+    def accept_dropped_path(self, file_type: str, path: str) -> None:
+        """A file was dropped on a FileSlot -- validate it in place.
+
+        Reuses validate_file(), the same check the file-dialog path runs
+        after a selection, rather than a second validation route.
+        """
+        if file_type == "orders":
+            self.mw.orders_file_path = path
+        else:
+            self.mw.stock_file_path = path
+        self.validate_file(file_type)
+        self.check_files_ready()
 
     # ============================================================
     # Folder Loading Support (New)

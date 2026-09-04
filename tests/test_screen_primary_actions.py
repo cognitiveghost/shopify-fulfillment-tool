@@ -32,7 +32,7 @@ def test_each_screen_puts_its_own_primary_in_the_bar(main_window, qapp):
     # state-owned and always in the left group under BarState.NO_SESSION
     # (Bundle 4, spec §3.2), so it has no entry in _SCREEN_ACTIONS any more.
     expected = {
-        0: "▶ Run Analysis",
+        0: "Run analysis",
         1: "Generate Reports",
     }
     for index, label in expected.items():
@@ -69,7 +69,7 @@ def test_the_moved_buttons_stop_rendering_in_the_page(main_window, qapp):
 
 def test_session_setups_new_session_button_never_renders_in_the_page(main_window, qapp):
     """New Session is state-owned in the command bar now (BarState.NO_SESSION,
-    Bundle 4) -- the page's own copy never draws, on any screen."""
+    Bundle 4) -- Bundle 5 deleted the page's own copy outright."""
     main_window.main_tabs.setCurrentIndex(0)
     QApplication.processEvents()
-    assert main_window.new_session_btn.isHidden()
+    assert not hasattr(main_window, "new_session_btn")

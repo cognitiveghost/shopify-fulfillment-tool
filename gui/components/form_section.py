@@ -42,9 +42,10 @@ class FormSection(QFrame):
         )
         layout.setSpacing(theme.spacing_xs)
 
-        title_label = QLabel(title)
-        title_label.setStyleSheet(font_css("label"))
-        layout.addWidget(title_label)
+        if title:
+            title_label = QLabel(title)
+            title_label.setStyleSheet(font_css("label"))
+            layout.addWidget(title_label)
 
         if description:
             desc_label = QLabel(description)
