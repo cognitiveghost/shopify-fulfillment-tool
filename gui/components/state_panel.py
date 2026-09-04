@@ -20,8 +20,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 from gui.components.card import Card
-from gui.theme_manager import get_theme_manager
-from shared.theme import set_button_role
+from shared.theme import font_css, on_theme_changed, set_button_role
 
 
 class StatePanel(QWidget):
@@ -48,12 +47,21 @@ class StatePanel(QWidget):
         self.card.add_text(cause, "body", wrap=True)
 
         if detail:
-            theme = get_theme_manager().get_current_theme()
             # 9.11 gives this line the one mono face; until then it is caption
             # in the secondary colour. The Qt tier has no mono family and
             # adding one is a token, which belongs to shared/ and to 9.11.
-            self.card.add_text(
-                detail, "caption", wrap=True, css=f"color: {theme.text_secondary};"
+            #
+            # The colour is re-run rather than baked (ADR 0003): add_text's
+            # `css` interpolates once at build time, so a theme toggle -- or a
+            # density change, which moves font_css too -- would leave this line
+            # in the old palette. Bundle 4 is the first screen to wire a panel
+            # in, and would have inherited the stale hex.
+            detail_label = self.card.add_text(detail, "caption", wrap=True)
+            on_theme_changed(
+                detail_label,
+                lambda tokens, label=detail_label: label.setStyleSheet(
+                    f"{font_css('caption')} color: {tokens.text_secondary};"
+                ),
             )
 
         self.button = None

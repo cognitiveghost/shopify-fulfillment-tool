@@ -68,6 +68,30 @@ def test_every_variant_has_at_most_one_accent_filled_action(qapp, panel_factory)
     assert len(primaries) <= 1
 
 
+def test_the_detail_line_follows_a_theme_toggle(qapp):
+    """ADR 0003: the secondary colour is re-run, not baked in at build time.
+
+    Card.add_text's `css` interpolates once, so the naive spelling leaves the
+    detail line in the old palette after a toggle -- and Bundle 4, the panel's
+    first real screen, would have inherited that.
+    """
+    from gui.theme_manager import get_theme_manager
+
+    manager = get_theme_manager()
+    before = manager.get_current_theme().name
+    try:
+        manager.set_theme("light")
+        panel = StatePanel.failed("t", "c", "the detail line", "a")
+        detail = next(w for w in panel.card.findChildren(QLabel)
+                      if w.text() == "the detail line")
+        assert manager.get_current_theme().text_secondary in detail.styleSheet()
+
+        manager.set_theme("dark")
+        assert manager.get_current_theme().text_secondary in detail.styleSheet()
+    finally:
+        manager.set_theme(before)
+
+
 def test_no_variant_says_no_data(qapp):
     """"No data · Nothing to display" cannot distinguish "you have not loaded
     anything" from "your filter is too tight" from "the server is unreachable"."""

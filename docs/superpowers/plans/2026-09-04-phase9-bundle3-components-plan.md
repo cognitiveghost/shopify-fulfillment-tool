@@ -1092,10 +1092,9 @@ build — commit the guard and move on. If `setAlternatingRowColors(True)` turns
 up, delete that call. If a caret is being forced onto unsorted headers, remove
 whatever forces it.
 
-- [ ] **Step 3: Add the hover caret**
+- [ ] **Step 3: ~~Add the hover caret~~ — dropped at Stage C, 2026-09-04**
 
-`build_stylesheet`'s `QHeaderView::section` block gains a hover rule using the
-arrow glyphs 9.0 vendored:
+This step prescribed:
 
 ```python
         QHeaderView::section:hover {{
@@ -1104,11 +1103,25 @@ arrow glyphs 9.0 vendored:
         }}
 ```
 
-This is a `shared/theme.py` edit — author it in **packing-tool** and re-sync,
-folding it into the Task 2 PR. Check first that `chevron-up` is actually in
-`shared/assets/` (`ls shared/assets | grep chevron`); if 9.0 did not vendor it,
-**skip this step and say so in the PR** rather than adding a glyph here, since
-`shared/assets/` is packing-tool's too.
+and offered one escape hatch: skip if 9.0 never vendored `chevron-up`. That
+hatch does not apply — `shared/assets/icons/chevron-up.svg` **is** vendored.
+The step is dropped for a different and stronger reason, measured at Stage C:
+
+**Qt draws `image:` on a `QHeaderView::section` *instead of* the label, not
+beside it.** A probe (PySide6 6.11.1, offscreen) rendered a three-column
+header with and without the rule and counted non-background pixels: 7172 →
+5368. Hovering a header would blank its title. `background-image` with
+`background-repeat`/`background-position` is worse (7172 → 1215, glyph never
+drawn). The snippet above would have shipped a visible regression.
+
+`QHeaderView::up-arrow` / `::down-arrow` accept a `glyph_url()` and keep the
+label — but they render only on the *sorted* section, which spec §4.5 already
+calls "verify-then-test" because Qt gets it right unaided. There is therefore
+no QSS route to a caret on hover, and **no `shared/theme.py` edit and no
+second packing-tool commit come out of this task.**
+
+Recorded in `docs/adr/0002` so the next attempt starts from the measurement.
+Steps 1 and 2 stand: the zebra and forced-caret guards are the deliverable.
 
 - [ ] **Step 4: Commit**
 
@@ -1127,7 +1140,10 @@ git commit -m "Phase 9.4: zebra stays off and the sort caret stays quiet"
 - Test: `tests/test_state_panel.py` (create)
 
 **Interfaces:**
-- Consumes: `Card`, `font_css`, `get_theme_manager`, `set_button_role`
+- Consumes: `Card`, `font_css`, `on_theme_changed`, `set_button_role`
+  (corrected at Stage C: this said `get_theme_manager`, which is the ADR 0003
+  anti-pattern — reading tokens once and interpolating them bakes the detail
+  line's colour in for the life of the widget)
 - Produces: `StatePanel(title, cause, *, detail="", action_text="",
   action_role="primary", parent=None)` with attributes `card`, `button`
   (`None` when there is no action), and four classmethods

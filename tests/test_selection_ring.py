@@ -70,6 +70,9 @@ def test_a_selected_and_blocked_row_draws_the_ring_around_the_edge(qapp):
     A blocked row carries a status token, so StatusEdgeDelegate paints its 3px
     bar; selected, the bar must start RING_WIDTH in from the row's left, which
     is exactly where the ring's left cap ends.
+
+    The pixel half of the same claim is the test below: caps() and edge_rect()
+    can both be right while paint_selection_ring() draws nothing.
     """
     from PySide6.QtCore import QRect
     from PySide6.QtWidgets import QStyle, QStyleOptionViewItem
@@ -85,6 +88,75 @@ def test_a_selected_and_blocked_row_draws_the_ring_around_the_edge(qapp):
     assert edge.left() == RING_WIDTH                     # starts where the cap ends
     assert edge.left() + EDGE_WIDTH <= option.rect.width() - RING_WIDTH
     assert edge.top() == RING_WIDTH and edge.height() == 28 - 2 * RING_WIDTH
+
+
+def test_the_ring_actually_closes_around_a_selected_blocked_row(qapp):
+    """Four ring segments in pixels, with the status edge inside them.
+
+    The two vertical segments come from paint_selection_ring, the two
+    horizontal ones from build_stylesheet's QTableView::item:selected rule --
+    the split §4.3 chose. Sampling all four in one render is the only thing
+    that proves the two halves meet rather than merely agreeing on paper.
+    """
+    import pandas as pd
+    from PySide6.QtGui import QColor, QImage
+    from PySide6.QtWidgets import QTableView
+
+    from gui.pandas_model import PandasModel
+    from gui.selection_ring import RING_WIDTH
+    from gui.status_edge_delegate import StatusEdgeDelegate
+    from gui.theme_manager import get_theme_manager
+    from shared.theme import build_stylesheet
+
+    theme = get_theme_manager().get_current_theme()
+    ring = theme.selection_border.upper()
+
+    view = QTableView()
+    model = PandasModel(
+        pd.DataFrame([{"Order_Number": "1", "Order_Fulfillment_Status": "Not Fulfillable"}])
+    )
+    view.setModel(model)
+    view.setItemDelegate(StatusEdgeDelegate(view))
+    view.setStyleSheet(build_stylesheet(theme))
+    view.resize(400, 120)
+    view.selectRow(0)
+    _KEEPALIVE.append((view, model))
+
+    image = QImage(view.viewport().size(), QImage.Format.Format_ARGB32)
+    image.fill(0)
+    view.viewport().render(image)
+
+    def pixel(x, y):
+        return QColor(image.pixel(x, y)).name().upper()
+
+    first = view.visualRect(model.index(0, 0))
+    last = view.visualRect(model.index(0, model.columnCount() - 1))
+    mid_y = first.center().y()
+
+    assert pixel(first.left(), mid_y) == ring                    # left cap
+    assert pixel(last.right(), mid_y) == ring                    # right cap
+    assert pixel(first.center().x(), first.top()) == ring        # QSS top
+    assert pixel(first.center().x(), first.bottom()) == ring     # QSS bottom
+    # ...and the status edge sits inside the left cap, not on top of it.
+    assert pixel(first.left() + RING_WIDTH + 1, mid_y) == theme.status_danger.upper()
+
+
+def test_the_ring_width_matches_the_qss_rule(qapp):
+    """§4.3 accepted naming the ring's width and colour twice; this holds them.
+
+    RING_WIDTH also drives StatusEdgeDelegate's inset, so a QSS bump to 3px
+    without this guard yields 2px caps *and* a mis-inset edge -- the exact
+    collision 9.4 exists to remove.
+    """
+    from gui.selection_ring import RING_WIDTH
+    from gui.theme_manager import get_theme_manager
+    from shared.theme import build_stylesheet
+
+    theme = get_theme_manager().get_current_theme()
+    sheet = build_stylesheet(theme)
+
+    for side in ("top", "bottom"):
+        assert f"border-{side}: {RING_WIDTH}px solid {theme.selection_border};" in sheet
 
 
 def test_zebra_striping_stays_off(qapp):
@@ -103,9 +175,18 @@ def test_zebra_striping_stays_off(qapp):
 def test_the_sort_caret_is_not_forced_onto_every_header(qapp):
     """Qt draws the indicator on the sorted section alone. What the artboard
     rejects is a permanent grey caret on all of them -- eight pieces of
-    furniture and no information."""
-    from PySide6.QtWidgets import QTableView
+    furniture and no information.
 
-    view = QTableView()
-    header = view.horizontalHeader()
-    assert not header.isSortIndicatorShown() or header.sortIndicatorSection() >= 0
+    setSortingEnabled() gives the wanted behaviour on its own; it is
+    setSortIndicatorShown(True) that pins a caret to every header, so that is
+    what this guards -- in the app's own tables, not in a throwaway QTableView
+    that no screen ever builds.
+    """
+    import gui.main_window_pyside as main_window
+    import gui.session_browser_widget as browser
+    import gui.ui_manager as ui
+
+    for module in (browser, ui, main_window):
+        with open(module.__file__, encoding="utf-8") as f:
+            source = f.read()
+        assert "setSortIndicatorShown(True)" not in source
