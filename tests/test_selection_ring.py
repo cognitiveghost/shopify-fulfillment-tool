@@ -1,0 +1,64 @@
+"""9.4: which end caps a cell owns. Pure, so it needs no painter.
+
+Spec: docs/superpowers/specs/2026-09-04-phase9-bundle3-components-design.md §4
+"""
+
+from PySide6.QtWidgets import QTableWidget
+
+from gui.selection_ring import caps, first_visible_column, last_visible_column
+
+_KEEPALIVE = []
+
+
+def _header(columns=4, hidden=(), moves=()):
+    table = QTableWidget(1, columns)
+    header = table.horizontalHeader()
+    for frm, to in moves:
+        header.moveSection(frm, to)
+    for col in hidden:
+        header.setSectionHidden(col, True)
+    _KEEPALIVE.append(table)
+    return header
+
+
+def test_the_caps_land_on_the_first_and_last_columns(qapp):
+    header = _header(4)
+    assert caps(header, 0) == (True, False)
+    assert caps(header, 3) == (False, True)
+    assert caps(header, 1) == (False, False)
+
+
+def test_a_single_column_row_owns_both_caps(qapp):
+    header = _header(1)
+    assert caps(header, 0) == (True, True)
+
+
+def test_a_hidden_last_column_hands_its_cap_to_the_one_before(qapp):
+    header = _header(4, hidden=(3,))
+    assert caps(header, 3) == (False, False)
+    assert caps(header, 2) == (False, True)
+
+
+def test_a_hidden_first_column_hands_its_cap_along(qapp):
+    header = _header(4, hidden=(0,))
+    assert caps(header, 0) == (False, False)
+    assert caps(header, 1) == (True, False)
+
+
+def test_a_dragged_column_takes_the_cap_with_it(qapp):
+    # Visual index, not logical: a user who drags column 2 to the front must
+    # get the cap on the left of the row.
+    header = _header(4, moves=((2, 0),))
+    assert caps(header, 2) == (True, False)
+    assert caps(header, 0) == (False, False)
+
+
+def test_no_header_means_no_caps(qapp):
+    assert caps(None, 0) == (False, False)
+    assert first_visible_column(None) is None
+    assert last_visible_column(None) is None
+
+
+def test_every_column_hidden_means_no_caps(qapp):
+    header = _header(2, hidden=(0, 1))
+    assert caps(header, 0) == (False, False)
