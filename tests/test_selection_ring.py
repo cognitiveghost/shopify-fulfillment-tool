@@ -62,3 +62,26 @@ def test_no_header_means_no_caps(qapp):
 def test_every_column_hidden_means_no_caps(qapp):
     header = _header(2, hidden=(0, 1))
     assert caps(header, 0) == (False, False)
+
+
+def test_a_selected_and_blocked_row_draws_the_ring_around_the_edge(qapp):
+    """The bundle's acceptance case, asserted on geometry rather than pixels.
+
+    A blocked row carries a status token, so StatusEdgeDelegate paints its 3px
+    bar; selected, the bar must start RING_WIDTH in from the row's left, which
+    is exactly where the ring's left cap ends.
+    """
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QStyle, QStyleOptionViewItem
+
+    from gui.selection_ring import RING_WIDTH
+    from gui.status_edge_delegate import EDGE_WIDTH, StatusEdgeDelegate
+
+    option = QStyleOptionViewItem()
+    option.rect = QRect(0, 0, 120, 28)
+    option.state |= QStyle.State_Selected
+    edge = StatusEdgeDelegate().edge_rect(option)
+
+    assert edge.left() == RING_WIDTH                     # starts where the cap ends
+    assert edge.left() + EDGE_WIDTH <= option.rect.width() - RING_WIDTH
+    assert edge.top() == RING_WIDTH and edge.height() == 28 - 2 * RING_WIDTH
