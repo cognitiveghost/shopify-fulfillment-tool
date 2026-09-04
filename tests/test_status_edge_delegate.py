@@ -147,8 +147,13 @@ def test_paint_actually_draws_the_edge(qapp):
 def test_a_selected_row_keeps_its_edge(qapp):
     """The whole point of the edge: *selected* and *blocked* at once.
 
-    The filled row tint this replaced could show only one of the two.
+    The filled row tint this replaced could show only one of the two. 9.4
+    insets the edge by RING_WIDTH on a selected row so it sits inside the
+    selection ring rather than on top of it, so the sample point moves past
+    the ring's own left cap.
     """
+    from gui.selection_ring import RING_WIDTH
+
     theme = get_theme_manager().get_current_theme()
 
     view = QTableView()
@@ -161,4 +166,44 @@ def test_a_selected_row_keeps_its_edge(qapp):
     view.selectRow(0)
     _KEEPALIVE.append((view, model))
 
-    assert _edge_pixel(view, _rendered(view), 0) == theme.status_danger.upper()
+    image = _rendered(view)
+    rect = view.visualRect(view.model().index(0, 0))
+    from PySide6.QtGui import QColor
+
+    pixel = QColor(
+        image.pixel(rect.left() + RING_WIDTH + 1, rect.center().y())
+    ).name().upper()
+    assert pixel == theme.status_danger.upper()
+
+
+def test_the_edge_insets_inside_the_ring_on_a_selected_row(qapp):
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QStyle, QStyleOptionViewItem
+
+    from gui.selection_ring import RING_WIDTH
+
+    delegate = StatusEdgeDelegate()
+    option = QStyleOptionViewItem()
+    option.rect = QRect(0, 0, 120, 28)
+
+    resting = delegate.edge_rect(option)
+    assert resting == QRect(0, 0, 120, 28)
+
+    option.state |= QStyle.State_Selected
+    selected = delegate.edge_rect(option)
+    assert selected.left() == RING_WIDTH
+    assert selected.top() == RING_WIDTH
+    assert selected.bottom() == 27 - RING_WIDTH
+
+
+def test_the_edge_follows_a_hidden_first_column(qapp):
+    # paints_edge shares the ring's first-visible-column rule, so hiding
+    # column 0 moves the edge rather than deleting it.
+    from PySide6.QtWidgets import QTableWidget
+
+    table = QTableWidget(1, 3)
+    header = table.horizontalHeader()
+    header.setSectionHidden(0, True)
+    delegate = StatusEdgeDelegate()
+    assert not delegate.paints_edge(header, 0)
+    assert delegate.paints_edge(header, 1)

@@ -94,6 +94,19 @@ blank glyph. This is asserted by a test, not by a comment.
   question. 9.4 and 9.5 consume it; neither invents its own scheme.
 - If a later Qt release teaches QSS `url()` to read data URIs, the file writes
   become removable without changing a single call site.
+- **A glyph cannot go on `QHeaderView::section`** (measured 2026-09-04,
+  PySide6 6.11.1, offscreen). Bundle 3's 9.4 wanted a hover sort caret and its
+  plan prescribed `QHeaderView::section:hover { image: … }`. A throwaway probe
+  rendered a three-column header with and without that rule and counted
+  non-background pixels: **7172 → 5368**. The `image:` is drawn *instead of*
+  the section's label, not beside it — hovering a header would blank its
+  title. `background-image` with `background-repeat`/`background-position`
+  fails the same way (7172 → 1215, and the glyph never appears). Both spellings
+  were tried; neither ships. The sort-indicator sub-controls
+  `QHeaderView::up-arrow` / `::down-arrow` *do* take a `glyph_url()` and leave
+  the label intact — but they render only on the sorted section, which is the
+  half Qt already gets right. So the hover caret is not buildable in QSS at
+  all, and 9.4 ships without it; see the Bundle 3 spec §4.5.
 
 ## What this does not decide
 

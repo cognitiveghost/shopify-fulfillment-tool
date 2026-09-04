@@ -23,7 +23,9 @@ from PySide6.QtWidgets import (
 
 from gui.background_worker import BackgroundWorker
 from gui.components import ContextualSelectionBar, FilterBar
+from gui.selection_ring import SelectionRingDelegate
 from gui.session_row_delegates import (
+    ROLE_LIVE,
     ROLE_MANUAL,
     ROLE_TOKEN,
     STATUS_ROLES,
@@ -235,6 +237,9 @@ class SessionBrowserWidget(QWidget):
 
         self.sessions_table.setItemDelegateForColumn(2, SessionStatusDelegate(self))
         self.sessions_table.setItemDelegateForColumn(6, PackingProgressDelegate(self))
+        # Columns 2 and 6 have their own delegates and paint the ring
+        # themselves; this closes it on the ones that do not.
+        self.sessions_table.setItemDelegate(SelectionRingDelegate(self))
 
         header = self.sessions_table.horizontalHeader()
         for column, width in ((1, 150), (2, 130), (3, 80), (4, 80), (5, 120), (6, 130)):
@@ -474,8 +479,10 @@ class SessionBrowserWidget(QWidget):
             # Column 2: Status -- painted by SessionStatusDelegate. The role and
             # the authorship flag ride on the item; the delegate owns the paint.
             status = session_info.get("status", "active")
+            role, live = STATUS_ROLES.get(status, ("text_secondary", False))
             status_item = QTableWidgetItem(status.capitalize())
-            status_item.setData(ROLE_TOKEN, STATUS_ROLES.get(status, "text_secondary"))
+            status_item.setData(ROLE_TOKEN, role)
+            status_item.setData(ROLE_LIVE, live)
             status_item.setData(
                 ROLE_MANUAL, bool(session_info.get("status_manually_set", False))
             )

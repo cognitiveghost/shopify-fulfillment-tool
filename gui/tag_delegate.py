@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QStyleOptionViewItem,
 )
 
+from gui.selection_ring import paint_selection_ring
 from gui.theme_manager import apply_font
 from shopify_tool.tag_manager import get_tag_color, parse_tags
 
@@ -33,6 +34,7 @@ class TagDelegate(QStyledItemDelegate):
         opt.text = ""
         style = opt.widget.style() if opt.widget else QApplication.style()
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        paint_selection_ring(painter, option, index)
 
         # Get tags to render
         tags_value = index.data(Qt.DisplayRole)
