@@ -61,6 +61,37 @@ upward, and that direction is frozen.
 already imported (`gui/theme_manager.py` here, `gui/theme.py` in
 `packing-tool`). A shim adapts; it does not decide.
 
+## Status and selection
+
+**Channel** — one of the three independent things a status says. **Colour**
+is the role, **fill** is live-vs-resting, **mark** is person-vs-system. One
+silhouette carries all three. Supersedes the older rule where tint carried
+authorship.
+
+**Live** — a status someone still has to act on, drawn with the role's tint.
+Its opposite is **resting**: terminal or waiting, drawn untinted. A property
+of the state itself, not of the row.
+
+**Mark** — the dot inside a status chip. Solid when a person set the status,
+hollow when the system derived it. A painted disc or ring, never a character.
+`StatusDot` is the mark; it is not a status form on its own.
+
+**Chip** — the one status silhouette: an outlined pill carrying a mark and a
+label. Distinguished from a **filter chip**, which is interactive and
+dismissible, and from the **edge** variant, a lane marker that carries no
+status of its own.
+
+**Selection ring** — the closed rectangle around a selected table row. Its
+horizontal sides come from QSS, its two end caps from a delegate, because
+`QTableView::item` styles cells and a QSS left border would repeat at every
+column boundary. Distinguished from the **status edge**, the 3px role-coloured
+bar on the row's leftmost visible column, which insets inside the ring.
+
+**State panel** — the widget a screen shows instead of its table when there
+is nothing to show: nothing-loaded, working, no-results, or failed. Names the
+cause, names the file or filter that caused it, and offers the action that
+resolves it.
+
 ## Repos
 
 **Canonical source** — `packing-tool`. Every `shared/` change is authored

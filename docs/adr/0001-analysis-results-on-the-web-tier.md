@@ -1,8 +1,25 @@
 # ADR 0001 — Analysis Results renders on a web tier
 
-- **Status:** accepted, 2026-09-03
+- **Status:** accepted, 2026-09-03. **Build gate passed, 2026-09-04.**
 - **Deciders:** repo owner
 - **Scope:** `shopify-fulfillment-tool` only. Packing Tool stays entirely Qt.
+
+## Build gate outcome (2026-09-04)
+
+This decision was conditional on a frozen Windows build actually shipping a
+working Chromium. It does. Recorded here because it is the one fact Bundles
+11–14 are gated on, and it would otherwise live only in a merged PR body.
+
+- PyInstaller `--onedir --windowed` on `windows-latest` collects
+  `QTWebEngineProcess.exe` and its resources. A CI step now guards it on
+  every build, so a silent regression fails the build rather than the RDP
+  session.
+- Qt 6.11.1 / Chromium 140.0.7339.225. Startup 0.43s, view-to-loaded 0.10s
+  measured headless.
+- **Cost, measured not estimated:** 716 MB / 4,095 files unzipped. The
+  shipped zip goes 128 MiB → 294 MiB (+167 MiB, ×2.3). Accepted by the repo
+  owner at merge (PR #314).
+- Verified on Windows over RDP by the repo owner: build works, gate renders.
 
 ## Decision
 
