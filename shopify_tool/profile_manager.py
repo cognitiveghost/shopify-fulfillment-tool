@@ -86,7 +86,7 @@ class ProfileManager:
     # Class-level constants for metadata cache
     METADATA_CACHE_TIMEOUT_SECONDS = 300  # 5 minutes
 
-    def __init__(self, base_path: str | None = None):
+    def __init__(self, base_path: str | None = None, require_connection: bool = True):
         """Initialize ProfileManager with automatic environment detection.
 
         Args:
@@ -95,9 +95,14 @@ class ProfileManager:
                        1. FULFILLMENT_SERVER_PATH environment variable (dev mode)
                        2. Path saved via the Server Connection UI
                        3. Default production path (\\\\192.168.88.101\\...)
+            require_connection: When False, an unreachable share sets
+                       is_network_available to False and returns instead of
+                       raising. Every path this object publishes is still a
+                       real Path -- the caller's disabled controls are the
+                       guard, not a None check here.
 
         Raises:
-            NetworkError: If file server is not accessible
+            NetworkError: If file server is not accessible and require_connection is True
         """
         # Auto-detect base path if not provided
         if base_path is None:
@@ -132,13 +137,20 @@ class ProfileManager:
         self.is_network_available = self._test_connection()
 
         if not self.is_network_available:
-            raise NetworkError(
-                f"Cannot connect to file server at {self.base_path}\n\n"
-                f"Please check:\n"
-                f"1. Network connection\n"
-                f"2. File server is online\n"
-                f"3. Path is correct and accessible"
-            )
+            if require_connection:
+                raise NetworkError(
+                    f"Cannot connect to file server at {self.base_path}\n\n"
+                    f"Please check:\n"
+                    f"1. Network connection\n"
+                    f"2. File server is online\n"
+                    f"3. Path is correct and accessible"
+                )
+            # The caller has a shell to render the failure in. Every path
+            # above is still real, so nothing downstream becomes None -- the
+            # controls that would touch the share are disabled instead, and
+            # that disabling is the guard. Spec §5.1.
+            logger.warning(f"Opening without a reachable server: {self.base_path}")
+            return
 
         logger.info(f"ProfileManager initialized with base path: {self.base_path}")
 

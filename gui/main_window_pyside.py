@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 
 import pandas as pd
-from PySide6.QtCore import QModelIndex, QPoint, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QModelIndex, QPoint, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
@@ -25,10 +25,9 @@ from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
 from gui.worker import Worker
 from shared.icons import icon
-from shared.server_connection import prompt_for_recovery_path
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
-from shopify_tool.profile_manager import NetworkError, ProfileManager
+from shopify_tool.profile_manager import ProfileManager
 from shopify_tool.session_manager import SessionManager
 from shopify_tool.tag_manager import _normalize_tag_categories
 from shopify_tool.undo_manager import UndoManager
@@ -61,6 +60,10 @@ class MainWindow(QMainWindow):
         actions_handler (ActionsHandler): Handles user actions like running
             analysis or generating reports.
     """
+
+    # One boolean, one signal, and every control that would touch the share is
+    # driven from it. See CONTEXT.md, "Connection state".
+    connectionChanged = Signal(bool)
 
     def __init__(self):
         """Initializes the MainWindow, sets up UI, and connects signals."""
@@ -123,6 +126,13 @@ class MainWindow(QMainWindow):
         self.connect_signals()
         self.setup_logging()
 
+        # Emitted once the widgets exist, so every slot has something to
+        # disable. Re-emitted by the Server Connection dialog on success.
+        self.connectionChanged.emit(self.is_connected())
+
+    def is_connected(self) -> bool:
+        return bool(getattr(self.profile_manager, "is_network_available", False))
+
     def _init_managers(self):
         """Initialize ProfileManager, SessionManager, and GroupsManager for the new architecture."""
         # ProfileManager now auto-detects environment:
@@ -131,25 +141,20 @@ class MainWindow(QMainWindow):
         # 3. Falls back to default production path
         # This allows seamless switching between dev and production without code changes
 
-        # Initialize ProfileManager with auto-detection, offering a
-        # path-recovery prompt on NetworkError instead of exiting immediately.
-        while True:
-            try:
-                self.profile_manager = ProfileManager()  # Auto-detects from environment
-                break
-            except NetworkError as e:
-                if prompt_for_recovery_path(self, str(e), "ShopifyTool"):
-                    continue
-                QApplication.quit()
-                return
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Initialization Error",
-                    f"Failed to initialize profile managers:\n{e!s}",
-                )
-                QApplication.quit()
-                return
+        # An unreachable share no longer quits the app -- the window opens
+        # degraded and connectionChanged(False) drives the disabled controls.
+        # The recovery prompt is still reachable: it is what "Server
+        # connection..." in the overflow opens. ADR 0004.
+        try:
+            self.profile_manager = ProfileManager(require_connection=False)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Initialization Error",
+                f"Failed to initialize profile managers:\n{e!s}",
+            )
+            QApplication.quit()
+            return
 
         try:
             self.session_manager = SessionManager(self.profile_manager)
