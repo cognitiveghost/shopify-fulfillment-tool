@@ -1,3 +1,4 @@
+import csv
 import json
 import logging
 import os
@@ -370,6 +371,43 @@ def validate_csv_headers(file_path, required_columns, delimiter=","):
             f"Unexpected error validating CSV headers for {file_path}",
         )
         return False, [f"An unexpected error occurred: {e}"]
+
+
+def read_csv_headers(file_path, delimiter=",") -> list[str]:
+    """The column names a CSV actually has. Used to tell someone which
+    columns are there when the one they need is not.
+
+    Only ever called on the branch where the file already failed to
+    validate, so every way of being unreadable -- missing, a directory, a
+    dropped UNC share -- has to end in an empty list rather than an
+    exception. validate_csv_headers has the same floor for the same reason.
+    """
+    try:
+        return pd.read_csv(
+            file_path, nrows=0, delimiter=delimiter, encoding="utf-8-sig"
+        ).columns.tolist()
+    except Exception:
+        logger.exception(f"Could not read CSV headers for {file_path}")
+        return []
+
+
+def count_csv_rows(file_path, delimiter=",") -> int:
+    """Data rows, excluding the header.
+
+    Reads with csv.reader rather than pandas: this runs on every successful
+    validation, and for orders it would otherwise be the second full parse
+    of a file already in memory. Not a line count -- a Shopify export puts
+    newlines inside quoted address and note fields, and counting lines
+    over-reports those files.
+    """
+    try:
+        with open(file_path, encoding="utf-8-sig", newline="") as handle:
+            rows = csv.reader(handle, delimiter=delimiter)
+            next(rows, None)  # header
+            return sum(1 for row in rows if any(field.strip() for field in row))
+    except Exception:
+        logger.exception(f"Could not count rows in {file_path}")
+        return 0
 
 
 def _validate_and_prepare_inputs(

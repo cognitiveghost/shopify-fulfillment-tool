@@ -65,7 +65,7 @@ class SettingsWindow(QDialog):
     # twice already and an index would silently point at a different page.
     NAV_SETTINGS_KEY = "settings_hub/last_page"
 
-    def __init__(self, client_id, client_config, profile_manager, analysis_df=None, parent=None):
+    def __init__(self, client_id, client_config, profile_manager, analysis_df=None, parent=None, initial_page=None):
         """Initializes the SettingsWindow.
 
         Args:
@@ -77,8 +77,13 @@ class SettingsWindow(QDialog):
                 DataFrame, used for populating filter value dropdowns.
                 Defaults to None.
             parent (QWidget, optional): The parent widget. Defaults to None.
+            initial_page (str, optional): Nav entry to open on, by the same
+                name SETTINGS_NAV_GROUPS uses. A caller that already knows
+                which page answers the user's problem says so; everyone else
+                gets the last page they were on. Defaults to None.
         """
         super().__init__(parent)
+        self._initial_page = initial_page
         self.client_id = client_id
         self.config_data = json.loads(json.dumps(client_config))
         self.profile_manager = profile_manager
@@ -229,10 +234,10 @@ class SettingsWindow(QDialog):
         return -1
 
     def _restore_nav_selection(self) -> None:
-        """Select the last-viewed page, or the first entry if it is gone."""
-        wanted = QSettings("ShopifyFulfillmentTool", "FulfillmentApp").value(
-            self.NAV_SETTINGS_KEY
-        )
+        """Select the requested page, else the last-viewed one, else the first."""
+        wanted = self._initial_page or QSettings(
+            "ShopifyFulfillmentTool", "FulfillmentApp"
+        ).value(self.NAV_SETTINGS_KEY)
         for row in range(self._settings_nav.count()):
             item = self._settings_nav.item(row)
             if item.text() == wanted and item.flags() & Qt.ItemFlag.ItemIsSelectable:

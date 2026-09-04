@@ -4,11 +4,18 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from gui.theme_manager import get_theme_manager
 from shopify_tool import core
+
+# Folder mode used to ask for these with two checkboxes each, in the widget
+# cluster Bundle 5 deleted. Spec §10.3 puts them back inside the loaded slot;
+# until that slot UI exists they are the behaviour a warehouse actually wants
+# -- pick a folder, get everything in it, once each.
+# ponytail: constants, not settings. Bind them to the slot's toggles when
+# §10.3's in-slot controls get built.
+_FOLDER_SCAN_RECURSIVE = True
+_FOLDER_REMOVE_DUPLICATES = True
 
 
 class FileHandler:
@@ -49,7 +56,6 @@ class FileHandler:
             return
 
         self.mw.orders_file_path = filepath
-        self.mw.orders_file_path_label.setText(os.path.basename(filepath))
         self.log.info(f"Orders file selected: {filepath}")
 
         # Get delimiter from config (default to comma for Shopify exports)
@@ -155,7 +161,6 @@ class FileHandler:
             return
 
         self.mw.stock_file_path = filepath
-        self.mw.stock_file_path_label.setText(os.path.basename(filepath))
         self.log.info(f"Stock file selected: {filepath}")
 
         # Get delimiter from config
@@ -301,8 +306,7 @@ class FileHandler:
                         if reply != QMessageBox.Yes:
                             # Cancel: clear the stock selection
                             self.mw.stock_file_path = None
-                            self.mw.stock_file_path_label.setText("Stock file not selected")
-                            self.mw.stock_file_status_label.setText("")
+                            self.mw.stock_slot.clear()
                             self.check_files_ready()
                             return
 
@@ -347,7 +351,7 @@ class FileHandler:
             )
         return False, ""
 
-    def validate_file(self, file_type):
+    def validate_file(self, file_type, summary: str | None = None):
         """Validates that a selected CSV file contains the required headers.
 
         It reads the required column names from the client-specific configuration
@@ -358,6 +362,9 @@ class FileHandler:
         Args:
             file_type (str): The type of file to validate, either "orders" or
                              "stock".
+            summary (str, optional): What the loaded slot should say instead
+                of the single-file row/column count. Folder mode passes the
+                merge's own summary, which the merged file cannot describe.
         """
         # Get client config from main window
         if not self.mw.current_client_id or not self.mw.current_client_config:
@@ -378,7 +385,6 @@ class FileHandler:
 
         if file_type == "orders":
             path = self.mw.orders_file_path
-            label = self.mw.orders_file_status_label
             delimiter = ","
 
             # Get CSV column names from v2 mappings
@@ -403,7 +409,6 @@ class FileHandler:
 
         else:  # stock
             path = self.mw.stock_file_path
-            label = self.mw.stock_file_status_label
             delimiter = client_config.get("settings", {}).get(
                 "stock_csv_delimiter", ";"
             )
@@ -432,18 +437,30 @@ class FileHandler:
             path, required_cols, delimiter
         )
 
-        theme = get_theme_manager().get_current_theme()
+        slot = (
+            self.mw.orders_slot if file_type == "orders" else self.mw.stock_slot
+        )
         if is_valid:
-            label.setText("✓")
-            label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
-            label.setToolTip("File is valid.")
+            slot.set_loaded(path, summary or self._summary_for(path, required_cols))
             self.log.info(f"'{file_type}' file is valid.")
         else:
-            label.setText("✗")
-            label.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
-            tooltip_text = f"Missing columns: {', '.join(missing_cols)}"
-            label.setToolTip(tooltip_text)
-            self.log.warning(f"'{file_type}' file is invalid. {tooltip_text}")
+            present = core.read_csv_headers(path, delimiter)
+            slot.set_invalid(path, missing_cols, present)
+            self.log.warning(
+                f"'{file_type}' file is invalid. Missing columns: "
+                f"{', '.join(missing_cols)}"
+            )
+
+    def _summary_for(self, path, required_cols: list[str]) -> str:
+        """"1 842 rows · 4 columns matched" -- what the loaded slot shows.
+
+        A row count is the one number that tells a supervisor they picked
+        this morning's export and not last Friday's.
+        """
+        rows = core.count_csv_rows(path)
+        return f"{rows:,} rows · {len(required_cols)} columns matched".replace(
+            ",", " "
+        )
 
     def check_files_ready(self):
         """Checks if both orders and stock files are selected and valid.
@@ -452,67 +469,64 @@ class FileHandler:
         method enables the main 'Run Analysis' button in the UI. Otherwise,
         the button remains disabled.
         """
-        orders_ok = (
-            self.mw.orders_file_path and self.mw.orders_file_status_label.text() == "✓"
-        )
-        stock_ok = (
-            self.mw.stock_file_path and self.mw.stock_file_status_label.text() == "✓"
-        )
+        orders_ok = self.mw.orders_slot.is_valid
+        stock_ok = self.mw.stock_slot.is_valid
         if orders_ok and stock_ok:
             self.mw.run_analysis_button.setEnabled(True)
             self.log.info("Both files are validated and ready for analysis.")
         else:
             self.mw.run_analysis_button.setEnabled(False)
+        return orders_ok and stock_ok
 
-    # ============================================================
-    # Folder Loading Support (New)
-    # ============================================================
+    def accept_dropped_path(self, file_type: str, path: str) -> None:
+        """A file or a folder was dropped on a FileSlot -- load it in place.
 
-    def on_orders_select_clicked(self):
-        """Handle orders select button click (adapts to mode)."""
-        is_folder_mode = self.mw.orders_folder_radio.isChecked()
-
-        if is_folder_mode:
-            self.select_orders_folder()
-        else:
-            self.select_orders_file()
-
-    def on_stock_select_clicked(self):
-        """Handle stock select button click (adapts to mode)."""
-        is_folder_mode = self.mw.stock_folder_radio.isChecked()
-
-        if is_folder_mode:
-            self.select_stock_folder()
-        else:
-            self.select_stock_file()
-
-    def select_orders_folder(self):
+        Reuses validate_file() / load_folder(), the same routes the two
+        buttons run after a selection, rather than a third validation path.
+        A folder is a supported gesture, not a malformed file: without this
+        branch it reaches pandas and raises IsADirectoryError.
         """
-        Handle orders folder selection with multiple CSV files.
-
-        Workflow:
-        1. Open folder dialog
-        2. Scan for CSV files
-        3. Validate all files
-        4. Show preview
-        5. Merge files
-        6. Save to temp
-        7. Store merged path
-        """
-        # 1. Open folder dialog
-        folder_path = QFileDialog.getExistingDirectory(
-            self.mw, "Select Orders Folder", "", QFileDialog.ShowDirsOnly
-        )
-
-        if not folder_path:
+        if os.path.isdir(path):
+            self.load_folder(file_type, path)
             return
 
-        self.log.info(f"Orders folder selected: {folder_path}")
+        if file_type == "orders":
+            self.mw.orders_file_path = path
+        else:
+            self.mw.stock_file_path = path
+        self.validate_file(file_type)
+        self.check_files_ready()
 
-        # 2. Scan for CSV files
-        recursive = self.mw.orders_recursive_checkbox.isChecked()
-        csv_files = self.scan_folder_for_csv(folder_path, recursive)
+    # ============================================================
+    # Folder Loading Support
+    # ============================================================
 
+    def select_folder(self, file_type: str) -> None:
+        """Pick a folder of CSVs for this slot, then load it.
+
+        The slot's own `Choose folder…` button is the only way in. There
+        used to be two of these, one per file type, differing in nothing but
+        which widgets they wrote to; now that both write to a FileSlot there
+        is nothing left to differ in.
+        """
+        label = "Orders" if file_type == "orders" else "Stock"
+        folder_path = QFileDialog.getExistingDirectory(
+            self.mw, f"Select {label} Folder", "", QFileDialog.ShowDirsOnly
+        )
+        if not folder_path:
+            return
+        self.load_folder(file_type, folder_path)
+
+    def load_folder(self, file_type: str, folder_path: str) -> None:
+        """Scan, validate, merge and load a folder of CSVs into a slot.
+
+        Split from select_folder so a dropped folder takes the same route as
+        a picked one -- the slot accepts either gesture, and they must not
+        be able to drift apart.
+        """
+        self.log.info(f"{file_type} folder selected: {folder_path}")
+
+        csv_files = self.scan_folder_for_csv(folder_path, _FOLDER_SCAN_RECURSIVE)
         if not csv_files:
             QMessageBox.warning(
                 self.mw,
@@ -521,12 +535,9 @@ class FileHandler:
             )
             return
 
-        self.log.info(f"Found {len(csv_files)} CSV files")
-
-        # 3. Validate all files
         try:
             valid_files, invalid_files, total_rows = self.validate_multiple_files(
-                csv_files, "orders"
+                csv_files, file_type
             )
         except Exception as e:
             QMessageBox.critical(
@@ -534,191 +545,71 @@ class FileHandler:
             )
             return
 
-        # 4. Check if any valid files
         if not valid_files:
-            msg = f"All {len(csv_files)} files are invalid.\n\n"
-            msg += "Invalid files:\n"
-            for filepath, missing in invalid_files[:5]:  # Show first 5
+            msg = f"All {len(csv_files)} files are invalid.\n\nInvalid files:\n"
+            for filepath, missing in invalid_files[:5]:
                 msg += (
                     f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
                 )
-
             QMessageBox.critical(self.mw, "No Valid Files", msg)
             return
 
-        # 5. Show preview and confirm
-        if not self.show_file_preview("orders", valid_files, invalid_files, total_rows):
+        if not self.show_file_preview(
+            file_type, valid_files, invalid_files, total_rows
+        ):
             return  # User cancelled
 
-        # 6. Merge files
         try:
-            merged_path = self.merge_and_save_files(valid_files, "orders", folder_path)
+            merged_path = self.merge_and_save_files(
+                valid_files, file_type, folder_path
+            )
         except Exception as e:
             QMessageBox.critical(
                 self.mw, "Merge Failed", f"Failed to merge files:\n{e!s}"
             )
             return
 
-        # 7. Store merged path and update UI
-        self.mw.orders_file_path = merged_path
-        self.mw.orders_source_files = valid_files  # Store for reference
+        if file_type == "orders":
+            self.mw.orders_file_path = merged_path
+            self.mw.orders_source_files = valid_files
+            self._remember_orders_dataframe(merged_path)
+        else:
+            self.mw.stock_file_path = merged_path
+            self.mw.stock_source_files = valid_files
 
-        # Load and store original orders DataFrame for column discovery
+        files = f"{len(valid_files)} files merged"
+        rows = f"{total_rows:,} rows".replace(",", " ")
+        summary = f"{files} · {rows}"
+        if invalid_files:
+            summary += f" · {len(invalid_files)} skipped"
+
+        self.validate_file(file_type, summary=summary)
+        self.check_files_ready()
+        self.log.info(
+            f"Successfully merged {len(valid_files)} files into {merged_path}"
+        )
+
+    def _remember_orders_dataframe(self, path: str) -> None:
+        """Keep the merged orders in memory for column discovery.
+
+        Failing here must not fail the merge: the file on disk is good, and
+        the only thing lost is the settings screen's column suggestions.
+        """
         try:
-            import pandas as pd
-
             delimiter = self.mw.active_profile_config.get("settings", {}).get(
                 "orders_csv_delimiter", ","
             )
-            orders_df = pd.read_csv(
-                merged_path, delimiter=delimiter, encoding="utf-8-sig"
-            )
+            orders_df = pd.read_csv(path, delimiter=delimiter, encoding="utf-8-sig")
             self.mw.last_loaded_orders_df = orders_df.copy()
             self.log.info(
-                f"Loaded merged orders DataFrame: {len(orders_df)} rows, {len(orders_df.columns)} columns"
+                f"Loaded merged orders DataFrame: {len(orders_df)} rows, "
+                f"{len(orders_df.columns)} columns"
             )
         except Exception as e:
             self.log.warning(
                 f"Failed to load merged orders DataFrame for column discovery: {e}"
             )
-            # Don't fail the merge, just skip storing the DataFrame
             self.mw.last_loaded_orders_df = None
-
-        # Update UI
-        self.mw.orders_file_path_label.setText(
-            f"{len(valid_files)} files merged ({total_rows} rows)"
-        )
-
-        # Update file list widget
-        self.mw.orders_file_list_widget.clear()
-        for filepath in valid_files:
-            item = QListWidgetItem(f"{os.path.basename(filepath)}")
-            item.setForeground(QColor("green"))
-            self.mw.orders_file_list_widget.addItem(item)
-
-        for filepath, missing in invalid_files:
-            item = QListWidgetItem(
-                f"{os.path.basename(filepath)} (missing: {', '.join(missing)})"
-            )
-            item.setForeground(QColor("red"))
-            self.mw.orders_file_list_widget.addItem(item)
-
-        self.mw.orders_file_count_label.setText(
-            f"Total: {len(valid_files)} valid, {len(invalid_files)} invalid, {total_rows} rows"
-        )
-
-        # Validate merged file
-        self.validate_file("orders")
-
-        # Check if ready to run analysis
-        self.check_files_ready()
-
-        self.log.info(
-            f"Successfully merged {len(valid_files)} files into {merged_path}"
-        )
-
-    def select_stock_folder(self):
-        """
-        Handle stock folder selection with multiple CSV files.
-
-        Workflow is same as select_orders_folder but for stock files.
-        """
-        # 1. Open folder dialog
-        folder_path = QFileDialog.getExistingDirectory(
-            self.mw, "Select Stock Folder", "", QFileDialog.ShowDirsOnly
-        )
-
-        if not folder_path:
-            return
-
-        self.log.info(f"Stock folder selected: {folder_path}")
-
-        # 2. Scan for CSV files
-        recursive = self.mw.stock_recursive_checkbox.isChecked()
-        csv_files = self.scan_folder_for_csv(folder_path, recursive)
-
-        if not csv_files:
-            QMessageBox.warning(
-                self.mw,
-                "No Files Found",
-                f"No CSV files found in folder:\n{folder_path}",
-            )
-            return
-
-        self.log.info(f"Found {len(csv_files)} CSV files")
-
-        # 3. Validate all files
-        try:
-            valid_files, invalid_files, total_rows = self.validate_multiple_files(
-                csv_files, "stock"
-            )
-        except Exception as e:
-            QMessageBox.critical(
-                self.mw, "Validation Error", f"Error validating files:\n{e!s}"
-            )
-            return
-
-        # 4. Check if any valid files
-        if not valid_files:
-            msg = f"All {len(csv_files)} files are invalid.\n\n"
-            msg += "Invalid files:\n"
-            for filepath, missing in invalid_files[:5]:  # Show first 5
-                msg += (
-                    f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
-                )
-
-            QMessageBox.critical(self.mw, "No Valid Files", msg)
-            return
-
-        # 5. Show preview and confirm
-        if not self.show_file_preview("stock", valid_files, invalid_files, total_rows):
-            return  # User cancelled
-
-        # 6. Merge files
-        try:
-            merged_path = self.merge_and_save_files(valid_files, "stock", folder_path)
-        except Exception as e:
-            QMessageBox.critical(
-                self.mw, "Merge Failed", f"Failed to merge files:\n{e!s}"
-            )
-            return
-
-        # 7. Store merged path and update UI
-        self.mw.stock_file_path = merged_path
-        self.mw.stock_source_files = valid_files  # Store for reference
-
-        # Update UI
-        self.mw.stock_file_path_label.setText(
-            f"{len(valid_files)} files merged ({total_rows} rows)"
-        )
-
-        # Update file list widget
-        self.mw.stock_file_list_widget.clear()
-        for filepath in valid_files:
-            item = QListWidgetItem(f"{os.path.basename(filepath)}")
-            item.setForeground(QColor("green"))
-            self.mw.stock_file_list_widget.addItem(item)
-
-        for filepath, missing in invalid_files:
-            item = QListWidgetItem(
-                f"{os.path.basename(filepath)} (missing: {', '.join(missing)})"
-            )
-            item.setForeground(QColor("red"))
-            self.mw.stock_file_list_widget.addItem(item)
-
-        self.mw.stock_file_count_label.setText(
-            f"Total: {len(valid_files)} valid, {len(invalid_files)} invalid, {total_rows} rows"
-        )
-
-        # Validate merged file
-        self.validate_file("stock")
-
-        # Check if ready to run analysis
-        self.check_files_ready()
-
-        self.log.info(
-            f"Successfully merged {len(valid_files)} files into {merged_path}"
-        )
 
     def scan_folder_for_csv(
         self, folder_path: str, recursive: bool = False, pattern: str = "*.csv"
@@ -881,11 +772,7 @@ class FileHandler:
                 msg += f"  ... and {len(invalid_files) - 5} more\n"
             msg += "\n"
 
-        # Duplicate warning (if applicable)
-        remove_duplicates = getattr(
-            self.mw, f"{file_type}_remove_duplicates_checkbox", None
-        )
-        if remove_duplicates and remove_duplicates.isChecked():
+        if _FOLDER_REMOVE_DUPLICATES:
             msg += "Duplicates will be removed (keep first occurrence)\n\n"
 
         msg += f"Continue with {len(valid_files)} valid files?"
@@ -935,8 +822,6 @@ class FileHandler:
             for csv_col, internal_name in orders_mappings.items():
                 if internal_name in ["Order_Number", "SKU"]:
                     duplicate_keys.append(csv_col)
-
-            remove_dups_checkbox = self.mw.orders_remove_duplicates_checkbox
         else:  # stock
             delimiter = config.get("settings", {}).get("stock_csv_delimiter", ";")
 
@@ -957,21 +842,20 @@ class FileHandler:
                     break
 
             duplicate_keys = [sku_col_name] if sku_col_name else []
-            remove_dups_checkbox = self.mw.stock_remove_duplicates_checkbox
 
         # Merge files
         self.log.info(f"Merging {len(file_paths)} {file_type} files...")
         self.log.info(f"Duplicate keys for {file_type}: {duplicate_keys}")
-        self.log.info(f"Remove duplicates: {remove_dups_checkbox.isChecked()}")
+        self.log.info(f"Remove duplicates: {_FOLDER_REMOVE_DUPLICATES}")
 
         merged_df = merge_csv_files(
             file_paths,
             delimiter=delimiter,
             dtype_dict=dtype_dict,
             add_source_column=True,
-            remove_duplicates=remove_dups_checkbox.isChecked(),
+            remove_duplicates=_FOLDER_REMOVE_DUPLICATES,
             duplicate_keys=duplicate_keys
-            if (remove_dups_checkbox.isChecked() and duplicate_keys)
+            if (_FOLDER_REMOVE_DUPLICATES and duplicate_keys)
             else None,
         )
 

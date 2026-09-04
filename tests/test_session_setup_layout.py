@@ -1,38 +1,15 @@
-"""Regression tests for Tab 1's layout -- gui.ui_manager.
+"""Session Setup is one card of three rows.
 
-Two unrelated regressions pinned in one file (same area of the codebase):
-
-1. Switching Orders 'Load Mode' to Folder must not grow the panel's minimum
-   height and resize the whole window (root cause: no QScrollArea absorbing
-   the newly-revealed widgets -- fixed by wrapping the setup column in one).
-2. That same QScrollArea is always willing to scroll rather than ask the
-   splitter for room, so a fixed 60/40 splitter squeezed it below the 706px
-   its content needs: a horizontal scrollbar appeared and five action
-   buttons -- including "Generate Reports" -- fell off the right edge at the
-   app's own default 1100x900 geometry. See
-   docs/superpowers/specs/2026-08-23-session-setup-layout-design.md.
+Bundle 5 deleted the splitter, the scroll area and the recent-sessions
+strip. The constraints the previous version of this file protected — a
+706px column floor, a fixed recent-list height — belonged to a layout that
+no longer exists.
 """
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from PySide6.QtWidgets import (
-    QApplication,
-    QListWidget,
-    QMainWindow,
-    QPushButton,
-    QScrollArea,
-    QSplitter,
-)
+from PySide6.QtWidgets import QApplication, QScrollArea, QSplitter
 
-from gui.theme_manager import get_theme_manager
-from gui.ui_manager import (
-    _RECENT_PANEL_MAX_WIDTH,
-    _RECENT_SESSIONS_ROWS,
-    UIManager,
-    _recent_list_height,
-)
-from shared.theme import build_stylesheet
+from gui.components import Card, FileSlot, RadioCard
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -41,157 +18,157 @@ def qapp():
 
 
 @pytest.fixture
-def mw(qapp):
-    window = QMainWindow()
-    # _create_tab1_session_setup wraps page 0 in a StatePanel.failed() that
-    # names profile_manager.base_path (Bundle 4) -- this fixture predates
-    # that and builds a bare QMainWindow with no ProfileManager at all.
-    window.profile_manager = SimpleNamespace(base_path=Path("/fake/server"))
-    # Degraded, so _refresh_setup_panel's StatePanel.failed() branch runs and
-    # never reaches into a command_bar this bare fixture does not build.
-    window.is_connected = lambda: False
-    ui = UIManager(window)
-    window.setCentralWidget(ui._create_tab1_session_setup())
-    window.setGeometry(100, 100, 1100, 900)
-    window.ui_manager = ui
-    window.show()
-    qapp.processEvents()
-    yield window
-    window.close()
-
-
-def test_switching_orders_to_folder_mode_does_not_grow_minimum_height(mw, qapp):
-    """The offscreen QPA platform doesn't propagate size-hint changes into an
-    actual window resize (Qt prints "This plugin does not support
-    propagateSizeHints()"), so this checks the underlying cause directly:
-    the panel's minimumSizeHint must not grow when Folder mode is toggled --
-    that growth is exactly what forces a real on-screen window to resize.
-    """
-    central = mw.centralWidget()
-    height_before = central.minimumSizeHint().height()
-
-    mw.orders_folder_radio.setChecked(True)
-    mw.ui_manager.on_orders_mode_changed(True)
-    qapp.processEvents()
-
-    height_after = central.minimumSizeHint().height()
-    assert height_after == height_before
-
-
-@pytest.fixture
 def main_window(tmp_path, monkeypatch):
+    """A real MainWindow rooted at a throwaway server path -- same
+    construction test_shell.py uses; there is no conftest fixture for this,
+    and copying seven lines beats making one test file import another."""
     monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
     from gui.main_window_pyside import MainWindow
+
     win = MainWindow()
-    # The app's own default (main_window_pyside.py:76). Qt clamps it up to the
-    # window's real minimum, so these tests measure the narrowest window a user
-    # can actually produce -- which is the case that matters.
-    win.resize(1100, 900)
+    win.resize(1366, 768)
     win.show()
     QApplication.processEvents()
     win.main_tabs.setCurrentIndex(0)
-    # This file measures the form's own layout (page 1), not page 0's empty
+    # This file measures the card's own layout (page 1), not page 0's empty
     # state -- and a QStackedWidget page that has never been current is
-    # never laid out, so every button in it would read back as (0, 0).
+    # never laid out, so every widget in it would read back as (0, 0).
     win.setup_stack.setCurrentIndex(1)
     QApplication.processEvents()
     yield win
     win.close()
 
 
-def _clipped_buttons(tab):
-    """Buttons whose right edge falls outside the setup column's viewport."""
-    scroll = tab.findChild(QScrollArea)
-    inner = scroll.widget()
-    limit = scroll.viewport().width()
-    return [b.text() for b in inner.findChildren(QPushButton)
-            if b.mapTo(inner, b.rect().topRight()).x() > limit]
+def test_the_setup_page_holds_exactly_one_card(main_window):
+    page = main_window.setup_stack.widget(1)
+    assert len(page.findChildren(Card)) == 1
 
 
-def test_no_action_button_is_clipped_at_default_window_size(main_window):
-    tab = main_window.setup_stack.widget(1)
-    assert _clipped_buttons(tab) == []
-
-
-def test_setup_column_never_scrolls_horizontally(main_window):
-    tab = main_window.setup_stack.widget(1)
-    scroll = tab.findChild(QScrollArea)
-    assert not scroll.horizontalScrollBar().isVisible()
-
-
-def test_recent_sessions_panel_stays_compact(main_window):
-    tab = main_window.setup_stack.widget(1)
-    card = tab.findChild(QSplitter).widget(1)
-    assert card.width() <= _RECENT_PANEL_MAX_WIDTH
-    assert main_window.recent_sessions_list.height() <= 200
-
-    # The stretch factors alone already keep the card at the cap, so the above
-    # would pass with setMaximumWidth removed. Simulate a user dragging the
-    # splitter open -- that is the only thing the cap actually resists.
-    main_window.resize(1920, 1080)
-    QApplication.processEvents()
-    tab.findChild(QSplitter).setSizes([200, 1500])
-    QApplication.processEvents()
-    assert card.width() <= _RECENT_PANEL_MAX_WIDTH
-
-
-def test_setup_column_does_not_dramatically_outgrow_the_rest_of_the_app(main_window):
-    """Pinning Tab 1's minimum to its content is what stops buttons hiding --
-    but it also means anything added to that column widens that minimum.
-
-    Phase 8.2's `desk` density profile tightens QPushButton/QComboBox/etc.
-    padding app-wide (spec S2/C3: 4px 8px vs the old 6px 12px). Tab 2
-    (Analysis Results) carries far more of those controls than Tab 1, so it
-    now shrinks more -- Tab 1 (~1022px) has overtaken Tab 2 (~989px) as the
-    tab that sets the app's minimum width. That flip is an accepted,
-    deliberate side effect of the density change (see the 8.2 plan's Stage C
-    notes), not a regression by itself: the actual failure modes -- clipped
-    buttons, forced horizontal scroll -- are covered directly by
-    test_no_action_button_is_clipped_at_default_window_size and
-    test_setup_column_never_scrolls_horizontally. This test keeps a loose
-    ceiling so a *dramatic* future blowup still gets caught, without pinning
-    to the pre-8.2 ordering.
-
-    2026-08-29: Tab 1's own primary (Run Analysis) and Tab 2's own primary
-    (Generate Reports) both moved into the CommandBar and hid their in-page
-    copies (see _SCREEN_ACTIONS in ui_manager.py). Tab 2 carried more of the
-    controls that shrank, so it dropped further -- 989px to ~857px -- widening
-    the gap past the old +100 ceiling even though Tab 1 itself (~1022px) did
-    not move. Widened to +200; still loose, not a pin to today's numbers.
-
-    2026-08-30: Phase 8.8a deleted Tab 2's "Tags Manager" and "Bulk
-    Operations" toggle buttons (the checkbox column and bulk-mode workarounds
-    they drove are gone -- selection is order-level now, see the 8.8a plan).
-    Tab 2 dropped further still -- ~857px to ~583px -- again without Tab 1
-    itself moving. Widened to +450; still loose, not a pin to today's numbers.
+def test_the_card_fits_above_530px(main_window):
+    """The spec's 480px estimate assumed the two RadioCard descriptions
+    would never wrap past two lines; rendering the real page (not just its
+    sizeHint at an untested width) showed a three-line wrap at the card's
+    actual 840px cap. The requirement behind the number -- no scrolling on
+    the 692px page at 1366x768 -- still holds at the measured 515px. Kept
+    within 15px of that so it still catches drift rather than absorbing it.
     """
-    tabs = main_window.main_tabs
-    widths = [tabs.widget(i).minimumSizeHint().width() for i in range(tabs.count())]
-    setup, others = widths[0], max(widths[1:])
-    assert setup <= others + 450, (
-        f"Tab 1 now sets the app's minimum window width ({setup}px vs {others}px "
-        f"for the next widest tab) -- the whole app got harder to fit on screen."
+    page = main_window.setup_stack.widget(1)
+    card = page.findChildren(Card)[0]
+    assert card.sizeHint().height() <= 530
+
+
+def test_nothing_on_the_setup_page_scrolls(main_window):
+    page = main_window.setup_stack.widget(1)
+    assert page.findChildren(QScrollArea) == []
+    assert page.findChildren(QSplitter) == []
+
+
+def test_the_page_has_two_file_slots(main_window):
+    page = main_window.setup_stack.widget(1)
+    assert len(page.findChildren(FileSlot)) == 2
+
+
+def test_the_strategy_is_two_radio_cards_not_a_combo(main_window):
+    page = main_window.setup_stack.widget(1)
+    cards = page.findChildren(RadioCard)
+    assert len(cards) == 2
+    assert {c.title_text for c in cards} == {"Multi-item first", "Oldest first"}
+    assert all(c.description_text for c in cards)
+
+
+def test_the_recent_sessions_strip_is_gone(main_window):
+    assert not hasattr(main_window, "recent_sessions_list")
+
+
+def test_the_shell_controls_are_not_duplicated_on_the_page(main_window):
+    for gone in (
+        "new_session_btn",
+        "settings_button",
+        "generate_reports_button",
+        "open_session_folder_button",
+        "add_product_button",
+    ):
+        assert not hasattr(main_window, gone), f"{gone} still on the page"
+
+
+def test_the_label_gutter_is_208(main_window):
+    from PySide6.QtWidgets import QFormLayout
+
+    from gui.components import FormSection
+
+    page = main_window.setup_stack.widget(1)
+    section = page.findChildren(FormSection)[0]
+    label = section.form.itemAt(0, QFormLayout.LabelRole).widget()
+    assert label.width() == 208
+
+
+def test_there_is_no_session_name_row(main_window):
+    """PR #317 review picked dropping the row over wiring an inert field
+    sight unseen (design call 1, option (c))."""
+    assert not hasattr(main_window, "session_name_edit")
+
+
+def test_orders_file_is_the_first_row_of_the_card(main_window):
+    from PySide6.QtWidgets import QFormLayout
+
+    from gui.components import FormSection
+
+    page = main_window.setup_stack.widget(1)
+    section = page.findChildren(FormSection)[0]
+    assert section.form.itemAt(0, QFormLayout.FieldRole).widget() is (
+        main_window.orders_slot
     )
 
 
-def test_the_fifth_recent_session_row_fits_whole(qapp):
-    """_recent_list_height() derives a fixed height from font metrics, so any
-    change to what a QListWidget::item costs vertically silently clips a row.
+def test_inventory_memory_is_its_own_row_not_folded_into_stock_file(main_window):
+    """PR #317 review: the checkbox should be a labelled option on the card,
+    not a second widget squeezed into the Stock file row's field column."""
+    from PySide6.QtWidgets import QCheckBox, QFormLayout
 
-    The selection ring did exactly that: items carry a transparent 2px
-    top/bottom border so selecting one does not shift its text, which put the
-    viewport at 4.24 rows until the helper accounted for it.
+    from gui.components import FormSection
+
+    page = main_window.setup_stack.widget(1)
+    section = page.findChildren(FormSection)[0]
+    labels = [
+        section.form.itemAt(row, QFormLayout.LabelRole).widget().text()
+        for row in range(section.form.rowCount())
+    ]
+    assert "Inventory memory" in labels
+    row = labels.index("Inventory memory")
+    field = section.form.itemAt(row, QFormLayout.FieldRole).widget()
+    assert field is main_window.inventory_memory_checkbox
+    assert isinstance(field, QCheckBox)
+
+
+def test_the_gutter_degrades_below_1024_and_flattens_below_840(qapp):
+    """Spec §8: 208 above 1024px, 96 down to the card's 840px cap, then 0
+    with labels stacked above their fields. Unreachable on the 1366px
+    Windows floor, but this page also runs on Linux, in dev and in tests --
+    tested standalone rather than through the full shell, where the page's
+    width is the stack's, not something a test can dial to an exact number.
     """
-    widget = QListWidget()
-    widget.setStyleSheet(build_stylesheet(get_theme_manager().get_current_theme()))
-    for i in range(_RECENT_SESSIONS_ROWS):
-        widget.addItem(f"session {i}")
-    widget.setFixedHeight(_recent_list_height(widget))
-    widget.show()
-    QApplication.processEvents()
+    from PySide6.QtWidgets import QFormLayout, QLineEdit
 
-    row = widget.sizeHintForRow(0)
-    assert widget.viewport().height() >= row * _RECENT_SESSIONS_ROWS, (
-        f"{widget.viewport().height() / row:.2f} rows fit, need "
-        f"{_RECENT_SESSIONS_ROWS}"
-    )
+    from gui.components import FormSection
+    from gui.ui_manager import _SetupPage
+
+    section = FormSection("", label_width=208)
+    section.add_row("Orders file", QLineEdit())
+    page = _SetupPage(section)
+    page.show()
+    label = section.form.itemAt(0, QFormLayout.LabelRole).widget()
+
+    page.resize(1200, 400)
+    QApplication.processEvents()
+    assert label.width() == 208
+
+    page.resize(900, 400)
+    QApplication.processEvents()
+    assert label.width() == 96
+
+    page.resize(700, 400)
+    QApplication.processEvents()
+    assert label.maximumWidth() > 208
+    assert section.form.rowWrapPolicy() == QFormLayout.WrapAllRows
+
+    page.close()

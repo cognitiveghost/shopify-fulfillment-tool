@@ -46,3 +46,41 @@ def test_low_stock_warning_still_shows(dialog):
     dialog.sku_input.setText("SKU-A")
     assert dialog.warning_box.isVisible()
     assert "low stock" in dialog.warning_box.text().lower()
+
+
+def _dialog(live_stock, low_stock_threshold):
+    analysis_df = pd.DataFrame([
+        {"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"},
+    ])
+    stock_df = pd.DataFrame([
+        {"SKU": "SKU-1", "Product_Name": "Widget"},
+    ])
+    dlg = AddProductDialog(
+        None, analysis_df, stock_df, live_stock,
+        low_stock_threshold=low_stock_threshold,
+    )
+    dlg.show()
+    return dlg
+
+
+def test_the_low_stock_warning_follows_the_client_threshold(qapp):
+    """The bug: the dialog hard-coded 5, so a client who set 12 saw no
+    warning at 11 units."""
+    dlg = _dialog({"SKU-1": 11}, low_stock_threshold=12)
+    dlg.sku_input.setText("SKU-1")
+    assert dlg.warning_box.isVisible()
+    assert "low stock" in dlg.warning_box.text().lower()
+
+
+def test_stock_at_the_threshold_is_not_low(qapp):
+    dlg = _dialog({"SKU-1": 12}, low_stock_threshold=12)
+    dlg.sku_input.setText("SKU-1")
+    assert not dlg.warning_box.isVisible()
+
+
+def test_zero_stock_still_warns_when_the_threshold_is_zero(qapp):
+    """Zero stock and low stock are different sentences."""
+    dlg = _dialog({"SKU-1": 0}, low_stock_threshold=0)
+    dlg.sku_input.setText("SKU-1")
+    assert dlg.warning_box.isVisible()
+    assert "0 stock" in dlg.warning_box.text()
