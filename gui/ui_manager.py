@@ -213,6 +213,11 @@ class UIManager:
         if not connected:
             self.mw.nav_rail.set_current(0)
 
+        # The selector is not just empty while disconnected, it is disabled:
+        # its "New client..." and "Manage groups..." rows are appended by the
+        # component itself and would still write to the unreachable share.
+        self.mw.command_bar.client_selector.setEnabled(connected)
+
         self._refresh_setup_panel()
         self.mw.setup_stack.setCurrentIndex(
             1 if connected and self.mw.current_client_id else 0
@@ -347,39 +352,26 @@ class UIManager:
         ConnectionSettingsDialog(
             self.mw, "ShopifyTool", "FULFILLMENT_SERVER_PATH", PROD_SERVER_PATH
         ).exec()
-        self.mw.profile_manager.is_network_available = (
-            self.mw.profile_manager._test_connection()
-        )
-        self.mw.connectionChanged.emit(self.mw.is_connected())
+        self.mw.recheck_connection()
 
     def _setup_tab_shortcuts(self):
-        """Setup keyboard shortcuts for tab switching."""
-        # Tab switching shortcuts
-        QShortcut(
-            QKeySequence("Ctrl+1"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(0),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+2"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(1),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+3"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(2),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+4"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(3),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+5"),
-            self.mw,
-            lambda: self.mw.main_tabs.setCurrentIndex(4),
-        )
+        """Ctrl+1..5 go to the five destinations, through the same gate the rail uses.
+
+        Bound to the rail rather than straight to main_tabs: a disabled rail
+        button that a keystroke walks past is not a guard, and while
+        disconnected three of these destinations touch the share.
+        """
+        for number, index in enumerate(range(5), start=1):
+            QShortcut(
+                QKeySequence(f"Ctrl+{number}"),
+                self.mw,
+                lambda index=index: self._go_to_destination(index),
+            )
+
+    def _go_to_destination(self, index: int) -> None:
+        """Navigate to a rail destination, if the rail is offering it."""
+        if self.mw.nav_rail.button(index).isEnabled():
+            self.mw.main_tabs.setCurrentIndex(index)
 
     def _create_tab1_session_setup(self):
         """Create Tab 1: Session Setup with split layout.
@@ -449,7 +441,12 @@ class UIManager:
                 "all belong to one client.",
                 "",
             )
-            self.mw.command_bar.client_selector.setFocus()
+            # This form's action is the selector, so it takes focus -- but
+            # only while it is still the thing to act on. Once a client is
+            # chosen the stack moves to page 1 and stealing focus back would
+            # yank it out of whatever the user just clicked.
+            if not self.mw.current_client_id:
+                self.mw.command_bar.client_selector.setFocus()
 
         old = self.mw.setup_stack.widget(0)
         self.mw.setup_stack.insertWidget(0, panel)

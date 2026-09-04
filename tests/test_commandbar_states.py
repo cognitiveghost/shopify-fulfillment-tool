@@ -116,7 +116,9 @@ def test_the_client_name_is_what_gives_way_first(bar):
 
     # Step 2 of the ladder fired; step 4 did not, because New Session is not
     # even shown in this state.
-    assert bar.client_selector.width() <= 200
+    # 120, not "<= 200": the selector is setFixedWidth to one of exactly
+    # two values, so a <= assertion passes whether or not the rung fired.
+    assert bar.client_selector.width() == 120
     assert bar.session_label.text() == _WORST_SESSION
 
 

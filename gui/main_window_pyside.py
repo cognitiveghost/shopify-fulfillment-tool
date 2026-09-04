@@ -134,6 +134,20 @@ class MainWindow(QMainWindow):
     def is_connected(self) -> bool:
         return bool(getattr(self.profile_manager, "is_network_available", False))
 
+    def recheck_connection(self) -> None:
+        """The one way back from a degraded launch, in-session.
+
+        GroupsManager captured base_path as a string, so a path that moved
+        leaves it pointed at the old server and it has to be rebuilt.
+        SessionManager and TableConfigManager hold the ProfileManager itself
+        and follow it. ADR 0004.
+        """
+        if self.profile_manager.recheck_connection():
+            self.groups_manager = GroupsManager(
+                base_path=str(self.profile_manager.base_path)
+            )
+        self.connectionChanged.emit(self.is_connected())
+
     def _init_managers(self):
         """Initialize ProfileManager, SessionManager, and GroupsManager for the new architecture."""
         # ProfileManager now auto-detects environment:
@@ -631,9 +645,8 @@ class MainWindow(QMainWindow):
         # Settings button (Tab 1 version)
         if hasattr(self, "settings_button"):
             self.settings_button.setEnabled(has_client)
-        # Settings button (Tab 2 version)
-        if hasattr(self, "settings_button_tab2"):
-            self.settings_button_tab2.setEnabled(has_client)
+        # The Tab 2 copy is gone -- client settings live in the command bar's
+        # overflow now, whose own item is gated in _populate_overflow.
 
         # File loading
         self.load_orders_btn.setEnabled(has_session)
@@ -1041,6 +1054,10 @@ class MainWindow(QMainWindow):
             # Set as current session
             self.session_path = session_path
             session_name = os.path.basename(session_path)
+            # Resuming a past session is the second way into SESSION; the
+            # first is creating one. Both have to say so, or the bar shows
+            # New Session while a session is open. Spec §3.1.
+            self.command_bar.set_state(BarState.SESSION)
 
             # Reload undo history for this session
             if hasattr(self, "undo_manager"):

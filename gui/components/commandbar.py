@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
 
 from gui.components.overflow import OverflowMenu, overflow_button
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
-from shared.theme import StatusChip
+from shared.icons import icon
+from shared.theme import StatusChip, on_theme_changed
 
 BAR_HEIGHT = 48
 _CLIENT_NAME_WIDTH = 200
@@ -157,10 +158,17 @@ class CommandBar(QWidget):
         self.session_label.setStyleSheet(font_css("caption"))
         layout.addWidget(self.session_label)
 
-        # Icon-only: its target is the string to its left.
+        # Icon-only: its target is the string to its left. The glyph is
+        # re-rendered on a theme change -- a QIcon is a snapshot, and the
+        # dark theme's grey is invisible on the light one.
         self.open_folder_button = QToolButton(self)
         self.open_folder_button.setAutoRaise(True)
         self.open_folder_button.setToolTip("Open session folder")
+        self.open_folder_button.setIcon(icon("folder-open"))
+        on_theme_changed(
+            self.open_folder_button,
+            lambda _t=None, b=self.open_folder_button: b.setIcon(icon("folder-open")),
+        )
         self.open_folder_button.clicked.connect(self.openFolderRequested.emit)
         self.open_folder_button.hide()
         layout.addWidget(self.open_folder_button)
@@ -174,7 +182,7 @@ class CommandBar(QWidget):
         self.progress_label.hide()
         layout.addWidget(self.progress_label)
 
-        self._spacer = layout.addStretch()
+        layout.addStretch()
 
         self.action_button = QPushButton("", self)
         set_button_role(self.action_button, "primary")

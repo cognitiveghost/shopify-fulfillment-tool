@@ -42,6 +42,16 @@ returns a working path. The modal recovery prompt is not lost — it is what
 "Server connection…" (in the command-bar overflow, and in the first-run
 empty state) now opens.
 
+Recovery has to happen **in-session**, which the shipped code very nearly
+failed to do: the dialog writes the corrected path to `QSettings`, so
+re-testing the `base_path` captured at construction would only ever
+re-confirm the original failure. `ProfileManager.recheck_connection()` re-runs
+the whole resolution chain and rebinds everything derived from it, and
+`MainWindow.recheck_connection()` rebuilds `GroupsManager`, which is the one
+collaborator that captured `base_path` as a string rather than holding the
+manager. The old `while True` loop got this for free by reconstructing
+`ProfileManager` outright; a signal-based recovery has to do it on purpose.
+
 Decided: **C**, by the repo owner, 2026-09-04.
 
 ## Why the disabling is the guard, not a null check

@@ -28,7 +28,7 @@ class OverflowMenu(QMenu):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setMinimumWidth(MENU_WIDTH)
-        self.setToolTipsVisible(True)
+        self._groups: list[QActionGroup] = []
         # The theme switch lives inside this menu, so a one-shot stylesheet
         # would go stale the moment it is used. ADR 0003.
         on_theme_changed(self, lambda _t: self._apply_theme())
@@ -47,6 +47,18 @@ class OverflowMenu(QMenu):
             f" color: {theme.text_secondary}; }}"
             f"QMenu::indicator {{ width: {MARK_COLUMN}px; }}"
         )
+
+    def clear(self) -> None:
+        """Drop the action groups too -- QMenu.clear() takes only the actions.
+
+        The menu is repopulated on every client change, so a group left
+        parented here would accumulate for the life of the process.
+        """
+        for group in self._groups:
+            group.setParent(None)
+            group.deleteLater()
+        self._groups.clear()
+        super().clear()
 
     def add_section(self, title: str) -> QAction:
         """A scope header. Disabled, so it is skipped by keyboard navigation."""
@@ -69,6 +81,7 @@ class OverflowMenu(QMenu):
         """
         group = QActionGroup(self)
         group.setExclusive(True)
+        self._groups.append(group)
         for label in labels:
             item = QAction(label, self)
             item.setCheckable(True)

@@ -153,3 +153,28 @@ def test_the_rail_cannot_grow_a_footer_again():
     from shared.navrail import NavRail
 
     assert not hasattr(NavRail, "add_footer_item")
+
+
+def test_the_selector_cannot_reach_the_share_it_cannot_reach(offline_window):
+    """The disabled controls are the guard -- and the selector is one of them.
+
+    It is not enough for the client list to come back empty: the component
+    appends "New client..." and "Manage groups..." itself, and both write to
+    the share. Disabled is the only state that closes that.
+    """
+    selector = offline_window.command_bar.client_selector
+    assert selector.isEnabled() is False
+
+
+def test_a_shortcut_cannot_walk_past_a_disabled_rail_button(offline_window):
+    """Ctrl+2/3/5 go through the same gate the rail does.
+
+    Bound straight to main_tabs they would navigate to Results, Browse and
+    Tools while disconnected, which is the hole the disabled rail exists to
+    close.
+    """
+    manager = offline_window.ui_manager
+    manager._go_to_destination(1)          # Results, disabled offline
+    assert offline_window.main_tabs.currentIndex() == 0
+    manager._go_to_destination(3)          # Info, enabled offline
+    assert offline_window.main_tabs.currentIndex() == 3

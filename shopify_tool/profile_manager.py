@@ -108,7 +108,7 @@ class ProfileManager:
         if base_path is None:
             base_path = self._get_base_path()
 
-        self.base_path = Path(base_path)
+        self._bind_base_path(base_path)
 
         # Per-process log file on the same server base_path resolved to -
         # previously this never happened at all: shopify_tool/__init__.py
@@ -124,11 +124,6 @@ class ProfileManager:
             logger.info(f"🔧 DEV MODE - Using local mock server: {self.base_path}")
         else:
             logger.info(f"🏭 PRODUCTION MODE - Using network server: {self.base_path}")
-
-        self.clients_dir = self.base_path / "Clients"
-        self.sessions_dir = self.base_path / "Sessions"
-        self.stats_dir = self.base_path / "Stats"
-        self.logs_dir = self.base_path / "Logs" / "shopify_tool"
 
         # Instance-level metadata cache
         self._metadata_cache: dict[str, tuple[dict, datetime]] = {}
@@ -153,6 +148,32 @@ class ProfileManager:
             return
 
         logger.info(f"ProfileManager initialized with base path: {self.base_path}")
+
+    def _bind_base_path(self, base_path: str) -> None:
+        """Point this object at a server root, with everything derived from it.
+
+        Every directory below is a pure function of base_path, so they are
+        rebuilt in one place -- a base_path that moves without them is an
+        object half-pointed at two servers.
+        """
+        self.base_path = Path(base_path)
+        self.clients_dir = self.base_path / "Clients"
+        self.sessions_dir = self.base_path / "Sessions"
+        self.stats_dir = self.base_path / "Stats"
+        self.logs_dir = self.base_path / "Logs" / "shopify_tool"
+
+    def recheck_connection(self) -> bool:
+        """Re-resolve the server path and re-test it. Returns reachability.
+
+        The path can change under a live object: ConnectionSettingsDialog
+        writes a new one, and a shell that opened degraded has to recover in
+        the same session rather than asking for a restart. Re-testing the
+        base_path captured at construction would only ever re-confirm the
+        failure, so this re-runs the whole resolution chain.
+        """
+        self._bind_base_path(self._get_base_path())
+        self.is_network_available = self._test_connection()
+        return self.is_network_available
 
     def _get_base_path(self) -> str:
         """Get base path with automatic environment detection.
