@@ -434,25 +434,6 @@ class UIManager:
             lambda checked: self.mw._on_analysis_mode_changed(1) if checked else None
         )
 
-        self.mw.command_bar.sessionChosen.connect(self.mw.on_session_selected)
-        self.mw.command_bar.browseAllRequested.connect(
-            lambda: self.mw.main_tabs.setCurrentIndex(2)
-        )
-        for slot, kind in (
-            (self.mw.orders_slot, "orders"),
-            (self.mw.stock_slot, "stock"),
-        ):
-            slot.chooseFileRequested.connect(
-                getattr(self.mw.file_handler, f"select_{kind}_file")
-            )
-            slot.pathDropped.connect(
-                lambda p, k=kind: self.mw.file_handler.accept_dropped_path(k, p)
-            )
-            slot.mapColumnsRequested.connect(
-                lambda: self.mw.actions_handler.open_settings_window()
-            )
-            slot.changed.connect(self.mw.file_handler.check_files_ready)
-
         stack = QStackedWidget()
         # Page 0 starts empty -- _refresh_setup_panel fills it, and is the
         # only place either of its two forms is built.

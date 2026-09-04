@@ -161,7 +161,7 @@ class CommandBar(QWidget):
         # deletes from the Setup page was the only route back to yesterday's
         # work, and navigation belongs in the shell. Bundle 4 §3.3 forbids
         # eliding the session ID at any width, so no maximum width is set
-        # and the style is TextBesideIcon with no icon.
+        # and the style is TextOnly.
         self.session_button = QToolButton(self)
         self.session_button.setAutoRaise(True)
         self.session_button.setPopupMode(QToolButton.InstantPopup)

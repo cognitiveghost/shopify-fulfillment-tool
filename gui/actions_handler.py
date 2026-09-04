@@ -359,8 +359,13 @@ class ActionsHandler(QObject):
         msg = f"An unexpected error occurred in a background task:\n{value}\n\nTraceback:\n{tb}"
         QMessageBox.critical(self.mw, "Task Exception", msg)
 
-    def open_settings_window(self):
-        """Opens the settings window for the active client."""
+    def open_settings_window(self, page: str | None = None):
+        """Opens the settings window for the active client.
+
+        Args:
+            page (str, optional): Nav entry to open on, e.g. "Orders Mapping".
+                Defaults to whichever page was open last.
+        """
         if not self.mw.current_client_id:
             QMessageBox.warning(
                 self.mw, "No Client Selected", "Please select a client first."
@@ -390,6 +395,7 @@ class ActionsHandler(QObject):
             profile_manager=self.mw.profile_manager,
             analysis_df=self.mw.analysis_results_df,
             parent=self.mw,
+            initial_page=page,
         )
 
         if settings_win.exec():

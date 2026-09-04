@@ -44,14 +44,17 @@ def test_the_setup_page_holds_exactly_one_card(main_window):
     assert len(page.findChildren(Card)) == 1
 
 
-def test_the_card_fits_above_600px(main_window):
-    """The plan's original 480px estimate assumed the two RadioCard
-    descriptions would never wrap past two lines; rendering the real page
-    (not just its sizeHint at an untested width) showed a three-line wrap
-    at the card's actual 840px cap, which this cap accounts for."""
+def test_the_card_fits_above_530px(main_window):
+    """The spec's 480px estimate assumed the two RadioCard descriptions
+    would never wrap past two lines; rendering the real page (not just its
+    sizeHint at an untested width) showed a three-line wrap at the card's
+    actual 840px cap. The requirement behind the number -- no scrolling on
+    the 692px page at 1366x768 -- still holds at the measured 515px. Kept
+    within 15px of that so it still catches drift rather than absorbing it.
+    """
     page = main_window.setup_stack.widget(1)
     card = page.findChildren(Card)[0]
-    assert card.sizeHint().height() <= 600
+    assert card.sizeHint().height() <= 530
 
 
 def test_nothing_on_the_setup_page_scrolls(main_window):
@@ -99,7 +102,18 @@ def test_the_label_gutter_is_208(main_window):
     assert label.width() == 208
 
 
-def test_the_session_name_field_takes_focus_first(main_window):
+def test_the_session_name_field_is_the_first_row_of_the_card(main_window):
+    """Named for what it checks. Spec §8 also wants this field pre-filled,
+    selected on focus, and focused when the page becomes current -- none of
+    which is built, because nothing reads the field yet (see the PR body).
+    The old name claimed to test focus and passed while focus never moved.
+    """
+    from PySide6.QtWidgets import QFormLayout
+
+    from gui.components import FormSection
+
     page = main_window.setup_stack.widget(1)
-    assert main_window.session_name_edit in page.findChildren(type(main_window.session_name_edit))
-    assert main_window.session_name_edit.focusPolicy() != 0
+    section = page.findChildren(FormSection)[0]
+    assert section.form.itemAt(0, QFormLayout.FieldRole).widget() is (
+        main_window.session_name_edit
+    )

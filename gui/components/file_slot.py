@@ -42,7 +42,10 @@ class FileSlot(QFrame):
 
     def __init__(self, title: str, hint: str, parent=None) -> None:
         super().__init__(parent)
-        self._title = title
+        # The visible label is the FormSection row's, not ours -- so the
+        # title's job here is to name the slot for a screen reader, which
+        # otherwise gets a bare frame and three unattributed buttons.
+        self.setAccessibleName(title)
         self.path: Path | None = None
         self.is_valid = False
         self.missing_columns: list[str] = []
@@ -154,7 +157,12 @@ class FileSlot(QFrame):
         self.changed.emit()
 
     def error_text(self) -> str:
-        """Headline plus body, as one string -- what the tests assert on."""
+        """Headline plus body, as one string.
+
+        The invalid state says one thing across two labels for layout
+        reasons; callers that care about the message, not the layout, want
+        it whole.
+        """
         return f"{self._error_headline.text()}\n{self._error_body.text()}"
 
     def _body_text(self) -> str:

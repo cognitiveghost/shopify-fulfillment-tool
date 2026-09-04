@@ -10,6 +10,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QLabel, QRadioButton, QVBoxLayout
 
 from gui.theme_manager import font_css, get_theme_manager
+from shared.theme import on_theme_changed
 
 
 class RadioCard(QRadioButton):
@@ -34,14 +35,10 @@ class RadioCard(QRadioButton):
 
         self.title_text = title
         self.description_text = description
-
-        # The native indicator centres on the whole widget by default, which
-        # is fine for a one-line button but drifts down to the description
-        # once a second line joins it. Pin it to the title's row instead.
-        self.setStyleSheet(
-            "QRadioButton::indicator { subcontrol-position: left top; "
-            f"margin-top: {theme.spacing_xs}px; }}"
-        )
+        # Empty native text leaves the radio with no accessible name, so a
+        # screen reader announces the group and not which option this is.
+        self.setAccessibleName(title)
+        self.setAccessibleDescription(description)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(
@@ -50,7 +47,6 @@ class RadioCard(QRadioButton):
         layout.setSpacing(theme.spacing_xs)
 
         self._title = QLabel(title, self)
-        self._title.setStyleSheet(font_css("label"))
         # Clicks on the title/description must still choose the option -- a
         # transparent label forwards them to the radio button underneath.
         self._title.setAttribute(Qt.WA_TransparentForMouseEvents, True)
@@ -58,11 +54,25 @@ class RadioCard(QRadioButton):
 
         self._description = QLabel(description, self)
         self._description.setWordWrap(True)
+        self._description.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        layout.addWidget(self._description)
+
+        self._apply_theme()
+        on_theme_changed(self, lambda _t=None: self._apply_theme())
+
+    def _apply_theme(self) -> None:
+        theme = get_theme_manager().get_current_theme()
+        self._title.setStyleSheet(font_css("label"))
         self._description.setStyleSheet(
             f"color: {theme.text_secondary}; {font_css('caption')}"
         )
-        self._description.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        layout.addWidget(self._description)
+        # The native indicator centres on the whole widget by default, which
+        # is fine for a one-line button but drifts down to the description
+        # once a second line joins it. Pin it to the title's row instead.
+        self.setStyleSheet(
+            "QRadioButton::indicator { subcontrol-position: left top; "
+            f"margin-top: {theme.spacing_xs}px; }}"
+        )
 
     def sizeHint(self) -> QSize:
         # QRadioButton's own sizeHint ignores the description below its

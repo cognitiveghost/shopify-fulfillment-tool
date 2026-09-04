@@ -335,6 +335,34 @@ class MainWindow(QMainWindow):
         self.command_bar.refreshRequested.connect(self.on_sidebar_refresh)
         self.client_directory.refresh()
 
+        # Session setup card
+        self.command_bar.sessionChosen.connect(self.on_session_selected)
+        self.command_bar.browseAllRequested.connect(
+            lambda: self.main_tabs.setCurrentIndex(2)
+        )
+        for slot, kind in (
+            (self.orders_slot, "orders"),
+            (self.stock_slot, "stock"),
+        ):
+            slot.chooseFileRequested.connect(
+                getattr(self.file_handler, f"select_{kind}_file")
+            )
+            slot.chooseFolderRequested.connect(
+                lambda k=kind: self.file_handler.select_folder(k)
+            )
+            slot.pathDropped.connect(
+                lambda p, k=kind: self.file_handler.accept_dropped_path(k, p)
+            )
+            # Straight to the mapping page: the slot only offers this when a
+            # column is unmapped, so landing on General is a search the user
+            # has already told us the answer to.
+            slot.mapColumnsRequested.connect(
+                lambda k=kind: self.actions_handler.open_settings_window(
+                    page=f"{k.capitalize()} Mapping"
+                )
+            )
+            slot.changed.connect(self.file_handler.check_files_ready)
+
         # Session browser (new architecture)
         self.session_browser.session_selected.connect(self.on_session_selected)
         self.session_browser.multi_export_requested.connect(

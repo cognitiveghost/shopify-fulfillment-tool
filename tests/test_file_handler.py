@@ -83,3 +83,41 @@ def test_an_orders_file_with_every_required_column_loads_the_slot(
     slot = main_window.orders_slot
     assert slot.is_valid is True
     assert slot.path == orders
+
+
+def test_a_dropped_folder_merges_its_csvs_into_the_slot(
+    main_window, tmp_path, monkeypatch
+):
+    """Spec 4.2: the slot accepts a file *or* a folder. Before the folder
+    branch, a dropped directory reached pandas and raised IsADirectoryError.
+    """
+    folder = tmp_path / "exports"
+    folder.mkdir()
+    header = "Name,Lineitem sku,Lineitem quantity,Shipping Method\n"
+    (folder / "a.csv").write_text(header + "#1,A1,2,Standard\n")
+    (folder / "b.csv").write_text(header + "#2,B2,1,Express\n")
+
+    # The merge is confirmed by a modal in real use; the question here is
+    # what happens to the slot, not whether the dialog appears.
+    monkeypatch.setattr(
+        main_window.file_handler, "show_file_preview", lambda *a, **k: True
+    )
+
+    main_window.file_handler.accept_dropped_path("orders", str(folder))
+
+    slot = main_window.orders_slot
+    assert slot.is_valid is True
+    assert "2 files merged" in slot._loaded_summary.text()
+    assert "2 rows" in slot._loaded_summary.text()
+
+
+def test_a_dropped_missing_file_shows_the_invalid_state_instead_of_raising(
+    main_window, tmp_path
+):
+    """read_csv_headers runs only on the branch where the file already
+    failed to read, so every unreadable shape has to land in the slot."""
+    main_window.file_handler.accept_dropped_path(
+        "orders", str(tmp_path / "not-here.csv")
+    )
+
+    assert main_window.orders_slot.is_valid is False
