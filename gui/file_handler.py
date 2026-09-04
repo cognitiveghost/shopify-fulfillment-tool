@@ -7,7 +7,6 @@ import pandas as pd
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFileDialog, QListWidgetItem, QMessageBox
 
-from gui.theme_manager import get_theme_manager
 from shopify_tool import core
 
 
@@ -378,7 +377,6 @@ class FileHandler:
 
         if file_type == "orders":
             path = self.mw.orders_file_path
-            label = self.mw.orders_file_status_label
             delimiter = ","
 
             # Get CSV column names from v2 mappings
@@ -403,7 +401,6 @@ class FileHandler:
 
         else:  # stock
             path = self.mw.stock_file_path
-            label = self.mw.stock_file_status_label
             delimiter = client_config.get("settings", {}).get(
                 "stock_csv_delimiter", ";"
             )
@@ -432,18 +429,30 @@ class FileHandler:
             path, required_cols, delimiter
         )
 
-        theme = get_theme_manager().get_current_theme()
+        slot = (
+            self.mw.orders_slot if file_type == "orders" else self.mw.stock_slot
+        )
         if is_valid:
-            label.setText("✓")
-            label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
-            label.setToolTip("File is valid.")
+            slot.set_loaded(path, self._summary_for(path, required_cols))
             self.log.info(f"'{file_type}' file is valid.")
         else:
-            label.setText("✗")
-            label.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
-            tooltip_text = f"Missing columns: {', '.join(missing_cols)}"
-            label.setToolTip(tooltip_text)
-            self.log.warning(f"'{file_type}' file is invalid. {tooltip_text}")
+            present = core.read_csv_headers(path, delimiter)
+            slot.set_invalid(path, missing_cols, present)
+            self.log.warning(
+                f"'{file_type}' file is invalid. Missing columns: "
+                f"{', '.join(missing_cols)}"
+            )
+
+    def _summary_for(self, path, required_cols: list[str]) -> str:
+        """"1 842 rows · 4 columns matched" -- what the loaded slot shows.
+
+        A row count is the one number that tells a supervisor they picked
+        this morning's export and not last Friday's.
+        """
+        rows = core.count_csv_rows(path)
+        return f"{rows:,} rows · {len(required_cols)} columns matched".replace(
+            ",", " "
+        )
 
     def check_files_ready(self):
         """Checks if both orders and stock files are selected and valid.
@@ -452,17 +461,14 @@ class FileHandler:
         method enables the main 'Run Analysis' button in the UI. Otherwise,
         the button remains disabled.
         """
-        orders_ok = (
-            self.mw.orders_file_path and self.mw.orders_file_status_label.text() == "✓"
-        )
-        stock_ok = (
-            self.mw.stock_file_path and self.mw.stock_file_status_label.text() == "✓"
-        )
+        orders_ok = self.mw.orders_slot.is_valid
+        stock_ok = self.mw.stock_slot.is_valid
         if orders_ok and stock_ok:
             self.mw.run_analysis_button.setEnabled(True)
             self.log.info("Both files are validated and ready for analysis.")
         else:
             self.mw.run_analysis_button.setEnabled(False)
+        return orders_ok and stock_ok
 
     # ============================================================
     # Folder Loading Support (New)

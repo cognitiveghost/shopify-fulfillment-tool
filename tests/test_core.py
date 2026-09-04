@@ -9,6 +9,42 @@ _ORDERS_MAPPING = {
 }
 
 
+class TestReadCsvHeaders:
+    def test_returns_the_header_row_as_a_list(self, tmp_path):
+        path = tmp_path / "stock.csv"
+        path.write_text("Артикул;Име;Цена\nA1;Widget;9.99\n")
+        assert core.read_csv_headers(path, delimiter=";") == [
+            "Артикул", "Име", "Цена",
+        ]
+
+    def test_a_header_only_file_still_returns_its_columns(self, tmp_path):
+        path = tmp_path / "stock.csv"
+        path.write_text("SKU,Stock\n")
+        assert core.read_csv_headers(path) == ["SKU", "Stock"]
+
+    def test_an_empty_file_returns_no_columns(self, tmp_path):
+        path = tmp_path / "empty.csv"
+        path.write_text("")
+        assert core.read_csv_headers(path) == []
+
+
+class TestCountCsvRows:
+    def test_counts_data_rows_excluding_the_header(self, tmp_path):
+        path = tmp_path / "orders.csv"
+        path.write_text("SKU,Qty\nA1,2\nA2,3\n")
+        assert core.count_csv_rows(path) == 2
+
+    def test_a_header_only_file_has_zero_rows(self, tmp_path):
+        path = tmp_path / "orders.csv"
+        path.write_text("SKU,Qty\n")
+        assert core.count_csv_rows(path) == 0
+
+    def test_an_empty_file_has_zero_rows(self, tmp_path):
+        path = tmp_path / "empty.csv"
+        path.write_text("")
+        assert core.count_csv_rows(path) == 0
+
+
 class TestInventoryMemoryStockReconstruction:
     def test_reconstructed_stock_has_sku_product_name_and_stock_columns(self):
         orders_df = pd.DataFrame([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 2, "Shipping Method": "Standard"}])

@@ -401,6 +401,15 @@ class UIManager:
         - Right panel: Recent Sessions quick-pick, capped at
           _RECENT_PANEL_MAX_WIDTH (full browser is on Tab 3).
         """
+        from gui.components import FileSlot
+
+        # Task 6 wires these into the rebuilt card; created here first so
+        # FileHandler (Task 5) has something correct to address by name.
+        self.mw.orders_slot = FileSlot(
+            "Orders file", "Drop the Shopify orders export here"
+        )
+        self.mw.stock_slot = FileSlot("Stock file", "Drop the stock export here")
+
         tab = QWidget()
         main_layout = QHBoxLayout(tab)
         main_layout.setContentsMargins(0, 0, 0, 0)

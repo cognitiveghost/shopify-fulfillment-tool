@@ -372,6 +372,27 @@ def validate_csv_headers(file_path, required_columns, delimiter=","):
         return False, [f"An unexpected error occurred: {e}"]
 
 
+def read_csv_headers(file_path, delimiter=",") -> list[str]:
+    """The column names a CSV actually has. Used to tell someone which
+    columns are there when the one they need is not."""
+    try:
+        return pd.read_csv(
+            file_path, nrows=0, delimiter=delimiter, encoding="utf-8-sig"
+        ).columns.tolist()
+    except pd.errors.EmptyDataError:
+        return []
+
+
+def count_csv_rows(file_path, delimiter=",") -> int:
+    """Data rows, excluding the header."""
+    try:
+        return len(
+            pd.read_csv(file_path, delimiter=delimiter, encoding="utf-8-sig")
+        )
+    except pd.errors.EmptyDataError:
+        return 0
+
+
 def _validate_and_prepare_inputs(
     stock_file_path: str | None,
     orders_file_path: str | None,
