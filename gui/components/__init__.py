@@ -6,6 +6,7 @@ from gui.components.filterbar import FilterBar
 from gui.components.form_section import FormSection
 from gui.components.selectionbar import ContextualSelectionBar
 from gui.components.statcard import KpiStrip, StatCard
+from gui.components.state_panel import StatePanel
 from shared.navrail import NavRail
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "KpiStrip",
     "NavRail",
     "StatCard",
+    "StatePanel",
 ]
