@@ -109,11 +109,17 @@ jobs:
         # MainWindow construction, and --windowed means the user double-clicks
         # an exe that silently never opens. This is the only part of the icon
         # work that cannot be tested from the Linux dev machine.
+        #
+        # QtWebEngineProcess.exe is the same shape of problem for the web tier:
+        # PyInstaller's hook-PySide6.QtWebEngineCore is supposed to collect the
+        # helper process, and if it silently does not, the only symptom is a
+        # dead view discovered over RDP after a 15-minute build and a several-
+        # hundred-MB download. Fail here, in the step named for it, instead.
         shell: pwsh
         run: |
-          foreach ($name in "package.svg", "Inter-Regular.ttf") {
+          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe") {
             if (-not (Get-ChildItem -Path "dist\ShopifyFulfillmentTool" -Recurse -Filter $name)) {
-              throw "PyInstaller did not bundle $name -- the app would not start."
+              throw "PyInstaller did not bundle $name."
             }
           }
       - name: Bundle GTK DLLs
