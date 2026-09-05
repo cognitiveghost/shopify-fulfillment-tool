@@ -65,6 +65,117 @@ def is_fully_packed(entry: dict) -> bool:
     return total > 0 and packed == total
 
 
+def _count(value) -> int | None:
+    """A non-negative int, or None for anything else.
+
+    bool is an int in Python and would sail through isinstance; a True here
+    means the file holds something we do not understand, so it reads as None.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def blocked_orders(entry: dict) -> int | None:
+    """Orders this session cannot fulfil, or None when it was never analysed.
+
+    None is not 0: a session with no analysis has no answer, and the Blocked
+    column must stay blank rather than claim nothing is blocked.
+
+    `core.py` has written `not_fulfillable_orders` into session_info.json on
+    every session-mode analysis since the session architecture landed, and the
+    index carries whole session_info dicts, so the stored key is the normal
+    path. The subtraction is the fallback for a session written by something
+    that recorded only the two halves.
+    """
+    if not isinstance(entry, dict):
+        return None
+
+    stored = _count(entry.get("not_fulfillable_orders"))
+    if stored is not None:
+        return stored
+
+    total = _count(entry.get("total_orders"))
+    fulfillable = _count(entry.get("fulfillable_orders"))
+    if total is None or fulfillable is None or fulfillable > total:
+        return None
+    return total - fulfillable
+
+
+# The eight states a row shows, in the order they progress. The four a person
+# can set live in SessionManager.VALID_STATUSES; the other four are derived
+# here from packing progress and idle time.
+DISPLAY_STATUSES = (
+    "not_started", "in_progress", "paused", "stale",
+    "completed", "incomplete", "abandoned", "archived",
+)
+
+# An in-flight session nobody has touched for this long has stopped moving.
+# Not age from creation -- the Age column already carries that, and drawing
+# one fact twice is what this phase keeps deleting.
+STALE_AFTER_DAYS = 7
+
+
+def _has_paused_list(entry: dict) -> bool:
+    progress = entry.get("packing_progress")
+    if not isinstance(progress, dict):
+        return False
+    return any(
+        isinstance(block, dict) and block.get("status") == "paused"
+        for block in progress.values()
+    )
+
+
+def _idle_since(entry: dict):
+    """When this session was last written, or None if unreadable.
+
+    packing-tool writes packing_progress through its own path, so
+    `last_updated` can be missing on a session it touched last. Falling back
+    to created_at makes the answer conservative rather than absent.
+    """
+    return (
+        parse_created_at(entry.get("last_updated"))
+        or parse_created_at(entry.get("created_at"))
+    )
+
+
+def display_status(entry: dict, now: datetime) -> str:
+    """One of DISPLAY_STATUSES for this entry. Pure, total, never raises.
+
+    An unrecognised stored status is returned unchanged, so a value some
+    future version writes renders as its own name rather than as a lie.
+    """
+    if not isinstance(entry, dict):
+        return "active"
+
+    stored = entry.get("status", "active")
+
+    if stored in ("abandoned", "archived"):
+        return stored
+
+    packed, total = packing_completion(entry)
+
+    if stored == "completed":
+        # A person called it done. If lists are still unpacked, that is a
+        # human judgment someone can still act on -- not an automation
+        # artefact: derive_status_updates only ever promotes a fully packed
+        # session.
+        return "incomplete" if total > 0 and packed < total else "completed"
+
+    if stored != "active":
+        return stored
+
+    if _has_paused_list(entry):
+        return "paused"
+    if packed == 0:
+        return "not_started"
+
+    idle_since = _idle_since(entry)
+    if idle_since is not None and now - idle_since >= timedelta(days=STALE_AFTER_DAYS):
+        return "stale"
+    return "in_progress"
+
+
 def parse_created_at(value) -> datetime | None:
     """ISO timestamp -> aware datetime, or None if unreadable.
 
