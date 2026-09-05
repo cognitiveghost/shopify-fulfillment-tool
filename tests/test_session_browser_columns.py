@@ -74,6 +74,17 @@ def commented_session():
     return _session("s1", comments="short pick, ask Dana")
 
 
+@pytest.fixture
+def sessions_with_archived():
+    return [
+        _session("live", status="completed", lists=["a"],
+                 progress={"a": {"status": "completed"}}),
+        _session("gone1", status="archived"),
+        _session("gone2", status="archived"),
+        _session("gone3", status="archived"),
+    ]
+
+
 def _column_text(browser, header):
     tree = browser.sessions_tree
     col = next(
@@ -165,7 +176,7 @@ class TestArchivedVisibility:
 
     def test_show_archived_toggle_reveals_them(self, browser):
         browser.sessions_data = [_session("keep"), _session("gone", status="archived")]
-        browser.show_archived_btn.setChecked(True)
+        browser.archive_toggle.click()
         assert sorted(_names(browser)) == ["gone", "keep"]
 
     def test_explicit_archived_status_filter_shows_them_with_toggle_off(self, browser):
@@ -231,3 +242,29 @@ class TestEmptyStates:
         browser._populate_tree()
         assert browser._empty_reason() is None
         assert browser.empty_panel is None or not browser.empty_panel.isVisible()
+
+
+class TestArchiveFooter:
+    def test_no_archived_sessions_means_no_line(self, browser, calm_sessions):
+        browser.sessions_data = calm_sessions
+        browser._populate_tree()
+        assert not browser.archive_line.isVisibleTo(browser)
+
+    def test_the_line_counts_the_archived_sessions(self, browser, sessions_with_archived):
+        browser.sessions_data = sessions_with_archived
+        browser._populate_tree()
+        assert browser.archive_line.isVisibleTo(browser)
+        assert browser.archive_count.text() == "3 archived"
+        assert browser.archive_toggle.text() == "Show"
+
+    def test_showing_them_flips_the_verb_and_keeps_the_count(
+        self, browser, sessions_with_archived
+    ):
+        browser.sessions_data = sessions_with_archived
+        browser._populate_tree()
+        browser.archive_toggle.click()
+        assert browser.archive_toggle.text() == "Hide"
+        assert browser.archive_count.text() == "3 archived"
+
+    def test_the_old_toggle_button_is_gone(self, browser):
+        assert not hasattr(browser, "show_archived_btn")

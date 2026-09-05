@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
+    QLabel,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -36,6 +37,7 @@ from gui.session_row_delegates import (
 )
 from gui.theme_manager import get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from shared.theme import font_css, set_button_role
 from shopify_tool.session_lifecycle import (
     age_label,
     blocked_orders,
@@ -214,14 +216,6 @@ class SessionBrowserWidget(QWidget):
         self.refresh_btn.clicked.connect(self.refresh_sessions)
         filter_layout.addWidget(self.refresh_btn)
 
-        self.show_archived_btn = QPushButton("Show Archived")
-        self.show_archived_btn.setCheckable(True)
-        self.show_archived_btn.setToolTip(
-            "Show archived sessions (sessions are archived automatically after 30 days)"
-        )
-        self.show_archived_btn.toggled.connect(self._on_show_archived_toggled)
-        filter_layout.addWidget(self.show_archived_btn)
-
         main_layout.addLayout(filter_layout)
 
         # Sessions tree: two groups (Needs attention / Everything else), not a
@@ -262,6 +256,24 @@ class SessionBrowserWidget(QWidget):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
 
         main_layout.addWidget(self.sessions_tree)
+
+        # Archive is a footer, not a third filter. It reports a fact about
+        # what is hidden and offers to unhide it; the two controls above
+        # narrow what is shown. Different jobs, different bands of chrome.
+        self.archive_line = QWidget(self)
+        archive_layout = QHBoxLayout(self.archive_line)
+        archive_layout.setContentsMargins(0, 0, 0, 0)
+        archive_layout.setSpacing(8)
+        self.archive_count = QLabel("")
+        self.archive_count.setStyleSheet(font_css("caption"))
+        self.archive_toggle = QPushButton("Show")
+        set_button_role(self.archive_toggle, "ghost")
+        self.archive_toggle.clicked.connect(self._on_show_archived_toggled)
+        archive_layout.addWidget(self.archive_count)
+        archive_layout.addWidget(self.archive_toggle)
+        archive_layout.addStretch(1)
+        self.archive_line.setVisible(False)
+        main_layout.addWidget(self.archive_line)
 
         self.selection_bar = ContextualSelectionBar(self)
 
@@ -548,7 +560,17 @@ class SessionBrowserWidget(QWidget):
         return item
 
     def _update_archive_footer(self):
-        """Filled in by 9.19 Task 9 (archive becomes a footer line)."""
+        archived = sum(
+            1 for s in self.sessions_data if s.get("status") == "archived"
+        )
+        showing_archived_explicitly = (
+            self.status_filter.currentText().lower() == "archived"
+        )
+        self.archive_line.setVisible(
+            bool(archived) and not showing_archived_explicitly
+        )
+        self.archive_count.setText(f"{archived} archived")
+        self.archive_toggle.setText("Hide" if self._show_archived else "Show")
 
     def _groups(self):
         return [
@@ -615,10 +637,10 @@ class SessionBrowserWidget(QWidget):
         """Apply the status filter."""
         self.refresh_sessions()
 
-    def _on_show_archived_toggled(self, checked: bool):
-        """Toggling this only re-filters the already-loaded self.sessions_data --
-        no new file-server call, since the whole index is already in memory."""
-        self._show_archived = checked
+    def _on_show_archived_toggled(self):
+        """Re-filters the already-loaded self.sessions_data -- no new
+        file-server call, since the whole index is already in memory."""
+        self._show_archived = not self._show_archived
         self._populate_tree()
 
     def _on_search_changed(self, text: str):
