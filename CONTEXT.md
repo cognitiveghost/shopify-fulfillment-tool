@@ -63,10 +63,10 @@ already imported (`gui/theme_manager.py` here, `gui/theme.py` in
 
 ## Status and selection
 
-**Channel** — one of the three independent things a status says. **Colour**
-is the role, **fill** is live-vs-resting, **mark** is person-vs-system. One
-silhouette carries all three. Supersedes the older rule where tint carried
-authorship.
+**Channel** — one of the independent things a status says. **Colour** is the
+role, **fill** is live-vs-resting, **mark** is person-vs-system, **shape** is
+which state. One silhouette carries them. Supersedes the older rule where
+tint carried authorship.
 
 **Live** — a status someone still has to act on, drawn with the role's tint.
 Its opposite is **resting**: terminal or waiting, drawn untinted. A property
@@ -75,6 +75,12 @@ of the state itself, not of the row.
 **Mark** — the dot inside a status chip. Solid when a person set the status,
 hollow when the system derived it. A painted disc or ring, never a character.
 `StatusDot` is the mark; it is not a status form on its own.
+
+**Shape** — the painted figure inside a session row's status cell, one per
+state. Never a **glyph**, which is a vendored Lucide drawing, and never a
+character. Where a screen shows eight states, shape replaces the **mark**:
+authorship is constant per state and rides in the state table, so nothing is
+lost by not drawing it.
 
 **Chip** — the one status silhouette: an outlined pill carrying a mark and a
 label. Distinguished from a **filter chip**, which is interactive and
@@ -122,6 +128,18 @@ opens: the slot persists and changes state, the picker appears and closes.
 `multi-item-first` or `fifo`. Supersedes "analysis mode", which named the
 combo rather than the thing it chose and collided with the Orders/Stock
 "Load Mode" on the same screen.
+
+## Sessions
+
+**Blocked order** — an order this session cannot fulfil, counted as
+`blocked_orders`. One number, one name: `SHORT ON STOCK` and `BLK` are both
+retired. `not_fulfillable_orders` stays the persisted key, because it is a
+file shared with another tool.
+
+**Display status** — one of the eight states a session row shows, derived from
+the four stored statuses plus packing progress and idle time. Distinguished
+from **stored status**, the four values `SessionManager.VALID_STATUSES`
+accepts and a person can set.
 
 ## Repos
 
