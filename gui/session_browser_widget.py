@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.background_worker import BackgroundWorker
-from gui.components import ContextualSelectionBar, FilterBar
+from gui.components import ContextualSelectionBar, FilterBar, StatePanel
 from gui.selection_ring import SelectionRingDelegate
 from gui.session_row_delegates import (
     ROLE_LIVE,
@@ -162,6 +162,7 @@ class SessionBrowserWidget(QWidget):
 
     session_selected = Signal(str)  # Emits session_path
     multi_export_requested = Signal(list)  # Emits list of session_path strings
+    new_session_requested = Signal()  # The "nothing yet" empty state's action
 
     # Class variable for testing - set to False to disable async loading in tests
     USE_ASYNC = True
@@ -172,6 +173,7 @@ class SessionBrowserWidget(QWidget):
         self.current_client_id = None
         self.sessions_data = []
         self.worker = None  # Track active background worker
+        self.empty_panel = None
         self._show_archived = False
         self._search = ""
         self._is_dirty = True  # forces one load on first show
@@ -181,7 +183,7 @@ class SessionBrowserWidget(QWidget):
 
     def _init_ui(self):
         """Initialize the UI components."""
-        main_layout = QVBoxLayout(self)
+        self.main_layout = main_layout = QVBoxLayout(self)
 
         # No group box: regions separate by elevation and space (Phase 8 fault
         # #1). The NavRail destination already names this screen.
@@ -548,8 +550,66 @@ class SessionBrowserWidget(QWidget):
     def _update_archive_footer(self):
         """Filled in by 9.19 Task 9 (archive becomes a footer line)."""
 
+    def _groups(self):
+        return [
+            self.sessions_tree.topLevelItem(i)
+            for i in range(self.sessions_tree.topLevelItemCount())
+        ]
+
+    def _empty_reason(self):
+        """None, "nothing" or "filtered" -- why the tree has no rows.
+
+        "filtered" is not "nothing": one is a filter the user can widen, the
+        other is a client with no sessions on the server. A panel that cannot
+        tell them apart is the "No data - Nothing to display" this phase
+        deleted.
+        """
+        if any(g.childCount() for g in self._groups()):
+            return None
+        return "filtered" if self.sessions_data else "nothing"
+
     def _update_empty_state(self):
-        """Filled in by 9.19 Task 8 (the two empty states)."""
+        reason = self._empty_reason()
+        if self.empty_panel is not None:
+            self.empty_panel.deleteLater()
+            self.empty_panel = None
+        self.sessions_tree.setVisible(reason is None)
+        if reason is None:
+            return
+
+        if reason == "nothing":
+            panel = StatePanel(
+                "No sessions yet",
+                f"CLIENT_{self.current_client_id} has no sessions on the file server.",
+                action_text="New session",
+            )
+            panel.button.clicked.connect(self.new_session_requested.emit)
+        else:
+            panel = StatePanel(
+                "No sessions match",
+                self._filter_sentence(),
+                action_text="Clear filters",
+                action_role="secondary",
+            )
+            panel.button.clicked.connect(self._clear_filters)
+
+        self.empty_panel = panel
+        self.main_layout.insertWidget(1, panel, 1)
+
+    def _filter_sentence(self) -> str:
+        """Names both live filters, and drops the half that is not set."""
+        status = self.status_filter.currentText()
+        search = self.filter_bar.search_field.text().strip()
+        noun = "session" if status == "All" else f"{status} session"
+        if search:
+            return f'No {noun} matches "{search}".'
+        return f"No {noun} is visible with the current filters."
+
+    def _clear_filters(self):
+        self.filter_bar.search_field.clear()
+        self.status_filter.setCurrentText("All")
+        self._show_archived = False
+        self.refresh_sessions()
 
     def _apply_filter(self):
         """Apply the status filter."""

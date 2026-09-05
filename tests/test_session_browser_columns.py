@@ -23,6 +23,9 @@ def qapp():
 def browser(qapp):
     widget = SessionBrowserWidget(Mock(), parent=None)
     widget.current_client_id = "M"
+    # Synchronous, so a refresh triggered mid-test (e.g. clearing filters)
+    # resolves before the assertion runs, instead of racing a real QThread.
+    widget.USE_ASYNC = False
     return widget
 
 
@@ -195,3 +198,36 @@ def test_display_status_is_reachable_from_the_module(calm_sessions):
 
     now = _dt.datetime.now().astimezone()
     assert all(display_status(s, now) == "completed" for s in calm_sessions)
+
+
+class TestEmptyStates:
+    def test_no_sessions_at_all_offers_a_new_session(self, browser):
+        browser.current_client_id = "M"
+        browser.sessions_data = []
+        browser._populate_tree()
+        assert browser._empty_reason() == "nothing"
+        assert not browser.sessions_tree.isVisibleTo(browser)
+        assert browser.empty_panel.button.text() == "New session"
+
+    def test_a_filter_that_hides_everything_offers_to_clear_it(self, browser, calm_sessions):
+        browser.sessions_data = calm_sessions
+        browser.filter_bar.search_field.setText("tuesday")
+        browser._populate_tree()
+        assert browser._empty_reason() == "filtered"
+        assert browser.empty_panel.button.text() == "Clear filters"
+
+    def test_clearing_the_filters_brings_the_rows_back(self, browser, calm_sessions):
+        browser.session_manager.list_client_sessions.return_value = calm_sessions
+        browser.sessions_data = calm_sessions
+        browser.filter_bar.search_field.setText("tuesday")
+        browser._populate_tree()
+        browser.empty_panel.button.click()
+        assert browser.filter_bar.search_field.text() == ""
+        assert browser._empty_reason() is None
+        assert browser.sessions_tree.isVisibleTo(browser)
+
+    def test_rows_present_means_no_panel(self, browser, calm_sessions):
+        browser.sessions_data = calm_sessions
+        browser._populate_tree()
+        assert browser._empty_reason() is None
+        assert browser.empty_panel is None or not browser.empty_panel.isVisible()
