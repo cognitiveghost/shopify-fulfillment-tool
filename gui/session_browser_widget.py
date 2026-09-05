@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
@@ -15,8 +16,8 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -26,31 +27,44 @@ from gui.components import ContextualSelectionBar, FilterBar
 from gui.selection_ring import SelectionRingDelegate
 from gui.session_row_delegates import (
     ROLE_LIVE,
-    ROLE_MANUAL,
+    ROLE_SHAPE,
     ROLE_TOKEN,
-    STATUS_ROLES,
+    STATE_STYLES,
+    UNKNOWN_STATE,
     PackingProgressDelegate,
     SessionStatusDelegate,
 )
-from gui.theme_manager import get_density_profile
+from gui.theme_manager import get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
-from shared.icons import icon
-from shared.theme import on_theme_changed
-from shopify_tool.session_lifecycle import derive_status_updates, packing_completion
+from shopify_tool.session_lifecycle import (
+    age_label,
+    blocked_orders,
+    derive_status_updates,
+    display_status,
+    needs_attention,
+    packing_completion,
+    parse_created_at,
+)
 from shopify_tool.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
+GROUP_ATTENTION = "Needs attention"
+GROUP_REST = "Everything else"
 
-class _RatioSortItem(QTableWidgetItem):
-    """Displays "packed/total" but sorts on the ratio behind it.
 
-    QTableWidgetItem compares its DisplayRole, so the plain text form puts
+class _SessionItem(QTreeWidgetItem):
+    """Sorts Packing on the ratio behind "packed/total", not on its text.
+
+    QTreeWidgetItem compares its DisplayRole, so the plain text form puts
     "10/12" above "2/3".
     """
 
     def __lt__(self, other):
-        return self.data(Qt.UserRole) < other.data(Qt.UserRole)
+        column = self.treeWidget().sortColumn() if self.treeWidget() else 0
+        if column == 6:
+            return (self.data(6, Qt.UserRole) or -1.0) < (other.data(6, Qt.UserRole) or -1.0)
+        return self.text(column) < other.text(column)
 
 
 class SessionLoaderWorker(BackgroundWorker):
@@ -132,7 +146,7 @@ class SessionBrowserWidget(QWidget):
     """Widget for browsing and opening client sessions.
 
     Provides:
-    - Table showing list of sessions with key info
+    - Tree showing sessions in two groups, with key info per row
     - Status filter (all/active/completed)
     - "Refresh" button to reload sessions
     - Double-click or "Open Session" to load a session
@@ -208,46 +222,44 @@ class SessionBrowserWidget(QWidget):
 
         main_layout.addLayout(filter_layout)
 
-        # Sessions table
-        self.sessions_table = QTableWidget()
-        self.sessions_table.setColumnCount(7)
-        self.sessions_table.setHorizontalHeaderLabels(
-            [
-                "Session Name",
-                "Created",
-                "Status",
-                "Orders",
-                "Items",
-                "Packing Lists",
-                "Packing",
-            ]
+        # Sessions tree: two groups (Needs attention / Everything else), not a
+        # hierarchy -- setRootIsDecorated(False) hides the arrow a real tree
+        # would draw for that.
+        self.sessions_tree = QTreeWidget()
+        self.sessions_tree.setColumnCount(8)
+        self.sessions_tree.setHeaderLabels(
+            ["Session", "Age", "Status", "Orders", "Items",
+             "Blocked", "Packing", "Comment"]
         )
-        self.sessions_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.sessions_table.setSelectionMode(QTableWidget.ExtendedSelection)
-        self.sessions_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.sessions_table.doubleClicked.connect(self._on_session_double_clicked)
-        self.sessions_table.setSortingEnabled(True)
+        self.sessions_tree.setSelectionBehavior(QTreeWidget.SelectRows)
+        self.sessions_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.sessions_tree.setEditTriggers(QTreeWidget.NoEditTriggers)
+        self.sessions_tree.setRootIsDecorated(False)
+        self.sessions_tree.setIndentation(0)
+        self.sessions_tree.doubleClicked.connect(self._on_session_double_clicked)
+        self.sessions_tree.setSortingEnabled(True)
 
-        vertical = self.sessions_table.verticalHeader()
         # ponytail: read once. theme_manager has no density_changed signal, so a
-        # desk<->floor switch lands on this table at next restart. Wire a signal
-        # if a second painted table needs it.
-        vertical.setDefaultSectionSize(get_density_profile().row_height)
-        vertical.setVisible(False)
+        # desk<->floor switch lands on this tree at next restart. Wire a signal
+        # if a second painted view needs it. Unlike the old table, there is no
+        # verticalHeader() to set a pixel row height on; setUniformRowHeights
+        # lets Qt derive it from the delegate/font instead.
+        self.sessions_tree.setUniformRowHeights(True)
 
-        self.sessions_table.setItemDelegateForColumn(2, SessionStatusDelegate(self))
-        self.sessions_table.setItemDelegateForColumn(6, PackingProgressDelegate(self))
+        self.sessions_tree.setItemDelegateForColumn(2, SessionStatusDelegate(self))
+        self.sessions_tree.setItemDelegateForColumn(6, PackingProgressDelegate(self))
         # Columns 2 and 6 have their own delegates and paint the ring
         # themselves; this closes it on the ones that do not.
-        self.sessions_table.setItemDelegate(SelectionRingDelegate(self))
+        self.sessions_tree.setItemDelegate(SelectionRingDelegate(self))
 
-        header = self.sessions_table.horizontalHeader()
-        for column, width in ((1, 150), (2, 130), (3, 80), (4, 80), (5, 120), (6, 130)):
+        header = self.sessions_tree.header()
+        for column, width in ((1, 90), (2, 140), (3, 80), (4, 80),
+                              (5, 80), (6, 130), (7, 200)):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
             header.resizeSection(column, width)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
 
-        main_layout.addWidget(self.sessions_table)
+        main_layout.addWidget(self.sessions_tree)
 
         self.selection_bar = ContextualSelectionBar(self)
 
@@ -280,19 +292,9 @@ class SessionBrowserWidget(QWidget):
         main_layout.addWidget(self.selection_bar)
 
         # Enable open/export buttons on actual click or keyboard navigation.
-        self.sessions_table.clicked.connect(lambda _: self._on_selection_changed())
-        self.sessions_table.currentItemChanged.connect(self._on_selection_changed)
-        self.sessions_table.selectionModel().selectionChanged.connect(
-            lambda *_: self._on_selection_changed()
-        )
-
-        # A comment icon is a QIcon snapshot handed to a QTableWidgetItem, not
-        # a live style -- it does not follow a toggle on its own. One
-        # connection for the widget's life, re-drawing only the icons:
-        # connecting per icon would leak one per keystroke in the search box
-        # (which re-runs _populate_table()), and re-populating would clear the
-        # selection out from under whoever toggled the theme.
-        on_theme_changed(self, lambda _t: self._refresh_comment_icons())
+        self.sessions_tree.clicked.connect(lambda _: self._on_selection_changed())
+        self.sessions_tree.currentItemChanged.connect(self._on_selection_changed)
+        self.sessions_tree.itemSelectionChanged.connect(self._on_selection_changed)
 
     def set_client(self, client_id: str, auto_refresh: bool = True):
         """Set the client to show sessions for.
@@ -316,8 +318,8 @@ class SessionBrowserWidget(QWidget):
         """Reload sessions from the session manager."""
         self._is_dirty = False
         if not self.current_client_id:
-            self.sessions_table.setRowCount(0)
-            logger.debug("No client selected, clearing sessions table")
+            self.sessions_tree.clear()
+            logger.debug("No client selected, clearing sessions tree")
             return
 
         # Check if using async mode (can be disabled for tests)
@@ -334,8 +336,8 @@ class SessionBrowserWidget(QWidget):
             self.worker = None
 
         # 2. Show loading state immediately
-        self.sessions_table.setRowCount(0)  # Clear table
-        self.sessions_table.setEnabled(False)
+        self.sessions_tree.clear()  # Clear tree
+        self.sessions_tree.setEnabled(False)
         self.refresh_btn.setEnabled(False)
         self.refresh_btn.setText("Loading...")
 
@@ -376,8 +378,8 @@ class SessionBrowserWidget(QWidget):
                 self.current_client_id, status_filter=status_filter
             )
 
-            # Populate table
-            self._populate_table()
+            # Populate tree
+            self._populate_tree()
 
             logger.info(f"Loaded {len(self.sessions_data)} sessions (sync mode)")
 
@@ -389,7 +391,7 @@ class SessionBrowserWidget(QWidget):
         """Handle loaded data in main thread (safe for UI updates)."""
         # Guard: widget may have been closed, or merely hidden (e.g. the user
         # switched tabs while the file-server load was in flight).
-        if not self.isVisible() or self.sessions_table is None:
+        if not self.isVisible() or self.sessions_tree is None:
             logger.debug("Widget not visible when sessions loaded — will retry on next show")
             # refresh_sessions() already cleared _is_dirty when the load started;
             # re-mark it so the next showEvent() retries instead of leaving the
@@ -399,10 +401,10 @@ class SessionBrowserWidget(QWidget):
 
         logger.debug(f"Received {len(sessions_data)} sessions from worker")
         self.sessions_data = sessions_data
-        self._populate_table()
+        self._populate_tree()
 
         # Restore UI state
-        self.sessions_table.setEnabled(True)
+        self.sessions_tree.setEnabled(True)
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("Refresh")
 
@@ -411,7 +413,7 @@ class SessionBrowserWidget(QWidget):
         logger.error(f"Session load error: {error_msg}")
 
         # Restore UI
-        self.sessions_table.setEnabled(True)
+        self.sessions_tree.setEnabled(True)
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("Refresh")
 
@@ -420,12 +422,12 @@ class SessionBrowserWidget(QWidget):
             self, "Error Loading Sessions", f"Failed to load sessions:\n{error_msg}"
         )
 
-    def _populate_table(self):
-        """Populate the table with sessions data."""
+    def _populate_tree(self):
+        """Populate the tree with sessions data, grouped by whether they need attention."""
         # Archived sessions are hidden unless asked for. When the user picks
         # "Archived" in the status filter the server-side query already
         # returned only archived rows, so hiding them here would leave an
-        # empty table.
+        # empty tree.
         showing_archived_explicitly = self.status_filter.currentText().lower() == "archived"
         if self._show_archived or showing_archived_explicitly:
             visible_sessions = list(self.sessions_data)
@@ -444,112 +446,110 @@ class SessionBrowserWidget(QWidget):
         self.filter_bar.set_count(
             f"{shown} sessions" if shown == total else f"{shown} of {total} sessions"
         )
-        header = self.sessions_table.horizontalHeader()
+
+        now = datetime.now().astimezone()
+        header = self.sessions_tree.header()
         sort_column = header.sortIndicatorSection()
         sort_order = header.sortIndicatorOrder()
-        self.sessions_table.setSortingEnabled(False)
-        self.sessions_table.setRowCount(len(visible_sessions))
+        self.sessions_tree.setSortingEnabled(False)
+        self.sessions_tree.clear()
 
-        for row, session_info in enumerate(visible_sessions):
-            session_path = session_info.get("session_path", "")
-            stats = session_info.get("statistics", {})
-            comments = session_info.get("comments", "")
+        attention = QTreeWidgetItem([GROUP_ATTENTION])
+        rest = QTreeWidgetItem([GROUP_REST])
+        for group in (attention, rest):
+            group.setFlags(Qt.ItemIsEnabled)      # a group is not selectable
+            group.setFirstColumnSpanned(True)
 
-            # Column 0: Session name
-            name_item = QTableWidgetItem(session_info.get("session_name", ""))
-            name_item.setData(Qt.UserRole, session_path)
-            if comments:
-                name_item.setIcon(icon("message-square"))
-            self.sessions_table.setItem(row, 0, name_item)
+        for session_info in visible_sessions:
+            state = display_status(session_info, now)
+            blocked = blocked_orders(session_info)
+            item = self._build_row(session_info, state, blocked, now)
+            parent = attention if needs_attention(state, blocked) else rest
+            parent.addChild(item)
 
-            # Column 1: Created at
-            created_at = session_info.get("created_at", "")
-            if created_at:
-                try:
-                    dt = datetime.fromisoformat(created_at)
-                    created_str = dt.strftime("%Y-%m-%d %H:%M")
-                except (ValueError, TypeError):
-                    # Invalid datetime format, use original string
-                    created_str = created_at
-            else:
-                created_str = ""
-            created_item = QTableWidgetItem(created_str)
-            self.sessions_table.setItem(row, 1, created_item)
+        for group in (attention, rest):
+            if group.childCount():
+                group.setText(0, f"{group.text(0)}  {group.childCount()}")
+                self.sessions_tree.addTopLevelItem(group)
+                group.setExpanded(True)
 
-            # Column 2: Status -- painted by SessionStatusDelegate. The role and
-            # the authorship flag ride on the item; the delegate owns the paint.
-            status = session_info.get("status", "active")
-            role, live = STATUS_ROLES.get(status, ("text_secondary", False))
-            status_item = QTableWidgetItem(status.capitalize())
-            status_item.setData(ROLE_TOKEN, role)
-            status_item.setData(ROLE_LIVE, live)
-            status_item.setData(
-                ROLE_MANUAL, bool(session_info.get("status_manually_set", False))
-            )
-            self.sessions_table.setItem(row, 2, status_item)
-
-            # Column 3: Orders (READ-ONLY)
-            orders_count = stats.get("total_orders", 0)
-            orders_item = QTableWidgetItem(
-                str(orders_count) if orders_count > 0 else "N/A"
-            )
-            orders_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 3, orders_item)
-
-            # Column 4: Items (READ-ONLY)
-            items_count = stats.get("total_items", 0)
-            items_item = QTableWidgetItem(
-                str(items_count) if items_count > 0 else "N/A"
-            )
-            items_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 4, items_item)
-
-            # Column 5: Packing Lists (READ-ONLY)
-            packing_lists_count = stats.get("packing_lists_count", 0)
-            packing_lists_item = QTableWidgetItem(str(packing_lists_count))
-            packing_lists_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 5, packing_lists_item)
-
-            # Column 6: Packing progress from Packing Tool (READ-ONLY)
-            packed, total = packing_completion(session_info)
-            packing_item = _RatioSortItem(f"{packed}/{total}" if total else "—")
-            packing_item.setData(Qt.UserRole, packed / total if total else -1.0)
-            packing_item.setTextAlignment(Qt.AlignCenter)
-            self.sessions_table.setItem(row, 6, packing_item)
-
-            # Build tooltip with full info
-            packing_lists_str = ", ".join(stats.get("packing_lists", [])) or "None"
-            tooltip = f"""Session: {session_info.get("session_name", "")}
-Created: {created_str}
-Status: {status.capitalize()}
-Orders: {orders_count if orders_count > 0 else "N/A"}
-Items: {items_count if items_count > 0 else "N/A"}
-Packing Lists ({packing_lists_count}): {packing_lists_str}
-Packed: {packed}/{total} lists completed in Packing Tool
-Comments: {comments if comments else "None"}"""
-
-            # Apply tooltip to all cells in row
-            for col in range(self.sessions_table.columnCount()):
-                self.sessions_table.item(row, col).setToolTip(tooltip)
-
-        self.sessions_table.setSortingEnabled(True)
-        # Created descending is the default, but this method now runs on every
-        # search keystroke -- hardcoding the sort here would snap the table back
-        # to column 1 mid-word after the user sorted by something else.
+        self.sessions_tree.setSortingEnabled(True)
         if sort_column < 0:
             sort_column, sort_order = 1, Qt.DescendingOrder
-        self.sessions_table.sortItems(sort_column, sort_order)
+        self.sessions_tree.sortItems(sort_column, sort_order)
+        self._update_archive_footer()
+        self._update_empty_state()
 
-    def _refresh_comment_icons(self):
-        """Re-draw the comment icons in the theme that is current now.
+    def _build_row(self, session_info, state, blocked, now):
+        stats = session_info.get("statistics", {})
+        comments = session_info.get("comments", "")
+        item = _SessionItem()
+        theme = get_theme_manager().get_current_theme()
 
-        Every other colour in this table is live QSS; the icons are the one
-        snapshot, so this is all a theme toggle has to redo here.
-        """
-        for row in range(self.sessions_table.rowCount()):
-            item = self.sessions_table.item(row, 0)
-            if item is not None and not item.icon().isNull():
-                item.setIcon(icon("message-square"))
+        item.setText(0, session_info.get("session_name", ""))
+        item.setData(0, Qt.UserRole, session_info.get("session_path", ""))
+
+        created = parse_created_at(session_info.get("created_at"))
+        age_cell, age_tip = age_label(created, now)
+        item.setText(1, age_cell)
+        if "archives in" in age_cell:
+            item.setForeground(1, QColor(theme.status_warning))
+
+        role, live, shape = STATE_STYLES.get(state, UNKNOWN_STATE)
+        item.setText(2, state.replace("_", " ").capitalize())
+        item.setData(2, ROLE_TOKEN, role)
+        item.setData(2, ROLE_LIVE, live)
+        item.setData(2, ROLE_SHAPE, shape)
+
+        orders = stats.get("total_orders", 0)
+        items = stats.get("total_items", 0)
+        item.setText(3, str(orders) if orders else "N/A")
+        item.setText(4, str(items) if items else "N/A")
+
+        # Blank at zero and at None, so the column reads as a list of
+        # exceptions rather than a field of noughts.
+        item.setText(5, str(blocked) if blocked else "")
+        if blocked:
+            item.setForeground(5, QColor(theme.status_warning))
+
+        packed, total = packing_completion(session_info)
+        item.setText(6, f"{packed}/{total}" if total else "—")
+        item.setData(6, Qt.UserRole, packed / total if total else -1.0)
+
+        item.setText(7, comments)
+
+        for column in (3, 4, 5, 6):
+            item.setTextAlignment(column, Qt.AlignCenter)
+
+        blocked_line = (
+            f"{blocked} of {orders} orders cannot be fulfilled"
+            if blocked else "No blocked orders"
+        )
+        tooltip = "\n".join([
+            session_info.get("session_name", ""),
+            age_tip,
+            f"Status: {item.text(2)}",
+            f"Orders: {orders if orders else 'N/A'}",
+            f"Items: {items if items else 'N/A'}",
+            blocked_line,
+            f"Packed: {packed}/{total} lists completed in Packing Tool",
+            f"Comment: {comments or 'None'}",
+        ])
+        for column in range(8):
+            item.setToolTip(column, tooltip)
+
+        # Abandoned recedes: the system concluded it, it is over. Incomplete
+        # stays full strength -- someone can still finish it.
+        if state == "abandoned":
+            for column in (0, 1, 3, 4, 6, 7):
+                item.setForeground(column, QColor(theme.text_secondary))
+        return item
+
+    def _update_archive_footer(self):
+        """Filled in by 9.19 Task 9 (archive becomes a footer line)."""
+
+    def _update_empty_state(self):
+        """Filled in by 9.19 Task 8 (the two empty states)."""
 
     def _apply_filter(self):
         """Apply the status filter."""
@@ -559,13 +559,13 @@ Comments: {comments if comments else "None"}"""
         """Toggling this only re-filters the already-loaded self.sessions_data --
         no new file-server call, since the whole index is already in memory."""
         self._show_archived = checked
-        self._populate_table()
+        self._populate_tree()
 
     def _on_search_changed(self, text: str):
         """Client-side: 42 sessions are already in memory, so searching them
         must not cost a file-server round trip the way the status filter does."""
         self._search = text.strip().lower()
-        self._populate_table()
+        self._populate_tree()
 
     def mark_dirty(self):
         """Call this whenever a session is created/updated for the client this
@@ -575,7 +575,7 @@ Comments: {comments if comments else "None"}"""
 
     def _on_selection_changed(self, current=None, previous=None):
         """Fires on click and keyboard navigation, not hover."""
-        selected = len(self.sessions_table.selectionModel().selectedRows())
+        selected = len(self._selected_session_paths())
         self.open_btn.setEnabled(selected == 1)
         self.comment_btn.setEnabled(selected == 1)
         self.status_btn.setEnabled(selected >= 1)
@@ -599,12 +599,11 @@ Comments: {comments if comments else "None"}"""
 
     def _open_selected_session(self):
         """Open the currently selected session."""
-        current_row = self.sessions_table.currentRow()
-        if current_row < 0:
+        item = self.sessions_tree.currentItem()
+        if item is None or item.parent() is None:
             return
 
-        item = self.sessions_table.item(current_row, 0)
-        session_path = item.data(Qt.UserRole) if item else None
+        session_path = item.data(0, Qt.UserRole)
 
         if session_path:
             logger.info(f"Opening session: {session_path}")
@@ -613,14 +612,17 @@ Comments: {comments if comments else "None"}"""
             QMessageBox.warning(self, "Error", "Selected session has no valid path.")
 
     def _selected_session_paths(self) -> list[str]:
-        """Session paths for every selected row, in table order."""
-        paths = []
-        for index in self.sessions_table.selectionModel().selectedRows():
-            item = self.sessions_table.item(index.row(), 0)
-            path = item.data(Qt.UserRole) if item else None
-            if path:
-                paths.append(path)
-        return paths
+        """Session paths for every selected row, in tree order.
+
+        Group headings are ItemIsEnabled-only so they never enter a
+        selection, but filtering on `parent()` keeps that a property of this
+        method rather than of a flag somewhere else.
+        """
+        return [
+            item.data(0, Qt.UserRole)
+            for item in self.sessions_tree.selectedItems()
+            if item.parent() is not None and item.data(0, Qt.UserRole)
+        ]
 
     def _apply_status_to_selection(self, status: str):
         """Bulk status write -- the capability the per-row combobox never had.
@@ -650,8 +652,8 @@ Comments: {comments if comments else "None"}"""
         paths = self._selected_session_paths()
         if len(paths) != 1:
             return
-        row = self.sessions_table.selectionModel().selectedRows()[0].row()
-        session_name = self.sessions_table.item(row, 0).text()
+        item = next(i for i in self.sessions_tree.selectedItems() if i.parent() is not None)
+        session_name = item.text(0)
         current = next(
             (
                 s.get("comments", "")
@@ -674,12 +676,10 @@ Comments: {comments if comments else "None"}"""
         Returns:
             str: Session path or empty string if none selected
         """
-        current_row = self.sessions_table.currentRow()
-        if current_row < 0:
+        item = self.sessions_tree.currentItem()
+        if item is None or item.parent() is None:
             return ""
-
-        item = self.sessions_table.item(current_row, 0)
-        return item.data(Qt.UserRole) if item else ""
+        return item.data(0, Qt.UserRole) or ""
 
     def _on_status_changed(
         self, session_path: str, new_status: str, *, quiet: bool = False

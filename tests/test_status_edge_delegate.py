@@ -88,9 +88,9 @@ def test_role_status_collides_with_no_other_custom_role():
     from PySide6.QtCore import Qt
 
     from gui.pandas_model import ROLE_STATUS
-    from gui.session_row_delegates import ROLE_MANUAL, ROLE_TOKEN
+    from gui.session_row_delegates import ROLE_SHAPE, ROLE_TOKEN
 
-    assert ROLE_STATUS not in (Qt.ItemDataRole.UserRole, ROLE_TOKEN, ROLE_MANUAL)
+    assert ROLE_STATUS not in (Qt.ItemDataRole.UserRole, ROLE_TOKEN, ROLE_SHAPE)
 
 
 def _rendered(view):
