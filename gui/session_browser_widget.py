@@ -7,7 +7,7 @@ with filtering by status and the ability to open existing sessions.
 import logging
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -30,14 +30,15 @@ from gui.session_row_delegates import (
     ROLE_LIVE,
     ROLE_SHAPE,
     ROLE_TOKEN,
+    STATE_LABELS,
     STATE_STYLES,
     UNKNOWN_STATE,
     PackingProgressDelegate,
     SessionStatusDelegate,
 )
-from gui.theme_manager import get_theme_manager
+from gui.theme_manager import get_density_profile, get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
-from shared.theme import font_css, set_button_role
+from shared.theme import font_css, on_theme_changed, set_button_role
 from shopify_tool.session_lifecycle import (
     age_label,
     blocked_orders,
@@ -55,18 +56,52 @@ GROUP_ATTENTION = "Needs attention"
 GROUP_REST = "Everything else"
 
 
+# Columns whose cell text is a rendering, not the value: Age reads "3d"/"2w"
+# and Packing reads "10/12", both of which sort wrongly as strings. Each
+# carries its real value in UserRole and is compared numerically.
+_NUMERIC_SORT_COLUMNS = (1, 6)
+
+
 class _SessionItem(QTreeWidgetItem):
-    """Sorts Packing on the ratio behind "packed/total", not on its text.
+    """Sorts Age and Packing on the numbers behind their text.
 
     QTreeWidgetItem compares its DisplayRole, so the plain text form puts
-    "10/12" above "2/3".
+    "10/12" above "2/3" and orders "2w" before "today".
     """
 
     def __lt__(self, other):
         column = self.treeWidget().sortColumn() if self.treeWidget() else 0
-        if column == 6:
-            return (self.data(6, Qt.UserRole) or -1.0) < (other.data(6, Qt.UserRole) or -1.0)
+        if column in _NUMERIC_SORT_COLUMNS:
+            return (self.data(column, Qt.UserRole) or -1.0) < (
+                other.data(column, Qt.UserRole) or -1.0
+            )
         return self.text(column) < other.text(column)
+
+
+class _GroupItem(QTreeWidgetItem):
+    """Holds Needs attention above Everything else under every sort.
+
+    Qt sorts top-level items with the same comparator as the rows, so without
+    a fixed rank a descending sort on any column swaps the two headings -- and
+    spec section 7 puts Needs attention first regardless of what the rows are
+    sorted by.
+    """
+
+    def __init__(self, rank: int, text: str):
+        super().__init__([text])
+        self._rank = rank
+
+    def __lt__(self, other):
+        tree = self.treeWidget()
+        descending = (
+            tree is not None
+            and tree.header().sortIndicatorOrder() == Qt.DescendingOrder
+        )
+        # Qt reverses the result of __lt__ under a descending sort, so invert
+        # here to land on the same order either way.
+        if descending:
+            return self._rank > other._rank
+        return self._rank < other._rank
 
 
 class SessionLoaderWorker(BackgroundWorker):
@@ -234,12 +269,14 @@ class SessionBrowserWidget(QWidget):
         self.sessions_tree.setIndentation(0)
         self.sessions_tree.doubleClicked.connect(self._on_session_double_clicked)
         self.sessions_tree.setSortingEnabled(True)
+        # setSortingEnabled leaves the indicator on column 0, so the default
+        # order has to be stated: newest first, which is what the browser
+        # showed before the tree and what spec section 7 keeps.
+        self.sessions_tree.sortByColumn(1, Qt.DescendingOrder)
 
-        # ponytail: read once. theme_manager has no density_changed signal, so a
-        # desk<->floor switch lands on this tree at next restart. Wire a signal
-        # if a second painted view needs it. Unlike the old table, there is no
-        # verticalHeader() to set a pixel row height on; setUniformRowHeights
-        # lets Qt derive it from the delegate/font instead.
+        # A QTreeView has no verticalHeader() to set a pixel row height on, so
+        # the density profile arrives per row as a size hint from _build_row;
+        # setUniformRowHeights then takes the first row's hint for all of them.
         self.sessions_tree.setUniformRowHeights(True)
 
         self.sessions_tree.setItemDelegateForColumn(2, SessionStatusDelegate(self))
@@ -266,10 +303,15 @@ class SessionBrowserWidget(QWidget):
         archive_layout.setSpacing(8)
         self.archive_count = QLabel("")
         self.archive_count.setStyleSheet(font_css("caption"))
+        # Spec section 9 sets the line as "12 archived · Show". Its own label,
+        # not part of the count, so the count still reads as the bare fact.
+        archive_separator = QLabel("·")
+        archive_separator.setStyleSheet(font_css("caption"))
         self.archive_toggle = QPushButton("Show")
         set_button_role(self.archive_toggle, "ghost")
         self.archive_toggle.clicked.connect(self._on_show_archived_toggled)
         archive_layout.addWidget(self.archive_count)
+        archive_layout.addWidget(archive_separator)
         archive_layout.addWidget(self.archive_toggle)
         archive_layout.addStretch(1)
         self.archive_line.setVisible(False)
@@ -309,6 +351,14 @@ class SessionBrowserWidget(QWidget):
         self.sessions_tree.clicked.connect(lambda _: self._on_selection_changed())
         self.sessions_tree.currentItemChanged.connect(self._on_selection_changed)
         self.sessions_tree.itemSelectionChanged.connect(self._on_selection_changed)
+
+        # _build_row bakes three theme values into its items -- the archive
+        # warning tint, the blocked tint and the abandoned row's dimming -- and
+        # a baked value does not follow a toggle. Per ADR 0003 the fix is to
+        # re-run the recipe, so the rows are rebuilt from self.sessions_data,
+        # which is already in memory. The same signal carries a density change,
+        # which is what refreshes the row-height hint above.
+        on_theme_changed(self, lambda _tokens: self._populate_tree())
 
     def set_client(self, client_id: str, auto_refresh: bool = True):
         """Set the client to show sessions for.
@@ -442,7 +492,7 @@ class SessionBrowserWidget(QWidget):
         # "Archived" in the status filter the server-side query already
         # returned only archived rows, so hiding them here would leave an
         # empty tree.
-        showing_archived_explicitly = self.status_filter.currentText().lower() == "archived"
+        showing_archived_explicitly = self._archived_filter_active()
         if self._show_archived or showing_archived_explicitly:
             visible_sessions = list(self.sessions_data)
         else:
@@ -468,8 +518,8 @@ class SessionBrowserWidget(QWidget):
         self.sessions_tree.setSortingEnabled(False)
         self.sessions_tree.clear()
 
-        attention = QTreeWidgetItem([GROUP_ATTENTION])
-        rest = QTreeWidgetItem([GROUP_REST])
+        attention = _GroupItem(0, GROUP_ATTENTION)
+        rest = _GroupItem(1, GROUP_REST)
         for group in (attention, rest):
             group.setFlags(Qt.ItemIsEnabled)      # a group is not selectable
             group.setFirstColumnSpanned(True)
@@ -488,8 +538,6 @@ class SessionBrowserWidget(QWidget):
                 group.setExpanded(True)
 
         self.sessions_tree.setSortingEnabled(True)
-        if sort_column < 0:
-            sort_column, sort_order = 1, Qt.DescendingOrder
         self.sessions_tree.sortItems(sort_column, sort_order)
         self._update_archive_footer()
         self._update_empty_state()
@@ -499,6 +547,7 @@ class SessionBrowserWidget(QWidget):
         comments = session_info.get("comments", "")
         item = _SessionItem()
         theme = get_theme_manager().get_current_theme()
+        item.setSizeHint(0, QSize(0, get_density_profile().row_height))
 
         item.setText(0, session_info.get("session_name", ""))
         item.setData(0, Qt.UserRole, session_info.get("session_path", ""))
@@ -506,11 +555,13 @@ class SessionBrowserWidget(QWidget):
         created = parse_created_at(session_info.get("created_at"))
         age_cell, age_tip = age_label(created, now)
         item.setText(1, age_cell)
+        # The cell reads "3d"/"2w"; the instant behind it is what Age sorts on.
+        item.setData(1, Qt.UserRole, created.timestamp() if created else -1.0)
         if "archives in" in age_cell:
             item.setForeground(1, QColor(theme.status_warning))
 
         role, live, shape = STATE_STYLES.get(state, UNKNOWN_STATE)
-        item.setText(2, state.replace("_", " ").capitalize())
+        item.setText(2, STATE_LABELS.get(state, state.replace("_", " ").capitalize()))
         item.setData(2, ROLE_TOKEN, role)
         item.setData(2, ROLE_LIVE, live)
         item.setData(2, ROLE_SHAPE, shape)
@@ -532,8 +583,12 @@ class SessionBrowserWidget(QWidget):
 
         item.setText(7, comments)
 
-        for column in (3, 4, 5, 6):
+        for column in (3, 4, 6):
             item.setTextAlignment(column, Qt.AlignCenter)
+        # Blocked is right-aligned per spec 6.2: it is read as an exception
+        # list down the column, and a ragged left edge is what makes the
+        # non-blank rows findable.
+        item.setTextAlignment(5, Qt.AlignRight | Qt.AlignVCenter)
 
         blocked_line = (
             f"{blocked} of {orders} orders cannot be fulfilled"
@@ -559,15 +614,20 @@ class SessionBrowserWidget(QWidget):
                 item.setForeground(column, QColor(theme.text_secondary))
         return item
 
+    def _archived_filter_active(self) -> bool:
+        """True when the status combo is already asking for archived rows.
+
+        The server-side query then returned nothing else, so the footer must
+        stand down and _populate_tree must not hide what it fetched.
+        """
+        return self.status_filter.currentText().lower() == "archived"
+
     def _update_archive_footer(self):
         archived = sum(
             1 for s in self.sessions_data if s.get("status") == "archived"
         )
-        showing_archived_explicitly = (
-            self.status_filter.currentText().lower() == "archived"
-        )
         self.archive_line.setVisible(
-            bool(archived) and not showing_archived_explicitly
+            bool(archived) and not self._archived_filter_active()
         )
         self.archive_count.setText(f"{archived} archived")
         self.archive_toggle.setText("Hide" if self._show_archived else "Show")
@@ -628,9 +688,21 @@ class SessionBrowserWidget(QWidget):
         return f"No {noun} is visible with the current filters."
 
     def _clear_filters(self):
+        # Each setter fires its own handler, and the status one costs a
+        # file-server round trip. Clear both quietly, then refresh once.
+        for widget in (self.filter_bar.search_field, self.status_filter):
+            widget.blockSignals(True)
         self.filter_bar.search_field.clear()
         self.status_filter.setCurrentText("All")
-        self._show_archived = False
+        for widget in (self.filter_bar.search_field, self.status_filter):
+            widget.blockSignals(False)
+        self._search = ""
+
+        # Putting the archive back away is part of clearing the filters --
+        # unless every session this client has is archived, where it would
+        # leave the same empty tree and the button would visibly do nothing.
+        if any(s.get("status") != "archived" for s in self.sessions_data):
+            self._show_archived = False
         self.refresh_sessions()
 
     def _apply_filter(self):

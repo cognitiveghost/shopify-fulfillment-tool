@@ -116,27 +116,37 @@ DISPLAY_STATUSES = (
 STALE_AFTER_DAYS = 7
 
 
-def _has_paused_list(entry: dict) -> bool:
+def _progress_blocks(entry: dict) -> list[dict]:
+    """Every readable packing_progress block, ignoring anything malformed."""
     progress = entry.get("packing_progress")
     if not isinstance(progress, dict):
-        return False
+        return []
+    return [block for block in progress.values() if isinstance(block, dict)]
+
+
+def _has_paused_list(entry: dict) -> bool:
     return any(
-        isinstance(block, dict) and block.get("status") == "paused"
-        for block in progress.values()
+        block.get("status") == "paused" for block in _progress_blocks(entry)
     )
 
 
 def _idle_since(entry: dict):
     """When this session was last written, or None if unreadable.
 
-    packing-tool writes packing_progress through its own path, so
-    `last_updated` can be missing on a session it touched last. Falling back
-    to created_at makes the answer conservative rather than absent.
+    packing-tool never writes `last_updated` -- its progress writer stamps
+    `packing_progress[*].updated_at` instead (packing_tool/session_manager.py
+    :721). Reading only `last_updated` therefore calls a session that is being
+    packed right now idle since the day it was created, which is exactly the
+    false Stale row the Needs attention group exists to avoid. Take the latest
+    of every stamp we can read, and fall back to created_at when there is none.
     """
-    return (
-        parse_created_at(entry.get("last_updated"))
-        or parse_created_at(entry.get("created_at"))
-    )
+    stamps = [parse_created_at(entry.get("last_updated"))]
+    stamps += [
+        parse_created_at(block.get("updated_at"))
+        for block in _progress_blocks(entry)
+    ]
+    readable = [s for s in stamps if s is not None]
+    return max(readable) if readable else parse_created_at(entry.get("created_at"))
 
 
 def display_status(entry: dict, now: datetime) -> str:
@@ -148,7 +158,13 @@ def display_status(entry: dict, now: datetime) -> str:
     if not isinstance(entry, dict):
         return "active"
 
-    stored = entry.get("status", "active")
+    # `.get(key, default)` does not cover a key that is present and null, and
+    # this file is written by two tools. Anything that is not a status word
+    # reads as the default rather than travelling on to the caller, which
+    # would hand `None` to `str.replace` in the browser's row builder.
+    stored = entry.get("status")
+    if not isinstance(stored, str) or not stored:
+        stored = "active"
 
     if stored in ("abandoned", "archived"):
         return stored
@@ -167,7 +183,12 @@ def display_status(entry: dict, now: datetime) -> str:
 
     if _has_paused_list(entry):
         return "paused"
-    if packed == 0:
+    # "No progress at all", not "nothing finished yet". A session whose only
+    # list is still `in_progress` has been started -- scoring it on the
+    # completed count alone made it read Not started for the whole packing
+    # run and then jump straight to Completed, and kept it from ever going
+    # stale, since stale is only reachable from in_progress.
+    if not _progress_blocks(entry):
         return "not_started"
 
     idle_since = _idle_since(entry)
@@ -208,14 +229,12 @@ def age_label(created, now: datetime) -> tuple[str, str]:
     else:
         cell = f"{days // 30}mo"
 
-    # A full warning-window early, drop the week/month bucket for a plain day
-    # count, so the jump into the countdown itself isn't the first time the
-    # display switches units.
+    # Inside the warning window the bucket drops to a plain day count, because
+    # the countdown is in days and "3w · archives in 4d" would state the same
+    # span in two units. Spec 6.1's own example is `26d · archives in 4d`.
     remaining = AUTO_ARCHIVE_AFTER_DAYS - days
-    if 0 < remaining <= 2 * ARCHIVE_WARNING_DAYS:
-        cell = f"{days}d"
-        if remaining <= ARCHIVE_WARNING_DAYS:
-            cell += f" · archives in {remaining}d"
+    if 0 < remaining <= ARCHIVE_WARNING_DAYS:
+        cell = f"{days}d · archives in {remaining}d"
     return (cell, tooltip)
 
 

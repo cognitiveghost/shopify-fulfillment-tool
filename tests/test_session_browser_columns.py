@@ -2,12 +2,16 @@
 
 Spec: docs/superpowers/specs/2026-09-04-phase9-bundle6-session-browser-design.md
 """
+from datetime import datetime
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QLabel
 
 from gui.session_browser_widget import SessionBrowserWidget
+from gui.theme_manager import get_density_profile
+from shared.theme import theme_notifier
 from shopify_tool.session_lifecycle import display_status
 
 HEADERS = ["Session", "Age", "Status", "Orders", "Items",
@@ -268,3 +272,96 @@ class TestArchiveFooter:
 
     def test_the_old_toggle_button_is_gone(self, browser):
         assert not hasattr(browser, "show_archived_btn")
+
+    def test_a_middot_separates_the_count_from_the_verb(self, browser,
+                                                        sessions_with_archived):
+        browser.sessions_data = sessions_with_archived
+        browser._populate_tree()
+        labels = browser.archive_line.findChildren(QLabel)
+        assert "·" in [label.text() for label in labels]
+
+
+@pytest.fixture
+def sessions_across_time():
+    """Four sessions whose names sort in the opposite order to their dates."""
+    return [
+        _session("weekish", created_at="2026-08-20T09:00:00"),
+        _session("oldest", created_at="2026-02-01T09:00:00"),
+        _session("newest", created_at="2026-09-04T09:00:00"),
+        _session("mid", created_at="2026-08-25T09:00:00"),
+    ]
+
+
+class TestRowOrder:
+    """Spec section 7: "Default sort stays created-descending"."""
+
+    def test_the_default_order_is_newest_first(self, browser, sessions_across_time):
+        browser.sessions_data = sessions_across_time
+        browser._populate_tree()
+        assert _names(browser) == ["newest", "mid", "weekish", "oldest"]
+
+    def test_sorting_age_ascending_is_oldest_first(self, browser, sessions_across_time):
+        browser.sessions_data = sessions_across_time
+        browser._populate_tree()
+        browser.sessions_tree.sortItems(1, Qt.AscendingOrder)
+        assert _names(browser) == ["oldest", "weekish", "mid", "newest"]
+
+    def test_the_groups_keep_their_order_under_a_descending_sort(
+        self, browser, two_group_sessions
+    ):
+        browser.sessions_data = two_group_sessions
+        browser._populate_tree()
+        browser.sessions_tree.sortItems(0, Qt.DescendingOrder)
+        tree = browser.sessions_tree
+        headings = [
+            tree.topLevelItem(i).text(0).split("  ")[0]
+            for i in range(tree.topLevelItemCount())
+        ]
+        assert headings == ["Needs attention", "Everything else"]
+
+
+class TestRowPresentation:
+    def test_an_active_session_is_labelled_active_not_in_progress(self, browser):
+        # Spec section 4's label table, and the word the status filter above
+        # the tree already uses for the same stored status.
+        browser.sessions_data = [
+            _session("s1", lists=["a", "b"],
+                     progress={"a": {"status": "completed"}},
+                     last_updated=datetime.now().astimezone().isoformat())
+        ]
+        browser._populate_tree()
+        assert _column_text(browser, "Status") == ["Active"]
+
+    def test_blocked_is_right_aligned(self, browser):
+        browser.sessions_data = [_session("s1", not_fulfillable_orders=4)]
+        browser._populate_tree()
+        item = browser.sessions_tree.topLevelItem(0).child(0)
+        assert item.textAlignment(5) & Qt.AlignRight
+
+    def test_the_row_height_follows_the_density_profile(self, browser, calm_sessions):
+        browser.sessions_data = calm_sessions
+        browser._populate_tree()
+        item = browser.sessions_tree.topLevelItem(0).child(0)
+        assert item.sizeHint(0).height() == get_density_profile().row_height
+
+    def test_a_long_comment_survives_in_the_row_tooltip(self, browser):
+        # Spec section 6.3: the column elides, the tooltip does not.
+        text = "short pick, ask Dana before releasing the rest of the pallet"
+        browser.sessions_data = [_session("s1", comments=text)]
+        browser._populate_tree()
+        item = browser.sessions_tree.topLevelItem(0).child(0)
+        assert f"Comment: {text}" in item.toolTip(0)
+
+
+def test_a_theme_toggle_rebuilds_the_rows_that_baked_theme_colours_in(
+    browser, sessions_with_archived
+):
+    # ADR 0003: _build_row bakes the archive tint, the blocked tint and the
+    # abandoned dimming into its items, and a baked colour does not follow a
+    # toggle -- so the rows have to be rebuilt off the signal.
+    browser.sessions_data = sessions_with_archived
+    browser._populate_tree()
+    before = _names(browser)
+    browser.sessions_tree.clear()
+    theme_notifier.changed.emit("dark")
+    assert _names(browser) == before

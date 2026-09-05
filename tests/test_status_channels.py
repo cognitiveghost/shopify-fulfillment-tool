@@ -64,3 +64,26 @@ def test_role_manual_is_gone():
     import gui.session_row_delegates as delegates
 
     assert not hasattr(delegates, "ROLE_MANUAL")
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_a_role_with_no_bg_partner_falls_back_to_surface_sunken(theme):
+    # text_secondary carries not_started and archived and has no _bg partner.
+    # Every state that uses it is resting, so the table's own resolution
+    # passes fill=None and never reaches the fallback -- force live=True, or
+    # the one tolerated missing token in the theme goes untested.
+    assert status_style("text_secondary", theme, live=True).fill == theme.surface_sunken
+
+
+@pytest.mark.parametrize("state", DISPLAY_STATUSES)
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME])
+def test_the_delegate_and_the_chip_resolve_the_same_style(state, theme, qapp):
+    # SessionStatusDelegate paints status_style() and StatusChip renders it as
+    # QSS. The chip is still in service elsewhere, so the two can still drift;
+    # this reads the chip's actual resolved style rather than making a second
+    # status_style() call that would pass by construction.
+    from shared.theme import StatusChip
+
+    role, live, _shape = STATE_STYLES[state]
+    chip = StatusChip(role, state, theme, live=live)
+    assert chip._style == status_style(role, theme, live=live)

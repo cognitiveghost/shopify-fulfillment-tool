@@ -47,6 +47,13 @@ STATE_STYLES: dict[str, tuple[str, bool, str]] = {
 # colour. A state this build has never heard of is not an emergency.
 UNKNOWN_STATE = ("text_secondary", False, "ring")
 
+# Every other state's label falls out of its name -- "not_started" reads
+# "Not started". Only this one does not: the stored status is `active`, the
+# status filter above the tree offers "Active", and printing "In progress"
+# beside them would be a second name for one thing, which is the failure the
+# phase spec's naming section exists to prevent.
+STATE_LABELS = {"in_progress": "Active"}
+
 
 class SessionStatusDelegate(QStyledItemDelegate):
     """Paints the Status cell as one silhouette: an outlined pill, a shape, a label.

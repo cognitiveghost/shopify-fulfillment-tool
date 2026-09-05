@@ -125,9 +125,17 @@ can still finish it". `derive_status_updates` only ever promotes
 `active → completed` when fully packed, so every `incomplete` row is a human
 judgment, never an automation artefact.
 
-`stale` reads `last_updated`, falling back to `created_at` when absent. It is
-**not** age from creation — Age is its own column, and drawing the same fact
-twice is what this phase keeps deleting.
+`stale` reads the latest of `last_updated` and every
+`packing_progress[*].updated_at`, falling back to `created_at` when none of
+them is readable. It is **not** age from creation — Age is its own column, and
+drawing the same fact twice is what this phase keeps deleting.
+
+> **Amended at review.** This section first said `last_updated` alone.
+> packing-tool never writes that key — its progress writer stamps
+> `updated_at` on the block it touched (`packing_tool/session_manager.py:721`)
+> — so a session being packed right now read as idle since the day it was
+> created, went `stale`, and landed in Needs attention. Reading every stamp is
+> what makes the rule true across both writers.
 
 One pure function, beside the accessor:
 

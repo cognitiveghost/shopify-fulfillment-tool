@@ -222,6 +222,43 @@ class TestDisplayStatus:
                        updated=NOW - timedelta(days=1))
         assert display_status(entry, NOW) == "in_progress"
 
+    def test_a_list_still_being_packed_is_active_not_not_started(self):
+        # Spec section 4 draws the line at "no packing progress at all", not
+        # at "nothing finished". Scoring on completed lists alone made a
+        # session read Not started for the whole packing run.
+        entry = _lifecycle_entry(lists=["a"],
+                                 progress={"a": {"status": "in_progress"}},
+                                 updated=NOW - timedelta(hours=1))
+        assert display_status(entry, NOW) == "in_progress"
+
+    def test_a_half_packed_session_left_a_week_goes_stale(self):
+        # Unreachable while not_started swallowed every session with nothing
+        # completed: stale is only reachable from in_progress.
+        entry = _lifecycle_entry(lists=["a"],
+                                 progress={"a": {"status": "in_progress"}},
+                                 updated=NOW - timedelta(days=8))
+        assert display_status(entry, NOW) == "stale"
+
+    def test_packing_tool_progress_counts_as_recent_activity(self):
+        # packing-tool never writes last_updated -- it stamps updated_at on
+        # the block it touched. Reading only last_updated called a session
+        # being packed right now idle since the day it was created.
+        entry = _lifecycle_entry(lists=["a", "b"],
+                                 progress={"a": {"status": "completed"}})
+        entry["created_at"] = (NOW - timedelta(days=40)).isoformat()
+        entry["packing_progress"]["a"]["updated_at"] = (
+            NOW - timedelta(hours=2)
+        ).isoformat()
+        assert display_status(entry, NOW) == "in_progress"
+
+    def test_a_null_status_reads_as_active_rather_than_escaping(self):
+        # session_info.json is written by two tools; `.get(key, default)`
+        # does not cover a key present with a null value, and the row builder
+        # calls str.replace on whatever comes back.
+        entry = _lifecycle_entry(lists=["a"])
+        entry["status"] = None
+        assert display_status(entry, NOW) == "not_started"
+
     def test_a_paused_list_beats_progress(self):
         entry = _lifecycle_entry(lists=["a", "b"],
                        progress={"a": {"status": "completed"},
@@ -293,8 +330,12 @@ class TestAgeLabel:
         assert cell == "26d · archives in 4d"
 
     def test_no_countdown_the_day_before_the_window_opens(self):
+        # The bucket the cell falls in outside the window is the Age column's
+        # own business; what this asserts is that the countdown has not
+        # started yet. Pinning the string here once made the implementation
+        # widen the plain-day zone a week early to satisfy the test.
         cell, _ = age_label(NOW - timedelta(days=22), NOW)
-        assert cell == "22d"
+        assert "archives in" not in cell
 
     def test_the_countdown_stops_at_zero_it_never_goes_negative(self):
         cell, _ = age_label(NOW - timedelta(days=40), NOW)
