@@ -176,6 +176,61 @@ def display_status(entry: dict, now: datetime) -> str:
     return "in_progress"
 
 
+# How long before the auto-archive the row starts counting down. The 23-day
+# threshold the countdown appears at is AUTO_ARCHIVE_AFTER_DAYS minus this;
+# writing 23 anywhere would let the two drift apart.
+ARCHIVE_WARNING_DAYS = 7
+
+# The states still in flight. Blocked orders matter on these and nowhere
+# else: a blocked count on a session someone already closed is history.
+_IN_FLIGHT = ("not_started", "in_progress", "paused", "stale")
+
+
+def age_label(created, now: datetime) -> tuple[str, str]:
+    """(cell, tooltip) for the Age column.
+
+    The cell is relative and one unit deep -- "3d", "2w", "6mo". The absolute
+    stamp goes in the tooltip, which is the only place it was ever read.
+    Inside the archive window the cell also carries the countdown.
+    """
+    if not isinstance(created, datetime):
+        return ("—", "Created date unreadable")
+
+    tooltip = f"Created {created:%Y-%m-%d %H:%M}"
+    days = max(0, (now - created).days)
+
+    if days == 0:
+        cell = "today"
+    elif days < 14:
+        cell = f"{days}d"
+    elif days < 60:
+        cell = f"{days // 7}w"
+    else:
+        cell = f"{days // 30}mo"
+
+    # A full warning-window early, drop the week/month bucket for a plain day
+    # count, so the jump into the countdown itself isn't the first time the
+    # display switches units.
+    remaining = AUTO_ARCHIVE_AFTER_DAYS - days
+    if 0 < remaining <= 2 * ARCHIVE_WARNING_DAYS:
+        cell = f"{days}d"
+        if remaining <= ARCHIVE_WARNING_DAYS:
+            cell += f" · archives in {remaining}d"
+    return (cell, tooltip)
+
+
+def needs_attention(state: str, blocked: int | None) -> bool:
+    """True when this row belongs in the Needs attention group.
+
+    Either the state itself is a request for someone -- paused, stale, or
+    finished-but-not-packed -- or the session is still in flight and carrying
+    orders it cannot fulfil.
+    """
+    if state in ("paused", "stale", "incomplete"):
+        return True
+    return bool(blocked) and state in _IN_FLIGHT
+
+
 def parse_created_at(value) -> datetime | None:
     """ISO timestamp -> aware datetime, or None if unreadable.
 

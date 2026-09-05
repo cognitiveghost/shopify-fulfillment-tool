@@ -2,11 +2,14 @@
 from datetime import datetime, timedelta
 
 from shopify_tool.session_lifecycle import (
+    ARCHIVE_WARNING_DAYS,
     DISPLAY_STATUSES,
+    age_label,
     blocked_orders,
     derive_status_updates,
     display_status,
     is_fully_packed,
+    needs_attention,
     packing_completion,
     parse_created_at,
 )
@@ -266,3 +269,63 @@ class TestDisplayStatus:
 
     def test_survives_a_non_dict(self):
         assert display_status(None, NOW) == "active"
+
+
+class TestAgeLabel:
+    def test_today(self):
+        cell, tip = age_label(NOW - timedelta(hours=3), NOW)
+        assert cell == "today"
+        assert tip.startswith("Created ")
+
+    def test_days(self):
+        assert age_label(NOW - timedelta(days=3), NOW)[0] == "3d"
+
+    def test_weeks_start_at_fourteen_days(self):
+        assert age_label(NOW - timedelta(days=13), NOW)[0] == "13d"
+        assert age_label(NOW - timedelta(days=14), NOW)[0] == "2w"
+
+    def test_months_start_at_sixty_days(self):
+        assert age_label(NOW - timedelta(days=59), NOW)[0] == "8w"
+        assert age_label(NOW - timedelta(days=60), NOW)[0] == "2mo"
+
+    def test_the_countdown_appears_seven_days_before_archiving(self):
+        cell, _ = age_label(NOW - timedelta(days=26), NOW)
+        assert cell == "26d · archives in 4d"
+
+    def test_no_countdown_the_day_before_the_window_opens(self):
+        cell, _ = age_label(NOW - timedelta(days=22), NOW)
+        assert cell == "22d"
+
+    def test_the_countdown_stops_at_zero_it_never_goes_negative(self):
+        cell, _ = age_label(NOW - timedelta(days=40), NOW)
+        assert "archives in" not in cell
+
+    def test_the_tooltip_carries_the_absolute_stamp(self):
+        created = NOW - timedelta(days=3)
+        assert age_label(created, NOW)[1] == f"Created {created:%Y-%m-%d %H:%M}"
+
+    def test_an_unreadable_date_says_so(self):
+        assert age_label(None, NOW) == ("—", "Created date unreadable")
+
+    def test_the_warning_window_is_derived_not_typed(self):
+        assert ARCHIVE_WARNING_DAYS == 7
+
+
+class TestNeedsAttention:
+    def test_the_three_states_that_always_need_it(self):
+        assert needs_attention("paused", 0)
+        assert needs_attention("stale", 0)
+        assert needs_attention("incomplete", 0)
+
+    def test_blocked_work_still_in_flight_needs_it(self):
+        assert needs_attention("in_progress", 4)
+        assert needs_attention("not_started", 4)
+
+    def test_blocked_work_already_over_does_not(self):
+        assert not needs_attention("completed", 4)
+        assert not needs_attention("abandoned", 4)
+        assert not needs_attention("archived", 4)
+
+    def test_unblocked_work_in_flight_does_not(self):
+        assert not needs_attention("in_progress", 0)
+        assert not needs_attention("in_progress", None)
