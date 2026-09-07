@@ -38,7 +38,7 @@ def test_dropped_result_while_hidden_marks_dirty_for_retry(widget, monkeypatch):
     widget._on_sessions_loaded([{"session_name": "s1", "created_at": ""}])
 
     assert widget._is_dirty is True
-    assert widget.sessions_table.rowCount() == 0
+    assert widget.sessions_tree.topLevelItemCount() == 0
 
 
 def test_becoming_visible_again_retries_the_load(widget, monkeypatch):

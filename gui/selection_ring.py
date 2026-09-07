@@ -57,9 +57,21 @@ def caps(header, column: int) -> tuple[bool, bool]:
 
 
 def header_of(option):
-    """The horizontal header behind this cell, or None for a non-table view."""
+    """The header behind this cell, or None for a view that has none.
+
+    A QTableView calls it horizontalHeader() and a QTreeView calls it
+    header(); the QHeaderView they return is the same class, and caps() only
+    reads count(), logicalIndex() and isSectionHidden(). Bundle 6 turned the
+    Session Browser into a tree, and without this branch the ring's two end
+    caps disappeared silently -- caps() returned (False, False) for every
+    column and nothing raised.
+    """
     widget = option.widget
-    return widget.horizontalHeader() if hasattr(widget, "horizontalHeader") else None
+    if hasattr(widget, "horizontalHeader"):
+        return widget.horizontalHeader()
+    if hasattr(widget, "header"):
+        return widget.header()
+    return None
 
 
 def paint_selection_ring(painter, option, index) -> None:

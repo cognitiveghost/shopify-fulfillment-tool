@@ -65,6 +65,191 @@ def is_fully_packed(entry: dict) -> bool:
     return total > 0 and packed == total
 
 
+def _count(value) -> int | None:
+    """A non-negative int, or None for anything else.
+
+    bool is an int in Python and would sail through isinstance; a True here
+    means the file holds something we do not understand, so it reads as None.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def blocked_orders(entry: dict) -> int | None:
+    """Orders this session cannot fulfil, or None when it was never analysed.
+
+    None is not 0: a session with no analysis has no answer, and the Blocked
+    column must stay blank rather than claim nothing is blocked.
+
+    `core.py` has written `not_fulfillable_orders` into session_info.json on
+    every session-mode analysis since the session architecture landed, and the
+    index carries whole session_info dicts, so the stored key is the normal
+    path. The subtraction is the fallback for a session written by something
+    that recorded only the two halves.
+    """
+    if not isinstance(entry, dict):
+        return None
+
+    stored = _count(entry.get("not_fulfillable_orders"))
+    if stored is not None:
+        return stored
+
+    total = _count(entry.get("total_orders"))
+    fulfillable = _count(entry.get("fulfillable_orders"))
+    if total is None or fulfillable is None or fulfillable > total:
+        return None
+    return total - fulfillable
+
+
+# The eight states a row shows, in the order they progress. The four a person
+# can set live in SessionManager.VALID_STATUSES; the other four are derived
+# here from packing progress and idle time.
+DISPLAY_STATUSES = (
+    "not_started", "in_progress", "paused", "stale",
+    "completed", "incomplete", "abandoned", "archived",
+)
+
+# An in-flight session nobody has touched for this long has stopped moving.
+# Not age from creation -- the Age column already carries that, and drawing
+# one fact twice is what this phase keeps deleting.
+STALE_AFTER_DAYS = 7
+
+
+def _progress_blocks(entry: dict) -> list[dict]:
+    """Every readable packing_progress block, ignoring anything malformed."""
+    progress = entry.get("packing_progress")
+    if not isinstance(progress, dict):
+        return []
+    return [block for block in progress.values() if isinstance(block, dict)]
+
+
+def _has_paused_list(entry: dict) -> bool:
+    return any(
+        block.get("status") == "paused" for block in _progress_blocks(entry)
+    )
+
+
+def _idle_since(entry: dict):
+    """When this session was last written, or None if unreadable.
+
+    packing-tool never writes `last_updated` -- its progress writer stamps
+    `packing_progress[*].updated_at` instead (packing_tool/session_manager.py
+    :721). Reading only `last_updated` therefore calls a session that is being
+    packed right now idle since the day it was created, which is exactly the
+    false Stale row the Needs attention group exists to avoid. Take the latest
+    of every stamp we can read, and fall back to created_at when there is none.
+    """
+    stamps = [parse_created_at(entry.get("last_updated"))]
+    stamps += [
+        parse_created_at(block.get("updated_at"))
+        for block in _progress_blocks(entry)
+    ]
+    readable = [s for s in stamps if s is not None]
+    return max(readable) if readable else parse_created_at(entry.get("created_at"))
+
+
+def display_status(entry: dict, now: datetime) -> str:
+    """One of DISPLAY_STATUSES for this entry. Pure, total, never raises.
+
+    An unrecognised stored status is returned unchanged, so a value some
+    future version writes renders as its own name rather than as a lie.
+    """
+    if not isinstance(entry, dict):
+        return "active"
+
+    # `.get(key, default)` does not cover a key that is present and null, and
+    # this file is written by two tools. Anything that is not a status word
+    # reads as the default rather than travelling on to the caller, which
+    # would hand `None` to `str.replace` in the browser's row builder.
+    stored = entry.get("status")
+    if not isinstance(stored, str) or not stored:
+        stored = "active"
+
+    if stored in ("abandoned", "archived"):
+        return stored
+
+    packed, total = packing_completion(entry)
+
+    if stored == "completed":
+        # A person called it done. If lists are still unpacked, that is a
+        # human judgment someone can still act on -- not an automation
+        # artefact: derive_status_updates only ever promotes a fully packed
+        # session.
+        return "incomplete" if total > 0 and packed < total else "completed"
+
+    if stored != "active":
+        return stored
+
+    if _has_paused_list(entry):
+        return "paused"
+    # "No progress at all", not "nothing finished yet". A session whose only
+    # list is still `in_progress` has been started -- scoring it on the
+    # completed count alone made it read Not started for the whole packing
+    # run and then jump straight to Completed, and kept it from ever going
+    # stale, since stale is only reachable from in_progress.
+    if not _progress_blocks(entry):
+        return "not_started"
+
+    idle_since = _idle_since(entry)
+    if idle_since is not None and now - idle_since >= timedelta(days=STALE_AFTER_DAYS):
+        return "stale"
+    return "in_progress"
+
+
+# How long before the auto-archive the row starts counting down. The 23-day
+# threshold the countdown appears at is AUTO_ARCHIVE_AFTER_DAYS minus this;
+# writing 23 anywhere would let the two drift apart.
+ARCHIVE_WARNING_DAYS = 7
+
+# The states still in flight. Blocked orders matter on these and nowhere
+# else: a blocked count on a session someone already closed is history.
+_IN_FLIGHT = ("not_started", "in_progress", "paused", "stale")
+
+
+def age_label(created, now: datetime) -> tuple[str, str]:
+    """(cell, tooltip) for the Age column.
+
+    The cell is relative and one unit deep -- "3d", "2w", "6mo". The absolute
+    stamp goes in the tooltip, which is the only place it was ever read.
+    Inside the archive window the cell also carries the countdown.
+    """
+    if not isinstance(created, datetime):
+        return ("—", "Created date unreadable")
+
+    tooltip = f"Created {created:%Y-%m-%d %H:%M}"
+    days = max(0, (now - created).days)
+
+    if days == 0:
+        cell = "today"
+    elif days < 14:
+        cell = f"{days}d"
+    elif days < 60:
+        cell = f"{days // 7}w"
+    else:
+        cell = f"{days // 30}mo"
+
+    # Inside the warning window the bucket drops to a plain day count, because
+    # the countdown is in days and "3w · archives in 4d" would state the same
+    # span in two units. Spec 6.1's own example is `26d · archives in 4d`.
+    remaining = AUTO_ARCHIVE_AFTER_DAYS - days
+    if 0 < remaining <= ARCHIVE_WARNING_DAYS:
+        cell = f"{days}d · archives in {remaining}d"
+    return (cell, tooltip)
+
+
+def needs_attention(state: str, blocked: int | None) -> bool:
+    """True when this row belongs in the Needs attention group.
+
+    Either the state itself is a request for someone -- paused, stale, or
+    finished-but-not-packed -- or the session is still in flight and carrying
+    orders it cannot fulfil.
+    """
+    if state in ("paused", "stale", "incomplete"):
+        return True
+    return bool(blocked) and state in _IN_FLIGHT
+
+
 def parse_created_at(value) -> datetime | None:
     """ISO timestamp -> aware datetime, or None if unreadable.
 

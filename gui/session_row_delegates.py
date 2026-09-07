@@ -18,33 +18,50 @@ from PySide6.QtWidgets import (
 
 from gui.selection_ring import paint_selection_ring
 from gui.theme_manager import get_theme_manager
-from shared.theme import MARK_LEFT_PX, MARK_PX, paint_status_mark, status_style
+from shared.theme import MARK_LEFT_PX, SHAPE_PX, paint_status_shape, status_style
 
-# Item-data roles. Qt.UserRole itself is already taken on this table: column 0
+# Item-data roles. Qt.UserRole itself is already taken on this tree: column 0
 # carries the session path, column 6 the packing ratio.
-ROLE_TOKEN = Qt.UserRole + 1     # str -- theme token name for the status
-ROLE_MANUAL = Qt.UserRole + 2    # bool -- status_manually_set
+ROLE_TOKEN = Qt.UserRole + 1     # str -- theme token name for the state
+ROLE_SHAPE = Qt.UserRole + 2     # str -- which of SHAPES to paint
 ROLE_LIVE = Qt.UserRole + 3      # bool -- someone still has to act
 
 # 9.3 §3.5: live-ness is data about a state, so it rides with the role rather
-# than in a second table keyed by the same thing. 9.19 extends this to seven
-# statuses plus archived; it owns that expansion because it is gated on the
-# `blocked_orders` data change.
-STATUS_ROLES: dict[str, tuple[str, bool]] = {
-    "active": ("status_info", True),
-    "completed": ("status_success", False),
-    "abandoned": ("status_danger", False),
-    "archived": ("text_secondary", False),
+# than in a second table keyed by the same thing. 9.19 adds the fourth channel
+# on the same argument -- shape names the state, and authorship, which is
+# constant per state, folds in here rather than being drawn.
+#
+# (role, live, shape), keyed by session_lifecycle.DISPLAY_STATUSES.
+STATE_STYLES: dict[str, tuple[str, bool, str]] = {
+    "not_started": ("text_secondary", False, "ring"),
+    "in_progress": ("status_info", True, "half"),
+    "paused": ("status_warning", True, "pause"),
+    "stale": ("status_warning", True, "clock"),
+    "completed": ("status_success", False, "check"),
+    "incomplete": ("status_warning", True, "bang"),
+    "abandoned": ("status_danger", False, "slash"),
+    "archived": ("text_secondary", False, "tray"),
 }
+
+# What an unrecognised state paints: the ring, untinted, in the secondary
+# colour. A state this build has never heard of is not an emergency.
+UNKNOWN_STATE = ("text_secondary", False, "ring")
+
+# Every other state's label falls out of its name -- "not_started" reads
+# "Not started". Only this one does not: the stored status is `active`, the
+# status filter above the tree offers "Active", and printing "In progress"
+# beside them would be a second name for one thing, which is the failure the
+# phase spec's naming section exists to prevent.
+STATE_LABELS = {"in_progress": "Active"}
 
 
 class SessionStatusDelegate(QStyledItemDelegate):
-    """Paints the Status cell as one silhouette: an outlined pill, a mark, a label.
+    """Paints the Status cell as one silhouette: an outlined pill, a shape, a label.
 
-    Colour is the role, fill is live-vs-resting, and the mark is authorship --
-    solid for a person, hollow for the system. Before 9.3 authorship chose
-    between a bare dot and a tinted pill, which read as two components and made
-    the authorship difference disappear into "the design is inconsistent".
+    Colour is the role, fill is live-vs-resting, and shape names the state --
+    the ring-to-check progression reads as movement through one lifecycle
+    rather than eight unrelated hues. Authorship is constant per state and
+    rides in STATE_STYLES; it is no longer a separate drawn channel.
 
     A delegate, not a cell widget: a QLabel in a cell covers it, so clicks
     never reach the row and hover moves the selection.
@@ -66,14 +83,13 @@ class SessionStatusDelegate(QStyledItemDelegate):
             role,
             get_theme_manager().get_current_theme(),
             live=bool(index.data(ROLE_LIVE)),
-            manual=bool(index.data(ROLE_MANUAL)),
         )
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
         rect = option.rect.adjusted(8, 0, -8, 0)
         metrics = painter.fontMetrics()
-        label_left = MARK_LEFT_PX + MARK_PX + 4
+        label_left = MARK_LEFT_PX + SHAPE_PX + 4
         height = metrics.height() + 4
         pill = QRect(
             rect.left(),
@@ -82,17 +98,18 @@ class SessionStatusDelegate(QStyledItemDelegate):
             height,
         )
         painter.setBrush(QColor(status.fill) if status.fill else Qt.NoBrush)
-        painter.setPen(QColor(status.fg))       # the outline, then the mark and label
+        painter.setPen(QColor(status.fg))       # the outline, then the shape and label
         painter.drawRoundedRect(pill, height / 2, height / 2)
-        paint_status_mark(
+        paint_status_shape(
             painter,
             QRectF(
                 pill.left() + MARK_LEFT_PX,
-                pill.center().y() - MARK_PX / 2,
-                MARK_PX,
-                MARK_PX,
+                pill.center().y() - SHAPE_PX / 2,
+                SHAPE_PX,
+                SHAPE_PX,
             ),
             status,
+            index.data(ROLE_SHAPE) or "ring",
         )
         painter.drawText(
             pill.adjusted(label_left, 0, -8, 0),

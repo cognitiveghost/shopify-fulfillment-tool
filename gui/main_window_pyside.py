@@ -368,6 +368,9 @@ class MainWindow(QMainWindow):
         self.session_browser.multi_export_requested.connect(
             self.actions_handler.handle_multi_session_stock_export
         )
+        self.session_browser.new_session_requested.connect(
+            self.actions_handler.create_new_session
+        )
 
         # Main actions
         self.run_analysis_button.clicked.connect(self.actions_handler.run_analysis)

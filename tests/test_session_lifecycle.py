@@ -2,8 +2,14 @@
 from datetime import datetime, timedelta
 
 from shopify_tool.session_lifecycle import (
+    ARCHIVE_WARNING_DAYS,
+    DISPLAY_STATUSES,
+    age_label,
+    blocked_orders,
     derive_status_updates,
+    display_status,
     is_fully_packed,
+    needs_attention,
     packing_completion,
     parse_created_at,
 )
@@ -158,3 +164,209 @@ class TestDeriveStatusUpdates:
     def test_junk_entries_do_not_raise(self):
         assert derive_status_updates([None, "nope", {}, {"session_name": ""}], NOW) == {}
         assert derive_status_updates(None, NOW) == {}
+
+
+class TestBlockedOrders:
+    def test_reads_the_stored_key(self):
+        assert blocked_orders({"not_fulfillable_orders": 4}) == 4
+
+    def test_zero_is_zero_not_none(self):
+        assert blocked_orders({"not_fulfillable_orders": 0}) == 0
+
+    def test_falls_back_to_the_complement(self):
+        entry = {"total_orders": 31, "fulfillable_orders": 27}
+        assert blocked_orders(entry) == 4
+
+    def test_stored_key_wins_over_the_complement(self):
+        entry = {"not_fulfillable_orders": 4, "total_orders": 31,
+                 "fulfillable_orders": 99}
+        assert blocked_orders(entry) == 4
+
+    def test_never_analysed_is_none_not_zero(self):
+        assert blocked_orders({"session_name": "2026-09-01_1"}) is None
+
+    def test_nonsense_reads_as_none(self):
+        assert blocked_orders({"not_fulfillable_orders": "four"}) is None
+        assert blocked_orders({"not_fulfillable_orders": -1}) is None
+        assert blocked_orders({"total_orders": 3, "fulfillable_orders": 9}) is None
+
+    def test_survives_a_non_dict(self):
+        assert blocked_orders(None) is None
+        assert blocked_orders([]) is None
+
+
+def _lifecycle_entry(status="active", lists=(), progress=None, updated=None):
+    entry = {
+        "session_name": "2026-09-01_1",
+        "status": status,
+        "statistics": {"packing_lists": list(lists)},
+        "packing_progress": dict(progress or {}),
+    }
+    if updated:
+        entry["last_updated"] = updated.isoformat()
+    return entry
+
+
+class TestDisplayStatus:
+    def test_the_vocabulary_is_eight_states(self):
+        assert DISPLAY_STATUSES == (
+            "not_started", "in_progress", "paused", "stale",
+            "completed", "incomplete", "abandoned", "archived",
+        )
+
+    def test_active_with_no_progress_is_not_started(self):
+        assert display_status(_lifecycle_entry(lists=["a", "b"]), NOW) == "not_started"
+
+    def test_active_with_some_progress_is_in_progress(self):
+        entry = _lifecycle_entry(lists=["a", "b"], progress={"a": {"status": "completed"}},
+                       updated=NOW - timedelta(days=1))
+        assert display_status(entry, NOW) == "in_progress"
+
+    def test_a_list_still_being_packed_is_active_not_not_started(self):
+        # Spec section 4 draws the line at "no packing progress at all", not
+        # at "nothing finished". Scoring on completed lists alone made a
+        # session read Not started for the whole packing run.
+        entry = _lifecycle_entry(lists=["a"],
+                                 progress={"a": {"status": "in_progress"}},
+                                 updated=NOW - timedelta(hours=1))
+        assert display_status(entry, NOW) == "in_progress"
+
+    def test_a_half_packed_session_left_a_week_goes_stale(self):
+        # Unreachable while not_started swallowed every session with nothing
+        # completed: stale is only reachable from in_progress.
+        entry = _lifecycle_entry(lists=["a"],
+                                 progress={"a": {"status": "in_progress"}},
+                                 updated=NOW - timedelta(days=8))
+        assert display_status(entry, NOW) == "stale"
+
+    def test_packing_tool_progress_counts_as_recent_activity(self):
+        # packing-tool never writes last_updated -- it stamps updated_at on
+        # the block it touched. Reading only last_updated called a session
+        # being packed right now idle since the day it was created.
+        entry = _lifecycle_entry(lists=["a", "b"],
+                                 progress={"a": {"status": "completed"}})
+        entry["created_at"] = (NOW - timedelta(days=40)).isoformat()
+        entry["packing_progress"]["a"]["updated_at"] = (
+            NOW - timedelta(hours=2)
+        ).isoformat()
+        assert display_status(entry, NOW) == "in_progress"
+
+    def test_a_null_status_reads_as_active_rather_than_escaping(self):
+        # session_info.json is written by two tools; `.get(key, default)`
+        # does not cover a key present with a null value, and the row builder
+        # calls str.replace on whatever comes back.
+        entry = _lifecycle_entry(lists=["a"])
+        entry["status"] = None
+        assert display_status(entry, NOW) == "not_started"
+
+    def test_a_paused_list_beats_progress(self):
+        entry = _lifecycle_entry(lists=["a", "b"],
+                       progress={"a": {"status": "completed"},
+                                 "b": {"status": "paused"}},
+                       updated=NOW - timedelta(days=1))
+        assert display_status(entry, NOW) == "paused"
+
+    def test_in_progress_untouched_a_week_is_stale(self):
+        entry = _lifecycle_entry(lists=["a", "b"], progress={"a": {"status": "completed"}},
+                       updated=NOW - timedelta(days=8))
+        assert display_status(entry, NOW) == "stale"
+
+    def test_not_started_never_goes_stale(self):
+        # Nothing has been touched because nothing was started. Age is the
+        # column that says so; Stale would be the same fact drawn twice.
+        entry = _lifecycle_entry(lists=["a"], updated=NOW - timedelta(days=90))
+        assert display_status(entry, NOW) == "not_started"
+
+    def test_completed_and_fully_packed_is_completed(self):
+        entry = _lifecycle_entry(status="completed", lists=["a"],
+                       progress={"a": {"status": "completed"}})
+        assert display_status(entry, NOW) == "completed"
+
+    def test_completed_with_work_left_is_incomplete(self):
+        entry = _lifecycle_entry(status="completed", lists=["a", "b"],
+                       progress={"a": {"status": "completed"}})
+        assert display_status(entry, NOW) == "incomplete"
+
+    def test_completed_with_no_lists_at_all_is_completed(self):
+        # packing_completion returns (0, 0) here. A session with nothing to
+        # pack that a person called done is done, not unfinished.
+        assert display_status(_lifecycle_entry(status="completed"), NOW) == "completed"
+
+    def test_abandoned_and_archived_pass_through(self):
+        assert display_status(_lifecycle_entry(status="abandoned"), NOW) == "abandoned"
+        assert display_status(_lifecycle_entry(status="archived"), NOW) == "archived"
+
+    def test_an_unknown_stored_status_renders_as_itself(self):
+        assert display_status(_lifecycle_entry(status="frozen"), NOW) == "frozen"
+
+    def test_an_unreadable_timestamp_is_not_stale(self):
+        entry = _lifecycle_entry(lists=["a", "b"], progress={"a": {"status": "completed"}})
+        entry["last_updated"] = "not a date"
+        assert display_status(entry, NOW) == "in_progress"
+
+    def test_survives_a_non_dict(self):
+        assert display_status(None, NOW) == "active"
+
+
+class TestAgeLabel:
+    def test_today(self):
+        cell, tip = age_label(NOW - timedelta(hours=3), NOW)
+        assert cell == "today"
+        assert tip.startswith("Created ")
+
+    def test_days(self):
+        assert age_label(NOW - timedelta(days=3), NOW)[0] == "3d"
+
+    def test_weeks_start_at_fourteen_days(self):
+        assert age_label(NOW - timedelta(days=13), NOW)[0] == "13d"
+        assert age_label(NOW - timedelta(days=14), NOW)[0] == "2w"
+
+    def test_months_start_at_sixty_days(self):
+        assert age_label(NOW - timedelta(days=59), NOW)[0] == "8w"
+        assert age_label(NOW - timedelta(days=60), NOW)[0] == "2mo"
+
+    def test_the_countdown_appears_seven_days_before_archiving(self):
+        cell, _ = age_label(NOW - timedelta(days=26), NOW)
+        assert cell == "26d · archives in 4d"
+
+    def test_no_countdown_the_day_before_the_window_opens(self):
+        # The bucket the cell falls in outside the window is the Age column's
+        # own business; what this asserts is that the countdown has not
+        # started yet. Pinning the string here once made the implementation
+        # widen the plain-day zone a week early to satisfy the test.
+        cell, _ = age_label(NOW - timedelta(days=22), NOW)
+        assert "archives in" not in cell
+
+    def test_the_countdown_stops_at_zero_it_never_goes_negative(self):
+        cell, _ = age_label(NOW - timedelta(days=40), NOW)
+        assert "archives in" not in cell
+
+    def test_the_tooltip_carries_the_absolute_stamp(self):
+        created = NOW - timedelta(days=3)
+        assert age_label(created, NOW)[1] == f"Created {created:%Y-%m-%d %H:%M}"
+
+    def test_an_unreadable_date_says_so(self):
+        assert age_label(None, NOW) == ("—", "Created date unreadable")
+
+    def test_the_warning_window_is_derived_not_typed(self):
+        assert ARCHIVE_WARNING_DAYS == 7
+
+
+class TestNeedsAttention:
+    def test_the_three_states_that_always_need_it(self):
+        assert needs_attention("paused", 0)
+        assert needs_attention("stale", 0)
+        assert needs_attention("incomplete", 0)
+
+    def test_blocked_work_still_in_flight_needs_it(self):
+        assert needs_attention("in_progress", 4)
+        assert needs_attention("not_started", 4)
+
+    def test_blocked_work_already_over_does_not(self):
+        assert not needs_attention("completed", 4)
+        assert not needs_attention("abandoned", 4)
+        assert not needs_attention("archived", 4)
+
+    def test_unblocked_work_in_flight_does_not(self):
+        assert not needs_attention("in_progress", 0)
+        assert not needs_attention("in_progress", None)

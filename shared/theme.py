@@ -13,7 +13,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import NamedTuple
 
-from PySide6.QtCore import QObject, QRectF, Qt, Signal
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QWidget
 
@@ -725,6 +725,92 @@ def paint_status_mark(painter: QPainter, rect: QRectF, style: StatusStyle) -> No
     painter.restore()
 
 
+# The state shape: a 12px painted figure that names which of eight states a
+# session row is in. Larger than MARK_PX because eight silhouettes have to
+# separate at a glance, where two only had to differ.
+#
+# Painted, never a character and never an SVG -- nothing may depend on a font
+# shipping a half-filled disc, and a Lucide glyph is a QIcon snapshot that
+# would need re-tinting on every theme toggle.
+SHAPE_PX = 12
+SHAPE_STROKE = 1.5
+
+SHAPES = ("ring", "half", "pause", "clock", "check", "bang", "slash", "tray")
+
+
+def paint_status_shape(
+    painter: QPainter, rect: QRectF, style: StatusStyle, shape: str
+) -> None:
+    """Paint one state shape into `rect`, a SHAPE_PX-square QRectF.
+
+    `ring -> half -> check` is one progression, so not-started, working and
+    done read as movement along a single form. An unknown name paints the
+    ring: a session in a state this build has never heard of is exactly a
+    session nothing has started on.
+    """
+    color = QColor(style.fg)
+    pen = QPen(color)
+    pen.setWidthF(SHAPE_STROKE)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    inset = SHAPE_STROKE / 2
+    circle = rect.adjusted(inset, inset, -inset, -inset)
+    w, h = rect.width(), rect.height()
+    left, top = rect.left(), rect.top()
+
+    if shape == "half":
+        painter.drawEllipse(circle)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        # 16ths of a degree, counter-clockwise from 3 o'clock: the left half.
+        painter.drawPie(circle, 90 * 16, 180 * 16)
+    elif shape == "pause":
+        painter.drawLine(QPointF(left + w * 0.32, top + h * 0.18),
+                         QPointF(left + w * 0.32, top + h * 0.82))
+        painter.drawLine(QPointF(left + w * 0.68, top + h * 0.18),
+                         QPointF(left + w * 0.68, top + h * 0.82))
+    elif shape == "clock":
+        painter.drawEllipse(circle)
+        centre = rect.center()
+        painter.drawLine(centre, QPointF(centre.x(), top + h * 0.25))
+        painter.drawLine(centre, QPointF(left + w * 0.75, centre.y()))
+    elif shape == "check":
+        painter.drawPolyline([
+            QPointF(left + w * 0.18, top + h * 0.52),
+            QPointF(left + w * 0.42, top + h * 0.76),
+            QPointF(left + w * 0.84, top + h * 0.24),
+        ])
+    elif shape == "bang":
+        painter.drawLine(QPointF(left + w * 0.5, top + h * 0.14),
+                         QPointF(left + w * 0.5, top + h * 0.60))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawEllipse(QPointF(left + w * 0.5, top + h * 0.84), 1.1, 1.1)
+    elif shape == "slash":
+        painter.drawEllipse(circle)
+        painter.drawLine(QPointF(left + w * 0.26, top + h * 0.74),
+                         QPointF(left + w * 0.74, top + h * 0.26))
+    elif shape == "tray":
+        painter.drawLine(QPointF(left + w * 0.12, top + h * 0.26),
+                         QPointF(left + w * 0.88, top + h * 0.26))
+        painter.drawPolyline([
+            QPointF(left + w * 0.20, top + h * 0.46),
+            QPointF(left + w * 0.20, top + h * 0.84),
+            QPointF(left + w * 0.80, top + h * 0.84),
+            QPointF(left + w * 0.80, top + h * 0.46),
+        ])
+    else:                                   # "ring", and anything unknown
+        painter.drawEllipse(circle)
+
+    painter.restore()
+
+
 class StatusDot(QWidget):
     """Small colored circle for status indicators in tables/lists.
 
@@ -1101,24 +1187,25 @@ def build_stylesheet(theme: ThemeTokens) -> str:
 
         QLabel {{ color: {theme.text}; background-color: transparent; }}
 
-        QTableView {{
+        QTableView, QTreeView {{
             background-color: {theme.surface};
             color: {theme.text};
             gridline-color: {theme.border_subtle};
             border-radius: {r + 4}px;
         }}
-        QTableView::item {{
+        QTableView::item, QTreeView::item {{
             border-top: 2px solid transparent;
             border-bottom: 2px solid transparent;
         }}
-        QTableView::item:selected {{
+        QTableView::item:selected, QTreeView::item:selected {{
             background-color: {theme.selection_bg};
             color: {theme.text};
             border-top: 2px solid {theme.selection_border};
             border-bottom: 2px solid {theme.selection_border};
         }}
-        QTableView::item:selected:hover {{ background-color: {theme.selection_bg}; }}
-        QTableView::item:hover {{ background-color: {theme.hover}; }}
+        QTableView::item:selected:hover,
+        QTreeView::item:selected:hover {{ background-color: {theme.selection_bg}; }}
+        QTableView::item:hover, QTreeView::item:hover {{ background-color: {theme.hover}; }}
         QHeaderView::section {{
             background-color: {theme.surface_raised};
             color: {theme.text};

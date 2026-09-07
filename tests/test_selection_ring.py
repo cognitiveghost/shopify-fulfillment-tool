@@ -3,9 +3,14 @@
 Spec: docs/superpowers/specs/2026-09-04-phase9-bundle3-components-design.md §4
 """
 
-from PySide6.QtWidgets import QTableWidget
+from PySide6.QtWidgets import QTableWidget, QTreeWidget
 
-from gui.selection_ring import caps, first_visible_column, last_visible_column
+from gui.selection_ring import (
+    caps,
+    first_visible_column,
+    header_of,
+    last_visible_column,
+)
 
 _KEEPALIVE = []
 
@@ -190,3 +195,28 @@ def test_the_sort_caret_is_not_forced_onto_every_header(qapp):
         with open(module.__file__, encoding="utf-8") as f:
             source = f.read()
         assert "setSortIndicatorShown(True)" not in source
+
+
+class _Option:
+    """A QStyleOptionViewItem carries `widget`; this is the part caps() reads."""
+
+    def __init__(self, widget):
+        self.widget = widget
+
+
+def test_header_of_finds_a_tree_header(qapp):
+    tree = QTreeWidget()
+    tree.setColumnCount(3)
+    assert header_of(_Option(tree)) is tree.header()
+
+
+def test_a_tree_still_gets_both_end_caps(qapp):
+    tree = QTreeWidget()
+    tree.setColumnCount(3)
+    assert caps(header_of(_Option(tree)), 0) == (True, False)
+    assert caps(header_of(_Option(tree)), 2) == (False, True)
+    assert caps(header_of(_Option(tree)), 1) == (False, False)
+
+
+def test_a_widget_with_neither_header_is_still_none():
+    assert header_of(_Option(object())) is None
