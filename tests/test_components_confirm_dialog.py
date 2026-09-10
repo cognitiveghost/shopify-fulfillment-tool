@@ -4,8 +4,9 @@ Spec: docs/superpowers/specs/2026-09-10-phase9-bundle9-message-boxes-design.md Â
 """
 
 import pytest
-from gui.components.confirm_dialog import ConfirmDialog
 from PySide6.QtWidgets import QDialogButtonBox
+
+from gui.components.confirm_dialog import ConfirmDialog
 
 
 def _dialog(verb="Delete group"):

@@ -4,10 +4,10 @@ Spec: docs/superpowers/specs/2026-09-10-phase9-bundle9-message-boxes-design.md Â
 """
 
 import pytest
-from gui.components.toast import Toast, toast
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QVBoxLayout, QWidget
 
+from gui.components.toast import Toast, toast
 from shared.theme import current_tokens
 
 

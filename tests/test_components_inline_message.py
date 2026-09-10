@@ -3,9 +3,9 @@
 Spec: docs/superpowers/specs/2026-09-10-phase9-bundle9-message-boxes-design.md §4.4
 """
 
-from gui.components.inline_message import InlineMessage
 from PySide6.QtWidgets import QWidget
 
+from gui.components.inline_message import InlineMessage
 from shared.theme import current_tokens
 
 
