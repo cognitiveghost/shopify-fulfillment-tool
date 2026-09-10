@@ -8,6 +8,7 @@ that full build needs a weight_config/column_mappings/delimiter fixture this
 test has no need to go through just to check the Quick Add row-insertion
 logic.
 """
+
 import pytest
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components.inline_message import InlineMessage
 from gui.settings.weight import WeightPage
 
 
@@ -43,6 +45,7 @@ def sw(qapp):
     obj.weight_quick_w = QDoubleSpinBox()
     obj.weight_quick_h = QDoubleSpinBox()
     obj.weight_quick_no_pkg = QCheckBox()
+    obj.weight_quick_sku_error = InlineMessage(obj)
     return obj
 
 
@@ -71,14 +74,16 @@ def test_quick_add_rejects_blank_sku(sw):
     assert sw.weight_products_table.rowCount() == 0
 
 
-def test_quick_add_rejects_duplicate_sku_without_adding_a_row(sw, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
-
+def test_quick_add_rejects_duplicate_sku_without_adding_a_row(sw):
     sw.weight_quick_sku.setText("DUPE")
     WeightPage._weight_quick_add_product(sw)
     assert sw.weight_products_table.rowCount() == 1
 
     sw.weight_quick_sku.setText("DUPE")
     WeightPage._weight_quick_add_product(sw)
+
     assert sw.weight_products_table.rowCount() == 1
+    assert (
+        sw.weight_quick_sku_error.text()
+        == "DUPE is already in the table. Edit it there instead."
+    )

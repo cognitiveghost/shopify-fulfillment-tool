@@ -31,11 +31,7 @@ OWNED = {
 
 # Not converted yet. Each conversion task deletes its own lines; Task 12
 # deletes this set.
-PENDING = {
-    "gui/settings/mappings.py",  # Task 11
-    "gui/settings/rules.py",  # Task 11
-    "gui/settings/weight.py",  # Task 11
-}
+PENDING = set()
 
 
 def _message_box_calls(tree):

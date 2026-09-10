@@ -24,7 +24,12 @@ def sample_weight_config():
             }
         },
         "boxes": [
-            {"name": "Small Box", "length_cm": 20.0, "width_cm": 15.0, "height_cm": 10.0}
+            {
+                "name": "Small Box",
+                "length_cm": 20.0,
+                "width_cm": 15.0,
+                "height_cm": 10.0,
+            }
         ],
     }
 
@@ -47,7 +52,9 @@ def test_weight_page_writes_every_key_it_owns(qapp):
     page._weight_config = {}
 
     assert set(page.collect()["weight_config"]) == {
-        "volumetric_divisor", "products", "boxes"
+        "volumetric_divisor",
+        "products",
+        "boxes",
     }
 
 
@@ -71,3 +78,12 @@ def test_weight_page_deleting_a_product_row_removes_it_on_save(qapp):
 
     result = page.collect()
     assert result["weight_config"]["products"] == {}
+
+
+def test_export_buttons_are_disabled_while_their_table_is_empty(qapp):
+    page = WeightPage({}, {}, ";")
+    assert not page.weight_export_products_btn.isEnabled()
+
+    page.weight_products_table.insertRow(0)
+
+    assert page.weight_export_products_btn.isEnabled()

@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -18,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components import InlineMessage
 from gui.settings.base import SettingsPage
 from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS, LEGACY_ACTION_TYPES
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
@@ -37,7 +37,9 @@ class RulesPage(SettingsPage):
             to the UI widgets for a single rule.
     """
 
-    def __init__(self, rules: list, analysis_df, tag_categories: dict | None = None, parent=None):
+    def __init__(
+        self, rules: list, analysis_df, tag_categories: dict | None = None, parent=None
+    ):
         super().__init__(parent)
         self.analysis_df = analysis_df
         self.rule_widgets = []
@@ -54,7 +56,13 @@ class RulesPage(SettingsPage):
         header_row = QHBoxLayout()
         add_rule_btn = QPushButton("Add New Rule")
         set_button_role(add_rule_btn, "secondary")
-        add_rule_btn.clicked.connect(lambda: [self.add_rule_widget(), self._update_priority_labels(), self._update_rules_count_label()])
+        add_rule_btn.clicked.connect(
+            lambda: [
+                self.add_rule_widget(),
+                self._update_priority_labels(),
+                self._update_rules_count_label(),
+            ]
+        )
         header_row.addWidget(add_rule_btn)
 
         self.filter_edit = QLineEdit()
@@ -265,15 +273,18 @@ class RulesPage(SettingsPage):
             common_field_names = [f for f in common_fields if not f.startswith("---")]
 
             custom_columns = [
-                col for col in all_columns
-                if not col.startswith('_')
+                col
+                for col in all_columns
+                if not col.startswith("_")
                 and col not in common_field_names  # Avoid duplicates
             ]
 
             if custom_columns:
                 fields += ["--- OTHER AVAILABLE FIELDS ---"] + custom_columns
         else:
-            logger.warning(f"[RULE ENGINE] No analysis_df available (is None: {self.analysis_df is None})")
+            logger.warning(
+                f"[RULE ENGINE] No analysis_df available (is None: {self.analysis_df is None})"
+            )
 
         return fields
 
@@ -293,13 +304,13 @@ class RulesPage(SettingsPage):
 
     def _update_rules_count_label(self):
         """Update the rules summary label in the Rules tab header."""
-        if not hasattr(self, 'rules_count_label'):
+        if not hasattr(self, "rules_count_label"):
             return
         rules = self._rules_config
         article_count = sum(1 for r in rules if r.get("level", "article") == "article")
         order_count = sum(1 for r in rules if r.get("level") == "order")
         # Count from live widgets instead if available
-        if hasattr(self, 'rule_widgets'):
+        if hasattr(self, "rule_widgets"):
             article_count = 0
             order_count = 0
             for rw in self.rule_widgets:
@@ -311,10 +322,14 @@ class RulesPage(SettingsPage):
                         article_count += 1
         parts = []
         if article_count:
-            parts.append(f"{article_count} article rule{'s' if article_count != 1 else ''}")
+            parts.append(
+                f"{article_count} article rule{'s' if article_count != 1 else ''}"
+            )
         if order_count:
             parts.append(f"{order_count} order rule{'s' if order_count != 1 else ''}")
-        self.rules_count_label.setText(", ".join(parts) if parts else "No rules defined")
+        self.rules_count_label.setText(
+            ", ".join(parts) if parts else "No rules defined"
+        )
 
     def add_rule_widget(self, config=None):
         """Adds a new group of widgets for creating/editing a single rule.
@@ -326,7 +341,13 @@ class RulesPage(SettingsPage):
         """
         config_was_none = not isinstance(config, dict)
         if not isinstance(config, dict):
-            config = {"name": "New Rule", "level": "article", "match": "ALL", "conditions": [], "actions": []}
+            config = {
+                "name": "New Rule",
+                "level": "article",
+                "match": "ALL",
+                "conditions": [],
+                "actions": [],
+            }
         rule_box = QGroupBox()
         rule_layout = QVBoxLayout(rule_box)
         header_layout = QHBoxLayout()
@@ -343,7 +364,9 @@ class RulesPage(SettingsPage):
         priority_label.setMinimumWidth(70)
         on_theme_changed(
             priority_label,
-            lambda t: priority_label.setStyleSheet(f"{font_css('label')} color: {t.accent_fill};"),
+            lambda t: priority_label.setStyleSheet(
+                f"{font_css('label')} color: {t.accent_fill};"
+            ),
         )
         header_layout.addWidget(priority_label)
 
@@ -368,7 +391,9 @@ class RulesPage(SettingsPage):
         test_btn.setToolTip("Test this rule against current analysis data")
         # As with Delete Rule below: the per-widget green background is
         # deliberate and overrides the secondary role's background.
-        on_theme_changed(test_btn, lambda t: test_btn.setStyleSheet(f"""
+        on_theme_changed(
+            test_btn,
+            lambda t: test_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {t.status_success};
                 color: {t.on_accent};
@@ -381,7 +406,8 @@ class RulesPage(SettingsPage):
                 background-color: {t.border_subtle};
                 color: {t.text_secondary};
             }}
-        """))
+        """),
+        )
         header_layout.addWidget(test_btn)
 
         header_layout.addWidget(QLabel("Rule Name:"))
@@ -391,7 +417,9 @@ class RulesPage(SettingsPage):
         summary_label = QLabel("")
         on_theme_changed(
             summary_label,
-            lambda t: summary_label.setStyleSheet(f"color: {t.text_secondary}; {font_css('caption')}"),
+            lambda t: summary_label.setStyleSheet(
+                f"color: {t.text_secondary}; {font_css('caption')}"
+            ),
         )
         header_layout.addWidget(summary_label)
 
@@ -408,6 +436,9 @@ class RulesPage(SettingsPage):
         )
         header_layout.addWidget(delete_rule_btn)
         rule_layout.addLayout(header_layout)
+
+        test_error = InlineMessage(rule_box)
+        rule_layout.addWidget(test_error)
 
         # Add level selector
         level_layout = QHBoxLayout()
@@ -451,7 +482,9 @@ class RulesPage(SettingsPage):
         )
         on_theme_changed(
             add_step_btn,
-            lambda t: add_step_btn.setStyleSheet(f"color: {t.accent_fill}; font-weight: bold;"),
+            lambda t: add_step_btn.setStyleSheet(
+                f"color: {t.accent_fill}; font-weight: bold;"
+            ),
         )
 
         body = QWidget()
@@ -469,6 +502,7 @@ class RulesPage(SettingsPage):
             "up_btn": up_btn,
             "down_btn": down_btn,
             "test_btn": test_btn,
+            "test_error": test_error,
             "name_edit": name_edit,
             "level_combo": level_combo,
             "steps_container": steps_container,
@@ -477,15 +511,19 @@ class RulesPage(SettingsPage):
             "summary_label": summary_label,
         }
         self.rule_widgets.append(widget_refs)
-        delete_rule_btn.clicked.connect(lambda: self._delete_widget_from_list(widget_refs, self.rule_widgets))
+        delete_rule_btn.clicked.connect(
+            lambda: self._delete_widget_from_list(widget_refs, self.rule_widgets)
+        )
         up_btn.clicked.connect(lambda: self._move_rule_up(widget_refs))
         down_btn.clicked.connect(lambda: self._move_rule_down(widget_refs))
         test_btn.clicked.connect(lambda: self._test_rule(widget_refs))
         add_step_btn.clicked.connect(lambda: self._add_step_widget(widget_refs))
         level_combo.currentTextChanged.connect(
-            lambda: [self._repopulate_field_combos(widget_refs),
-                     self._update_priority_labels(),
-                     self._update_rule_summary(widget_refs)]
+            lambda: [
+                self._repopulate_field_combos(widget_refs),
+                self._update_priority_labels(),
+                self._update_rule_summary(widget_refs),
+            ]
         )
 
         def _toggle():
@@ -541,18 +579,24 @@ class RulesPage(SettingsPage):
         if step_number > 1:
             separator_label = QLabel("   ↓ THEN CHECK ↓")
             separator_label.setAlignment(Qt.AlignCenter)
-            on_theme_changed(separator_label, lambda t: separator_label.setStyleSheet(
-                f"color: {t.status_warning}; {font_css('label')} "
-                "padding: 4px; margin: 2px 0;"
-            ))
+            on_theme_changed(
+                separator_label,
+                lambda t: separator_label.setStyleSheet(
+                    f"color: {t.status_warning}; {font_css('label')} "
+                    "padding: 4px; margin: 2px 0;"
+                ),
+            )
             steps_container.addWidget(separator_label)
 
         # Step wrapper
         step_box = QGroupBox(f"Step {step_number}")
-        on_theme_changed(step_box, lambda t: step_box.setStyleSheet(
-            f"QGroupBox {{ font-weight: bold; border: 1px solid {t.border}; "
-            f"border-radius: 4px; margin-top: 6px; padding-top: 10px; }}"
-        ))
+        on_theme_changed(
+            step_box,
+            lambda t: step_box.setStyleSheet(
+                f"QGroupBox {{ font-weight: bold; border: 1px solid {t.border}; "
+                f"border-radius: 4px; margin-top: 6px; padding-top: 10px; }}"
+            ),
+        )
         step_layout = QVBoxLayout(step_box)
 
         # Conditions box ("IF")
@@ -614,7 +658,9 @@ class RulesPage(SettingsPage):
         add_condition_btn.clicked.connect(lambda: self.add_condition_row(step_refs))
         add_action_btn.clicked.connect(lambda: self.add_action_row(step_refs))
         if delete_step_btn:
-            delete_step_btn.clicked.connect(lambda: self._delete_step(rule_widget_refs, step_refs))
+            delete_step_btn.clicked.connect(
+                lambda: self._delete_step(rule_widget_refs, step_refs)
+            )
 
         # Load conditions and actions
         for cond_config in step_config.get("conditions", []):
@@ -746,8 +792,12 @@ class RulesPage(SettingsPage):
         row_layout.addWidget(delete_btn)
 
         # Connect signals to the new handler
-        field_combo.currentTextChanged.connect(lambda: self._on_rule_condition_changed(condition_refs))
-        op_combo.currentTextChanged.connect(lambda: self._on_rule_condition_changed(condition_refs))
+        field_combo.currentTextChanged.connect(
+            lambda: self._on_rule_condition_changed(condition_refs)
+        )
+        op_combo.currentTextChanged.connect(
+            lambda: self._on_rule_condition_changed(condition_refs)
+        )
 
         # Create the initial value widget
         self._on_rule_condition_changed(condition_refs, initial_value=initial_value)
@@ -755,8 +805,12 @@ class RulesPage(SettingsPage):
         rule_widget_refs["conditions_layout"].addWidget(row_widget)
         rule_widget_refs["conditions"].append(condition_refs)
         delete_btn.clicked.connect(
-            lambda: [self._delete_row_from_list(row_widget, rule_widget_refs["conditions"], condition_refs),
-                     self._update_rule_summary_for_step(rule_widget_refs)]
+            lambda: [
+                self._delete_row_from_list(
+                    row_widget, rule_widget_refs["conditions"], condition_refs
+                ),
+                self._update_rule_summary_for_step(rule_widget_refs),
+            ]
         )
 
         self._update_rule_summary_for_step(rule_widget_refs)
@@ -862,7 +916,9 @@ class RulesPage(SettingsPage):
 
         # Connect validation for QLineEdit widgets (QLineEdit is already imported globally)
         if isinstance(new_widget, QLineEdit):
-            new_widget.textChanged.connect(lambda: self._validate_condition_value(condition_refs))
+            new_widget.textChanged.connect(
+                lambda: self._validate_condition_value(condition_refs)
+            )
 
         # Mark an unresolvable field as soon as the row is built. This is the
         # only path that runs on load -- the value validation that also calls it
@@ -956,9 +1012,16 @@ class RulesPage(SettingsPage):
             if not is_valid:
                 self._show_validation_feedback(condition_refs, "error", error_msg)
             else:
-                self._show_validation_feedback(condition_refs, "success", f"{item_count} items")
+                self._show_validation_feedback(
+                    condition_refs, "success", f"{item_count} items"
+                )
 
-        elif op in ["is greater than", "is less than", "is greater than or equal", "is less than or equal"]:
+        elif op in [
+            "is greater than",
+            "is less than",
+            "is greater than or equal",
+            "is less than or equal",
+        ]:
             is_valid, error_msg = validate_numeric(value)
             if not is_valid:
                 self._show_validation_feedback(condition_refs, "error", error_msg)
@@ -1008,7 +1071,9 @@ class RulesPage(SettingsPage):
             feedback_label.hide()
             return
 
-        feedback_label.setStyleSheet(f"color: {text_color[status]}; {font_css('caption')}")
+        feedback_label.setStyleSheet(
+            f"color: {text_color[status]}; {font_css('caption')}"
+        )
         feedback_label.setText(message)
         feedback_label.show()
 
@@ -1094,13 +1159,10 @@ class RulesPage(SettingsPage):
         """
         from gui.rule_test_dialog import RuleTestDialog
 
+        rule_widget_refs["test_error"].clear()
+
         if self.analysis_df is None or self.analysis_df.empty:
-            QMessageBox.warning(
-                self,
-                "No Data",
-                "No analysis data available to test rule.\n\n"
-                "Please run analysis first in the main window."
-            )
+            logger.warning("_test_rule called with no analysis data")
             return
 
         # Build rule config from current UI state
@@ -1111,10 +1173,7 @@ class RulesPage(SettingsPage):
             step.get("conditions") for step in rule_config.get("steps", [])
         )
         if not has_conditions:
-            QMessageBox.warning(
-                self,
-                "No Conditions",
-                "This rule has no conditions defined in any step.\n\n"
+            rule_widget_refs["test_error"].show_message(
                 "Add at least one condition before testing."
             )
             return
@@ -1152,11 +1211,13 @@ class RulesPage(SettingsPage):
                     elif isinstance(value_widget, QLineEdit):
                         val = value_widget.text()
 
-                conditions.append({
-                    "field": condition_refs["field"].currentText(),
-                    "operator": condition_refs["op"].currentText(),
-                    "value": val,
-                })
+                conditions.append(
+                    {
+                        "field": condition_refs["field"].currentText(),
+                        "operator": condition_refs["op"].currentText(),
+                        "value": val,
+                    }
+                )
 
             # Extract actions
             actions = []
@@ -1173,11 +1234,13 @@ class RulesPage(SettingsPage):
 
                 actions.append(action_dict)
 
-            steps.append({
-                "conditions": conditions,
-                "match": step_refs["match_combo"].currentText(),
-                "actions": actions,
-            })
+            steps.append(
+                {
+                    "conditions": conditions,
+                    "match": step_refs["match_combo"].currentText(),
+                    "actions": actions,
+                }
+            )
 
         return {
             "name": rule_widget_refs["name_edit"].text(),
@@ -1201,7 +1264,9 @@ class RulesPage(SettingsPage):
                 "Run analysis in main window first."
             )
         else:
-            rule_widget_refs["test_btn"].setToolTip("Test this rule against current analysis data")
+            rule_widget_refs["test_btn"].setToolTip(
+                "Test this rule against current analysis data"
+            )
 
     def add_action_row(self, rule_widget_refs, config=None):
         """Adds action row with dynamic parameter widgets based on type.
@@ -1278,8 +1343,12 @@ class RulesPage(SettingsPage):
         rule_widget_refs["actions"].append(action_refs)
 
         delete_btn.clicked.connect(
-            lambda: [self._delete_row_from_list(row_widget, rule_widget_refs["actions"], action_refs),
-                     self._update_rule_summary_for_step(rule_widget_refs)]
+            lambda: [
+                self._delete_row_from_list(
+                    row_widget, rule_widget_refs["actions"], action_refs
+                ),
+                self._update_rule_summary_for_step(rule_widget_refs),
+            ]
         )
 
         self._update_rule_summary_for_step(rule_widget_refs)
@@ -1384,7 +1453,9 @@ class RulesPage(SettingsPage):
                 op_combo.setCurrentText(initial_config.get("operation", "add"))
 
             # Field1 & Field2 dropdowns
-            fields = [f for f in self.get_available_rule_fields() if not f.startswith("---")]
+            fields = [
+                f for f in self.get_available_rule_fields() if not f.startswith("---")
+            ]
 
             field1_combo = WheelIgnoreComboBox()
             field1_combo.addItems(fields)
@@ -1418,7 +1489,9 @@ class RulesPage(SettingsPage):
             tags_edit = QLineEdit()
             tags_edit.setPlaceholderText("TAG1, TAG2, TAG3")
             if initial_config:
-                tags_value = initial_config.get("tags") or initial_config.get("value", "")
+                tags_value = initial_config.get("tags") or initial_config.get(
+                    "value", ""
+                )
                 if isinstance(tags_value, list):
                     tags_edit.setText(", ".join(tags_value))
                 else:
@@ -1457,7 +1530,9 @@ class RulesPage(SettingsPage):
             qty_spin = QSpinBox()
             qty_spin.setMinimum(1)
             qty_spin.setMaximum(9999)
-            qty_spin.setValue(initial_config.get("quantity", 1) if initial_config else 1)
+            qty_spin.setValue(
+                initial_config.get("quantity", 1) if initial_config else 1
+            )
 
             layout.insertWidget(insert_pos, sku_edit, 1)
             layout.insertWidget(insert_pos + 1, QLabel("Qty:"), 0)
@@ -1481,11 +1556,13 @@ class RulesPage(SettingsPage):
                         else:
                             val = value_widget.text()
 
-                    conditions.append({
-                        "field": c["field"].currentText(),
-                        "operator": c["op"].currentText(),
-                        "value": val,
-                    })
+                    conditions.append(
+                        {
+                            "field": c["field"].currentText(),
+                            "operator": c["op"].currentText(),
+                            "value": val,
+                        }
+                    )
 
                 actions = []
                 for act_refs in step_refs["actions"]:
@@ -1500,13 +1577,21 @@ class RulesPage(SettingsPage):
                         act["value"] = act_refs["param_widgets"]["value"].text()
 
                     elif action_type == "COPY_FIELD":
-                        act["source"] = act_refs["param_widgets"]["source"].currentText()
+                        act["source"] = act_refs["param_widgets"][
+                            "source"
+                        ].currentText()
                         act["target"] = act_refs["param_widgets"]["target"].text()
 
                     elif action_type == "CALCULATE":
-                        act["operation"] = act_refs["param_widgets"]["operation"].currentText()
-                        act["field1"] = act_refs["param_widgets"]["field1"].currentText()
-                        act["field2"] = act_refs["param_widgets"]["field2"].currentText()
+                        act["operation"] = act_refs["param_widgets"][
+                            "operation"
+                        ].currentText()
+                        act["field1"] = act_refs["param_widgets"][
+                            "field1"
+                        ].currentText()
+                        act["field2"] = act_refs["param_widgets"][
+                            "field2"
+                        ].currentText()
                         act["target"] = act_refs["param_widgets"]["target"].text()
 
                     elif action_type == "SET_MULTI_TAGS":
@@ -1514,7 +1599,9 @@ class RulesPage(SettingsPage):
 
                     elif action_type == "ALERT_NOTIFICATION":
                         act["message"] = act_refs["param_widgets"]["message"].text()
-                        act["severity"] = act_refs["param_widgets"]["severity"].currentText()
+                        act["severity"] = act_refs["param_widgets"][
+                            "severity"
+                        ].currentText()
 
                     elif action_type == "ADD_PRODUCT":
                         act["sku"] = act_refs["param_widgets"]["sku"].text()
@@ -1522,17 +1609,21 @@ class RulesPage(SettingsPage):
 
                     actions.append(act)
 
-                steps.append({
-                    "conditions": conditions,
-                    "match": step_refs["match_combo"].currentText(),
-                    "actions": actions,
-                })
+                steps.append(
+                    {
+                        "conditions": conditions,
+                        "match": step_refs["match_combo"].currentText(),
+                        "actions": actions,
+                    }
+                )
 
-            new_rules.append({
-                "name": rule_w["name_edit"].text(),
-                "priority": idx + 1,
-                "level": rule_w["level_combo"].currentText(),
-                "steps": steps,
-            })
+            new_rules.append(
+                {
+                    "name": rule_w["name_edit"].text(),
+                    "priority": idx + 1,
+                    "level": rule_w["level_combo"].currentText(),
+                    "steps": steps,
+                }
+            )
 
         return {"rules": new_rules}
