@@ -10,18 +10,13 @@ Features:
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
+from PySide6.QtCore import QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtPrintSupport import QPrinterInfo
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -29,11 +24,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.pdf_printing import (
-    load_print_settings,
-    print_pdf,
-    save_print_settings,
-)
+from gui.components import ElidedLabel, FormSection, PrintOptions, row_widget
+from gui.components.print_options import LABEL_WIDTH
+from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 
@@ -73,107 +66,12 @@ class ReferenceLabelsWidget(QWidget):
         self._progress_update.connect(self._update_progress_ui)
 
     def _init_ui(self):
-        """Initialize UI layout."""
+        """One card's content: inputs, print options, then status and actions."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
-        # Section 1: File Selection
-        layout.addWidget(self._create_file_selection_group())
-
-        # Section 2: Output Settings
-        layout.addWidget(self._create_output_settings_group())
-
-        # Section 3: Processing
-        layout.addWidget(self._create_processing_group())
-
-        layout.addStretch()
-
-    def _create_file_selection_group(self):
-        """Create file selection section."""
-        group = QGroupBox("File Selection")
-        layout = QVBoxLayout(group)
-
-        # PDF Selection Row
-        pdf_row = QHBoxLayout()
-        self.select_pdf_btn = QPushButton("Select PDF Labels")
-        self.select_pdf_btn.setMinimumWidth(150)
-        self.select_pdf_btn.setToolTip("Select the PDF file containing courier labels")
-        pdf_row.addWidget(self.select_pdf_btn)
-
-        self.pdf_label = QLabel("No PDF selected")
-        theme = get_theme_manager().get_current_theme()
-        self.pdf_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic;")
-        self.pdf_label.setWordWrap(True)
-        pdf_row.addWidget(self.pdf_label, 1)
-        layout.addLayout(pdf_row)
-
-        # CSV Selection Row
-        csv_row = QHBoxLayout()
-        self.select_csv_btn = QPushButton("Select CSV Mapping")
-        self.select_csv_btn.setMinimumWidth(150)
-        self.select_csv_btn.setToolTip("Select the CSV file with PostOne ID → Reference Number mapping")
-        csv_row.addWidget(self.select_csv_btn)
-
-        self.csv_label = QLabel("No CSV selected")
-        self.csv_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic;")
-        self.csv_label.setWordWrap(True)
-        csv_row.addWidget(self.csv_label, 1)
-        layout.addLayout(csv_row)
-
-        return group
-
-    def _create_output_settings_group(self):
-        """Create output settings section."""
-        group = QGroupBox("Output Settings")
-        layout = QVBoxLayout(group)
-
-        # Output directory row
-        dir_row = QHBoxLayout()
-        dir_row.addWidget(QLabel("Output Directory:"))
-
-        self.output_dir_label = QLabel()
-        self.output_dir_label.setStyleSheet("font-weight: bold;")
-        self.output_dir_label.setWordWrap(True)
-        dir_row.addWidget(self.output_dir_label, 1)
-
-        self.change_dir_btn = QPushButton("Change...")
-        self.change_dir_btn.setToolTip("Change output directory")
-        dir_row.addWidget(self.change_dir_btn)
-
-        layout.addLayout(dir_row)
-
-        # Auto-open checkbox
-        self.auto_open_checkbox = QCheckBox("Auto-open PDF after processing")
-        self.auto_open_checkbox.setChecked(True)
-        layout.addWidget(self.auto_open_checkbox)
-
-        # Printing (raw ZPL target/rotate only relevant when that mode is selected)
-        print_settings = load_print_settings("reference_labels")
-
-        mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Print mode:"))
-        self.print_mode_combo = QComboBox()
-        self.print_mode_combo.addItem("OS driver (print dialog)", "driver")
-        self.print_mode_combo.addItem("Raw ZPL (direct)", "raw_zpl")
-        mode_index = self.print_mode_combo.findData(print_settings["print_mode"])
-        if mode_index >= 0:
-            self.print_mode_combo.setCurrentIndex(mode_index)
-        mode_row.addWidget(self.print_mode_combo, 1)
-        layout.addLayout(mode_row)
-
-        target_row = QHBoxLayout()
-        target_row.addWidget(QLabel("Raw ZPL target:"))
-        self.raw_zpl_target_edit = QLineEdit(print_settings["raw_zpl_target"])
-        self.raw_zpl_target_edit.setPlaceholderText(
-            "e.g. ZPL-RAW-Printer (Windows) or /dev/usb/lp0 (Linux)"
-        )
-        target_row.addWidget(self.raw_zpl_target_edit, 1)
-        layout.addLayout(target_row)
-
-        self.raw_zpl_rotate_check = QCheckBox("Rotate labels 90° for raw ZPL")
-        self.raw_zpl_rotate_check.setChecked(print_settings["raw_zpl_rotate"])
-        layout.addWidget(self.raw_zpl_rotate_check)
+        layout.addWidget(self._create_inputs_section())
 
         # Courier PDFs' own page size can't be trusted (the same batch mixes
         # pages from ~98x147mm up to 152x102mm depending on courier) -- raw
@@ -181,88 +79,102 @@ class ReferenceLabelsWidget(QWidget):
         # shrunk with blank margin instead of filling it. Set both to the
         # loaded label's real size to fit every page to it; 0 (default)
         # keeps the old behavior of using each page's own size as-is.
-        label_size_row = QHBoxLayout()
-        label_size_row.addWidget(QLabel("Fit to label size (mm):"))
-        self.raw_zpl_label_width_spin = QDoubleSpinBox()
-        self.raw_zpl_label_width_spin.setRange(0.0, 500.0)
-        self.raw_zpl_label_width_spin.setDecimals(1)
-        self.raw_zpl_label_width_spin.setSpecialValueText("(use PDF page size)")
-        self.raw_zpl_label_width_spin.setValue(print_settings["raw_zpl_label_width_mm"])
-        self.raw_zpl_label_width_spin.setToolTip(
-            "Physical label width as loaded in the printer, e.g. 152.4 for 6x4in "
-            "shipping labels. 0 disables fitting and uses each page's own PDF size."
+        self.print_options = PrintOptions(
+            "reference_labels",
+            label_size_tooltip=(
+                "Physical label size as loaded in the printer, e.g. 152.4 x 101.6 "
+                "for 6x4in shipping labels. 0 disables fitting and uses each "
+                "page's own PDF size."
+            ),
         )
-        label_size_row.addWidget(self.raw_zpl_label_width_spin)
-        label_size_row.addWidget(QLabel("x"))
-        self.raw_zpl_label_height_spin = QDoubleSpinBox()
-        self.raw_zpl_label_height_spin.setRange(0.0, 500.0)
-        self.raw_zpl_label_height_spin.setDecimals(1)
-        self.raw_zpl_label_height_spin.setSpecialValueText("(use PDF page size)")
-        self.raw_zpl_label_height_spin.setValue(print_settings["raw_zpl_label_height_mm"])
-        self.raw_zpl_label_height_spin.setToolTip(self.raw_zpl_label_width_spin.toolTip())
-        label_size_row.addWidget(self.raw_zpl_label_height_spin)
-        layout.addLayout(label_size_row)
+        layout.addWidget(self.print_options)
 
-        printer_row = QHBoxLayout()
-        printer_row.addWidget(QLabel("Default printer (driver mode):"))
-        self.driver_printer_combo = QComboBox()
-        self.driver_printer_combo.addItem("(Windows default)", "")
-        for info in QPrinterInfo.availablePrinters():
-            self.driver_printer_combo.addItem(info.printerName(), info.printerName())
-        printer_index = self.driver_printer_combo.findData(print_settings["driver_printer_name"])
-        if printer_index >= 0:
-            self.driver_printer_combo.setCurrentIndex(printer_index)
-        printer_row.addWidget(self.driver_printer_combo, 1)
-        layout.addLayout(printer_row)
+        # Side by side, the taller card sets the row height; this stretch keeps
+        # both action rows on one baseline.
+        layout.addStretch()
+        layout.addLayout(self._create_action_area())
 
-        def _update_zpl_controls_enabled():
-            is_zpl = self.print_mode_combo.currentData() == "raw_zpl"
-            self.raw_zpl_target_edit.setEnabled(is_zpl)
-            self.raw_zpl_rotate_check.setEnabled(is_zpl)
-            self.raw_zpl_label_width_spin.setEnabled(is_zpl)
-            self.raw_zpl_label_height_spin.setEnabled(is_zpl)
-            self.driver_printer_combo.setEnabled(not is_zpl)
+    def _create_inputs_section(self):
+        """The two input files, where the output goes, and whether to open it."""
+        theme = get_theme_manager().get_current_theme()
+        section = FormSection(
+            "Reference labels",
+            "Stamps each courier label with its order's reference number.",
+            label_width=LABEL_WIDTH,
+        )
 
-        _update_zpl_controls_enabled()
-        self.print_mode_combo.currentIndexChanged.connect(_update_zpl_controls_enabled)
-        self.print_mode_combo.currentIndexChanged.connect(self._save_print_settings)
-        self.raw_zpl_target_edit.editingFinished.connect(self._save_print_settings)
-        self.raw_zpl_rotate_check.toggled.connect(self._save_print_settings)
-        self.raw_zpl_label_width_spin.editingFinished.connect(self._save_print_settings)
-        self.raw_zpl_label_height_spin.editingFinished.connect(self._save_print_settings)
-        self.driver_printer_combo.currentIndexChanged.connect(self._save_print_settings)
+        self.select_pdf_btn = QPushButton("Select PDF…")
+        self.select_pdf_btn.setToolTip("Select the PDF file containing courier labels")
+        self.pdf_label = ElidedLabel("No file chosen")
+        self.pdf_label.setStyleSheet(
+            f"color: {theme.text_secondary}; font-style: italic;"
+        )
+        section.add_row(
+            "Labels PDF",
+            row_widget(self.select_pdf_btn, self.pdf_label, stretch=self.pdf_label),
+        )
 
-        return group
+        self.select_csv_btn = QPushButton("Select CSV…")
+        self.select_csv_btn.setToolTip(
+            "Select the CSV file with PostOne ID → Reference Number mapping"
+        )
+        self.csv_label = ElidedLabel("No file chosen")
+        self.csv_label.setStyleSheet(
+            f"color: {theme.text_secondary}; font-style: italic;"
+        )
+        section.add_row(
+            "Mapping CSV",
+            row_widget(self.select_csv_btn, self.csv_label, stretch=self.csv_label),
+        )
 
-    def _create_processing_group(self):
-        """Create processing section."""
-        group = QGroupBox("Processing")
-        layout = QVBoxLayout(group)
+        self.output_dir_label = ElidedLabel()
+        self.change_dir_btn = QPushButton("Change…")
+        self.change_dir_btn.setToolTip("Change output directory")
+        section.add_row(
+            "Output folder",
+            row_widget(
+                self.output_dir_label,
+                self.change_dir_btn,
+                stretch=self.output_dir_label,
+            ),
+        )
 
-        # Process button
-        self.process_btn = QPushButton("Process Labels")
-        self.process_btn.setMinimumHeight(50)
-        self.process_btn.setEnabled(False)
-        self.process_btn.setToolTip("Process PDF with reference numbers")
-        layout.addWidget(self.process_btn)
+        self.auto_open_checkbox = QCheckBox("Open the PDF when it's ready")
+        self.auto_open_checkbox.setChecked(True)
+        section.add_row("", self.auto_open_checkbox)
 
-        # Progress bar
+        return section
+
+    def _create_action_area(self):
+        """Progress and status, then the actions, right-aligned."""
+        area = QVBoxLayout()
+        area.setSpacing(8)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.progress_bar.setTextVisible(True)
-        layout.addWidget(self.progress_bar)
+        area.addWidget(self.progress_bar)
 
-        # Status label
         self.status_label = QLabel("Ready")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("padding: 5px;")
-        layout.addWidget(self.status_label)
+        self.status_label.setWordWrap(True)
+        area.addWidget(self.status_label)
 
-        self.print_btn = QPushButton("Print...")
+        self.print_btn = QPushButton("Print…")
         self.print_btn.setEnabled(False)
-        layout.addWidget(self.print_btn)
 
-        return group
+        # Its role (primary or secondary) is ToolsWidget's to set: the page has
+        # one primary, and it moves to whichever card can run.
+        self.process_btn = QPushButton("Process Labels")
+        self.process_btn.setEnabled(False)
+        self.process_btn.setToolTip("Process PDF with reference numbers")
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        buttons.addWidget(self.print_btn)
+        buttons.addWidget(self.process_btn)
+        area.addLayout(buttons)
+
+        return area
 
     def _connect_signals(self):
         """Connect signals and slots."""
@@ -274,16 +186,13 @@ class ReferenceLabelsWidget(QWidget):
 
         # Connect to MainWindow session change
         # Note: session_changed might not exist yet, so we'll also check in showEvent
-        if hasattr(self.mw, 'session_changed'):
+        if hasattr(self.mw, "session_changed"):
             self.mw.session_changed.connect(self._on_session_changed)
 
     def _select_pdf(self):
         """Open file dialog to select PDF file."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select PDF Labels File",
-            "",
-            "PDF Files (*.pdf)"
+            self, "Select PDF Labels File", "", "PDF Files (*.pdf)"
         )
 
         if file_path:
@@ -300,10 +209,7 @@ class ReferenceLabelsWidget(QWidget):
     def _select_csv(self):
         """Open file dialog to select CSV file."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select CSV Mapping File",
-            "",
-            "CSV Files (*.csv);;All Files (*.*)"
+            self, "Select CSV Mapping File", "", "CSV Files (*.csv);;All Files (*.*)"
         )
 
         if file_path:
@@ -322,7 +228,7 @@ class ReferenceLabelsWidget(QWidget):
         dir_path = QFileDialog.getExistingDirectory(
             self,
             "Select Output Directory",
-            str(self.output_dir) if self.output_dir else ""
+            str(self.output_dir) if self.output_dir else "",
         )
 
         if dir_path:
@@ -340,7 +246,9 @@ class ReferenceLabelsWidget(QWidget):
         if has_both_files and has_output:
             theme = get_theme_manager().get_current_theme()
             self.status_label.setText("Ready to process")
-            self.status_label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
+            self.status_label.setStyleSheet(
+                f"color: {theme.status_success}; font-weight: bold;"
+            )
         elif not has_output:
             theme = get_theme_manager().get_current_theme()
             self.status_label.setText("No session selected")
@@ -354,9 +262,11 @@ class ReferenceLabelsWidget(QWidget):
         """Update output directory based on current session."""
         if not self.mw.session_path:
             self.output_dir = None
-            self.output_dir_label.setText("No session selected")
+            self.output_dir_label.setText("Open a session to save labels into it")
             theme = get_theme_manager().get_current_theme()
-            self.output_dir_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic;")
+            self.output_dir_label.setStyleSheet(
+                f"color: {theme.text_secondary}; font-style: italic;"
+            )
             self._update_process_button()
             return
 
@@ -378,7 +288,9 @@ class ReferenceLabelsWidget(QWidget):
         except Exception:
             self.log.exception("Failed to set output directory")
             self.output_dir = None
-            self.output_dir_label.setText("Error accessing session directory")
+            self.output_dir_label.setText(
+                "Can't reach this session's folder. Check the server connection."
+            )
             theme = get_theme_manager().get_current_theme()
             self.output_dir_label.setStyleSheet(f"color: {theme.status_danger};")
 
@@ -398,7 +310,7 @@ class ReferenceLabelsWidget(QWidget):
             errors.append("PDF file not selected")
         elif not Path(self.pdf_path).exists():
             errors.append(f"PDF file not found: {self.pdf_path}")
-        elif Path(self.pdf_path).suffix.lower() != '.pdf':
+        elif Path(self.pdf_path).suffix.lower() != ".pdf":
             errors.append("Selected file is not a PDF")
 
         # Validate CSV
@@ -406,7 +318,7 @@ class ReferenceLabelsWidget(QWidget):
             errors.append("CSV file not selected")
         elif not Path(self.csv_path).exists():
             errors.append(f"CSV file not found: {self.csv_path}")
-        elif Path(self.csv_path).suffix.lower() != '.csv':
+        elif Path(self.csv_path).suffix.lower() != ".csv":
             errors.append("Selected file is not a CSV")
 
         # Validate output directory
@@ -419,7 +331,7 @@ class ReferenceLabelsWidget(QWidget):
             QMessageBox.warning(
                 self,
                 "Validation Error",
-                "Cannot process:\n\n" + "\n".join(f"• {e}" for e in errors)
+                "Cannot process:\n\n" + "\n".join(f"• {e}" for e in errors),
             )
             return False
 
@@ -448,10 +360,7 @@ class ReferenceLabelsWidget(QWidget):
 
         # Create worker
         worker = Worker(
-            self._process_pdf_worker,
-            self.pdf_path,
-            self.csv_path,
-            str(self.output_dir)
+            self._process_pdf_worker, self.pdf_path, self.csv_path, str(self.output_dir)
         )
 
         # Connect signals
@@ -487,7 +396,7 @@ class ReferenceLabelsWidget(QWidget):
             pdf_path=pdf_path,
             csv_path=csv_path,
             output_dir=output_dir,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
         )
 
         return result
@@ -512,9 +421,11 @@ class ReferenceLabelsWidget(QWidget):
         self.progress_bar.setValue(100)
         self.status_label.setText("Processing complete!")
         theme = get_theme_manager().get_current_theme()
-        self.status_label.setStyleSheet(f"color: {theme.status_success}; font-weight: bold;")
+        self.status_label.setStyleSheet(
+            f"color: {theme.status_success}; font-weight: bold;"
+        )
 
-        self.last_output_pdf = Path(result['output_file'])
+        self.last_output_pdf = Path(result["output_file"])
         self.print_btn.setEnabled(True)
 
         self.log.info(
@@ -531,12 +442,12 @@ class ReferenceLabelsWidget(QWidget):
             f"Matched: {result['matched']}\n"
             f"Unmatched: {result['unmatched']}\n"
             f"Processing time: {result['processing_time']:.1f}s\n\n"
-            f"Output: {Path(result['output_file']).name}"
+            f"Output: {Path(result['output_file']).name}",
         )
 
         # Auto-open if checkbox enabled
         if self.auto_open_checkbox.isChecked():
-            self._open_pdf(result['output_file'])
+            self._open_pdf(result["output_file"])
 
         # Emit signal
         self.processing_complete.emit(result)
@@ -552,7 +463,9 @@ class ReferenceLabelsWidget(QWidget):
 
         self.status_label.setText("Processing failed")
         theme = get_theme_manager().get_current_theme()
-        self.status_label.setStyleSheet(f"color: {theme.status_danger}; font-weight: bold;")
+        self.status_label.setStyleSheet(
+            f"color: {theme.status_danger}; font-weight: bold;"
+        )
 
         self.log.error(f"PDF processing failed: {value}\n{traceback_str}")
 
@@ -583,11 +496,7 @@ class ReferenceLabelsWidget(QWidget):
             message = str(value)
             suggestion = "See execution log for technical details."
 
-        QMessageBox.critical(
-            self,
-            title,
-            f"{message}\n\n{suggestion}"
-        )
+        QMessageBox.critical(self, title, f"{message}\n\n{suggestion}")
 
     def _on_processing_finished(self):
         """Re-enable UI after processing completes or fails."""
@@ -610,21 +519,10 @@ class ReferenceLabelsWidget(QWidget):
             QMessageBox.warning(
                 self,
                 "Cannot Open File",
-                f"Failed to open PDF:\n{file_path}\n\n"
-                "Please open it manually."
+                f"Failed to open PDF:\n{file_path}\n\nPlease open it manually.",
             )
         else:
             self.log.info(f"Opened PDF: {file_path}")
-
-    def _save_print_settings(self):
-        save_print_settings("reference_labels", {
-            "print_mode": self.print_mode_combo.currentData(),
-            "raw_zpl_target": self.raw_zpl_target_edit.text(),
-            "raw_zpl_rotate": self.raw_zpl_rotate_check.isChecked(),
-            "raw_zpl_label_width_mm": self.raw_zpl_label_width_spin.value(),
-            "raw_zpl_label_height_mm": self.raw_zpl_label_height_spin.value(),
-            "driver_printer_name": self.driver_printer_combo.currentData(),
-        })
 
     def _on_print_clicked(self):
         print_pdf(self, self.last_output_pdf, load_print_settings("reference_labels"))

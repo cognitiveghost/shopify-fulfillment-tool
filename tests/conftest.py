@@ -8,6 +8,7 @@ The SettingsWindow fixtures at the bottom are here rather than in a test
 module because three test files need them and `tests/` is not a package --
 conftest is the only sharing mechanism that does not depend on sys.path.
 """
+
 import gc
 from unittest.mock import Mock
 
@@ -25,6 +26,7 @@ def profile_manager(tmp_path):
     """Real ProfileManager rooted at a throwaway tmp_path -- exercises the
     actual file-locking/JSON read-write code path, not a mock."""
     from shopify_tool.profile_manager import ProfileManager
+
     ProfileManager._config_cache.clear()  # class-level cache; avoid cross-test leakage
     return ProfileManager(base_path=str(tmp_path))
 
@@ -39,6 +41,7 @@ def orders_df_factory():
     forward-fill export format -- pass explicit values on every row if you don't
     want to rely on ffill.
     """
+
     def _make(rows):
         defaults = {
             "Name": "",
@@ -52,16 +55,19 @@ def orders_df_factory():
         }
         full_rows = [{**defaults, **row} for row in rows]
         return pd.DataFrame(full_rows)
+
     return _make
 
 
 @pytest.fixture
 def stock_df_factory():
     """Build a raw stock DataFrame using real Bulgarian-ERP CSV column names."""
+
     def _make(rows):
         defaults = {"Артикул": "", "Име": "", "Наличност": 0}
         full_rows = [{**defaults, **row} for row in rows]
         return pd.DataFrame(full_rows)
+
     return _make
 
 
@@ -73,25 +79,59 @@ def empty_history_df():
 @pytest.fixture
 def simple_orders_df(orders_df_factory):
     """One single-item order, one two-item order."""
-    return orders_df_factory([
-        {"Name": "#1001", "Lineitem sku": "A1", "Lineitem quantity": 2},
-        {"Name": "#1002", "Lineitem sku": "B1", "Lineitem quantity": 1},
-        {"Name": "#1002", "Lineitem sku": "B2", "Lineitem quantity": 3},
-    ])
+    return orders_df_factory(
+        [
+            {"Name": "#1001", "Lineitem sku": "A1", "Lineitem quantity": 2},
+            {"Name": "#1002", "Lineitem sku": "B1", "Lineitem quantity": 1},
+            {"Name": "#1002", "Lineitem sku": "B2", "Lineitem quantity": 3},
+        ]
+    )
 
 
 @pytest.fixture
 def simple_stock_df(stock_df_factory):
-    return stock_df_factory([
-        {"Артикул": "A1", "Име": "Widget A1", "Наличност": 10},
-        {"Артикул": "B1", "Име": "Widget B1", "Наличност": 10},
-        {"Артикул": "B2", "Име": "Widget B2", "Наличност": 10},
-    ])
+    return stock_df_factory(
+        [
+            {"Артикул": "A1", "Име": "Widget A1", "Наличност": 10},
+            {"Артикул": "B1", "Име": "Widget B1", "Наличност": 10},
+            {"Артикул": "B2", "Име": "Widget B2", "Наличност": 10},
+        ]
+    )
 
 
 @pytest.fixture(scope="module")
 def qapp():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def print_settings_store(monkeypatch):
+    """PrintOptions reads and writes QSettings("ShopifyFulfillmentTool",
+    "Printing") -- the developer's real per-PC printer choice. Tests that build
+    a real PrintOptions, or a widget holding one, get an in-memory store keyed
+    by scope instead."""
+    from gui.components import print_options
+
+    defaults = {
+        "print_mode": "driver",
+        "raw_zpl_target": "",
+        "raw_zpl_rotate": False,
+        "raw_zpl_label_width_mm": 0.0,
+        "raw_zpl_label_height_mm": 0.0,
+        "driver_printer_name": "",
+    }
+    store = {}
+    monkeypatch.setattr(
+        print_options,
+        "load_print_settings",
+        lambda scope: dict(store.get(scope, defaults)),
+    )
+    monkeypatch.setattr(
+        print_options,
+        "save_print_settings",
+        lambda scope, settings: store.__setitem__(scope, dict(settings)),
+    )
+    return store
 
 
 @pytest.fixture
@@ -105,7 +145,8 @@ def no_modals(monkeypatch):
     seen = []
     for name in ("warning", "critical", "information", "question"):
         monkeypatch.setattr(
-            QMessageBox, name,
+            QMessageBox,
+            name,
             staticmethod(lambda *a, _n=name, **k: seen.append((_n, a[1:3]))),
         )
     return seen
@@ -128,7 +169,11 @@ def settings_fixture_config():
                 "steps": [
                     {
                         "conditions": [
-                            {"field": "item_count", "operator": "is greater than", "value": "5"}
+                            {
+                                "field": "item_count",
+                                "operator": "is greater than",
+                                "value": "5",
+                            }
                         ],
                         "match": "ALL",
                         "actions": [{"type": "ADD_ORDER_TAG", "value": "BULK"}],
@@ -185,7 +230,12 @@ def settings_fixture_config():
                 }
             },
             "boxes": [
-                {"name": "Small", "length_cm": 20.0, "width_cm": 15.0, "height_cm": 10.0}
+                {
+                    "name": "Small",
+                    "length_cm": 20.0,
+                    "width_cm": 15.0,
+                    "height_cm": 10.0,
+                }
             ],
         },
         "tag_categories": {"version": 2, "categories": {}},
@@ -211,11 +261,15 @@ def started_workers(monkeypatch):
     started = []
     monkeypatch.setattr(
         "gui.settings.window.QThreadPool",
-        type("Pool", (), {
-            "globalInstance": staticmethod(
-                lambda: type("P", (), {"start": staticmethod(started.append)})()
-            )
-        }),
+        type(
+            "Pool",
+            (),
+            {
+                "globalInstance": staticmethod(
+                    lambda: type("P", (), {"start": staticmethod(started.append)})()
+                )
+            },
+        ),
     )
     return started
 
@@ -278,7 +332,9 @@ def reset_theme_and_density():
         # an app-wide stylesheet, which re-polishes every live widget -- paid on
         # all ~850 tests it would dwarf the suite, and almost none of them touch
         # theming at all.
-        dirty = manager._current_theme_name != "light" or get_density() != DEFAULT_DENSITY
+        dirty = (
+            manager._current_theme_name != "light" or get_density() != DEFAULT_DENSITY
+        )
         manager._current_theme_name = "light"
         set_density(DEFAULT_DENSITY)
         if dirty and QApplication.instance():

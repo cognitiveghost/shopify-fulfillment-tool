@@ -10,7 +10,14 @@ shows; and the hand-rolled font_css("heading") label written three times
 paragraph). One component rather than a second PageHeader type.
 """
 
-from PySide6.QtWidgets import QFormLayout, QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui.theme_manager import font_css, get_theme_manager
 
@@ -118,3 +125,21 @@ class FormSection(QFrame):
         mappings section is a title over a button-and-rows column.
         """
         self.layout().addWidget(widget)
+
+
+def row_widget(*widgets: QWidget, stretch: QWidget | None = None) -> QWidget:
+    """Several widgets as one form field, laid out left to right.
+
+    `stretch` takes the spare width. With none named, a trailing stretch takes
+    it instead, so the row packs left rather than spreading its widgets apart.
+    """
+    theme = get_theme_manager().get_current_theme()
+    row = QWidget()
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(theme.spacing_sm)
+    for widget in widgets:
+        layout.addWidget(widget, 1 if widget is stretch else 0)
+    if stretch is None:
+        layout.addStretch()
+    return row
