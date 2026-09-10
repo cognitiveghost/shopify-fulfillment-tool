@@ -7,6 +7,7 @@ from gui.components.file_slot import FileSlot
 from gui.components.filterbar import FilterBar
 from gui.components.form_section import FormSection, row_widget
 from gui.components.overflow import OverflowMenu, overflow_button
+from gui.components.print_options import PrintOptions
 from gui.components.radio_card import RadioCard
 from gui.components.selectionbar import ContextualSelectionBar
 from gui.components.statcard import KpiStrip, StatCard
@@ -25,6 +26,7 @@ __all__ = [
     "KpiStrip",
     "NavRail",
     "OverflowMenu",
+    "PrintOptions",
     "RadioCard",
     "StatCard",
     "StatePanel",
