@@ -3,9 +3,10 @@ and consolidates its three QGroupBox sections into one QFormLayout (Phase 5
 Item 3) -- the live status labels and stock-warning box keep working
 unchanged since the backend behavior they describe wasn't touched.
 """
+
 import pandas as pd
 import pytest
-from PySide6.QtWidgets import QApplication, QGroupBox
+from PySide6.QtWidgets import QApplication, QGroupBox, QMessageBox
 
 from gui.add_product_dialog import AddProductDialog
 
@@ -17,12 +18,16 @@ def qapp():
 
 @pytest.fixture
 def dialog():
-    analysis_df = pd.DataFrame([
-        {"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"},
-    ])
-    stock_df = pd.DataFrame([
-        {"SKU": "SKU-A", "Product_Name": "Widget A"},
-    ])
+    analysis_df = pd.DataFrame(
+        [
+            {"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"},
+        ]
+    )
+    stock_df = pd.DataFrame(
+        [
+            {"SKU": "SKU-A", "Product_Name": "Widget A"},
+        ]
+    )
     live_stock = {"SKU-A": 2}
     dlg = AddProductDialog(None, analysis_df, stock_df, live_stock)
     # isVisible() on a child only reflects reality once the top-level widget
@@ -49,14 +54,21 @@ def test_low_stock_warning_still_shows(dialog):
 
 
 def _dialog(live_stock, low_stock_threshold):
-    analysis_df = pd.DataFrame([
-        {"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"},
-    ])
-    stock_df = pd.DataFrame([
-        {"SKU": "SKU-1", "Product_Name": "Widget"},
-    ])
+    analysis_df = pd.DataFrame(
+        [
+            {"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"},
+        ]
+    )
+    stock_df = pd.DataFrame(
+        [
+            {"SKU": "SKU-1", "Product_Name": "Widget"},
+        ]
+    )
     dlg = AddProductDialog(
-        None, analysis_df, stock_df, live_stock,
+        None,
+        analysis_df,
+        stock_df,
+        live_stock,
         low_stock_threshold=low_stock_threshold,
     )
     dlg.show()
@@ -84,3 +96,34 @@ def test_zero_stock_still_warns_when_the_threshold_is_zero(qapp):
     dlg.sku_input.setText("SKU-1")
     assert dlg.warning_box.isVisible()
     assert "0 stock" in dlg.warning_box.text()
+
+
+def test_a_missing_order_number_is_said_under_the_field(dialog):
+    dialog._on_add_clicked()
+    assert dialog.isVisible()
+    assert not dialog.order_error.isHidden()
+    assert dialog.order_error.text() == "Enter an order number."
+
+
+def test_editing_the_field_clears_its_message(dialog):
+    dialog._on_add_clicked()
+    dialog.order_input.setText("1001")
+    assert dialog.order_error.isHidden()
+
+
+def test_an_unknown_sku_needs_a_second_press_not_a_dialog(dialog, monkeypatch):
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no dialog")),
+    )
+    dialog.order_input.setText("1001")
+    dialog.sku_input.setText("SKU-NOPE")
+
+    dialog._on_add_clicked()
+
+    assert dialog.isVisible()
+    assert dialog.add_btn.text() == "Add anyway"
+    assert "SKU-NOPE" in dialog.sku_error.text()
+    dialog.sku_input.setText("SKU-A")
+    assert dialog.add_btn.text() == "Add Product"

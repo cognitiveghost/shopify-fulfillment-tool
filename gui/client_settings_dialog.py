@@ -18,13 +18,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from gui.components import InlineMessage, show_error, toast
 from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
@@ -45,7 +45,7 @@ class ClientCreationDialog(QDialog):
         self,
         profile_manager: ProfileManager,
         groups_manager: GroupsManager | None = None,
-        parent=None
+        parent=None,
     ):
         super().__init__(parent)
         self.profile_manager = profile_manager
@@ -69,10 +69,18 @@ class ClientCreationDialog(QDialog):
         )
         form_layout.addRow("Client ID:", self.client_id_input)
 
+        self.client_id_error = InlineMessage(self)
+        form_layout.addRow("", self.client_id_error)
+        self.client_id_input.textChanged.connect(self.client_id_error.clear)
+
         self.client_name_input = QLineEdit()
         self.client_name_input.setPlaceholderText("e.g., M Cosmetics")
         self.client_name_input.setToolTip("Full name of the client")
         form_layout.addRow("Client Name:", self.client_name_input)
+
+        self.client_name_error = InlineMessage(self)
+        form_layout.addRow("", self.client_name_error)
+        self.client_name_input.textChanged.connect(self.client_name_error.clear)
 
         # Group dropdown
         self.group_combo = QComboBox()
@@ -85,7 +93,9 @@ class ClientCreationDialog(QDialog):
         self.color_display = QLabel()
         self.color_display.setFixedSize(40, 30)
         theme = get_theme_manager().get_current_theme()
-        self.color_display.setStyleSheet(f"border: 1px solid {theme.border}; background-color: {theme.status_success};")
+        self.color_display.setStyleSheet(
+            f"border: 1px solid {theme.border}; background-color: {theme.status_success};"
+        )
         color_layout.addWidget(self.color_display)
 
         self.color_button = QPushButton("Choose Color")
@@ -111,13 +121,13 @@ class ClientCreationDialog(QDialog):
             "You can customize it later in Profile Settings."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('body')} padding: 10px;")
+        info_label.setStyleSheet(
+            f"color: {theme.text_secondary}; {font_css('body')} padding: 10px;"
+        )
         layout.addWidget(info_label)
 
         # Button box
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self.validate_and_accept)
         button_box.rejected.connect(self.reject)
@@ -143,10 +153,7 @@ class ClientCreationDialog(QDialog):
 
         groups = self.groups_manager.list_groups()
         for group in groups:
-            self.group_combo.addItem(
-                group.get("name", "Unknown"),
-                group.get("id")
-            )
+            self.group_combo.addItem(group.get("name", "Unknown"), group.get("id"))
 
     def validate_and_accept(self):
         """Validate inputs and create client profile."""
@@ -155,17 +162,17 @@ class ClientCreationDialog(QDialog):
 
         # Validate inputs
         if not client_id:
-            QMessageBox.warning(self, "Validation Error", "Client ID is required.")
+            self.client_id_error.show_message("Enter a client ID.")
             return
 
         if not client_name:
-            QMessageBox.warning(self, "Validation Error", "Client Name is required.")
+            self.client_name_error.show_message("Enter a client name.")
             return
 
         # Validate client ID format
         is_valid, error_msg = ProfileManager.validate_client_id(client_id)
         if not is_valid:
-            QMessageBox.warning(self, "Validation Error", error_msg)
+            self.client_id_error.show_message(error_msg)
             return
 
         # Try to create client profile
@@ -178,34 +185,26 @@ class ClientCreationDialog(QDialog):
                     "group_id": self.group_combo.currentData(),
                     "custom_color": self.current_color,
                     "custom_badges": [],
-                    "display_order": 0
+                    "display_order": 0,
                 }
                 self.profile_manager.update_ui_settings(client_id, ui_settings)
 
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    f"Client profile 'CLIENT_{client_id.upper()}' created successfully!"
-                )
                 self.accept()
+                if self.parent() is not None:
+                    toast(self.parent(), f"Client CLIENT_{client_id.upper()} created.")
             else:
-                QMessageBox.warning(
-                    self,
-                    "Profile Exists",
-                    f"Client profile 'CLIENT_{client_id.upper()}' already exists."
+                self.client_id_error.show_message(
+                    f"CLIENT_{client_id.upper()} already exists."
                 )
-        except (ValidationError, ProfileManagerError) as e:
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to create client profile:\n{e!s}"
+        except (ValidationError, ProfileManagerError):
+            logger.exception("Failed to create client profile")
+            show_error(
+                self, "The client profile wasn't created", "Details are in Logs."
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Unexpected error creating client")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"An unexpected error occurred:\n{e!s}"
+            show_error(
+                self, "The client profile wasn't created", "Details are in Logs."
             )
 
 
@@ -287,13 +286,9 @@ class ClientSelectorWidget(QWidget):
             if clients:
                 self._on_client_changed(self.client_combo.currentText())
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to refresh clients")
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to load clients from server:\n{e!s}"
-            )
+            show_error(self, "The client list didn't load", "Details are in Logs.")
 
     def _on_client_changed(self, client_id: str):
         """Handle client selection change."""
@@ -349,7 +344,7 @@ class ClientSettingsDialog(QDialog):
         client_id: str,
         profile_manager: ProfileManager,
         groups_manager: GroupsManager | None = None,
-        parent=None
+        parent=None,
     ):
         """Initialize ClientSettingsDialog.
 
@@ -373,11 +368,13 @@ class ClientSettingsDialog(QDialog):
         # Load config
         self.config = self.profile_manager.load_client_config(client_id)
         if not self.config:
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load config for CLIENT_{client_id}"
-            )
+            logger.warning(f"Failed to load config for CLIENT_{client_id}")
+            if self.parent() is not None:
+                show_error(
+                    self.parent(),
+                    f"CLIENT_{client_id} settings couldn't be loaded",
+                    "Check that the server share is reachable, then open the settings again.",
+                )
             self.reject()
             return
 
@@ -409,9 +406,7 @@ class ClientSettingsDialog(QDialog):
         layout.addWidget(self.tabs)
 
         # Button box
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Save | QDialogButtonBox.Cancel
-        )
+        button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = button_box.button(QDialogButtonBox.Save)
         apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self._save_and_accept)
@@ -439,7 +434,9 @@ class ClientSettingsDialog(QDialog):
         )
         info_label.setWordWrap(True)
         theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;")
+        info_label.setStyleSheet(
+            f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;"
+        )
         layout.addRow(info_label)
 
         return widget
@@ -484,7 +481,9 @@ class ClientSettingsDialog(QDialog):
             "Badges are displayed next to the client name."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;")
+        info_label.setStyleSheet(
+            f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;"
+        )
         layout.addRow(info_label)
 
         return widget
@@ -513,7 +512,9 @@ class ClientSettingsDialog(QDialog):
             "These values are read-only and update automatically."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;")
+        info_label.setStyleSheet(
+            f"color: {theme.text_secondary}; {font_css('caption')} padding: 10px;"
+        )
         layout.addRow(info_label)
 
         return widget
@@ -589,7 +590,11 @@ class ClientSettingsDialog(QDialog):
         """Gather form data on the GUI thread, save in the background."""
         try:
             badges_text = self.badges_input.text().strip()
-            badges = [b.strip() for b in badges_text.split(",") if b.strip()] if badges_text else []
+            badges = (
+                [b.strip() for b in badges_text.split(",") if b.strip()]
+                if badges_text
+                else []
+            )
 
             self.save_button.setEnabled(False)
             self.save_button.setText("Saving...")
@@ -617,30 +622,26 @@ class ClientSettingsDialog(QDialog):
             self._save_worker = worker
             QThreadPool.globalInstance().start(worker)
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to save client settings")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to save client settings:\n{e!s}",
-            )
+            self._is_saving = False
+            self.save_button.setEnabled(True)
+            self.save_button.setText("Save")
+            show_error(self, "The settings weren't saved", "Details are in Logs.")
 
     def _on_save_result(self, success: bool):
         self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         if success:
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Settings for CLIENT_{self.client_id} saved successfully!"
-            )
             self.accept()
+            if self.parent() is not None:
+                toast(self.parent(), f"CLIENT_{self.client_id} settings saved.")
         else:
-            QMessageBox.warning(
+            show_error(
                 self,
-                "Save Failed",
-                "Failed to save client settings. Please try again."
+                "The settings weren't saved",
+                "Check that the server share is reachable, then save again.",
             )
 
     def _on_save_error(self, error):
@@ -649,4 +650,4 @@ class ClientSettingsDialog(QDialog):
         self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
-        QMessageBox.critical(self, "Error", f"Failed to save client settings:\n{value!s}")
+        show_error(self, "The settings weren't saved", "Details are in Logs.")

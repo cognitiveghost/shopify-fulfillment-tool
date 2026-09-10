@@ -17,13 +17,13 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QGroupBox,
     QLabel,
-    QMessageBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
 )
 
 logger = logging.getLogger(__name__)
+from gui.components import show_error
 from gui.pandas_model import cell_display_text
 from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
 
@@ -109,9 +109,9 @@ class RuleTestDialog(QDialog):
         # Table: Field | Operator | Value | Matched Rows
         self.conditions_table = QTableWidget()
         self.conditions_table.setColumnCount(4)
-        self.conditions_table.setHorizontalHeaderLabels([
-            "Field", "Operator", "Value", "Matched Rows"
-        ])
+        self.conditions_table.setHorizontalHeaderLabels(
+            ["Field", "Operator", "Value", "Matched Rows"]
+        )
         self.conditions_table.setMaximumHeight(200)
         self.conditions_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.conditions_table.setSelectionMode(QTableWidget.NoSelection)
@@ -131,9 +131,13 @@ class RuleTestDialog(QDialog):
         layout = QVBoxLayout(group)
 
         # Info label
-        info_label = QLabel("Showing first 5 matched rows (limited to 100 for performance)")
+        info_label = QLabel(
+            "Showing first 5 matched rows (limited to 100 for performance)"
+        )
         theme = get_theme_manager().get_current_theme()
-        info_label.setStyleSheet(f"color: {theme.text_secondary}; font-style: italic; {font_css('caption')}")
+        info_label.setStyleSheet(
+            f"color: {theme.text_secondary}; font-style: italic; {font_css('caption')}"
+        )
         layout.addWidget(info_label)
 
         # Preview table
@@ -177,7 +181,9 @@ class RuleTestDialog(QDialog):
             "Green highlight = Row added by rule"
         )
         theme = get_theme_manager().get_current_theme()
-        legend.setStyleSheet(f"color: {theme.text_secondary}; {font_css('caption')} margin-top: 5px;")
+        legend.setStyleSheet(
+            f"color: {theme.text_secondary}; {font_css('caption')} margin-top: 5px;"
+        )
         layout.addWidget(legend)
 
         return group
@@ -189,11 +195,15 @@ class RuleTestDialog(QDialog):
         try:
             # Performance warning for large datasets
             if len(self.analysis_df) > 1000:
-                logger.warning(f"[RULE TEST] Large dataset ({len(self.analysis_df)} rows), limiting to 100 for performance")
+                logger.warning(
+                    f"[RULE TEST] Large dataset ({len(self.analysis_df)} rows), limiting to 100 for performance"
+                )
 
             # Limit to 100 rows for performance
             self.test_df = self.analysis_df.head(100).copy()
-            logger.info(f"[RULE TEST] Testing rule '{self.rule_config.get('name')}' with {len(self.test_df)} rows")
+            logger.info(
+                f"[RULE TEST] Testing rule '{self.rule_config.get('name')}' with {len(self.test_df)} rows"
+            )
 
             # Create single-rule engine
             engine = RuleEngine([self.rule_config])
@@ -220,13 +230,9 @@ class RuleTestDialog(QDialog):
             self._populate_actions_list()
             self._populate_after_actions_table()
 
-        except Exception as e:
+        except Exception:
             logger.exception("[RULE TEST] Error testing rule")
-            QMessageBox.critical(
-                self,
-                "Test Error",
-                f"Failed to test rule:\n\n{e!s}\n\nCheck logs for details."
-            )
+            show_error(self, "The rule test didn't finish", "Details are in Logs.")
 
     def _align_frames(self):
         """Make df_before and df_after comparable.
@@ -298,19 +304,29 @@ class RuleTestDialog(QDialog):
         all_conditions = []
         for step_idx, step in enumerate(steps):
             for condition in step.get("conditions", []):
-                all_conditions.append((step_idx + 1, step.get("match", "ALL"), condition))
+                all_conditions.append(
+                    (step_idx + 1, step.get("match", "ALL"), condition)
+                )
 
         self.conditions_table.setColumnCount(5)
-        self.conditions_table.setHorizontalHeaderLabels([
-            "Step", "Field", "Operator", "Value", "Match Logic"
-        ])
+        self.conditions_table.setHorizontalHeaderLabels(
+            ["Step", "Field", "Operator", "Value", "Match Logic"]
+        )
         self.conditions_table.setRowCount(len(all_conditions))
 
         for row_idx, (step_num, match_type, condition) in enumerate(all_conditions):
-            self.conditions_table.setItem(row_idx, 0, QTableWidgetItem(f"Step {step_num}"))
-            self.conditions_table.setItem(row_idx, 1, QTableWidgetItem(condition.get("field", "")))
-            self.conditions_table.setItem(row_idx, 2, QTableWidgetItem(condition.get("operator", "")))
-            self.conditions_table.setItem(row_idx, 3, QTableWidgetItem(str(condition.get("value", ""))))
+            self.conditions_table.setItem(
+                row_idx, 0, QTableWidgetItem(f"Step {step_num}")
+            )
+            self.conditions_table.setItem(
+                row_idx, 1, QTableWidgetItem(condition.get("field", ""))
+            )
+            self.conditions_table.setItem(
+                row_idx, 2, QTableWidgetItem(condition.get("operator", ""))
+            )
+            self.conditions_table.setItem(
+                row_idx, 3, QTableWidgetItem(str(condition.get("value", "")))
+            )
             self.conditions_table.setItem(row_idx, 4, QTableWidgetItem(match_type))
 
         self.conditions_table.resizeColumnsToContents()
@@ -324,7 +340,9 @@ class RuleTestDialog(QDialog):
 
         summary = f"Final Result ({step_info}, narrowing): "
         summary += f"<span style='color: {theme.status_success}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
-        summary += f"({self.changed_count} of {total_rows} existing rows, {percentage:.1f}%)"
+        summary += (
+            f"({self.changed_count} of {total_rows} existing rows, {percentage:.1f}%)"
+        )
         if len(self.added_rows):
             summary += f" — {len(self.added_rows)} added by rule"
 
@@ -370,7 +388,9 @@ class RuleTestDialog(QDialog):
         # Show "and X more" if there are more matches
         if self.changed_count > 5:
             remaining = self.changed_count - 5
-            logger.info(f"[RULE TEST] Showing 5 of {self.changed_count} matched rows ({remaining} more)")
+            logger.info(
+                f"[RULE TEST] Showing 5 of {self.changed_count} matched rows ({remaining} more)"
+            )
 
     def _populate_actions_list(self):
         """Populate actions list with actions from all steps."""
@@ -385,7 +405,9 @@ class RuleTestDialog(QDialog):
             self.actions_label.setText("No actions configured for this rule")
             return
 
-        actions_text = f"<b>{len(all_actions)} action(s) across {len(steps)} step(s):</b><br><br>"
+        actions_text = (
+            f"<b>{len(all_actions)} action(s) across {len(steps)} step(s):</b><br><br>"
+        )
 
         for idx, (step_num, action) in enumerate(all_actions, 1):
             # Normalized, because the engine dispatches on the uppercased type
@@ -419,7 +441,9 @@ class RuleTestDialog(QDialog):
                 field1 = action.get("field1", "")
                 field2 = action.get("field2", "")
                 target = action.get("target", "")
-                actions_text += f" → {operation.upper()} {field1} and {field2}, store in {target}"
+                actions_text += (
+                    f" → {operation.upper()} {field1} and {field2}, store in {target}"
+                )
 
             actions_text += "<br>"
 
@@ -504,7 +528,7 @@ class RuleTestDialog(QDialog):
             "Total_Price",
             "Quantity",
             "Shipping_Provider",
-            "Internal_Tags"
+            "Internal_Tags",
         ]
 
         # Select priority columns that exist in DataFrame
@@ -513,6 +537,6 @@ class RuleTestDialog(QDialog):
         # Add other columns if we have space (max 10 total)
         remaining_cols = [col for col in df.columns if col not in display_cols]
         if len(display_cols) < 10:
-            display_cols.extend(remaining_cols[:10 - len(display_cols)])
+            display_cols.extend(remaining_cols[: 10 - len(display_cols)])
 
         return display_cols
