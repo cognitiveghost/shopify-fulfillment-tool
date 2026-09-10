@@ -1483,12 +1483,11 @@ class UIManager:
     def _create_tab5_tools(self):
         """Create Tab 5: Tools
 
-        Contains sub-tabs:
-        - Reference Labels: PDF processing for reference numbers
-        - Barcode Generator: Placeholder for future implementation
+        Reference labels and Barcode labels as two cards, side by side, that
+        stack when the page is narrow. See gui/tools_widget.py.
 
         Returns:
-            QWidget: Tools widget with sub-tabs
+            QWidget: the Tools page
         """
         from gui.tools_widget import ToolsWidget
 
