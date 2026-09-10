@@ -1,43 +1,41 @@
+"""Bridges Python logging to Qt, as structure rather than as text.
+
+This handler runs on whatever thread logged, so it must only emit a signal --
+never touch a widget. That is the whole reason it exists.
+
+It emits a LogEntry, not a formatted line: the viewer filters by level, and a
+level parsed back out of a formatted string is a level you can get wrong.
+
+Spec: docs/superpowers/specs/2026-09-07-phase9-bundle7-info-becomes-logs-design.md
+"""
+
 import logging
+from datetime import datetime
 
 from PySide6.QtCore import QObject, Signal
 
+from gui.log_entry import LogEntry
+
 
 class QtLogHandler(logging.Handler, QObject):
-    """A custom logging handler that emits a Qt signal for each log record.
-
-    This class inherits from both `logging.Handler` and `QObject` to bridge
-    Python's standard logging framework with Qt's signal/slot mechanism.
-    When a log record is processed, it is formatted and then emitted via a
-    Qt signal. This allows a Qt widget (like a QPlainTextEdit) in the main
-    UI thread to receive and display log messages from any thread in a
-    thread-safe way.
+    """Emits one LogEntry per record, on the thread that logged it.
 
     Signals:
-        log_message_received (str): Emitted with the formatted log message
-                                    for each record.
+        entry_received (object): the LogEntry for each record.
     """
 
-    # Define a signal that will carry the log message
-    log_message_received = Signal(str)
+    entry_received = Signal(object)
 
-    def __init__(self, parent=None):
-        """Initializes the QtLogHandler."""
-        # Initialize QObject part first
+    def __init__(self):
         QObject.__init__(self)
-        # Then initialize the logging.Handler part
         logging.Handler.__init__(self)
 
     def emit(self, record):
-        """Formats and emits a log record as a Qt signal.
-
-        This method is called automatically by the Python logging framework
-        whenever a log event is dispatched to this handler.
-
-        Args:
-            record (logging.LogRecord): The log record to process.
-        """
-        # Format the log record into a string
-        msg = self.format(record)
-        # Emit the signal with the formatted message
-        self.log_message_received.emit(msg)
+        """Turn a LogRecord into a LogEntry and emit it."""
+        entry = LogEntry(
+            timestamp=datetime.fromtimestamp(record.created).astimezone(),
+            level=record.levelno,
+            source=record.name,
+            message=record.getMessage(),
+        )
+        self.entry_received.emit(entry)

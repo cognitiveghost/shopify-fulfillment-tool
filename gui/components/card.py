@@ -1,9 +1,9 @@
-"""Elevated container for the Statistics tab's stat / courier / tag tiles.
+"""Elevated container holding a vertical stack of centred labels.
 
-ui_manager.py hand-rolled this same QFrame + centred-label stack three times
-(_make_stat_card, _make_courier_card, _make_tag_card). The differences between
-them were per-instance data -- margins, minimum width, which TYPE_SCALE role
-each row uses -- not three different widgets.
+ui_manager.py hand-rolled this same QFrame + centred-label stack three times,
+in card builders since deleted. The differences between them were
+per-instance data -- margins, minimum width, which TYPE_SCALE role each row
+uses -- not three different widgets.
 """
 
 from PySide6.QtCore import Qt
@@ -44,7 +44,7 @@ class Card(QFrame):
         """Append a centred label at a TYPE_SCALE role and return it.
 
         The label is returned because callers keep handles to the rows they
-        update live (the Statistics tab's stat_card_labels).
+        update live rather than rebuilding the card.
 
         `css` appends caller-specific declarations after the role's font
         rules -- it exists for the tag tile's coloured count badge. An unknown

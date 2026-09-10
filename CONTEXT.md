@@ -15,7 +15,8 @@ for decisions.
 Everything except the two heavy views.
 
 **Web tier** — the part drawn in a `QWebEngineView`, styled with real CSS.
-Analysis Results and Info › Statistics only. See ADR 0001.
+Analysis Results only. See ADR 0001, which also records the deletion of
+Info › Statistics that leaves it the sole occupant.
 
 **Renderer** — either tier, when the point is that there are two of them and
 one palette must serve both. Never used for `QSvgRenderer`; say
@@ -111,6 +112,22 @@ destination, which is why the rail has no footer.
 Qualified when the scope matters: the **command-bar overflow** holds what
 configures the client and this PC; the **screen overflow** holds actions
 scoped to the screen you are on. Two menus, two scopes, two bands of chrome.
+
+**Logs** — the destination holding the log viewer, renamed from **Info** when
+Statistics was deleted and one page was left. Supersedes "Info", which named a
+folder of three unrelated pages.
+
+**Log entry** — one line in the viewer: time, level, source, message. The same
+four fields whichever stream produced it.
+
+**Source** — which stream a log entry came from. **Activity** is what the
+operator did (`log_activity`, ten call sites); **Execution** is what the
+program logged (the root logger, through `QtLogHandler`). One viewer, one
+switch, never two widgets.
+
+**Follow-tail** — the viewer scrolling itself to the newest entry. On only
+while the user is already at the bottom; it stops the moment they scroll up and
+counts what arrived since.
 
 **Connection state** — whether this PC can currently reach the file server.
 One boolean, from `ProfileManager.is_network_available`, carried by one

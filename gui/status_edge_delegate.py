@@ -11,11 +11,22 @@ selection_border top and bottom) still renders underneath the edge.
 Spec: docs/superpowers/specs/2026-08-30-phase8.8b-analysis-results-chrome-design.md
 """
 
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QStyle, QStyledItemDelegate
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFontMetrics
+from PySide6.QtWidgets import (
+    QApplication,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+)
 
 from gui.pandas_model import ROLE_STATUS
-from gui.selection_ring import RING_WIDTH, first_visible_column, paint_selection_ring
+from gui.selection_ring import (
+    RING_WIDTH,
+    first_visible_column,
+    header_of,
+    paint_selection_ring,
+)
 from gui.theme_manager import get_theme_manager
 
 EDGE_WIDTH = 3
@@ -51,15 +62,63 @@ class StatusEdgeDelegate(QStyledItemDelegate):
             return option.rect.adjusted(RING_WIDTH, RING_WIDTH, 0, -RING_WIDTH)
         return option.rect
 
+    def _paint_with_foreground(self, painter, option, index, colour):
+        """Draw the cell, then its text in the model's colour, not the QSS's.
+
+        QStyleSheetStyle takes the text colour from the stylesheet and
+        ignores the palette initStyleOption just filled in, so the only way
+        to honour ForegroundRole under an application stylesheet is to let
+        the style draw everything *except* the text and draw that here.
+        """
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        text = opt.text
+        opt.text = ""
+
+        widget = opt.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)
+
+        rect = style.subElementRect(QStyle.SE_ItemViewItemText, opt, widget)
+        painter.save()
+        painter.setPen(colour)
+        painter.setFont(opt.font)
+        elided = QFontMetrics(opt.font).elidedText(text, Qt.ElideRight, rect.width())
+        painter.drawText(rect, int(opt.displayAlignment), elided)
+        painter.restore()
+
     def paint(self, painter, option, index):
-        super().paint(painter, option, index)
+        # An application stylesheet targets QTableView/QTreeView::item
+        # (shared/theme.py), which hands item painting to QStyleSheetStyle.
+        # That style draws its own panel and takes its colour from the QSS,
+        # so a model's BackgroundRole never reaches the screen -- it arrives
+        # on the option intact and is then discarded. Painting it here is
+        # what makes the role mean anything. Selected rows keep the
+        # stylesheet's selection colour; a tint under the ring reads as a
+        # second selection.
+        if not (option.state & QStyle.State_Selected):
+            background = index.data(Qt.BackgroundRole)
+            if background is not None:
+                painter.fillRect(option.rect, QColor(background))
+
+        foreground = index.data(Qt.ForegroundRole)
+        if foreground is None:
+            # The overwhelmingly common case, and the one every other view
+            # takes: let the style draw the cell whole.
+            super().paint(painter, option, index)
+        else:
+            self._paint_with_foreground(painter, option, index, QColor(foreground))
+
         paint_selection_ring(painter, option, index)
 
         # Column check first: it is a C++ visualIndex lookup, where edge_token
         # is a data() round-trip through the proxy. Only one column of N draws
         # an edge, so the cheap test skips the model call for the other N-1.
-        widget = option.widget
-        header = widget.horizontalHeader() if hasattr(widget, "horizontalHeader") else None
+        # header_of, not a horizontalHeader() sniff: a QTreeView calls it
+        # header(), so sniffing only for the table's name returned None and
+        # killed the edge on every tree -- the same silent failure the
+        # selection ring's own docstring records from Bundle 6.
+        header = header_of(option)
         if not self.paints_edge(header, index.column()):
             return
         token = self.edge_token(index)
@@ -71,5 +130,7 @@ class StatusEdgeDelegate(QStyledItemDelegate):
         painter.save()
         # Not `rect.setWidth()`: PySide6 hands back a reference to the option's
         # own field, so narrowing it would mutate the caller's const option.
-        painter.fillRect(rect.x(), rect.y(), EDGE_WIDTH, rect.height(), QColor(getattr(theme, token)))
+        painter.fillRect(
+            rect.x(), rect.y(), EDGE_WIDTH, rect.height(), QColor(getattr(theme, token))
+        )
         painter.restore()
