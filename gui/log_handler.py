@@ -10,6 +10,7 @@ Spec: docs/superpowers/specs/2026-09-07-phase9-bundle7-info-becomes-logs-design.
 """
 
 import logging
+import traceback
 from datetime import datetime
 
 from PySide6.QtCore import QObject, Signal
@@ -31,11 +32,22 @@ class QtLogHandler(logging.Handler, QObject):
         logging.Handler.__init__(self)
 
     def emit(self, record):
-        """Turn a LogRecord into a LogEntry and emit it."""
+        """Turn a LogRecord into a LogEntry and emit it.
+
+        An exception's one-line summary rides on the message: the error banner
+        (9.25) sends the operator here for the cause, and a row per record
+        keeps the viewer one line per entry. The full traceback stays in the
+        JSON file log.
+        """
+        message = record.getMessage()
+        if record.exc_info and record.exc_info[1] is not None:
+            etype, value = record.exc_info[:2]
+            summary = traceback.format_exception_only(etype, value)[-1].strip()
+            message = f"{message} — {summary}"
         entry = LogEntry(
             timestamp=datetime.fromtimestamp(record.created).astimezone(),
             level=record.levelno,
             source=record.name,
-            message=record.getMessage(),
+            message=message,
         )
         self.entry_received.emit(entry)

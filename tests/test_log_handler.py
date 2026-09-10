@@ -52,3 +52,37 @@ def test_the_entry_carries_level_logger_name_and_rendered_message(qapp):
 
 def test_the_old_string_signal_is_gone(qapp):
     assert not hasattr(QtLogHandler, "log_message_received")
+
+
+def test_an_exception_summary_rides_on_the_message(qapp):
+    import sys
+
+    handler = QtLogHandler()
+    received = []
+    handler.entry_received.connect(received.append)
+    try:
+        raise PermissionError("share is read-only")
+    except PermissionError:
+        record = logging.LogRecord(
+            name="gui.actions_handler",
+            level=logging.ERROR,
+            pathname=__file__,
+            lineno=1,
+            msg="Save failed",
+            args=(),
+            exc_info=sys.exc_info(),
+        )
+
+    handler.emit(record)
+
+    assert received[0].message == "Save failed — PermissionError: share is read-only"
+
+
+def test_a_record_without_an_exception_keeps_its_message(qapp):
+    handler = QtLogHandler()
+    received = []
+    handler.entry_received.connect(received.append)
+
+    handler.emit(_record())
+
+    assert received[0].message == "careful now"
