@@ -158,6 +158,19 @@ the four stored statuses plus packing progress and idle time. Distinguished
 from **stored status**, the four values `SessionManager.VALID_STATUSES`
 accepts and a person can set.
 
+## Printing
+
+**Print mode** — how a label PDF reaches a printer: through the operating
+system's print dialog (**driver**), or as raw ZPL sent straight to a printer
+target (**Raw ZPL**). Chosen per tool and per PC.
+
+**Print options** — one tool's print mode and the settings that mode needs.
+Stored on the PC, not in the client profile.
+
+**Fold** — a closed row that states the current values of the controls it
+hides. It is opened to change a value, never to check one. Distinguished from
+an **overflow**, which holds actions rather than values.
+
 ## Repos
 
 **Canonical source** — `packing-tool`. Every `shared/` change is authored
