@@ -29,10 +29,6 @@ OWNED = {
     ): "stays native: no window exists yet",
 }
 
-# Not converted yet. Each conversion task deletes its own lines; Task 12
-# deletes this set.
-PENDING = set()
-
 
 def _message_box_calls(tree):
     """Yield (enclosing function name, call node) for each message box call."""
@@ -78,7 +74,7 @@ def offenders(root, skip=frozenset()):
 
 
 def test_no_message_box_outside_the_owned_list():
-    assert offenders(ROOT, skip=PENDING) == []
+    assert offenders(ROOT) == []
 
 
 def test_every_owned_entry_still_matches_a_call():
