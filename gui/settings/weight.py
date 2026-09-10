@@ -626,6 +626,20 @@ class WeightPage(SettingsPage):
             logger.exception("Failed to import SKUs from stock CSV")
             show_error(self, "The SKUs weren't imported", "Details are in Logs.")
 
+    def _toast_import_result(self, added, updated, skipped, update_them):
+        """Report an import; skipped duplicates get one click to update them."""
+        text = f"Added {added}."
+        if updated:
+            text += f" Updated {updated}."
+        if skipped:
+            text += f" Skipped {skipped} already in the table."
+        toast(
+            self,
+            text,
+            action_text="Update them" if skipped else "",
+            on_action=update_them if skipped else None,
+        )
+
     def _weight_import_products_from_csv(
         self, path: str | None = None, update_existing: bool = False
     ):
@@ -765,17 +779,14 @@ class WeightPage(SettingsPage):
                     added += 1
             self.weight_products_table.blockSignals(False)
 
-            if skipped and not update_existing:
-                toast(
-                    self,
-                    f"Added {added}. Skipped {skipped} already in the table.",
-                    action_text="Update them",
-                    on_action=lambda: self._weight_import_products_from_csv(
-                        file_path, update_existing=True
-                    ),
-                )
-            else:
-                toast(self, f"Added {added}. Updated {updated}.")
+            self._toast_import_result(
+                added,
+                updated,
+                skipped,
+                lambda: self._weight_import_products_from_csv(
+                    file_path, update_existing=True
+                ),
+            )
 
         except Exception:
             logger.exception("Failed to import product dimensions from CSV")
@@ -907,17 +918,14 @@ class WeightPage(SettingsPage):
                     added += 1
             self.weight_boxes_table.blockSignals(False)
 
-            if skipped and not update_existing:
-                toast(
-                    self,
-                    f"Added {added}. Skipped {skipped} already in the table.",
-                    action_text="Update them",
-                    on_action=lambda: self._weight_import_boxes_from_csv(
-                        file_path, update_existing=True
-                    ),
-                )
-            else:
-                toast(self, f"Added {added}. Updated {updated}.")
+            self._toast_import_result(
+                added,
+                updated,
+                skipped,
+                lambda: self._weight_import_boxes_from_csv(
+                    file_path, update_existing=True
+                ),
+            )
 
         except Exception:
             logger.exception("Failed to import boxes from CSV")

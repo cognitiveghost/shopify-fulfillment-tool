@@ -248,6 +248,7 @@ class ReferenceLabelsWidget(QWidget):
 
     def _update_process_button(self):
         """Enable/disable process button based on file selection."""
+        self.validation_error.clear()  # the inputs it named have changed
         has_both_files = bool(self.pdf_path and self.csv_path)
         has_output = bool(self.output_dir)
 
@@ -481,22 +482,24 @@ class ReferenceLabelsWidget(QWidget):
         )
 
         if isinstance(value, InvalidPDFError):
-            title = "Invalid PDF File"
-            suggestion = "Please check that the PDF file is valid and not corrupted."
+            what_to_do = (
+                "The PDF couldn't be read. Check that it isn't damaged, "
+                "then process it again."
+            )
         elif isinstance(value, InvalidCSVError):
-            title = "Invalid CSV File"
-            suggestion = (
-                "Please check that the CSV file has the correct format.\n"
-                "Expected columns: PostOne ID (0), Tracking (1), Reference (2), Name (6)"
+            what_to_do = (
+                "The CSV isn't in the expected format. Expected columns: "
+                "PostOne ID (0), Tracking (1), Reference (2), Name (6)."
             )
         elif isinstance(value, MappingError):
-            title = "Mapping Error"
-            suggestion = "Some pages could not be matched. Check the CSV mapping file."
+            what_to_do = (
+                "Some pages didn't match a row in the CSV. Check the CSV "
+                "mapping file, then process it again."
+            )
         else:
-            title = "Processing Error"
-            suggestion = "See execution log for technical details."
+            what_to_do = "Details are in Logs."
 
-        show_error(self, title, suggestion or "Details are in Logs.")
+        show_error(self, "The PDF wasn't processed", what_to_do)
 
     def _on_processing_finished(self):
         """Re-enable UI after processing completes or fails."""

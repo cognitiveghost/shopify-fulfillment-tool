@@ -5,6 +5,7 @@ categories_updated signal on Save/Apply. Root cause: __init__ did a shallow
 as the caller's live config; deleting/editing a category mutated it
 immediately, and Cancel never restored it.
 """
+
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -21,7 +22,12 @@ def test_deleting_a_category_does_not_mutate_the_caller_s_dict():
     live_config = {
         "version": 2,
         "categories": {
-            "packaging": {"label": "Packaging", "color": "#FF0000", "tags": ["BOX", "BAG"], "order": 1},
+            "packaging": {
+                "label": "Packaging",
+                "color": "#FF0000",
+                "tags": ["BOX", "BAG"],
+                "order": 1,
+            },
         },
     }
     panel = TagCategoriesPanel(live_config)
@@ -36,18 +42,26 @@ def _sample_categories():
         "version": 2,
         "categories": {
             "packaging": {
-                "label": "Packaging", "color": "#4CAF50", "order": 1,
+                "label": "Packaging",
+                "color": "#4CAF50",
+                "order": 1,
                 "tags": ["BOX"],
                 "sku_writeoff": {"enabled": False, "mappings": {}},
             },
             "priority": {
-                "label": "Priority", "color": "#FF9800", "order": 2,
+                "label": "Priority",
+                "color": "#FF9800",
+                "order": 2,
                 "tags": ["URGENT"],
-                "sku_writeoff": {"enabled": True,
-                                 "mappings": {"URGENT": [{"sku": "S1", "quantity": 2.0}]}},
+                "sku_writeoff": {
+                    "enabled": True,
+                    "mappings": {"URGENT": [{"sku": "S1", "quantity": 2.0}]},
+                },
             },
             "status": {
-                "label": "Status", "color": "#2196F3", "order": 3,
+                "label": "Status",
+                "color": "#2196F3",
+                "order": 3,
                 "tags": ["CHECKED"],
                 "sku_writeoff": {"enabled": False, "mappings": {}},
             },
@@ -57,6 +71,36 @@ def _sample_categories():
 
 def _labels(panel):
     return {k: v["label"] for k, v in panel.working_categories["categories"].items()}
+
+
+@pytest.mark.parametrize("save_fails", [False, True])
+def test_apply_and_save_report_success_only_when_the_save_worked(
+    qtbot, monkeypatch, save_fails
+):
+    """9.25 review: a failed save used to toast "saved" and clear `modified`,
+    so Cancel then discarded the edits without asking."""
+    from unittest.mock import Mock
+
+    from PySide6.QtWidgets import QDialog
+
+    from gui.tag_categories_dialog import TagCategoriesDialog
+
+    toasts = Mock()
+    monkeypatch.setattr("gui.tag_categories_dialog.toast", toasts)
+    dialog = TagCategoriesDialog(_sample_categories())
+    qtbot.addWidget(dialog)
+    if save_fails:
+        dialog.categories_updated.connect(
+            lambda _: setattr(dialog.panel, "modified", True)
+        )
+
+    dialog.panel.modified = True
+    dialog._on_apply()
+    assert toasts.called is not save_fails
+    assert dialog.panel.modified is save_fails
+
+    dialog._on_save()
+    assert (dialog.result() == QDialog.Accepted) is not save_fails
 
 
 def test_rebuilding_the_list_preserves_every_label(qtbot):
@@ -69,7 +113,9 @@ def test_rebuilding_the_list_preserves_every_label(qtbot):
     panel._load_categories()
 
     assert _labels(panel) == {
-        "packaging": "Packaging", "priority": "Priority", "status": "Status"
+        "packaging": "Packaging",
+        "priority": "Priority",
+        "status": "Status",
     }
 
 
@@ -82,7 +128,10 @@ def test_adding_a_category_preserves_every_existing_label(qtbot):
 
     cats = panel.working_categories["categories"]
     cats["extra"] = {
-        "label": "Extra", "color": "#9E9E9E", "order": 4, "tags": [],
+        "label": "Extra",
+        "color": "#9E9E9E",
+        "order": 4,
+        "tags": [],
         "sku_writeoff": {"enabled": False, "mappings": {}},
     }
     panel._load_categories()
@@ -132,7 +181,10 @@ def test_new_category_becomes_the_selected_one(qtbot):
 
     cats = panel.working_categories["categories"]
     cats["extra"] = {
-        "label": "Extra", "color": "#9E9E9E", "order": 4, "tags": [],
+        "label": "Extra",
+        "color": "#9E9E9E",
+        "order": 4,
+        "tags": [],
         "sku_writeoff": {"enabled": False, "mappings": {}},
     }
     panel._load_categories()
@@ -229,7 +281,7 @@ def test_new_category_order_is_unused_after_deletions():
     from gui.tag_categories_dialog import next_available_order
 
     assert next_available_order([1, 2, 3, 999]) == 4
-    assert next_available_order([1, 3, 999]) == 2      # fills the gap
+    assert next_available_order([1, 3, 999]) == 2  # fills the gap
     assert next_available_order([999]) == 1
     assert next_available_order([]) == 1
     assert next_available_order([1, 2, 3, 4, 5, 6, 999]) == 7

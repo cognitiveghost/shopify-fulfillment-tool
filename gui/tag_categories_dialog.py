@@ -585,6 +585,7 @@ class TagCategoriesPanel(QWidget):
 
     def _on_add_tag(self):
         """Handle add tag button click."""
+        self.validation_error.clear()
         tag, ok = QInputDialog.getText(
             self, "Add Tag", "Enter tag name (UPPERCASE):", QLineEdit.Normal, ""
         )
@@ -678,6 +679,7 @@ class TagCategoriesPanel(QWidget):
 
     def _on_add_mapping(self):
         """Add a new writeoff mapping row."""
+        self.validation_error.clear()
         if not self.current_category_id:
             return
 
@@ -765,6 +767,7 @@ class TagCategoriesPanel(QWidget):
 
     def _on_new_category(self):
         """Handle new category button click."""
+        self.validation_error.clear()
         category_id, ok = QInputDialog.getText(
             self,
             "New Category",
@@ -884,24 +887,26 @@ class TagCategoriesDialog(QDialog):
         )
 
     def _validate(self) -> bool:
+        self.panel.validation_error.clear()
         is_valid, errors = self.panel.validate_categories()
         if not is_valid:
             self.panel.validation_error.show_message("; ".join(errors))
             return False
         return True
 
-    def _on_apply(self):
-        if not self._validate():
-            return
-        self.categories_updated.emit(self.panel.get_categories())
+    def _save(self) -> bool:
+        """Emit the edits. A receiver whose save fails sets panel.modified back."""
         self.panel.modified = False
-        toast(self, "Tag categories saved.")
+        self.categories_updated.emit(self.panel.get_categories())
+        return not self.panel.modified
+
+    def _on_apply(self):
+        if self._validate() and self._save():
+            toast(self, "Tag categories saved.")
 
     def _on_save(self):
-        if not self._validate():
-            return
-        self.categories_updated.emit(self.panel.get_categories())
-        self.accept()
+        if self._validate() and self._save():
+            self.accept()
 
     def _on_cancel(self):
         if self.panel.modified and not ConfirmDialog.ask(

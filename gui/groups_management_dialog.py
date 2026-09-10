@@ -233,7 +233,13 @@ class GroupsManagementDialog(QDialog):
         # Get current group data
         group = self.groups_manager.get_group(group_id)
         if not group:
-            show_error(self, "The group wasn't found", "Details are in Logs.")
+            logger.warning(f"Group {group_id} not found")
+            show_error(
+                self,
+                "The group wasn't found",
+                "It may have been deleted on another PC. The list is reloaded.",
+            )
+            self._load_groups()
             return
 
         current_name = group.get("name", "")
@@ -267,7 +273,7 @@ class GroupsManagementDialog(QDialog):
             self.groups_manager.update_group(group_id, name=name, color=color_hex)
             logger.info(f"Updated group: {group_id}")
 
-            toast(self, "Group updated.")
+            toast(self, f"Group {name or current_name} updated.")
 
             # Reload table
             self._load_groups()
@@ -288,7 +294,13 @@ class GroupsManagementDialog(QDialog):
         # Get group data for confirmation
         group = self.groups_manager.get_group(group_id)
         if not group:
-            show_error(self, "The group wasn't found", "Details are in Logs.")
+            logger.warning(f"Group {group_id} not found")
+            show_error(
+                self,
+                "The group wasn't found",
+                "It may have been deleted on another PC. The list is reloaded.",
+            )
+            self._load_groups()
             return
 
         name = group.get("name", "Unknown")

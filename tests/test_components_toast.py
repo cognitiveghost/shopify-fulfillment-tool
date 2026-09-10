@@ -124,3 +124,18 @@ def test_it_never_takes_focus(window):
     shown = toast(window, "Done.", action_text="Undo", on_action=lambda: None)
     assert shown.focusPolicy() == Qt.FocusPolicy.NoFocus
     assert shown.button.focusPolicy() == Qt.FocusPolicy.NoFocus
+
+
+def test_the_edge_follows_a_theme_toggle(window):
+    from gui.theme_manager import get_theme_manager
+
+    manager = get_theme_manager()
+    before = manager.get_current_theme().name
+    shown = toast(window, "Done.")
+    sheet = shown.styleSheet()
+    try:
+        manager.set_theme("dark" if before == "light" else "light")
+        assert shown.styleSheet() != sheet
+        assert current_tokens().status_success in shown.styleSheet()
+    finally:
+        manager.set_theme(before)

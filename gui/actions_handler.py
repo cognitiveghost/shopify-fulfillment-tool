@@ -448,8 +448,13 @@ class ActionsHandler(QObject):
 
             except Exception:
                 self.log.exception("Error saving tag categories")
+                # Still unsaved: the dialog neither toasts nor closes.
+                dialog.panel.modified = True
                 show_error(
-                    self.mw, "Tag categories weren't saved", "Details are in Logs."
+                    dialog,
+                    "Tag categories weren't saved",
+                    "Check that the server share is reachable, then save again. "
+                    "Details are in Logs.",
                 )
 
         dialog.categories_updated.connect(on_categories_updated)
@@ -547,7 +552,9 @@ class ActionsHandler(QObject):
         if failures:
             show_error(
                 self.mw,
-                f"{len(failures)} reports weren't generated",
+                "1 report wasn't generated"
+                if len(failures) == 1
+                else f"{len(failures)} reports weren't generated",
                 ", ".join(failures) + ". Details are in Logs.",
             )
 
@@ -1935,8 +1942,17 @@ class ActionsHandler(QObject):
 
         session_path_objs = [Path(p) for p in session_paths if Path(p).exists()]
         if len(session_path_objs) < 2:
+            # Not a disabled-action guard: the button needs 2+ selected, so
+            # sessions went missing on the share after they were listed.
+            missing = len(session_paths) - len(session_path_objs)
             self.log.warning(
-                "handle_multi_session_stock_export called with fewer than 2 valid session paths"
+                f"Combined stock export: {missing} of {len(session_paths)} session folders not found"
+            )
+            show_error(
+                self.mw,
+                "The stock exports weren't combined",
+                f"{missing} of the selected sessions couldn't be found. Check "
+                "that the server share is reachable, then try again.",
             )
             return
 

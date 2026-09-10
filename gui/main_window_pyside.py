@@ -690,7 +690,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "generate_reports_button_tab2"):
             self.generate_reports_button_tab2.setEnabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
-            self.add_product_button_tab2.setEnabled(has_analysis)
+            self.add_product_button_tab2.setEnabled(has_analysis and has_stock)
         if hasattr(self, "configure_columns_button_tab2"):
             self.configure_columns_button_tab2.setEnabled(has_analysis)
 
@@ -1075,7 +1075,7 @@ class MainWindow(QMainWindow):
                     toast(
                         self,
                         f"Session {session_name} opened · "
-                        f"{len(self.analysis_results_df)} orders.",
+                        f"{self.analysis_results_df['Order_Number'].nunique()} orders.",
                     )
                 else:
                     # Session exists but no analysis yet

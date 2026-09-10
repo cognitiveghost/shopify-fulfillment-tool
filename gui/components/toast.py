@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QStatusBar,
     QWidget,
 )
 
@@ -123,10 +124,10 @@ class Toast(QFrame):
     def _place(self) -> None:
         host = self._host
         bottom = host.height()
-        if isinstance(host, QMainWindow):
-            bar = host.statusBar()
-            if not bar.isHidden():
-                bottom -= bar.height()
+        # findChild, not statusBar(): statusBar() creates a bar on a window that has none.
+        bar = host.findChild(QStatusBar) if isinstance(host, QMainWindow) else None
+        if bar is not None and not bar.isHidden():
+            bottom -= bar.height()
         width = max(0, min(self.MAX_WIDTH, host.width() - 2 * self.MARGIN))
         self.setFixedWidth(width)
         self.adjustSize()

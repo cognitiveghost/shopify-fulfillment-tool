@@ -87,3 +87,31 @@ def test_export_buttons_are_disabled_while_their_table_is_empty(qapp):
     page.weight_products_table.insertRow(0)
 
     assert page.weight_export_products_btn.isEnabled()
+
+
+def test_a_re_import_skips_known_skus_until_update_them_is_pressed(
+    qapp, tmp_path, monkeypatch
+):
+    from unittest.mock import Mock
+
+    dims = tmp_path / "dims.csv"
+    dims.write_text(
+        "SKU;Name;L (cm);W (cm);H (cm)\nSKU1;Widget v2;11;5;2\nSKU2;Gadget;1;2;3\n"
+    )
+    toasts = Mock()
+    monkeypatch.setattr("gui.settings.weight.toast", toasts)
+    page = WeightPage(sample_weight_config(), {}, ";")
+
+    page._weight_import_products_from_csv(str(dims))
+
+    assert page.weight_products_table.rowCount() == 2
+    assert page.weight_products_table.item(0, 1).text() == "Widget"
+    assert toasts.call_args.args[1] == "Added 1. Skipped 1 already in the table."
+    assert toasts.call_args.kwargs["action_text"] == "Update them"
+
+    toasts.call_args.kwargs["on_action"]()
+
+    assert page.weight_products_table.rowCount() == 2
+    assert page.weight_products_table.item(0, 1).text() == "Widget v2"
+    assert toasts.call_args.args[1] == "Added 0. Updated 2."
+    assert toasts.call_args.kwargs["on_action"] is None

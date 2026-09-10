@@ -22,10 +22,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-logger = logging.getLogger(__name__)
 from gui.components import show_error
 from gui.pandas_model import cell_display_text
 from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
+
+logger = logging.getLogger(__name__)
 
 
 class RuleTestDialog(QDialog):

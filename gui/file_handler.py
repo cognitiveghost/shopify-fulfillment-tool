@@ -96,7 +96,7 @@ class FileHandler:
                 role="info",
                 action_text="Save as default",
                 on_action=lambda: self._save_default_delimiter(
-                    "orders", detected_delimiter
+                    "orders", detected_delimiter, config.get("client_id")
                 ),
             )
 
@@ -119,10 +119,18 @@ class FileHandler:
         self.validate_file("orders")
         self.check_files_ready()
 
-    def _save_default_delimiter(self, kind: str, delimiter: str) -> None:
-        """Persist a detected delimiter as the client's default for `kind` ('orders' or 'stock')."""
+    def _save_default_delimiter(
+        self, kind: str, delimiter: str, client_id: str | None
+    ) -> None:
+        """Persist a detected delimiter as the client's default for `kind` ('orders' or 'stock').
+
+        `client_id` is the client the file was loaded under: the toast offering
+        this can outlive a client switch, and the delimiter is not the new client's.
+        """
+        if client_id != self.mw.active_profile_config.get("client_id"):
+            self.log.warning(f"Not saving {kind} delimiter: the client has changed")
+            return
         self.mw.active_profile_config["settings"][f"{kind}_csv_delimiter"] = delimiter
-        client_id = self.mw.active_profile_config.get("client_id")
         if client_id and hasattr(self.mw, "profile_manager"):
             self.mw.profile_manager.save_shopify_config(
                 client_id, self.mw.active_profile_config
@@ -181,7 +189,7 @@ class FileHandler:
                 role="info",
                 action_text="Save as default",
                 on_action=lambda: self._save_default_delimiter(
-                    "stock", detected_delimiter
+                    "stock", detected_delimiter, config.get("client_id")
                 ),
             )
 
