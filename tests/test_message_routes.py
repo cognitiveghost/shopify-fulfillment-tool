@@ -32,7 +32,6 @@ OWNED = {
 # Not converted yet. Each conversion task deletes its own lines; Task 12
 # deletes this set.
 PENDING = {
-    "gui/actions_handler.py",  # Task 7
     "gui/main_window_pyside.py",  # Task 8
     "gui/ui_manager.py",  # Task 8
     "gui/file_handler.py",  # Task 8
@@ -66,11 +65,15 @@ def _message_box_calls(tree):
             if isinstance(child, ast.Call):
                 f = child.func
                 if (
-                    isinstance(f, ast.Attribute)
-                    and isinstance(f.value, ast.Name)
-                    and f.value.id == "QMessageBox"
-                    and f.attr in KINDS
-                ) or isinstance(f, ast.Name) and f.id == "QMessageBox":
+                    (
+                        isinstance(f, ast.Attribute)
+                        and isinstance(f.value, ast.Name)
+                        and f.value.id == "QMessageBox"
+                        and f.attr in KINDS
+                    )
+                    or isinstance(f, ast.Name)
+                    and f.id == "QMessageBox"
+                ):
                     yield name, child
             yield from walk(child, name)
 

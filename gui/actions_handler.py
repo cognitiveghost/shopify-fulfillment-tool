@@ -6,6 +6,7 @@ import pandas as pd
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
+from gui.components import show_error, toast
 from gui.components.commandbar import BarState
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
@@ -58,11 +59,7 @@ class ActionsHandler(QObject):
         Upon successful creation, it enables the file loading buttons in the UI.
         """
         if not self.mw.current_client_id:
-            QMessageBox.warning(
-                self.mw,
-                "No Client Selected",
-                "Please select a client before creating a session.",
-            )
+            self.log.warning("create_new_session called with no client selected")
             return
 
         try:
@@ -106,34 +103,21 @@ class ActionsHandler(QObject):
             self.mw.log_activity("Session", f"New session created: {session_name}")
             self.log.info(f"New session created: {session_path}")
 
-            QMessageBox.information(
-                self.mw,
-                "Session Created",
-                f"New session created successfully:\n\n{session_name}\n\n"
-                f"You can now load Orders and Stock files.",
-            )
+            toast(self.mw, f"Session {session_name} created.")
 
-        except SessionManagerError as e:
-            self.log.exception(
-                "Session manager error creating session"
-            )
-            QMessageBox.critical(
-                self.mw, "Session Error", f"Could not create a new session.\n\n{e}"
-            )
-        except (OSError, PermissionError) as e:
+        except SessionManagerError:
+            self.log.exception("Session manager error creating session")
+            show_error(self.mw, "The session wasn't created", "Details are in Logs.")
+        except (OSError, PermissionError):
             self.log.exception("File system error creating session")
-            QMessageBox.critical(
+            show_error(
                 self.mw,
-                "File System Error",
-                f"Could not create session due to file system error.\n\n{e}",
+                "The session wasn't created",
+                "Check that the server share is reachable, then create the session again.",
             )
-        except Exception as e:
+        except Exception:
             self.log.exception("Unexpected error creating new session")
-            QMessageBox.critical(
-                self.mw,
-                "Unexpected Error",
-                f"An unexpected error occurred.\n\nError: {e}",
-            )
+            show_error(self.mw, "The session wasn't created", "Details are in Logs.")
 
     def run_analysis(self):
         """Triggers the main fulfillment analysis in a background thread.
@@ -143,15 +127,11 @@ class ActionsHandler(QObject):
         to the appropriate slots for handling completion or errors.
         """
         if not self.mw.session_path:
-            QMessageBox.critical(
-                self.mw,
-                "Session Error",
-                "Please create a new session before running an analysis.",
-            )
+            self.log.warning("run_analysis called with no session")
             return
 
         if not self.mw.current_client_id:
-            QMessageBox.critical(self.mw, "Client Error", "No client selected.")
+            self.log.warning("run_analysis called with no client selected")
             return
 
         # Prevent double-run: if UI is already busy, analysis is still running
@@ -233,9 +213,7 @@ class ActionsHandler(QObject):
             # (Track A). The cheap in-memory counts below stay inline (not
             # the freeze source); only the network write is backgrounded.
             orders_count = (
-                len(df["Order_Number"].unique())
-                if "Order_Number" in df.columns
-                else 0
+                len(df["Order_Number"].unique()) if "Order_Number" in df.columns else 0
             )
             items_count = len(df)
 
@@ -263,21 +241,14 @@ class ActionsHandler(QObject):
             if hasattr(self.mw, "update_ui_state"):
                 self.mw.update_ui_state()
 
-            QMessageBox.information(
-                self.mw,
-                "Analysis Complete",
-                "Analysis completed successfully!\n\n"
-                "Results are now visible in the Analysis Results tab.",
-            )
+            toast(self.mw, "Analysis complete.")
         else:
             self.log.error(f"Analysis failed: {result_msg}")
-            QMessageBox.critical(
-                self.mw,
-                "Analysis Error",
-                f"An error occurred during analysis:\n{result_msg}",
-            )
+            show_error(self.mw, "The analysis didn't finish", "Details are in Logs.")
 
-    def _record_analysis_stats_async(self, orders_count, items_count, fulfillable_orders):
+    def _record_analysis_stats_async(
+        self, orders_count, items_count, fulfillable_orders
+    ):
         """Fires off StatsManager.record_analysis() on a background thread.
 
         StatsManager performs blocking network I/O over the UNC file share --
@@ -356,8 +327,7 @@ class ActionsHandler(QObject):
         self.log.error(
             f"An unexpected error occurred in a background task: {value}\n{tb}",
         )
-        msg = f"An unexpected error occurred in a background task:\n{value}\n\nTraceback:\n{tb}"
-        QMessageBox.critical(self.mw, "Task Exception", msg)
+        show_error(self.mw, "A background task failed", "Details are in Logs.")
 
     def open_settings_window(self, page: str | None = None):
         """Opens the settings window for the active client.
@@ -367,9 +337,7 @@ class ActionsHandler(QObject):
                 Defaults to whichever page was open last.
         """
         if not self.mw.current_client_id:
-            QMessageBox.warning(
-                self.mw, "No Client Selected", "Please select a client first."
-            )
+            self.log.warning("open_settings_window called with no client selected")
             return
 
         # Reload fresh config
@@ -381,10 +349,9 @@ class ActionsHandler(QObject):
             if not fresh_config:
                 raise ProfileManagerError("Failed to load configuration")
 
-        except Exception as e:
-            QMessageBox.critical(
-                self.mw, "Error", f"Failed to load settings:\n{e!s}"
-            )
+        except Exception:
+            self.log.exception("Failed to load settings")
+            show_error(self.mw, "Settings couldn't be opened", "Details are in Logs.")
             return
 
         # Open settings with fresh data
@@ -439,18 +406,14 @@ class ActionsHandler(QObject):
     def open_tag_categories_dialog(self):
         """Opens the tag categories management dialog."""
         if not self.mw.current_client_id:
-            QMessageBox.warning(
-                self.mw,
-                "No Client Selected",
-                "Please select a client before managing tag categories.",
+            self.log.warning(
+                "open_tag_categories_dialog called with no client selected"
             )
             return
 
         if not self.mw.active_profile_config:
-            QMessageBox.warning(
-                self.mw,
-                "No Configuration Loaded",
-                "Please load a client configuration first.",
+            self.log.warning(
+                "open_tag_categories_dialog called with no configuration loaded"
             )
             return
 
@@ -483,10 +446,10 @@ class ActionsHandler(QObject):
                 ):
                     self.mw.tag_delegate.tag_categories = updated_categories
 
-            except Exception as e:
+            except Exception:
                 self.log.exception("Error saving tag categories")
-                QMessageBox.critical(
-                    self.mw, "Save Error", f"Failed to save tag categories:\n{e!s}"
+                show_error(
+                    self.mw, "Tag categories weren't saved", "Details are in Logs."
                 )
 
         dialog.categories_updated.connect(on_categories_updated)
@@ -499,27 +462,23 @@ class ActionsHandler(QObject):
 
         # Validate that analysis has been run
         if self.mw.analysis_results_df is None or self.mw.analysis_results_df.empty:
-            QMessageBox.warning(
-                self.mw,
-                "No Analysis Data",
-                "Please run analysis first before generating reports.",
+            self.log.warning(
+                "open_generate_reports_dialog called with no analysis data"
             )
             return
 
         # Validate client and session
         if not self.mw.current_client_id:
-            QMessageBox.warning(
-                self.mw, "No Client Selected", "Please select a client."
+            self.log.warning(
+                "open_generate_reports_dialog called with no client selected"
             )
             return
 
         session_path = self.mw.session_path
 
         if not session_path:
-            QMessageBox.warning(
-                self.mw,
-                "No Active Session",
-                "No active session. Please create a new session or open an existing one.",
+            self.log.warning(
+                "open_generate_reports_dialog called with no active session"
             )
             return
 
@@ -535,23 +494,22 @@ class ActionsHandler(QObject):
             # Update main window config
             self.mw.active_profile_config = fresh_config
 
-        except Exception as e:
-            QMessageBox.critical(
-                self.mw,
-                "Configuration Error",
-                f"Failed to load client configuration:\n{e!s}",
-            )
+        except Exception:
+            self.log.exception("Failed to load client configuration")
+            show_error(self.mw, "Reports couldn't be generated", "Details are in Logs.")
             return
 
         packing_configs = fresh_config.get("packing_list_configs", [])
         stock_configs = fresh_config.get("stock_export_configs", [])
 
         if not packing_configs and not stock_configs:
-            QMessageBox.information(
+            client_id = self.mw.current_client_id
+            toast(
                 self.mw,
-                "No Reports Configured",
-                "No packing lists or stock exports are configured for this client.\n\n"
-                "Please configure them in Client Settings.",
+                f"No reports are set up for CLIENT_{client_id}.",
+                role="info",
+                action_text="Open Settings",
+                on_action=self.open_settings_window,
             )
             return
 
@@ -563,7 +521,6 @@ class ActionsHandler(QObject):
             stock_configs,
             analysis_df,
             self._apply_filters,
-            writeoff_handler=self.generate_writeoff_report,
             parent=self.mw,
         )
 
@@ -583,15 +540,15 @@ class ActionsHandler(QObject):
             report_type = report_config.get("report_type")
             try:
                 self._generate_single_report(report_type, report_config, session_path)
-            except Exception as exc:
+            except Exception:
                 self.log.exception(f"Failed to generate {report_config.get('name')}")
-                failures.append(f"{report_config.get('name', 'Unknown')}: {exc}")
+                failures.append(report_config.get("name", "Unknown"))
 
         if failures:
-            QMessageBox.warning(
+            show_error(
                 self.mw,
-                "Some Reports Failed",
-                "These reports could not be generated:\n\n" + "\n".join(failures),
+                f"{len(failures)} reports weren't generated",
+                ", ".join(failures) + ". Details are in Logs.",
             )
 
     def _apply_filters(self, df, filters):
@@ -881,74 +838,10 @@ class ActionsHandler(QObject):
                     self.log.warning(f"Failed to update session statistics: {e}")
                     # Don't fail the report if statistics update fails
 
-        except Exception as e:
-            self.log.exception(
-                f"Failed to generate report '{report_name}'"
-            )
-            QMessageBox.critical(
-                self.mw,
-                "Generation Failed",
-                f"Failed to generate report '{report_name}':\n\n{e!s}",
-            )
-
-    def generate_writeoff_report(self):
-        """Generate writeoff report directly (single button, no dialog)."""
-        from datetime import datetime
-        from pathlib import Path
-
-        self.log.info("Generating writeoff report")
-
-        # Validate that analysis has been run
-        if self.mw.analysis_results_df is None or self.mw.analysis_results_df.empty:
-            QMessageBox.warning(
-                self.mw,
-                "No Analysis Data",
-                "Please run analysis first before generating writeoff report.",
-            )
-            return
-
-        # Validate session
-        if not self.mw.session_path:
-            QMessageBox.warning(
-                self.mw,
-                "No Active Session",
-                "No active session. Please create a new session first.",
-            )
-            return
-
-        try:
-            # Create writeoff_report directory in session
-            writeoff_dir = Path(self.mw.session_path) / "writeoff_report"
-            writeoff_dir.mkdir(parents=True, exist_ok=True)
-
-            # Generate filename with timestamp
-            timestamp = datetime.now().astimezone().strftime("%Y-%m-%d")
-            output_file = writeoff_dir / f"writeoff_{timestamp}.xls"
-
-            # Get tag categories
-            tag_categories = self.mw.active_profile_config.get("tag_categories", {})
-
-            # Generate report using sku_writeoff module
-            from shopify_tool.sku_writeoff import generate_writeoff_report
-
-            generate_writeoff_report(
-                self.mw.analysis_results_df, tag_categories, str(output_file)
-            )
-
-            # Show success message in status bar
-            self.mw.statusBar().showMessage(
-                f"Writeoff report saved: {output_file.name}",
-                5000,  # 5 seconds
-            )
-            self.log.info(f"Writeoff report created: {output_file}")
-            self.mw.log_activity("Report", "Generated writeoff report")
-
-        except Exception as e:
-            self.log.exception("Failed to generate writeoff report")
-            QMessageBox.critical(
-                self.mw,
-                "Generation Failed",
-                f"Failed to generate writeoff report:\n\n{e!s}",
+        except Exception:
+            self.log.exception(f"Failed to generate report '{report_name}'")
+            show_error(
+                self.mw, f"{report_name!r} wasn't generated", "Details are in Logs."
             )
 
     def toggle_fulfillment_status_for_order(self, order_number):
@@ -981,10 +874,10 @@ class ActionsHandler(QObject):
 
             if matching_rows.empty:
                 self.log.error(f"Order {order_number} not found after toggle operation")
-                QMessageBox.critical(
+                show_error(
                     self.mw,
-                    "Error",
-                    f"Order {order_number} not found after status change",
+                    f"Order {order_number}'s status didn't change",
+                    "Details are in Logs.",
                 )
                 return
 
@@ -1010,7 +903,7 @@ class ActionsHandler(QObject):
             self.log.warning(
                 f"Failed to toggle status for order {order_number}: {result}"
             )
-            QMessageBox.critical(self.mw, "Error", result)
+            show_error(self.mw, f"Order {order_number}'s status didn't change", result)
 
     def add_tag_manually(self, order_number):
         """Opens a dialog to add a manual tag to an order's 'Status_Note'.
@@ -1058,7 +951,9 @@ class ActionsHandler(QObject):
                 "Manual Tag", f"Added note '{tag_to_add}' to order {order_number}."
             )
 
-    def remove_item_from_order(self, order_number, sku, row_position, row_snapshot=None):
+    def remove_item_from_order(
+        self, order_number, sku, row_position, row_snapshot=None
+    ):
         """Removes a single item (a row) from the analysis DataFrame.
 
         Args:
@@ -1076,62 +971,60 @@ class ActionsHandler(QObject):
                 and the removal is aborted rather than risk deleting the
                 wrong line.
         """
-        reply = QMessageBox.question(
-            self.mw,
-            "Confirm Delete",
-            f"Are you sure you want to remove item {sku} from order {order_number}?\nThis can be undone with Ctrl+Z.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply == QMessageBox.Yes:
-            df = self.mw.analysis_results_df
-            if not (0 <= row_position < len(df)):
-                self.log.warning("Aborted item removal: clicked row is no longer valid")
-                return
+        df = self.mw.analysis_results_df
+        if not (0 <= row_position < len(df)):
+            self.log.warning("Aborted item removal: clicked row is no longer valid")
+            return
 
-            row_label = df.index[row_position]
-            order_number_str = str(order_number).strip()
-            sku_str = str(sku).strip()
-            if (
-                str(df.loc[row_label, "Order_Number"]).strip() != order_number_str
-                or str(df.loc[row_label, "SKU"]).strip() != sku_str
+        row_label = df.index[row_position]
+        order_number_str = str(order_number).strip()
+        sku_str = str(sku).strip()
+        if (
+            str(df.loc[row_label, "Order_Number"]).strip() != order_number_str
+            or str(df.loc[row_label, "SKU"]).strip() != sku_str
+        ):
+            self.log.warning("Aborted item removal: clicked row no longer matches")
+            return
+
+        if row_snapshot is not None:
+            current_row = df.loc[row_label]
+            if any(
+                str(current_row.get(col)) != str(value)
+                for col, value in row_snapshot.items()
             ):
-                self.log.warning("Aborted item removal: clicked row no longer matches")
+                self.log.warning(
+                    "Aborted item removal: clicked row no longer matches its snapshot"
+                )
                 return
 
-            if row_snapshot is not None:
-                current_row = df.loc[row_label]
-                if any(
-                    str(current_row.get(col)) != str(value)
-                    for col, value in row_snapshot.items()
-                ):
-                    self.log.warning(
-                        "Aborted item removal: clicked row no longer matches its snapshot"
-                    )
-                    return
+        mask = df.index == row_label
 
-            mask = df.index == row_label
+        # Get affected rows BEFORE operation
+        affected_rows = df[mask].copy()
 
-            # Get affected rows BEFORE operation
-            affected_rows = df[mask].copy()
+        self.mw.analysis_results_df = df[~mask].reset_index(drop=True)
 
-            self.mw.analysis_results_df = df[~mask].reset_index(drop=True)
+        # Record for undo
+        self.mw.undo_manager.record_operation(
+            "remove_item",
+            f"Removed item {sku} from order {order_number}",
+            {"order_number": order_number, "sku": sku},
+            affected_rows,
+        )
 
-            # Record for undo
-            self.mw.undo_manager.record_operation(
-                "remove_item",
-                f"Removed item {sku} from order {order_number}",
-                {"order_number": order_number, "sku": sku},
-                affected_rows,
-            )
-
-            self.data_changed.emit()
-            # Auto-save session state after modification
-            self.mw.save_session_state()
-            self._update_undo_button()
-            self.mw.log_activity(
-                "Data Edit", f"Removed item {sku} from order {order_number}."
-            )
+        self.data_changed.emit()
+        # Auto-save session state after modification
+        self.mw.save_session_state()
+        self._update_undo_button()
+        self.mw.log_activity(
+            "Data Edit", f"Removed item {sku} from order {order_number}."
+        )
+        toast(
+            self.mw,
+            f"Removed {sku} from order {order_number}.",
+            action_text="Undo",
+            on_action=self.mw.undo_last_operation,
+        )
 
     def remove_entire_order(self, order_number):
         """Removes all rows associated with a given order number.
@@ -1139,45 +1032,43 @@ class ActionsHandler(QObject):
         Args:
             order_number (str): The order number to remove completely.
         """
-        reply = QMessageBox.question(
-            self.mw,
-            "Confirm Delete",
-            f"Are you sure you want to remove the entire order {order_number}?\nThis can be undone with Ctrl+Z.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+        # Convert to string for comparison to handle int/float order numbers
+        order_number_str = str(order_number).strip()
+
+        # Get affected rows BEFORE operation
+        affected_rows = self.mw.analysis_results_df[
+            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
+            == order_number_str
+        ].copy()
+
+        order_mask = (
+            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
+            != order_number_str
         )
-        if reply == QMessageBox.Yes:
-            # Convert to string for comparison to handle int/float order numbers
-            order_number_str = str(order_number).strip()
 
-            # Get affected rows BEFORE operation
-            affected_rows = self.mw.analysis_results_df[
-                self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-                == order_number_str
-            ].copy()
+        self.mw.analysis_results_df = self.mw.analysis_results_df[
+            order_mask
+        ].reset_index(drop=True)
 
-            order_mask = (
-                self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-                != order_number_str
-            )
+        # Record for undo
+        self.mw.undo_manager.record_operation(
+            "remove_order",
+            f"Removed order {order_number}",
+            {"order_number": order_number},
+            affected_rows,
+        )
 
-            self.mw.analysis_results_df = self.mw.analysis_results_df[
-                order_mask
-            ].reset_index(drop=True)
-
-            # Record for undo
-            self.mw.undo_manager.record_operation(
-                "remove_order",
-                f"Removed order {order_number}",
-                {"order_number": order_number},
-                affected_rows,
-            )
-
-            self.data_changed.emit()
-            # Auto-save session state after modification
-            self.mw.save_session_state()
-            self._update_undo_button()
-            self.mw.log_activity("Data Edit", f"Removed order {order_number}.")
+        self.data_changed.emit()
+        # Auto-save session state after modification
+        self.mw.save_session_state()
+        self._update_undo_button()
+        self.mw.log_activity("Data Edit", f"Removed order {order_number}.")
+        toast(
+            self.mw,
+            f"Removed order {order_number}.",
+            action_text="Undo",
+            on_action=self.mw.undo_last_operation,
+        )
 
     def show_add_product_dialog(self):
         """Show dialog to add product to order."""
@@ -1190,17 +1081,11 @@ class ActionsHandler(QObject):
             not hasattr(self.mw, "analysis_results_df")
             or self.mw.analysis_results_df is None
         ):
-            QMessageBox.warning(
-                self.mw,
-                "No Analysis",
-                "Please run analysis first before adding products.",
-            )
+            self.log.warning("show_add_product_dialog called with no analysis data")
             return
 
         if not hasattr(self.mw, "stock_file_path") or not self.mw.stock_file_path:
-            QMessageBox.warning(
-                self.mw, "No Stock Data", "Stock file must be loaded to add products."
-            )
+            self.log.warning("show_add_product_dialog called with no stock file")
             return
 
         # Load stock DataFrame
@@ -1236,12 +1121,10 @@ class ActionsHandler(QObject):
 
                 stock_df["SKU"] = stock_df["SKU"].apply(normalize_sku)
 
-        except Exception as e:
+        except Exception:
             self.log.exception("Failed to load stock file")
-            QMessageBox.critical(
-                self.mw,
-                "Error Loading Stock",
-                f"Could not load stock file.\n\nError: {e}",
+            show_error(
+                self.mw, "The stock file couldn't be loaded", "Details are in Logs."
             )
             return
 
@@ -1287,9 +1170,9 @@ class ActionsHandler(QObject):
             analysis_df=self.mw.analysis_results_df,
             stock_df=stock_df,
             live_stock=live_stock,
-            low_stock_threshold=self.mw.active_profile_config.get(
-                "settings", {}
-            ).get("low_stock_threshold", 5),
+            low_stock_threshold=self.mw.active_profile_config.get("settings", {}).get(
+                "low_stock_threshold", 5
+            ),
         )
 
         if dialog.exec() == QDialog.Accepted:
@@ -1328,8 +1211,10 @@ class ActionsHandler(QObject):
 
         if existing_rows.empty:
             self.log.error(f"Order {order_num} not found")
-            QMessageBox.critical(
-                self.mw, "Error", f"Order {order_num} not found in analysis."
+            show_error(
+                self.mw,
+                f"{sku} wasn't added",
+                f"Order {order_num} isn't in this analysis.",
             )
             return
 
@@ -1385,12 +1270,7 @@ class ActionsHandler(QObject):
         self.mw.save_session_state()
 
         # Step 10: Show success message
-        QMessageBox.information(
-            self.mw,
-            "Product Added",
-            f"Product {sku} ({quantity}x) added to order {order_num}.\n\n"
-            "Fulfillment status has been updated.",
-        )
+        toast(self.mw, f"Added {quantity}x {sku} to order {order_num}.")
 
         self.mw.log_activity(
             "Manual Addition", f"Added {quantity}x {sku} to order {order_num}"
@@ -2043,18 +1923,20 @@ class ActionsHandler(QObject):
         """
         from pathlib import Path
 
-        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from PySide6.QtWidgets import QFileDialog
 
         from shopify_tool.stock_export import merge_session_stock_exports
 
         if not self.mw.current_client_id:
-            QMessageBox.warning(self.mw, "Error", "No client selected.")
+            self.log.warning(
+                "handle_multi_session_stock_export called with no client selected"
+            )
             return
 
         session_path_objs = [Path(p) for p in session_paths if Path(p).exists()]
         if len(session_path_objs) < 2:
-            QMessageBox.warning(
-                self.mw, "Error", "Could not resolve 2+ valid session paths."
+            self.log.warning(
+                "handle_multi_session_stock_export called with fewer than 2 valid session paths"
             )
             return
 
@@ -2063,8 +1945,10 @@ class ActionsHandler(QObject):
         )
 
         if combined_df.empty:
-            QMessageBox.warning(
-                self.mw, "No Data", "No stock export data found in selected sessions."
+            show_error(
+                self.mw,
+                "Nothing to combine",
+                "None of the selected sessions has a stock export. Generate one in each session first.",
             )
             return
 
@@ -2091,19 +1975,20 @@ class ActionsHandler(QObject):
                 for col_num, value in enumerate(row):
                     sheet.write(row_num + 1, col_num, value)
             workbook.save(filename)
-            QMessageBox.information(
-                self.mw,
-                "Done",
-                f"Combined stock export saved:\n{filename}\n\n"
-                f"{len(combined_df)} SKU entries from {len(session_path_objs)} sessions.",
+            toast(
+                self.mw, f"Combined stock export saved: {os.path.basename(filename)}."
             )
             self.mw.log_activity(
                 "Export",
                 f"Combined stock export: {len(combined_df)} SKUs from {len(session_path_objs)} sessions",
             )
-        except Exception as e:
-            QMessageBox.critical(self.mw, "Save Error", str(e))
+        except Exception:
             self.log.exception("Failed to save combined stock export")
+            show_error(
+                self.mw,
+                "The combined stock export wasn't saved",
+                "Details are in Logs.",
+            )
 
     def bulk_export_selection(self, format_type: str):
         """Export selected rows to file.

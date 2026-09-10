@@ -4,6 +4,7 @@ Previously two buttons opened two modal dialogs, each emitting exactly one
 config, so producing a packing list and its stock export took two full
 round-trips.
 """
+
 import logging
 from types import SimpleNamespace
 
@@ -27,12 +28,14 @@ STOCK = [{"name": "Daily ERP", "output_filename": "erp.xls", "filters": []}]
 
 
 def _df():
-    return pd.DataFrame({
-        "Order_Number": ["#1001"],
-        "SKU": ["AB-01"],
-        "Quantity": [1],
-        "Order_Fulfillment_Status": ["Fulfillable"],
-    })
+    return pd.DataFrame(
+        {
+            "Order_Number": ["#1001"],
+            "SKU": ["AB-01"],
+            "Quantity": [1],
+            "Order_Fulfillment_Status": ["Fulfillable"],
+        }
+    )
 
 
 def _dialog():
@@ -83,15 +86,13 @@ def test_one_failing_report_does_not_cost_the_user_the_others(monkeypatch):
     and the user loses every report after it -- which is worse than the two
     single-select dialogs this replaced.
     """
+    from unittest.mock import Mock
+
     from gui import actions_handler
     from gui.actions_handler import ActionsHandler
 
-    warnings = []
-    monkeypatch.setattr(
-        actions_handler.QMessageBox,
-        "warning",
-        lambda parent, title, text: warnings.append(text),
-    )
+    errors = Mock()
+    monkeypatch.setattr(actions_handler, "show_error", errors)
 
     generated = []
 
@@ -114,5 +115,5 @@ def test_one_failing_report_does_not_cost_the_user_the_others(monkeypatch):
     ActionsHandler._generate_reports(handler, batch, "/tmp/session")
 
     assert generated == ["DHL", "Daily ERP"]
-    assert len(warnings) == 1
-    assert "DPD: no such column" in warnings[0]
+    errors.assert_called_once()
+    assert "DPD" in errors.call_args.args[2]
