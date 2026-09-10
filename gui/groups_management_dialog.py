@@ -14,13 +14,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
 )
 
+from gui.components import ConfirmDialog, show_error, toast
 from gui.theme_manager import apply_dialog_button_roles, get_theme_manager
 from shopify_tool.groups_manager import GroupsManager, GroupsManagerError
 
@@ -159,13 +159,9 @@ class GroupsManagementDialog(QDialog):
 
             logger.info(f"Loaded {len(groups)} groups into table")
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to load groups")
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to load groups:\n{e!s}"
-            )
+            show_error(self, "Groups didn't load", "Details are in Logs.")
 
     def _on_selection_changed(self):
         """Handle table selection change."""
@@ -191,11 +187,7 @@ class GroupsManagementDialog(QDialog):
         """Create new group."""
         theme = get_theme_manager().get_current_theme()
         # Get group name
-        name, ok = QInputDialog.getText(
-            self,
-            "Create Group",
-            "Enter group name:"
-        )
+        name, ok = QInputDialog.getText(self, "Create Group", "Enter group name:")
 
         if not ok or not name.strip():
             return
@@ -206,7 +198,7 @@ class GroupsManagementDialog(QDialog):
         color = QColorDialog.getColor(
             QColor(theme.accent_fill),  # Default blue
             self,
-            "Select Group Color"
+            "Select Group Color",
         )
 
         if not color.isValid():
@@ -219,28 +211,17 @@ class GroupsManagementDialog(QDialog):
             group_id = self.groups_manager.create_group(name, color_hex)
             logger.info(f"Created group: {name} (ID: {group_id}, Color: {color_hex})")
 
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Group '{name}' created successfully!"
-            )
+            toast(self, f"Group {name} created.")
 
             # Reload table
             self._load_groups()
 
-        except GroupsManagerError as e:
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to create group:\n{e!s}"
-            )
-        except Exception as e:
+        except GroupsManagerError:
+            logger.exception("Failed to create group")
+            show_error(self, "The group wasn't created", "Details are in Logs.")
+        except Exception:
             logger.exception("Unexpected error creating group")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"An unexpected error occurred:\n{e!s}"
-            )
+            show_error(self, "The group wasn't created", "Details are in Logs.")
 
     def _edit_group(self):
         """Edit selected group."""
@@ -252,7 +233,13 @@ class GroupsManagementDialog(QDialog):
         # Get current group data
         group = self.groups_manager.get_group(group_id)
         if not group:
-            QMessageBox.warning(self, "Error", "Group not found.")
+            logger.warning(f"Group {group_id} not found")
+            show_error(
+                self,
+                "The group wasn't found",
+                "It may have been deleted on another PC. The list is reloaded.",
+            )
+            self._load_groups()
             return
 
         current_name = group.get("name", "")
@@ -260,10 +247,7 @@ class GroupsManagementDialog(QDialog):
 
         # Get new name
         name, ok = QInputDialog.getText(
-            self,
-            "Edit Group",
-            "Enter new group name:",
-            text=current_name
+            self, "Edit Group", "Enter new group name:", text=current_name
         )
 
         if not ok:
@@ -272,11 +256,7 @@ class GroupsManagementDialog(QDialog):
         name = name.strip() if name else None
 
         # Get new color
-        color = QColorDialog.getColor(
-            QColor(current_color),
-            self,
-            "Select Group Color"
-        )
+        color = QColorDialog.getColor(QColor(current_color), self, "Select Group Color")
 
         color_hex = color.name() if color.isValid() else None
 
@@ -287,35 +267,23 @@ class GroupsManagementDialog(QDialog):
             color_hex = None  # No change
 
         if name is None and color_hex is None:
-            QMessageBox.information(self, "No Changes", "No changes were made.")
             return
 
         try:
             self.groups_manager.update_group(group_id, name=name, color=color_hex)
             logger.info(f"Updated group: {group_id}")
 
-            QMessageBox.information(
-                self,
-                "Success",
-                "Group updated successfully!"
-            )
+            toast(self, f"Group {name or current_name} updated.")
 
             # Reload table
             self._load_groups()
 
-        except GroupsManagerError as e:
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to update group:\n{e!s}"
-            )
-        except Exception as e:
+        except GroupsManagerError:
+            logger.exception("Failed to update group")
+            show_error(self, "The group wasn't updated", "Details are in Logs.")
+        except Exception:
             logger.exception("Unexpected error updating group")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"An unexpected error occurred:\n{e!s}"
-            )
+            show_error(self, "The group wasn't updated", "Details are in Logs.")
 
     def _delete_group(self):
         """Delete selected group."""
@@ -326,7 +294,13 @@ class GroupsManagementDialog(QDialog):
         # Get group data for confirmation
         group = self.groups_manager.get_group(group_id)
         if not group:
-            QMessageBox.warning(self, "Error", "Group not found.")
+            logger.warning(f"Group {group_id} not found")
+            show_error(
+                self,
+                "The group wasn't found",
+                "It may have been deleted on another PC. The list is reloaded.",
+            )
+            self._load_groups()
             return
 
         name = group.get("name", "Unknown")
@@ -337,18 +311,12 @@ class GroupsManagementDialog(QDialog):
         )
         client_count = len(clients_in_group)
 
-        # Confirmation dialog
-        reply = QMessageBox.question(
+        if not ConfirmDialog.ask(
             self,
-            "Delete Group",
-            f"Delete group '{name}'?\n\n"
-            f"This will unassign {client_count} client(s) from this group.\n"
-            f"Clients will not be deleted.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply != QMessageBox.Yes:
+            title=f"Delete group {name}?",
+            body=f"{client_count} client(s) lose this group. Clients are not deleted.",
+            verb="Delete group",
+        ):
             return
 
         # Delete group
@@ -356,26 +324,14 @@ class GroupsManagementDialog(QDialog):
             self.groups_manager.delete_group(group_id, self.profile_manager)
             logger.info(f"Deleted group: {name} (ID: {group_id})")
 
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Group '{name}' deleted successfully!\n"
-                f"{client_count} client(s) unassigned."
-            )
+            toast(self, f"Group {name} deleted.")
 
             # Reload table
             self._load_groups()
 
-        except GroupsManagerError as e:
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to delete group:\n{e!s}"
-            )
-        except Exception as e:
+        except GroupsManagerError:
+            logger.exception("Failed to delete group")
+            show_error(self, "The group wasn't deleted", "Details are in Logs.")
+        except Exception:
             logger.exception("Unexpected error deleting group")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"An unexpected error occurred:\n{e!s}"
-            )
+            show_error(self, "The group wasn't deleted", "Details are in Logs.")

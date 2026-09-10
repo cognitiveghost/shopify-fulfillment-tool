@@ -1,6 +1,7 @@
 """Column mappings, split one page per CSV: orders (plus courier name
 mappings, which resolve an orders column) and stock."""
 
+import logging
 from typing import ClassVar
 
 from PySide6.QtWidgets import (
@@ -8,7 +9,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -16,11 +16,14 @@ from PySide6.QtWidgets import (
 )
 
 from gui.column_mapping_widget import ColumnMappingWidget
+from gui.components import show_error
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.theme_manager import set_button_role
 from shared.theme import on_theme_changed
 from shopify_tool.csv_utils import read_csv_headers
+
+logger = logging.getLogger(__name__)
 
 
 class _MappingPageBase(SettingsPage):
@@ -103,18 +106,15 @@ class _MappingPageBase(SettingsPage):
 
         try:
             headers = read_csv_headers(file_path)
-        except Exception as e:
-            QMessageBox.warning(
-                self,
-                "Could Not Read CSV",
-                f"Failed to read column names from this file:\n\n{e!s}",
+        except Exception:
+            logger.exception("Failed to read column names from CSV")
+            show_error(
+                self, "The column names couldn't be read", "Details are in Logs."
             )
             return
 
         if not headers:
-            QMessageBox.warning(
-                self, "No Columns Found", "That file has no column headers."
-            )
+            show_error(self, "No columns found", "That file has no column headers.")
             return
 
         self.mapping_widget.set_available_headers(headers)
@@ -128,10 +128,18 @@ class OrdersMappingPage(_MappingPageBase):
     TITLE = "Orders CSV Column Mapping"
     DESCRIPTION = "Map your CSV column names to internal fields for the ORDERS file."
     REQUIRED_FIELDS: ClassVar[list[str]] = [
-        "Order_Number", "SKU", "Quantity", "Shipping_Method",
+        "Order_Number",
+        "SKU",
+        "Quantity",
+        "Shipping_Method",
     ]
     OPTIONAL_FIELDS: ClassVar[list[str]] = [
-        "Product_Name", "Shipping_Country", "Tags", "Notes", "Total_Price", "Subtotal",
+        "Product_Name",
+        "Shipping_Country",
+        "Tags",
+        "Notes",
+        "Total_Price",
+        "Subtotal",
     ]
 
     def __init__(self, column_mappings: dict, courier_mappings: dict, parent=None):
@@ -163,7 +171,9 @@ class OrdersMappingPage(_MappingPageBase):
             for courier_code, mapping_data in courier_mappings.items():
                 if isinstance(mapping_data, dict):
                     patterns = mapping_data.get("patterns", [])
-                    self.add_courier_mapping_row(courier_code, ", ".join(patterns) if patterns else "")
+                    self.add_courier_mapping_row(
+                        courier_code, ", ".join(patterns) if patterns else ""
+                    )
 
         if not courier_mappings:
             self.add_courier_mapping_row()
@@ -201,7 +211,9 @@ class OrdersMappingPage(_MappingPageBase):
         # Sets only `color`, so the secondary role's background still applies.
         on_theme_changed(
             delete_btn,
-            lambda t: delete_btn.setStyleSheet(f"color: {t.status_danger}; font-weight: bold;"),
+            lambda t: delete_btn.setStyleSheet(
+                f"color: {t.status_danger}; font-weight: bold;"
+            ),
         )
         delete_btn.setToolTip("Remove this courier mapping")
 
@@ -233,8 +245,11 @@ class OrdersMappingPage(_MappingPageBase):
             courier_code = row_refs["courier_code"].text().strip()
             patterns_str = row_refs["patterns"].text().strip()
             if courier_code and patterns_str:
-                patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
-                new_couriers[courier_code] = {"patterns": patterns, "case_sensitive": False}
+                patterns = [p.strip() for p in patterns_str.split(",") if p.strip()]
+                new_couriers[courier_code] = {
+                    "patterns": patterns,
+                    "case_sensitive": False,
+                }
 
         # Same live-dict contract as column_mappings: clear-and-refill in
         # place so a deleted courier code does not survive the shell's merge.

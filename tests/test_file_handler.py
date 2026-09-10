@@ -4,8 +4,10 @@ The bug this replaces: validity was the string "✓" in a QLabel, read back by
 check_files_ready(). FileSlot (Task 3) now owns that fact as data.
 """
 
+from unittest.mock import Mock
+
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -121,3 +123,27 @@ def test_a_dropped_missing_file_shows_the_invalid_state_instead_of_raising(
     )
 
     assert main_window.orders_slot.is_valid is False
+
+
+def test_a_delimiter_mismatch_loads_with_the_detected_one_and_offers_to_save_it(
+    main_window, tmp_path, monkeypatch
+):
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name;Lineitem sku;Lineitem quantity;Shipping Method\n#1;A1;2;Standard\n"
+    )
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileName", lambda *a, **k: (str(orders), "")
+    )
+    monkeypatch.setattr(
+        QMessageBox, "question", Mock(side_effect=AssertionError("no question"))
+    )
+    toasts = Mock()
+    monkeypatch.setattr("gui.file_handler.toast", toasts)
+
+    main_window.file_handler.select_orders_file()
+
+    toasts.assert_called_once()
+    assert toasts.call_args.kwargs["role"] == "info"
+    assert toasts.call_args.kwargs["action_text"] == "Save as default"
+    assert ";" in toasts.call_args.args[1]

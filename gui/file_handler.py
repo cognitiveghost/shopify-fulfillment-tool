@@ -4,8 +4,9 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog
 
+from gui.components import ConfirmDialog, show_error, toast
 from shopify_tool import core
 
 # Folder mode used to ask for these with two checkboxes each, in the widget
@@ -80,52 +81,24 @@ class FileHandler:
             self.log.exception("Encoding error in orders file")
             detected_delimiter = ","  # fallback to comma
         except Exception:
-            self.log.exception(
-                "Unexpected error detecting delimiter for orders"
-            )
+            self.log.exception("Unexpected error detecting delimiter for orders")
             detected_delimiter = ","  # fallback to comma
 
         # Determine which delimiter to use
         delimiter = detected_delimiter  # Default to detected
 
-        # If detected differs from config, prompt user
+        # If detected differs from config, load with it and offer to save it
         if detected_delimiter != config_delimiter:
-            result = QMessageBox.question(
+            self.log.info(f"Using detected delimiter: '{delimiter}'")
+            toast(
                 self.mw,
-                "Delimiter Detected",
-                f"Detected delimiter: '{detected_delimiter}'\n"
-                f"Configured delimiter: '{config_delimiter}'\n\n"
-                f"Which delimiter should be used for orders file?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
+                f"Loaded with {delimiter!r} — settings say {config_delimiter!r}.",
+                role="info",
+                action_text="Save as default",
+                on_action=lambda: self._save_default_delimiter(
+                    "orders", detected_delimiter, config.get("client_id")
+                ),
             )
-
-            if result == QMessageBox.StandardButton.Yes:
-                delimiter = detected_delimiter
-                self.log.info(f"Using detected delimiter: '{delimiter}'")
-
-                # Offer to update config
-                update = QMessageBox.question(
-                    self.mw,
-                    "Update Settings",
-                    f"Would you like to save '{delimiter}' as default orders delimiter?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                )
-
-                if update == QMessageBox.StandardButton.Yes:
-                    self.mw.active_profile_config["settings"][
-                        "orders_csv_delimiter"
-                    ] = delimiter
-                    # Save config through ProfileManager
-                    client_id = self.mw.active_profile_config.get("client_id")
-                    if client_id and hasattr(self.mw, "profile_manager"):
-                        self.mw.profile_manager.save_shopify_config(
-                            client_id, self.mw.active_profile_config
-                        )
-                        self.log.info(f"Saved orders delimiter '{delimiter}' to config")
-            else:
-                delimiter = config_delimiter
-                self.log.info(f"Using configured orders delimiter: '{delimiter}'")
 
         # Load and store original orders DataFrame for column discovery
         try:
@@ -145,6 +118,24 @@ class FileHandler:
 
         self.validate_file("orders")
         self.check_files_ready()
+
+    def _save_default_delimiter(
+        self, kind: str, delimiter: str, client_id: str | None
+    ) -> None:
+        """Persist a detected delimiter as the client's default for `kind` ('orders' or 'stock').
+
+        `client_id` is the client the file was loaded under: the toast offering
+        this can outlive a client switch, and the delimiter is not the new client's.
+        """
+        if client_id != self.mw.active_profile_config.get("client_id"):
+            self.log.warning(f"Not saving {kind} delimiter: the client has changed")
+            return
+        self.mw.active_profile_config["settings"][f"{kind}_csv_delimiter"] = delimiter
+        if client_id and hasattr(self.mw, "profile_manager"):
+            self.mw.profile_manager.save_shopify_config(
+                client_id, self.mw.active_profile_config
+            )
+            self.log.info(f"Saved {kind} delimiter '{delimiter}' to config")
 
     def select_stock_file(self):
         """Opens file dialog for stock CSV selection and loads file.
@@ -183,52 +174,24 @@ class FileHandler:
             self.log.exception("Encoding error in stock file")
             detected_delimiter = ";"  # fallback
         except Exception:
-            self.log.exception(
-                "Unexpected error detecting delimiter for stock"
-            )
+            self.log.exception("Unexpected error detecting delimiter for stock")
             detected_delimiter = ";"  # fallback
 
         # Determine which delimiter to use
         delimiter = detected_delimiter  # Default to detected
 
-        # If detected differs from config, prompt user
+        # If detected differs from config, load with it and offer to save it
         if detected_delimiter != config_delimiter:
-            result = QMessageBox.question(
+            self.log.info(f"Using detected delimiter: '{delimiter}'")
+            toast(
                 self.mw,
-                "Delimiter Detected",
-                f"Detected delimiter: '{detected_delimiter}'\n"
-                f"Configured delimiter: '{config_delimiter}'\n\n"
-                f"Which delimiter should be used?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
+                f"Loaded with {delimiter!r} — settings say {config_delimiter!r}.",
+                role="info",
+                action_text="Save as default",
+                on_action=lambda: self._save_default_delimiter(
+                    "stock", detected_delimiter, config.get("client_id")
+                ),
             )
-
-            if result == QMessageBox.StandardButton.Yes:
-                delimiter = detected_delimiter
-                self.log.info(f"Using detected delimiter: '{delimiter}'")
-
-                # Offer to update config
-                update = QMessageBox.question(
-                    self.mw,
-                    "Update Settings",
-                    f"Would you like to save '{delimiter}' as default stock delimiter?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                )
-
-                if update == QMessageBox.StandardButton.Yes:
-                    self.mw.active_profile_config["settings"]["stock_csv_delimiter"] = (
-                        delimiter
-                    )
-                    # Save config through ProfileManager
-                    client_id = self.mw.active_profile_config.get("client_id")
-                    if client_id and hasattr(self.mw, "profile_manager"):
-                        self.mw.profile_manager.save_shopify_config(
-                            client_id, self.mw.active_profile_config
-                        )
-                        self.log.info(f"Saved delimiter '{delimiter}' to config")
-            else:
-                delimiter = config_delimiter
-                self.log.info(f"Using configured delimiter: '{delimiter}'")
 
         # Try to load CSV with determined delimiter to verify it's readable
         # Force SKU columns to string type to prevent float conversion
@@ -250,14 +213,12 @@ class FileHandler:
                 f"Loaded stock CSV with delimiter '{delimiter}': {len(stock_df)} rows"
             )
 
-        except Exception as e:
+        except Exception:
             self.log.exception("Failed to load stock CSV")
-            QMessageBox.critical(
+            show_error(
                 self.mw,
-                "File Load Error",
-                f"Failed to load stock file:\n{e!s}\n\n"
-                f"Make sure the delimiter is set correctly in Settings.\n"
-                f"Current delimiter: '{delimiter}'",
+                "The stock file wasn't loaded",
+                f"Check the delimiter setting (currently {delimiter!r}), then choose the file again.",
             )
             return
 
@@ -295,20 +256,17 @@ class FileHandler:
                     is_anomaly, anomaly_msg = self._check_inventory_anomaly(
                         mapped_df, memory
                     )
-                    if is_anomaly:
-                        reply = QMessageBox.warning(
-                            self.mw,
-                            "Inventory Anomaly Detected",
-                            f"{anomaly_msg}\n\nContinue with this stock file?",
-                            QMessageBox.Yes | QMessageBox.No,
-                            QMessageBox.No,
-                        )
-                        if reply != QMessageBox.Yes:
-                            # Cancel: clear the stock selection
-                            self.mw.stock_file_path = None
-                            self.mw.stock_slot.clear()
-                            self.check_files_ready()
-                            return
+                    if is_anomaly and not ConfirmDialog.ask(
+                        self.mw,
+                        title="Use this stock file?",
+                        body=anomaly_msg,
+                        verb="Use this stock file",
+                    ):
+                        # Cancel: clear the stock selection
+                        self.mw.stock_file_path = None
+                        self.mw.stock_slot.clear()
+                        self.check_files_ready()
+                        return
 
                 # Memory is updated with Final Stock after analysis (not raw stock on load)
             except Exception as e:
@@ -437,9 +395,7 @@ class FileHandler:
             path, required_cols, delimiter
         )
 
-        slot = (
-            self.mw.orders_slot if file_type == "orders" else self.mw.stock_slot
-        )
+        slot = self.mw.orders_slot if file_type == "orders" else self.mw.stock_slot
         if is_valid:
             slot.set_loaded(path, summary or self._summary_for(path, required_cols))
             self.log.info(f"'{file_type}' file is valid.")
@@ -452,15 +408,13 @@ class FileHandler:
             )
 
     def _summary_for(self, path, required_cols: list[str]) -> str:
-        """"1 842 rows · 4 columns matched" -- what the loaded slot shows.
+        """ "1 842 rows · 4 columns matched" -- what the loaded slot shows.
 
         A row count is the one number that tells a supervisor they picked
         this morning's export and not last Friday's.
         """
         rows = core.count_csv_rows(path)
-        return f"{rows:,} rows · {len(required_cols)} columns matched".replace(
-            ",", " "
-        )
+        return f"{rows:,} rows · {len(required_cols)} columns matched".replace(",", " ")
 
     def check_files_ready(self):
         """Checks if both orders and stock files are selected and valid.
@@ -528,10 +482,10 @@ class FileHandler:
 
         csv_files = self.scan_folder_for_csv(folder_path, _FOLDER_SCAN_RECURSIVE)
         if not csv_files:
-            QMessageBox.warning(
+            show_error(
                 self.mw,
-                "No Files Found",
-                f"No CSV files found in folder:\n{folder_path}",
+                f"No CSV files in {folder_path}",
+                "Choose a folder that holds the exported CSV files.",
             )
             return
 
@@ -539,19 +493,20 @@ class FileHandler:
             valid_files, invalid_files, total_rows = self.validate_multiple_files(
                 csv_files, file_type
             )
-        except Exception as e:
-            QMessageBox.critical(
-                self.mw, "Validation Error", f"Error validating files:\n{e!s}"
+        except Exception:
+            self.log.exception("Error validating files")
+            show_error(
+                self.mw, "The files couldn't be validated", "Details are in Logs."
             )
             return
 
         if not valid_files:
-            msg = f"All {len(csv_files)} files are invalid.\n\nInvalid files:\n"
-            for filepath, missing in invalid_files[:5]:
-                msg += (
-                    f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
-                )
-            QMessageBox.critical(self.mw, "No Valid Files", msg)
+            names = ", ".join(os.path.basename(f) for f, _m in invalid_files[:5])
+            show_error(
+                self.mw,
+                f"None of the {len(csv_files)} files are valid",
+                f"{names}. Details are in Logs.",
+            )
             return
 
         if not self.show_file_preview(
@@ -560,13 +515,10 @@ class FileHandler:
             return  # User cancelled
 
         try:
-            merged_path = self.merge_and_save_files(
-                valid_files, file_type, folder_path
-            )
-        except Exception as e:
-            QMessageBox.critical(
-                self.mw, "Merge Failed", f"Failed to merge files:\n{e!s}"
-            )
+            merged_path = self.merge_and_save_files(valid_files, file_type, folder_path)
+        except Exception:
+            self.log.exception("Failed to merge files")
+            show_error(self.mw, "The files weren't merged", "Details are in Logs.")
             return
 
         if file_type == "orders":
@@ -775,13 +727,10 @@ class FileHandler:
         if _FOLDER_REMOVE_DUPLICATES:
             msg += "Duplicates will be removed (keep first occurrence)\n\n"
 
-        msg += f"Continue with {len(valid_files)} valid files?"
-
-        reply = QMessageBox.question(
-            self.mw, "Confirm Merge", msg, QMessageBox.Yes | QMessageBox.No
+        n = len(valid_files)
+        return ConfirmDialog.ask(
+            self.mw, title=f"Merge {n} files?", body=msg, verb=f"Merge {n} files"
         )
-
-        return reply == QMessageBox.Yes
 
     def merge_and_save_files(
         self, file_paths: list[str], file_type: str, original_folder: str

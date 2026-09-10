@@ -1,8 +1,10 @@
 """The 8.6 shell contract: one command bar, a rail, no global header."""
 
+from unittest.mock import Mock
+
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from gui.components import CommandBar
 from gui.components.commandbar import ROW_CLIENT
@@ -233,3 +235,16 @@ def test_new_session_is_reachable_from_the_overflow_with_a_session_open(main_win
     main_window.actions_handler.create_new_session = lambda: calls.append(1)
     item.trigger()
     assert calls == [1]
+
+
+def test_undo_with_nothing_to_undo_says_nothing(main_window, monkeypatch):
+    toasts = Mock()
+    monkeypatch.setattr("gui.main_window_pyside.toast", toasts)
+    monkeypatch.setattr(
+        QMessageBox, "information", Mock(side_effect=AssertionError("no message box"))
+    )
+
+    main_window.undo_last_operation()
+
+    toasts.assert_not_called()
+    assert main_window.error_banner.isHidden()

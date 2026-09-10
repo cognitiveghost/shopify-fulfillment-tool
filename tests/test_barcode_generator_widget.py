@@ -6,10 +6,9 @@ dialog regardless, so a WeasyPrint/blabel failure looked like success with
 no PDF ever written (CodeRabbit review on PR #259). Extended to cover the
 "Add QR labels" checkbox and the auto-open-PDF checkbox (PR #259 follow-up).
 """
+
 from pathlib import Path
 from unittest.mock import Mock
-
-from PySide6.QtWidgets import QMessageBox
 
 from gui.barcode_generator_widget import BarcodeGeneratorWidget
 
@@ -49,11 +48,13 @@ class _FakeWidget:
         self.opened_pdfs.append(pdf_path)
 
 
-def _run(monkeypatch, pdf_ok, results=None, auto_open=True, add_qr=False, qr_pdf_ok=True):
+def _run(
+    monkeypatch, pdf_ok, results=None, auto_open=True, add_qr=False, qr_pdf_ok=True
+):
     info = Mock()
     critical = Mock()
-    monkeypatch.setattr(QMessageBox, "information", info)
-    monkeypatch.setattr(QMessageBox, "critical", critical)
+    monkeypatch.setattr("gui.barcode_generator_widget.toast", info)
+    monkeypatch.setattr("gui.barcode_generator_widget.show_error", critical)
 
     widget = _FakeWidget(pdf_ok, qr_pdf_ok=qr_pdf_ok)
     widget.auto_open_pdf_checkbox.isChecked.return_value = auto_open
@@ -110,16 +111,18 @@ def test_qr_checkbox_on_generates_and_opens_both_pdfs(monkeypatch):
     ]
     assert info.called
     assert not critical.called
-    message = info.call_args[0][2]
+    message = info.call_args[0][1]
     assert "QR" in message
 
 
 def test_qr_generation_failure_does_not_block_primary_success_dialog(monkeypatch):
-    widget, info, critical = _run(monkeypatch, pdf_ok=True, add_qr=True, qr_pdf_ok=False)
+    widget, info, critical = _run(
+        monkeypatch, pdf_ok=True, add_qr=True, qr_pdf_ok=False
+    )
     assert info.called
     assert not critical.called
-    message = info.call_args[0][2]
-    assert "QR labels PDF failed" in message
+    message = info.call_args[0][1]
+    assert "QR labels failed" in message
     assert widget.opened_pdfs == [Path("/fake/barcodes/PL1_barcodes.pdf")]
 
 
@@ -136,7 +139,9 @@ def test_pdf_render_failure_leaves_print_button_disabled(monkeypatch):
 
 
 def test_qr_checkbox_on_enables_print_qr_button(monkeypatch):
-    widget, _info, _critical = _run(monkeypatch, pdf_ok=True, add_qr=True, qr_pdf_ok=True)
+    widget, _info, _critical = _run(
+        monkeypatch, pdf_ok=True, add_qr=True, qr_pdf_ok=True
+    )
     assert widget.last_qr_pdf == Path("/fake/barcodes/PL1_qr_labels.pdf")
     widget.print_qr_btn.setEnabled.assert_called_with(True)
 

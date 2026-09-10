@@ -5,6 +5,7 @@ order with two lines sharing the same SKU would have both lines deleted when
 the user only meant to remove one. The fix threads the clicked row's position
 through from the context menu and removes exactly that row.
 """
+
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -30,13 +31,14 @@ def mw():
     return SimpleNamespace(
         analysis_results_df=df,
         undo_manager=Mock(),
+        undo_last_operation=Mock(),
         save_session_state=Mock(),
         log_activity=Mock(),
     )
 
 
 def test_remove_item_removes_only_the_clicked_duplicate_sku_line(mw, monkeypatch):
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    monkeypatch.setattr("gui.actions_handler.toast", Mock())
     handler = ActionsHandler(mw)
 
     handler.remove_item_from_order("1001", "SKU-A", row_position=1)
@@ -49,7 +51,7 @@ def test_remove_item_removes_only_the_clicked_duplicate_sku_line(mw, monkeypatch
 
 
 def test_remove_item_aborts_if_row_no_longer_matches(mw, monkeypatch):
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    monkeypatch.setattr("gui.actions_handler.toast", Mock())
     handler = ActionsHandler(mw)
 
     # row_position 2 is SKU-B, not SKU-A -- table changed since menu opened
@@ -64,7 +66,7 @@ def test_remove_item_aborts_if_snapshot_no_longer_matches(mw, monkeypatch):
     snapshot, captured in full when the menu opened, must catch this even
     when order/SKU alone would pass.
     """
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    monkeypatch.setattr("gui.actions_handler.toast", Mock())
     handler = ActionsHandler(mw)
 
     stale_snapshot = {"Order_Number": "1001", "SKU": "SKU-A", "Lineitem_Quantity": 2}
@@ -84,7 +86,12 @@ def mw_with_tags():
         [
             {"Order_Number": "1001", "SKU": "A1", "Quantity": 1, "Internal_Tags": "[]"},
             {"Order_Number": "1001", "SKU": "A2", "Quantity": 1, "Internal_Tags": "[]"},
-            {"Order_Number": "1002", "SKU": "B1", "Quantity": 1, "Internal_Tags": '["URGENT"]'},
+            {
+                "Order_Number": "1002",
+                "SKU": "B1",
+                "Quantity": 1,
+                "Internal_Tags": '["URGENT"]',
+            },
         ]
     )
     mw = SimpleNamespace(
@@ -95,7 +102,9 @@ def mw_with_tags():
         active_profile_config={"tag_categories": {}},
         _update_all_views=Mock(),
     )
-    mw.selection_helper = SelectionHelper(table_view=None, proxy_model=None, main_window=mw)
+    mw.selection_helper = SelectionHelper(
+        table_view=None, proxy_model=None, main_window=mw
+    )
     return mw
 
 
@@ -106,27 +115,33 @@ def test_bulk_add_tag_writes_every_row_of_a_multi_line_order(mw_with_tags, monke
     )
     monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("FRAGILE", True))
 
-    mw_with_tags.selection_helper.checked_rows = {0}  # only line 1 of order 1001 checked
+    mw_with_tags.selection_helper.checked_rows = {
+        0
+    }  # only line 1 of order 1001 checked
     handler = ActionsHandler(mw_with_tags)
 
     handler.bulk_add_tag()
 
     tags = mw_with_tags.analysis_results_df.set_index("SKU")["Internal_Tags"]
     assert '"FRAGILE"' in tags.loc["A1"]
-    assert '"FRAGILE"' in tags.loc["A2"]  # order 1001's other line, not just the checked one
+    assert (
+        '"FRAGILE"' in tags.loc["A2"]
+    )  # order 1001's other line, not just the checked one
     assert '"FRAGILE"' not in tags.loc["B1"]  # different order, untouched
 
 
-def test_bulk_remove_tag_removes_from_every_row_of_a_multi_line_order(mw_with_tags, monkeypatch):
+def test_bulk_remove_tag_removes_from_every_row_of_a_multi_line_order(
+    mw_with_tags, monkeypatch
+):
     df = mw_with_tags.analysis_results_df
     df.loc[df["Order_Number"] == "1001", "Internal_Tags"] = '["URGENT"]'
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
-    monkeypatch.setattr(
-        QInputDialog, "getItem", lambda *a, **k: ("URGENT", True)
-    )
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("URGENT", True))
 
-    mw_with_tags.selection_helper.checked_rows = {0}  # only line 1 of order 1001 checked
+    mw_with_tags.selection_helper.checked_rows = {
+        0
+    }  # only line 1 of order 1001 checked
     handler = ActionsHandler(mw_with_tags)
 
     handler.bulk_remove_tag()
@@ -167,7 +182,7 @@ def test_on_analysis_complete_does_not_block_ui_thread_on_stats_recording(
     monkeypatch.setattr(
         "shared.stats_manager.StatsManager.record_analysis", slow_record_analysis
     )
-    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr("gui.actions_handler.toast", Mock())
 
     mw = SimpleNamespace(
         session_path=str(tmp_path / "session_1"),
@@ -196,3 +211,31 @@ def test_on_analysis_complete_does_not_block_ui_thread_on_stats_recording(
     assert calls[0]["orders_count"] == 3
     assert calls[0]["metadata"]["items_count"] == 3
     assert calls[0]["metadata"]["fulfillable_orders"] == 2
+
+
+def test_removing_an_item_asks_nothing_and_offers_undo(mw, monkeypatch):
+    def refuse(*a, **k):
+        raise AssertionError("an undoable removal must not confirm")
+
+    monkeypatch.setattr(QMessageBox, "question", refuse)
+    toasts = Mock()
+    monkeypatch.setattr("gui.actions_handler.toast", toasts)
+
+    ActionsHandler(mw).remove_item_from_order("1001", "SKU-A", row_position=1)
+
+    toasts.assert_called_once()
+    assert "SKU-A" in toasts.call_args.args[1]
+    assert toasts.call_args.kwargs["action_text"] == "Undo"
+    assert toasts.call_args.kwargs["on_action"] is mw.undo_last_operation
+
+
+def test_the_writeoff_bypass_is_gone():
+    import inspect
+
+    from gui.report_selection_dialog import GenerateReportsDialog
+
+    assert (
+        "writeoff_handler"
+        not in inspect.signature(GenerateReportsDialog.__init__).parameters
+    )
+    assert not hasattr(ActionsHandler, "generate_writeoff_report")

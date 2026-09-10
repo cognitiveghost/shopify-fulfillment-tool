@@ -1,6 +1,7 @@
 """Tests for gui.pdf_printing -- the shared print-to-printer dispatcher
 (driver mode + raw ZPL mode) both windows' Print buttons call into. See
 docs/superpowers/specs/2026-08-10-direct-label-printing-design.md."""
+
 from unittest.mock import Mock
 
 import pytest
@@ -8,7 +9,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QPageSize
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPrintSupport import QPrinter
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 
 from gui import pdf_printing
 
@@ -26,7 +27,9 @@ def qapp():
 def isolated_settings(monkeypatch):
     """Point QSettings at a throwaway org/app pair so tests never touch the
     developer's real local settings."""
-    monkeypatch.setattr(pdf_printing, "_SETTINGS", ("ShopifyFulfillmentToolTest", "PrintingTest"))
+    monkeypatch.setattr(
+        pdf_printing, "_SETTINGS", ("ShopifyFulfillmentToolTest", "PrintingTest")
+    )
     yield
     QSettings(*pdf_printing._SETTINGS).clear()
 
@@ -35,8 +38,11 @@ class TestPrintSettingsRoundTrip:
     def test_defaults_when_nothing_saved(self, isolated_settings):
         settings = pdf_printing.load_print_settings("reference_labels")
         assert settings == {
-            "print_mode": "driver", "raw_zpl_target": "", "raw_zpl_rotate": False,
-            "raw_zpl_label_width_mm": 0.0, "raw_zpl_label_height_mm": 0.0,
+            "print_mode": "driver",
+            "raw_zpl_target": "",
+            "raw_zpl_rotate": False,
+            "raw_zpl_label_width_mm": 0.0,
+            "raw_zpl_label_height_mm": 0.0,
             "driver_printer_name": "",
         }
 
@@ -44,9 +50,11 @@ class TestPrintSettingsRoundTrip:
         pdf_printing.save_print_settings(
             "reference_labels",
             {
-                "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer",
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW-Printer",
                 "raw_zpl_rotate": True,
-                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 101.6,
+                "raw_zpl_label_width_mm": 152.4,
+                "raw_zpl_label_height_mm": 101.6,
                 "driver_printer_name": "Labels 6x4",
             },
         )
@@ -63,18 +71,22 @@ class TestPrintSettingsRoundTrip:
         pdf_printing.save_print_settings(
             "reference_labels",
             {
-                "print_mode": "raw_zpl", "raw_zpl_target": "Labels 6x4",
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "Labels 6x4",
                 "raw_zpl_rotate": False,
-                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 101.6,
+                "raw_zpl_label_width_mm": 152.4,
+                "raw_zpl_label_height_mm": 101.6,
                 "driver_printer_name": "Labels 6x4",
             },
         )
         pdf_printing.save_print_settings(
             "barcode_generator",
             {
-                "print_mode": "driver", "raw_zpl_target": "Barcodes",
+                "print_mode": "driver",
+                "raw_zpl_target": "Barcodes",
                 "raw_zpl_rotate": True,
-                "raw_zpl_label_width_mm": 68.0, "raw_zpl_label_height_mm": 38.0,
+                "raw_zpl_label_width_mm": 68.0,
+                "raw_zpl_label_height_mm": 38.0,
                 "driver_printer_name": "Barcodes",
             },
         )
@@ -86,58 +98,86 @@ class TestPrintSettingsRoundTrip:
 
 
 class TestPrintPdfRawZplMode:
-    def test_blank_target_warns_and_returns_false(self, monkeypatch, tmp_path):
+    def test_blank_target_says_where_to_set_it_and_returns_false(
+        self, monkeypatch, tmp_path
+    ):
         warning = Mock()
-        monkeypatch.setattr(QMessageBox, "warning", warning)
+        monkeypatch.setattr(pdf_printing, "show_error", warning)
         called = Mock()
         monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
 
         result = pdf_printing.print_pdf(
-            None, tmp_path / "x.pdf", {"print_mode": "raw_zpl", "raw_zpl_target": "", "raw_zpl_rotate": False}
+            None,
+            tmp_path / "x.pdf",
+            {"print_mode": "raw_zpl", "raw_zpl_target": "", "raw_zpl_rotate": False},
         )
 
         assert result is False
         assert warning.called
+        assert "Print options" in warning.call_args.args[2]
         assert not called.called
 
-    def test_calls_print_pdf_raw_zpl_with_target_and_rotate(self, monkeypatch, tmp_path):
+    def test_calls_print_pdf_raw_zpl_with_target_and_rotate(
+        self, monkeypatch, tmp_path
+    ):
         called = Mock()
         monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
         pdf_path = tmp_path / "x.pdf"
 
         result = pdf_printing.print_pdf(
-            None, pdf_path,
-            {"print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": True},
-        )
-
-        assert result is True
-        called.assert_called_once_with(pdf_path, "ZPL-RAW-Printer", rotate=True, target_size_mm=None)
-
-    def test_omits_target_size_when_width_or_height_is_zero(self, monkeypatch, tmp_path):
-        called = Mock()
-        monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
-        pdf_path = tmp_path / "x.pdf"
-
-        pdf_printing.print_pdf(
-            None, pdf_path,
+            None,
+            pdf_path,
             {
-                "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False,
-                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 0.0,
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW-Printer",
+                "raw_zpl_rotate": True,
             },
         )
 
-        called.assert_called_once_with(pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=None)
+        assert result is True
+        called.assert_called_once_with(
+            pdf_path, "ZPL-RAW-Printer", rotate=True, target_size_mm=None
+        )
 
-    def test_passes_target_size_when_both_dimensions_configured(self, monkeypatch, tmp_path):
+    def test_omits_target_size_when_width_or_height_is_zero(
+        self, monkeypatch, tmp_path
+    ):
         called = Mock()
         monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
         pdf_path = tmp_path / "x.pdf"
 
         pdf_printing.print_pdf(
-            None, pdf_path,
+            None,
+            pdf_path,
             {
-                "print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False,
-                "raw_zpl_label_width_mm": 152.4, "raw_zpl_label_height_mm": 101.6,
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW-Printer",
+                "raw_zpl_rotate": False,
+                "raw_zpl_label_width_mm": 152.4,
+                "raw_zpl_label_height_mm": 0.0,
+            },
+        )
+
+        called.assert_called_once_with(
+            pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=None
+        )
+
+    def test_passes_target_size_when_both_dimensions_configured(
+        self, monkeypatch, tmp_path
+    ):
+        called = Mock()
+        monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
+        pdf_path = tmp_path / "x.pdf"
+
+        pdf_printing.print_pdf(
+            None,
+            pdf_path,
+            {
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW-Printer",
+                "raw_zpl_rotate": False,
+                "raw_zpl_label_width_mm": 152.4,
+                "raw_zpl_label_height_mm": 101.6,
             },
         )
 
@@ -147,15 +187,21 @@ class TestPrintPdfRawZplMode:
 
     def test_exception_shows_critical_and_returns_false(self, monkeypatch, tmp_path):
         critical = Mock()
-        monkeypatch.setattr(QMessageBox, "critical", critical)
+        monkeypatch.setattr(pdf_printing, "show_error", critical)
         monkeypatch.setattr(
-            pdf_printing.label_printing, "print_pdf_raw_zpl",
+            pdf_printing.label_printing,
+            "print_pdf_raw_zpl",
             Mock(side_effect=OSError("printer offline")),
         )
 
         result = pdf_printing.print_pdf(
-            None, tmp_path / "x.pdf",
-            {"print_mode": "raw_zpl", "raw_zpl_target": "ZPL-RAW-Printer", "raw_zpl_rotate": False},
+            None,
+            tmp_path / "x.pdf",
+            {
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW-Printer",
+                "raw_zpl_rotate": False,
+            },
         )
 
         assert result is False
@@ -165,9 +211,11 @@ class TestPrintPdfRawZplMode:
 class TestPrintPdfDriverMode:
     def test_missing_pdf_shows_critical_and_returns_false(self, monkeypatch, tmp_path):
         critical = Mock()
-        monkeypatch.setattr(QMessageBox, "critical", critical)
+        monkeypatch.setattr(pdf_printing, "show_error", critical)
 
-        result = pdf_printing._print_pdf_driver_mode(None, tmp_path / "does_not_exist.pdf")
+        result = pdf_printing._print_pdf_driver_mode(
+            None, tmp_path / "does_not_exist.pdf"
+        )
 
         assert result is False
         assert critical.called
@@ -191,6 +239,7 @@ class TestPrintPdfDriverMode:
         assert result is True
         assert out_pdf.exists()
         import pypdf
+
         assert len(pypdf.PdfReader(str(out_pdf)).pages) == 2
 
 
@@ -303,7 +352,9 @@ class TestPrintPdfDriverModeDefaultPrinter:
         assert result is True
         assert calls == ["Labels 6x4"]
 
-    def test_blank_default_printer_name_does_not_set_printer_name(self, monkeypatch, tmp_path):
+    def test_blank_default_printer_name_does_not_set_printer_name(
+        self, monkeypatch, tmp_path
+    ):
         from reportlab.lib.units import mm
         from reportlab.pdfgen import canvas
 
@@ -314,7 +365,9 @@ class TestPrintPdfDriverModeDefaultPrinter:
         c.save()
 
         calls = []
-        monkeypatch.setattr(QPrinter, "setPrinterName", lambda self, name: calls.append(name))
+        monkeypatch.setattr(
+            QPrinter, "setPrinterName", lambda self, name: calls.append(name)
+        )
 
         out_pdf = tmp_path / "out.pdf"
         pdf_printing._print_pdf_driver_mode(None, src_pdf, output_path=out_pdf)
@@ -328,11 +381,16 @@ class TestPrintPdfDispatchesDriverPrinterName:
         monkeypatch.setattr(pdf_printing, "_print_pdf_driver_mode", called)
 
         pdf_printing.print_pdf(
-            None, tmp_path / "x.pdf",
+            None,
+            tmp_path / "x.pdf",
             {
-                "print_mode": "driver", "raw_zpl_target": "", "raw_zpl_rotate": False,
+                "print_mode": "driver",
+                "raw_zpl_target": "",
+                "raw_zpl_rotate": False,
                 "driver_printer_name": "Labels 6x4",
             },
         )
 
-        called.assert_called_once_with(None, tmp_path / "x.pdf", driver_printer_name="Labels 6x4")
+        called.assert_called_once_with(
+            None, tmp_path / "x.pdf", driver_printer_name="Labels 6x4"
+        )

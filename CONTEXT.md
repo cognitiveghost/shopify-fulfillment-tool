@@ -99,6 +99,27 @@ is nothing to show: nothing-loaded, working, no-results, or failed. Names the
 cause, names the file or filter that caused it, and offers the action that
 resolves it.
 
+## Messages
+
+**Message route** — where one message to the operator goes: a toast, an inline
+message, a confirm, or an error banner, plus the two non-routes, a disabled
+action and deletion. Not a **destination**, which is a place on the rail; the
+9.25 brief's "four destinations" means the four routes.
+
+**Toast** — the route for something that worked and needs no decision. It
+never blocks, hides itself, appears on the window that raised it, and carries
+Undo when the operation can be undone.
+
+**Inline message** — the route for a problem with a location on screen. It sits
+beside that location and clears when the field it names is edited; the typed
+input survives.
+
+**Confirm** — the route for an act that destroys data Undo cannot reach. Its
+accept button is the verb, never "OK". An undoable act never confirms.
+
+**Error banner** — the route for a failure. It persists until dismissed, says
+what to do rather than what the exception was, and points to Logs for the cause.
+
 ## Shell
 
 **Shell** — the chrome around every screen: the rail, the command bar, the

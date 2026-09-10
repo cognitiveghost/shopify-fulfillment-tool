@@ -19,11 +19,11 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QSpinBox,
     QVBoxLayout,
 )
 
+from gui.components import InlineMessage
 from gui.theme_manager import apply_dialog_button_roles, get_theme_manager
 
 logger = logging.getLogger(__name__)
@@ -58,6 +58,7 @@ class AddProductDialog(QDialog):
         # saw the wrong warning.
         self.low_stock_threshold = low_stock_threshold
         self.result = None
+        self._unknown_sku_accepted = ""
 
         self.setup_ui()
         self.setup_autocompleters()
@@ -90,6 +91,10 @@ class AddProductDialog(QDialog):
         self.order_status_label = QLabel("")
         form_layout.addRow("", self.order_status_label)
 
+        self.order_error = InlineMessage(self)
+        form_layout.addRow("", self.order_error)
+        self.order_input.textChanged.connect(self.order_error.clear)
+
         self.sku_input = QLineEdit()
         self.sku_input.setPlaceholderText("Type SKU... (e.g., SKU-HAT)")
         self.sku_input.textChanged.connect(self._on_sku_changed)
@@ -98,11 +103,19 @@ class AddProductDialog(QDialog):
         self.product_info_label = QLabel("")
         form_layout.addRow("", self.product_info_label)
 
+        self.sku_error = InlineMessage(self)
+        form_layout.addRow("", self.sku_error)
+        self.sku_input.textChanged.connect(self.sku_error.clear)
+
         self.quantity_spin = QSpinBox()
         self.quantity_spin.setMinimum(1)
         self.quantity_spin.setMaximum(9999)
         self.quantity_spin.setValue(1)
         form_layout.addRow("Quantity:", self.quantity_spin)
+
+        self.quantity_error = InlineMessage(self)
+        form_layout.addRow("", self.quantity_error)
+        self.quantity_spin.valueChanged.connect(lambda _v: self.quantity_error.clear())
 
     def _create_warning_box(self):
         """Create warning box for low/zero stock."""
@@ -140,7 +153,9 @@ class AddProductDialog(QDialog):
         """Setup autocomplete for order and SKU inputs."""
         # Order number autocomplete - convert to strings and strip whitespace
         order_numbers = self.analysis_df["Order_Number"].astype(str).unique().tolist()
-        order_numbers = [str(o).strip() for o in order_numbers]  # Convert to strings and strip
+        order_numbers = [
+            str(o).strip() for o in order_numbers
+        ]  # Convert to strings and strip
         order_numbers = sorted(set(order_numbers))  # Remove duplicates and sort
 
         order_completer = QCompleter(order_numbers, self)
@@ -187,6 +202,8 @@ class AddProductDialog(QDialog):
 
     def _on_sku_changed(self, text):
         """Handle SKU input change."""
+        self._unknown_sku_accepted = ""
+        self.add_btn.setText("Add Product")
         theme = get_theme_manager().get_current_theme()
         if not text:
             self.product_info_label.setText("")
@@ -195,7 +212,9 @@ class AddProductDialog(QDialog):
 
         # Check if SKU exists in stock - compare as strings
         text_str = str(text).strip()
-        stock_row = self.stock_df[self.stock_df["SKU"].astype(str).str.strip() == text_str]
+        stock_row = self.stock_df[
+            self.stock_df["SKU"].astype(str).str.strip() == text_str
+        ]
 
         if stock_row.empty:
             self.product_info_label.setText("SKU not found in stock")
@@ -207,9 +226,7 @@ class AddProductDialog(QDialog):
         # Live stock keys might be strings, ensure we lookup with string
         current_stock = self.live_stock.get(text_str, self.live_stock.get(text, 0))
 
-        self.product_info_label.setText(
-            f"{product_name} | Live stock: {current_stock}"
-        )
+        self.product_info_label.setText(f"{product_name} | Live stock: {current_stock}")
         self.product_info_label.setStyleSheet(f"color: {theme.status_success};")
 
         # Show warning if low/zero stock
@@ -232,8 +249,7 @@ class AddProductDialog(QDialog):
             """)
         elif current_stock < self.low_stock_threshold:
             warning_text = (
-                "WARNING\n\n"
-                f"Product {text} has low stock ({current_stock} units)."
+                f"WARNING\n\nProduct {text} has low stock ({current_stock} units)."
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
@@ -262,14 +278,16 @@ class AddProductDialog(QDialog):
 
         # Get product name from stock - compare as strings
         stock_row = self.stock_df[self.stock_df["SKU"].astype(str).str.strip() == sku]
-        product_name = stock_row.iloc[0].get("Product_Name", sku) if not stock_row.empty else sku
+        product_name = (
+            stock_row.iloc[0].get("Product_Name", sku) if not stock_row.empty else sku
+        )
 
         # Store result
         self.result = {
             "order_number": order_number,
             "sku": sku,
             "product_name": product_name,
-            "quantity": quantity
+            "quantity": quantity,
         }
 
         logger.info(f"Adding product: {self.result}")
@@ -284,56 +302,39 @@ class AddProductDialog(QDialog):
 
         # Check order number entered
         if not order_number:
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                "Please enter an order number."
-            )
+            self.order_error.show_message("Enter an order number.")
             self.order_input.setFocus()
             return False
 
         # Check order exists - convert to string for comparison
         order_numbers_str = self.analysis_df["Order_Number"].astype(str)
         if order_number not in order_numbers_str.values:
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                f"Order '{order_number}' not found in analysis."
+            self.order_error.show_message(
+                f"Order {order_number} isn't in this analysis."
             )
             self.order_input.setFocus()
             return False
 
         # Check SKU entered
         if not sku:
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                "Please enter a product SKU."
-            )
+            self.sku_error.show_message("Enter a product SKU.")
             self.sku_input.setFocus()
             return False
 
         # Check SKU exists in stock - convert to string for comparison
         stock_skus_str = self.stock_df["SKU"].astype(str).str.strip()
-        if sku not in stock_skus_str.values:
-            reply = QMessageBox.question(
-                self,
-                "SKU Not Found",
-                f"SKU '{sku}' not found in stock file.\n\n"
-                "Do you want to add it anyway?",
-                QMessageBox.Yes | QMessageBox.No
+        if sku not in stock_skus_str.values and sku != self._unknown_sku_accepted:
+            self.sku_error.show_message(
+                f"{sku} isn't in the stock file. Press Add anyway to add it."
             )
-            if reply == QMessageBox.No:
-                self.sku_input.setFocus()
-                return False
+            self.add_btn.setText("Add anyway")
+            self._unknown_sku_accepted = sku
+            self.sku_input.setFocus()
+            return False
 
         # Check quantity
         if self.quantity_spin.value() < 1:
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                "Quantity must be at least 1."
-            )
+            self.quantity_error.show_message("Quantity must be at least 1.")
             self.quantity_spin.setFocus()
             return False
 

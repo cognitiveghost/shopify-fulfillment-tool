@@ -1,5 +1,7 @@
 """Volumetric weight management: product dimensions and packaging boxes."""
 
+import logging
+
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -11,7 +13,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -20,15 +21,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components import InlineMessage, show_error, toast
 from gui.settings.base import SettingsPage
 from gui.theme_manager import font_css, set_button_role
 from shared.theme import on_theme_changed
+
+logger = logging.getLogger(__name__)
 
 
 class WeightPage(SettingsPage):
     """Volumetric weight config, stored under config_data["weight_config"]."""
 
-    def __init__(self, weight_config: dict, column_mappings: dict, stock_csv_delimiter: str, parent=None):
+    def __init__(
+        self,
+        weight_config: dict,
+        column_mappings: dict,
+        stock_csv_delimiter: str,
+        parent=None,
+    ):
         super().__init__(parent)
         self.column_mappings = column_mappings
         self.stock_csv_delimiter = stock_csv_delimiter
@@ -40,7 +50,7 @@ class WeightPage(SettingsPage):
         weight_cfg = weight_config or {
             "volumetric_divisor": 6000,
             "products": {},
-            "boxes": []
+            "boxes": [],
         }
         # Held by reference for collect() -- see SettingsPage's contract. Note
         # this is weight_cfg, not weight_config: an empty config substitutes a
@@ -54,7 +64,9 @@ class WeightPage(SettingsPage):
         self.weight_divisor_spin = QDoubleSpinBox()
         self.weight_divisor_spin.setRange(1, 100000)
         self.weight_divisor_spin.setDecimals(0)
-        self.weight_divisor_spin.setValue(float(weight_cfg.get("volumetric_divisor", 6000)))
+        self.weight_divisor_spin.setValue(
+            float(weight_cfg.get("volumetric_divisor", 6000))
+        )
         self.weight_divisor_spin.setFixedWidth(100)
         self.weight_divisor_spin.setToolTip(
             "Volumetric weight formula: L × W × H / divisor\n"
@@ -63,7 +75,10 @@ class WeightPage(SettingsPage):
         )
         hint = QLabel("(6000 = DPD/Speedy · 5000 = DHL/FedEx)")
         on_theme_changed(
-            hint, lambda t: hint.setStyleSheet(f"color: {t.text_secondary}; {font_css('caption')}")
+            hint,
+            lambda t: hint.setStyleSheet(
+                f"color: {t.text_secondary}; {font_css('caption')}"
+            ),
         )
         global_row.addWidget(div_label)
         global_row.addWidget(self.weight_divisor_spin)
@@ -89,21 +104,29 @@ class WeightPage(SettingsPage):
         prod_toolbar.addWidget(import_sku_btn)
         import_dims_btn = QPushButton("Import Dimensions CSV")
         set_button_role(import_dims_btn, "secondary")
-        import_dims_btn.setToolTip("Import SKU dimensions from a CSV (columns: SKU, Name, L, W, H, No Packaging)")
-        import_dims_btn.clicked.connect(self._weight_import_products_from_csv)
+        import_dims_btn.setToolTip(
+            "Import SKU dimensions from a CSV (columns: SKU, Name, L, W, H, No Packaging)"
+        )
+        import_dims_btn.clicked.connect(lambda: self._weight_import_products_from_csv())
         prod_toolbar.addWidget(import_dims_btn)
         add_prod_btn = QPushButton("Add Row")
         set_button_role(add_prod_btn, "secondary")
         add_prod_btn.clicked.connect(self._weight_add_product_row)
         prod_toolbar.addWidget(add_prod_btn)
-        export_prod_btn = QPushButton("Export CSV")
-        set_button_role(export_prod_btn, "secondary")
-        export_prod_btn.setToolTip("Export all products with dimensions to a CSV file")
-        export_prod_btn.clicked.connect(self._weight_export_products_to_csv)
-        prod_toolbar.addWidget(export_prod_btn)
+        self.weight_export_products_btn = QPushButton("Export CSV")
+        set_button_role(self.weight_export_products_btn, "secondary")
+        self.weight_export_products_btn.setToolTip(
+            "Export all products with dimensions to a CSV file"
+        )
+        self.weight_export_products_btn.clicked.connect(
+            self._weight_export_products_to_csv
+        )
+        prod_toolbar.addWidget(self.weight_export_products_btn)
         del_prod_btn = QPushButton("Delete Selected")
         set_button_role(del_prod_btn, "secondary")
-        del_prod_btn.clicked.connect(lambda: self._weight_delete_selected(self.weight_products_table))
+        del_prod_btn.clicked.connect(
+            lambda: self._weight_delete_selected(self.weight_products_table)
+        )
         prod_toolbar.addWidget(del_prod_btn)
         prod_toolbar.addStretch()
         products_layout.addLayout(prod_toolbar)
@@ -125,7 +148,11 @@ class WeightPage(SettingsPage):
         self.weight_quick_l = QDoubleSpinBox()
         self.weight_quick_w = QDoubleSpinBox()
         self.weight_quick_h = QDoubleSpinBox()
-        for label_text, spin in (("L:", self.weight_quick_l), ("W:", self.weight_quick_w), ("H:", self.weight_quick_h)):
+        for label_text, spin in (
+            ("L:", self.weight_quick_l),
+            ("W:", self.weight_quick_w),
+            ("H:", self.weight_quick_h),
+        ):
             quick_add_row.addWidget(QLabel(label_text))
             spin.setRange(0, 1000)
             spin.setDecimals(1)
@@ -138,7 +165,9 @@ class WeightPage(SettingsPage):
 
         quick_add_btn = QPushButton("Add")
         set_button_role(quick_add_btn, "secondary")
-        quick_add_btn.setToolTip("Add this SKU and keep the form open for the next one (Enter also works)")
+        quick_add_btn.setToolTip(
+            "Add this SKU and keep the form open for the next one (Enter also works)"
+        )
         quick_add_btn.clicked.connect(self._weight_quick_add_product)
         quick_add_row.addWidget(quick_add_btn)
 
@@ -147,6 +176,10 @@ class WeightPage(SettingsPage):
 
         products_layout.addWidget(quick_add_box)
 
+        self.weight_quick_sku_error = InlineMessage(self)
+        products_layout.addWidget(self.weight_quick_sku_error)
+        self.weight_quick_sku.textChanged.connect(self.weight_quick_sku_error.clear)
+
         self.products_search = QLineEdit()
         self.products_search.setPlaceholderText("Search by SKU or name...")
         self.products_search.setClearButtonEnabled(True)
@@ -154,11 +187,23 @@ class WeightPage(SettingsPage):
         products_layout.addWidget(self.products_search)
 
         self.weight_products_table = QTableWidget(0, 7)
-        self.weight_products_table.setHorizontalHeaderLabels([
-            "SKU", "Name", "L (cm)", "W (cm)", "H (cm)", "Vol. Weight (kg)", "No Packaging"
-        ])
-        self.weight_products_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.weight_products_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.weight_products_table.setHorizontalHeaderLabels(
+            [
+                "SKU",
+                "Name",
+                "L (cm)",
+                "W (cm)",
+                "H (cm)",
+                "Vol. Weight (kg)",
+                "No Packaging",
+            ]
+        )
+        self.weight_products_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self.weight_products_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
         self.weight_products_table.setColumnWidth(2, 70)
         self.weight_products_table.setColumnWidth(3, 70)
         self.weight_products_table.setColumnWidth(4, 70)
@@ -166,7 +211,9 @@ class WeightPage(SettingsPage):
         self.weight_products_table.setColumnWidth(6, 100)
         self.weight_products_table.setAlternatingRowColors(True)
         self.weight_products_table.cellChanged.connect(
-            lambda row, col: self._weight_recalc_vol_weight(self.weight_products_table, row, col, [2, 3, 4])
+            lambda row, col: self._weight_recalc_vol_weight(
+                self.weight_products_table, row, col, [2, 3, 4]
+            )
         )
         products_layout.addWidget(self.weight_products_table)
 
@@ -182,20 +229,22 @@ class WeightPage(SettingsPage):
         import_box_btn = QPushButton("Import CSV")
         set_button_role(import_box_btn, "secondary")
         import_box_btn.setToolTip("Import boxes from a CSV (columns: Name, L, W, H)")
-        import_box_btn.clicked.connect(self._weight_import_boxes_from_csv)
+        import_box_btn.clicked.connect(lambda: self._weight_import_boxes_from_csv())
         box_toolbar.addWidget(import_box_btn)
         add_box_btn = QPushButton("Add Box")
         set_button_role(add_box_btn, "secondary")
         add_box_btn.clicked.connect(self._weight_add_box_row)
         box_toolbar.addWidget(add_box_btn)
-        export_box_btn = QPushButton("Export CSV")
-        set_button_role(export_box_btn, "secondary")
-        export_box_btn.setToolTip("Export all boxes to a CSV file")
-        export_box_btn.clicked.connect(self._weight_export_boxes_to_csv)
-        box_toolbar.addWidget(export_box_btn)
+        self.weight_export_boxes_btn = QPushButton("Export CSV")
+        set_button_role(self.weight_export_boxes_btn, "secondary")
+        self.weight_export_boxes_btn.setToolTip("Export all boxes to a CSV file")
+        self.weight_export_boxes_btn.clicked.connect(self._weight_export_boxes_to_csv)
+        box_toolbar.addWidget(self.weight_export_boxes_btn)
         del_box_btn = QPushButton("Delete Selected")
         set_button_role(del_box_btn, "secondary")
-        del_box_btn.clicked.connect(lambda: self._weight_delete_selected(self.weight_boxes_table))
+        del_box_btn.clicked.connect(
+            lambda: self._weight_delete_selected(self.weight_boxes_table)
+        )
         box_toolbar.addWidget(del_box_btn)
         box_toolbar.addStretch()
         boxes_layout.addLayout(box_toolbar)
@@ -207,17 +256,21 @@ class WeightPage(SettingsPage):
         boxes_layout.addWidget(self.boxes_search)
 
         self.weight_boxes_table = QTableWidget(0, 5)
-        self.weight_boxes_table.setHorizontalHeaderLabels([
-            "Box Name", "L (cm)", "W (cm)", "H (cm)", "Vol. Weight (kg)"
-        ])
-        self.weight_boxes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.weight_boxes_table.setHorizontalHeaderLabels(
+            ["Box Name", "L (cm)", "W (cm)", "H (cm)", "Vol. Weight (kg)"]
+        )
+        self.weight_boxes_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
         self.weight_boxes_table.setColumnWidth(1, 70)
         self.weight_boxes_table.setColumnWidth(2, 70)
         self.weight_boxes_table.setColumnWidth(3, 70)
         self.weight_boxes_table.setColumnWidth(4, 110)
         self.weight_boxes_table.setAlternatingRowColors(True)
         self.weight_boxes_table.cellChanged.connect(
-            lambda row, col: self._weight_recalc_vol_weight(self.weight_boxes_table, row, col, [1, 2, 3])
+            lambda row, col: self._weight_recalc_vol_weight(
+                self.weight_boxes_table, row, col, [1, 2, 3]
+            )
         )
         boxes_layout.addWidget(self.weight_boxes_table)
 
@@ -227,7 +280,10 @@ class WeightPage(SettingsPage):
             "Values: box name / NO_BOX_NEEDED / NO_BOX_FITS / UNKNOWN_DIMS"
         )
         on_theme_changed(
-            tips_box, lambda t: tips_box.setStyleSheet(f"color: {t.text_secondary}; {font_css('caption')}")
+            tips_box,
+            lambda t: tips_box.setStyleSheet(
+                f"color: {t.text_secondary}; {font_css('caption')}"
+            ),
         )
         tips_box.setWordWrap(True)
         boxes_layout.addWidget(tips_box)
@@ -240,15 +296,47 @@ class WeightPage(SettingsPage):
         self._weight_populate_products(weight_cfg.get("products", {}))
         self._weight_populate_boxes(weight_cfg.get("boxes", []))
 
+        self.weight_products_table.model().rowsInserted.connect(
+            lambda *_: self._sync_export_buttons()
+        )
+        self.weight_products_table.model().rowsRemoved.connect(
+            lambda *_: self._sync_export_buttons()
+        )
+        self.weight_boxes_table.model().rowsInserted.connect(
+            lambda *_: self._sync_export_buttons()
+        )
+        self.weight_boxes_table.model().rowsRemoved.connect(
+            lambda *_: self._sync_export_buttons()
+        )
+        self._sync_export_buttons()
+
+    def _sync_export_buttons(self) -> None:
+        self.weight_export_products_btn.setEnabled(
+            self.weight_products_table.rowCount() > 0
+        )
+        self.weight_export_boxes_btn.setEnabled(self.weight_boxes_table.rowCount() > 0)
+
     def _weight_recalc_vol_weight(self, table, row, col, dim_cols):
         """Recalculate volumetric weight cell when L/W/H changes."""
         if col not in dim_cols:
             return
         vol_col = max(dim_cols) + 1
         try:
-            l = float(table.item(row, dim_cols[0]).text() or 0) if table.item(row, dim_cols[0]) else 0
-            w = float(table.item(row, dim_cols[1]).text() or 0) if table.item(row, dim_cols[1]) else 0
-            h = float(table.item(row, dim_cols[2]).text() or 0) if table.item(row, dim_cols[2]) else 0
+            l = (
+                float(table.item(row, dim_cols[0]).text() or 0)
+                if table.item(row, dim_cols[0])
+                else 0
+            )
+            w = (
+                float(table.item(row, dim_cols[1]).text() or 0)
+                if table.item(row, dim_cols[1])
+                else 0
+            )
+            h = (
+                float(table.item(row, dim_cols[2]).text() or 0)
+                if table.item(row, dim_cols[2])
+                else 0
+            )
             divisor = float(self.weight_divisor_spin.value() or 6000)
             vol_w = round((l * w * h) / divisor, 4) if divisor > 0 else 0.0
             item = QTableWidgetItem(str(vol_w))
@@ -274,10 +362,18 @@ class WeightPage(SettingsPage):
             no_pkg = data.get("no_packaging", False)
 
             self.weight_products_table.setItem(row, 0, QTableWidgetItem(sku))
-            self.weight_products_table.setItem(row, 1, QTableWidgetItem(data.get("name", "")))
-            self.weight_products_table.setItem(row, 2, QTableWidgetItem(str(l) if l else ""))
-            self.weight_products_table.setItem(row, 3, QTableWidgetItem(str(w) if w else ""))
-            self.weight_products_table.setItem(row, 4, QTableWidgetItem(str(h) if h else ""))
+            self.weight_products_table.setItem(
+                row, 1, QTableWidgetItem(data.get("name", ""))
+            )
+            self.weight_products_table.setItem(
+                row, 2, QTableWidgetItem(str(l) if l else "")
+            )
+            self.weight_products_table.setItem(
+                row, 3, QTableWidgetItem(str(w) if w else "")
+            )
+            self.weight_products_table.setItem(
+                row, 4, QTableWidgetItem(str(h) if h else "")
+            )
             vol_item = QTableWidgetItem(str(vol_w))
             vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.weight_products_table.setItem(row, 5, vol_item)
@@ -292,7 +388,7 @@ class WeightPage(SettingsPage):
             chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.weight_products_table.setCellWidget(row, 6, chk_widget)
         self.weight_products_table.blockSignals(False)
-        if hasattr(self, 'products_search'):
+        if hasattr(self, "products_search"):
             self._filter_products_table(self.products_search.text())
 
     def _weight_populate_boxes(self, boxes: list):
@@ -308,15 +404,23 @@ class WeightPage(SettingsPage):
             h = float(box.get("height_cm") or 0)
             vol_w = round((l * w * h) / divisor, 4) if divisor > 0 else 0.0
 
-            self.weight_boxes_table.setItem(row, 0, QTableWidgetItem(box.get("name", "")))
-            self.weight_boxes_table.setItem(row, 1, QTableWidgetItem(str(l) if l else ""))
-            self.weight_boxes_table.setItem(row, 2, QTableWidgetItem(str(w) if w else ""))
-            self.weight_boxes_table.setItem(row, 3, QTableWidgetItem(str(h) if h else ""))
+            self.weight_boxes_table.setItem(
+                row, 0, QTableWidgetItem(box.get("name", ""))
+            )
+            self.weight_boxes_table.setItem(
+                row, 1, QTableWidgetItem(str(l) if l else "")
+            )
+            self.weight_boxes_table.setItem(
+                row, 2, QTableWidgetItem(str(w) if w else "")
+            )
+            self.weight_boxes_table.setItem(
+                row, 3, QTableWidgetItem(str(h) if h else "")
+            )
             vol_item = QTableWidgetItem(str(vol_w))
             vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.weight_boxes_table.setItem(row, 4, vol_item)
         self.weight_boxes_table.blockSignals(False)
-        if hasattr(self, 'boxes_search'):
+        if hasattr(self, "boxes_search"):
             self._filter_boxes_table(self.boxes_search.text())
 
     def _filter_products_table(self, text: str):
@@ -339,18 +443,30 @@ class WeightPage(SettingsPage):
             visible = not text or text in name_text
             self.weight_boxes_table.setRowHidden(row, not visible)
 
-    def _weight_append_product_row(self, sku="", name="", l="", w="", h="", no_pkg=False):
+    def _weight_append_product_row(
+        self, sku="", name="", l="", w="", h="", no_pkg=False
+    ):
         """Append one product row to the products table, filled with the given values."""
         divisor = float(self.weight_divisor_spin.value() or 6000)
         row = self.weight_products_table.rowCount()
         self.weight_products_table.insertRow(row)
         self.weight_products_table.setItem(row, 0, QTableWidgetItem(sku))
         self.weight_products_table.setItem(row, 1, QTableWidgetItem(name))
-        self.weight_products_table.setItem(row, 2, QTableWidgetItem(str(l) if l else ""))
-        self.weight_products_table.setItem(row, 3, QTableWidgetItem(str(w) if w else ""))
-        self.weight_products_table.setItem(row, 4, QTableWidgetItem(str(h) if h else ""))
+        self.weight_products_table.setItem(
+            row, 2, QTableWidgetItem(str(l) if l else "")
+        )
+        self.weight_products_table.setItem(
+            row, 3, QTableWidgetItem(str(w) if w else "")
+        )
+        self.weight_products_table.setItem(
+            row, 4, QTableWidgetItem(str(h) if h else "")
+        )
         try:
-            vol_w = round((float(l or 0) * float(w or 0) * float(h or 0)) / divisor, 4) if divisor > 0 else 0.0
+            vol_w = (
+                round((float(l or 0) * float(w or 0) * float(h or 0)) / divisor, 4)
+                if divisor > 0
+                else 0.0
+            )
         except ValueError:
             vol_w = 0.0
         vol_item = QTableWidgetItem(str(vol_w))
@@ -383,9 +499,8 @@ class WeightPage(SettingsPage):
             if self.weight_products_table.item(r, 0)
         }
         if sku in existing_skus:
-            QMessageBox.warning(
-                self, "Duplicate SKU",
-                f"SKU '{sku}' is already in the table. Edit it there instead."
+            self.weight_quick_sku_error.show_message(
+                f"{sku} is already in the table. Edit it there instead."
             )
             return
 
@@ -425,10 +540,7 @@ class WeightPage(SettingsPage):
     def _weight_import_skus_from_stock_csv(self):
         """Import SKUs from a stock CSV file into the products table."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import SKUs from Stock CSV",
-            "",
-            "CSV Files (*.csv);;All Files (*)"
+            self, "Import SKUs from Stock CSV", "", "CSV Files (*.csv);;All Files (*)"
         )
         if not file_path:
             return
@@ -442,8 +554,22 @@ class WeightPage(SettingsPage):
                 if isinstance(self.column_mappings.get("stock"), dict)
                 else {}
             )
-            sku_col = next((csv_col for csv_col, internal in stock_mappings.items() if internal == "SKU"), None)
-            name_col = next((csv_col for csv_col, internal in stock_mappings.items() if internal == "Product_Name"), None)
+            sku_col = next(
+                (
+                    csv_col
+                    for csv_col, internal in stock_mappings.items()
+                    if internal == "SKU"
+                ),
+                None,
+            )
+            name_col = next(
+                (
+                    csv_col
+                    for csv_col, internal in stock_mappings.items()
+                    if internal == "Product_Name"
+                ),
+                None,
+            )
 
             if not sku_col or sku_col not in df.columns:
                 # Fallback: try common names
@@ -453,7 +579,12 @@ class WeightPage(SettingsPage):
                         break
 
             if not sku_col:
-                QMessageBox.warning(self, "Warning", "Could not find SKU column in CSV.\nCheck column mappings in Settings → Stock Mapping.")
+                show_error(
+                    self,
+                    "No SKU column found",
+                    "Check the column mappings under Settings → Stock Mapping, "
+                    "then import again.",
+                )
                 return
 
             skus_in_csv = df[sku_col].dropna().astype(str).str.strip().unique().tolist()
@@ -469,7 +600,9 @@ class WeightPage(SettingsPage):
             # Determine names if available
             sku_to_name = {}
             if name_col and name_col in df.columns:
-                for _, row in df[[sku_col, name_col]].dropna(subset=[sku_col]).iterrows():
+                for _, row in (
+                    df[[sku_col, name_col]].dropna(subset=[sku_col]).iterrows()
+                ):
                     sku = str(row[sku_col]).strip()
                     name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ""
                     if sku not in sku_to_name:
@@ -484,26 +617,46 @@ class WeightPage(SettingsPage):
                 added += 1
             self.weight_products_table.blockSignals(False)
 
-            QMessageBox.information(
-                self, "Import Complete",
-                f"Added {added} new SKUs. Skipped {len(skus_in_csv) - added} already existing."
+            toast(
+                self,
+                f"Added {added}. Skipped {len(skus_in_csv) - added} already existing.",
             )
 
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import SKUs:\n\n{e!s}")
+        except Exception:
+            logger.exception("Failed to import SKUs from stock CSV")
+            show_error(self, "The SKUs weren't imported", "Details are in Logs.")
 
-    def _weight_import_products_from_csv(self):
+    def _toast_import_result(self, added, updated, skipped, update_them):
+        """Report an import; skipped duplicates get one click to update them."""
+        text = f"Added {added}."
+        if updated:
+            text += f" Updated {updated}."
+        if skipped:
+            text += f" Skipped {skipped} already in the table."
+        toast(
+            self,
+            text,
+            action_text="Update them" if skipped else "",
+            on_action=update_them if skipped else None,
+        )
+
+    def _weight_import_products_from_csv(
+        self, path: str | None = None, update_existing: bool = False
+    ):
         """Import SKU dimensions from an arbitrary CSV into the products table."""
         from shopify_tool.csv_utils import detect_csv_delimiter
 
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import Product Dimensions from CSV",
-            "",
-            "CSV Files (*.csv);;All Files (*)"
-        )
-        if not file_path:
-            return
+        if path is None:
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Import Product Dimensions from CSV",
+                "",
+                "CSV Files (*.csv);;All Files (*)",
+            )
+            if not file_path:
+                return
+        else:
+            file_path = path
 
         try:
             delimiter, _ = detect_csv_delimiter(file_path)
@@ -518,42 +671,35 @@ class WeightPage(SettingsPage):
                 return None
 
             sku_col = find_col(["sku", "артикул", "article", "код", "article_no"])
-            name_col = find_col(["name", "назва", "product_name", "наименование", "title"])
-            l_col = find_col(["l (cm)", "l(cm)", "length_cm", "length", "l", "довжина", "длина"])
+            name_col = find_col(
+                ["name", "назва", "product_name", "наименование", "title"]
+            )
+            l_col = find_col(
+                ["l (cm)", "l(cm)", "length_cm", "length", "l", "довжина", "длина"]
+            )
             w_col = find_col(["w (cm)", "w(cm)", "width_cm", "width", "w", "ширина"])
-            h_col = find_col(["h (cm)", "h(cm)", "height_cm", "height", "h", "висота", "высота"])
-            np_col = find_col(["no_packaging", "no packaging", "без упаковки", "nopackaging"])
+            h_col = find_col(
+                ["h (cm)", "h(cm)", "height_cm", "height", "h", "висота", "высота"]
+            )
+            np_col = find_col(
+                ["no_packaging", "no packaging", "без упаковки", "nopackaging"]
+            )
 
             if not sku_col:
                 cols_str = ", ".join(df.columns.tolist())
-                QMessageBox.warning(
-                    self, "Column Not Found",
-                    f"Could not find SKU column in CSV.\n\nAvailable columns: {cols_str}\n\n"
-                    "Expected one of: SKU, Артикул, Article, Код"
+                show_error(
+                    self,
+                    "No SKU column found",
+                    f"Available columns: {cols_str}. Expected one of: SKU, "
+                    "Артикул, Article, Код.",
                 )
                 return
 
-            # Ask about duplicates
             existing_skus = {}
             for r in range(self.weight_products_table.rowCount()):
                 item = self.weight_products_table.item(r, 0)
                 if item:
                     existing_skus[item.text().strip()] = r
-
-            rows_in_csv = df[sku_col].dropna().astype(str).str.strip().tolist()
-            [s for s in rows_in_csv if s and s != "nan" and s not in existing_skus]
-            dup_skus = [s for s in rows_in_csv if s and s != "nan" and s in existing_skus]
-
-            update_existing = False
-            if dup_skus:
-                msg = QMessageBox(self)
-                msg.setWindowTitle("Duplicates Found")
-                msg.setText(f"Found {len(dup_skus)} SKU(s) already in the table.\nWhat would you like to do?")
-                skip_btn = msg.addButton("Skip Duplicates", QMessageBox.ButtonRole.AcceptRole)
-                update_btn = msg.addButton("Update Existing", QMessageBox.ButtonRole.ActionRole)
-                msg.setDefaultButton(skip_btn)
-                msg.exec()
-                update_existing = msg.clickedButton() == update_btn
 
             divisor = float(self.weight_divisor_spin.value() or 6000)
             added = 0
@@ -570,16 +716,26 @@ class WeightPage(SettingsPage):
 
             self.weight_products_table.blockSignals(True)
             for _, csv_row in df.iterrows():
-                sku = str(csv_row[sku_col]).strip() if pd.notna(csv_row[sku_col]) else ""
+                sku = (
+                    str(csv_row[sku_col]).strip() if pd.notna(csv_row[sku_col]) else ""
+                )
                 if not sku or sku == "nan":
                     continue
 
-                name = str(csv_row[name_col]).strip() if name_col and pd.notna(csv_row.get(name_col)) else ""
+                name = (
+                    str(csv_row[name_col]).strip()
+                    if name_col and pd.notna(csv_row.get(name_col))
+                    else ""
+                )
 
                 l = _val(csv_row, l_col)
                 w = _val(csv_row, w_col)
                 h = _val(csv_row, h_col)
-                vol_w = round((l * w * h) / divisor, 4) if (l and w and h and divisor > 0) else 0.0
+                vol_w = (
+                    round((l * w * h) / divisor, 4)
+                    if (l and w and h and divisor > 0)
+                    else 0.0
+                )
 
                 no_pkg = False
                 if np_col and pd.notna(csv_row.get(np_col)):
@@ -592,13 +748,21 @@ class WeightPage(SettingsPage):
                         continue
                     row = existing_skus[sku]
                     if name_col:
-                        self.weight_products_table.setItem(row, 1, QTableWidgetItem(name))
+                        self.weight_products_table.setItem(
+                            row, 1, QTableWidgetItem(name)
+                        )
                     if l_col:
-                        self.weight_products_table.setItem(row, 2, QTableWidgetItem(str(l) if l is not None else ""))
+                        self.weight_products_table.setItem(
+                            row, 2, QTableWidgetItem(str(l) if l is not None else "")
+                        )
                     if w_col:
-                        self.weight_products_table.setItem(row, 3, QTableWidgetItem(str(w) if w is not None else ""))
+                        self.weight_products_table.setItem(
+                            row, 3, QTableWidgetItem(str(w) if w is not None else "")
+                        )
                     if h_col:
-                        self.weight_products_table.setItem(row, 4, QTableWidgetItem(str(h) if h is not None else ""))
+                        self.weight_products_table.setItem(
+                            row, 4, QTableWidgetItem(str(h) if h is not None else "")
+                        )
                     vol_item = QTableWidgetItem(str(vol_w))
                     vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     self.weight_products_table.setItem(row, 5, vol_item)
@@ -609,32 +773,39 @@ class WeightPage(SettingsPage):
                             chk.setChecked(no_pkg)
                     updated += 1
                 else:
-                    self._weight_append_product_row(sku=sku, name=name, l=l, w=w, h=h, no_pkg=no_pkg)
+                    self._weight_append_product_row(
+                        sku=sku, name=name, l=l, w=w, h=h, no_pkg=no_pkg
+                    )
                     added += 1
             self.weight_products_table.blockSignals(False)
 
-            parts = [f"Added {added} new product(s)."]
-            if updated:
-                parts.append(f"Updated {updated} existing.")
-            if skipped:
-                parts.append(f"Skipped {skipped} duplicate(s).")
-            QMessageBox.information(self, "Import Complete", " ".join(parts))
+            self._toast_import_result(
+                added,
+                updated,
+                skipped,
+                lambda: self._weight_import_products_from_csv(
+                    file_path, update_existing=True
+                ),
+            )
 
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import dimensions:\n\n{e!s}")
+        except Exception:
+            logger.exception("Failed to import product dimensions from CSV")
+            show_error(self, "The dimensions weren't imported", "Details are in Logs.")
 
-    def _weight_import_boxes_from_csv(self):
+    def _weight_import_boxes_from_csv(
+        self, path: str | None = None, update_existing: bool = False
+    ):
         """Import boxes from an arbitrary CSV into the boxes table."""
         from shopify_tool.csv_utils import detect_csv_delimiter
 
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import Boxes from CSV",
-            "",
-            "CSV Files (*.csv);;All Files (*)"
-        )
-        if not file_path:
-            return
+        if path is None:
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Import Boxes from CSV", "", "CSV Files (*.csv);;All Files (*)"
+            )
+            if not file_path:
+                return
+        else:
+            file_path = path
 
         try:
             delimiter, _ = detect_csv_delimiter(file_path)
@@ -648,17 +819,24 @@ class WeightPage(SettingsPage):
                         return cols_lower[c]
                 return None
 
-            name_col = find_col(["box name", "box_name", "name", "назва", "size", "box", "коробка"])
-            l_col = find_col(["l (cm)", "l(cm)", "length_cm", "length", "l", "довжина", "длина"])
+            name_col = find_col(
+                ["box name", "box_name", "name", "назва", "size", "box", "коробка"]
+            )
+            l_col = find_col(
+                ["l (cm)", "l(cm)", "length_cm", "length", "l", "довжина", "длина"]
+            )
             w_col = find_col(["w (cm)", "w(cm)", "width_cm", "width", "w", "ширина"])
-            h_col = find_col(["h (cm)", "h(cm)", "height_cm", "height", "h", "висота", "высота"])
+            h_col = find_col(
+                ["h (cm)", "h(cm)", "height_cm", "height", "h", "висота", "высота"]
+            )
 
             if not name_col:
                 cols_str = ", ".join(df.columns.tolist())
-                QMessageBox.warning(
-                    self, "Column Not Found",
-                    f"Could not find box name column in CSV.\n\nAvailable columns: {cols_str}\n\n"
-                    "Expected one of: Name, Box Name, Size, Box"
+                show_error(
+                    self,
+                    "No box name column found",
+                    f"Available columns: {cols_str}. Expected one of: Name, "
+                    "Box Name, Size, Box.",
                 )
                 return
 
@@ -667,22 +845,6 @@ class WeightPage(SettingsPage):
                 item = self.weight_boxes_table.item(r, 0)
                 if item:
                     existing_boxes[item.text().strip()] = r
-
-            dup_boxes = [
-                str(r[name_col]).strip() for _, r in df.iterrows()
-                if pd.notna(r.get(name_col)) and str(r[name_col]).strip() in existing_boxes
-            ]
-
-            update_existing = False
-            if dup_boxes:
-                msg = QMessageBox(self)
-                msg.setWindowTitle("Duplicates Found")
-                msg.setText(f"Found {len(dup_boxes)} box name(s) already in the table.\nWhat would you like to do?")
-                skip_btn = msg.addButton("Skip Duplicates", QMessageBox.ButtonRole.AcceptRole)
-                update_btn = msg.addButton("Update Existing", QMessageBox.ButtonRole.ActionRole)
-                msg.setDefaultButton(skip_btn)
-                msg.exec()
-                update_existing = msg.clickedButton() == update_btn
 
             divisor = float(self.weight_divisor_spin.value() or 6000)
             added = 0
@@ -699,14 +861,22 @@ class WeightPage(SettingsPage):
 
             self.weight_boxes_table.blockSignals(True)
             for _, csv_row in df.iterrows():
-                name = str(csv_row[name_col]).strip() if pd.notna(csv_row[name_col]) else ""
+                name = (
+                    str(csv_row[name_col]).strip()
+                    if pd.notna(csv_row[name_col])
+                    else ""
+                )
                 if not name or name == "nan":
                     continue
 
                 l = _val(csv_row, l_col)
                 w = _val(csv_row, w_col)
                 h = _val(csv_row, h_col)
-                vol_w = round((l * w * h) / divisor, 4) if (l and w and h and divisor > 0) else 0.0
+                vol_w = (
+                    round((l * w * h) / divisor, 4)
+                    if (l and w and h and divisor > 0)
+                    else 0.0
+                )
 
                 if name in existing_boxes:
                     if not update_existing:
@@ -714,11 +884,17 @@ class WeightPage(SettingsPage):
                         continue
                     row = existing_boxes[name]
                     if l_col:
-                        self.weight_boxes_table.setItem(row, 1, QTableWidgetItem(str(l) if l is not None else ""))
+                        self.weight_boxes_table.setItem(
+                            row, 1, QTableWidgetItem(str(l) if l is not None else "")
+                        )
                     if w_col:
-                        self.weight_boxes_table.setItem(row, 2, QTableWidgetItem(str(w) if w is not None else ""))
+                        self.weight_boxes_table.setItem(
+                            row, 2, QTableWidgetItem(str(w) if w is not None else "")
+                        )
                     if h_col:
-                        self.weight_boxes_table.setItem(row, 3, QTableWidgetItem(str(h) if h is not None else ""))
+                        self.weight_boxes_table.setItem(
+                            row, 3, QTableWidgetItem(str(h) if h is not None else "")
+                        )
                     vol_item = QTableWidgetItem(str(vol_w))
                     vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     self.weight_boxes_table.setItem(row, 4, vol_item)
@@ -727,36 +903,45 @@ class WeightPage(SettingsPage):
                     row = self.weight_boxes_table.rowCount()
                     self.weight_boxes_table.insertRow(row)
                     self.weight_boxes_table.setItem(row, 0, QTableWidgetItem(name))
-                    self.weight_boxes_table.setItem(row, 1, QTableWidgetItem(str(l) if l is not None else ""))
-                    self.weight_boxes_table.setItem(row, 2, QTableWidgetItem(str(w) if w is not None else ""))
-                    self.weight_boxes_table.setItem(row, 3, QTableWidgetItem(str(h) if h is not None else ""))
+                    self.weight_boxes_table.setItem(
+                        row, 1, QTableWidgetItem(str(l) if l is not None else "")
+                    )
+                    self.weight_boxes_table.setItem(
+                        row, 2, QTableWidgetItem(str(w) if w is not None else "")
+                    )
+                    self.weight_boxes_table.setItem(
+                        row, 3, QTableWidgetItem(str(h) if h is not None else "")
+                    )
                     vol_item = QTableWidgetItem(str(vol_w))
                     vol_item.setFlags(vol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     self.weight_boxes_table.setItem(row, 4, vol_item)
                     added += 1
             self.weight_boxes_table.blockSignals(False)
 
-            parts = [f"Added {added} new box(es)."]
-            if updated:
-                parts.append(f"Updated {updated} existing.")
-            if skipped:
-                parts.append(f"Skipped {skipped} duplicate(s).")
-            QMessageBox.information(self, "Import Complete", " ".join(parts))
+            self._toast_import_result(
+                added,
+                updated,
+                skipped,
+                lambda: self._weight_import_boxes_from_csv(
+                    file_path, update_existing=True
+                ),
+            )
 
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import boxes:\n\n{e!s}")
+        except Exception:
+            logger.exception("Failed to import boxes from CSV")
+            show_error(self, "The boxes weren't imported", "Details are in Logs.")
 
     def _weight_export_products_to_csv(self):
         """Export products table to a CSV file."""
         if self.weight_products_table.rowCount() == 0:
-            QMessageBox.information(self, "Export", "No products to export.")
+            logger.warning("_weight_export_products_to_csv called with an empty table")
             return
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Product Dimensions to CSV",
             "weight_products.csv",
-            "CSV Files (*.csv);;All Files (*)"
+            "CSV Files (*.csv);;All Files (*)",
         )
         if not file_path:
             return
@@ -775,31 +960,34 @@ class WeightPage(SettingsPage):
                     chk = chk_widget.findChild(QCheckBox)
                     if chk:
                         no_pkg = chk.isChecked()
-                rows.append({
-                    "SKU": sku.text().strip() if sku else "",
-                    "Name": name.text().strip() if name else "",
-                    "L (cm)": l.text().strip() if l else "",
-                    "W (cm)": w.text().strip() if w else "",
-                    "H (cm)": h.text().strip() if h else "",
-                    "No Packaging": str(no_pkg),
-                })
+                rows.append(
+                    {
+                        "SKU": sku.text().strip() if sku else "",
+                        "Name": name.text().strip() if name else "",
+                        "L (cm)": l.text().strip() if l else "",
+                        "W (cm)": w.text().strip() if w else "",
+                        "H (cm)": h.text().strip() if h else "",
+                        "No Packaging": str(no_pkg),
+                    }
+                )
             df = pd.DataFrame(rows)
             df.to_csv(file_path, sep=";", index=False, encoding="utf-8-sig")
-            QMessageBox.information(self, "Export Complete", f"Exported {len(rows)} product(s) to:\n{file_path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Export Error", f"Failed to export products:\n\n{e!s}")
+            toast(self, f"Exported {len(rows)} products.")
+        except Exception:
+            logger.exception("Failed to export products to CSV")
+            show_error(self, "The products weren't exported", "Details are in Logs.")
 
     def _weight_export_boxes_to_csv(self):
         """Export boxes table to a CSV file."""
         if self.weight_boxes_table.rowCount() == 0:
-            QMessageBox.information(self, "Export", "No boxes to export.")
+            logger.warning("_weight_export_boxes_to_csv called with an empty table")
             return
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Boxes to CSV",
             "weight_boxes.csv",
-            "CSV Files (*.csv);;All Files (*)"
+            "CSV Files (*.csv);;All Files (*)",
         )
         if not file_path:
             return
@@ -811,17 +999,20 @@ class WeightPage(SettingsPage):
                 l = self.weight_boxes_table.item(r, 1)
                 w = self.weight_boxes_table.item(r, 2)
                 h = self.weight_boxes_table.item(r, 3)
-                rows.append({
-                    "Name": name.text().strip() if name else "",
-                    "L (cm)": l.text().strip() if l else "",
-                    "W (cm)": w.text().strip() if w else "",
-                    "H (cm)": h.text().strip() if h else "",
-                })
+                rows.append(
+                    {
+                        "Name": name.text().strip() if name else "",
+                        "L (cm)": l.text().strip() if l else "",
+                        "W (cm)": w.text().strip() if w else "",
+                        "H (cm)": h.text().strip() if h else "",
+                    }
+                )
             df = pd.DataFrame(rows)
             df.to_csv(file_path, sep=";", index=False, encoding="utf-8-sig")
-            QMessageBox.information(self, "Export Complete", f"Exported {len(rows)} box(es) to:\n{file_path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Export Error", f"Failed to export boxes:\n\n{e!s}")
+            toast(self, f"Exported {len(rows)} boxes.")
+        except Exception:
+            logger.exception("Failed to export boxes to CSV")
+            show_error(self, "The boxes weren't exported", "Details are in Logs.")
 
     def collect(self) -> dict:
         """Collect weight configuration from UI tables."""
@@ -833,7 +1024,11 @@ class WeightPage(SettingsPage):
             if not sku_item or not sku_item.text().strip():
                 continue
             sku = sku_item.text().strip()
-            name = (self.weight_products_table.item(row, 1) or QTableWidgetItem("")).text().strip()
+            name = (
+                (self.weight_products_table.item(row, 1) or QTableWidgetItem(""))
+                .text()
+                .strip()
+            )
 
             def _safe_float(table, r, c):
                 item = table.item(r, c)
@@ -880,16 +1075,20 @@ class WeightPage(SettingsPage):
                         pass
                 return 0.0
 
-            boxes.append({
-                "name": name,
-                "length_cm": _safe_float_b(row, 1),
-                "width_cm": _safe_float_b(row, 2),
-                "height_cm": _safe_float_b(row, 3),
-            })
+            boxes.append(
+                {
+                    "name": name,
+                    "length_cm": _safe_float_b(row, 1),
+                    "width_cm": _safe_float_b(row, 2),
+                    "height_cm": _safe_float_b(row, 3),
+                }
+            )
 
-        self._weight_config.update({
-            "volumetric_divisor": divisor,
-            "products": products,
-            "boxes": boxes,
-        })
+        self._weight_config.update(
+            {
+                "volumetric_divisor": divisor,
+                "products": products,
+                "boxes": boxes,
+            }
+        )
         return {"weight_config": self._weight_config}

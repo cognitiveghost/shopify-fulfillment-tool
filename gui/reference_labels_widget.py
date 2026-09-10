@@ -17,14 +17,21 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
-from gui.components import ElidedLabel, FormSection, PrintOptions, row_widget
+from gui.components import (
+    ElidedLabel,
+    FormSection,
+    InlineMessage,
+    PrintOptions,
+    row_widget,
+    show_error,
+    toast,
+)
 from gui.components.print_options import LABEL_WIDTH
 from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
@@ -168,6 +175,9 @@ class ReferenceLabelsWidget(QWidget):
         self.process_btn.setEnabled(False)
         self.process_btn.setToolTip("Process PDF with reference numbers")
 
+        self.validation_error = InlineMessage(self)
+        area.addWidget(self.validation_error)
+
         buttons = QHBoxLayout()
         buttons.addStretch()
         buttons.addWidget(self.print_btn)
@@ -238,6 +248,7 @@ class ReferenceLabelsWidget(QWidget):
 
     def _update_process_button(self):
         """Enable/disable process button based on file selection."""
+        self.validation_error.clear()  # the inputs it named have changed
         has_both_files = bool(self.pdf_path and self.csv_path)
         has_output = bool(self.output_dir)
 
@@ -303,6 +314,7 @@ class ReferenceLabelsWidget(QWidget):
         Returns:
             bool: True if inputs are valid
         """
+        self.validation_error.clear()
         errors = []
 
         # Validate PDF
@@ -328,10 +340,8 @@ class ReferenceLabelsWidget(QWidget):
             errors.append(f"Output directory does not exist: {self.output_dir}")
 
         if errors:
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                "Cannot process:\n\n" + "\n".join(f"• {e}" for e in errors),
+            self.validation_error.show_message(
+                "Can't process yet: " + "; ".join(errors)
             )
             return False
 
@@ -434,15 +444,10 @@ class ReferenceLabelsWidget(QWidget):
         )
 
         # Show success message
-        QMessageBox.information(
+        toast(
             self,
-            "Success",
-            f"PDF processed successfully!\n\n"
-            f"Pages processed: {result['pages_processed']}\n"
-            f"Matched: {result['matched']}\n"
-            f"Unmatched: {result['unmatched']}\n"
-            f"Processing time: {result['processing_time']:.1f}s\n\n"
-            f"Output: {Path(result['output_file']).name}",
+            f"Processed {Path(result['output_file']).name} "
+            f"({result['matched']} matched, {result['unmatched']} unmatched).",
         )
 
         # Auto-open if checkbox enabled
@@ -477,26 +482,24 @@ class ReferenceLabelsWidget(QWidget):
         )
 
         if isinstance(value, InvalidPDFError):
-            title = "Invalid PDF File"
-            message = str(value)
-            suggestion = "Please check that the PDF file is valid and not corrupted."
+            what_to_do = (
+                "The PDF couldn't be read. Check that it isn't damaged, "
+                "then process it again."
+            )
         elif isinstance(value, InvalidCSVError):
-            title = "Invalid CSV File"
-            message = str(value)
-            suggestion = (
-                "Please check that the CSV file has the correct format.\n"
-                "Expected columns: PostOne ID (0), Tracking (1), Reference (2), Name (6)"
+            what_to_do = (
+                "The CSV isn't in the expected format. Expected columns: "
+                "PostOne ID (0), Tracking (1), Reference (2), Name (6)."
             )
         elif isinstance(value, MappingError):
-            title = "Mapping Error"
-            message = str(value)
-            suggestion = "Some pages could not be matched. Check the CSV mapping file."
+            what_to_do = (
+                "Some pages didn't match a row in the CSV. Check the CSV "
+                "mapping file, then process it again."
+            )
         else:
-            title = "Processing Error"
-            message = str(value)
-            suggestion = "See execution log for technical details."
+            what_to_do = "Details are in Logs."
 
-        QMessageBox.critical(self, title, f"{message}\n\n{suggestion}")
+        show_error(self, "The PDF wasn't processed", what_to_do)
 
     def _on_processing_finished(self):
         """Re-enable UI after processing completes or fails."""
@@ -516,11 +519,8 @@ class ReferenceLabelsWidget(QWidget):
         """
         url = QUrl.fromLocalFile(str(file_path))
         if not QDesktopServices.openUrl(url):
-            QMessageBox.warning(
-                self,
-                "Cannot Open File",
-                f"Failed to open PDF:\n{file_path}\n\nPlease open it manually.",
-            )
+            self.log.warning(f"Failed to open PDF: {file_path}")
+            show_error(self, "The PDF didn't open", f"Open it manually: {file_path}")
         else:
             self.log.info(f"Opened PDF: {file_path}")
 

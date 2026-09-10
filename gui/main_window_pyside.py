@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gui.actions_handler import ActionsHandler
+from gui.components import show_error, toast
 from gui.components.commandbar import BarState
 from gui.file_handler import FileHandler
 from gui.log_entry import LogEntry
@@ -275,15 +276,18 @@ class MainWindow(QMainWindow):
 
                 self.log_activity("Client", f"Switched to CLIENT_{client_id}")
             else:
-                QMessageBox.warning(
+                logger.warning(f"Could not load configuration for CLIENT_{client_id}")
+                show_error(
                     self,
-                    "Configuration Error",
-                    f"Could not load configuration for CLIENT_{client_id}",
+                    f"CLIENT_{client_id}'s configuration couldn't be loaded",
+                    "Details are in Logs.",
                 )
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to load client config")
-            QMessageBox.critical(
-                self, "Error", f"Failed to load client configuration:\n{e!s}"
+            show_error(
+                self,
+                f"CLIENT_{client_id}'s configuration couldn't be loaded",
+                "Details are in Logs.",
             )
 
     def setup_logging(self):
@@ -426,7 +430,6 @@ class MainWindow(QMainWindow):
     def undo_last_operation(self):
         """Undo the last DataFrame modification."""
         if not self.undo_manager.can_undo():
-            QMessageBox.information(self, "Undo", "Nothing to undo")
             return
 
         success, message = self.undo_manager.undo()
@@ -447,9 +450,10 @@ class MainWindow(QMainWindow):
                 else:
                     self.undo_button.setToolTip("Undo last operation (Ctrl+Z)")
 
-            QMessageBox.information(self, "Undo", message)
+            toast(self, message)
         else:
-            QMessageBox.critical(self, "Undo Failed", message)
+            logger.error(f"Undo failed: {message}")
+            show_error(self, "Undo didn't complete", "Details are in Logs.")
 
     def _apply_tag_operation(self, mask, description: str, params: dict, tag: str):
         """Apply add_tag to DataFrame rows matching mask, record undo, and refresh UI."""
@@ -598,11 +602,7 @@ class MainWindow(QMainWindow):
             return
 
         if not hasattr(self, "current_client_id") or not self.current_client_id:
-            QMessageBox.warning(
-                self,
-                "No Client Selected",
-                "Please select a client before configuring columns.",
-            )
+            logger.warning("open_column_config_dialog called with no client selected")
             return
 
         from gui.column_config_dialog import ColumnConfigDialog
@@ -690,7 +690,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "generate_reports_button_tab2"):
             self.generate_reports_button_tab2.setEnabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
-            self.add_product_button_tab2.setEnabled(has_analysis)
+            self.add_product_button_tab2.setEnabled(has_analysis and has_stock)
         if hasattr(self, "configure_columns_button_tab2"):
             self.configure_columns_button_tab2.setEnabled(has_analysis)
 
@@ -794,10 +794,11 @@ class MainWindow(QMainWindow):
             return
 
         if not shopify_config:
-            QMessageBox.warning(
+            logger.warning(f"Failed to load configuration for client {client_id}")
+            show_error(
                 self,
-                "Configuration Error",
-                f"Failed to load configuration for client {client_id}",
+                f"CLIENT_{client_id}'s configuration couldn't be loaded",
+                "Details are in Logs.",
             )
             return
 
@@ -843,23 +844,23 @@ class MainWindow(QMainWindow):
             if hasattr(self, "statusBar"):
                 self.statusBar().showMessage(f"CLIENT_{client_id} loaded", 2000)
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error applying loaded client data")
-            QMessageBox.critical(self, "Error", f"Failed to change client: {e!s}")
+            show_error(self, "The client couldn't be switched", "Details are in Logs.")
 
     def _on_client_data_load_error(self, error):
         _exctype, value, tb = error
         logger.error(f"Error loading client data: {value}\n{tb}")
-        QMessageBox.critical(self, "Error", f"Failed to change client: {value!s}")
+        show_error(self, "The client couldn't be switched", "Details are in Logs.")
 
     def on_sidebar_refresh(self):
         """Handle manual client list refresh request."""
         try:
             self.client_directory.refresh()
             self.log_activity("UI", "Client list refreshed")
-        except Exception as e:
+        except Exception:
             logger.exception("Client list refresh failed")
-            QMessageBox.warning(self, "Refresh Error", str(e))
+            show_error(self, "The client list didn't refresh", "Details are in Logs.")
 
     def on_session_selected(self, session_path: str):
         """Handle session selection from session browser.
@@ -868,17 +869,7 @@ class MainWindow(QMainWindow):
             session_path: Path to the selected session
         """
         logger.info(f"Session selected: {session_path}")
-
-        reply = QMessageBox.question(
-            self,
-            "Open Session",
-            f"Do you want to open this session?\n\n{session_path}\n\n"
-            f"This will load any existing analysis data from the session.",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-
-        if reply == QMessageBox.Yes:
-            self.load_existing_session(session_path)
+        self.load_existing_session(session_path)
 
     def save_session_state(self):
         """Save current analysis state to session directory.
@@ -1081,30 +1072,28 @@ class MainWindow(QMainWindow):
                     self.main_tabs.setCurrentIndex(1)
 
                     self.log_activity("Session", f"Loaded session: {session_name}")
-                    QMessageBox.information(
+                    toast(
                         self,
-                        "Session Loaded",
-                        f"Session loaded successfully:\n{session_name}\n\n"
-                        f"Analysis data: {len(self.analysis_results_df)} rows",
+                        f"Session {session_name} opened · "
+                        f"{self.analysis_results_df['Order_Number'].nunique()} orders.",
                     )
                 else:
                     # Session exists but no analysis yet
                     self.log_activity(
                         "Session", f"Opened session (no analysis): {session_name}"
                     )
-                    QMessageBox.information(
+                    toast(
                         self,
-                        "Session Opened",
-                        f"Session opened:\n{session_name}\n\n"
-                        f"No analysis data found. You can run a new analysis.",
+                        f"Session {session_name} opened. Run an analysis to see results.",
+                        role="info",
                     )
 
                 # Update UI state
                 self.update_ui_state()
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to load session")
-            QMessageBox.critical(self, "Error", f"Failed to load session:\n{e!s}")
+            show_error(self, "The session wasn't loaded", "Details are in Logs.")
 
     def filter_table(self):
         """Applies the current filter settings to the results table view.

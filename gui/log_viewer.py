@@ -20,13 +20,13 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTreeView,
     QVBoxLayout,
     QWidget,
 )
 
+from gui.components import show_error
 from gui.log_filter import LogFilterProxy
 from gui.log_follow import FollowState
 from gui.log_model import COL_LEVEL, COL_MESSAGE, COL_SOURCE, COL_TIME, LogBufferModel
@@ -235,10 +235,10 @@ class LogViewer(QWidget):
             logging.getLogger(__name__).warning(
                 "Could not save log to %s: %s", path, error
             )
-            QMessageBox.warning(
+            show_error(
                 self,
-                "Could not save log",
-                f"The log could not be written to:\n{path}\n\n{error.strerror or error}",
+                "The log wasn't saved",
+                f"{path} couldn't be written. Choose another folder and save again.",
             )
 
     # -- theme --------------------------------------------------------------

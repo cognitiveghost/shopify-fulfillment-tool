@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -37,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components import ConfirmDialog, InlineMessage, toast
 from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
 from shopify_tool.tag_manager import validate_tag_categories_v2
 
@@ -109,7 +109,7 @@ class TagCategoriesPanel(QWidget):
         if "version" not in self.working_categories:
             self.working_categories = {
                 "version": 2,
-                "categories": self.working_categories
+                "categories": self.working_categories,
             }
 
         self.current_category_id: str | None = None
@@ -140,6 +140,9 @@ class TagCategoriesPanel(QWidget):
         splitter.setStretchFactor(1, 3)
 
         layout.addWidget(splitter, 1)
+
+        self.validation_error = InlineMessage(self)
+        layout.addWidget(self.validation_error)
 
     def _create_categories_list_panel(self) -> QWidget:
         """Create left panel with categories list."""
@@ -202,7 +205,9 @@ class TagCategoriesPanel(QWidget):
         color_layout = QHBoxLayout()
         self.color_display = QLabel()
         self.color_display.setFixedSize(40, 30)
-        self.color_display.setStyleSheet(f"border: 1px solid {self.theme.border}; background-color: {self.theme.border};")
+        self.color_display.setStyleSheet(
+            f"border: 1px solid {self.theme.border}; background-color: {self.theme.border};"
+        )
         color_layout.addWidget(self.color_display)
 
         self.color_button = QPushButton("Choose Color")
@@ -247,7 +252,9 @@ class TagCategoriesPanel(QWidget):
         tags_layout.addLayout(tag_buttons_layout)
 
         self.tags_list.itemSelectionChanged.connect(
-            lambda: self.remove_tag_btn.setEnabled(len(self.tags_list.selectedItems()) > 0)
+            lambda: self.remove_tag_btn.setEnabled(
+                len(self.tags_list.selectedItems()) > 0
+            )
         )
 
         layout.addWidget(tags_group)
@@ -261,7 +268,9 @@ class TagCategoriesPanel(QWidget):
             "When enabled, tags in this category can trigger automatic SKU writeoffs\n"
             "in stock exports (e.g., deduct packaging materials)"
         )
-        self.writeoff_enabled_checkbox.stateChanged.connect(self._on_writeoff_enabled_changed)
+        self.writeoff_enabled_checkbox.stateChanged.connect(
+            self._on_writeoff_enabled_changed
+        )
         writeoff_layout.addWidget(self.writeoff_enabled_checkbox)
 
         mappings_label = QLabel("Writeoff Mappings:")
@@ -270,10 +279,18 @@ class TagCategoriesPanel(QWidget):
 
         self.writeoff_mappings_table = QTableWidget()
         self.writeoff_mappings_table.setColumnCount(3)
-        self.writeoff_mappings_table.setHorizontalHeaderLabels(["Tag", "SKU", "Quantity"])
-        self.writeoff_mappings_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.writeoff_mappings_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.writeoff_mappings_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.writeoff_mappings_table.setHorizontalHeaderLabels(
+            ["Tag", "SKU", "Quantity"]
+        )
+        self.writeoff_mappings_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch
+        )
+        self.writeoff_mappings_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.Stretch
+        )
+        self.writeoff_mappings_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeToContents
+        )
         self.writeoff_mappings_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.writeoff_mappings_table.setMaximumHeight(200)
         self.writeoff_mappings_table.setEnabled(False)
@@ -329,8 +346,7 @@ class TagCategoriesPanel(QWidget):
             categories = self.working_categories.get("categories", {})
 
             sorted_categories = sorted(
-                categories.items(),
-                key=lambda x: x[1].get("order", 999)
+                categories.items(), key=lambda x: x[1].get("order", 999)
             )
 
             for category_id, category_config in sorted_categories:
@@ -341,11 +357,13 @@ class TagCategoriesPanel(QWidget):
                 color = category_config.get("color", DEFAULT_TAG_COLOR)
                 _cat = QColor(color)
                 _bg = QColor(get_theme_manager().get_current_theme().surface)
-                item.setBackground(QColor(
-                    int(_cat.red() * 0.45 + _bg.red() * 0.55),
-                    int(_cat.green() * 0.45 + _bg.green() * 0.55),
-                    int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
-                ))
+                item.setBackground(
+                    QColor(
+                        int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                        int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                        int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+                    )
+                )
                 self.categories_list.addItem(item)
 
     def _select_category(self, category_id: str):
@@ -356,7 +374,9 @@ class TagCategoriesPanel(QWidget):
                 self.categories_list.setCurrentItem(item)
                 return
 
-    def _on_category_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
+    def _on_category_selected(
+        self, current: QListWidgetItem, previous: QListWidgetItem
+    ):
         """Handle category selection change."""
         if current is None:
             self._set_editor_enabled(False)
@@ -386,7 +406,9 @@ class TagCategoriesPanel(QWidget):
         # ponytail: literal neutral swatch-fill default, not a text color —
         # see _create_editor comment above for why no theme token fits.
         self.current_color = category.get("color", DEFAULT_TAG_COLOR)
-        self.color_display.setStyleSheet(f"border: 1px solid {self.theme.border}; background-color: {self.current_color};")
+        self.color_display.setStyleSheet(
+            f"border: 1px solid {self.theme.border}; background-color: {self.current_color};"
+        )
         self.order_spin.setValue(category.get("order", 1))
 
         self.tags_list.clear()
@@ -404,7 +426,7 @@ class TagCategoriesPanel(QWidget):
         enabled = sku_writeoff.get("enabled", False)
         self.writeoff_enabled_checkbox.setChecked(enabled)
         self.writeoff_mappings_table.setEnabled(enabled)
-        self.add_mapping_btn.setEnabled(enabled)
+        self._update_add_mapping_btn_state()
         self.remove_mapping_btn.setEnabled(False)
 
         self.writeoff_mappings_table.setRowCount(0)
@@ -422,15 +444,21 @@ class TagCategoriesPanel(QWidget):
                 row_position = self.writeoff_mappings_table.rowCount()
                 self.writeoff_mappings_table.insertRow(row_position)
 
-                self.writeoff_mappings_table.setItem(row_position, 0, _read_only_item(tag))
-                self.writeoff_mappings_table.setItem(row_position, 1, _read_only_item(item["sku"]))
+                self.writeoff_mappings_table.setItem(
+                    row_position, 0, _read_only_item(tag)
+                )
+                self.writeoff_mappings_table.setItem(
+                    row_position, 1, _read_only_item(item["sku"])
+                )
                 self.writeoff_mappings_table.setItem(
                     row_position, 2, _read_only_item(f"{item['quantity']:.2f}")
                 )
 
         self.writeoff_enabled_checkbox.blockSignals(False)
 
-        self.editor_header_label.setText(f"Editing: {category.get('label', category_id)}")
+        self.editor_header_label.setText(
+            f"Editing: {category.get('label', category_id)}"
+        )
 
     def _on_theme_changed(self):
         """Handle theme changes."""
@@ -459,7 +487,7 @@ class TagCategoriesPanel(QWidget):
         self.writeoff_enabled_checkbox.setEnabled(enabled)
         if enabled and self.writeoff_enabled_checkbox.isChecked():
             self.writeoff_mappings_table.setEnabled(True)
-            self.add_mapping_btn.setEnabled(True)
+            self._update_add_mapping_btn_state()
         else:
             self.writeoff_mappings_table.setEnabled(False)
             self.add_mapping_btn.setEnabled(False)
@@ -525,33 +553,27 @@ class TagCategoriesPanel(QWidget):
             if tag not in mappings:
                 mappings[tag] = []
 
-            mappings[tag].append({
-                "sku": sku,
-                "quantity": quantity
-            })
+            mappings[tag].append({"sku": sku, "quantity": quantity})
 
-        category["sku_writeoff"] = {
-            "enabled": enabled,
-            "mappings": mappings
-        }
+        category["sku_writeoff"] = {"enabled": enabled, "mappings": mappings}
 
         current_item = self.categories_list.currentItem()
         if current_item:
             current_item.setText(category["label"])
             _cat = QColor(self.current_color)
             _bg = QColor(get_theme_manager().get_current_theme().surface)
-            current_item.setBackground(QColor(
-                int(_cat.red() * 0.45 + _bg.red() * 0.55),
-                int(_cat.green() * 0.45 + _bg.green() * 0.55),
-                int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
-            ))
+            current_item.setBackground(
+                QColor(
+                    int(_cat.red() * 0.45 + _bg.red() * 0.55),
+                    int(_cat.green() * 0.45 + _bg.green() * 0.55),
+                    int(_cat.blue() * 0.45 + _bg.blue() * 0.55),
+                )
+            )
 
     def _choose_color(self):
         """Open color picker dialog."""
         color = QColorDialog.getColor(
-            QColor(self.current_color),
-            self,
-            "Choose Category Color"
+            QColor(self.current_color), self, "Choose Category Color"
         )
 
         if color.isValid():
@@ -563,36 +585,36 @@ class TagCategoriesPanel(QWidget):
 
     def _on_add_tag(self):
         """Handle add tag button click."""
+        self.validation_error.clear()
         tag, ok = QInputDialog.getText(
-            self,
-            "Add Tag",
-            "Enter tag name (UPPERCASE):",
-            QLineEdit.Normal,
-            ""
+            self, "Add Tag", "Enter tag name (UPPERCASE):", QLineEdit.Normal, ""
         )
 
         if ok and tag:
             tag = tag.strip().upper()
 
             if not tag:
-                QMessageBox.warning(self, "Invalid Tag", "Tag cannot be empty.")
+                self.validation_error.show_message("Tag cannot be empty.")
                 return
 
-            existing_tags = [self.tags_list.item(i).text() for i in range(self.tags_list.count())]
+            existing_tags = [
+                self.tags_list.item(i).text() for i in range(self.tags_list.count())
+            ]
             if tag in existing_tags:
-                QMessageBox.warning(self, "Duplicate Tag", f"Tag '{tag}' already exists in this category.")
+                self.validation_error.show_message(
+                    f"{tag} already exists in this category."
+                )
                 return
 
             if self._is_tag_in_other_categories(tag):
-                QMessageBox.warning(
-                    self,
-                    "Duplicate Tag",
-                    f"Tag '{tag}' already exists in another category.\n"
+                self.validation_error.show_message(
+                    f"{tag} already exists in another category. "
                     "Each tag can only belong to one category."
                 )
                 return
 
             self.tags_list.addItem(tag)
+            self._update_add_mapping_btn_state()
             self._on_editor_changed()
 
     def _on_remove_tag(self):
@@ -617,6 +639,7 @@ class TagCategoriesPanel(QWidget):
             if tag_item is not None and tag_item.text() in removed:
                 self.writeoff_mappings_table.removeRow(row)
 
+        self._update_add_mapping_btn_state()
         self._on_editor_changed()
 
     def _is_tag_in_other_categories(self, tag: str) -> bool:
@@ -637,18 +660,26 @@ class TagCategoriesPanel(QWidget):
         has_selection = len(self.writeoff_mappings_table.selectedItems()) > 0
         self.remove_mapping_btn.setEnabled(enabled and has_selection)
 
+    def _update_add_mapping_btn_state(self):
+        """Add mapping needs writeoff enabled and the category to already have tags."""
+        has_tags = self.tags_list.count() > 0
+        self.add_mapping_btn.setEnabled(
+            self.writeoff_enabled_checkbox.isChecked() and has_tags
+        )
+
     def _on_writeoff_enabled_changed(self, state):
         """Handle writeoff enabled checkbox state change."""
         enabled = self.writeoff_enabled_checkbox.isChecked()
 
         self.writeoff_mappings_table.setEnabled(enabled)
-        self.add_mapping_btn.setEnabled(enabled)
+        self._update_add_mapping_btn_state()
         self._update_remove_mapping_btn_state()
 
         self._on_editor_changed()
 
     def _on_add_mapping(self):
         """Add a new writeoff mapping row."""
+        self.validation_error.clear()
         if not self.current_category_id:
             return
 
@@ -657,11 +688,7 @@ class TagCategoriesPanel(QWidget):
         available_tags = category.get("tags", [])
 
         if not available_tags:
-            QMessageBox.warning(
-                self,
-                "No Tags",
-                "Please add tags to this category before creating writeoff mappings."
-            )
+            logger.warning("_on_add_mapping called with no tags in the category")
             return
 
         dialog = QDialog(self)
@@ -695,7 +722,7 @@ class TagCategoriesPanel(QWidget):
             quantity = quantity_spin.value()
 
             if not sku:
-                QMessageBox.warning(self, "Invalid Input", "SKU cannot be empty.")
+                self.validation_error.show_message("Enter a SKU.")
                 return
 
             existing = [
@@ -708,10 +735,8 @@ class TagCategoriesPanel(QWidget):
                 and self.writeoff_mappings_table.item(r, 1)
             ]
             if mapping_row_exists(existing, tag, sku):
-                QMessageBox.warning(
-                    self,
-                    "Duplicate Mapping",
-                    f"'{sku}' is already mapped to tag '{tag}'.",
+                self.validation_error.show_message(
+                    f"{sku} is already mapped to tag {tag}."
                 )
                 return
 
@@ -720,13 +745,17 @@ class TagCategoriesPanel(QWidget):
 
             self.writeoff_mappings_table.setItem(row_position, 0, _read_only_item(tag))
             self.writeoff_mappings_table.setItem(row_position, 1, _read_only_item(sku))
-            self.writeoff_mappings_table.setItem(row_position, 2, _read_only_item(f"{quantity:.2f}"))
+            self.writeoff_mappings_table.setItem(
+                row_position, 2, _read_only_item(f"{quantity:.2f}")
+            )
 
             self._on_editor_changed()
 
     def _on_remove_mapping(self):
         """Remove selected writeoff mapping."""
-        selected_rows = {index.row() for index in self.writeoff_mappings_table.selectedIndexes()}
+        selected_rows = {
+            index.row() for index in self.writeoff_mappings_table.selectedIndexes()
+        }
 
         if not selected_rows:
             return
@@ -738,12 +767,13 @@ class TagCategoriesPanel(QWidget):
 
     def _on_new_category(self):
         """Handle new category button click."""
+        self.validation_error.clear()
         category_id, ok = QInputDialog.getText(
             self,
             "New Category",
             "Enter category ID (lowercase, underscores only):",
             QLineEdit.Normal,
-            ""
+            "",
         )
 
         if not ok or not category_id:
@@ -752,20 +782,18 @@ class TagCategoriesPanel(QWidget):
         category_id = category_id.strip().lower()
 
         if not category_id:
-            QMessageBox.warning(self, "Invalid ID", "Category ID cannot be empty.")
+            self.validation_error.show_message("Enter a category ID.")
             return
 
         if not is_valid_category_id(category_id):
-            QMessageBox.warning(
-                self,
-                "Invalid ID",
-                "Category ID can only contain lowercase letters, numbers, and underscores."
+            self.validation_error.show_message(
+                "A category ID uses only lowercase letters, numbers and underscores."
             )
             return
 
         categories = self.working_categories.get("categories", {})
         if category_id in categories:
-            QMessageBox.warning(self, "Duplicate ID", f"Category '{category_id}' already exists.")
+            self.validation_error.show_message(f"{category_id} already exists.")
             return
 
         new_category = {
@@ -775,10 +803,7 @@ class TagCategoriesPanel(QWidget):
                 c.get("order") for c in categories.values() if isinstance(c, dict)
             ),
             "tags": [],
-            "sku_writeoff": {
-                "enabled": False,
-                "mappings": {}
-            }
+            "sku_writeoff": {"enabled": False, "mappings": {}},
         }
 
         categories[category_id] = new_category
@@ -794,24 +819,24 @@ class TagCategoriesPanel(QWidget):
 
         categories = self.working_categories.get("categories", {})
         category = categories.get(self.current_category_id, {})
+        label = category.get("label", self.current_category_id)
+        n = len(category.get("tags", []))
 
-        reply = QMessageBox.question(
+        if not ConfirmDialog.ask(
             self,
-            "Delete Category",
-            f"Are you sure you want to delete category '{category.get('label', self.current_category_id)}'?\n\n"
-            f"This category has {len(category.get('tags', []))} tags.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
+            title=f"Delete category {label}?",
+            body=f"Its {n} tags are deleted with it. This cannot be undone.",
+            verb="Delete category",
+        ):
+            return
 
-        if reply == QMessageBox.Yes:
-            del categories[self.current_category_id]
-            self.modified = True
+        del categories[self.current_category_id]
+        self.modified = True
 
-            self.current_category_id = None
-            self._load_categories()
-            self._set_editor_enabled(False)
-            self.delete_category_btn.setEnabled(False)
+        self.current_category_id = None
+        self._load_categories()
+        self._set_editor_enabled(False)
+        self.delete_category_btn.setEnabled(False)
 
     def validate_categories(self) -> tuple:
         """Validate current categories. Returns (is_valid, errors)."""
@@ -854,43 +879,43 @@ class TagCategoriesDialog(QDialog):
     def __getattr__(self, name):
         """Proxy attribute lookups to the embedded panel for backwards compatibility."""
         # Avoid infinite recursion during __init__ before self.panel exists
-        panel = self.__dict__.get('panel')
+        panel = self.__dict__.get("panel")
         if panel is not None and hasattr(panel, name):
             return getattr(panel, name)
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
     def _validate(self) -> bool:
+        self.panel.validation_error.clear()
         is_valid, errors = self.panel.validate_categories()
         if not is_valid:
-            error_msg = "Validation errors:\n\n" + "\n".join(f"- {err}" for err in errors)
-            QMessageBox.critical(self, "Validation Failed", error_msg)
+            self.panel.validation_error.show_message("; ".join(errors))
             return False
         return True
 
-    def _on_apply(self):
-        if not self._validate():
-            return
-        self.categories_updated.emit(self.panel.get_categories())
+    def _save(self) -> bool:
+        """Emit the edits. A receiver whose save fails sets panel.modified back."""
         self.panel.modified = False
-        QMessageBox.information(self, "Saved", "Tag categories have been saved successfully.")
+        self.categories_updated.emit(self.panel.get_categories())
+        return not self.panel.modified
+
+    def _on_apply(self):
+        if self._validate() and self._save():
+            toast(self, "Tag categories saved.")
 
     def _on_save(self):
-        if not self._validate():
-            return
-        self.categories_updated.emit(self.panel.get_categories())
-        self.accept()
+        if self._validate() and self._save():
+            self.accept()
 
     def _on_cancel(self):
-        if self.panel.modified:
-            reply = QMessageBox.question(
-                self,
-                "Unsaved Changes",
-                "You have unsaved changes. Are you sure you want to cancel?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply == QMessageBox.No:
-                return
+        if self.panel.modified and not ConfirmDialog.ask(
+            self,
+            title="Discard your changes?",
+            body="Your edits to tag categories haven't been saved.",
+            verb="Discard changes",
+        ):
+            return
         self.reject()
 
     def get_categories(self) -> dict:

@@ -23,7 +23,9 @@ class _BaseReportDialog(QDialog):
 
     reportSelected = Signal(dict)
 
-    def __init__(self, title, reports_config, analysis_df, apply_filters_fn, parent=None):
+    def __init__(
+        self, title, reports_config, analysis_df, apply_filters_fn, parent=None
+    ):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumSize(750, 500)
@@ -122,7 +124,9 @@ class _BaseReportDialog(QDialog):
             filters = cfg.get("filters", [])
             item = QListWidgetItem(name)
             item.setData(Qt.UserRole, cfg)
-            item.setToolTip(f"Filters: {len(filters)} active" if filters else "No filters")
+            item.setToolTip(
+                f"Filters: {len(filters)} active" if filters else "No filters"
+            )
             self.report_list.addItem(item)
 
     def _on_report_selected(self, row):
@@ -145,13 +149,25 @@ class _BaseReportDialog(QDialog):
         filters = cfg.get("filters", [])
 
         # Count matching rows (cached by filter fingerprint to avoid re-filtering on every click)
-        if self.analysis_df is not None and not self.analysis_df.empty and self.apply_filters_fn:
+        if (
+            self.analysis_df is not None
+            and not self.analysis_df.empty
+            and self.apply_filters_fn
+        ):
             try:
                 cache_key = str(filters)
                 if cache_key not in self._preview_cache:
                     filtered = self.apply_filters_fn(self.analysis_df, filters)
-                    order_col = "Order_Number" if "Order_Number" in filtered.columns else (filtered.columns[0] if not filtered.empty else None)
-                    num_orders = filtered[order_col].nunique() if (not filtered.empty and order_col) else 0
+                    order_col = (
+                        "Order_Number"
+                        if "Order_Number" in filtered.columns
+                        else (filtered.columns[0] if not filtered.empty else None)
+                    )
+                    num_orders = (
+                        filtered[order_col].nunique()
+                        if (not filtered.empty and order_col)
+                        else 0
+                    )
                     self._preview_cache[cache_key] = (num_orders, len(filtered))
                 num_orders, num_rows = self._preview_cache[cache_key]
                 self.preview_orders_label.setText(
@@ -202,11 +218,11 @@ class GenerateReportsDialog(_BaseReportDialog):
 
     reportsSelected = Signal(list)
 
-    def __init__(self, packing_configs, stock_configs, analysis_df, apply_filters_fn,
-                 writeoff_handler=None, parent=None):
+    def __init__(
+        self, packing_configs, stock_configs, analysis_df, apply_filters_fn, parent=None
+    ):
         self._packing_configs = packing_configs or []
         self._stock_configs = stock_configs or []
-        self._writeoff_handler = writeoff_handler
         self._checked_count = 0
         super().__init__(
             "Generate Reports",
@@ -232,7 +248,9 @@ class GenerateReportsDialog(_BaseReportDialog):
         writeoff_group = QGroupBox("Writeoff Report")
         writeoff_layout = QVBoxLayout(writeoff_group)
 
-        self.writeoff_checkbox = QCheckBox("Include Packaging Materials in export (SKU Writeoff)")
+        self.writeoff_checkbox = QCheckBox(
+            "Include Packaging Materials in export (SKU Writeoff)"
+        )
         self.writeoff_checkbox.setToolTip(
             "When enabled, packaging materials (based on Internal Tags) will be\n"
             "automatically added to the stock export as separate SKU lines.\n"
@@ -240,30 +258,7 @@ class GenerateReportsDialog(_BaseReportDialog):
         )
         writeoff_layout.addWidget(self.writeoff_checkbox)
 
-        if self._writeoff_handler:
-            self.writeoff_only_btn = QPushButton("Generate Writeoff Report Only")
-            self.writeoff_only_btn.setMinimumHeight(36)
-            theme = get_theme_manager().get_current_theme()
-            self.writeoff_only_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {theme.status_warning};
-                    color: {theme.on_accent};
-                    font-weight: bold;
-                    border: none;
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background-color: {theme.status_warning}; }}
-                QPushButton:pressed {{ background-color: {theme.status_warning}; }}
-            """)
-            self.writeoff_only_btn.clicked.connect(self._on_writeoff_only)
-            writeoff_layout.addWidget(self.writeoff_only_btn)
-
         layout.addWidget(writeoff_group)
-
-    def _on_writeoff_only(self):
-        if self._writeoff_handler:
-            self._writeoff_handler()
-        self.accept()
 
     def _populate_list(self):
         """Fill the list with both kinds under section headers."""
@@ -290,7 +285,9 @@ class GenerateReportsDialog(_BaseReportDialog):
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Unchecked)
                 item.setData(Qt.UserRole, (kind, index, cfg))
-                item.setToolTip(f"Filters: {len(filters)} active" if filters else "No filters")
+                item.setToolTip(
+                    f"Filters: {len(filters)} active" if filters else "No filters"
+                )
                 self.report_list.addItem(item)
 
         self.report_list.itemChanged.connect(self._on_item_changed)

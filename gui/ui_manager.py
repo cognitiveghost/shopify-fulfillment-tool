@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.commandbar import BarState, CommandBar
+from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
@@ -176,6 +177,13 @@ class UIManager:
         # Step 1: The command bar — client selector, session, status, actions.
         # Replaces the two-row header: its own border-bottom is the separator.
         right_layout.addWidget(self._create_command_bar())
+
+        # 9.25: a failure waits here, under the command bar, until dismissed.
+        logs_index = self._RAIL_LABELS.index("Logs")
+        self.mw.error_banner = ErrorBanner(
+            open_logs=lambda: self.mw.main_tabs.setCurrentIndex(logs_index)
+        )
+        right_layout.addWidget(self.mw.error_banner)
 
         # Step 2: Create main tab widget with 5 tabs
         self._create_tabs()
@@ -693,11 +701,7 @@ class UIManager:
         import subprocess
 
         if not self.mw.session_path:
-            from PySide6.QtWidgets import QMessageBox
-
-            QMessageBox.warning(
-                self.mw, "No Session", "No session is currently active."
-            )
+            self.log.warning("_open_session_folder called with no active session")
             return
 
         try:
@@ -708,11 +712,10 @@ class UIManager:
                 subprocess.Popen(["open", self.mw.session_path])
             else:  # Linux
                 subprocess.Popen(["xdg-open", self.mw.session_path])
-        except Exception as e:
-            from PySide6.QtWidgets import QMessageBox
-
-            QMessageBox.critical(
-                self.mw, "Error", f"Failed to open session folder:\n{e!s}"
+        except Exception:
+            self.log.exception("Failed to open session folder")
+            show_error(
+                self.mw, "The session folder wouldn't open", "Details are in Logs."
             )
 
     def set_ui_busy(self, is_busy):
