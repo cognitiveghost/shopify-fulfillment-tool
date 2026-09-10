@@ -103,6 +103,11 @@ class BarcodeGeneratorWidget(QWidget):
         )
 
         self.packing_list_combo = QComboBox()
+        # A long list name must not set the card's minimum width.
+        self.packing_list_combo.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.packing_list_combo.setMinimumContentsLength(20)
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setToolTip("Refresh packing lists")
         refresh_btn.clicked.connect(self._refresh_packing_lists)
@@ -198,7 +203,7 @@ class BarcodeGeneratorWidget(QWidget):
         if not self.mw.session_path:
             self.packing_list_combo.clear()
             self.order_count_label.setText("No session selected")
-            self.output_dir_label.setText("No session selected")
+            self.output_dir_label.setText("Open a session to save labels into it")
             self.status_label.setText("No session selected")
             self.generate_btn.setEnabled(False)
             return

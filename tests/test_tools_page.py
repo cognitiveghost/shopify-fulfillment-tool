@@ -54,6 +54,24 @@ def test_side_by_side_still_fits_at_the_breakpoint(tools):
     assert tools.scroll.widget().width() <= tools.scroll.viewport().width()
 
 
+def test_long_printer_and_packing_list_names_do_not_widen_a_card(tools):
+    # A combo's minimum width is its longest item unless told otherwise, and
+    # print-server printer names run long.
+    printer = (
+        r"\\WAREHOUSE-PRINTSRV-01\Zebra ZT411-203dpi ZPL (Packing Station 3 - Left)"
+    )
+    for widget in (tools.reference_labels_widget, tools.barcode_generator_widget):
+        widget.print_options.driver_printer_combo.addItem(printer, printer)
+        widget.print_options.set_open(True)
+    packing_lists = tools.barcode_generator_widget.packing_list_combo
+    packing_lists.blockSignals(True)
+    packing_lists.addItem("packing_list_" + "DHL_Express_Worldwide_" * 3)
+    packing_lists.blockSignals(False)
+
+    _resize(tools, 1180)
+    assert tools.scroll.widget().width() <= tools.scroll.viewport().width()
+
+
 def test_stacked_below_1180(tools):
     _resize(tools, 1100)
     assert tools.cards_row.direction() == QBoxLayout.TopToBottom

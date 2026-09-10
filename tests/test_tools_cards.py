@@ -74,6 +74,13 @@ def test_barcode_generate_button_is_not_drawn_by_hand(qapp, print_settings_store
     assert not widget.generate_btn.isEnabled()
 
 
+def test_barcode_card_without_a_session_says_what_to_do(qapp, print_settings_store):
+    widget = BarcodeGeneratorWidget(_main_window())
+    assert (
+        widget.output_dir_label.full_text() == "Open a session to save labels into it"
+    )
+
+
 def test_barcode_card_with_no_packing_list_says_what_to_do(qapp, print_settings_store):
     widget = BarcodeGeneratorWidget(_main_window())
     widget._on_packing_list_changed(-1)

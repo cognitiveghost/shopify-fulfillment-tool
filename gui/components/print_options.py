@@ -87,6 +87,12 @@ class PrintOptions(QWidget):
         self.body.add_row("Print mode", self.print_mode_combo)
 
         self.driver_printer_combo = QComboBox()
+        # Otherwise its minimum width is its longest printer name, and a print
+        # server's names are long enough to push the card past its slot.
+        self.driver_printer_combo.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.driver_printer_combo.setMinimumContentsLength(20)
         self.driver_printer_combo.addItem("(Windows default)", "")
         for info in QPrinterInfo.availablePrinters():
             self.driver_printer_combo.addItem(info.printerName(), info.printerName())
