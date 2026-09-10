@@ -14,6 +14,7 @@ from gui.components.radio_card import RadioCard
 from gui.components.selectionbar import ContextualSelectionBar
 from gui.components.statcard import KpiStrip, StatCard
 from gui.components.state_panel import StatePanel
+from gui.components.toast import Toast, toast
 from shared.navrail import NavRail
 
 __all__ = [
@@ -34,6 +35,8 @@ __all__ = [
     "RadioCard",
     "StatCard",
     "StatePanel",
+    "Toast",
     "overflow_button",
     "row_widget",
+    "toast",
 ]
