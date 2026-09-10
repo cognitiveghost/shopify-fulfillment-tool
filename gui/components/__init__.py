@@ -2,6 +2,7 @@
 
 from gui.components.card import Card
 from gui.components.commandbar import BarState, CommandBar
+from gui.components.confirm_dialog import ConfirmDialog
 from gui.components.elided_label import ElidedLabel
 from gui.components.file_slot import FileSlot
 from gui.components.filterbar import FilterBar
@@ -19,6 +20,7 @@ __all__ = [
     "BarState",
     "Card",
     "CommandBar",
+    "ConfirmDialog",
     "ContextualSelectionBar",
     "ElidedLabel",
     "FileSlot",
