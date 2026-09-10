@@ -32,9 +32,6 @@ OWNED = {
 # Not converted yet. Each conversion task deletes its own lines; Task 12
 # deletes this set.
 PENDING = {
-    "gui/main_window_pyside.py",  # Task 8
-    "gui/ui_manager.py",  # Task 8
-    "gui/file_handler.py",  # Task 8
     "gui/add_product_dialog.py",  # Task 9
     "gui/client_settings_dialog.py",  # Task 9
     "gui/groups_management_dialog.py",  # Task 9

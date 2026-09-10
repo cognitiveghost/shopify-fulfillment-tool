@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.commandbar import BarState, CommandBar
-from gui.components.error_banner import ErrorBanner
+from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
@@ -701,11 +701,7 @@ class UIManager:
         import subprocess
 
         if not self.mw.session_path:
-            from PySide6.QtWidgets import QMessageBox
-
-            QMessageBox.warning(
-                self.mw, "No Session", "No session is currently active."
-            )
+            self.log.warning("_open_session_folder called with no active session")
             return
 
         try:
@@ -716,11 +712,10 @@ class UIManager:
                 subprocess.Popen(["open", self.mw.session_path])
             else:  # Linux
                 subprocess.Popen(["xdg-open", self.mw.session_path])
-        except Exception as e:
-            from PySide6.QtWidgets import QMessageBox
-
-            QMessageBox.critical(
-                self.mw, "Error", f"Failed to open session folder:\n{e!s}"
+        except Exception:
+            self.log.exception("Failed to open session folder")
+            show_error(
+                self.mw, "The session folder wouldn't open", "Details are in Logs."
             )
 
     def set_ui_busy(self, is_busy):
