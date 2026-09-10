@@ -143,8 +143,9 @@ class Toast(QFrame):
   subclassing every host. Width is at most 360px, text wraps, and `raise_()` is
   called on every show.
 - **Anatomy:** one `QLabel`, up to one ghost button (`set_button_role(…,
-  "ghost")`), and the badge. Pressing the button calls `on_action`, then
-  dismisses.
+  "ghost")`), and the badge. Pressing the button dismisses the toast, then
+  calls `on_action`, so a toast that the action raises (Undo's own result)
+  is not hidden by the dismissal.
 - **Look:** `surface_overlay` ground, 1px `border`, a 3px left edge in
   `status_success` or `status_info` (the only two roles; a failure is never a
   toast), `radius_md`, text in `text` with `font_css("body")`, and the badge in
@@ -416,7 +417,7 @@ because line numbers drift.
   - `tests/test_components_toast.py`: the host is the source's window, both a
     `QMainWindow` and a `QDialog`; a second call replaces the text and a third
     shows the badge; the timer's timeout hides the toast and resets the count;
-    the action button calls `on_action` and dismisses; the toast sits inside the
+    the action button dismisses and then calls `on_action`; the toast sits inside the
     host rect after a resize; the edge colour follows a theme toggle.
   - `tests/test_components_confirm_dialog.py`: the verb is the accept button
     and carries role `primary`; Cancel is the default; "OK" and "Yes" raise;
