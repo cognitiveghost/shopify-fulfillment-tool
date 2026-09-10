@@ -11,7 +11,7 @@ import logging
 from collections import deque
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 
 from gui.log_entry import LogEntry
 from gui.pandas_model import ROLE_STATUS
@@ -126,5 +126,16 @@ class LogBufferModel(QAbstractTableModel):
         if role == Qt.BackgroundRole and entry.level >= logging.ERROR:
             theme = get_theme_manager().get_current_theme()
             return QColor(theme.status_danger_bg)
+
+        column = index.column()
+
+        if role == Qt.ForegroundRole and column in (_TIME, _SOURCE):
+            # TIME and SOURCE sit back so MESSAGE carries the row.
+            theme = get_theme_manager().get_current_theme()
+            return QColor(theme.text_secondary)
+
+        if role == Qt.FontRole and column == _TIME:
+            theme = get_theme_manager().get_current_theme()
+            return QFont(theme.font_family_mono)
 
         return None
