@@ -10,7 +10,8 @@ Spec: docs/superpowers/specs/2026-09-07-phase9-bundle7-info-becomes-logs-design.
 
 import logging
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTreeView,
     QVBoxLayout,
@@ -27,12 +29,10 @@ from PySide6.QtWidgets import (
 
 from gui.log_filter import LogFilterProxy
 from gui.log_follow import FollowState
-from gui.log_model import LogBufferModel
+from gui.log_model import COL_LEVEL, COL_MESSAGE, COL_SOURCE, COL_TIME, LogBufferModel
 from gui.status_edge_delegate import StatusEdgeDelegate
 from gui.theme_manager import get_theme_manager
 from shared.theme import font_css, on_theme_changed, set_button_role
-
-_MESSAGE_COLUMN = 3
 
 _LEVEL_FLOORS = (
     ("All", logging.NOTSET),
@@ -117,9 +117,23 @@ class LogViewer(QWidget):
         self.view.setEditTriggers(QTreeView.NoEditTriggers)
 
         header = self.view.header()
-        header.setSectionResizeMode(_MESSAGE_COLUMN, QHeaderView.Stretch)
-        for column in range(_MESSAGE_COLUMN):
-            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(COL_MESSAGE, QHeaderView.Stretch)
+
+        # Interactive with a measured starting width, never ResizeToContents:
+        # that mode re-queries every row on each insert, so a live log costs
+        # O(buffer) per arriving entry -- measured at ~31ms per append at 2200
+        # rows and ~52ms at 4800, which is a visible freeze during the burst
+        # an analysis run produces. All three columns are bounded anyway, and
+        # a fixed width is what lets SOURCE elide rather than widen.
+        metrics = QFontMetrics(self.view.font())
+        for column, sample in (
+            (COL_TIME, "00:00:00"),
+            (COL_LEVEL, "WARNING"),
+            (COL_SOURCE, "shopify_tool.engine"),
+        ):
+            header.setSectionResizeMode(column, QHeaderView.Interactive)
+            self.view.setColumnWidth(column, metrics.horizontalAdvance(sample) + 24)
+        self.view.setTextElideMode(Qt.ElideRight)
 
         self.view.verticalScrollBar().valueChanged.connect(self._on_scrolled)
         return self.view
@@ -158,6 +172,14 @@ class LogViewer(QWidget):
         # is taller than its neighbours by definition.
         self.view.setWordWrap(on)
         self.view.setUniformRowHeights(not on)
+        # And per-pixel vertical scrolling needs a total pixel height, which
+        # without uniform rows it can only get by measuring every row in the
+        # buffer -- 40ms per arriving entry at 4800 rows, against 0.6ms with
+        # uniform rows. Wrapped rows therefore scroll per item: a wrapped log
+        # is one you are reading, not one you are watching stream past.
+        self.view.setVerticalScrollMode(
+            QTreeView.ScrollPerItem if on else QTreeView.ScrollPerPixel
+        )
         self._settings.setValue("logs/wrap", on)
         if self.wrap_toggle.isChecked() != on:
             self.wrap_toggle.setChecked(on)
@@ -187,15 +209,37 @@ class LogViewer(QWidget):
     # -- save as text -------------------------------------------------------
 
     def _save_as_text(self):
-        path, _filter = QFileDialog.getSaveFileName(self, "Save log as text")
+        source = self.model.current_source()
+        path, _filter = QFileDialog.getSaveFileName(
+            self,
+            "Save log as text",
+            f"{source.lower()}-log.txt",
+            "Text files (*.txt);;All files (*)",
+        )
         if not path:
             return
-        with open(path, "w", encoding="utf-8") as handle:
-            for entry in self.model.entries():
-                ts = entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                handle.write(
-                    f"{ts}  {entry.level_name:<8} {entry.source}  {entry.message}\n"
-                )
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                # Oldest first on disk: the screen shows newest-first because
+                # the newest line is the one you came to read, but a saved log
+                # is read top to bottom like every other log file.
+                for entry in reversed(self.model.entries()):
+                    ts = entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                    handle.write(
+                        f"{ts}  {entry.level_name:<8} {entry.source}  {entry.message}\n"
+                    )
+        except OSError as error:
+            # Operators save to UNC shares that go away mid-write. An
+            # unhandled OSError out of a Qt slot takes the app down rather
+            # than telling anyone which file failed.
+            logging.getLogger(__name__).warning(
+                "Could not save log to %s: %s", path, error
+            )
+            QMessageBox.warning(
+                self,
+                "Could not save log",
+                f"The log could not be written to:\n{path}\n\n{error.strerror or error}",
+            )
 
     # -- theme --------------------------------------------------------------
 

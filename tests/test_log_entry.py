@@ -1,5 +1,8 @@
+import dataclasses
 import logging
 from datetime import datetime
+
+import pytest
 
 from gui.log_entry import LogEntry
 
@@ -11,11 +14,8 @@ def test_entry_is_frozen():
         source="Session",
         message="New session created",
     )
-    try:
+    with pytest.raises(dataclasses.FrozenInstanceError):
         entry.level = logging.ERROR
-    except Exception:
-        return
-    raise AssertionError("LogEntry must be frozen")
 
 
 def test_level_name_is_the_logging_name():

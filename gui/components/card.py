@@ -44,7 +44,7 @@ class Card(QFrame):
         """Append a centred label at a TYPE_SCALE role and return it.
 
         The label is returned because callers keep handles to the rows they
-        update live (the Statistics tab's stat_card_labels).
+        update live rather than rebuilding the card.
 
         `css` appends caller-specific declarations after the role's font
         rules -- it exists for the tag tile's coloured count badge. An unknown

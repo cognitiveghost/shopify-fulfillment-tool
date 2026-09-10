@@ -26,7 +26,7 @@ class QtLogHandler(logging.Handler, QObject):
 
     entry_received = Signal(object)
 
-    def __init__(self, parent=None):
+    def __init__(self):
         QObject.__init__(self)
         logging.Handler.__init__(self)
 

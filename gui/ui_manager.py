@@ -1043,7 +1043,7 @@ class UIManager:
         return widget
 
     def update_filter_count(self):
-        """ "312 orders", or "48 of 312 orders" while a filter narrows it."""
+        """Show `312 orders`, or `48 of 312 orders` while a filter narrows it."""
         bar = getattr(self.mw, "filter_bar", None)
         if bar is None:
             return

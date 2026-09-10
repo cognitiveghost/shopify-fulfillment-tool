@@ -17,10 +17,18 @@ from gui.log_entry import LogEntry
 from gui.pandas_model import ROLE_STATUS
 from gui.theme_manager import get_theme_manager
 
-_TIME = 0
-_LEVEL = 1
-_SOURCE = 2
-_MESSAGE = 3
+# The column layout, declared once. The proxy filters on LEVEL/SOURCE/MESSAGE
+# and the viewer sizes and stretches by index, so all three files have to
+# agree about these numbers -- which is the argument for them having one home.
+COL_TIME = 0
+COL_LEVEL = 1
+COL_SOURCE = 2
+COL_MESSAGE = 3
+
+# The real level as an int, so the filter never has to read a level back out
+# of the string the model rendered it as. Same UserRole convention as
+# pandas_model's ROLE_STATUS.
+ROLE_LEVEL = Qt.ItemDataRole.UserRole + 21
 
 
 class LogBufferModel(QAbstractTableModel):
@@ -104,19 +112,22 @@ class LogBufferModel(QAbstractTableModel):
 
         if role == Qt.DisplayRole:
             column = index.column()
-            if column == _TIME:
+            if column == COL_TIME:
                 return entry.timestamp.strftime("%H:%M:%S")
-            if column == _LEVEL:
+            if column == COL_LEVEL:
                 return entry.level_name
-            if column == _SOURCE:
+            if column == COL_SOURCE:
                 return entry.source
             return entry.message
 
         if role == Qt.ToolTipRole:
             # The absolute time lives here; the cell only has room for a clock.
-            if index.column() == _TIME:
+            if index.column() == COL_TIME:
                 return entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
             return entry.message
+
+        if role == ROLE_LEVEL:
+            return entry.level
 
         if role == ROLE_STATUS:
             # StatusEdgeDelegate reads exactly this role, so answering it is
@@ -129,12 +140,12 @@ class LogBufferModel(QAbstractTableModel):
 
         column = index.column()
 
-        if role == Qt.ForegroundRole and column in (_TIME, _SOURCE):
+        if role == Qt.ForegroundRole and column in (COL_TIME, COL_SOURCE):
             # TIME and SOURCE sit back so MESSAGE carries the row.
             theme = get_theme_manager().get_current_theme()
             return QColor(theme.text_secondary)
 
-        if role == Qt.FontRole and column == _TIME:
+        if role == Qt.FontRole and column == COL_TIME:
             theme = get_theme_manager().get_current_theme()
             return QFont(theme.font_family_mono)
 

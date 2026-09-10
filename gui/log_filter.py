@@ -10,9 +10,7 @@ import logging
 
 from PySide6.QtCore import QSortFilterProxyModel, Qt
 
-_LEVEL = 1
-_SOURCE = 2
-_MESSAGE = 3
+from gui.log_model import COL_LEVEL, COL_MESSAGE, COL_SOURCE, ROLE_LEVEL
 
 
 class LogFilterProxy(QSortFilterProxyModel):
@@ -36,16 +34,18 @@ class LogFilterProxy(QSortFilterProxyModel):
         if model is None:
             return True
 
-        level_name = model.index(row, _LEVEL, parent).data(Qt.DisplayRole)
-        # getLevelName round-trips a name back to its number.
-        level = logging.getLevelName(level_name)
-        if isinstance(level, int) and level < self._floor:
+        # ROLE_LEVEL, not the LEVEL column's text: a level recovered from the
+        # string the model rendered it as is a level you can get wrong. A
+        # custom level has no registered name, so getLevelName hands back
+        # "Level 25" and the row escapes the floor entirely.
+        level = model.index(row, COL_LEVEL, parent).data(ROLE_LEVEL)
+        if level is not None and level < self._floor:
             return False
 
         if not self._search:
             return True
 
-        source = model.index(row, _SOURCE, parent).data(Qt.DisplayRole) or ""
-        message = model.index(row, _MESSAGE, parent).data(Qt.DisplayRole) or ""
+        source = model.index(row, COL_SOURCE, parent).data(Qt.DisplayRole) or ""
+        message = model.index(row, COL_MESSAGE, parent).data(Qt.DisplayRole) or ""
         haystack = f"{source} {message}".lower()
         return self._search in haystack

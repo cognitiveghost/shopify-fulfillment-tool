@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QTreeView
 
 from gui.log_entry import LogEntry
 from gui.log_model import LogBufferModel
@@ -52,6 +53,23 @@ def test_a_long_traceback_survives_both_wrap_modes(qapp):
     assert viewer.proxy.index(0, 3).data(Qt.DisplayRole) == traceback
 
 
+def test_wrapping_switches_off_per_pixel_vertical_scrolling(qapp):
+    """Per-pixel scrolling needs a total pixel height.
+
+    Without uniform row heights it can only get one by measuring every row
+    in the buffer, which costs ~40ms per arriving entry at 4800 rows against
+    ~0.6ms with uniform rows -- a freeze during the burst an analysis run
+    produces. Wrapped rows scroll per item instead.
+    """
+    viewer = LogViewer()
+
+    viewer.set_wrap(False)
+    assert viewer.view.verticalScrollMode() == QTreeView.ScrollPerPixel
+
+    viewer.set_wrap(True)
+    assert viewer.view.verticalScrollMode() == QTreeView.ScrollPerItem
+
+
 def test_alternating_row_colours_are_off(qapp):
     viewer = LogViewer()
     assert viewer.view.alternatingRowColors() is False
@@ -69,7 +87,8 @@ def test_the_footer_counts_arrivals_after_a_scroll_up(qapp):
     viewer.follow.scrolled(at_bottom=False)
     viewer.append(_entry("a"), LogBufferModel.EXECUTION)
     viewer.append(_entry("b"), LogBufferModel.EXECUTION)
-    viewer._sync_footer()
+    # No _sync_footer() here on purpose: append must have kept the footer up
+    # to date by itself, which is the thing worth asserting.
     assert viewer.follow.pending == 2
     assert "2" in viewer.footer_label.text()
 

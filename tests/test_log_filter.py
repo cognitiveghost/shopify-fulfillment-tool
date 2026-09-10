@@ -82,3 +82,18 @@ def test_an_empty_search_matches_everything(qapp):
     proxy.setSourceModel(model)
     proxy.set_search("")
     assert len(_messages(proxy)) == 2
+
+
+def test_a_level_with_no_registered_name_still_obeys_the_floor(qapp):
+    """The floor must not fail open on a level logging cannot name.
+
+    Reading the level back out of the LEVEL column's text used to do exactly
+    that: getLevelName(25) has no name, so it renders as "Level 25", the
+    round-trip back hands over a str rather than an int, and the row sailed
+    past the floor. The proxy reads ROLE_LEVEL now, which is the real int.
+    """
+    model = _model_with(_entry("custom chatter", level=25))
+    proxy = LogFilterProxy()
+    proxy.setSourceModel(model)
+    proxy.set_level_floor(logging.ERROR)
+    assert _messages(proxy) == []
