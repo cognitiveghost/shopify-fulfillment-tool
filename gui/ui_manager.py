@@ -6,23 +6,15 @@ from PySide6.QtCore import QItemSelection, QItemSelectionModel, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
-    QFrame,
-    QGroupBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
-    QLineEdit,
-    QPlainTextEdit,
     QPushButton,
-    QScrollArea,
     QTableView,
-    QTableWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from gui.components.card import Card
 from gui.components.commandbar import BarState, CommandBar
 from gui.components.state_panel import StatePanel
 from shared.icons import icon
@@ -33,7 +25,6 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .orders_view import HIDDEN_COLUMNS, ORDER_KEY, orders_frame
 from .pandas_model import PandasModel
-from .tag_categories_dialog import DEFAULT_TAG_COLOR
 from .theme_manager import get_theme_manager
 from .wheel_ignore_combobox import WheelIgnoreComboBox
 
@@ -124,7 +115,7 @@ class UIManager:
         "Session Setup",
         "Analysis Results",
         "Session Browser",
-        "Information",
+        "Logs",
         "Tools",
     )
     # 8.6 shipped the rail with _TAB_LABELS verbatim, because guardrail 2 of
@@ -133,12 +124,12 @@ class UIManager:
     # needed: at 56px the rail elides five of the six to "Ses...tup" /
     # "Anal...ults" / "Ses...ser", which is worse than no label. The full names
     # survive as the tooltips in _TAB_TOOLTIPS.
-    _RAIL_LABELS = ("Setup", "Results", "Browse", "Info", "Tools")
+    _RAIL_LABELS = ("Setup", "Results", "Browse", "Logs", "Tools")
     _TAB_TOOLTIPS = (
         "Session setup and file loading (Ctrl+1)",
         "View and edit analysis results (Ctrl+2)",
         "Browse past sessions (Ctrl+3)",
-        "Statistics and logs (Ctrl+4)",
+        "Activity and execution logs (Ctrl+4)",
         "PDF processing and utilities (Ctrl+5)",
     )
     # Both former entries (open_session_folder_button, new_session_btn) were
@@ -201,8 +192,10 @@ class UIManager:
         # place of the free-text "Ready" message it replaces.
         self.mw.statusBar().setFixedHeight(28)
         self.mw.connection_chip = StatusChip(
-            "status_success", "Server connected",
-            get_theme_manager().get_current_theme(), parent=self.mw,
+            "status_success",
+            "Server connected",
+            get_theme_manager().get_current_theme(),
+            parent=self.mw,
         )
         self.mw.statusBar().addPermanentWidget(self.mw.connection_chip)
 
@@ -212,7 +205,7 @@ class UIManager:
             "UI widgets created successfully with tab-based structure and sidebar."
         )
 
-    _OFFLINE_RAIL_ITEMS = (1, 2, 4)   # Results, Browse, Tools
+    _OFFLINE_RAIL_ITEMS = (1, 2, 4)  # Results, Browse, Tools
 
     def _on_connection_changed(self, connected: bool) -> None:
         """The one signal that drives every control which touches the share.
@@ -267,7 +260,7 @@ class UIManager:
             self._create_tab1_session_setup(),
             self._create_tab2_analysis_results(),
             self._create_tab3_session_browser(),
-            self._create_tab4_information(),
+            self._create_tab4_logs(),
             self._create_tab5_tools(),
         )
         for page, label, rail_label, icon_name, tip in zip(
@@ -472,8 +465,8 @@ class UIManager:
         stack = QStackedWidget()
         # Page 0 starts empty -- _refresh_setup_panel fills it, and is the
         # only place either of its two forms is built.
-        stack.addWidget(QWidget())    # page 0, replaced by _refresh_setup_panel
-        stack.addWidget(tab)          # page 1, the card
+        stack.addWidget(QWidget())  # page 0, replaced by _refresh_setup_panel
+        stack.addWidget(tab)  # page 1, the card
         self.mw.setup_stack = stack
         self._refresh_setup_panel()
         return stack
@@ -618,12 +611,8 @@ class UIManager:
         bar = ContextualSelectionBar()
         self.mw.selection_bar = bar
 
-        bar.add_action(
-            "Set Fulfillable", lambda: handler.bulk_change_status(True)
-        )
-        bar.add_action(
-            "Set Not Fulfillable", lambda: handler.bulk_change_status(False)
-        )
+        bar.add_action("Set Fulfillable", lambda: handler.bulk_change_status(True))
+        bar.add_action("Set Not Fulfillable", lambda: handler.bulk_change_status(False))
         bar.add_action("Add Tag", handler.bulk_add_tag)
         bar.add_action("Remove Tag", handler.bulk_remove_tag)
 
@@ -687,31 +676,16 @@ class UIManager:
 
         return tab
 
-    def _create_tab4_information(self):
-        """Create Tab 4: Information
+    def _create_tab4_logs(self):
+        """Create Tab 4: Logs -- one viewer, two sources, no sub-tabs.
 
-        Contains sub-tabs:
-        - Statistics
-        - Activity Log
-        - Execution Log
+        Statistics is deleted (9.20) and the two log widgets are one widget
+        (9.21), so there is nothing left to tab between.
         """
-        # Create sub-tab widget
-        sub_tabs = QTabWidget()
-        sub_tabs.setTabPosition(QTabWidget.North)
+        from gui.log_viewer import LogViewer
 
-        # Sub-tab 1: Statistics
-        stats_tab = self._create_statistics_subtab()
-        sub_tabs.addTab(stats_tab, "Statistics")
-
-        # Sub-tab 2: Activity Log
-        activity_tab = self._create_activity_log_subtab()
-        sub_tabs.addTab(activity_tab, "Activity Log")
-
-        # Sub-tab 3: Execution Log
-        execution_tab = self._create_execution_log_subtab()
-        sub_tabs.addTab(execution_tab, "Execution Log")
-
-        return sub_tabs
+        self.mw.log_viewer = LogViewer(self.mw)
+        return self.mw.log_viewer
 
     def _open_session_folder(self):
         """Open session folder in file explorer."""
@@ -802,9 +776,7 @@ class UIManager:
         # again after it.
         for name in HIDDEN_COLUMNS:
             if name in orders_df.columns:
-                self.mw.tableView.setColumnHidden(
-                    orders_df.columns.get_loc(name), True
-                )
+                self.mw.tableView.setColumnHidden(orders_df.columns.get_loc(name), True)
 
         # No client selected yet -> no profile config; this runs on every
         # client switch, before one is loaded.
@@ -841,9 +813,7 @@ class UIManager:
         # apply_config_to_view walks the frame it is given, so re-hide after it.
         for name in HIDDEN_COLUMNS:
             if name in orders_df.columns:
-                self.mw.tableView.setColumnHidden(
-                    orders_df.columns.get_loc(name), True
-                )
+                self.mw.tableView.setColumnHidden(orders_df.columns.get_loc(name), True)
 
         # setModel() above replaced the selection model, so the connection
         # must be remade every call rather than once at widget-creation time.
@@ -1060,9 +1030,11 @@ class UIManager:
             "Generate packing lists and stock exports based on pre-defined filters"
         )
         self.mw.generate_reports_button_tab2.clicked.connect(
-            lambda: self.mw.actions_handler.open_generate_reports_dialog()
-            if hasattr(self.mw, "actions_handler")
-            else None
+            lambda: (
+                self.mw.actions_handler.open_generate_reports_dialog()
+                if hasattr(self.mw, "actions_handler")
+                else None
+            )
         )
         self.mw.generate_reports_button_tab2.hide()
 
@@ -1071,7 +1043,7 @@ class UIManager:
         return widget
 
     def update_filter_count(self):
-        """"312 orders", or "48 of 312 orders" while a filter narrows it."""
+        """ "312 orders", or "48 of 312 orders" while a filter narrows it."""
         bar = getattr(self.mw, "filter_bar", None)
         if bar is None:
             return
@@ -1079,7 +1051,8 @@ class UIManager:
         total_rows = total.rowCount() if total is not None else 0
         shown = self.mw.proxy_model.rowCount()
         bar.set_count(
-            f"{total_rows} orders" if shown == total_rows
+            f"{total_rows} orders"
+            if shown == total_rows
             else f"{shown} of {total_rows} orders"
         )
 
@@ -1114,16 +1087,20 @@ class UIManager:
 
         self.mw.add_product_button_tab2 = action(
             "Add Product to Order",
-            lambda: self.mw.actions_handler.show_add_product_dialog()
-            if hasattr(self.mw, "actions_handler")
-            else None,
+            lambda: (
+                self.mw.actions_handler.show_add_product_dialog()
+                if hasattr(self.mw, "actions_handler")
+                else None
+            ),
             "Manually add a product to an existing order",
         )
         self.mw.configure_columns_button_tab2 = action(
             "Configure Columns",
-            lambda: self.mw.open_column_config_dialog()
-            if hasattr(self.mw, "open_column_config_dialog")
-            else None,
+            lambda: (
+                self.mw.open_column_config_dialog()
+                if hasattr(self.mw, "open_column_config_dialog")
+                else None
+            ),
             "Customize table column visibility and order",
         )
         # Enabled by undo_manager, like the button it replaces. Ctrl+Z is still
@@ -1503,214 +1480,6 @@ class UIManager:
             )
             self.update_hidden_columns_indicator()
 
-    def _make_stat_card(self, value: str, label: str) -> tuple:
-        """Stat card: large value on top, small label below. Returns (widget, value_label)."""
-        card = Card()
-        value_lbl = card.add_text(value, "display")
-        card.add_text(label, "caption", wrap=True)
-        return card, value_lbl
-
-    def _make_courier_card(self, courier_id: str, orders: str, repeated: str) -> Card:
-        """Courier card: orders count on top, courier name in middle, repeated below."""
-        card = Card(min_width=100)
-        card.add_text(orders, "display")
-        card.add_text(courier_id, "caption")
-        card.add_text(f"{repeated} repeated", "caption")
-        return card
-
-    def _make_tag_card(self, tag: str, count: str, color: str | None = None) -> Card:
-        """Tag card: colored count badge on top, tag name below."""
-        if color is None:
-            color = DEFAULT_TAG_COLOR
-        # Denser than the default on purpose: these sit 60px wide in a
-        # horizontal scroll strip.
-        card = Card(min_width=60, margins=(6, 4, 6, 4))
-        theme = get_theme_manager().get_current_theme()
-        card.add_text(
-            count,
-            "label",
-            css=f"color: {theme.on_accent}; background-color: {color}; border-radius: 8px; padding: 2px 6px;",
-        )
-        card.add_text(tag, "caption", wrap=True)
-        return card
-
-    def _create_statistics_subtab(self):
-        """Create statistics sub-tab with stat cards."""
-        tab = QWidget()
-        outer_layout = QVBoxLayout(tab)
-        outer_layout.setSpacing(0)
-        outer_layout.setContentsMargins(8, 8, 8, 8)
-
-        # Outer vertical scroll wraps all sections
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll_widget = QWidget()
-        layout = QVBoxLayout(scroll_widget)
-        layout.setSpacing(10)
-        layout.setContentsMargins(0, 0, 0, 0)
-        scroll.setWidget(scroll_widget)
-        outer_layout.addWidget(scroll)
-
-        # ── 1. Session Totals ───────────────────────────────────────────────
-        totals_group = QGroupBox("Session Totals")
-        totals_row = QHBoxLayout(totals_group)
-        totals_row.setSpacing(8)
-        totals_row.setContentsMargins(8, 8, 8, 8)
-
-        self.mw.stat_card_labels = {}
-        for key, label_text in [
-            ("total_orders_completed", "Orders\nCompleted"),
-            ("total_orders_not_completed", "Orders Not\nCompleted"),
-            ("total_items_to_write_off", "Items to\nWrite Off"),
-            ("total_items_not_to_write_off", "Items Not\nWrite Off"),
-        ]:
-            card, val_lbl = self._make_stat_card("-", label_text)
-            self.mw.stat_card_labels[key] = val_lbl
-            totals_row.addWidget(card)
-        totals_row.addStretch()
-        layout.addWidget(totals_group)
-
-        # ── 2. By Courier ──────────────────────────────────────────────────
-        courier_group = QGroupBox("By Courier")
-        courier_group_layout = QVBoxLayout(courier_group)
-        courier_group_layout.setContentsMargins(8, 8, 8, 8)
-        courier_group_layout.setSpacing(0)
-
-        courier_hscroll = QScrollArea()
-        courier_hscroll.setWidgetResizable(True)
-        courier_hscroll.setFrameShape(QFrame.NoFrame)
-        courier_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        courier_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        courier_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        courier_hscroll.setMinimumHeight(90)
-
-        courier_container = QWidget()
-        self.mw.courier_cards_layout = QHBoxLayout(courier_container)
-        self.mw.courier_cards_layout.setSpacing(8)
-        self.mw.courier_cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.mw.courier_cards_layout.addStretch()
-        courier_hscroll.setWidget(courier_container)
-        courier_group_layout.addWidget(courier_hscroll)
-        layout.addWidget(courier_group)
-
-        # ── 3 & 4. Tags Breakdown (Fulfillable + Not Fulfillable, side by side) ──
-        tags_row_widget = QWidget()
-        tags_row_layout = QHBoxLayout(tags_row_widget)
-        tags_row_layout.setSpacing(8)
-        tags_row_layout.setContentsMargins(0, 0, 0, 0)
-
-        tags_f_group = QGroupBox("Fulfillable Tags")
-        tags_f_group_layout = QVBoxLayout(tags_f_group)
-        tags_f_group_layout.setContentsMargins(8, 8, 8, 8)
-        tags_f_group_layout.setSpacing(0)
-
-        tags_f_hscroll = QScrollArea()
-        tags_f_hscroll.setWidgetResizable(True)
-        tags_f_hscroll.setFrameShape(QFrame.NoFrame)
-        tags_f_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        tags_f_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        tags_f_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        tags_f_hscroll.setMinimumHeight(90)
-
-        tags_f_container = QWidget()
-        self.mw.tags_fulfillable_layout = QHBoxLayout(tags_f_container)
-        self.mw.tags_fulfillable_layout.setSpacing(8)
-        self.mw.tags_fulfillable_layout.setContentsMargins(0, 0, 0, 0)
-        self.mw.tags_fulfillable_layout.addStretch()
-        tags_f_hscroll.setWidget(tags_f_container)
-        tags_f_group_layout.addWidget(tags_f_hscroll)
-        tags_row_layout.addWidget(tags_f_group)
-
-        tags_nf_group = QGroupBox("Not Fulfillable Tags")
-        tags_nf_group_layout = QVBoxLayout(tags_nf_group)
-        tags_nf_group_layout.setContentsMargins(8, 8, 8, 8)
-        tags_nf_group_layout.setSpacing(0)
-
-        tags_nf_hscroll = QScrollArea()
-        tags_nf_hscroll.setWidgetResizable(True)
-        tags_nf_hscroll.setFrameShape(QFrame.NoFrame)
-        tags_nf_hscroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        tags_nf_hscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        tags_nf_hscroll.setSizeAdjustPolicy(QScrollArea.AdjustToContents)
-        tags_nf_hscroll.setMinimumHeight(90)
-
-        tags_nf_container = QWidget()
-        self.mw.tags_not_fulfillable_layout = QHBoxLayout(tags_nf_container)
-        self.mw.tags_not_fulfillable_layout.setSpacing(8)
-        self.mw.tags_not_fulfillable_layout.setContentsMargins(0, 0, 0, 0)
-        self.mw.tags_not_fulfillable_layout.addStretch()
-        tags_nf_hscroll.setWidget(tags_nf_container)
-        tags_nf_group_layout.addWidget(tags_nf_hscroll)
-        tags_row_layout.addWidget(tags_nf_group)
-
-        layout.addWidget(tags_row_widget)
-
-        # ── 5. SKU Summary ─────────────────────────────────────────────────
-        sku_group = QGroupBox("SKU Summary")
-        sku_layout = QVBoxLayout(sku_group)
-        sku_layout.setContentsMargins(8, 8, 8, 8)
-
-        self.mw.sku_search_input = QLineEdit()
-        self.mw.sku_search_input.setPlaceholderText("Filter by SKU or product...")
-        self.mw.sku_search_input.textChanged.connect(self.mw._on_sku_search_changed)
-        sku_layout.addWidget(self.mw.sku_search_input)
-
-        self.mw.sku_table = QTableWidget()
-        self.mw.sku_table.setColumnCount(6)
-        self.mw.sku_table.setHorizontalHeaderLabels(
-            ["#", "SKU", "Product", "Total Qty", "Fulfillable", "Not Fulfillable"]
-        )
-        self.mw.sku_table.horizontalHeader().setStretchLastSection(False)
-        self.mw.sku_table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.Stretch
-        )
-        self.mw.sku_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.mw.sku_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.mw.sku_table.verticalHeader().setVisible(False)
-        self.mw.sku_table.setSortingEnabled(True)
-        self.mw.sku_table.setMinimumHeight(200)
-        sku_layout.addWidget(self.mw.sku_table)
-        layout.addWidget(sku_group, 1)
-
-        layout.addStretch()
-        return tab
-
-    def _create_activity_log_subtab(self):
-        """Create activity log sub-tab for Tab 4."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Activity table
-        self.mw.activity_log_table = QTableWidget()
-        self.mw.activity_log_table.setColumnCount(3)
-        self.mw.activity_log_table.setHorizontalHeaderLabels(
-            ["Time", "Operation", "Description"]
-        )
-        self.mw.activity_log_table.horizontalHeader().setStretchLastSection(True)
-        self.mw.activity_log_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.mw.activity_log_table.setEditTriggers(QTableWidget.NoEditTriggers)
-
-        layout.addWidget(self.mw.activity_log_table)
-
-        return tab
-
-    def _create_execution_log_subtab(self):
-        """Create execution log sub-tab for Tab 4."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Log text widget
-        self.mw.execution_log_edit = QPlainTextEdit()
-        self.mw.execution_log_edit.setReadOnly(True)
-        self.mw.execution_log_edit.setLineWrapMode(QPlainTextEdit.NoWrap)
-
-        layout.addWidget(self.mw.execution_log_edit)
-
-        return tab
-
     def _create_tab5_tools(self):
         """Create Tab 5: Tools
 
@@ -1739,4 +1508,3 @@ class UIManager:
             widget = getattr(self.mw, attr, None)
             if widget is not None:
                 widget.setIcon(icon(name))
-

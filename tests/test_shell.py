@@ -75,7 +75,7 @@ DESTINATIONS = (
     "Session Setup",
     "Analysis Results",
     "Session Browser",
-    "Information",
+    "Logs",
     "Tools",
 )
 
@@ -100,7 +100,7 @@ def test_the_rail_shows_short_labels_not_the_full_titles(main_window):
     tests/test_navrail_labels_fit.py for the width check that forced it.
     """
     labels = [main_window.nav_rail.button(i).text() for i in range(5)]
-    assert labels == ["Setup", "Results", "Browse", "Info", "Tools"]
+    assert labels == ["Setup", "Results", "Browse", "Logs", "Tools"]
 
 
 def test_the_full_destination_name_survives_in_the_tooltip(main_window):
@@ -162,8 +162,11 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
     )
     bar = main_window.command_bar
     model = bar.client_selector.model()
-    row = next(i for i in range(model.rowCount())
-               if model.item(i).data(Qt.UserRole) == ROW_CLIENT)
+    row = next(
+        i
+        for i in range(model.rowCount())
+        if model.item(i).data(Qt.UserRole) == ROW_CLIENT
+    )
 
     view = bar.client_selector.view()
     bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center())

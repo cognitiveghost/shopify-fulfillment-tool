@@ -2,17 +2,15 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
 
 import pandas as pd
-from PySide6.QtCore import QModelIndex, QPoint, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QModelIndex, QPoint, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QMenu,
     QMessageBox,
-    QTableWidgetItem,
 )
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -20,7 +18,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from gui.actions_handler import ActionsHandler
 from gui.components.commandbar import BarState
 from gui.file_handler import FileHandler
+from gui.log_entry import LogEntry
 from gui.log_handler import QtLogHandler
+from gui.log_model import LogBufferModel
 from gui.pandas_model import FulfillmentFilterProxy
 from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
@@ -74,7 +74,10 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QSettings
 
         from shared.theme import restore_window_geometry
-        self._geometry_settings = QSettings("ShopifyFulfillmentTool", "MainWindowGeometry")
+
+        self._geometry_settings = QSettings(
+            "ShopifyFulfillmentTool", "MainWindowGeometry"
+        )
         if not restore_window_geometry(self, self._geometry_settings):
             self.setGeometry(100, 100, 1100, 900)
 
@@ -286,22 +289,21 @@ class MainWindow(QMainWindow):
     def setup_logging(self):
         """Sets up the Qt-based logging handler.
 
-        Initializes a `QtLogHandler` that emits a signal whenever a log
-        message is received. This signal is connected to a slot that appends
-        the message to the 'Execution Log' text box in the UI.
+        Initializes a `QtLogHandler` that emits a `LogEntry` for every record
+        the root logger dispatches, routed to the Logs destination's
+        Execution source.
         """
         self.log_handler = QtLogHandler()
-        self.log_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        )
         # Root logger level is owned by shared.logger.setup_logging
         # (called from ProfileManager, before this runs) - don't
         # override it back to INFO here, or FULFILLMENT_LOG_LEVEL=DEBUG
         # would silently have no effect.
         logging.getLogger().addHandler(self.log_handler)
-        self.log_handler.log_message_received.connect(
-            self.execution_log_edit.appendPlainText
-        )
+        self.log_handler.entry_received.connect(self._on_log_entry)
+
+    def _on_log_entry(self, entry):
+        """A record from the root logger reaches the Execution source."""
+        self.log_viewer.append(entry, LogBufferModel.EXECUTION)
 
     def connect_signals(self):
         """Connects all UI widget signals to their corresponding slots.
@@ -408,9 +410,11 @@ class MainWindow(QMainWindow):
         QShortcut(
             QKeySequence("Ctrl+R"),
             self,
-            lambda: self.run_analysis_button.click()
-            if self.run_analysis_button.isEnabled()
-            else None,
+            lambda: (
+                self.run_analysis_button.click()
+                if self.run_analysis_button.isEnabled()
+                else None
+            ),
         )
 
         # Add Ctrl+F shortcut for Filter
@@ -621,7 +625,8 @@ class MainWindow(QMainWindow):
 
         orders_count, items_count = self.selection_helper.get_selection_summary()
         self.selection_bar.set_selection(
-            "" if orders_count == 0
+            ""
+            if orders_count == 0
             else f"{orders_count} orders · {items_count} items selected"
         )
 
@@ -774,7 +779,9 @@ class MainWindow(QMainWindow):
         # Tracked in a set, not a single slot: a second switch before this one
         # finishes must not drop the first worker's reference out from under it.
         self._client_load_workers.add(worker)
-        worker.signals.finished.connect(lambda: self._client_load_workers.discard(worker))
+        worker.signals.finished.connect(
+            lambda: self._client_load_workers.discard(worker)
+        )
         self.threadpool.start(worker)
 
     def _on_client_data_loaded(self, client_id: str, result):
@@ -971,9 +978,7 @@ class MainWindow(QMainWindow):
                     return True
 
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to load pickle, trying Excel fallback: {e}"
-                    )
+                    logger.warning(f"Failed to load pickle, trying Excel fallback: {e}")
                     # Continue to fallback options
 
             # Priority 2: Try loading from current_state.xlsx
@@ -1135,23 +1140,20 @@ class MainWindow(QMainWindow):
 
         This method is called whenever the main `analysis_results_df` is
         modified. It recalculates statistics, updates the main results table,
-        refreshes the statistics tab, and repopulates the column filter
-        dropdown. It acts as a single point of refresh for the UI.
+        and repopulates the column filter dropdown. It acts as a single point
+        of refresh for the UI.
         """
         # Update statistics ONLY if analysis results exist
         if self.analysis_results_df is not None and not self.analysis_results_df.empty:
             try:
                 self.analysis_stats = recalculate_statistics(self.analysis_results_df)
                 self.ui_manager.update_results_table(self.analysis_results_df)
-                self.update_statistics_tab()
             except Exception:
                 logger.exception("Failed to recalculate statistics")
                 self.analysis_stats = None
-                self._clear_statistics_view()
         else:
             # No analysis results - clear statistics
             self.analysis_stats = None
-            self._clear_statistics_view()
             self.ui_manager.update_results_table(pd.DataFrame())
 
         self.ui_manager.update_kpi_strip()
@@ -1172,138 +1174,6 @@ class MainWindow(QMainWindow):
         self.ui_manager.set_ui_busy(False)
         # The column manager button is enabled within update_results_table
 
-    def update_statistics_tab(self):
-        """Populates the 'Statistics' tab with the latest analysis data."""
-        if not self.analysis_stats:
-            return
-
-        # === 1. Session Totals cards ===
-        if hasattr(self, "stat_card_labels"):
-            for key, lbl in self.stat_card_labels.items():
-                lbl.setText(str(self.analysis_stats.get(key, "-")))
-
-        # === 2. Courier cards ===
-        if hasattr(self, "courier_cards_layout"):
-            while self.courier_cards_layout.count() > 1:
-                item = self.courier_cards_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-            courier_stats = self.analysis_stats.get("couriers_stats") or []
-            for stats in courier_stats:
-                card = self.ui_manager._make_courier_card(
-                    stats.get("courier_id", "N/A"),
-                    str(stats.get("orders_assigned", 0)),
-                    str(stats.get("repeated_orders_found", 0)),
-                )
-                self.courier_cards_layout.insertWidget(
-                    self.courier_cards_layout.count() - 1, card
-                )
-
-        # === 3. Tag cards (Fulfillable + Not Fulfillable) ===
-        from shopify_tool.tag_manager import get_tag_color
-
-        tag_cats = _normalize_tag_categories(
-            self.active_profile_config.get("tag_categories", {})
-            if self.active_profile_config
-            else {}
-        )
-
-        def _populate_tag_layout(layout_attr, breakdown_key):
-            layout = getattr(self, layout_attr, None)
-            if layout is None:
-                return
-            while layout.count() > 1:
-                item = layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-            breakdown = self.analysis_stats.get(breakdown_key) or {}
-            for tag, count in breakdown.items():
-                color = get_tag_color(tag, tag_cats)
-                card = self.ui_manager._make_tag_card(tag, str(count), color=color)
-                layout.insertWidget(layout.count() - 1, card)
-
-        _populate_tag_layout("tags_fulfillable_layout", "tags_breakdown_fulfillable")
-        _populate_tag_layout(
-            "tags_not_fulfillable_layout", "tags_breakdown_not_fulfillable"
-        )
-
-        # === 4. SKU table ===
-        if hasattr(self, "sku_table"):
-            self.sku_table.setSortingEnabled(False)
-            self.sku_table.setRowCount(0)
-            sku_summary = self.analysis_stats.get("sku_summary") or []
-            for row_idx, sku_data in enumerate(sku_summary):
-                self.sku_table.insertRow(row_idx)
-
-                # Numeric columns store real ints, not strings -- a
-                # QTableWidgetItem built from str() sorts lexicographically,
-                # which orders 10 before 2.
-                num_item = QTableWidgetItem()
-                num_item.setData(Qt.DisplayRole, row_idx + 1)
-                num_item.setTextAlignment(Qt.AlignCenter)
-                self.sku_table.setItem(row_idx, 0, num_item)
-
-                self.sku_table.setItem(
-                    row_idx, 1, QTableWidgetItem(str(sku_data.get("SKU", "N/A")))
-                )
-
-                product = sku_data.get("Warehouse_Name", "")
-                if not product or (hasattr(pd, "isna") and pd.isna(product)):
-                    product = sku_data.get("Product_Name", "N/A")
-                self.sku_table.setItem(row_idx, 2, QTableWidgetItem(str(product)))
-
-                for col_idx, key in enumerate(
-                    ["Total_Quantity", "Fulfillable_Items", "Not_Fulfillable_Items"],
-                    start=3,
-                ):
-                    raw = sku_data.get(key, 0)
-                    if raw is None or (hasattr(pd, "isna") and pd.isna(raw)):
-                        raw = 0
-                    val_item = QTableWidgetItem()
-                    val_item.setData(Qt.DisplayRole, int(raw))
-                    val_item.setTextAlignment(Qt.AlignCenter)
-                    self.sku_table.setItem(row_idx, col_idx, val_item)
-
-            self.sku_table.resizeColumnToContents(0)
-            self.sku_table.resizeColumnToContents(1)
-            self.sku_table.setSortingEnabled(True)
-            if hasattr(self, "sku_search_input"):
-                self.sku_search_input.clear()
-
-    def _on_sku_search_changed(self, text: str):
-        """Filter the SKU Summary table by SKU/product substring."""
-        text = text.strip().lower()
-        for row in range(self.sku_table.rowCount()):
-            sku_item = self.sku_table.item(row, 1)
-            product_item = self.sku_table.item(row, 2)
-            sku_text = sku_item.text().lower() if sku_item else ""
-            product_text = product_item.text().lower() if product_item else ""
-            matches = not text or text in sku_text or text in product_text
-            self.sku_table.setRowHidden(row, not matches)
-
-    def _clear_statistics_view(self):
-        """Clear statistics display when no analysis results."""
-        if hasattr(self, "stat_card_labels"):
-            for lbl in self.stat_card_labels.values():
-                lbl.setText("-")
-
-        if hasattr(self, "courier_cards_layout"):
-            while self.courier_cards_layout.count() > 1:
-                item = self.courier_cards_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-
-        for layout_attr in ("tags_fulfillable_layout", "tags_not_fulfillable_layout"):
-            layout = getattr(self, layout_attr, None)
-            if layout is not None:
-                while layout.count() > 1:
-                    item = layout.takeAt(0)
-                    if item.widget():
-                        item.widget().deleteLater()
-
-        if hasattr(self, "sku_table"):
-            self.sku_table.setRowCount(0)
-
     def _on_analysis_mode_changed(self, index: int):
         """Save the analysis mode selection to shopify_config when the combo changes."""
         if not self.current_client_id:
@@ -1321,17 +1191,18 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to save analysis_mode")
 
     def log_activity(self, op_type, desc):
-        """Adds a new entry to the 'Activity Log' table in the UI.
+        """Records an operator action in the Logs destination.
+
+        Signature is unchanged on purpose: actions_handler calls this from
+        ten places and none of them should have to know the widget changed.
 
         Args:
             op_type (str): The type of operation (e.g., "Session", "Analysis").
             desc (str): A description of the activity.
         """
-        current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
-        self.activity_log_table.insertRow(0)
-        self.activity_log_table.setItem(0, 0, QTableWidgetItem(current_time))
-        self.activity_log_table.setItem(0, 1, QTableWidgetItem(op_type))
-        self.activity_log_table.setItem(0, 2, QTableWidgetItem(desc))
+        self.log_viewer.append(
+            LogEntry.activity(op_type, desc), LogBufferModel.ACTIVITY
+        )
 
     def on_table_double_clicked(self, index: QModelIndex):
         """Handles double-click events on the results table.
@@ -1351,7 +1222,9 @@ class MainWindow(QMainWindow):
             return
 
         source_row = self.proxy_model.mapToSource(index).row()
-        order_number = orders_df.iat[source_row, orders_df.columns.get_loc("Order_Number")]
+        order_number = orders_df.iat[
+            source_row, orders_df.columns.get_loc("Order_Number")
+        ]
 
         if order_number:
             self.actions_handler.toggle_fulfillment_status_for_order(order_number)
@@ -1378,7 +1251,9 @@ class MainWindow(QMainWindow):
             return
 
         source_row = self.proxy_model.mapToSource(index).row()
-        order_number = orders_df.iat[source_row, orders_df.columns.get_loc("Order_Number")]
+        order_number = orders_df.iat[
+            source_row, orders_df.columns.get_loc("Order_Number")
+        ]
 
         if not order_number:
             return
@@ -1516,6 +1391,7 @@ class MainWindow(QMainWindow):
             event: The close event.
         """
         from shared.theme import save_window_geometry
+
         try:
             save_window_geometry(self, self._geometry_settings)
         except Exception as e:
