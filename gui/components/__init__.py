@@ -4,6 +4,7 @@ from gui.components.card import Card
 from gui.components.commandbar import BarState, CommandBar
 from gui.components.confirm_dialog import ConfirmDialog
 from gui.components.elided_label import ElidedLabel
+from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.file_slot import FileSlot
 from gui.components.filterbar import FilterBar
 from gui.components.form_section import FormSection, row_widget
@@ -24,6 +25,7 @@ __all__ = [
     "ConfirmDialog",
     "ContextualSelectionBar",
     "ElidedLabel",
+    "ErrorBanner",
     "FileSlot",
     "FilterBar",
     "FormSection",
@@ -38,5 +40,6 @@ __all__ = [
     "Toast",
     "overflow_button",
     "row_widget",
+    "show_error",
     "toast",
 ]

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.commandbar import BarState, CommandBar
+from gui.components.error_banner import ErrorBanner
 from gui.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
@@ -176,6 +177,13 @@ class UIManager:
         # Step 1: The command bar — client selector, session, status, actions.
         # Replaces the two-row header: its own border-bottom is the separator.
         right_layout.addWidget(self._create_command_bar())
+
+        # 9.25: a failure waits here, under the command bar, until dismissed.
+        logs_index = self._RAIL_LABELS.index("Logs")
+        self.mw.error_banner = ErrorBanner(
+            open_logs=lambda: self.mw.main_tabs.setCurrentIndex(logs_index)
+        )
+        right_layout.addWidget(self.mw.error_banner)
 
         # Step 2: Create main tab widget with 5 tabs
         self._create_tabs()
