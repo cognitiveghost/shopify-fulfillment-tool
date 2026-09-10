@@ -21,14 +21,21 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
-from gui.components import ElidedLabel, FormSection, PrintOptions, row_widget
+from gui.components import (
+    ConfirmDialog,
+    ElidedLabel,
+    FormSection,
+    PrintOptions,
+    row_widget,
+    show_error,
+    toast,
+)
 from gui.components.print_options import LABEL_WIDTH
 from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
@@ -338,24 +345,19 @@ class BarcodeGeneratorWidget(QWidget):
     def _on_generate_clicked(self):
         """Handle generate button click."""
         if self.filtered_orders_df is None or len(self.filtered_orders_df) == 0:
-            QMessageBox.warning(
-                self, "No Orders", "No orders available for barcode generation."
-            )
+            self.log.warning("_on_generate_clicked called with no orders")
             return
 
         # Confirm generation
         order_count = self.filtered_orders_df["Order_Number"].nunique()
 
-        reply = QMessageBox.question(
+        output_path = self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf"
+        if output_path.exists() and not ConfirmDialog.ask(
             self,
-            "Confirm Generation",
-            f"Generate barcodes for {order_count} orders?\n\n"
-            f"Packing List: {self.current_packing_list}\n"
-            f"Output: {self.barcodes_dir}",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-
-        if reply != QMessageBox.Yes:
+            title=f"Replace barcodes for {self.current_packing_list}?",
+            body=f"The existing PDF is overwritten with {order_count} new barcodes. This cannot be undone.",
+            verb="Replace barcodes",
+        ):
             return
 
         # Disable UI during generation
@@ -480,25 +482,23 @@ class BarcodeGeneratorWidget(QWidget):
         self.print_qr_btn.setEnabled(bool(self.last_qr_pdf))
 
         if successful and not pdf_generated:
-            QMessageBox.critical(
-                self,
-                "PDF Generation Failed",
-                f"{len(successful)} barcodes were validated, but rendering the "
-                "PDF failed.\n\nSee execution log for details.",
+            self.log.error(
+                f"{len(successful)} barcodes validated but PDF rendering failed"
             )
+            show_error(self, "The barcode PDF wasn't created", "Details are in Logs.")
         else:
-            message = f"Successfully generated {len(successful)} barcode labels as a PDF document."
+            message = f"Generated {len(successful)} barcode labels."
 
             if want_qr:
                 if qr_pdf_generated:
-                    message += "\n\nAlso generated QR labels as a PDF document."
+                    message += " QR labels generated too."
                 else:
-                    message += "\n\nQR labels PDF failed to generate. See execution log for details."
+                    message += " QR labels failed — details are in Logs."
 
             if failed:
-                message += f"\n\n{len(failed)} barcodes failed to generate."
+                message += f" {len(failed)} barcodes failed."
 
-            QMessageBox.information(self, "Generation Complete", message)
+            toast(self, message)
 
         # Auto-open generated PDFs if enabled
         if self.auto_open_pdf_checkbox.isChecked():
@@ -533,11 +533,7 @@ class BarcodeGeneratorWidget(QWidget):
 
         self.log.error(f"Barcode generation failed: {value}\n{traceback_str}")
 
-        QMessageBox.critical(
-            self,
-            "Generation Error",
-            f"Barcode generation failed:\n\n{value}\n\nSee execution log for details.",
-        )
+        show_error(self, "Barcode generation didn't finish", "Details are in Logs.")
 
     def _on_generation_finished(self):
         """Re-enable UI after generation."""

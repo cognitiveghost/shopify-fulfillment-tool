@@ -2,6 +2,7 @@
 Print button -- mirrors the _FakeWidget pattern in
 test_barcode_generator_widget.py. See
 docs/superpowers/specs/2026-08-10-direct-label-printing-design.md."""
+
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -26,8 +27,11 @@ class _FakeWidget:
 
 def _result(**overrides):
     result = {
-        "matched": 3, "unmatched": 0, "output_file": "/fake/out.pdf",
-        "pages_processed": 3, "processing_time": 1.2,
+        "matched": 3,
+        "unmatched": 0,
+        "output_file": "/fake/out.pdf",
+        "pages_processed": 3,
+        "processing_time": 1.2,
     }
     result.update(overrides)
     return result
@@ -39,8 +43,7 @@ def test_print_button_disabled_before_processing():
 
 
 def test_processing_complete_sets_last_output_pdf_and_enables_print(monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-    monkeypatch.setattr(QMessageBox, "information", Mock())
+    monkeypatch.setattr("gui.reference_labels_widget.toast", Mock())
 
     widget = _FakeWidget()
     ReferenceLabelsWidget._on_processing_complete(widget, _result())

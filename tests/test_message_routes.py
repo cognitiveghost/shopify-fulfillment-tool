@@ -32,12 +32,6 @@ OWNED = {
 # Not converted yet. Each conversion task deletes its own lines; Task 12
 # deletes this set.
 PENDING = {
-    "gui/barcode_generator_widget.py",  # Task 10
-    "gui/reference_labels_widget.py",  # Task 10
-    "gui/pdf_printing.py",  # Task 10
-    "gui/session_browser_widget.py",  # Task 10
-    "gui/client_directory.py",  # Task 10
-    "gui/log_viewer.py",  # Task 10
     "gui/settings/mappings.py",  # Task 11
     "gui/settings/rules.py",  # Task 11
     "gui/settings/weight.py",  # Task 11

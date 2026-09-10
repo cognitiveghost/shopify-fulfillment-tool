@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QMenu,
-    QMessageBox,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -24,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.background_worker import BackgroundWorker
-from gui.components import ContextualSelectionBar, FilterBar, StatePanel
+from gui.components import ContextualSelectionBar, FilterBar, StatePanel, show_error
 from gui.selection_ring import SelectionRingDelegate
 from gui.session_row_delegates import (
     ROLE_LIVE,
@@ -143,9 +142,7 @@ class SessionLoaderWorker(BackgroundWorker):
             sessions = self._sync_statuses(sessions)
 
             self.finished_with_data.emit(sessions)
-            logger.debug(
-                f"Loaded {len(sessions)} sessions for CLIENT_{self.client_id}"
-            )
+            logger.debug(f"Loaded {len(sessions)} sessions for CLIENT_{self.client_id}")
 
         except Exception as e:
             if not self._is_cancelled:
@@ -175,7 +172,9 @@ class SessionLoaderWorker(BackgroundWorker):
                 if new_status:
                     session["status"] = new_status
         except Exception:
-            logger.exception("Automatic session status sync failed; showing stored statuses")
+            logger.exception(
+                "Automatic session status sync failed; showing stored statuses"
+            )
         return sessions
 
 
@@ -259,8 +258,16 @@ class SessionBrowserWidget(QWidget):
         self.sessions_tree = QTreeWidget()
         self.sessions_tree.setColumnCount(8)
         self.sessions_tree.setHeaderLabels(
-            ["Session", "Age", "Status", "Orders", "Items",
-             "Blocked", "Packing", "Comment"]
+            [
+                "Session",
+                "Age",
+                "Status",
+                "Orders",
+                "Items",
+                "Blocked",
+                "Packing",
+                "Comment",
+            ]
         )
         self.sessions_tree.setSelectionBehavior(QTreeWidget.SelectRows)
         self.sessions_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
@@ -286,8 +293,15 @@ class SessionBrowserWidget(QWidget):
         self.sessions_tree.setItemDelegate(SelectionRingDelegate(self))
 
         header = self.sessions_tree.header()
-        for column, width in ((1, 90), (2, 140), (3, 80), (4, 80),
-                              (5, 80), (6, 130), (7, 200)):
+        for column, width in (
+            (1, 90),
+            (2, 140),
+            (3, 80),
+            (4, 80),
+            (5, 80),
+            (6, 130),
+            (7, 200),
+        ):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
             header.resizeSection(column, width)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -324,7 +338,9 @@ class SessionBrowserWidget(QWidget):
         for label in ("Active", "Completed", "Abandoned", "Archived"):
             status_menu.addAction(
                 label,
-                lambda _checked=False, value=label: self._apply_status_to_selection(value),
+                lambda _checked=False, value=label: self._apply_status_to_selection(
+                    value
+                ),
             )
         self.status_btn.setMenu(status_menu)
         self.status_btn.setToolTip("Set the status of every selected session")
@@ -447,16 +463,18 @@ class SessionBrowserWidget(QWidget):
 
             logger.info(f"Loaded {len(self.sessions_data)} sessions (sync mode)")
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to load sessions")
-            QMessageBox.warning(self, "Error", f"Failed to load sessions:\n{e!s}")
+            show_error(self, "Sessions didn't load", "Details are in Logs.")
 
     def _on_sessions_loaded(self, sessions_data):
         """Handle loaded data in main thread (safe for UI updates)."""
         # Guard: widget may have been closed, or merely hidden (e.g. the user
         # switched tabs while the file-server load was in flight).
         if not self.isVisible() or self.sessions_tree is None:
-            logger.debug("Widget not visible when sessions loaded — will retry on next show")
+            logger.debug(
+                "Widget not visible when sessions loaded — will retry on next show"
+            )
             # refresh_sessions() already cleared _is_dirty when the load started;
             # re-mark it so the next showEvent() retries instead of leaving the
             # table/button stuck in the "Loading..." state forever.
@@ -482,9 +500,7 @@ class SessionBrowserWidget(QWidget):
         self.refresh_btn.setText("Refresh")
 
         # Show error to user
-        QMessageBox.warning(
-            self, "Error Loading Sessions", f"Failed to load sessions:\n{error_msg}"
-        )
+        show_error(self, "Sessions didn't load", "Details are in Logs.")
 
     def _populate_tree(self):
         """Populate the tree with sessions data, grouped by whether they need attention."""
@@ -521,7 +537,7 @@ class SessionBrowserWidget(QWidget):
         attention = _GroupItem(0, GROUP_ATTENTION)
         rest = _GroupItem(1, GROUP_REST)
         for group in (attention, rest):
-            group.setFlags(Qt.ItemIsEnabled)      # a group is not selectable
+            group.setFlags(Qt.ItemIsEnabled)  # a group is not selectable
             group.setFirstColumnSpanned(True)
 
         for session_info in visible_sessions:
@@ -592,18 +608,21 @@ class SessionBrowserWidget(QWidget):
 
         blocked_line = (
             f"{blocked} of {orders} orders cannot be fulfilled"
-            if blocked else "No blocked orders"
+            if blocked
+            else "No blocked orders"
         )
-        tooltip = "\n".join([
-            session_info.get("session_name", ""),
-            age_tip,
-            f"Status: {item.text(2)}",
-            f"Orders: {orders if orders else 'N/A'}",
-            f"Items: {items if items else 'N/A'}",
-            blocked_line,
-            f"Packed: {packed}/{total} lists completed in Packing Tool",
-            f"Comment: {comments or 'None'}",
-        ])
+        tooltip = "\n".join(
+            [
+                session_info.get("session_name", ""),
+                age_tip,
+                f"Status: {item.text(2)}",
+                f"Orders: {orders if orders else 'N/A'}",
+                f"Items: {items if items else 'N/A'}",
+                blocked_line,
+                f"Packed: {packed}/{total} lists completed in Packing Tool",
+                f"Comment: {comments or 'None'}",
+            ]
+        )
         for column in range(8):
             item.setToolTip(column, tooltip)
 
@@ -623,9 +642,7 @@ class SessionBrowserWidget(QWidget):
         return self.status_filter.currentText().lower() == "archived"
 
     def _update_archive_footer(self):
-        archived = sum(
-            1 for s in self.sessions_data if s.get("status") == "archived"
-        )
+        archived = sum(1 for s in self.sessions_data if s.get("status") == "archived")
         self.archive_line.setVisible(
             bool(archived) and not self._archived_filter_active()
         )
@@ -735,7 +752,9 @@ class SessionBrowserWidget(QWidget):
         self.status_btn.setEnabled(selected >= 1)
         self.combined_export_btn.setEnabled(selected >= 2)
         noun = "session" if selected == 1 else "sessions"
-        self.selection_bar.set_selection(f"{selected} {noun} selected" if selected else "")
+        self.selection_bar.set_selection(
+            f"{selected} {noun} selected" if selected else ""
+        )
 
     def _on_combined_export(self):
         """Emit multi_export_requested with session paths for all selected rows."""
@@ -763,7 +782,7 @@ class SessionBrowserWidget(QWidget):
             logger.info(f"Opening session: {session_path}")
             self.session_selected.emit(session_path)
         else:
-            QMessageBox.warning(self, "Error", "Selected session has no valid path.")
+            logger.warning("_open_selected_session called with no valid path")
 
     def _selected_session_paths(self) -> list[str]:
         """Session paths for every selected row, in tree order.
@@ -793,11 +812,10 @@ class SessionBrowserWidget(QWidget):
             p for p in paths if not self._on_status_changed(p, status, quiet=True)
         ]
         if failed:
-            QMessageBox.critical(
+            show_error(
                 self,
-                "Error",
-                f"Failed to update status on {len(failed)} of {len(paths)} sessions.\n"
-                "See the log for details.",
+                f"{len(failed)} of {len(paths)} sessions weren't updated",
+                "Details are in Logs.",
             )
         self.refresh_sessions()
 
@@ -806,7 +824,9 @@ class SessionBrowserWidget(QWidget):
         paths = self._selected_session_paths()
         if len(paths) != 1:
             return
-        item = next(i for i in self.sessions_tree.selectedItems() if i.parent() is not None)
+        item = next(
+            i for i in self.sessions_tree.selectedItems() if i.parent() is not None
+        )
         session_name = item.text(0)
         current = next(
             (
@@ -854,16 +874,18 @@ class SessionBrowserWidget(QWidget):
             # manual=True stops session_lifecycle from ever managing this
             # session's status again -- otherwise un-archiving an old session
             # would just re-archive it on the next refresh.
-            self.session_manager.update_session_status(session_path, status, manual=True)
+            self.session_manager.update_session_status(
+                session_path, status, manual=True
+            )
 
             logger.info(f"Updated session status: {session_path} -> {status}")
             return True
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to update status")
             if quiet:
                 return False
-            QMessageBox.critical(self, "Error", f"Failed to update status:\n{e!s}")
+            show_error(self, "The status wasn't updated", "Details are in Logs.")
             # Revert to previous value
             self.refresh_sessions()
             return False

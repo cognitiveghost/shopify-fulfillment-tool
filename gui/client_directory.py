@@ -8,9 +8,10 @@ owns no application state -- growing a ProfileManager.
 import logging
 
 from PySide6.QtCore import QObject, QThreadPool, Signal
-from PySide6.QtWidgets import QMenu, QMessageBox, QWidget
+from PySide6.QtWidgets import QMenu, QWidget
 
 from gui.client_settings_dialog import ClientCreationDialog, ClientSettingsDialog
+from gui.components import show_error
 from gui.groups_management_dialog import GroupsManagementDialog
 from gui.worker import Worker
 from shopify_tool.groups_manager import GroupsManager
@@ -51,7 +52,9 @@ class ClientDirectory(QObject):
             ui_settings = self.profile_manager.get_ui_settings(client_id)
             if ui_settings.get("is_pinned", False):
                 pinned_client_ids.add(client_id)
-            card_data[client_id] = self.profile_manager.get_client_config_extended(client_id)
+            card_data[client_id] = self.profile_manager.get_client_config_extended(
+                client_id
+            )
 
         group_members = {}
         for group in custom_groups:
@@ -86,7 +89,9 @@ class ClientDirectory(QObject):
     def _on_refresh_error(self, error) -> None:
         _exctype, value, tb = error
         logger.error(f"Client directory refresh failed: {value}\n{tb}")
-        QMessageBox.warning(self.parent(), "Refresh Error", f"Failed to refresh clients:\n{value!s}")
+        show_error(
+            self.parent(), "The client list didn't refresh", "Details are in Logs."
+        )
 
     def menu_for(self, client_id: str, parent: QWidget) -> QMenu:
         """Build the per-client context menu. The caller exec()s it."""
@@ -111,13 +116,10 @@ class ClientDirectory(QObject):
             group_id = group.get("id")
             group_name = group.get("name", "Unknown")
             move_menu.addAction(group_name).triggered.connect(
-                lambda checked, gid=group_id: self._move_to_group(client_id, gid, parent)
+                lambda checked, gid=group_id: self._move_to_group(
+                    client_id, gid, parent
+                )
             )
-
-        menu.addSeparator()
-
-        delete_action = menu.addAction("Delete Client...")
-        delete_action.triggered.connect(lambda: self._delete_client(client_id, parent))
 
         return menu
 
@@ -126,14 +128,16 @@ class ClientDirectory(QObject):
             ui_settings = self.profile_manager.get_ui_settings(client_id)
             new_pin_state = not ui_settings.get("is_pinned", False)
 
-            self.profile_manager.update_ui_settings(client_id, {"is_pinned": new_pin_state})
+            self.profile_manager.update_ui_settings(
+                client_id, {"is_pinned": new_pin_state}
+            )
 
             logger.info(f"Toggled pin for CLIENT_{client_id}: {new_pin_state}")
             self.refresh()
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to toggle pin")
-            QMessageBox.warning(parent, "Error", f"Failed to toggle pin:\n{e!s}")
+            show_error(parent, "The pin wasn't changed", "Details are in Logs.")
 
     def _edit_client(self, client_id: str, parent: QWidget) -> None:
         dialog = ClientSettingsDialog(
@@ -146,7 +150,9 @@ class ClientDirectory(QObject):
         if dialog.exec():
             self.refresh()
 
-    def _move_to_group(self, client_id: str, group_id: str | None, parent: QWidget) -> None:
+    def _move_to_group(
+        self, client_id: str, group_id: str | None, parent: QWidget
+    ) -> None:
         try:
             self.profile_manager.update_ui_settings(client_id, {"group_id": group_id})
 
@@ -154,33 +160,9 @@ class ClientDirectory(QObject):
             logger.info(f"Moved CLIENT_{client_id} to {group_name}")
             self.refresh()
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to move client to group")
-            QMessageBox.warning(parent, "Error", f"Failed to move client:\n{e!s}")
-
-    def _delete_client(self, client_id: str, parent: QWidget) -> None:
-        reply = QMessageBox.question(
-            parent,
-            "Delete Client",
-            f"Delete CLIENT_{client_id}?\n\n"
-            f"This will remove all configuration and session data.\n"
-            f"This action cannot be undone!",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-
-        if reply == QMessageBox.Yes:
-            try:
-                QMessageBox.information(
-                    parent,
-                    "Not Implemented",
-                    "Client deletion is not yet implemented.\n"
-                    "Please manually delete the client directory on the server.",
-                )
-
-            except Exception as e:
-                logger.exception("Failed to delete client")
-                QMessageBox.critical(parent, "Error", f"Failed to delete client:\n{e!s}")
+            show_error(parent, "The client wasn't moved", "Details are in Logs.")
 
     def open_groups_dialog(self, parent: QWidget) -> None:
         dialog = GroupsManagementDialog(

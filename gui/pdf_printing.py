@@ -7,6 +7,7 @@ Generator windows. Two modes, chosen by a per-machine setting:
 
 See docs/superpowers/specs/2026-08-10-direct-label-printing-design.md.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,8 +17,9 @@ from PySide6.QtCore import QSettings, QSizeF
 from PySide6.QtGui import QPageSize, QPainter
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
-from PySide6.QtWidgets import QMessageBox, QWidget
+from PySide6.QtWidgets import QWidget
 
+from gui.components import show_error
 from shopify_tool import label_printing
 
 logger = logging.getLogger(__name__)
@@ -31,8 +33,12 @@ def load_print_settings(scope: str) -> dict:
         "print_mode": qs.value(f"{scope}/print_mode", "driver"),
         "raw_zpl_target": qs.value(f"{scope}/raw_zpl_target", ""),
         "raw_zpl_rotate": qs.value(f"{scope}/raw_zpl_rotate", False, type=bool),
-        "raw_zpl_label_width_mm": qs.value(f"{scope}/raw_zpl_label_width_mm", 0.0, type=float),
-        "raw_zpl_label_height_mm": qs.value(f"{scope}/raw_zpl_label_height_mm", 0.0, type=float),
+        "raw_zpl_label_width_mm": qs.value(
+            f"{scope}/raw_zpl_label_width_mm", 0.0, type=float
+        ),
+        "raw_zpl_label_height_mm": qs.value(
+            f"{scope}/raw_zpl_label_height_mm", 0.0, type=float
+        ),
         "driver_printer_name": qs.value(f"{scope}/driver_printer_name", ""),
     }
 
@@ -52,20 +58,23 @@ def print_pdf(parent: QWidget | None, pdf_path: Path, settings: dict) -> bool:
 
     Returns True only if printing completed with no error. Returns False if
     the user cancelled the print dialog (driver mode only) or if printing
-    failed for any other reason -- a QMessageBox is shown in the failure
+    failed for any other reason -- an error banner is shown in the failure
     case, not the cancel case.
     """
     if settings.get("print_mode") == "raw_zpl":
         return _print_pdf_raw_zpl_mode(parent, pdf_path, settings)
-    return _print_pdf_driver_mode(parent, pdf_path, driver_printer_name=settings.get("driver_printer_name", ""))
+    return _print_pdf_driver_mode(
+        parent, pdf_path, driver_printer_name=settings.get("driver_printer_name", "")
+    )
 
 
 def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
     target = settings.get("raw_zpl_target", "")
     if not target.strip():
-        QMessageBox.warning(
-            parent, "No Printer Configured",
-            "Set the raw ZPL printer target in this window's Output/Options section first."
+        show_error(
+            parent,
+            "Nothing was printed",
+            "Choose a Raw ZPL printer under Print options, then print again.",
         )
         return False
     width_mm = settings.get("raw_zpl_label_width_mm", 0.0)
@@ -79,9 +88,9 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
             target_size_mm=target_size_mm,
         )
         return True
-    except (OSError, *label_printing.windows_print_errors()) as error:
+    except (OSError, *label_printing.windows_print_errors()):
         logger.exception("Raw ZPL print failed")
-        QMessageBox.critical(parent, "Print Failed", f"Raw ZPL printing failed:\n\n{error}")
+        show_error(parent, "Nothing was printed", "Details are in Logs.")
         return False
 
 
@@ -108,12 +117,16 @@ def _apply_default_page_size(printer: QPrinter, document: QPdfDocument) -> None:
 
 
 def _print_pdf_driver_mode(
-    parent, pdf_path: Path, output_path: Path | None = None, driver_printer_name: str = ""
+    parent,
+    pdf_path: Path,
+    output_path: Path | None = None,
+    driver_printer_name: str = "",
 ) -> bool:
     document = QPdfDocument()
     load_error = document.load(str(pdf_path))
     if load_error != QPdfDocument.Error.None_:
-        QMessageBox.critical(parent, "Print Failed", f"Could not open PDF for printing:\n\n{pdf_path}\n\n{load_error}")
+        logger.error(f"Could not open PDF for printing: {pdf_path}: {load_error}")
+        show_error(parent, "Nothing was printed", "Details are in Logs.")
         return False
 
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
@@ -145,7 +158,7 @@ def _print_pdf_driver_mode(
             painter.drawImage(page_rect, image)
         painter.end()
         return True
-    except Exception as error:
+    except Exception:
         logger.exception("Driver print failed")
-        QMessageBox.critical(parent, "Print Failed", f"Printing failed:\n\n{error}")
+        show_error(parent, "Nothing was printed", "Details are in Logs.")
         return False
