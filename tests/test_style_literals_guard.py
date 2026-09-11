@@ -4,6 +4,7 @@ for a hex string and the palette escapes the theme one widget at a time.
 The checker's own behaviour is tested in packing-tool's tests/test_style_lint.py;
 this file only asserts the repo is clean.
 """
+
 from pathlib import Path
 
 from shared.style_lint import _CSS_NAME, find_style_literals
@@ -45,8 +46,22 @@ def test_every_detection_path_survived_the_shared_sync(tmp_path):
     offender = tmp_path / "offender.py"
     offender.write_text(
         'S = "color: red; font-size: 13px; background: rgb(1,2,3)"\n'
-        'V = theme.accent_blue\n',
+        "V = theme.accent_blue\n",
         encoding="utf-8",
     )
     kinds = {f.split(": ")[1] for f in find_style_literals([offender])}
     assert kinds == {"css-name", "px-font", "css-func", "alias"}, kinds
+
+
+def test_the_web_asset_rules_survived_the_shared_sync(tmp_path):
+    """The same reasoning as above, for the rules ADR 0001 added: one planted
+    offender per web rule, so a half-synced style_lint cannot pass quietly."""
+    offender = tmp_path / "offender.css"
+    offender.write_text(
+        ".a { color: #ff0000; box-shadow: 0 0 1px; }\n"
+        ".b { color: var(--accent-blue); font-size: 12px; }\n"
+        ".c { background: linear-gradient(red, blue); }\n",
+        encoding="utf-8",
+    )
+    kinds = {f.split(": ")[1] for f in find_style_literals([offender])}
+    assert kinds == {"hex", "banned", "alias", "px-font", "css-name"}, kinds

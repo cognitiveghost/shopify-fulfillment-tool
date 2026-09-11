@@ -8,7 +8,7 @@ shopify-fulfillment-tool/scripts/sync_shared.py after changing this file.
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from functools import lru_cache
 from types import MappingProxyType
 from typing import NamedTuple
@@ -43,6 +43,7 @@ class ThemeTokens:
     opposite backgrounds. Every color is spelled out per theme; only the
     theme-independent `spacing_*` / `radius_*` / `font_*` scales default.
     """
+
     name: str
 
     # --- Surfaces: a four-step elevation scale (spec 2/C1) ---
@@ -245,7 +246,7 @@ def set_current(name: str) -> None:
     """
     global _current
     if name == _current:
-        return                      # re-applying the same theme is not a change
+        return  # re-applying the same theme is not a change
     _current = name
     theme_notifier.changed.emit(name)
 
@@ -322,6 +323,7 @@ themed_tokens.cache_clear = _tokens_with_font.cache_clear
 @dataclass(frozen=True)
 class TypeStyle:
     """One rung of the type scale: a point size and a default weight."""
+
     size_pt: int
     bold: bool
 
@@ -334,11 +336,11 @@ class TypeStyle:
 # numeral read across an aisle, not the next rung up. Spec 2026-08-26 §2/C2.
 # This dict is the *desk* baseline -- see DENSITY_PROFILES for floor's overrides.
 TYPE_SCALE: dict[str, TypeStyle] = {
-    "caption": TypeStyle(9, False),   # hints, tips, feedback, dense card labels
-    "body": TypeStyle(10, False),     # default text and button labels
-    "label": TypeStyle(12, True),     # emphasis, sub-headers, count badges
-    "heading": TypeStyle(14, True),   # dialog and section headers
-    "display": TypeStyle(17, True),   # stat-card numbers
+    "caption": TypeStyle(9, False),  # hints, tips, feedback, dense card labels
+    "body": TypeStyle(10, False),  # default text and button labels
+    "label": TypeStyle(12, True),  # emphasis, sub-headers, count badges
+    "heading": TypeStyle(14, True),  # dialog and section headers
+    "display": TypeStyle(17, True),  # stat-card numbers
     "display_xl": TypeStyle(28, True),  # KPI numerals, Packer Mode scan verdict
 }
 
@@ -352,10 +354,10 @@ class DensityProfile:
     never touches them.
     """
 
-    control_height: int          # px, the finished height of an interactive control
-    row_height: int              # px, table and list row height
-    padding_v: int               # px, must equal a shared.theme spacing token
-    padding_h: int               # px, must equal a shared.theme spacing token
+    control_height: int  # px, the finished height of an interactive control
+    row_height: int  # px, table and list row height
+    padding_v: int  # px, must equal a shared.theme spacing token
+    padding_h: int  # px, must equal a shared.theme spacing token
     type_overrides: Mapping[str, int]  # role -> pt, overriding the TYPE_SCALE baseline
 
     @property
@@ -388,11 +390,17 @@ class DensityProfile:
 # tokens are per-theme. tests/test_type_scale.py asserts they still match.
 DENSITY_PROFILES: dict[str, DensityProfile] = {
     "desk": DensityProfile(
-        control_height=32, row_height=28, padding_v=4, padding_h=8,
+        control_height=32,
+        row_height=28,
+        padding_v=4,
+        padding_h=8,
         type_overrides=MappingProxyType({}),
     ),
     "floor": DensityProfile(
-        control_height=44, row_height=40, padding_v=8, padding_h=12,
+        control_height=44,
+        row_height=40,
+        padding_v=8,
+        padding_h=12,
         type_overrides=MappingProxyType({"body": 12, "caption": 10}),
     ),
 }
@@ -464,20 +472,44 @@ _HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 _COLOR_FIELDS = (
     # canonical
-    "surface_sunken", "surface", "surface_raised", "surface_overlay",
-    "text", "text_secondary", "text_disabled", "text_placeholder",
-    "border", "border_subtle", "border_strong",
-    "status_info", "status_info_bg",
-    "status_success", "status_success_bg",
-    "status_warning", "status_warning_bg",
-    "status_danger", "status_danger_bg",
-    "accent_fill", "accent_fill_hover", "accent_fill_active", "on_accent",
-    "selection_border", "selection_bg", "focus_ring",
-    "hover", "button_hover_light", "button_hover_dark",
+    "surface_sunken",
+    "surface",
+    "surface_raised",
+    "surface_overlay",
+    "text",
+    "text_secondary",
+    "text_disabled",
+    "text_placeholder",
+    "border",
+    "border_subtle",
+    "border_strong",
+    "status_info",
+    "status_info_bg",
+    "status_success",
+    "status_success_bg",
+    "status_warning",
+    "status_warning_bg",
+    "status_danger",
+    "status_danger_bg",
+    "accent_fill",
+    "accent_fill_hover",
+    "accent_fill_active",
+    "on_accent",
+    "selection_border",
+    "selection_bg",
+    "focus_ring",
+    "hover",
+    "button_hover_light",
+    "button_hover_dark",
     # aliases
-    "background", "background_elevated",
-    "accent_blue", "accent_green", "accent_orange", "accent_red",
-    "active_background", "active_border",
+    "background",
+    "background_elevated",
+    "accent_blue",
+    "accent_green",
+    "accent_orange",
+    "accent_red",
+    "active_background",
+    "active_border",
 )
 
 # Derived from _COLOR_FIELDS rather than listed again, so registering a token
@@ -534,8 +566,12 @@ _STATUS_ROLES = ("info", "success", "warning", "danger")
 # a selection_border ring, so the selected row is a fifth plane -- it is just
 # not a `surface_*` one, which is exactly why it escaped _SURFACE_PLANES.
 _SELECTION_FOREGROUNDS = (
-    "text", "text_secondary",
-    "status_info", "status_success", "status_warning", "status_danger",
+    "text",
+    "text_secondary",
+    "status_info",
+    "status_success",
+    "status_warning",
+    "status_danger",
 )
 
 # Non-text marks drawn on a selected row: the ring itself, and `border`, which
@@ -622,10 +658,9 @@ def validate_theme(theme: ThemeTokens) -> None:
 def _relative_luminance(hex_color: str) -> float:
     """WCAG 2.1 relative luminance of an #RRGGBB color."""
     raw = hex_color.lstrip("#")
-    channels = [int(raw[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    channels = [int(raw[i : i + 2], 16) / 255 for i in (0, 2, 4)]
     linear = [
-        c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-        for c in channels
+        c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels
     ]
     return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
 
@@ -642,8 +677,14 @@ def contrast_ratio(fg: str, bg: str) -> float:
 
 
 def clamp_geometry(
-    x: int, y: int, w: int, h: int,
-    avail_x: int, avail_y: int, avail_w: int, avail_h: int,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    avail_x: int,
+    avail_y: int,
+    avail_w: int,
+    avail_h: int,
 ) -> tuple:
     """Clamp a saved window rect to fit inside the available screen rect.
 
@@ -771,41 +812,55 @@ def paint_status_shape(
         # 16ths of a degree, counter-clockwise from 3 o'clock: the left half.
         painter.drawPie(circle, 90 * 16, 180 * 16)
     elif shape == "pause":
-        painter.drawLine(QPointF(left + w * 0.32, top + h * 0.18),
-                         QPointF(left + w * 0.32, top + h * 0.82))
-        painter.drawLine(QPointF(left + w * 0.68, top + h * 0.18),
-                         QPointF(left + w * 0.68, top + h * 0.82))
+        painter.drawLine(
+            QPointF(left + w * 0.32, top + h * 0.18),
+            QPointF(left + w * 0.32, top + h * 0.82),
+        )
+        painter.drawLine(
+            QPointF(left + w * 0.68, top + h * 0.18),
+            QPointF(left + w * 0.68, top + h * 0.82),
+        )
     elif shape == "clock":
         painter.drawEllipse(circle)
         centre = rect.center()
         painter.drawLine(centre, QPointF(centre.x(), top + h * 0.25))
         painter.drawLine(centre, QPointF(left + w * 0.75, centre.y()))
     elif shape == "check":
-        painter.drawPolyline([
-            QPointF(left + w * 0.18, top + h * 0.52),
-            QPointF(left + w * 0.42, top + h * 0.76),
-            QPointF(left + w * 0.84, top + h * 0.24),
-        ])
+        painter.drawPolyline(
+            [
+                QPointF(left + w * 0.18, top + h * 0.52),
+                QPointF(left + w * 0.42, top + h * 0.76),
+                QPointF(left + w * 0.84, top + h * 0.24),
+            ]
+        )
     elif shape == "bang":
-        painter.drawLine(QPointF(left + w * 0.5, top + h * 0.14),
-                         QPointF(left + w * 0.5, top + h * 0.60))
+        painter.drawLine(
+            QPointF(left + w * 0.5, top + h * 0.14),
+            QPointF(left + w * 0.5, top + h * 0.60),
+        )
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color)
         painter.drawEllipse(QPointF(left + w * 0.5, top + h * 0.84), 1.1, 1.1)
     elif shape == "slash":
         painter.drawEllipse(circle)
-        painter.drawLine(QPointF(left + w * 0.26, top + h * 0.74),
-                         QPointF(left + w * 0.74, top + h * 0.26))
+        painter.drawLine(
+            QPointF(left + w * 0.26, top + h * 0.74),
+            QPointF(left + w * 0.74, top + h * 0.26),
+        )
     elif shape == "tray":
-        painter.drawLine(QPointF(left + w * 0.12, top + h * 0.26),
-                         QPointF(left + w * 0.88, top + h * 0.26))
-        painter.drawPolyline([
-            QPointF(left + w * 0.20, top + h * 0.46),
-            QPointF(left + w * 0.20, top + h * 0.84),
-            QPointF(left + w * 0.80, top + h * 0.84),
-            QPointF(left + w * 0.80, top + h * 0.46),
-        ])
-    else:                                   # "ring", and anything unknown
+        painter.drawLine(
+            QPointF(left + w * 0.12, top + h * 0.26),
+            QPointF(left + w * 0.88, top + h * 0.26),
+        )
+        painter.drawPolyline(
+            [
+                QPointF(left + w * 0.20, top + h * 0.46),
+                QPointF(left + w * 0.20, top + h * 0.84),
+                QPointF(left + w * 0.80, top + h * 0.84),
+                QPointF(left + w * 0.80, top + h * 0.46),
+            ]
+        )
+    else:  # "ring", and anything unknown
         painter.drawEllipse(circle)
 
     painter.restore()
@@ -830,8 +885,15 @@ class StatusDot(QWidget):
     status form of its own.
     """
 
-    def __init__(self, role: str, theme: ThemeTokens, diameter: int = 10,
-                 parent=None, *, filled: bool = True):
+    def __init__(
+        self,
+        role: str,
+        theme: ThemeTokens,
+        diameter: int = 10,
+        parent=None,
+        *,
+        filled: bool = True,
+    ):
         super().__init__(parent)
         self._color = QColor(getattr(theme, role))
         self._diameter = diameter
@@ -900,8 +962,15 @@ class StatusChip(QLabel):
         self._style = None
         self.set_status(role, text, theme, live=live, manual=manual)
 
-    def set_status(self, role: str, text: str, theme: ThemeTokens,
-                   *, live: bool = True, manual: bool = False) -> None:
+    def set_status(
+        self,
+        role: str,
+        text: str,
+        theme: ThemeTokens,
+        *,
+        live: bool = True,
+        manual: bool = False,
+    ) -> None:
         """Three channels: colour is the role, fill is live, mark is authorship.
 
         Keyword-only and defaulted to the shipped behaviour, so every existing
@@ -960,8 +1029,14 @@ def restore_window_geometry(window, settings, key: str = "window_geometry") -> b
     avail = screen.availableGeometry()
     geo = window.geometry()
     x, y, w, h = clamp_geometry(
-        geo.x(), geo.y(), geo.width(), geo.height(),
-        avail.x(), avail.y(), avail.width(), avail.height(),
+        geo.x(),
+        geo.y(),
+        geo.width(),
+        geo.height(),
+        avail.x(),
+        avail.y(),
+        avail.width(),
+        avail.height(),
     )
     window.setGeometry(x, y, w, h)
     return True
@@ -981,10 +1056,60 @@ def set_button_role(button, role: str) -> None:
     unconditionally so a later live-flipping caller cannot step in it.
     """
     if role not in BUTTON_ROLES:
-        raise ValueError(f"Unknown button role {role!r}; expected one of {BUTTON_ROLES}")
+        raise ValueError(
+            f"Unknown button role {role!r}; expected one of {BUTTON_ROLES}"
+        )
     button.setProperty("role", role)
     button.style().unpolish(button)
     button.style().polish(button)
+
+
+def _css_name(field_name: str) -> str:
+    return "--" + field_name.replace("_", "-")
+
+
+def _css_value(value) -> str:
+    return f"{value}px" if isinstance(value, int) else str(value)
+
+
+def theme_css_vars(theme: ThemeTokens) -> str:
+    """The theme as CSS custom properties, for the web tier (ADR 0001).
+
+    Every ThemeTokens field under its own name with underscores turned into
+    hyphens -- mechanically, so a token added to the dataclass reaches the web
+    tier with no second registration site, the same reasoning that derives
+    _SURFACE_PLANES. The aliases stay behind: a web asset has no legacy call
+    sites to protect, so `--accent-green` would be new debt.
+
+    Ints are px and type sizes stay pt. The type scale and the density
+    fields are the *active* profile's, so a caller re-runs this on every
+    theme_notifier change, which a density switch also announces.
+    """
+    aliases = {alias for alias, _ in _ALIAS_PAIRS}
+    decls = {
+        _css_name(f.name): _css_value(getattr(theme, f.name))
+        for f in fields(theme)
+        if f.name != "name" and f.name not in aliases
+    }
+    # Raised, not asserted: `python -O` strips assert statements.
+    missing = {_css_name(c) for c in _COLOR_FIELDS if c not in aliases} - decls.keys()
+    if missing:
+        raise AssertionError(f"theme_css_vars did not emit {sorted(missing)}")
+
+    for role in TYPE_SCALE:
+        style = type_style(role)
+        decls[_css_name(f"type_{role}_size")] = f"{style.size_pt}pt"
+        decls[_css_name(f"type_{role}_weight")] = "700" if style.bold else "400"
+
+    # control_content_height is a property compensating for Qt's box model;
+    # fields() skips it, and the web tier's border-box does not need it.
+    profile = get_density_profile()
+    for f in fields(profile):
+        if f.name != "type_overrides":
+            decls[_css_name(f.name)] = _css_value(getattr(profile, f.name))
+
+    body = "\n".join(f"  {name}: {value};" for name, value in decls.items())
+    return f":root {{\n{body}\n}}\n"
 
 
 def build_stylesheet(theme: ThemeTokens) -> str:
@@ -1313,11 +1438,31 @@ def build_palette(theme: ThemeTokens):
     palette.setColor(QPalette.ColorRole.Highlight, QColor(theme.accent_fill))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
     palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(theme.text_placeholder))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(theme.text_disabled))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(theme.text_disabled))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(theme.text_disabled))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor(theme.surface_raised))
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor(theme.surface_raised))
+    palette.setColor(
+        QPalette.ColorGroup.Disabled,
+        QPalette.ColorRole.WindowText,
+        QColor(theme.text_disabled),
+    )
+    palette.setColor(
+        QPalette.ColorGroup.Disabled,
+        QPalette.ColorRole.Text,
+        QColor(theme.text_disabled),
+    )
+    palette.setColor(
+        QPalette.ColorGroup.Disabled,
+        QPalette.ColorRole.ButtonText,
+        QColor(theme.text_disabled),
+    )
+    palette.setColor(
+        QPalette.ColorGroup.Disabled,
+        QPalette.ColorRole.Base,
+        QColor(theme.surface_raised),
+    )
+    palette.setColor(
+        QPalette.ColorGroup.Disabled,
+        QPalette.ColorRole.Button,
+        QColor(theme.surface_raised),
+    )
     return palette
 
 
@@ -1336,6 +1481,7 @@ if __name__ == "__main__":
     assert get_theme("missing") is LIGHT_THEME
 
     import os
+
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
@@ -1343,11 +1489,16 @@ if __name__ == "__main__":
     for theme in (LIGHT_THEME, DARK_THEME):
         sheet = build_stylesheet(theme)
         assert "QPushButton" in sheet and theme.accent_fill in sheet
-        assert theme.accent_fill not in sheet.split("QPushButton {", 1)[1].split("}", 1)[0]
+        assert (
+            theme.accent_fill not in sheet.split("QPushButton {", 1)[1].split("}", 1)[0]
+        )
         for _role in BUTTON_ROLES:
             assert f'QPushButton[role="{_role}"]' in sheet
         palette = build_palette(theme)
-        assert palette.color(palette.ColorRole.Window).name().upper() == theme.surface.upper()
+        assert (
+            palette.color(palette.ColorRole.Window).name().upper()
+            == theme.surface.upper()
+        )
     apply_theme(app, "dark")
     assert (theme_app_stylesheet := app.styleSheet())
 
@@ -1364,6 +1515,7 @@ if __name__ == "__main__":
 
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QMainWindow
+
     test_settings = QSettings("SharedThemeSelfCheck", "GeometryTest")
     test_settings.remove("window_geometry")
     win = QMainWindow()
