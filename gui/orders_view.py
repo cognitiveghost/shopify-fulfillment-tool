@@ -6,6 +6,9 @@ computed on demand, never persisted, never written back to. See
 ``docs/superpowers/specs/2026-08-30-analysis-results-1b-design.md`` section 3.
 """
 
+import datetime
+import math
+
 import pandas as pd
 
 from gui.pandas_model import REPEAT_COLUMN, cell_search_text, is_repeat
@@ -142,7 +145,9 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
     out["Items"] = out[ORDER_KEY].map(grouped.size()).astype(int)
 
     if "System_note" in df.columns:
-        out["Blocker"] = out[ORDER_KEY].map(grouped["System_note"].apply(_first_blocker))
+        out["Blocker"] = out[ORDER_KEY].map(
+            grouped["System_note"].apply(_first_blocker)
+        )
     else:
         out["Blocker"] = ""
 
@@ -177,3 +182,52 @@ def order_lines(df: pd.DataFrame, order_number) -> pd.DataFrame:
         return pd.DataFrame()
     _, line_level = classify_columns(df)
     return df.loc[df[ORDER_KEY] == order_number, line_level].copy()
+
+
+def _json_value(value):
+    """One cell as the web tier can receive it: JSON-native, never NaN."""
+    if isinstance(value, (list, tuple)):
+        return [_json_value(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_value(v) for k, v in value.items()}
+    if value is None or value is pd.NaT or value is pd.NA:
+        return None
+    if isinstance(value, float):  # numpy.float64 included
+        return float(value) if math.isfinite(value) else None
+    if isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, (datetime.date, datetime.datetime)):  # pd.Timestamp included
+        return value.isoformat()
+    if hasattr(value, "item"):  # numpy int, bool, ...
+        return _json_value(value.item())
+    return str(value)
+
+
+def order_payload(df: pd.DataFrame) -> list[dict]:
+    """The order frame with each order's lines nested -- what the bridge sends.
+
+    One entry per order in the frame's row order: the order-level columns once,
+    under their own names, and ``lines``, the line-level columns one dict per
+    line. SEARCH_COLUMN stays behind -- it is the Qt filter proxy's helper, and
+    the web tier filters on its own terms (9.13).
+    """
+    orders = orders_frame(df)
+    if orders.empty:
+        return []
+    _, line_level = classify_columns(df)
+    lines = {
+        key: [
+            dict(zip(line_level, map(_json_value, row)))
+            for row in group[line_level].itertuples(index=False, name=None)
+        ]
+        for key, group in df.groupby(ORDER_KEY, sort=False)
+    }
+    columns = [ORDER_KEY] + [
+        c for c in orders.columns if c not in (ORDER_KEY, SEARCH_COLUMN)
+    ]
+    payload = []
+    for row in orders[columns].itertuples(index=False, name=None):
+        entry = dict(zip(columns, map(_json_value, row)))
+        entry["lines"] = lines.get(row[0], [])
+        payload.append(entry)
+    return payload
