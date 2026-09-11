@@ -4,6 +4,8 @@ Sizes are the *page* area: the window minus the 56px rail and the 48 + 28 of
 Qt chrome. 1366x768 -> 1310x692, 1920x1080 -> 1864x1004. Never mark skip.
 """
 
+import json
+
 import pandas as pd
 import pytest
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -129,12 +131,19 @@ def test_only_a_window_of_rows_exists(qtbot, doc):
 
 
 def test_the_nine_columns_in_order(qtbot, doc):
+    # JSON-encoded and decoded on the Python side: runJavaScript's automatic
+    # QVariantList marshalling of a JS array is unreliable under this box's
+    # software-rendered QtWebEngine, though the page and the DOM it produces
+    # are unaffected -- see the horizontal-scroll fix in results.css for the
+    # one genuine bug this environment did surface.
     view, _ = doc
-    titles = _eval(
-        qtbot,
-        view,
-        "Array.from(document.querySelectorAll('#header .head'))"
-        ".map(function (c) { return c.textContent.trim(); })",
+    titles = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify(Array.from(document.querySelectorAll('#header .head'))"
+            ".map(function (c) { return c.textContent.trim(); }))",
+        )
     )
     assert titles == [
         "",
