@@ -1,9 +1,9 @@
 """Sets/bundles: SKUs decoded into their component SKUs at fulfillment time.
 
-Self-saving: every Add/Edit/Delete/Import/Export mutates the set_decoders
-dict handed in at construction (the same object the window holds under
-config_data["set_decoders"]) directly, so there is nothing left to collect()
-by the time the window's save runs.
+Every Add/Edit/Delete/Import mutates the set_decoders dict handed in at
+construction -- the same object the window holds under
+config_data["set_decoders"] -- and collect() returns that dict. Nothing
+reaches disk until the window's Save.
 """
 
 from PySide6.QtCore import Qt
@@ -42,7 +42,6 @@ class SetsPage(SettingsPage):
     def __init__(self, set_decoders: dict, parent=None):
         super().__init__(parent)
         self.set_decoders = set_decoders
-
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -64,7 +63,7 @@ class SetsPage(SettingsPage):
         header = self.sets_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Set SKU
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Components
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)    # Actions
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Actions
         self.sets_table.setColumnWidth(2, 150)
 
         self.sets_table.setAlternatingRowColors(True)
@@ -113,6 +112,9 @@ class SetsPage(SettingsPage):
         # Populate table with existing sets
         self._populate_sets_table()
 
+    def collect(self) -> dict:
+        return {"set_decoders": self.set_decoders}
+
     def _populate_sets_table(self):
         """Populate the sets table with current set definitions."""
         set_decoders = self.set_decoders
@@ -122,23 +124,26 @@ class SetsPage(SettingsPage):
         for row_idx, (set_sku, components) in enumerate(set_decoders.items()):
             # Set SKU column
             sku_item = QTableWidgetItem(set_sku)
-            sku_item.setFlags(sku_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Read-only
+            sku_item.setFlags(
+                sku_item.flags() & ~Qt.ItemFlag.ItemIsEditable
+            )  # Read-only
             self.sets_table.setItem(row_idx, 0, sku_item)
 
             # Components summary column
             if components:
                 # Show first 5 components, then "..."
-                comp_summary = ", ".join([
-                    f"{comp['sku']}({comp['quantity']}x)"
-                    for comp in components[:5]
-                ])
+                comp_summary = ", ".join(
+                    [f"{comp['sku']}({comp['quantity']}x)" for comp in components[:5]]
+                )
                 if len(components) > 5:
                     comp_summary += f" ... (+{len(components) - 5} more)"
             else:
                 comp_summary = "(no components)"
 
             comp_item = QTableWidgetItem(comp_summary)
-            comp_item.setFlags(comp_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Read-only
+            comp_item.setFlags(
+                comp_item.flags() & ~Qt.ItemFlag.ItemIsEditable
+            )  # Read-only
             self.sets_table.setItem(row_idx, 1, comp_item)
 
             # Actions column - Edit and Delete buttons
@@ -150,20 +155,24 @@ class SetsPage(SettingsPage):
             edit_btn = QPushButton("Edit")
             set_button_role(edit_btn, "secondary")
             edit_btn.setMaximumWidth(70)
-            edit_btn.clicked.connect(lambda checked, sku=set_sku: self._edit_set_dialog(sku))
+            edit_btn.clicked.connect(
+                lambda checked, sku=set_sku: self._edit_set_dialog(sku)
+            )
             actions_layout.addWidget(edit_btn)
 
             delete_btn = QPushButton("Delete")
             set_button_role(delete_btn, "secondary")
             delete_btn.setMaximumWidth(70)
-            delete_btn.clicked.connect(lambda checked, sku=set_sku: self._delete_set(sku))
+            delete_btn.clicked.connect(
+                lambda checked, sku=set_sku: self._delete_set(sku)
+            )
             actions_layout.addWidget(delete_btn)
 
             actions_layout.addStretch()
             self.sets_table.setCellWidget(row_idx, 2, actions_widget)
 
         # Re-apply search filter after repopulate
-        if hasattr(self, 'sets_search'):
+        if hasattr(self, "sets_search"):
             self._filter_sets_table(self.sets_search.text())
 
     def _filter_sets_table(self, text: str):
@@ -186,7 +195,7 @@ class SetsPage(SettingsPage):
             # Debug: print what we got
             print(f"[DEBUG] Adding set '{set_sku}' with {len(components)} components:")
             for i, comp in enumerate(components):
-                print(f"  {i+1}. {comp['sku']} x {comp['quantity']}")
+                print(f"  {i + 1}. {comp['sku']} x {comp['quantity']}")
 
             # Add to config
             self.set_decoders[set_sku] = components
@@ -197,14 +206,16 @@ class SetsPage(SettingsPage):
             QMessageBox.information(
                 self,
                 "Success",
-                f"Set '{set_sku}' added with {len(components)} components!"
+                f"Set '{set_sku}' added with {len(components)} components!",
             )
 
     def _edit_set_dialog(self, set_sku):
         """Show dialog to edit an existing set."""
         current_components = self.set_decoders.get(set_sku, [])
 
-        dialog = SetEditorDialog(set_sku=set_sku, components=current_components, parent=self)
+        dialog = SetEditorDialog(
+            set_sku=set_sku, components=current_components, parent=self
+        )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_set_sku, new_components = dialog.get_set_definition()
 
@@ -218,7 +229,9 @@ class SetsPage(SettingsPage):
             # Refresh table
             self._populate_sets_table()
 
-            QMessageBox.information(self, "Success", f"Set '{new_set_sku}' updated successfully!")
+            QMessageBox.information(
+                self, "Success", f"Set '{new_set_sku}' updated successfully!"
+            )
 
     def _delete_set(self, set_sku):
         """Delete a set after confirmation."""
@@ -226,21 +239,20 @@ class SetsPage(SettingsPage):
             self,
             "Confirm Delete",
             f"Are you sure you want to delete set '{set_sku}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
 
         if reply == QMessageBox.StandardButton.Yes:
             del self.set_decoders[set_sku]
             self._populate_sets_table()
-            QMessageBox.information(self, "Success", f"Set '{set_sku}' deleted successfully!")
+            QMessageBox.information(
+                self, "Success", f"Set '{set_sku}' deleted successfully!"
+            )
 
     def _import_sets_from_csv(self):
         """Import sets from CSV file."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import Sets from CSV",
-            "",
-            "CSV Files (*.csv);;All Files (*)"
+            self, "Import Sets from CSV", "", "CSV Files (*.csv);;All Files (*)"
         )
 
         if not file_path:
@@ -261,7 +273,9 @@ class SetsPage(SettingsPage):
                 f"Found {len(imported_sets)} sets in CSV.\n\n"
                 "Yes = Replace all existing sets\n"
                 "No = Merge (update existing, add new)",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel,
             )
 
             if reply == QMessageBox.StandardButton.Cancel:
@@ -281,14 +295,12 @@ class SetsPage(SettingsPage):
             QMessageBox.information(
                 self,
                 "Success",
-                f"Successfully imported {len(imported_sets)} sets from CSV!"
+                f"Successfully imported {len(imported_sets)} sets from CSV!",
             )
 
         except Exception as e:
             QMessageBox.critical(
-                self,
-                "Import Error",
-                f"Failed to import sets from CSV:\n\n{e!s}"
+                self, "Import Error", f"Failed to import sets from CSV:\n\n{e!s}"
             )
 
     def _export_sets_to_csv(self):
@@ -303,7 +315,7 @@ class SetsPage(SettingsPage):
             self,
             "Export Sets to CSV",
             "sets_export.csv",
-            "CSV Files (*.csv);;All Files (*)"
+            "CSV Files (*.csv);;All Files (*)",
         )
 
         if not file_path:
@@ -316,14 +328,12 @@ class SetsPage(SettingsPage):
             QMessageBox.information(
                 self,
                 "Success",
-                f"Successfully exported {len(set_decoders)} sets to:\n{file_path}"
+                f"Successfully exported {len(set_decoders)} sets to:\n{file_path}",
             )
 
         except Exception as e:
             QMessageBox.critical(
-                self,
-                "Export Error",
-                f"Failed to export sets to CSV:\n\n{e!s}"
+                self, "Export Error", f"Failed to export sets to CSV:\n\n{e!s}"
             )
 
 
@@ -361,13 +371,15 @@ class SetEditorDialog(QDialog):
 
         self.components_table = QTableWidget()
         self.components_table.setColumnCount(3)
-        self.components_table.setHorizontalHeaderLabels(["Component SKU", "Quantity", "Remove"])
+        self.components_table.setHorizontalHeaderLabels(
+            ["Component SKU", "Quantity", "Remove"]
+        )
 
         # Configure columns
         header = self.components_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Component SKU
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # Quantity
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)    # Remove
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Quantity
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Remove
         self.components_table.setColumnWidth(1, 100)
         self.components_table.setColumnWidth(2, 80)
 
@@ -403,7 +415,10 @@ class SetEditorDialog(QDialog):
         layout.addWidget(tips_label)
 
         # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
         apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self._validate_and_save)
         button_box.rejected.connect(self.reject)
@@ -467,13 +482,12 @@ class SetEditorDialog(QDialog):
                 comp_qty = qty_widget.value()
 
                 if comp_sku:  # Only add non-empty SKUs
-                    components.append({
-                        "sku": comp_sku,
-                        "quantity": comp_qty
-                    })
+                    components.append({"sku": comp_sku, "quantity": comp_qty})
 
         if not components:
-            QMessageBox.warning(self, "Validation Error", "Set must have at least one component!")
+            QMessageBox.warning(
+                self, "Validation Error", "Set must have at least one component!"
+            )
             return
 
         # All valid, accept dialog
@@ -489,7 +503,9 @@ class SetEditorDialog(QDialog):
         set_sku = self.set_sku_edit.text().strip()
         components = []
 
-        print(f"[DEBUG] get_set_definition: Reading {self.components_table.rowCount()} rows from table")
+        print(
+            f"[DEBUG] get_set_definition: Reading {self.components_table.rowCount()} rows from table"
+        )
 
         for row in range(self.components_table.rowCount()):
             sku_widget = self.components_table.cellWidget(row, 0)
@@ -499,15 +515,18 @@ class SetEditorDialog(QDialog):
                 comp_sku = sku_widget.text().strip()
                 comp_qty = qty_widget.value()
 
-                print(f"[DEBUG]   Row {row}: SKU='{comp_sku}', Qty={comp_qty}, Empty={not bool(comp_sku)}")
+                print(
+                    f"[DEBUG]   Row {row}: SKU='{comp_sku}', Qty={comp_qty}, Empty={not bool(comp_sku)}"
+                )
 
                 if comp_sku:
-                    components.append({
-                        "sku": comp_sku,
-                        "quantity": comp_qty
-                    })
+                    components.append({"sku": comp_sku, "quantity": comp_qty})
             else:
-                print(f"[DEBUG]   Row {row}: widgets are None (sku_widget={sku_widget}, qty_widget={qty_widget})")
+                print(
+                    f"[DEBUG]   Row {row}: widgets are None (sku_widget={sku_widget}, qty_widget={qty_widget})"
+                )
 
-        print(f"[DEBUG] get_set_definition: Collected {len(components)} non-empty components")
+        print(
+            f"[DEBUG] get_set_definition: Collected {len(components)} non-empty components"
+        )
         return set_sku, components

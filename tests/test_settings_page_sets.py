@@ -9,9 +9,11 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
-def test_sets_page_contributes_nothing_to_collect(qapp):
-    page = SetsPage({"SET-A": [{"sku": "X", "quantity": 2}]})
-    assert page.collect() == {}
+def test_sets_page_collects_the_live_dict(qapp):
+    decoders = {"SET-A": [{"sku": "X", "quantity": 2}]}
+    page = SetsPage(decoders)
+    assert page.collect() == {"set_decoders": decoders}
+    assert page.collect()["set_decoders"] is decoders
     assert page.validate() == (True, [])
 
 
@@ -30,7 +32,11 @@ def test_sets_page_delete_mutates_the_live_dict_in_place(qapp, monkeypatch):
     set_decoders = {"SET-A": [{"sku": "X", "quantity": 2}]}
     page = SetsPage(set_decoders)
 
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes),
+    )
     monkeypatch.setattr(QMessageBox, "information", staticmethod(lambda *a, **k: None))
 
     page._delete_set("SET-A")
