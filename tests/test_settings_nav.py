@@ -7,11 +7,13 @@ Fixtures (qapp, no_modals, started_workers, window, make_settings_config)
 all come from conftest.py.
 """
 
+from typing import ClassVar
 from unittest.mock import Mock
 
+import pytest
 from PySide6.QtCore import QSettings, Qt
 
-from gui.settings.window import SettingsWindow
+from gui.settings.window import SETTINGS_SEARCH_KEYWORDS, SettingsWindow
 
 
 def _current_page_name(win):
@@ -91,3 +93,80 @@ def test_every_registered_page_is_reachable_from_the_nav(window):
         if window._settings_nav.item(row).flags() & Qt.ItemFlag.ItemIsSelectable
     }
     assert nav_names == set(window._page_index_by_name)
+
+
+def _headers(win):
+    nav = win._settings_nav
+    return {
+        nav.item(r).text(): nav.item(r).isHidden()
+        for r in range(nav.count())
+        if nav.item(r).data(Qt.ItemDataRole.UserRole) is None
+    }
+
+
+def test_search_matches_a_keyword(window):
+    assert window.filter_nav("box") == ["Weight"]
+
+
+def test_search_matches_a_page_name_ignoring_case(window):
+    assert window.filter_nav("SETS") == ["Sets"]
+
+
+def test_a_group_with_no_match_hides_its_header(window):
+    window.filter_nav("box")
+    assert _headers(window) == {
+        "DATA": True,
+        "FULFILLMENT LOGIC": False,
+        "OUTPUT": True,
+        "ORGANIZATION": True,
+    }
+
+
+def test_no_match_says_so_and_clearing_restores_every_page(window):
+    assert window.filter_nav("zzz") == []
+    assert not window._no_match_label.isHidden()
+    assert len(window.filter_nav("")) == 8
+    assert window._no_match_label.isHidden()
+
+
+def test_enter_opens_the_first_match(window):
+    window._nav_search.setText("courier")
+    window._nav_search.returnPressed.emit()
+    assert window._settings_nav.currentItem().text() == "Orders Mapping"
+
+
+def test_every_nav_page_has_search_keywords():
+    listed = sorted(
+        n for _g, names in SettingsWindow.SETTINGS_NAV_GROUPS for n in names
+    )
+    assert sorted(SETTINGS_SEARCH_KEYWORDS) == listed
+
+
+def test_a_nav_name_with_no_page_fails_construction(
+    qapp, no_modals, started_workers, make_settings_config
+):
+    class Broken(SettingsWindow):
+        SETTINGS_NAV_GROUPS: ClassVar = [
+            *SettingsWindow.SETTINGS_NAV_GROUPS,
+            ("Extra", ["Nope"]),
+        ]
+
+    with pytest.raises(ValueError):
+        Broken(
+            client_id="M", client_config=make_settings_config(), profile_manager=Mock()
+        )
+
+
+def test_an_empty_nav_group_fails_construction(
+    qapp, no_modals, started_workers, make_settings_config
+):
+    class Broken(SettingsWindow):
+        SETTINGS_NAV_GROUPS: ClassVar = [
+            *SettingsWindow.SETTINGS_NAV_GROUPS,
+            ("Empty", []),
+        ]
+
+    with pytest.raises(ValueError):
+        Broken(
+            client_id="M", client_config=make_settings_config(), profile_manager=Mock()
+        )

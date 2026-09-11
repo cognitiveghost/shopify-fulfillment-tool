@@ -4,13 +4,14 @@ from typing import ClassVar
 
 import pandas as pd
 from PySide6.QtCore import QRectF, QSettings, QSize, Qt, QThreadPool, QTimer
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -38,6 +39,18 @@ logger = logging.getLogger(__name__)
 NAV_ICON_PX = 12
 UNSAVED_DOT_PX = 8
 DIRTY_POLL_MS = 400
+
+# Page name -> words a person might search for that are not in the name.
+SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
+    "General": ["delimiter", "csv", "low stock", "threshold", "repeat"],
+    "Orders Mapping": ["columns", "csv", "headers", "courier", "carrier", "shipping"],
+    "Stock Mapping": ["columns", "csv", "headers", "expiry", "batch", "lot", "fifo"],
+    "Rules": ["conditions", "actions", "tags", "status", "priority", "automation"],
+    "Sets": ["bundles", "kits", "components", "decoder"],
+    "Weight": ["volumetric", "divisor", "dimensions", "boxes", "packaging", "kg"],
+    "Reports": ["packing list", "stock export", "filters", "output", "writeoff"],
+    "Tag Categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
+}
 
 
 def unsaved_summary(names: list[str]) -> str:
@@ -160,7 +173,29 @@ class SettingsWindow(QDialog):
         self._settings_nav.setFixedWidth(170)
         self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._settings_nav.setIconSize(QSize(NAV_ICON_PX, NAV_ICON_PX))
-        content_layout.addWidget(self._settings_nav)
+
+        nav_column = QVBoxLayout()
+        self._nav_search = QLineEdit()
+        self._nav_search.setPlaceholderText("Search settings")
+        self._nav_search.setClearButtonEnabled(True)
+        self._nav_search.setFixedWidth(170)
+        self._nav_search.textChanged.connect(self.filter_nav)
+        self._nav_search.returnPressed.connect(self._select_first_visible_page)
+        nav_column.addWidget(self._nav_search)
+        self._no_match_label = QLabel("No page matches")
+        on_theme_changed(
+            self._no_match_label,
+            lambda tokens: self._no_match_label.setStyleSheet(
+                f"{font_css('caption')} color: {tokens.text_secondary};"
+            ),
+        )
+        self._no_match_label.hide()
+        nav_column.addWidget(self._no_match_label)
+        nav_column.addWidget(self._settings_nav, 1)
+        content_layout.addLayout(nav_column)
+        QShortcut(QKeySequence(QKeySequence.StandardKey.Find), self).activated.connect(
+            self._nav_search.setFocus
+        )
 
         page_column = QVBoxLayout()
         self._validation_message = InlineMessage()
@@ -300,14 +335,28 @@ class SettingsWindow(QDialog):
     def _build_settings_nav(self) -> None:
         """Populate the left-nav list from SETTINGS_NAV_GROUPS with
         non-selectable section headers, and wire selection to the stack."""
+        listed = self._nav_page_names()
+        problems = []
+        if any(not names for _group, names in self.SETTINGS_NAV_GROUPS):
+            problems.append("a nav group has no pages")
+        if sorted(listed) != sorted(self._page_index_by_name):
+            problems.append(
+                f"nav lists {sorted(listed)} but pages are {sorted(self._page_index_by_name)}"
+            )
+        if sorted(SETTINGS_SEARCH_KEYWORDS) != sorted(listed):
+            problems.append(
+                "SETTINGS_SEARCH_KEYWORDS does not name exactly the nav's pages"
+            )
+        if problems:
+            # A page missing from the nav is unreachable, and nothing else says so.
+            raise ValueError("; ".join(problems))
+
         for group_name, page_names in self.SETTINGS_NAV_GROUPS:
             header = QListWidgetItem(group_name.upper())
             header.setFlags(Qt.ItemFlag.NoItemFlags)
             apply_font(header, "caption", bold=True)
             self._settings_nav.addItem(header)
             for page_name in page_names:
-                if page_name not in self._page_index_by_name:
-                    continue
                 item = QListWidgetItem(page_name)
                 item.setData(
                     Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name]
@@ -335,6 +384,37 @@ class SettingsWindow(QDialog):
         row = self._first_selectable_row()
         if row >= 0:
             self._settings_nav.setCurrentRow(row)
+
+    def filter_nav(self, text: str) -> list[str]:
+        """Show nav rows whose name or keywords contain `text`; return them."""
+        query = text.strip().casefold()
+        visible: list[str] = []
+        header, header_has_rows = None, False
+        for row in range(self._settings_nav.count()):
+            item = self._settings_nav.item(row)
+            if item.data(Qt.ItemDataRole.UserRole) is None:
+                if header is not None:
+                    header.setHidden(not header_has_rows)
+                header, header_has_rows = item, False
+                continue
+            name = item.text()
+            haystack = [name, *SETTINGS_SEARCH_KEYWORDS[name]]
+            match = not query or any(query in word.casefold() for word in haystack)
+            item.setHidden(not match)
+            if match:
+                visible.append(name)
+                header_has_rows = True
+        if header is not None:
+            header.setHidden(not header_has_rows)
+        self._no_match_label.setHidden(not query or bool(visible))
+        return visible
+
+    def _select_first_visible_page(self) -> None:
+        for row in range(self._settings_nav.count()):
+            item = self._settings_nav.item(row)
+            if item.data(Qt.ItemDataRole.UserRole) is not None and not item.isHidden():
+                self._settings_nav.setCurrentRow(row)
+                return
 
     def _on_settings_nav_changed(self, current, _previous):
         self._validation_message.clear()
