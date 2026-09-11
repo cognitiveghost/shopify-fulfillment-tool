@@ -11,7 +11,8 @@ import pytest
 from PySide6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
 
 from gui.settings.fields import REPORT_FILTER_OPERATORS, add_filter_row
-from gui.settings.reports import ReportsPage
+from gui.settings.report_editor import PACKING_LISTS, STOCK_EXPORTS, ReportEditor
+from gui.settings.reports import UNTITLED, ReportsPage
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -220,3 +221,92 @@ def test_a_filter_row_reports_value_edits_and_its_removal():
     delete.click()
     assert calls
     assert refs["filters"] == []
+
+
+def _named(*names):
+    return [{**PACKING[0], "name": name} for name in names]
+
+
+def test_the_page_holds_one_editor_at_a_time():
+    page = ReportsPage(PACKING, STOCK, analysis_df=None)
+
+    page._lists[STOCK_EXPORTS].setCurrentRow(0)
+
+    editors = page.findChildren(ReportEditor)
+    assert len(editors) == 1
+    assert editors[0].kind == STOCK_EXPORTS
+    assert page._lists[PACKING_LISTS].currentRow() == -1
+
+
+def test_an_edit_survives_switching_reports():
+    page = ReportsPage(PACKING, STOCK, analysis_df=None)
+    page._editor.name_edit.setText("Renamed")
+
+    page._lists[STOCK_EXPORTS].setCurrentRow(0)
+
+    assert page.collect()["packing_list_configs"][0]["name"] == "Renamed"
+    assert page._lists[PACKING_LISTS].item(0).text() == "Renamed"
+
+
+def test_reordering_the_list_reorders_the_config():
+    page = ReportsPage(_named("First", "Second"), [], analysis_df=None)
+    reports = page._lists[PACKING_LISTS]
+
+    reports.insertItem(0, reports.takeItem(1))
+
+    assert [c["name"] for c in page.collect()["packing_list_configs"]] == [
+        "Second",
+        "First",
+    ]
+
+
+def test_deleting_opens_the_neighbour():
+    page = ReportsPage(_named("A", "B", "C"), [], analysis_df=None)
+    page._lists[PACKING_LISTS].setCurrentRow(1)
+
+    page._editor.delete_button.click()
+
+    assert [c["name"] for c in page.collect()["packing_list_configs"]] == ["A", "C"]
+    assert page._editor.name_edit.text() == "C"
+
+
+def test_deleting_the_last_report_shows_the_empty_state():
+    page = ReportsPage([], STOCK, analysis_df=None)
+
+    page._editor.delete_button.click()
+
+    assert page._editor is None
+    assert not page._empty.isHidden()
+    assert page.collect() == {"packing_list_configs": [], "stock_export_configs": []}
+
+
+def test_a_page_with_no_reports_invites_adding_one():
+    page = ReportsPage([], [], analysis_df=None)
+    assert page._editor is None
+    assert not page._empty.isHidden()
+    page._empty.button.click()
+    assert page._editor is not None
+    assert page._editor.kind == PACKING_LISTS
+
+
+def test_a_new_report_lists_as_untitled_until_named():
+    page = ReportsPage([], [], analysis_df=None)
+    editor = page.add_report(STOCK_EXPORTS)
+    assert page._lists[STOCK_EXPORTS].item(0).text() == UNTITLED
+    editor.name_edit.setText("Nightly")
+    assert page._lists[STOCK_EXPORTS].item(0).text() == "Nightly"
+
+
+def test_opening_a_legacy_report_does_not_mark_the_page_unsaved():
+    legacy = {
+        "name": "legacy",
+        "output_filename": "l.xlsx",
+        "filters": [{"field": "SKU", "operator": "!=", "value": "A"}],
+        "exclude_skus": [],
+    }
+    page = ReportsPage([PACKING[0], legacy], [], analysis_df=None)
+    page.mark_clean()
+
+    page._lists[PACKING_LISTS].setCurrentRow(1)
+
+    assert page.is_dirty() is False
