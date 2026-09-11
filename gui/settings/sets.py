@@ -6,6 +6,9 @@ config_data["set_decoders"] -- and collect() returns that dict. Nothing
 reaches disk until the window's Save.
 """
 
+import logging
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
@@ -16,7 +19,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
+    QMenu,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -25,7 +28,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components.error_banner import show_error
 from gui.components.form_section import FormSection
+from gui.components.inline_message import InlineMessage
+from gui.components.toast import toast
 from gui.settings.base import SettingsPage
 from gui.theme_manager import (
     apply_dialog_button_roles,
@@ -34,6 +40,8 @@ from gui.theme_manager import (
 )
 from shared.theme import on_theme_changed
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
+
+logger = logging.getLogger(__name__)
 
 
 class SetsPage(SettingsPage):
@@ -79,15 +87,24 @@ class SetsPage(SettingsPage):
         add_btn.clicked.connect(self._add_set_dialog)
         buttons_layout.addWidget(add_btn)
 
-        import_btn = QPushButton("Import from CSV")
-        set_button_role(import_btn, "secondary")
-        import_btn.clicked.connect(self._import_sets_from_csv)
-        buttons_layout.addWidget(import_btn)
+        self.import_button = QPushButton("Import from CSV")
+        set_button_role(self.import_button, "secondary")
+        import_menu = QMenu(self.import_button)
+        merge_action = import_menu.addAction("Add and update sets…")
+        merge_action.triggered.connect(
+            lambda _checked=False: self._import_sets_from_csv(replace=False)
+        )
+        replace_action = import_menu.addAction("Replace all sets…")
+        replace_action.triggered.connect(
+            lambda _checked=False: self._import_sets_from_csv(replace=True)
+        )
+        self.import_button.setMenu(import_menu)
+        buttons_layout.addWidget(self.import_button)
 
-        export_btn = QPushButton("Export to CSV")
-        set_button_role(export_btn, "secondary")
-        export_btn.clicked.connect(self._export_sets_to_csv)
-        buttons_layout.addWidget(export_btn)
+        self.export_button = QPushButton("Export to CSV")
+        set_button_role(self.export_button, "secondary")
+        self.export_button.clicked.connect(self._export_sets_to_csv)
+        buttons_layout.addWidget(self.export_button)
 
         buttons_layout.addStretch()
 
@@ -174,6 +191,7 @@ class SetsPage(SettingsPage):
         # Re-apply search filter after repopulate
         if hasattr(self, "sets_search"):
             self._filter_sets_table(self.sets_search.text())
+        self.export_button.setEnabled(bool(self.set_decoders))
 
     def _filter_sets_table(self, text: str):
         """Filter sets table rows by SKU or components text."""
@@ -187,154 +205,76 @@ class SetsPage(SettingsPage):
             self.sets_table.setRowHidden(row, not visible)
 
     def _add_set_dialog(self):
-        """Show dialog to add a new set."""
         dialog = SetEditorDialog(parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             set_sku, components = dialog.get_set_definition()
-
-            # Debug: print what we got
-            print(f"[DEBUG] Adding set '{set_sku}' with {len(components)} components:")
-            for i, comp in enumerate(components):
-                print(f"  {i + 1}. {comp['sku']} x {comp['quantity']}")
-
-            # Add to config
             self.set_decoders[set_sku] = components
-
-            # Refresh table
             self._populate_sets_table()
 
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Set '{set_sku}' added with {len(components)} components!",
-            )
-
     def _edit_set_dialog(self, set_sku):
-        """Show dialog to edit an existing set."""
         current_components = self.set_decoders.get(set_sku, [])
-
         dialog = SetEditorDialog(
             set_sku=set_sku, components=current_components, parent=self
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_set_sku, new_components = dialog.get_set_definition()
-
-            # Remove old SKU if changed
             if new_set_sku != set_sku:
                 del self.set_decoders[set_sku]
-
-            # Update with new definition
             self.set_decoders[new_set_sku] = new_components
-
-            # Refresh table
             self._populate_sets_table()
-
-            QMessageBox.information(
-                self, "Success", f"Set '{new_set_sku}' updated successfully!"
-            )
 
     def _delete_set(self, set_sku):
-        """Delete a set after confirmation."""
-        reply = QMessageBox.question(
-            self,
-            "Confirm Delete",
-            f"Are you sure you want to delete set '{set_sku}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
+        """No confirm: the settings window's Cancel undoes it."""
+        del self.set_decoders[set_sku]
+        self._populate_sets_table()
 
-        if reply == QMessageBox.StandardButton.Yes:
-            del self.set_decoders[set_sku]
-            self._populate_sets_table()
-            QMessageBox.information(
-                self, "Success", f"Set '{set_sku}' deleted successfully!"
-            )
-
-    def _import_sets_from_csv(self):
-        """Import sets from CSV file."""
+    def _import_sets_from_csv(self, replace: bool):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Import Sets from CSV", "", "CSV Files (*.csv);;All Files (*)"
         )
-
         if not file_path:
             return
-
+        name = Path(file_path).name
         try:
-            # Import using set_decoder module
             imported_sets = import_sets_from_csv(file_path)
-
-            if not imported_sets:
-                QMessageBox.warning(self, "Warning", "No sets found in CSV file.")
-                return
-
-            # Ask user: Replace all or Merge
-            reply = QMessageBox.question(
+        except Exception:
+            logger.exception(f"Failed to import sets from {file_path}")
+            show_error(self, "The sets weren't imported", "Details are in Logs.")
+            return
+        if not imported_sets:
+            show_error(
                 self,
-                "Import Mode",
-                f"Found {len(imported_sets)} sets in CSV.\n\n"
-                "Yes = Replace all existing sets\n"
-                "No = Merge (update existing, add new)",
-                QMessageBox.StandardButton.Yes
-                | QMessageBox.StandardButton.No
-                | QMessageBox.StandardButton.Cancel,
+                f"No sets found in {name}",
+                "Each row needs Set_SKU, Component_SKU and Component_Quantity.",
             )
-
-            if reply == QMessageBox.StandardButton.Cancel:
-                return
-
-            if reply == QMessageBox.StandardButton.Yes:
-                # Replace all
-                self.set_decoders.clear()
-                self.set_decoders.update(imported_sets)
-            else:
-                # Merge
-                self.set_decoders.update(imported_sets)
-
-            # Refresh table
-            self._populate_sets_table()
-
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Successfully imported {len(imported_sets)} sets from CSV!",
-            )
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Import Error", f"Failed to import sets from CSV:\n\n{e!s}"
-            )
-
-    def _export_sets_to_csv(self):
-        """Export sets to CSV file."""
-        set_decoders = self.set_decoders
-
-        if not set_decoders:
-            QMessageBox.warning(self, "Warning", "No sets to export.")
             return
 
+        if replace:
+            self.set_decoders.clear()
+        self.set_decoders.update(imported_sets)
+        self._populate_sets_table()
+        if replace:
+            toast(self, f"Replaced all sets with {len(imported_sets)} from {name}")
+        else:
+            toast(self, f"Imported {len(imported_sets)} sets from {name}")
+
+    def _export_sets_to_csv(self):
+        """Disabled while there are no sets (see _populate_sets_table)."""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Sets to CSV",
             "sets_export.csv",
             "CSV Files (*.csv);;All Files (*)",
         )
-
         if not file_path:
             return
-
         try:
-            # Export using set_decoder module
-            export_sets_to_csv(set_decoders, file_path)
-
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Successfully exported {len(set_decoders)} sets to:\n{file_path}",
-            )
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Export Error", f"Failed to export sets to CSV:\n\n{e!s}"
-            )
+            export_sets_to_csv(self.set_decoders, file_path)
+        except Exception:
+            logger.exception(f"Failed to export sets to {file_path}")
+            show_error(self, "The sets weren't exported", "Details are in Logs.")
+            return
+        toast(self, f"Exported {len(self.set_decoders)} sets to {Path(file_path).name}")
 
 
 class SetEditorDialog(QDialog):
@@ -364,6 +304,10 @@ class SetEditorDialog(QDialog):
         sku_layout.addRow("Set SKU:", self.set_sku_edit)
         layout.addLayout(sku_layout)
 
+        self.sku_message = InlineMessage()
+        layout.addWidget(self.sku_message)
+        self.set_sku_edit.textChanged.connect(self.sku_message.clear)
+
         # Components table
         components_label = QLabel("Components:")
         components_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
@@ -384,6 +328,9 @@ class SetEditorDialog(QDialog):
         self.components_table.setColumnWidth(2, 80)
 
         layout.addWidget(self.components_table)
+
+        self.components_message = InlineMessage()
+        layout.addWidget(self.components_message)
 
         # Add component button
         add_comp_btn = QPushButton("+ Add Component")
@@ -464,48 +411,23 @@ class SetEditorDialog(QDialog):
                     break
 
     def _validate_and_save(self):
-        """Validate inputs and accept dialog if valid."""
-        # Validate Set SKU
-        set_sku = self.set_sku_edit.text().strip()
-        if not set_sku:
-            QMessageBox.warning(self, "Validation Error", "Set SKU cannot be empty!")
+        """Explain problems under the field they name; accept when there are none."""
+        self.sku_message.clear()
+        self.components_message.clear()
+        if not self.set_sku_edit.text().strip():
+            self.sku_message.show_message("Enter the set's SKU.")
             return
-
-        # Validate components
-        components = []
-        for row in range(self.components_table.rowCount()):
-            sku_widget = self.components_table.cellWidget(row, 0)
-            qty_widget = self.components_table.cellWidget(row, 1)
-
-            if sku_widget and qty_widget:
-                comp_sku = sku_widget.text().strip()
-                comp_qty = qty_widget.value()
-
-                if comp_sku:  # Only add non-empty SKUs
-                    components.append({"sku": comp_sku, "quantity": comp_qty})
-
-        if not components:
-            QMessageBox.warning(
-                self, "Validation Error", "Set must have at least one component!"
+        if not self.get_set_definition()[1]:
+            self.components_message.show_message(
+                "Add at least one component with a SKU."
             )
             return
-
-        # All valid, accept dialog
         self.accept()
 
     def get_set_definition(self):
-        """
-        Get the set definition from the dialog.
-
-        Returns:
-            Tuple of (set_sku, components_list)
-        """
+        """(set_sku, components_list) as currently entered."""
         set_sku = self.set_sku_edit.text().strip()
         components = []
-
-        print(
-            f"[DEBUG] get_set_definition: Reading {self.components_table.rowCount()} rows from table"
-        )
 
         for row in range(self.components_table.rowCount()):
             sku_widget = self.components_table.cellWidget(row, 0)
@@ -515,18 +437,7 @@ class SetEditorDialog(QDialog):
                 comp_sku = sku_widget.text().strip()
                 comp_qty = qty_widget.value()
 
-                print(
-                    f"[DEBUG]   Row {row}: SKU='{comp_sku}', Qty={comp_qty}, Empty={not bool(comp_sku)}"
-                )
-
                 if comp_sku:
                     components.append({"sku": comp_sku, "quantity": comp_qty})
-            else:
-                print(
-                    f"[DEBUG]   Row {row}: widgets are None (sku_widget={sku_widget}, qty_widget={qty_widget})"
-                )
 
-        print(
-            f"[DEBUG] get_set_definition: Collected {len(components)} non-empty components"
-        )
         return set_sku, components

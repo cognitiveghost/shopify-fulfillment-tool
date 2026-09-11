@@ -2,7 +2,6 @@
 them silently. Fixtures (window, started_workers, no_modals) come from
 conftest.py."""
 
-import pytest
 from PySide6.QtWidgets import QFileDialog
 
 from gui.settings.window import unsaved_summary
@@ -92,7 +91,6 @@ def test_keep_editing_and_escape_both_restore_the_footer(window):
     assert window._close_guard.isHidden()
 
 
-@pytest.mark.xfail(reason="Task 6", strict=True)
 def test_cancel_then_discard_leaves_the_profile_unwritten(
     window, started_workers, monkeypatch, tmp_path
 ):
