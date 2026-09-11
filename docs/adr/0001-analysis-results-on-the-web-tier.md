@@ -86,6 +86,13 @@ Guardrails that keep the two renderers from drifting:
 - One mono face across both renderers. Consolas, because a Windows warehouse
   PC already has it. `templates/assets/fonts/` currently ships JetBrains Mono,
   which is a live seam today and shows on every SKU.
+  **Corrected 2026-09-11 (Bundle 11):** that premise was wrong.
+  `shopify_tool/templates/assets/fonts/` belongs to the printed-label
+  templates, which never appear in either renderer, and `label_tools.py`
+  wraps label text using JetBrains Mono's 0.6em character width. The labels
+  keep it, by the repo owner's decision. The rule still holds on screen: both
+  tiers take the mono face from `font_family_mono` (Consolas), the web tier
+  through `theme_css_vars`.
 
 ## Alternatives considered
 

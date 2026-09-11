@@ -22,6 +22,22 @@ Info › Statistics that leaves it the sole occupant.
 one palette must serve both. Never used for `QSvgRenderer`; say
 `QSvgRenderer` when that is what is meant.
 
+**Bridge** — the one object through which the two tiers exchange messages.
+Each message is its own named member; nothing crosses as a generic
+"send this kind of message" call. Not the **seam**, which is the visible
+edge where the tiers meet on screen: the bridge is what crosses it, the
+seam is what must not be seen.
+
+**Web asset** — a stylesheet, page or script the web tier loads. The
+printed-label templates are not web assets: they are rendered to PDF, never
+shown in the web tier, and keep their own font.
+
+**Order frame** — the analysis result folded to one row per order, with its
+lines counted rather than listed. What the Qt tier's table shows.
+
+**Order payload** — the order frame as the web tier receives it: one entry
+per order, with that order's lines nested inside it.
+
 ## Assets
 
 **Asset library** — `shared/assets/`, plus the two modules that read it
