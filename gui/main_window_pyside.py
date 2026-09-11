@@ -1392,6 +1392,14 @@ class MainWindow(QMainWindow):
         # doesn't kill a write mid-flight -- bounded so a hung write can't
         # hang shutdown.
         self.threadpool.waitForDone(2000)
+        # waitForDone only waits for the worker threads themselves to return;
+        # it doesn't pump the event loop, so a result signal a worker already
+        # queued (e.g. on_client_changed's client-load) is still sitting
+        # undelivered. Deliver it now, while self and its children are still
+        # alive, instead of leaving it to fire later against a torn-down
+        # window (surfaced as "libshiboken: ... already deleted" in tests
+        # that switch clients and close in the same run).
+        QApplication.processEvents()
         event.accept()
 
 
