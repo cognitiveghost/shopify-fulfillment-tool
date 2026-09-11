@@ -29,6 +29,8 @@ ORDER_LEVEL_COLUMNS = (
     "Internal_Tags",
     "Total_Price",
     "Subtotal",
+    "Customer",
+    "Created_At",
 )
 
 # Varies line by line; these live in the detail pane, not on the order row.

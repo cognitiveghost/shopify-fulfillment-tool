@@ -152,6 +152,8 @@ class OrdersMappingPage(_MappingPageBase):
         "Notes",
         "Total_Price",
         "Subtotal",
+        "Customer",
+        "Created_At",
     ]
 
     def __init__(self, column_mappings: dict, courier_mappings: dict, parent=None):
