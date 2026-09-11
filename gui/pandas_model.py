@@ -1,12 +1,11 @@
-
 import pandas as pd
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 
 from gui.theme_manager import get_theme_manager
 
 # The row's status as a theme role token name -- resolved against the live
-# theme by StatusEdgeDelegate, not here. Qt.UserRole is unused on this model
-# and TagDelegate reads none; +20 leaves room for both.
+# theme by StatusEdgeDelegate, not here. Qt.UserRole is unused on this model;
+# +20 leaves room.
 ROLE_STATUS = Qt.ItemDataRole.UserRole + 20
 
 
@@ -15,7 +14,11 @@ def _format_lot(lot: dict) -> str:
     qty = lot.get("qty_allocated", lot.get("qty", 0))
     qty_str = f"{qty:g}" if isinstance(qty, float) else str(qty)
     expiry_dt = lot.get("expiry_dt")
-    expiry_str = f"exp {expiry_dt.isoformat()}" if expiry_dt is not None else f"exp unparsed ({lot.get('expiry')!r})"
+    expiry_str = (
+        f"exp {expiry_dt.isoformat()}"
+        if expiry_dt is not None
+        else f"exp unparsed ({lot.get('expiry')!r})"
+    )
     batch = lot.get("batch")
     batch_str = f", Batch {batch}" if batch else ""
     return f"{qty_str}x, {expiry_str}{batch_str}"
@@ -178,7 +181,12 @@ class PandasModel(QAbstractTableModel):
 
         return None
 
-    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole):
+    def headerData(
+        self,
+        section: int,
+        orientation: Qt.Orientation,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
         """Returns the header data for the given section and orientation.
 
         Args:
@@ -224,9 +232,13 @@ class PandasModel(QAbstractTableModel):
                 visible.
         """
         self.beginResetModel()
-        existing_columns = [col for col in all_columns_in_order if col in self._dataframe.columns]
+        existing_columns = [
+            col for col in all_columns_in_order if col in self._dataframe.columns
+        ]
         self._dataframe = self._dataframe[existing_columns]
-        self.hidden_columns = [col for col in all_columns_in_order if col not in visible_columns]
+        self.hidden_columns = [
+            col for col in all_columns_in_order if col not in visible_columns
+        ]
         self.endResetModel()
 
     def _build_row_status_cache(self):

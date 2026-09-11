@@ -82,6 +82,7 @@ class ActionsHandler(QObject):
 
             self.mw.session_path = session_path
             self.mw.command_bar.set_state(BarState.SESSION)
+            self.mw.ui_manager.update_session_chips()
 
             # Update session info labels
             if hasattr(self.mw, "update_session_info_label"):
@@ -174,6 +175,9 @@ class ActionsHandler(QObject):
         """Reset analysis-running guard and update UI after analysis finishes."""
         self.mw._analysis_running = False
         self.mw.command_bar.set_state(BarState.SESSION)
+        # Here, not in _update_all_views: the chips read session_info and stat
+        # the stock copy over the share, which every tag or undo would repeat.
+        self.mw.ui_manager.update_session_chips()
         self.mw.ui_manager.set_ui_busy(False)
 
     def on_analysis_complete(self, result):
@@ -425,13 +429,6 @@ class ActionsHandler(QObject):
                 self.log.info(
                     f"Tag categories updated for CLIENT_{self.mw.current_client_id}"
                 )
-
-                # Refresh tag delegate so new tags get correct colors immediately
-                if (
-                    hasattr(self.mw, "tag_delegate")
-                    and self.mw.tag_delegate is not None
-                ):
-                    self.mw.tag_delegate.tag_categories = updated_categories
 
             except Exception:
                 self.log.exception("Error saving tag categories")

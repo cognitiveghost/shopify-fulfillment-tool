@@ -83,6 +83,35 @@ def _count_is(qtbot, view, text):
     _until_js(qtbot, view, f"document.getElementById('count').textContent === {text!r}")
 
 
+def _search(qtbot, view, text):
+    _eval(
+        qtbot,
+        view,
+        f"var s = document.getElementById('search'); s.value = {text!r};"
+        " s.dispatchEvent(new Event('input')); true",
+    )
+
+
+def _click_order(qtbot, view, order, **modifiers):
+    init = json.dumps({"bubbles": True, **modifiers})
+    _eval(
+        qtbot,
+        view,
+        f"document.querySelector('#rows .row[data-order=\"{order}\"] .order')"
+        f".dispatchEvent(new MouseEvent('click', {init})); true",
+    )
+
+
+def _key(qtbot, view, key, **modifiers):
+    init = json.dumps({"key": key, "bubbles": True, **modifiers})
+    _eval(
+        qtbot,
+        view,
+        "document.getElementById('table')"
+        f".dispatchEvent(new KeyboardEvent('keydown', {init})); true",
+    )
+
+
 # --- 9.15: the numbers ------------------------------------------------------
 
 
@@ -216,13 +245,26 @@ def test_nothing_analysed_shows_its_state(qtbot, doc):
 def test_search_finds_an_order_by_its_sku(qtbot, doc):
     view, _ = doc
     _count_is(qtbot, view, "312 orders")
-    _eval(
-        qtbot,
-        view,
-        "var s = document.getElementById('search'); s.value = 'sku-042-0';"
-        " s.dispatchEvent(new Event('input')); true",
-    )
+    _search(qtbot, view, "sku-042-0")
     _count_is(qtbot, view, "1 of 312 orders")
+
+
+def test_search_finds_an_order_by_a_lot_batch_or_either_expiry_form(qtbot, doc):
+    """#285: a lot is searched by batch, raw expiry and parsed expiry."""
+    view, bridge = doc
+    lot = {
+        "batch": "B7",
+        "expiry": "261230",
+        "expiry_dt": pd.Timestamp("2026-12-30").date(),
+        "qty_allocated": 1,
+    }
+    lines = results_lines(3)
+    lines["Lot_Details"] = [[lot] if i == 0 else None for i in range(len(lines))]
+    bridge.set_orders(lines)
+    _count_is(qtbot, view, "3 orders")
+    for query in ("b7", "261230", "2026-12-30"):
+        _search(qtbot, view, query)
+        _count_is(qtbot, view, "1 of 3 orders")
 
 
 def test_chips_and_across_groups_and_or_within_one(qtbot, doc):
@@ -280,6 +322,55 @@ def test_arrow_down_moves_the_selection(qtbot, doc):
             "new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true})); true",
         )
     assert blocker.args == [["#10002"]]
+
+
+def test_an_orders_push_keeps_the_selection(qtbot, doc):
+    """Every tag, status or undo re-pushes the session; the selection stays."""
+    view, bridge = doc
+    _click_order(qtbot, view, "#10002")
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
+    _eval(qtbot, view, "document.querySelector('#rows .row').dataset.stale = '1'; true")
+    bridge.set_orders(results_lines())
+    _until_js(qtbot, view, "!document.querySelector('#rows [data-stale]')")
+    assert (
+        _eval(
+            qtbot,
+            view,
+            "document.querySelector('#rows .row[data-order=\"#10002\"]')"
+            ".classList.contains('selected')",
+        )
+        is True
+    )
+    assert bridge.selection() == ["#10002"]
+
+
+def test_shift_selects_a_range_and_shift_arrow_can_shrink_it(qtbot, doc):
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _click_order(qtbot, view, "#10004", shiftKey=True)
+    qtbot.waitUntil(
+        lambda: bridge.selection() == ["#10001", "#10002", "#10003", "#10004"]
+    )
+    _key(qtbot, view, "ArrowUp", shiftKey=True)
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10001", "#10002", "#10003"])
+
+
+def test_ctrl_a_selects_every_order_shown_and_escape_clears(qtbot, doc):
+    view, bridge = doc
+    _choose_filter(qtbot, view, "Blocked")
+    _count_is(qtbot, view, "31 of 312 orders")
+    _key(qtbot, view, "a", ctrlKey=True)
+    qtbot.waitUntil(lambda: len(bridge.selection()) == 31)
+    _key(qtbot, view, "Escape")
+    qtbot.waitUntil(lambda: bridge.selection() == [])
+
+
+def test_ctrl_f_focuses_the_search_field(qtbot, doc):
+    view, bridge = doc
+    bridge.focusSearchRequested.emit()
+    _until_js(
+        qtbot, view, "document.activeElement === document.getElementById('search')"
+    )
 
 
 def test_sorting_value_twice_is_descending(qtbot, doc):

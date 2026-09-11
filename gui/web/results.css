@@ -222,7 +222,7 @@ button, input { font: inherit; color: inherit; }
 .row {
   display: grid;
   grid-template-columns: var(--cols);
-  min-width: 780px;
+  min-width: var(--table-min, 780px); /* results.js measureColumns */
   background: var(--surface);
 }
 
@@ -234,7 +234,7 @@ button, input { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.rows { position: relative; min-width: 780px; }
+.rows { position: relative; min-width: var(--table-min, 780px); }
 
 .rows .row {
   position: absolute;

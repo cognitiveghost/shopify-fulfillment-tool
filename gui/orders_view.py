@@ -12,7 +12,7 @@ import math
 import numpy as np
 import pandas as pd
 
-from gui.pandas_model import REPEAT_COLUMN, cell_search_text, is_repeat
+from gui.pandas_model import REPEAT_COLUMN, is_repeat
 from shopify_tool.tag_manager import parse_tags
 
 # Constant across every line of an order, by construction in analysis.py's
@@ -52,14 +52,6 @@ LINE_LEVEL_COLUMNS = (
 # analysis.py:1072 writes exactly this prefix into System_note, for every line
 # of the order. The reason is the analysis's to compute; this module only reads.
 BLOCKER_PREFIX = "Cannot fulfill: "
-
-# Hidden column carrying the order's line text so a SKU search still finds the
-# order that contains it. The view hides it; the filter proxy still scans it.
-SEARCH_COLUMN = "_search_text"
-
-# Derived, and hidden from every surface that walks the frame's columns: the
-# table view, the column-config dialog, and the filter-scope dropdown.
-HIDDEN_COLUMNS = (SEARCH_COLUMN, REPEAT_COLUMN)
 
 ORDER_KEY = "Order_Number"
 
@@ -132,12 +124,12 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Fold ``df`` to one row per ``Order_Number``, preserving row order.
 
     Adds three columns that exist only at the order level: ``Items`` (line
-    count), ``Blocker`` (the reason, extracted) and ``SEARCH_COLUMN``.
+    count), ``Blocker`` (the reason, extracted) and ``REPEAT_COLUMN``.
     """
     if df is None or df.empty or ORDER_KEY not in df.columns:
         return pd.DataFrame()
 
-    order_level, line_level = classify_columns(df)
+    order_level, _line_level = classify_columns(df)
     carried = [col for col in order_level if col != ORDER_KEY]
 
     # groupby drops null keys. analysis.py writes Order_Number for every line,
@@ -164,21 +156,6 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         out[REPEAT_COLUMN] = False
-
-    if line_level:
-        # Series.map, not DataFrame.map: the latter only exists from pandas 2.1
-        # and this stays readable either way.
-        # cell_search_text, not cell_display_text: a Lot_Details cell displays
-        # as "1 lot" but must stay findable by its batch number and expiry.
-        parts = [df[col].map(cell_search_text) for col in line_level]
-        line_text = parts[0]
-        for part in parts[1:]:
-            line_text = line_text.str.cat(part, sep=" ")
-        out[SEARCH_COLUMN] = out[ORDER_KEY].map(
-            line_text.groupby(df[ORDER_KEY], sort=False).agg(" ".join)
-        )
-    else:
-        out[SEARCH_COLUMN] = ""
 
     return out
 
@@ -229,8 +206,7 @@ def order_payload(df: pd.DataFrame) -> list[dict]:
 
     One entry per order in the frame's row order: the order-level columns once,
     under their own names, and ``lines``, the line-level columns one dict per
-    line. SEARCH_COLUMN stays behind -- it is the Qt filter proxy's helper, and
-    the web tier filters on its own terms (9.13).
+    line. The page builds its own search text from these (9.13).
     """
     orders = orders_frame(df)
     if orders.empty:
@@ -243,9 +219,7 @@ def order_payload(df: pd.DataFrame) -> list[dict]:
         ]
         for key, group in df.groupby(ORDER_KEY, sort=False)
     }
-    columns = [ORDER_KEY] + [
-        c for c in orders.columns if c not in (ORDER_KEY, SEARCH_COLUMN)
-    ]
+    columns = [ORDER_KEY] + [c for c in orders.columns if c != ORDER_KEY]
     by_order = df[ORDER_KEY]
     units = (
         pd.to_numeric(df["Quantity"], errors="coerce")

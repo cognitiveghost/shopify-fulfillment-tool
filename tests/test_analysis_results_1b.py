@@ -1,10 +1,7 @@
 """Widget-level tests for Analysis Results 1b (spec §10 tests 9-11)."""
 
-import pandas as pd
 import pytest
 from PySide6.QtWidgets import QApplication
-
-from gui.orders_view import orders_frame
 
 
 @pytest.fixture(scope="module")
@@ -37,22 +34,5 @@ def test_no_bulk_mode_and_no_tag_panel_toggle(app, main_window):
     assert not hasattr(main_window, "toggle_tags_panel_btn")
 
 
-def test_a_lot_batch_number_is_still_findable(app):
-    """cell_search_text, not cell_display_text: a lot cell renders as "1 lot"."""
-    import json
-
-    df = pd.DataFrame(
-        [
-            {
-                "Order_Number": "1001",
-                "SKU": "AAA",
-                "Lot_Details": json.dumps([{"batch": "B7", "expiry": "2026-12-30"}]),
-            },
-            {"Order_Number": "1002", "SKU": "BBB", "Lot_Details": "[]"},
-        ]
-    )
-
-    orders = orders_frame(df)
-    from gui.orders_view import SEARCH_COLUMN
-
-    assert "B7" in orders.loc[orders["Order_Number"] == "1001", SEARCH_COLUMN].iloc[0]
+# The lot batch/expiry search this file used to pin moved with the search into
+# the results document: tests/test_results_document.py.

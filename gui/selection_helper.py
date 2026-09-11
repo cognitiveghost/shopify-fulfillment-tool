@@ -1,18 +1,19 @@
 """Selection helper utilities for bulk operations.
 
-This module provides the SelectionHelper class that manages table selection
-and checkbox state for bulk operations on the Analysis Results table.
+This module provides the SelectionHelper class, which holds the order
+selection the results document reports through ResultsBridge, for bulk
+operations.
 """
 
 import pandas as pd
 
 
 class SelectionHelper:
-    """Manages table selection and checkbox state for bulk operations.
+    """Holds the page's order selection for bulk operations.
 
-    This class tracks which rows are "checked" (selected for bulk operations)
-    independently from Qt's native row selection. The checked state is stored
-    as a set of source DataFrame indexes.
+    The results document owns the gesture (ADR 0005) and reports order
+    numbers; this class stores them as the source DataFrame indexes of those
+    orders' lines.
 
     Attributes:
         main_window: Reference to the MainWindow instance

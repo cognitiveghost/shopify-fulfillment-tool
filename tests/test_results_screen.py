@@ -70,6 +70,18 @@ def test_update_all_views_pushes_orders_and_summary(main_window, lines_df):
     assert main_window.results_bridge.summary["blocked"] == 1
 
 
+def test_a_failed_push_still_clears_busy(main_window, lines_df, monkeypatch):
+    main_window.analysis_results_df = lines_df
+    main_window.ui_manager.set_ui_busy(True)
+
+    def fail(_df):
+        raise KeyError("unusual session data")
+
+    monkeypatch.setattr(main_window.results_bridge, "set_orders", fail)
+    main_window._update_all_views()
+    assert main_window.results_bridge.exportEnabled is True
+
+
 def test_a_page_selection_reaches_the_selection_helper(main_window, lines_df):
     main_window.analysis_results_df = lines_df
     main_window.results_bridge.setSelection(["1002"])
@@ -194,3 +206,17 @@ def test_session_chips_blank_without_an_analysis(main_window, tmp_path, monkeypa
     main_window.ui_manager.update_session_chips()
     assert main_window.command_bar.status_chip.text() == ""
     assert main_window.command_bar.stock_chip.text() == ""
+
+
+def test_opening_a_session_drops_the_previous_sessions_chips(
+    main_window, tmp_path, monkeypatch
+):
+    bar = main_window.command_bar
+    bar.set_status("text_secondary", "Analysed 09:33")
+    bar.set_stock_age("Stock file 19 h old")
+    monkeypatch.setattr(
+        main_window.session_manager, "get_session_info", lambda _path: {}
+    )
+    main_window.load_existing_session(str(tmp_path))
+    assert bar.status_chip.text() == ""
+    assert bar.stock_chip.text() == ""

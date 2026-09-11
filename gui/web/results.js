@@ -28,7 +28,8 @@ const state = {
   chips: [], // {kind, value, label}
   sort: null, // {key, dir: 1 | -1}
   selected: new Set(), // order numbers
-  anchorKey: null, // the row a Shift-click or an arrow key starts from
+  anchorKey: null, // the fixed end of a Shift range
+  cursorKey: null, // the row the arrow keys move from
   rowH: 28,
   visible: 0,
 };
@@ -55,8 +56,10 @@ function fmtCompact(v) {
   const n = num(v);
   if (n === null) return DASH;
   const abs = Math.abs(n);
-  if (abs >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (abs >= 1e3) return (n / 1e3).toFixed(1) + "k";
+  // Each threshold sits where rounding would reach the next unit: 999.6 is
+  // "1.0k", not "1000".
+  if (abs >= 999950) return (n / 1e6).toFixed(1) + "M";
+  if (abs >= 999.5) return (n / 1e3).toFixed(1) + "k";
   return String(Math.round(n));
 }
 function ageMs(iso) {
@@ -165,9 +168,19 @@ function matches(record) {
   return true;
 }
 
+// A lot stays findable by its batch and by both expiry forms, the raw
+// stock-file string and the parsed date (#285). A Lot_Details cell read back
+// from disk as text is searched whole, as the Qt filter did.
 function searchText(o) {
   const parts = [o.Order_Number, o.Customer, o.Shipping_Provider].concat(o.Tag_List || []);
-  for (const line of o.lines || []) parts.push(line.SKU, line.Product_Name);
+  for (const line of o.lines || []) {
+    parts.push(line.SKU, line.Product_Name);
+    const lots = line.Lot_Details;
+    for (const lot of Array.isArray(lots) ? lots : [lots]) {
+      if (lot && typeof lot === "object") parts.push(lot.batch, lot.expiry, lot.expiry_dt);
+      else parts.push(lot);
+    }
+  }
   return parts.map(str).join(" ").toLowerCase();
 }
 
@@ -196,6 +209,7 @@ function recompute() {
   const shown = new Set(view.map((r) => r.key));
   state.selected = new Set([...state.selected].filter((k) => shown.has(k)));
   if (state.anchorKey !== null && !shown.has(state.anchorKey)) state.anchorKey = null;
+  if (state.cursorKey !== null && !shown.has(state.cursorKey)) state.cursorKey = null;
 }
 
 // --- rendering ----------------------------------------------------------------
@@ -391,6 +405,9 @@ function measureColumns() {
   const customerMin = Math.max(120, TABLE_MIN_PX - fixed);
   const template = COLUMNS.map((col, i) => (col.stretch ? "minmax(" + customerMin + "px, 1fr)" : widths[i] + "px"));
   els.table.style.setProperty("--cols", template.join(" "));
+  // A column grown past its canvas width raises the floor with it, or the
+  // cells past 780 would overflow the row box.
+  els.table.style.setProperty("--table-min", fixed + customerMin + "px");
 }
 
 // Whole rows only: the table is as tall as the rows that fit, and whatever is
@@ -492,6 +509,7 @@ function onRowClick(event) {
     state.selected = new Set([key]);
     state.anchorKey = key;
   }
+  state.cursorKey = key;
   els.table.focus({ preventScroll: true });
   render();
 }
@@ -515,6 +533,7 @@ function onTableKey(event) {
   if (event.key === "Escape") {
     state.selected = new Set();
     state.anchorKey = null;
+    state.cursorKey = null;
     render();
     return;
   }
@@ -522,11 +541,16 @@ function onTableKey(event) {
   event.preventDefault();
   if (!state.view.length) return;
   const keys = state.view.map((r) => r.key);
-  const at = state.anchorKey === null ? -1 : keys.indexOf(state.anchorKey);
+  const at = state.cursorKey === null ? -1 : keys.indexOf(state.cursorKey);
   const next = Math.min(keys.length - 1, Math.max(0, at + (event.key === "ArrowDown" ? 1 : -1)));
-  if (event.shiftKey) state.selected.add(keys[next]);
-  else state.selected = new Set([keys[next]]);
-  state.anchorKey = keys[next];
+  // Shift keeps the anchor and re-spans to the cursor, so reversing shrinks.
+  if (event.shiftKey && state.anchorKey !== null) {
+    selectRange(state.anchorKey, keys[next], false);
+  } else {
+    state.selected = new Set([keys[next]]);
+    state.anchorKey = keys[next];
+  }
+  state.cursorKey = keys[next];
   scrollIntoView(next);
   render();
 }
@@ -595,6 +619,12 @@ function bind() {
 bind();
 renderKpis();
 render();
+// Columns are measured on a canvas, which needs the real face: measure again
+// once Inter has loaded, or widths from the fallback font would stick.
+document.fonts.ready.then(() => {
+  measureColumns();
+  render();
+});
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.results;

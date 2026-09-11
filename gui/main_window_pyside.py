@@ -89,11 +89,6 @@ class MainWindow(QMainWindow):
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
         self._analysis_running = False  # Guard against duplicate analysis runs
 
-        # Table display attributes
-        self.all_columns = []
-        self.visible_columns = []
-        self.is_syncing_selection = False
-
         # Initialize new architecture managers
         self._init_managers()
 
@@ -424,32 +419,6 @@ class MainWindow(QMainWindow):
         else:
             logger.error(f"Undo failed: {message}")
             show_error(self, "Undo didn't complete", "Details are in Logs.")
-
-    def _apply_tag_operation(self, mask, description: str, params: dict, tag: str):
-        """Apply add_tag to DataFrame rows matching mask, record undo, and refresh UI."""
-        from shopify_tool.tag_manager import add_tag
-
-        if "Internal_Tags" not in self.analysis_results_df.columns:
-            self.analysis_results_df["Internal_Tags"] = "[]"
-
-        affected_rows_before = self.analysis_results_df[mask].copy()
-        self.analysis_results_df.loc[mask, "Internal_Tags"] = (
-            self.analysis_results_df.loc[mask, "Internal_Tags"].apply(
-                lambda t: add_tag(t, tag)
-            )
-        )
-        self.undo_manager.record_operation(
-            operation_type="add_internal_tag",
-            description=description,
-            params=params,
-            affected_rows_before=affected_rows_before,
-        )
-        self.save_session_state()
-        self._update_all_views()
-        self.log_activity("Internal Tag", description)
-        if hasattr(self, "undo_button"):
-            self.undo_button.setEnabled(True)
-            self.undo_button.setToolTip(f"Undo: {description} (Ctrl+Z)")
 
     def update_session_info_label(self):
         """Update global header session info label."""
@@ -870,6 +839,9 @@ class MainWindow(QMainWindow):
             # first is creating one. Both have to say so, or the bar shows
             # New Session while a session is open. Spec §3.1.
             self.command_bar.set_state(BarState.SESSION)
+            # Before the analysis loads: a session without one must not keep
+            # the previous session's chips.
+            self.ui_manager.update_session_chips()
 
             # Reload undo history for this session
             if hasattr(self, "undo_manager"):
@@ -930,9 +902,13 @@ class MainWindow(QMainWindow):
         else:
             self.analysis_stats = None
 
-        self.results_bridge.set_orders(self.analysis_results_df)
-        self.ui_manager.update_session_chips()
-        self.ui_manager.set_ui_busy(False)
+        try:
+            self.results_bridge.set_orders(self.analysis_results_df)
+        except Exception:
+            logger.exception("Failed to refresh the results document")
+        finally:
+            # Never skipped: a failed push must not leave the window stuck busy.
+            self.ui_manager.set_ui_busy(False)
 
     def _on_analysis_mode_changed(self, index: int):
         """Save the analysis mode selection to shopify_config when the combo changes."""

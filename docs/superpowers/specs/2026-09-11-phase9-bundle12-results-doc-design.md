@@ -209,8 +209,10 @@ A 40px flex row with an 8px gap, items centred, left to right:
      `--focus-ring` outline.
    - Placeholder: **"Order, customer or SKU"**.
    - Matching: case-insensitive substring over `Order_Number`, `Customer`,
-     `Shipping_Provider`, `Tag_List`, and every line's `SKU` and
-     `Product_Name`. The search text is precomputed once per `orders` push.
+     `Shipping_Provider`, `Tag_List`, and every line's `SKU`,
+     `Product_Name` and lots (batch, raw expiry, parsed expiry — the #285
+     behaviour the Qt filter had; added at Stage C review). The search text
+     is precomputed once per `orders` push.
 2. **Applied chips:**
    - Look: an outlined pill with 1px `--border`, `--radius-lg`, padding
      3px 8px, caption size.
