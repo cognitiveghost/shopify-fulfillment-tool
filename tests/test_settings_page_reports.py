@@ -227,6 +227,15 @@ def _named(*names):
     return [{**PACKING[0], "name": name} for name in names]
 
 
+def test_a_long_report_scrolls_instead_of_growing_the_page():
+    """Without a scroll area, a dozen filters push Save below a 768px screen."""
+    one = ReportsPage(PACKING, [], analysis_df=None)
+    twelve = ReportsPage(
+        [{**PACKING[0], "filters": PACKING[0]["filters"] * 12}], [], analysis_df=None
+    )
+    assert twelve.minimumSizeHint().height() == one.minimumSizeHint().height()
+
+
 def test_the_page_holds_one_editor_at_a_time():
     page = ReportsPage(PACKING, STOCK, analysis_df=None)
 

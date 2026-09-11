@@ -8,7 +8,7 @@ and a drag between them is impossible by construction.
 
 import itertools
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractScrollArea,
@@ -26,8 +26,9 @@ from PySide6.QtWidgets import (
 from gui.components.state_panel import StatePanel
 from gui.settings.base import SettingsPage
 from gui.settings.report_editor import PACKING_LISTS, STOCK_EXPORTS, ReportEditor
+from gui.theme_manager import set_button_role
 from shared.icons import icon
-from shared.theme import font_css, on_theme_changed, set_button_role
+from shared.theme import font_css, on_theme_changed
 
 KINDS = (
     (PACKING_LISTS, "Packing lists", "Add packing list", "packing_list_configs"),
@@ -109,8 +110,15 @@ class ReportsPage(SettingsPage):
         scroll.setWidget(column)
         layout.addWidget(scroll)
 
-        self._editor_layout = QVBoxLayout()
-        layout.addLayout(self._editor_layout, 1)
+        # A report with a dozen filters is taller than a warehouse screen.
+        editor_host = QWidget()
+        self._editor_layout = QVBoxLayout(editor_host)
+        self._editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_scroll = QScrollArea()
+        editor_scroll.setWidgetResizable(True)
+        editor_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        editor_scroll.setWidget(editor_host)
+        layout.addWidget(editor_scroll, 1)
         # Secondary: inside Settings, Save is the only primary.
         self._empty = StatePanel(
             "No reports yet",
@@ -169,10 +177,9 @@ class ReportsPage(SettingsPage):
             return
         for other_kind, other in self._lists.items():
             if other_kind != kind:
-                other.blockSignals(True)
-                other.setCurrentRow(-1)
-                other.clearSelection()
-                other.blockSignals(False)
+                with QSignalBlocker(other):
+                    other.setCurrentRow(-1)
+                    other.clearSelection()
         self._show(kind, item.data(Qt.ItemDataRole.UserRole))
 
     def _show(self, kind, key) -> None:
@@ -218,10 +225,9 @@ class ReportsPage(SettingsPage):
         reports = self._lists[kind]
         self._drop_editor()
         self._store.pop(key)
-        reports.blockSignals(True)
-        reports.takeItem(row)
-        reports.setCurrentRow(-1)
-        reports.blockSignals(False)
+        with QSignalBlocker(reports):
+            reports.takeItem(row)
+            reports.setCurrentRow(-1)
         if reports.count():
             reports.setCurrentRow(min(row, reports.count() - 1))
         else:
@@ -230,9 +236,8 @@ class ReportsPage(SettingsPage):
     def _select_first(self) -> None:
         for reports in self._lists.values():
             if reports.count():
-                reports.blockSignals(True)
-                reports.setCurrentRow(-1)
-                reports.blockSignals(False)
+                with QSignalBlocker(reports):
+                    reports.setCurrentRow(-1)
                 reports.setCurrentRow(0)
                 return
         self._drop_editor()

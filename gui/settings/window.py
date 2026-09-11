@@ -365,25 +365,24 @@ class SettingsWindow(QDialog):
         self._settings_nav.currentItemChanged.connect(self._on_settings_nav_changed)
         self._restore_nav_selection()
 
-    def _first_selectable_row(self) -> int:
-        for row in range(self._settings_nav.count()):
-            if self._settings_nav.item(row).flags() & Qt.ItemFlag.ItemIsSelectable:
-                return row
-        return -1
+    def _page_items(self) -> list[QListWidgetItem]:
+        """Every nav row that opens a page, in nav order; group headers excluded."""
+        nav = self._settings_nav
+        items = (nav.item(row) for row in range(nav.count()))
+        return [
+            item for item in items if item.data(Qt.ItemDataRole.UserRole) is not None
+        ]
 
     def _restore_nav_selection(self) -> None:
         """Select the requested page, else the last-viewed one, else the first."""
         wanted = self._initial_page or QSettings(
             "ShopifyFulfillmentTool", "FulfillmentApp"
         ).value(self.NAV_SETTINGS_KEY)
-        for row in range(self._settings_nav.count()):
-            item = self._settings_nav.item(row)
-            if item.text() == wanted and item.flags() & Qt.ItemFlag.ItemIsSelectable:
-                self._settings_nav.setCurrentRow(row)
-                return
-        row = self._first_selectable_row()
-        if row >= 0:
-            self._settings_nav.setCurrentRow(row)
+        items = self._page_items()
+        # _build_settings_nav refuses an empty group, so items is never empty.
+        self._settings_nav.setCurrentItem(
+            next((item for item in items if item.text() == wanted), items[0])
+        )
 
     def filter_nav(self, text: str) -> list[str]:
         """Show nav rows whose name or keywords contain `text`; return them."""
@@ -410,14 +409,15 @@ class SettingsWindow(QDialog):
         return visible
 
     def _select_first_visible_page(self) -> None:
-        for row in range(self._settings_nav.count()):
-            item = self._settings_nav.item(row)
-            if item.data(Qt.ItemDataRole.UserRole) is not None and not item.isHidden():
-                self._settings_nav.setCurrentRow(row)
+        for item in self._page_items():
+            if not item.isHidden():
+                self._settings_nav.setCurrentItem(item)
                 return
 
     def _on_settings_nav_changed(self, current, _previous):
         self._validation_message.clear()
+        # The page being left may hold an edit the 400ms poll hasn't seen.
+        self._poll_current_page()
         if current is None:
             return
         index = current.data(Qt.ItemDataRole.UserRole)
@@ -431,11 +431,13 @@ class SettingsWindow(QDialog):
         return [name for _group, names in self.SETTINGS_NAV_GROUPS for name in names]
 
     def _select_page(self, name: str) -> None:
-        for row in range(self._settings_nav.count()):
-            item = self._settings_nav.item(row)
-            if item.text() == name and item.data(Qt.ItemDataRole.UserRole) is not None:
-                self._settings_nav.setCurrentRow(row)
+        for item in self._page_items():
+            if item.text() == name:
+                self._settings_nav.setCurrentItem(item)
                 return
+
+    def _unsaved_names(self) -> list[str]:
+        return [name for name in self._nav_page_names() if name in self._unsaved]
 
     def refresh_dirty(self) -> list[str]:
         """Re-check every page; return the unsaved page names in nav order."""
@@ -443,7 +445,7 @@ class SettingsWindow(QDialog):
             name for name, page in self._pages_by_name.items() if page.is_dirty()
         }
         self._render_unsaved()
-        return [name for name in self._nav_page_names() if name in self._unsaved]
+        return self._unsaved_names()
 
     def _poll_current_page(self) -> None:
         page = self.tab_widget.currentWidget()
@@ -455,7 +457,7 @@ class SettingsWindow(QDialog):
             self._render_unsaved()
 
     def _render_unsaved(self) -> None:
-        names = [name for name in self._nav_page_names() if name in self._unsaved]
+        names = self._unsaved_names()
         summary = unsaved_summary(names)
         self._unsaved_label.setText(summary)
         self._close_guard_label.setText(
@@ -481,10 +483,7 @@ class SettingsWindow(QDialog):
         self._apply_nav_marks()
 
     def _apply_nav_marks(self) -> None:
-        for row in range(self._settings_nav.count()):
-            item = self._settings_nav.item(row)
-            if item.data(Qt.ItemDataRole.UserRole) is None:
-                continue  # group header
+        for item in self._page_items():
             unsaved = item.text() in self._unsaved
             item.setIcon(self._unsaved_icon if unsaved else self._clean_icon)
             item.setToolTip("Unsaved changes" if unsaved else "")
@@ -492,6 +491,17 @@ class SettingsWindow(QDialog):
                 Qt.ItemDataRole.AccessibleTextRole,
                 f"{item.text()}, unsaved changes" if unsaved else item.text(),
             )
+
+    def keyPressEvent(self, event):
+        # QLineEdit passes Return on, and QDialog answers it by clicking its
+        # default button -- Save. In the search box Return only opens a page.
+        if self.focusWidget() is self._nav_search and event.key() in (
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+        ):
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def reject(self):
         if self._is_saving:

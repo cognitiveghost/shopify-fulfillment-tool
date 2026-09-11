@@ -12,6 +12,7 @@ from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QSettings, Qt
+from PySide6.QtTest import QTest
 
 from gui.settings.window import SETTINGS_SEARCH_KEYWORDS, SettingsWindow
 
@@ -135,6 +136,18 @@ def test_enter_opens_the_first_match(window):
     assert window._settings_nav.currentItem().text() == "Orders Mapping"
 
 
+def test_enter_in_search_opens_the_match_without_saving(window, started_workers):
+    """QLineEdit passes Return on to the dialog, which clicks its default
+    button -- Save. Emitting returnPressed cannot catch that; a key press can."""
+    window.show()
+    window._nav_search.setFocus()
+    QTest.keyClicks(window._nav_search, "courier")
+    QTest.keyClick(window._nav_search, Qt.Key.Key_Return)
+    assert window._settings_nav.currentItem().text() == "Orders Mapping"
+    assert started_workers == []
+    assert window.result() == 0 and not window.isHidden()
+
+
 def test_every_nav_page_has_search_keywords():
     listed = sorted(
         n for _g, names in SettingsWindow.SETTINGS_NAV_GROUPS for n in names
@@ -168,5 +181,30 @@ def test_an_empty_nav_group_fails_construction(
 
     with pytest.raises(ValueError):
         Broken(
+            client_id="M", client_config=make_settings_config(), profile_manager=Mock()
+        )
+
+
+def test_a_page_missing_from_the_nav_fails_construction(
+    qapp, no_modals, started_workers, make_settings_config
+):
+    class Broken(SettingsWindow):
+        SETTINGS_NAV_GROUPS: ClassVar = [
+            (group, [name for name in names if name != "Weight"])
+            for group, names in SettingsWindow.SETTINGS_NAV_GROUPS
+        ]
+
+    with pytest.raises(ValueError, match="nav lists"):
+        Broken(
+            client_id="M", client_config=make_settings_config(), profile_manager=Mock()
+        )
+
+
+def test_a_keyword_table_that_misses_a_page_fails_construction(
+    qapp, no_modals, started_workers, make_settings_config, monkeypatch
+):
+    monkeypatch.delitem(SETTINGS_SEARCH_KEYWORDS, "Weight")
+    with pytest.raises(ValueError, match="SETTINGS_SEARCH_KEYWORDS"):
+        SettingsWindow(
             client_id="M", client_config=make_settings_config(), profile_manager=Mock()
         )

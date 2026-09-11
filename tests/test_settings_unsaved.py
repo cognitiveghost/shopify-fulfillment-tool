@@ -58,6 +58,13 @@ def test_the_poll_checks_the_page_on_screen(window):
     assert window._unsaved_label.text() == "Unsaved changes on Sets"
 
 
+def test_leaving_a_page_checks_it_before_the_next_poll(window):
+    window._select_page("Sets")
+    _edit_sets(window)
+    window._select_page("General")
+    assert _nav_item(window, "Sets").toolTip() == "Unsaved changes"
+
+
 def test_cancel_with_nothing_unsaved_closes(window):
     closed = []
     window.rejected.connect(lambda: closed.append(True))

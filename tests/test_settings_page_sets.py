@@ -100,6 +100,46 @@ def test_an_empty_csv_shows_a_banner(qapp, monkeypatch, tmp_path):
     ]
 
 
+def _raise(*_args):
+    raise OSError("unreadable")
+
+
+def test_a_failed_import_shows_a_banner(qapp, monkeypatch, tmp_path):
+    errors = []
+    monkeypatch.setattr(
+        "gui.settings.sets.show_error",
+        lambda source, headline, what: errors.append((headline, what)),
+    )
+    _patch_open(monkeypatch, tmp_path, {})
+    monkeypatch.setattr("gui.settings.sets.import_sets_from_csv", _raise)
+    decoders = {"SET-A": [{"sku": "X", "quantity": 2}]}
+    page = SetsPage(decoders)
+
+    page._import_sets_from_csv(replace=True)
+
+    assert errors == [("The sets weren't imported", "Details are in Logs.")]
+    assert list(decoders) == ["SET-A"]
+
+
+def test_a_failed_export_shows_a_banner(qapp, monkeypatch, tmp_path):
+    errors = []
+    monkeypatch.setattr(
+        "gui.settings.sets.show_error",
+        lambda source, headline, what: errors.append((headline, what)),
+    )
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        staticmethod(lambda *a, **k: (str(tmp_path / "out.csv"), "")),
+    )
+    monkeypatch.setattr("gui.settings.sets.export_sets_to_csv", _raise)
+    page = SetsPage({"SET-A": [{"sku": "X", "quantity": 1}]})
+
+    page._export_sets_to_csv()
+
+    assert errors == [("The sets weren't exported", "Details are in Logs.")]
+
+
 def test_export_is_disabled_until_there_is_a_set(qapp):
     page = SetsPage({})
     assert not page.export_button.isEnabled()
