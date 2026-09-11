@@ -1,0 +1,28 @@
+/* The web tier's base. Every value is a token from theme_css_vars(): no hex,
+   and nothing the Qt tier cannot draw (ADR 0001, shared/style_lint.py). */
+
+/* Chromium cannot see fonts registered with Qt's QFontDatabase, so the
+   bundled Inter the Qt tier renders in is declared again here. The relative
+   path holds in the dev tree and under _internal/ in the --onedir build. */
+@font-face {
+  font-family: "Inter";
+  font-weight: 400;
+  src: url("../../shared/assets/fonts/Inter-Regular.ttf");
+}
+@font-face {
+  font-family: "Inter";
+  font-weight: 700;
+  src: url("../../shared/assets/fonts/Inter-Bold.ttf");
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--type-body-size);
+  font-variant-numeric: tabular-nums;
+}

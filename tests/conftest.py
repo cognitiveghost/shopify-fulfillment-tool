@@ -10,6 +10,7 @@ conftest is the only sharing mechanism that does not depend on sys.path.
 """
 
 import gc
+import os
 from unittest.mock import Mock
 
 import pandas as pd
@@ -19,6 +20,10 @@ from PySide6.QtCore import QEvent, QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from gui.settings.window import SettingsWindow
+
+# Chromium's sandbox needs unprivileged user namespaces, which the CI runner's
+# AppArmor profile refuses. Test-only: the app never sets this.
+os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
 
 
 @pytest.fixture
