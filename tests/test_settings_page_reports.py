@@ -5,9 +5,12 @@ now, owning both config keys. The round-trip tests below are the merged
 successors of test_settings_page_packing_lists.py and
 test_settings_page_stock_exports.py.
 """
-import pytest
-from PySide6.QtWidgets import QApplication
 
+import pandas as pd
+import pytest
+from PySide6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
+
+from gui.settings.fields import REPORT_FILTER_OPERATORS, add_filter_row
 from gui.settings.reports import ReportsPage
 
 
@@ -18,19 +21,25 @@ def qapp():
 
 # "columns" is in the picker's own (sorted) order -- see the note in the plan
 # about column ordering being the picker's, not an arbitrary user order.
-PACKING = [{
-    "name": "DHL Express",
-    "output_filename": "dhl.xlsx",
-    "filters": [{"field": "Shipping_Provider", "operator": "equals", "value": "DHL"}],
-    "exclude_skus": ["SHIP-01"],
-    "columns": ["Quantity", "SKU"],
-}]
+PACKING = [
+    {
+        "name": "DHL Express",
+        "output_filename": "dhl.xlsx",
+        "filters": [
+            {"field": "Shipping_Provider", "operator": "equals", "value": "DHL"}
+        ],
+        "exclude_skus": ["SHIP-01"],
+        "columns": ["Quantity", "SKU"],
+    }
+]
 
-STOCK = [{
-    "name": "Daily ERP",
-    "output_filename": "erp.xls",
-    "filters": [{"field": "SKU", "operator": "in list", "value": "A,B"}],
-}]
+STOCK = [
+    {
+        "name": "Daily ERP",
+        "output_filename": "erp.xls",
+        "filters": [{"field": "SKU", "operator": "in list", "value": "A,B"}],
+    }
+]
 
 
 def test_round_trips_both_config_keys():
@@ -69,13 +78,16 @@ def test_added_packing_list_appears_in_collect():
     assert len(page.collect()["packing_list_configs"]) == 1
 
 
-@pytest.mark.parametrize("stored, expected", [
-    ("==", "equals"),
-    ("!=", "does not equal"),
-    ("in", "in list"),
-    ("not in", "not in list"),
-    ("contains", "contains"),
-])
+@pytest.mark.parametrize(
+    "stored, expected",
+    [
+        ("==", "equals"),
+        ("!=", "does not equal"),
+        ("in", "in list"),
+        ("not in", "not in list"),
+        ("contains", "contains"),
+    ],
+)
 def test_legacy_operators_survive_a_load_and_save(stored, expected):
     """Opening the page must not rewrite a saved filter's meaning.
 
@@ -85,12 +97,14 @@ def test_legacy_operators_survive_a_load_and_save(stored, expected):
     opening settings and pressing Save would turn every stored "!=" and
     "not in" filter into "equals", inverting it against live client data.
     """
-    config = [{
-        "name": "legacy",
-        "output_filename": "legacy.xlsx",
-        "filters": [{"field": "SKU", "operator": stored, "value": "AB-01"}],
-        "exclude_skus": [],
-    }]
+    config = [
+        {
+            "name": "legacy",
+            "output_filename": "legacy.xlsx",
+            "filters": [{"field": "SKU", "operator": stored, "value": "AB-01"}],
+            "exclude_skus": [],
+        }
+    ]
     page = ReportsPage(config, [], analysis_df=None)
 
     saved = page.collect()["packing_list_configs"][0]["filters"][0]
@@ -108,12 +122,16 @@ def test_a_field_outside_the_offered_list_survives_a_load_and_save():
     as) the first entry, silently repointing it at another column. That is
     every app start until an analysis is run.
     """
-    config = [{
-        "name": "tagged",
-        "output_filename": "tagged.xlsx",
-        "filters": [{"field": "Internal_Tags", "operator": "contains", "value": "Gift"}],
-        "exclude_skus": [],
-    }]
+    config = [
+        {
+            "name": "tagged",
+            "output_filename": "tagged.xlsx",
+            "filters": [
+                {"field": "Internal_Tags", "operator": "contains", "value": "Gift"}
+            ],
+            "exclude_skus": [],
+        }
+    ]
     page = ReportsPage(config, [], analysis_df=None)
 
     saved = page.collect()["packing_list_configs"][0]["filters"][0]
@@ -129,17 +147,76 @@ def test_columns_outside_the_offered_list_survive_a_load_and_save():
     FILTERABLE_COLUMNS, so without the union it is dropped from any config
     saved before an analysis has been run.
     """
-    config = [{
-        "name": "wide",
-        "output_filename": "wide.xlsx",
-        "filters": [],
-        "exclude_skus": [],
-        "columns": ["Order_Number", "SKU", "Warehouse_Name", "Quantity"],
-    }]
+    config = [
+        {
+            "name": "wide",
+            "output_filename": "wide.xlsx",
+            "filters": [],
+            "exclude_skus": [],
+            "columns": ["Order_Number", "SKU", "Warehouse_Name", "Quantity"],
+        }
+    ]
     page = ReportsPage(config, [], analysis_df=None)
 
     saved = page.collect()["packing_list_configs"][0]
 
     assert sorted(saved["columns"]) == [
-        "Order_Number", "Quantity", "SKU", "Warehouse_Name",
+        "Order_Number",
+        "Quantity",
+        "SKU",
+        "Warehouse_Name",
     ]
+
+
+def test_a_saved_equals_value_the_analysis_lacks_survives_a_load_and_save():
+    """The value combo's twin of the field-combo trap: a saved "UPS" on a
+    frame that only has DHL and DPD rendered as "DHL" and was saved back."""
+    frame = pd.DataFrame(
+        {
+            "Order_Number": ["1", "2"],
+            "Shipping_Provider": ["DHL", "DPD"],
+            "Order_Fulfillment_Status": ["Fulfillable", "Fulfillable"],
+        }
+    )
+    config = [
+        {
+            "name": "ups",
+            "output_filename": "ups.xlsx",
+            "filters": [
+                {"field": "Shipping_Provider", "operator": "equals", "value": "UPS"}
+            ],
+            "exclude_skus": [],
+        }
+    ]
+    page = ReportsPage(config, [], analysis_df=frame)
+
+    saved = page.collect()["packing_list_configs"][0]["filters"][0]
+
+    assert saved["value"] == "UPS"
+
+
+def test_a_filter_row_reports_value_edits_and_its_removal():
+    host = QWidget()
+    refs = {"filters_layout": QVBoxLayout(host), "filters": []}
+    calls = []
+    add_filter_row(
+        refs,
+        ["SKU"],
+        REPORT_FILTER_OPERATORS,
+        None,
+        {"field": "SKU", "operator": "contains", "value": "A"},
+        on_change=lambda: calls.append(1),
+    )
+    calls.clear()
+
+    refs["filters"][0]["value_widget"].setText("AB")
+    assert calls
+
+    calls.clear()
+    delete = refs["filters"][0]["widget"].findChildren(QPushButton)[0]
+    assert delete.text() == ""
+    assert delete.accessibleName() == "Remove filter"
+    assert delete.property("role") == "ghost"
+    delete.click()
+    assert calls
+    assert refs["filters"] == []

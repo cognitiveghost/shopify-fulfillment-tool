@@ -4,10 +4,12 @@ Imports nothing from this package: pages import from here, never the
 reverse, so there is no cycle back through window.py.
 """
 
-from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
 from gui.theme_manager import set_button_role
 from gui.wheel_ignore_combobox import WheelIgnoreComboBox
+from shared.icons import icon
+from shared.theme import on_theme_changed
 
 FILTERABLE_COLUMNS: list[str] = [
     "Order_Number",
@@ -89,12 +91,16 @@ def report_filter_fields(analysis_df) -> list[str]:
     return sorted(FILTERABLE_COLUMNS)
 
 
-def _delete_filter_row(row_widget, ref_list, ref_dict):
+def _delete_filter_row(row_widget, ref_list, ref_dict, on_change=None):
     row_widget.deleteLater()
     ref_list.remove(ref_dict)
+    if on_change is not None:
+        on_change()
 
 
-def _on_filter_criteria_changed(filter_refs, analysis_df, initial_value=None):
+def _on_filter_criteria_changed(
+    filter_refs, analysis_df, initial_value=None, on_change=None
+):
     """Dynamically changes the filter's value widget based on other selections.
 
     For example, if the operator is '==' and the field is 'Order_Type',
@@ -128,9 +134,17 @@ def _on_filter_criteria_changed(filter_refs, analysis_df, initial_value=None):
         try:
             unique_values = analysis_df[field].dropna().unique().tolist()
             unique_values = sorted([str(v) for v in unique_values])
+            # A saved value the frame no longer contains must still be offered:
+            # setCurrentText is a silent no-op otherwise, and the first value
+            # would be written back in its place.
+            if (
+                initial_value not in (None, "")
+                and str(initial_value) not in unique_values
+            ):
+                unique_values.append(str(initial_value))
             new_widget = WheelIgnoreComboBox()
             new_widget.addItems(unique_values)
-            if initial_value and str(initial_value) in unique_values:
+            if initial_value not in (None, ""):
                 new_widget.setCurrentText(str(initial_value))
         except Exception:
             new_widget = QLineEdit()
@@ -141,14 +155,29 @@ def _on_filter_criteria_changed(filter_refs, analysis_df, initial_value=None):
         if op in ["in list", "not in list"]:
             placeholder = "Values, comma-separated"
         new_widget.setPlaceholderText(placeholder)
-        text_value = ",".join(initial_value) if isinstance(initial_value, list) else (initial_value or "")
+        text_value = (
+            ",".join(initial_value)
+            if isinstance(initial_value, list)
+            else (initial_value or "")
+        )
         new_widget.setText(str(text_value))
 
     filter_refs["value_layout"].insertWidget(2, new_widget, 1)
     filter_refs["value_widget"] = new_widget
 
+    if on_change is not None:
+        edited = (
+            new_widget.currentTextChanged
+            if isinstance(new_widget, QComboBox)
+            else new_widget.textChanged
+        )
+        edited.connect(lambda _text: on_change())
+        on_change()
 
-def add_filter_row(parent_widget_refs, fields, operators, analysis_df, config=None):
+
+def add_filter_row(
+    parent_widget_refs, fields, operators, analysis_df, config=None, on_change=None
+):
     """Adds a new row of widgets for a single filter criterion.
 
     Shared by the Packing Lists and Stock Exports pages.
@@ -161,6 +190,8 @@ def add_filter_row(parent_widget_refs, fields, operators, analysis_df, config=No
             populate dropdown values.
         config (dict, optional): The configuration for a pre-existing
             filter. If None, creates a new, blank filter.
+        on_change (callable, optional): Runs after a field or operator
+            change, on every value edit, and after removal.
     """
     if not isinstance(config, dict):
         config = {}
@@ -181,8 +212,14 @@ def add_filter_row(parent_widget_refs, fields, operators, analysis_df, config=No
     op_combo = WheelIgnoreComboBox()
     op_combo.addItems(operators)
     value_edit = QLineEdit()
-    delete_btn = QPushButton("X")
-    set_button_role(delete_btn, "secondary")
+    delete_btn = QPushButton()
+    delete_btn.setToolTip("Remove filter")
+    delete_btn.setAccessibleName("Remove filter")
+    set_button_role(delete_btn, "ghost")
+    # The asset library has no "x" glyph; adding one is a packing-tool PR.
+    on_theme_changed(
+        delete_btn, lambda _tokens, b=delete_btn: b.setIcon(icon("trash-2"))
+    )
 
     row_layout.addWidget(field_combo)
     row_layout.addWidget(op_combo)
@@ -205,17 +242,25 @@ def add_filter_row(parent_widget_refs, fields, operators, analysis_df, config=No
 
     # Connect signals before setting initial value to trigger the handler
     field_combo.currentTextChanged.connect(
-        lambda: _on_filter_criteria_changed(filter_refs, analysis_df)
+        lambda: _on_filter_criteria_changed(
+            filter_refs, analysis_df, on_change=on_change
+        )
     )
     op_combo.currentTextChanged.connect(
-        lambda: _on_filter_criteria_changed(filter_refs, analysis_df)
+        lambda: _on_filter_criteria_changed(
+            filter_refs, analysis_df, on_change=on_change
+        )
     )
 
-    _on_filter_criteria_changed(filter_refs, analysis_df, initial_value=val)  # Set initial widget and value
+    _on_filter_criteria_changed(
+        filter_refs, analysis_df, initial_value=val, on_change=on_change
+    )  # Set initial widget and value
 
     row_layout.addWidget(delete_btn)
     parent_widget_refs["filters_layout"].addWidget(row_widget)
     parent_widget_refs["filters"].append(filter_refs)
     delete_btn.clicked.connect(
-        lambda: _delete_filter_row(row_widget, parent_widget_refs["filters"], filter_refs)
+        lambda: _delete_filter_row(
+            row_widget, parent_widget_refs["filters"], filter_refs, on_change
+        )
     )
