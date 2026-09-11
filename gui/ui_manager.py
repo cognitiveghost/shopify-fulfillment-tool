@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import ClassVar
 
 from PySide6.QtCore import Qt
@@ -30,17 +32,30 @@ from .theme_manager import get_theme_manager
 _SETUP_LABEL_GUTTER = 208
 _SETUP_CARD_MAX_WIDTH = 840
 
-# Tab index -> (main_window attribute holding that screen's primary button,
-# whether the button lives on this screen and should stop painting itself).
+# Tab index -> (main_window attribute holding that screen's command-bar action,
+# whether that button lives on a screen and must stop painting itself, and the
+# role the bar's slot takes). Results re-runs the analysis as a *secondary*
+# action: its one primary, Export, is inside the results document (W3).
 #
 # New Session used to be entry 2, borrowed by the Browse screen from Session
 # Setup. Under Bundle 4 it is state-owned (BarState.NO_SESSION) and always
 # present in the command bar, so the borrow is dead -- new_session_btn is
 # hidden unconditionally below instead.
 _SCREEN_ACTIONS = {
-    0: ("run_analysis_button", True),
-    1: ("generate_reports_button_tab2", True),
+    0: ("run_analysis_button", True, "primary"),
+    1: ("run_analysis_button", True, "secondary"),
 }
+
+
+def age_text(delta) -> str:
+    """`19 h`, `45 min`, `3 d` -- the one age format the results screen uses."""
+    minutes = max(0, int(delta.total_seconds() // 60))
+    if minutes < 60:
+        return f"{minutes} min"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours} h"
+    return f"{hours // 24} d"
 
 
 class _SetupPage(QWidget):
@@ -292,7 +307,7 @@ class UIManager:
         self._setup_tab_shortcuts()
 
         # The screen's primary action moves into the command bar's one slot.
-        for attribute, hide_in_page in _SCREEN_ACTIONS.values():
+        for attribute, hide_in_page, _role in _SCREEN_ACTIONS.values():
             if hide_in_page:
                 getattr(self.mw, attribute).hide()
         self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
@@ -355,9 +370,11 @@ class UIManager:
     def _bind_screen_action(self, index: int) -> None:
         """Point the command bar's one primary at this screen's primary button."""
         entry = _SCREEN_ACTIONS.get(index)
-        self.mw.command_bar.bind_action(
-            None if entry is None else getattr(self.mw, entry[0])
-        )
+        if entry is None:
+            self.mw.command_bar.bind_action(None)
+            return
+        attribute, _hide_in_page, role = entry
+        self.mw.command_bar.bind_action(getattr(self.mw, attribute), role)
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog.
@@ -616,6 +633,45 @@ class UIManager:
         """The hidden generate-reports button stays the guard; the page mirrors it."""
         self.mw.generate_reports_button_tab2.setEnabled(enabled)
         self.mw.results_bridge.set_export_enabled(enabled)
+
+    def update_session_chips(self) -> None:
+        """`Analysed 09:33` and `Stock file 19 h old` (W3's two command-bar chips).
+
+        Stock age is measured at analysis time, not now: it qualifies the
+        analysis. The stock copy in the session keeps the source file's mtime
+        (shutil.copy2 in core.py).
+        """
+        bar = self.mw.command_bar
+        session_path = getattr(self.mw, "session_path", None)
+        info = (
+            self.mw.session_manager.get_session_info(session_path)
+            if session_path
+            else None
+        )
+        try:
+            analysed = datetime.fromisoformat(
+                (info or {}).get("analysis_completed_at") or ""
+            )
+        except ValueError:
+            analysed = None
+        if analysed is None:
+            bar.set_status("text_secondary", "")
+            bar.set_stock_age("")
+            return
+        if analysed.tzinfo is None:
+            analysed = analysed.astimezone()
+        bar.set_status(
+            "text_secondary", f"Analysed {analysed.astimezone().strftime('%H:%M')}"
+        )
+        stock = (
+            Path(self.mw.session_manager.get_input_dir(session_path)) / "inventory.csv"
+        )
+        try:
+            copied = datetime.fromtimestamp(stock.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            bar.set_stock_age("")
+            return
+        bar.set_stock_age(f"Stock file {age_text(analysed - copied)} old")
 
     def _create_tab3_session_browser(self):
         """Create Tab 3: Session Browser

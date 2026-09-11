@@ -5,6 +5,7 @@ side was empty on all five screens while each screen kept its primary in the pag
 body -- next to an unmarked Settings button that the theme was painting primary
 blue. See docs/superpowers/specs/2026-08-29-commandbar-primary-action-design.md.
 """
+
 import pytest
 from PySide6.QtWidgets import QApplication
 
@@ -31,15 +32,18 @@ def test_each_screen_puts_its_own_primary_in_the_bar(main_window, qapp):
     # Screen 2 (Browse) no longer borrows Setup's New Session -- it is
     # state-owned and always in the left group under BarState.NO_SESSION
     # (Bundle 4, spec §3.2), so it has no entry in _SCREEN_ACTIONS any more.
+    # Results (1) re-runs the analysis as a secondary action now (Bundle 12,
+    # W3): its own primary, Export, lives inside the results document.
     expected = {
-        0: "Run analysis",
-        1: "Generate Reports",
+        0: ("Run analysis", "primary"),
+        1: ("Run analysis", "secondary"),
     }
-    for index, label in expected.items():
+    for index, (label, role) in expected.items():
         main_window.main_tabs.setCurrentIndex(index)
         QApplication.processEvents()
         assert main_window.command_bar.action_button.text() == label
         assert not main_window.command_bar.action_button.isHidden()
+        assert main_window.command_bar.action_button.property("role") == role
 
 
 def test_a_screen_with_no_primary_hides_the_slot(main_window, qapp):

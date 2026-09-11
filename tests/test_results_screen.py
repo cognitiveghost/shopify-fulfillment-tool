@@ -126,3 +126,71 @@ def test_the_qt_results_screen_is_gone():
         if GONE.search(line)
     ]
     assert hits == []
+
+
+def test_results_binds_run_analysis_as_the_secondary_action(main_window):
+    from PySide6.QtWidgets import QApplication
+
+    bar = main_window.command_bar
+    main_window.main_tabs.setCurrentIndex(1)
+    QApplication.processEvents()
+    assert bar._bound_action is main_window.run_analysis_button
+    assert bar.action_button.property("role") == "secondary"
+    main_window.main_tabs.setCurrentIndex(0)
+    QApplication.processEvents()
+    assert bar.action_button.property("role") == "primary"
+
+
+@pytest.mark.parametrize(
+    "minutes, text",
+    [
+        (0, "0 min"),
+        (59, "59 min"),
+        (60, "1 h"),
+        (47 * 60 + 59, "47 h"),
+        (48 * 60, "2 d"),
+    ],
+)
+def test_age_text(minutes, text):
+    from datetime import timedelta
+
+    from gui.ui_manager import age_text
+
+    assert age_text(timedelta(minutes=minutes)) == text
+
+
+def test_session_chips_read_the_analysis_and_the_stock_copy(
+    main_window, tmp_path, monkeypatch
+):
+    import os
+    from datetime import datetime, timedelta
+
+    analysed = datetime(2026, 9, 2, 9, 33).astimezone()
+    stock = tmp_path / "input" / "inventory.csv"
+    stock.parent.mkdir()
+    stock.write_text("sku\n", encoding="utf-8")
+    stamp = (analysed - timedelta(hours=19)).timestamp()
+    os.utime(stock, (stamp, stamp))
+    manager = main_window.session_manager
+    monkeypatch.setattr(
+        manager,
+        "get_session_info",
+        lambda _path: {"analysis_completed_at": analysed.isoformat()},
+    )
+    monkeypatch.setattr(manager, "get_input_dir", lambda _path: tmp_path / "input")
+    main_window.session_path = str(tmp_path)
+
+    main_window.ui_manager.update_session_chips()
+
+    assert main_window.command_bar.status_chip.text() == "Analysed 09:33"
+    assert main_window.command_bar.stock_chip.text() == "Stock file 19 h old"
+
+
+def test_session_chips_blank_without_an_analysis(main_window, tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        main_window.session_manager, "get_session_info", lambda _path: {}
+    )
+    main_window.session_path = str(tmp_path)
+    main_window.ui_manager.update_session_chips()
+    assert main_window.command_bar.status_chip.text() == ""
+    assert main_window.command_bar.stock_chip.text() == ""

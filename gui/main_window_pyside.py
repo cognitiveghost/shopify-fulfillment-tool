@@ -931,6 +931,7 @@ class MainWindow(QMainWindow):
             self.analysis_stats = None
 
         self.results_bridge.set_orders(self.analysis_results_df)
+        self.ui_manager.update_session_chips()
         self.ui_manager.set_ui_busy(False)
 
     def _on_analysis_mode_changed(self, index: int):
