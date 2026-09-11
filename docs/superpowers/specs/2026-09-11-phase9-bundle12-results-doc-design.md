@@ -67,7 +67,9 @@ Two optional orders-file fields, carried exactly like `Total_Price`:
    `"Customer"` and `"Created_At"`.
 2. `shopify_tool/profile_manager.py` — the new-profile `column_mappings.orders`
    defaults gain `"Shipping Name": "Customer"` and `"Created at": "Created_At"`.
-   These are Shopify's export headers.
+   These are Shopify's export headers. So does `run_analysis`'s
+   `column_mappings is None` fallback in `analysis.py`, which writes no profile.
+   `profile_migrations.py` is **not** touched: there is no migration.
 3. `shopify_tool/analysis.py`:
    - forward-fill both, beside the `Total_Price`/`Tags` forward-fills. A Shopify
      export writes them on an order's first line only.
@@ -308,11 +310,13 @@ Sizing and scrolling:
 
 ### 6.5 Status chip
 
-This is the web rendering of `shared.theme.StatusChip`'s `chip` variant. Match
-its mark size and padding by reading that class. The canvas pill:
-- 1px border in the role colour, `--radius-lg`
-- padding 3px 8px 3px 9px, caption size, 6px gap
-- a hollow ring mark
+This is the web rendering of `shared.theme.StatusChip`'s `chip` variant, at
+**its** geometry, not the canvas pill's. Two renderers get one appearance
+(ADR 0001):
+- a 1px border in the role colour, `--radius` (4)
+- padding 2px 8px 2px 20px (`MARK_LEFT_PX + MARK_PX + 4`), caption size
+- an 8px hollow ring (`MARK_PX`, stroke `MARK_RING_WIDTH` 1.5) at 8px from the
+  left, vertically centred
 
 | Status | Role | Live? | Fill |
 |---|---|---|---|
