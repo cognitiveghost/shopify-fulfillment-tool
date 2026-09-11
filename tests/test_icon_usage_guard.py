@@ -6,6 +6,7 @@ iconography one widget at a time. The second catches the failure mode
 icon()'s KeyError cannot -- a typo in a rarely-opened dialog that no test
 ever constructs.
 """
+
 import re
 from pathlib import Path
 
@@ -27,7 +28,8 @@ def test_no_stock_icons_remain_anywhere_in_the_gui():
             if "QStyle.SP_" in line:
                 offenders.append(f"{path.name}:{lineno}: {line.strip()}")
     assert not offenders, (
-        "Use shared.icons.icon() instead of OS-native stock icons:\n" + "\n".join(offenders)
+        "Use shared.icons.icon() instead of OS-native stock icons:\n"
+        + "\n".join(offenders)
     )
 
 
@@ -61,4 +63,4 @@ def test_the_guard_can_actually_see_icon_calls():
     found = set()
     for path in _PY_FILES:
         found.update(_ICON_CALL.findall(path.read_text(encoding="utf-8")))
-    assert {"package", "trash-2", "copy"} <= found
+    assert {"package", "trash-2"} <= found

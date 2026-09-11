@@ -102,9 +102,7 @@ def mw_with_tags():
         active_profile_config={"tag_categories": {}},
         _update_all_views=Mock(),
     )
-    mw.selection_helper = SelectionHelper(
-        table_view=None, proxy_model=None, main_window=mw
-    )
+    mw.selection_helper = SelectionHelper(main_window=mw)
     return mw
 
 

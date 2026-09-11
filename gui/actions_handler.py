@@ -1749,10 +1749,6 @@ class ActionsHandler(QObject):
             f"Removed SKU '{sku}' ({affected_count} items) from selected orders",
         )
 
-        # Update toolbar state
-        if hasattr(self.mw, "_update_selection_bar_state"):
-            self.mw._update_selection_bar_state()
-
         # Update undo button
         self._update_undo_button()
 
@@ -1845,10 +1841,6 @@ class ActionsHandler(QObject):
             f"Removed {len(orders_with_sku)} orders ({items_count} items) containing SKU '{sku}'",
         )
 
-        # Update toolbar state
-        if hasattr(self.mw, "_update_selection_bar_state"):
-            self.mw._update_selection_bar_state()
-
         # Update undo button
         self._update_undo_button()
 
@@ -1901,10 +1893,6 @@ class ActionsHandler(QObject):
         self.mw.log_activity(
             "Bulk Operation", f"Deleted {orders_count} orders ({items_count} items)"
         )
-
-        # Update toolbar state
-        if hasattr(self.mw, "_update_selection_bar_state"):
-            self.mw._update_selection_bar_state()
 
         # Update undo button
         self._update_undo_button()

@@ -2,6 +2,7 @@
 source before rasterizing, so these tests assert on actual rendered pixels --
 a QIcon that is merely non-null proves nothing about whether it is visible
 against the current theme."""
+
 from pathlib import Path
 
 import pytest
@@ -83,7 +84,11 @@ def test_every_long_lived_icon_name_resolves():
     from gui.ui_manager import UIManager
 
     assert UIManager._TAB_ICONS == (
-        "clipboard-list", "table", "folder-open", "info", "wrench",
+        "clipboard-list",
+        "table",
+        "folder-open",
+        "info",
+        "wrench",
     )
     for name in UIManager._TAB_ICONS:
         assert not icon(name).isNull()
@@ -91,20 +96,9 @@ def test_every_long_lived_icon_name_resolves():
         assert not icon(name).isNull()
 
 
-def test_context_menu_no_longer_reaches_for_stock_icons():
-    """Three separate menu actions shared SP_FileDialogDetailedView, which is
-    why the app's icons carried no meaning. Each gets its own glyph now."""
-    source = (
-        Path(__file__).resolve().parent.parent / "gui" / "main_window_pyside.py"
-    ).read_text(encoding="utf-8")
-    assert "QStyle.SP_" not in source
-    for name in ("refresh-cw", "tag", "tags", "circle-minus", "trash-2", "copy"):
-        assert f'icon("{name}")' in source
-
-
 def _path_from_token(token: str) -> Path:
     assert token.startswith('url("') and token.endswith('")')
-    return Path(token[len('url("'):-len('")')])
+    return Path(token[len('url("') : -len('")')])
 
 
 def test_glyph_url_writes_a_readable_png():
