@@ -188,9 +188,12 @@ nothing else.
 | out | `orders: list[order]` | property | **11** |
 | out | `themeCss: str` | property | **11** |
 | in | `setSelection(orderNumbers: list[str])` | slot | **11** |
-| in | `setSort(column: str, descending: bool)` | slot | 12 (9.13) |
-| in | `setFilterText(text: str)` | slot | 12 (9.13) |
-| in | `setFilterChips(chips: list[str])` | slot | 12 (9.13) |
+| ~~in~~ | ~~`setSort`, `setFilterText`, `setFilterChips`~~ | removed | 12 — no Python consumer, the page owns view state (ADR 0005) |
+| out | `summary: dict` | property | 12 (9.13) |
+| out | `exportEnabled: bool` | property | 12 (9.13) |
+| out | `focusSearchRequested()` | signal | 12 (9.13) |
+| in | `openExport()` | slot | 12 (9.13) — canvas W3 puts Export in the document |
+| in | `openScreenMenu()` | slot | 12 (9.13) |
 | in | one slot per pane action, `<verb>Order(orderNumber: str)` | slot | 13 (9.14) |
 | out | `columns: list[{name, visible, pinned}]` | property | 13 (9.16) |
 | in | `setColumnOrder(names: list[str])` | slot | 13 (9.16) |
@@ -204,7 +207,7 @@ nothing else.
 | out | `toastRaised(message: str, undoable: bool)` | signal | 14 (9.17) |
 
 9.14 names its own pane verbs, because the pane's action set is its brief.
-Export is **not** on the bridge: it is the Qt command bar's primary.
+Export was first kept off the bridge; Bundle 12 moved it into the document per canvas W3.
 
 ### 5.3 `order_payload(df)`
 
