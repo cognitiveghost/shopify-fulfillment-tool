@@ -6,7 +6,10 @@ remain -- exclude SKUs and the column picker -- are packing-list only and
 switch on `kind`.
 """
 
-from PySide6.QtCore import Qt
+import json
+import logging
+
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -25,22 +28,51 @@ from gui.settings.fields import (
     report_filter_fields,
 )
 from gui.theme_manager import set_button_role
-from shopify_tool.report_filters import normalize_operator
+from shared.theme import current_tokens, font_css, on_theme_changed
+from shopify_tool.report_filters import count_matches, normalize_operator
 
 PACKING_LISTS = "packing_lists"
 STOCK_EXPORTS = "stock_exports"
+
+logger = logging.getLogger(__name__)
+
+MATCH_DEBOUNCE_MS = 300
+CANT_COUNT = "Can't count matches for these filters."
+
+
+def match_text(counts) -> str:
+    """Copy for a report's match count; None means no analysis has run."""
+    if counts is None:
+        return "Run an analysis to see how many orders this report matches."
+    orders, rows = counts
+    if orders == 0:
+        return "Matches no orders. Check the filters."
+    return (
+        f"Matches {orders} order{'' if orders == 1 else 's'}"
+        f" · {rows} row{'' if rows == 1 else 's'}"
+    )
 
 
 class ReportEditor(QGroupBox):
     """Editor for a single packing-list or stock-export config."""
 
-    def __init__(self, kind, config=None, analysis_df=None, parent=None):
+    def __init__(
+        self, kind, config=None, analysis_df=None, parent=None, *, match_cache=None
+    ):
         super().__init__(parent)
         if kind not in (PACKING_LISTS, STOCK_EXPORTS):
             raise ValueError(f"Unknown report kind: {kind}")
         self.kind = kind
         self.analysis_df = analysis_df
         self.filters = []
+        # Shared by every editor the Reports page builds: the analysis frame is
+        # fixed for the settings dialog's lifetime, so an entry never goes stale.
+        self._match_cache = match_cache if match_cache is not None else {}
+        self._match_warn = False
+        self._match_timer = QTimer(self)
+        self._match_timer.setSingleShot(True)
+        self._match_timer.setInterval(MATCH_DEBOUNCE_MS)
+        self._match_timer.timeout.connect(self.refresh_match_count)
 
         if not isinstance(config, dict):
             config = {}
@@ -67,6 +99,13 @@ class ReportEditor(QGroupBox):
         set_button_role(add_filter_btn, "secondary")
         add_filter_btn.clicked.connect(self._add_filter)
         filters_box_layout.addWidget(add_filter_btn, 0, Qt.AlignLeft)
+        self.match_label = QLabel("")
+        self.match_label.setWordWrap(True)
+        self.match_label.setToolTip(
+            "Counts fulfillable orders, the same as the generated file."
+        )
+        on_theme_changed(self.match_label, self._style_match_label)
+        filters_box_layout.addWidget(self.match_label)
         layout.addWidget(filters_box)
 
         if kind == PACKING_LISTS:
@@ -100,12 +139,13 @@ class ReportEditor(QGroupBox):
             # exactly this) if a user asks to reorder printed columns.
             layout.addWidget(columns_box)
 
-        self.delete_button = QPushButton("Delete")
+        self.delete_button = QPushButton("Delete report")
         set_button_role(self.delete_button, "secondary")
         layout.addWidget(self.delete_button, 0, Qt.AlignRight)
 
         for f_config in config.get("filters", []):
             self._add_filter(f_config)
+        self.refresh_match_count()
 
     def _add_filter(self, f_config=None):
         # Normalise the stored operator before it reaches the combo box.
@@ -116,7 +156,10 @@ class ReportEditor(QGroupBox):
         # way on the next save, inverting the filter against live client
         # configs. Verified: setCurrentText("!=") leaves the combo on "equals".
         if isinstance(f_config, dict):
-            f_config = {**f_config, "operator": normalize_operator(f_config.get("operator"))}
+            f_config = {
+                **f_config,
+                "operator": normalize_operator(f_config.get("operator")),
+            }
         else:
             f_config = None
 
@@ -126,7 +169,29 @@ class ReportEditor(QGroupBox):
             REPORT_FILTER_OPERATORS,
             self.analysis_df,
             f_config,
+            on_change=self._match_timer.start,
         )
+
+    def refresh_match_count(self) -> None:
+        """Count this report's matches now (the timer calls this after edits)."""
+        filters = self.collect()["filters"]
+        key = json.dumps(filters, sort_keys=True, default=str)
+        try:
+            if key not in self._match_cache:
+                self._match_cache[key] = count_matches(self.analysis_df, filters)
+            counts = self._match_cache[key]
+            text, warn = match_text(counts), counts is not None and counts[0] == 0
+        except Exception:
+            # Debug, not warning: a half-typed regex lands here on every keystroke.
+            logger.debug("Couldn't count report matches", exc_info=True)
+            text, warn = CANT_COUNT, False
+        self._match_warn = warn
+        self.match_label.setText(text)
+        self._style_match_label(current_tokens())
+
+    def _style_match_label(self, tokens) -> None:
+        color = tokens.status_warning if self._match_warn else tokens.text_secondary
+        self.match_label.setStyleSheet(f"{font_css('caption')} color: {color};")
 
     def _chosen_columns(self):
         """The ticked columns, in list order. Empty means "default layout"."""
@@ -154,11 +219,13 @@ class ReportEditor(QGroupBox):
                 val = value_widget.text()
             else:
                 val = ""
-            filters.append({
-                "field": f["field"].currentText(),
-                "operator": f["op"].currentText(),
-                "value": val,
-            })
+            filters.append(
+                {
+                    "field": f["field"].currentText(),
+                    "operator": f["op"].currentText(),
+                    "value": val,
+                }
+            )
 
         config = {
             "name": self.name_edit.text(),

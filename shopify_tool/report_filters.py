@@ -113,7 +113,9 @@ def apply_report_filters(df, filters):
         value = filt.get("value")
 
         if not field or not operator:
-            logger.warning(f"[REPORT FILTERS] Incomplete filter, matches nothing: {filt}")
+            logger.warning(
+                f"[REPORT FILTERS] Incomplete filter, matches nothing: {filt}"
+            )
             return df.iloc[0:0].copy()
 
         if field not in df.columns:
@@ -139,3 +141,28 @@ def apply_report_filters(df, filters):
         mask &= op_func(df[field], value)
 
     return df[mask].copy()
+
+
+def match_counts(filtered):
+    """(distinct orders, rows) in an already-filtered frame.
+
+    Falls back to the first column when there is no Order_Number, as the
+    report dialog's preview always has.
+    """
+    if filtered is None or filtered.empty:
+        return (0, 0)
+    order_col = (
+        "Order_Number" if "Order_Number" in filtered.columns else filtered.columns[0]
+    )
+    return (int(filtered[order_col].nunique()), len(filtered))
+
+
+def count_matches(df, filters):
+    """(orders, rows) a report with these filters would contain.
+
+    None when there is no analysis to count against. Counts over
+    fulfillable orders only, exactly as the generated file does.
+    """
+    if df is None or df.empty:
+        return None
+    return match_counts(apply_report_filters(fulfillable_only(df), filters))

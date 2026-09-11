@@ -1,6 +1,7 @@
 """Column mappings, split one page per CSV: orders (plus courier name
 mappings, which resolve an orders column) and stock."""
 
+import json
 import logging
 from typing import ClassVar
 
@@ -87,6 +88,17 @@ class _MappingPageBase(SettingsPage):
         self.column_mappings["version"] = 2
         self.column_mappings[self.MAPPING_TYPE] = self.mapping_widget.get_mappings()
         return self.column_mappings
+
+    def snapshot(self) -> str:
+        """Only this page's own mapping.
+
+        column_mappings is one live dict shared by both mapping pages, so the
+        default snapshot of collect() would mark both unsaved when either
+        changes.
+        """
+        return json.dumps(
+            self.mapping_widget.get_mappings(), sort_keys=True, default=str
+        )
 
     def _load_headers_from_csv(self):
         """Offer a chosen CSV's column names as dropdown options on every row.
@@ -239,7 +251,7 @@ class OrdersMappingPage(_MappingPageBase):
         row_refs["widget"].deleteLater()
         self.courier_mapping_widgets.remove(row_refs)
 
-    def collect(self) -> dict:
+    def _courier_rows(self) -> dict:
         new_couriers = {}
         for row_refs in self.courier_mapping_widgets:
             courier_code = row_refs["courier_code"].text().strip()
@@ -250,9 +262,17 @@ class OrdersMappingPage(_MappingPageBase):
                     "patterns": patterns,
                     "case_sensitive": False,
                 }
+        return new_couriers
 
+    def snapshot(self) -> str:
+        return json.dumps(
+            [super().snapshot(), self._courier_rows()], sort_keys=True, default=str
+        )
+
+    def collect(self) -> dict:
         # Same live-dict contract as column_mappings: clear-and-refill in
         # place so a deleted courier code does not survive the shell's merge.
+        new_couriers = self._courier_rows()
         self.courier_mappings.clear()
         self.courier_mappings.update(new_couriers)
 

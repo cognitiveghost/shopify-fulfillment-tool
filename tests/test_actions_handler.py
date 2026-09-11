@@ -229,6 +229,30 @@ def test_removing_an_item_asks_nothing_and_offers_undo(mw, monkeypatch):
     assert toasts.call_args.kwargs["on_action"] is mw.undo_last_operation
 
 
+def test_settings_that_save_but_fail_to_reload_say_so(monkeypatch):
+    headlines = []
+    monkeypatch.setattr(
+        "gui.actions_handler.show_error",
+        lambda source, headline, what: headlines.append(headline),
+    )
+    monkeypatch.setattr(
+        "gui.actions_handler.SettingsWindow",
+        lambda **kwargs: SimpleNamespace(exec=lambda: True),
+    )
+    profile_manager = Mock()
+    profile_manager.load_shopify_config.side_effect = [
+        {"settings": {}},
+        OSError("gone"),
+    ]
+    mw = SimpleNamespace(
+        current_client_id="M", profile_manager=profile_manager, analysis_results_df=None
+    )
+
+    ActionsHandler(mw).open_settings_window()
+
+    assert headlines == ["Settings were saved but didn't reload"]
+
+
 def test_the_writeoff_bypass_is_gone():
     import inspect
 

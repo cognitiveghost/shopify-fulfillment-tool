@@ -366,41 +366,28 @@ class ActionsHandler(QObject):
         )
 
         if settings_win.exec():
-            # Settings saved successfully
+            # The window has already toasted "Settings saved".
             try:
-                # Reload config in MainWindow
                 self.mw.active_profile_config = (
                     self.mw.profile_manager.load_shopify_config(
                         self.mw.current_client_id
                     )
                 )
 
-                # Re-validate files with new settings
                 self.log.info("Re-validating files with updated settings...")
-
                 if self.mw.orders_file_path:
                     self.mw.file_handler.validate_file("orders")
-
                 if self.mw.stock_file_path:
                     self.mw.file_handler.validate_file("stock")
 
-                # Success message
-                QMessageBox.information(
-                    self.mw,
-                    "Settings Updated",
-                    "Settings saved successfully!\n\n"
-                    "Files have been re-validated with new configuration.",
-                )
-
                 self.log.info("Settings updated and files re-validated successfully")
 
-            except Exception as e:
+            except Exception:
                 self.log.exception("Error updating config after save")
-                QMessageBox.warning(
+                show_error(
                     self.mw,
-                    "Warning",
-                    f"Settings were saved, but failed to reload configuration:\n{e!s}\n\n"
-                    "Please restart the application.",
+                    "Settings were saved but didn't reload",
+                    "Restart the app to use them. Details are in Logs.",
                 )
 
     def open_tag_categories_dialog(self):
