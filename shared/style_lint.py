@@ -116,11 +116,20 @@ WEB_SUFFIXES = (".css", ".html", ".js")
 # Allowed by CSS, banned in a web asset: each is something the Qt tier cannot
 # draw, so each is a visible seam (ADR 0001). The lookbehind keeps
 # text-transform and fill-opacity clean. `opacity` is banned outright: QSS has
-# no per-element opacity, so there is no container it could match.
+# no per-element opacity, so there is no container it could match. ADR 0001
+# bans the effect, not one spelling of it, so vendor prefixes, the individual
+# transform properties and style.setProperty() are caught too.
+_VENDOR = r"(?:-(?:webkit|moz|ms|o)-)?"
+_BANNED_PROPERTY = (
+    _VENDOR
+    + r"(?:box-shadow|transition(?:-[a-z-]+)?|transform|scale|rotate|translate|opacity)"
+)
 _BANNED = re.compile(
-    r"(?<![-\w])(box-shadow|transition(?:-[a-z-]+)?|transform|opacity)\s*:"
-    r"|(?<![-\w])((?:repeating-)?(?:linear|radial|conic)-gradient)\s*\("
-    r"|\.style\.(boxShadow|transition\w*|transform|opacity)\b"
+    r"(?<![-\w])(" + _BANNED_PROPERTY + r")\s*:"
+    r"|(?<![-\w])(" + _VENDOR + r"(?:repeating-)?(?:linear|radial|conic)-gradient)\s*\("
+    r"|\.style\.((?:webkit|Webkit|moz|Moz|ms)?"
+    r"(?:[bB]oxShadow|[tT]ransition\w*|[tT]ransform|scale|rotate|translate|opacity))\b"
+    r"|setProperty\(\s*[\"'](" + _BANNED_PROPERTY + r")[\"']"
 )
 
 # The aliases are never exported to the web tier, so var(--accent-blue)
@@ -169,6 +178,17 @@ def _line_of(node: ast.Constant, offset: int) -> int:
     return node.lineno + node.value.count("\n", 0, offset)
 
 
+# The rules a Python string literal and a web asset share. Each has at most
+# one capture group, so a finding reports m.group(m.lastindex or 0).
+_STYLE_RULES = (
+    ("hex", _HEX),
+    ("css-name", _CSS_NAME),
+    ("css-func", _CSS_FUNC),
+    ("px-font", _PX_FONT),
+)
+_WEB_RULES = (*_STYLE_RULES, ("banned", _BANNED), ("alias", _WEB_ALIAS))
+
+
 def _scan_file(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
     lines = source.splitlines()
@@ -194,16 +214,11 @@ def _scan_file(path: Path) -> list[str]:
             and isinstance(node.value, str)
             and id(node) not in docstrings
         ):
-            for kind, rx, group in (
-                ("hex", _HEX, 0),
-                ("css-name", _CSS_NAME, 1),
-                ("css-func", _CSS_FUNC, 1),
-                ("px-font", _PX_FONT, 0),
-            ):
+            for kind, rx in _STYLE_RULES:
                 for m in rx.finditer(node.value):
                     ln = _line_of(node, m.start())
                     if not suppressed(ln, node.lineno):
-                        found.append((ln, kind, m.group(group)))
+                        found.append((ln, kind, m.group(m.lastindex or 0)))
         elif (
             isinstance(node, ast.Attribute)
             and node.attr in FROZEN_ALIASES
@@ -223,22 +238,13 @@ def _scan_web_asset(path: Path) -> list[str]:
         code = _LINE_COMMENT.sub(_blank, code)
 
     found: list[tuple[int, str, str]] = []
-    for kind, rx in (
-        ("hex", _HEX),
-        ("css-name", _CSS_NAME),
-        ("css-func", _CSS_FUNC),
-        ("px-font", _PX_FONT),
-        ("banned", _BANNED),
-        ("alias", _WEB_ALIAS),
-    ):
+    for kind, rx in _WEB_RULES:
         for m in rx.finditer(code):
             ln = code.count("\n", 0, m.start()) + 1
             # The marker usually sits in a comment, so read it from the raw line.
             if ALLOW_MARKER in lines[ln - 1]:
                 continue
-            found.append(
-                (ln, kind, m.group(m.lastindex) if m.lastindex else m.group(0))
-            )
+            found.append((ln, kind, m.group(m.lastindex or 0)))
 
     return [f"{path}:{ln}: {kind}: {text}" for ln, kind, text in sorted(found)]
 

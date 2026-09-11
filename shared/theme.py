@@ -1096,17 +1096,24 @@ def theme_css_vars(theme: ThemeTokens) -> str:
     if missing:
         raise AssertionError(f"theme_css_vars did not emit {sorted(missing)}")
 
+    derived = {}
     for role in TYPE_SCALE:
         style = type_style(role)
-        decls[_css_name(f"type_{role}_size")] = f"{style.size_pt}pt"
-        decls[_css_name(f"type_{role}_weight")] = "700" if style.bold else "400"
+        derived[_css_name(f"type_{role}_size")] = f"{style.size_pt}pt"
+        derived[_css_name(f"type_{role}_weight")] = "700" if style.bold else "400"
 
     # control_content_height is a property compensating for Qt's box model;
     # fields() skips it, and the web tier's border-box does not need it.
     profile = get_density_profile()
     for f in fields(profile):
         if f.name != "type_overrides":
-            decls[_css_name(f.name)] = _css_value(getattr(profile, f.name))
+            derived[_css_name(f.name)] = _css_value(getattr(profile, f.name))
+
+    # A token named like a derived value would be overwritten without a sound.
+    clash = derived.keys() & decls.keys()
+    if clash:
+        raise AssertionError(f"theme_css_vars: {sorted(clash)} is a token and derived")
+    decls.update(derived)
 
     body = "\n".join(f"  {name}: {value};" for name, value in decls.items())
     return f":root {{\n{body}\n}}\n"

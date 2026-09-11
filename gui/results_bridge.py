@@ -14,6 +14,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtWebChannel import QWebChannel
+from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from gui.orders_view import order_payload
 from gui.theme_manager import get_theme_manager
@@ -78,7 +79,7 @@ class ResultsBridge(QObject):
         self.themeCssChanged.emit()
 
 
-def mount_results_page(view) -> ResultsBridge:
+def mount_results_page(view: QWebEngineView) -> ResultsBridge:
     """Load the results page into `view` and return the bridge it talks to.
 
     The theme is written into the page before it loads, so the first paint is

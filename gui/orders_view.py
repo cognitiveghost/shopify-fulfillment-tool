@@ -9,6 +9,7 @@ computed on demand, never persisted, never written back to. See
 import datetime
 import math
 
+import numpy as np
 import pandas as pd
 
 from gui.pandas_model import REPEAT_COLUMN, cell_search_text, is_repeat
@@ -190,6 +191,8 @@ def _json_value(value):
         return [_json_value(v) for v in value]
     if isinstance(value, dict):
         return {str(k): _json_value(v) for k, v in value.items()}
+    if isinstance(value, np.datetime64):  # a nanosecond one's .item() is an int
+        value = pd.Timestamp(value)
     if value is None or value is pd.NaT or value is pd.NA:
         return None
     if isinstance(value, float):  # numpy.float64 included

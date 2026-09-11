@@ -134,11 +134,18 @@ scope includes them, so they stay out of scope.
   raw line, typically inside a comment.
 - **Rules on a web asset:**
   - The existing `hex`, `css-name`, `css-func` and `px-font`.
-  - **`banned`:** `box-shadow`, `transition` and `transition-*`, `transform`,
-    `opacity`, the `(repeating-)linear|radial|conic-gradient(` functions, and
-    the JS spellings `.style.boxShadow|transition*|transform|opacity`.
-    - A property only matches when not preceded by `-` or a word character,
-      so `text-transform` and `fill-opacity` stay clean.
+  - **`banned`:** `box-shadow`, `transition` and `transition-*`, `transform`
+    and the individual `scale`/`rotate`/`translate`, `opacity`, the
+    `(repeating-)linear|radial|conic-gradient(` functions, each also with a
+    `-webkit-`/`-moz-`/`-ms-`/`-o-` prefix; the JS spellings
+    `.style.boxShadow|transition*|transform|scale|rotate|translate|opacity`
+    (vendor-prefixed too) and `style.setProperty('<banned>', …)`.
+    - A property only matches when not preceded by `-` or a word character
+      (a vendor prefix aside), so `text-transform` and `fill-opacity` stay
+      clean.
+    - The prefixes and individual transforms were added at Stage C review:
+      without them `-webkit-box-shadow` and `scale:` passed, and ADR 0001 bans
+      the effect, not one spelling of it.
     - `opacity` is banned outright. QSS has no per-element opacity, so there
       is no container it could legitimately match.
   - **`alias`:** `var(--<alias>)` for any frozen alias, hyphenated. Aliases

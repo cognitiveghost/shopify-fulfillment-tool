@@ -8,6 +8,7 @@ import time
 
 import pandas as pd
 import pytest
+from PySide6.QtWebEngineCore import QWebEngineScript
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from gui.results_bridge import PAGE, THEME_MARKER, ResultsBridge, mount_results_page
@@ -74,6 +75,7 @@ def test_an_order_payload_arrives_in_js_with_its_lines_nested(qtbot, page):
         pd.DataFrame(
             {
                 "Order_Number": ["#1001", "#1002", "#1002"],
+                "Notes": [None, "call first", "call first"],
                 "SKU": ["A", "TS-4409-B", "C"],
                 "Quantity": [1, 6, 2],
             }
@@ -84,13 +86,44 @@ def test_an_order_payload_arrives_in_js_with_its_lines_nested(qtbot, page):
         _eval(qtbot, view, "window.resultsBridge.orders[1].lines[0].SKU") == "TS-4409-B"
     )
     assert _eval(qtbot, view, "window.resultsBridge.orders[1].lines[0].Quantity") == 6
+    assert _eval(qtbot, view, "window.resultsBridge.orders[0].Notes === null") is True
 
 
-def test_the_first_paint_is_already_themed(qtbot, page):
+def test_the_first_paint_is_already_themed(qtbot):
+    # Read at DOMContentLoaded, before the channel's first reply can arrive, so
+    # this sees what mount_results_page wrote into the HTML, not what results.js
+    # applies once the bridge connects.
+    view = QWebEngineView()
+    qtbot.addWidget(view)
+    probe = QWebEngineScript()
+    probe.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+    probe.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+    probe.setSourceCode(
+        "document.addEventListener('DOMContentLoaded', function () {"
+        " window.__firstPaint = getComputedStyle(document.body).backgroundColor; });"
+    )
+    view.page().scripts().insert(probe)
+    mount_results_page(view)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    assert _eval(qtbot, view, "window.__firstPaint") == _rgb(LIGHT_THEME.surface)
+
+
+def test_the_bundled_inter_loads_in_both_weights(qtbot, page):
+    # Chromium cannot see Qt's font database; a wrong @font-face path would
+    # fall back to another sans without a sound.
     view, _ = page
-    assert _eval(
-        qtbot, view, "getComputedStyle(document.body).backgroundColor"
-    ) == _rgb(LIGHT_THEME.surface)
+    _eval(
+        qtbot,
+        view,
+        "Promise.all([document.fonts.load('10pt Inter'),"
+        " document.fonts.load('bold 10pt Inter')]).then(function (r) {"
+        " window.__inter = r[0].concat(r[1]).filter(function (f) {"
+        " return f.status === 'loaded'; }).length; },"
+        " function () { window.__inter = -1; }); true",
+    )
+    _until_js(qtbot, view, "window.__inter !== undefined")
+    assert _eval(qtbot, view, "window.__inter") == 2
 
 
 def test_a_theme_switch_repaints_the_document_without_a_reload(qtbot, page):

@@ -77,6 +77,14 @@ def test_every_value_is_json_native():
     assert type(payload[0]["lines"][0]["Quantity"]) is int
 
 
+def test_a_numpy_datetime_nested_in_a_list_cell_becomes_an_iso_string():
+    # A top-level datetime64 cell already arrives as a pd.Timestamp; inside a
+    # list pandas leaves it raw, and a nanosecond one's .item() is an int.
+    df = _analysis_frame()
+    df["Lot_Details"] = [[np.datetime64("2026-01-02T03:04:05", "ns")] for _ in range(6)]
+    assert '"2026-01-02T03:04:05"' in json.dumps(order_payload(df))
+
+
 def test_nothing_to_send_is_an_empty_list():
     assert order_payload(None) == []
     assert order_payload(pd.DataFrame()) == []
