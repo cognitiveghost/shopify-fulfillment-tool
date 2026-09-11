@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
+from shopify_tool.report_filters import match_counts
 
 
 class _BaseReportDialog(QDialog):
@@ -158,17 +159,7 @@ class _BaseReportDialog(QDialog):
                 cache_key = str(filters)
                 if cache_key not in self._preview_cache:
                     filtered = self.apply_filters_fn(self.analysis_df, filters)
-                    order_col = (
-                        "Order_Number"
-                        if "Order_Number" in filtered.columns
-                        else (filtered.columns[0] if not filtered.empty else None)
-                    )
-                    num_orders = (
-                        filtered[order_col].nunique()
-                        if (not filtered.empty and order_col)
-                        else 0
-                    )
-                    self._preview_cache[cache_key] = (num_orders, len(filtered))
+                    self._preview_cache[cache_key] = match_counts(filtered)
                 num_orders, num_rows = self._preview_cache[cache_key]
                 self.preview_orders_label.setText(
                     f"Matching: {num_orders} orders · {num_rows} rows"
