@@ -3,18 +3,21 @@ import logging
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import QSettings, Qt, QThreadPool
+from PySide6.QtCore import QRectF, QSettings, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from gui.settings.base import SettingsPage
@@ -26,8 +29,24 @@ from gui.settings.sets import SetsPage
 from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
+from shared.theme import font_css, on_theme_changed
 
 logger = logging.getLogger(__name__)
+
+NAV_ICON_PX = 12
+UNSAVED_DOT_PX = 8
+DIRTY_POLL_MS = 400
+
+
+def unsaved_summary(names: list[str]) -> str:
+    """Footer copy for the unsaved pages, given in nav order."""
+    if not names:
+        return ""
+    if len(names) == 1:
+        return f"Unsaved changes on {names[0]}"
+    if len(names) == 2:
+        return f"Unsaved changes on {names[0]} and {names[1]}"
+    return f"Unsaved changes on {len(names)} pages"
 
 
 class SettingsWindow(QDialog):
@@ -138,6 +157,7 @@ class SettingsWindow(QDialog):
         self._settings_nav.setObjectName("settingsNav")
         self._settings_nav.setFixedWidth(170)
         self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._settings_nav.setIconSize(QSize(NAV_ICON_PX, NAV_ICON_PX))
         content_layout.addWidget(self._settings_nav)
 
         self.tab_widget = QStackedWidget()
@@ -145,6 +165,8 @@ class SettingsWindow(QDialog):
 
         self._page_index_by_name = {}
         self._pages: list[SettingsPage] = []
+        self._pages_by_name: dict[str, SettingsPage] = {}
+        self._unsaved: set[str] = set()
 
         # Create all tabs (unchanged call order/method names)
         self._add_page(GeneralPage(self.config_data.get("settings", {})), "General")
@@ -198,11 +220,63 @@ class SettingsWindow(QDialog):
         set_button_role(button_box.button(QDialogButtonBox.Cancel), "secondary")
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
-        main_layout.addWidget(button_box)
+
+        self._unsaved_label = QLabel("")
+        on_theme_changed(
+            self._unsaved_label,
+            lambda tokens: self._unsaved_label.setStyleSheet(
+                f"{font_css('body')} color: {tokens.text_secondary};"
+            ),
+        )
+        self._footer = QWidget()
+        footer_row = QHBoxLayout(self._footer)
+        footer_row.setContentsMargins(0, 0, 0, 0)
+        footer_row.addWidget(self._unsaved_label, 1)
+        footer_row.addWidget(button_box)
+        main_layout.addWidget(self._footer)
+
+        # The close guard replaces the footer in place: the pages it names are
+        # on screen beside it, so it is not a message box.
+        self._close_guard = QWidget()
+        guard_row = QHBoxLayout(self._close_guard)
+        guard_row.setContentsMargins(0, 0, 0, 0)
+        self._close_guard_label = QLabel("")
+        self._close_guard_label.setWordWrap(True)
+        guard_row.addWidget(self._close_guard_label, 1)
+        self.keep_editing_button = QPushButton("Keep editing")
+        set_button_role(self.keep_editing_button, "ghost")
+        self.keep_editing_button.clicked.connect(self._hide_close_guard)
+        self.discard_button = QPushButton("Discard")
+        set_button_role(self.discard_button, "danger")
+        self.discard_button.clicked.connect(self._discard)
+        # "&&": a single "&" is a Qt mnemonic and would underline the "c".
+        self.save_and_close_button = QPushButton("Save && close")
+        set_button_role(self.save_and_close_button, "primary")
+        self.save_and_close_button.clicked.connect(self.save_settings)
+        for button in (
+            self.keep_editing_button,
+            self.discard_button,
+            self.save_and_close_button,
+        ):
+            guard_row.addWidget(button)
+        self._close_guard.hide()
+        main_layout.addWidget(self._close_guard)
 
         _screen = parent.screen() if parent else QApplication.primaryScreen()
         _geo = _screen.availableGeometry()
         self.resize(min(1250, _geo.width() - 40), min(820, _geo.height() - 100))
+
+        for page in self._pages:
+            page.mark_clean()
+        on_theme_changed(self._settings_nav, self._rebuild_nav_marks)
+        # ponytail: polls the visible page's snapshot (one collect() plus one
+        # json.dumps) every 400ms. Ceiling: a page whose snapshot costs tens of
+        # milliseconds makes the dialog stutter; upgrade to a per-page
+        # `edited` signal then.
+        self._dirty_poll = QTimer(self)
+        self._dirty_poll.setInterval(DIRTY_POLL_MS)
+        self._dirty_poll.timeout.connect(self._poll_current_page)
+        self._dirty_poll.start()
 
     def _add_page(self, page: SettingsPage, name: str) -> None:
         """Register a settings page under `name`. Tracked in _pages so
@@ -213,6 +287,7 @@ class SettingsWindow(QDialog):
         (_build_settings_nav) that looks up pages by this same name.
         """
         self._pages.append(page)
+        self._pages_by_name[name] = page
         self.tab_widget.addWidget(page)
         self._page_index_by_name[name] = self.tab_widget.count() - 1
 
@@ -265,13 +340,105 @@ class SettingsWindow(QDialog):
                 self.NAV_SETTINGS_KEY, current.text()
             )
 
+    def _nav_page_names(self) -> list[str]:
+        return [name for _group, names in self.SETTINGS_NAV_GROUPS for name in names]
+
+    def _select_page(self, name: str) -> None:
+        for row in range(self._settings_nav.count()):
+            item = self._settings_nav.item(row)
+            if item.text() == name and item.data(Qt.ItemDataRole.UserRole) is not None:
+                self._settings_nav.setCurrentRow(row)
+                return
+
+    def refresh_dirty(self) -> list[str]:
+        """Re-check every page; return the unsaved page names in nav order."""
+        self._unsaved = {
+            name for name, page in self._pages_by_name.items() if page.is_dirty()
+        }
+        self._render_unsaved()
+        return [name for name in self._nav_page_names() if name in self._unsaved]
+
+    def _poll_current_page(self) -> None:
+        page = self.tab_widget.currentWidget()
+        name = next((n for n, p in self._pages_by_name.items() if p is page), None)
+        if name is None:
+            return
+        if page.is_dirty() != (name in self._unsaved):
+            self._unsaved ^= {name}
+            self._render_unsaved()
+
+    def _render_unsaved(self) -> None:
+        names = [name for name in self._nav_page_names() if name in self._unsaved]
+        summary = unsaved_summary(names)
+        self._unsaved_label.setText(summary)
+        self._close_guard_label.setText(
+            f"{summary}. Closing now discards them." if names else ""
+        )
+        self._apply_nav_marks()
+
+    def _rebuild_nav_marks(self, tokens) -> None:
+        dot = QPixmap(NAV_ICON_PX, NAV_ICON_PX)
+        dot.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(dot)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        # accent_fill: the colour of the Save button the page is waiting for.
+        painter.setBrush(QColor(tokens.accent_fill))
+        inset = (NAV_ICON_PX - UNSAVED_DOT_PX) / 2
+        painter.drawEllipse(QRectF(inset, inset, UNSAVED_DOT_PX, UNSAVED_DOT_PX))
+        painter.end()
+        blank = QPixmap(NAV_ICON_PX, NAV_ICON_PX)
+        blank.fill(Qt.GlobalColor.transparent)
+        self._unsaved_icon = QIcon(dot)
+        self._clean_icon = QIcon(blank)
+        self._apply_nav_marks()
+
+    def _apply_nav_marks(self) -> None:
+        for row in range(self._settings_nav.count()):
+            item = self._settings_nav.item(row)
+            if item.data(Qt.ItemDataRole.UserRole) is None:
+                continue  # group header
+            unsaved = item.text() in self._unsaved
+            item.setIcon(self._unsaved_icon if unsaved else self._clean_icon)
+            item.setToolTip("Unsaved changes" if unsaved else "")
+            item.setData(
+                Qt.ItemDataRole.AccessibleTextRole,
+                f"{item.text()}, unsaved changes" if unsaved else item.text(),
+            )
+
     def reject(self):
         if self._is_saving:
             return
+        # isHidden, not isVisible: children of a dialog that was never shown
+        # (every test) report invisible.
+        if not self._close_guard.isHidden():
+            self._hide_close_guard()
+            return
+        if self.refresh_dirty():
+            self._show_close_guard()
+            return
         super().reject()
+
+    def _show_close_guard(self) -> None:
+        self._footer.hide()
+        self._close_guard.show()
+        self.save_and_close_button.setFocus()
+
+    def _hide_close_guard(self) -> None:
+        self._close_guard.hide()
+        self._footer.show()
+
+    def _discard(self) -> None:
+        self._hide_close_guard()
+        super().reject()
+
+    def done(self, result):
+        self._dirty_poll.stop()
+        super().done(result)
 
     def save_settings(self):
         """Saves all settings from the UI back into the config dictionary."""
+        self._hide_close_guard()
         try:
             for page in self._pages:
                 ok, errors = page.validate()
