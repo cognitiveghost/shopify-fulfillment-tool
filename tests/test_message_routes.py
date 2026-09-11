@@ -16,11 +16,6 @@ KINDS = {"information", "warning", "critical", "question"}
 
 OWNED = {
     ("gui/actions_handler.py", "bulk_*"): "Bundle 14 (9.17) replaces these chains",
-    (
-        "gui/actions_handler.py",
-        "open_settings_window",
-    ): "Bundle 10 (9.23) owns settings save feedback",
-    ("gui/settings/window.py", "*"): "Bundle 10 (9.23)",
     ("gui/settings/sets.py", "*"): "Bundle 10 (9.23)",
     ("gui/column_config_dialog.py", "*"): "Bundle 13 (9.16) replaces ColumnConfigPanel",
     (

@@ -13,13 +13,15 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from gui.components.error_banner import show_error
+from gui.components.inline_message import InlineMessage
+from gui.components.toast import toast
 from gui.settings.base import SettingsPage
 from gui.settings.general import GeneralPage
 from gui.settings.mappings import OrdersMappingPage, StockMappingPage
@@ -160,8 +162,12 @@ class SettingsWindow(QDialog):
         self._settings_nav.setIconSize(QSize(NAV_ICON_PX, NAV_ICON_PX))
         content_layout.addWidget(self._settings_nav)
 
+        page_column = QVBoxLayout()
+        self._validation_message = InlineMessage()
+        page_column.addWidget(self._validation_message)
         self.tab_widget = QStackedWidget()
-        content_layout.addWidget(self.tab_widget, 1)
+        page_column.addWidget(self.tab_widget, 1)
+        content_layout.addLayout(page_column, 1)
 
         self._page_index_by_name = {}
         self._pages: list[SettingsPage] = []
@@ -331,6 +337,7 @@ class SettingsWindow(QDialog):
             self._settings_nav.setCurrentRow(row)
 
     def _on_settings_nav_changed(self, current, _previous):
+        self._validation_message.clear()
         if current is None:
             return
         index = current.data(Qt.ItemDataRole.UserRole)
@@ -437,83 +444,67 @@ class SettingsWindow(QDialog):
         super().done(result)
 
     def save_settings(self):
-        """Saves all settings from the UI back into the config dictionary."""
-        self._hide_close_guard()
-        try:
-            for page in self._pages:
-                ok, errors = page.validate()
-                if not ok:
-                    QMessageBox.warning(self, "Invalid Settings", "\n".join(errors))
-                    return
+        """Validate every page, collect them all, and write the profile once.
 
+        Save always writes, even when no page reads unsaved: the unsaved state
+        drives warnings only, so a snapshot that misses a field costs a
+        warning, never an edit.
+        """
+        self._hide_close_guard()
+        self._validation_message.clear()
+        for name in self._nav_page_names():
+            ok, errors = self._pages_by_name[name].validate()
+            if not ok:
+                self._select_page(name)
+                self._validation_message.show_message("\n".join(errors))
+                return
+
+        try:
             for page in self._pages:
                 for key, value in page.collect().items():
                     self.config_data[key] = value
-
-            # ========================================
-            # Save to server via ProfileManager (background -- avoids blocking
-            # the GUI thread on the lock-contention retry sleep)
-            # ========================================
-            self.save_button.setEnabled(False)
-            self.save_button.setText("Saving...")
-            self._is_saving = True
-
-            worker = Worker(
-                self.profile_manager.save_shopify_config,
-                self.client_id,
-                self.config_data,
-            )
-            worker.signals.result.connect(self._on_save_settings_result)
-            worker.signals.error.connect(self._on_save_settings_error)
-            # Keep a strong reference until the worker finishes -- a bare
-            # local var is garbage-collected the instant this method returns,
-            # which (in this PySide6 build) destroys the QRunnable's
-            # unparented signals object before its queued result reaches the
-            # main thread. See MainWindow._client_load_worker for the
-            # verified repro.
-            self._save_worker = worker
-            QThreadPool.globalInstance().start(worker)
-
-        except ValueError as e:
-            QMessageBox.critical(
+        except Exception:
+            logger.exception("Failed to collect settings")
+            show_error(
                 self,
-                "Validation Error",
-                f"Invalid value entered:\n\n{e!s}\n\nPlease check your inputs.",
+                "Settings weren't saved",
+                "A value couldn't be read. Details are in Logs.",
             )
-        except Exception as e:
-            import traceback
+            return
 
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to save settings:\n\n{e!s}\n\n{traceback.format_exc()}",
-            )
+        # Save to server via ProfileManager (background -- avoids blocking the
+        # GUI thread on the lock-contention retry sleep)
+        self.save_button.setEnabled(False)
+        self.save_button.setText("Saving...")
+        self._is_saving = True
+
+        worker = Worker(
+            self.profile_manager.save_shopify_config, self.client_id, self.config_data
+        )
+        worker.signals.result.connect(self._on_save_settings_result)
+        worker.signals.error.connect(self._on_save_settings_error)
+        # Keep a strong reference until the worker finishes -- a bare local var
+        # is garbage-collected the instant this method returns, which (in this
+        # PySide6 build) destroys the QRunnable's unparented signals object
+        # before its queued result reaches the main thread. See
+        # MainWindow._client_load_worker for the verified repro.
+        self._save_worker = worker
+        QThreadPool.globalInstance().start(worker)
 
     def _on_save_settings_result(self, success: bool):
         self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         if success:
-            QMessageBox.information(self, "Success", "Settings saved successfully!")
+            # Raised on the parent: this dialog is about to close.
+            toast(self.parentWidget() or self, "Settings saved")
             self.accept()
         else:
-            import json
-
-            config_size = len(
-                json.dumps(self.config_data, ensure_ascii=False).encode("utf-8")
-            )
-            num_sets = len(self.config_data.get("set_decoders", {}))
-            QMessageBox.critical(
+            show_error(
                 self,
-                "Save Error",
-                f"Failed to save settings to server.\n\n"
-                f"Configuration size: {config_size:,} bytes\n"
-                f"Number of sets: {num_sets}\n\n"
-                f"Possible causes:\n"
-                f"• File is locked by another user\n"
-                f"• Network connection issue\n"
-                f"• Insufficient permissions\n\n"
-                f"Please wait a few seconds and try again.",
+                "Settings weren't saved",
+                "The profile may be open on another PC, or the server can't be reached. "
+                "Wait a few seconds, then press Save again.",
             )
 
     def _on_save_settings_error(self, error):
@@ -522,7 +513,7 @@ class SettingsWindow(QDialog):
         self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")
-        QMessageBox.critical(self, "Error", f"Failed to save settings:\n\n{value!s}")
+        show_error(self, "Settings weren't saved", "Details are in Logs.")
 
 
 class _TagCategoriesPage(SettingsPage):

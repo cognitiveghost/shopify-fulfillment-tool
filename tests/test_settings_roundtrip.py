@@ -109,3 +109,76 @@ def test_a_key_no_page_renders_survives_a_save(
     assert win.config_data["settings"]["legacy_key_no_page_renders"] == "keep me"
     assert win.config_data["weight_config"]["legacy_weight_key"] == 123
     win.deleteLater()
+
+
+def test_a_validation_failure_selects_the_page_and_says_so_inline(
+    window, no_modals, started_workers, monkeypatch
+):
+    mappings = window._pages_by_name["Orders Mapping"]
+    monkeypatch.setattr(mappings, "validate", lambda: (False, ["Map the SKU column."]))
+
+    window.save_settings()
+
+    assert no_modals == []
+    assert started_workers == []
+    assert window._settings_nav.currentItem().text() == "Orders Mapping"
+    assert window._validation_message.text() == "Map the SKU column."
+    assert not window._validation_message.isHidden()
+
+
+def test_changing_page_clears_the_validation_message(window, monkeypatch):
+    mappings = window._pages_by_name["Orders Mapping"]
+    monkeypatch.setattr(mappings, "validate", lambda: (False, ["Map the SKU column."]))
+    window.save_settings()
+
+    window._select_page("Sets")
+
+    assert window._validation_message.isHidden()
+
+
+def test_a_successful_save_toasts_on_the_parent_and_closes(window, monkeypatch):
+    toasts = []
+    monkeypatch.setattr(
+        "gui.settings.window.toast", lambda source, text, **k: toasts.append(text)
+    )
+    accepted = []
+    window.accepted.connect(lambda: accepted.append(True))
+
+    window._on_save_settings_result(True)
+
+    assert toasts == ["Settings saved"]
+    assert accepted == [True]
+
+
+def test_a_failed_write_shows_a_banner_and_stays_open(window, monkeypatch):
+    errors = []
+    monkeypatch.setattr(
+        "gui.settings.window.show_error",
+        lambda source, headline, what: errors.append((headline, what)),
+    )
+    accepted = []
+    window.accepted.connect(lambda: accepted.append(True))
+
+    window._on_save_settings_result(False)
+
+    assert errors == [
+        (
+            "Settings weren't saved",
+            (
+                "The profile may be open on another PC, or the server can't be reached. "
+                "Wait a few seconds, then press Save again."
+            ),
+        )
+    ]
+    assert accepted == []
+    assert window.save_button.isEnabled()
+
+
+def test_a_crashed_write_points_to_logs(window, monkeypatch):
+    errors = []
+    monkeypatch.setattr(
+        "gui.settings.window.show_error",
+        lambda source, headline, what: errors.append((headline, what)),
+    )
+    window._on_save_settings_error((ValueError, ValueError("disk"), "tb"))
+    assert errors == [("Settings weren't saved", "Details are in Logs.")]
