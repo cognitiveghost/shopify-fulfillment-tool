@@ -25,7 +25,9 @@ def valid_column_mappings():
 
 def test_orders_page_round_trips_valid_mappings(qapp):
     column_mappings = valid_column_mappings()
-    courier_mappings = {"DHL": {"patterns": ["dhl", "DHL Express"], "case_sensitive": False}}
+    courier_mappings = {
+        "DHL": {"patterns": ["dhl", "DHL Express"], "case_sensitive": False}
+    }
     page = OrdersMappingPage(column_mappings, courier_mappings)
 
     ok, errors = page.validate()
@@ -81,7 +83,11 @@ def test_get_mappings_preserves_an_internal_name_it_has_no_row_for(qapp):
     ships with -- and with them, FIFO lot allocation."""
     widget = ColumnMappingWidget(
         mapping_type="stock",
-        current_mappings={"Article": "SKU", "Available": "Stock", "Годност": "Expiry_Date"},
+        current_mappings={
+            "Article": "SKU",
+            "Available": "Stock",
+            "Годност": "Expiry_Date",
+        },
         required_fields=["SKU", "Stock"],
         optional_fields=[],  # deliberately does not manage Expiry_Date
     )
@@ -170,7 +176,9 @@ def test_set_available_headers_offers_them_on_every_row_without_losing_text(qapp
         "Lineitem sku",
         "Some other column",
     ]
-    assert sku_input.currentText() == "Lineitem sku", "typed/configured text must survive"
+    assert sku_input.currentText() == "Lineitem sku", (
+        "typed/configured text must survive"
+    )
 
 
 def test_the_widget_has_no_scroll_area_of_its_own(qapp):
@@ -254,7 +262,10 @@ def test_load_headers_fills_every_row_from_the_chosen_file(qapp, tmp_path, monke
 
     sku_input = page.stock_mapping_widget.csv_column_inputs["SKU"]
     assert [sku_input.itemText(i) for i in range(sku_input.count())] == [
-        "Article", "Available", "Exp date", "Lot",
+        "Article",
+        "Available",
+        "Exp date",
+        "Lot",
     ]
     assert sku_input.currentText() == "Article", "the configured mapping must survive"
 
@@ -270,3 +281,28 @@ def test_load_headers_cancelled_leaves_the_inputs_alone(qapp, monkeypatch):
     sku_input = page.stock_mapping_widget.csv_column_inputs["SKU"]
     assert sku_input.count() == 0
     assert sku_input.currentText() == "Article"
+
+
+def test_editing_orders_mapping_leaves_stock_mapping_clean(qapp, monkeypatch):
+    """Both pages return the same live column_mappings dict; comparing
+    collect() would mark Stock unsaved whenever Orders changed."""
+    column_mappings = {
+        "version": 2,
+        "orders": {
+            "Name": "Order_Number",
+            "Lineitem sku": "SKU",
+            "Lineitem quantity": "Quantity",
+        },
+        "stock": {"Article": "SKU", "Available": "Stock"},
+    }
+    orders = OrdersMappingPage(column_mappings, {})
+    stock = StockMappingPage(column_mappings)
+    orders.mark_clean()
+    stock.mark_clean()
+
+    changed = {**orders.mapping_widget.get_mappings(), "Extra": "Product_Name"}
+    monkeypatch.setattr(orders.mapping_widget, "get_mappings", lambda: changed)
+    orders.collect()  # writes the orders sub-key into the shared dict
+
+    assert orders.is_dirty() is True
+    assert stock.is_dirty() is False

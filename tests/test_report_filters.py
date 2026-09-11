@@ -6,54 +6,72 @@ settings UI offered: "in" produced no file, "contains" raised SyntaxError, and
 "not in" silently emitted the rows it was told to exclude. test_not_in_excludes
 pins that last one -- it is the case that shipped wrong picking lists.
 """
+
 import pandas as pd
 import pytest
 
 from shopify_tool.report_filters import (
     apply_report_filters,
+    count_matches,
     fulfillable_only,
+    match_counts,
     normalize_operator,
 )
 
 
 @pytest.fixture
 def df():
-    return pd.DataFrame({
-        "Order_Number": ["#1001", "#1002", "#1003"],
-        "SKU": ["AB-01", "CD-02", "EF-03"],
-        "Quantity": [1, 2, 3],
-        "Shipping_Provider": ["DHL", "DPD", "DHL"],
-        # Both storage forms: a JSON string (what analysis.py writes) and a
-        # native list (what the in-memory tag path can hold).
-        "Internal_Tags": ['["Gift"]', '["NoGift"]', ["Gift", "Fragile"]],
-    })
+    return pd.DataFrame(
+        {
+            "Order_Number": ["#1001", "#1002", "#1003"],
+            "SKU": ["AB-01", "CD-02", "EF-03"],
+            "Quantity": [1, 2, 3],
+            "Shipping_Provider": ["DHL", "DPD", "DHL"],
+            # Both storage forms: a JSON string (what analysis.py writes) and a
+            # native list (what the in-memory tag path can hold).
+            "Internal_Tags": ['["Gift"]', '["NoGift"]', ["Gift", "Fragile"]],
+        }
+    )
 
 
 def _skus(df, filters):
     return sorted(apply_report_filters(df, filters)["SKU"].tolist())
 
 
-@pytest.mark.parametrize("operator, value, expected", [
-    # Legacy spellings, as stored by older builds of the settings UI.
-    ("==", "DHL", ["AB-01", "EF-03"]),
-    ("!=", "DHL", ["CD-02"]),
-    # Rules-engine spellings.
-    ("equals", "DHL", ["AB-01", "EF-03"]),
-    ("does not equal", "DHL", ["CD-02"]),
-])
+@pytest.mark.parametrize(
+    "operator, value, expected",
+    [
+        # Legacy spellings, as stored by older builds of the settings UI.
+        ("==", "DHL", ["AB-01", "EF-03"]),
+        ("!=", "DHL", ["CD-02"]),
+        # Rules-engine spellings.
+        ("equals", "DHL", ["AB-01", "EF-03"]),
+        ("does not equal", "DHL", ["CD-02"]),
+    ],
+)
 def test_provider_operators(df, operator, value, expected):
-    assert _skus(df, [{"field": "Shipping_Provider", "operator": operator, "value": value}]) == expected
+    assert (
+        _skus(
+            df, [{"field": "Shipping_Provider", "operator": operator, "value": value}]
+        )
+        == expected
+    )
 
 
-@pytest.mark.parametrize("operator, value, expected", [
-    ("in", "AB-01,CD-02", ["AB-01", "CD-02"]),
-    ("in list", "AB-01,CD-02", ["AB-01", "CD-02"]),
-    ("contains", "AB", ["AB-01"]),
-    ("starts with", "AB", ["AB-01"]),
-    ("ends with", "03", ["EF-03"]),
-])
+@pytest.mark.parametrize(
+    "operator, value, expected",
+    [
+        ("in", "AB-01,CD-02", ["AB-01", "CD-02"]),
+        ("in list", "AB-01,CD-02", ["AB-01", "CD-02"]),
+        ("contains", "AB", ["AB-01"]),
+        ("starts with", "AB", ["AB-01"]),
+        ("ends with", "03", ["EF-03"]),
+    ],
+)
 def test_sku_operators(df, operator, value, expected):
-    assert _skus(df, [{"field": "SKU", "operator": operator, "value": value}]) == expected
+    assert (
+        _skus(df, [{"field": "SKU", "operator": operator, "value": value}]) == expected
+    )
 
 
 @pytest.mark.parametrize("operator", ["not in", "not in list"])
@@ -64,24 +82,34 @@ def test_not_in_excludes_the_listed_skus(df, operator):
     SKUs the filter named. A warehouse worker got a picking list containing
     items the configuration excluded, under a "Report saved" message.
     """
-    assert _skus(df, [{"field": "SKU", "operator": operator, "value": "AB-01,CD-02"}]) == ["EF-03"]
+    assert _skus(
+        df, [{"field": "SKU", "operator": operator, "value": "AB-01,CD-02"}]
+    ) == ["EF-03"]
 
 
 def test_numeric_comparison(df):
-    assert _skus(df, [{"field": "Quantity", "operator": "is greater than", "value": "1"}]) == ["CD-02", "EF-03"]
+    assert _skus(
+        df, [{"field": "Quantity", "operator": "is greater than", "value": "1"}]
+    ) == ["CD-02", "EF-03"]
 
 
-@pytest.mark.parametrize("operator, expected", [
-    ("contains", ["AB-01", "EF-03"]),
-    ("does not contain", ["CD-02"]),
-])
+@pytest.mark.parametrize(
+    "operator, expected",
+    [
+        ("contains", ["AB-01", "EF-03"]),
+        ("does not contain", ["CD-02"]),
+    ],
+)
 def test_internal_tags_use_membership_not_substring(df, operator, expected):
-    """"Gift" must match ["Gift"] but not ["NoGift"].
+    """ "Gift" must match ["Gift"] but not ["NoGift"].
 
     A substring match against the raw JSON would match both, which is why this
     column gets tag_manager.has_tag semantics instead.
     """
-    assert _skus(df, [{"field": "Internal_Tags", "operator": operator, "value": "Gift"}]) == expected
+    assert (
+        _skus(df, [{"field": "Internal_Tags", "operator": operator, "value": "Gift"}])
+        == expected
+    )
 
 
 def test_filters_combine_with_and(df):
@@ -92,11 +120,14 @@ def test_filters_combine_with_and(df):
     assert _skus(df, filters) == ["AB-01"]
 
 
-@pytest.mark.parametrize("filters", [
-    [{"field": "SKU", "operator": "bogus", "value": "x"}],
-    [{"field": "NoSuchColumn", "operator": "equals", "value": "x"}],
-    [{"field": "", "operator": "equals", "value": "x"}],
-])
+@pytest.mark.parametrize(
+    "filters",
+    [
+        [{"field": "SKU", "operator": "bogus", "value": "x"}],
+        [{"field": "NoSuchColumn", "operator": "equals", "value": "x"}],
+        [{"field": "", "operator": "equals", "value": "x"}],
+    ],
+)
 def test_unresolvable_filter_matches_nothing(df, filters):
     """Skipping a filter widens the result set -- the exact failure this
     module exists to remove. An unusable filter matches nothing instead.
@@ -110,7 +141,9 @@ def test_no_filters_returns_everything(df):
 
 def test_empty_frame_is_returned_unchanged(df):
     empty = df.iloc[0:0]
-    assert apply_report_filters(empty, [{"field": "SKU", "operator": "equals", "value": "AB-01"}]).empty
+    assert apply_report_filters(
+        empty, [{"field": "SKU", "operator": "equals", "value": "AB-01"}]
+    ).empty
 
 
 def test_normalize_operator_maps_legacy_names():
@@ -136,18 +169,23 @@ def test_preview_and_writer_agree_on_the_same_config(tmp_path):
     """
     from shopify_tool.packing_lists import create_packing_list
 
-    df = pd.DataFrame({
-        "Order_Number": ["#1001", "#1002", "#1003", "#1004"],
-        "SKU": ["AB-01", "CD-02", "EF-03", "GH-04"],
-        "Product_Name": ["Widget", "Gadget", "Doohickey", "Thing"],
-        "Warehouse_Name": ["Widget", "Gadget", "Doohickey", "Thing"],
-        "Quantity": [1, 2, 3, 4],
-        "Shipping_Provider": ["DHL", "DPD", "DHL", "DHL"],
-        "Destination_Country": ["DE", "FR", "DE", "DE"],
-        "Order_Fulfillment_Status": [
-            "Fulfillable", "Fulfillable", "Fulfillable", "Not Fulfillable",
-        ],
-    })
+    df = pd.DataFrame(
+        {
+            "Order_Number": ["#1001", "#1002", "#1003", "#1004"],
+            "SKU": ["AB-01", "CD-02", "EF-03", "GH-04"],
+            "Product_Name": ["Widget", "Gadget", "Doohickey", "Thing"],
+            "Warehouse_Name": ["Widget", "Gadget", "Doohickey", "Thing"],
+            "Quantity": [1, 2, 3, 4],
+            "Shipping_Provider": ["DHL", "DPD", "DHL", "DHL"],
+            "Destination_Country": ["DE", "FR", "DE", "DE"],
+            "Order_Fulfillment_Status": [
+                "Fulfillable",
+                "Fulfillable",
+                "Fulfillable",
+                "Not Fulfillable",
+            ],
+        }
+    )
     # GH-04 passes the filter and is excluded only by its status.
     filters = [{"field": "SKU", "operator": "not in", "value": "AB-01,CD-02"}]
 
@@ -171,11 +209,13 @@ def test_apply_filters_matches_the_writers_on_a_mixed_status_frame():
     """
     from gui.actions_handler import ActionsHandler
 
-    df = pd.DataFrame({
-        "Order_Number": ["#1001", "#1002"],
-        "SKU": ["AB-01", "CD-02"],
-        "Order_Fulfillment_Status": ["Fulfillable", "Not Fulfillable"],
-    })
+    df = pd.DataFrame(
+        {
+            "Order_Number": ["#1001", "#1002"],
+            "SKU": ["AB-01", "CD-02"],
+            "Order_Fulfillment_Status": ["Fulfillable", "Not Fulfillable"],
+        }
+    )
 
     result = ActionsHandler._apply_filters(None, df, [])
 
@@ -186,3 +226,31 @@ def test_fulfillable_only_matches_nothing_without_the_status_column():
     """Fail closed, same as a filter on a column that is not there."""
     df = pd.DataFrame({"SKU": ["AB-01"]})
     assert fulfillable_only(df).empty
+
+
+def test_count_matches_is_none_without_an_analysis():
+    assert count_matches(None, []) is None
+    assert count_matches(pd.DataFrame(), []) is None
+
+
+def test_count_matches_counts_fulfillable_orders_and_rows():
+    frame = pd.DataFrame(
+        {
+            "Order_Number": ["1", "1", "2", "3"],
+            "SKU": ["A", "B", "A", "A"],
+            "Order_Fulfillment_Status": [
+                "Fulfillable",
+                "Fulfillable",
+                "Fulfillable",
+                "Not Fulfillable",
+            ],
+        }
+    )
+    assert count_matches(frame, []) == (2, 3)
+    assert count_matches(
+        frame, [{"field": "SKU", "operator": "equals", "value": "A"}]
+    ) == (2, 2)
+
+
+def test_match_counts_of_an_empty_frame_is_zero():
+    assert match_counts(pd.DataFrame()) == (0, 0)

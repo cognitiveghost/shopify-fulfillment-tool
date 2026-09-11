@@ -6,8 +6,8 @@ docs/superpowers/specs/2026-08-12-component-library-design.md:12-17.
 Replaces two patterns at once. QGroupBox + QFormLayout in the settings
 pages, where the OS group-box chrome duplicates a title the nav already
 shows; and the hand-rolled font_css("heading") label written three times
-(sets.py, window.py's _ColumnConfigPage, mappings.py's instructions
-paragraph). One component rather than a second PageHeader type.
+(sets.py, mappings.py's instructions paragraph, and a former window.py
+page). One component rather than a second PageHeader type.
 """
 
 from PySide6.QtWidgets import (

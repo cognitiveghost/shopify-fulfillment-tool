@@ -208,6 +208,26 @@ Stored on the PC, not in the client profile.
 hides. It is opened to change a value, never to check one. Distinguished from
 an **overflow**, which holds actions rather than values.
 
+## Settings
+
+**Unsaved page** — a settings page whose values differ from the ones it
+opened with. The nav marks it, the footer names it, and closing guards it.
+Saving writes every page regardless; unsaved is what the operator is warned
+about, not what decides the write.
+
+**Close guard** — the row that replaces Save and Cancel when closing Settings
+would discard unsaved pages: Keep editing, Discard, Save & close.
+Distinguished from a **confirm**, which is a separate dialog; the guard is
+inline because the pages it names are on screen beside it.
+
+**Match count** — how many orders and rows a report's filters select from
+the current analysis, counted over fulfillable orders exactly as the generated
+file is. Shown while the filter is being written.
+
+**Generate order** — the order reports are listed in Settings › Reports,
+which is the order they are offered and generated in. Set by dragging within
+one kind; packing lists and stock exports never mix.
+
 ## Repos
 
 **Canonical source** — `packing-tool`. Every `shared/` change is authored
