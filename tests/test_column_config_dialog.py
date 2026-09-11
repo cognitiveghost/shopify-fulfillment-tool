@@ -5,6 +5,7 @@ list items to show display names instead of raw column names would break
 every call site that read item.text() as the column name -- this locks in
 item.data(Qt.UserRole) as the source of truth instead.
 """
+
 from unittest.mock import Mock
 
 import pytest
@@ -24,7 +25,9 @@ def _make_panel(columns, locked_columns=None):
     config = TableConfig(
         visible_columns={col: True for col in columns},
         column_order=columns,
-        locked_columns=locked_columns if locked_columns is not None else ["Order_Number"],
+        locked_columns=locked_columns
+        if locked_columns is not None
+        else ["Order_Number"],
     )
     tcm = Mock()
     tcm.get_current_config.return_value = config
@@ -46,7 +49,12 @@ def test_columns_are_grouped_under_category_headers():
         if panel.column_list.item(i).data(Qt.UserRole) == _CATEGORY_HEADER_MARKER
     ]
 
-    assert categories_seen == ["Order Info", "Product Info", "Fulfillment", "Tags & Lot"]
+    assert categories_seen == [
+        "Order Info",
+        "Product Info",
+        "Fulfillment",
+        "Tags & Lot",
+    ]
 
 
 def test_get_config_from_ui_skips_header_rows():
@@ -94,7 +102,7 @@ def test_locked_column_tooltip_still_shows_raw_name():
 
 
 def test_search_matches_the_display_name_the_user_can_see():
-    """"Name" renders as "Order Name" -- searching the visible label has to
+    """ "Name" renders as "Order Name" -- searching the visible label has to
     find it, or the box no longer matches what the list shows.
     """
     panel = _make_panel(["Order_Number", "Name"])
@@ -115,12 +123,8 @@ def test_search_still_matches_the_raw_column_name():
 
 
 def test_the_panels_apply_button_is_not_a_primary():
-    """The panel is embedded twice, and marking its Apply primary is wrong in both.
-
-    In ColumnConfigDialog the panel's Apply is hidden in favour of the button
-    box's; on Settings -> Column Configuration it would sit beside the settings
-    window's own Save, giving that page two primaries.
-    """
+    """In ColumnConfigDialog the panel's Apply is hidden in favour of the button
+    box's, which is the dialog's one primary."""
     panel = _make_panel(["Order_Number", "SKU"])
     assert panel.apply_button.property("role") is None
 
@@ -146,7 +150,8 @@ def test_apply_is_the_column_dialogs_one_primary():
     dialog = ColumnConfigDialog(tcm, main_window=main_window)
     try:
         primaries = [
-            b.text() for b in dialog.findChildren(QPushButton)
+            b.text()
+            for b in dialog.findChildren(QPushButton)
             if b.property("role") == "primary"
         ]
         # Reset/Cancel/Apply carry no AcceptRole, so the shared dialog helper

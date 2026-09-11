@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
-    QLabel,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.settings.general import GeneralPage
 from gui.settings.mappings import OrdersMappingPage, StockMappingPage
@@ -55,7 +53,7 @@ class SettingsWindow(QDialog):
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
     SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
-        ("Data", ["General", "Orders Mapping", "Stock Mapping", "Column Config"]),
+        ("Data", ["General", "Orders Mapping", "Stock Mapping"]),
         ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
         ("Output", ["Reports"]),
         ("Organization", ["Tag Categories"]),
@@ -65,7 +63,15 @@ class SettingsWindow(QDialog):
     # twice already and an index would silently point at a different page.
     NAV_SETTINGS_KEY = "settings_hub/last_page"
 
-    def __init__(self, client_id, client_config, profile_manager, analysis_df=None, parent=None, initial_page=None):
+    def __init__(
+        self,
+        client_id,
+        client_config,
+        profile_manager,
+        analysis_df=None,
+        parent=None,
+        initial_page=None,
+    ):
         """Initializes the SettingsWindow.
 
         Args:
@@ -95,7 +101,7 @@ class SettingsWindow(QDialog):
         if not isinstance(self.config_data.get("column_mappings"), dict):
             self.config_data["column_mappings"] = {
                 "orders_required": [],
-                "stock_required": []
+                "stock_required": [],
             }
 
         if "courier_mappings" not in self.config_data:
@@ -104,7 +110,7 @@ class SettingsWindow(QDialog):
         if "settings" not in self.config_data:
             self.config_data["settings"] = {
                 "low_stock_threshold": 5,
-                "stock_csv_delimiter": ";"
+                "stock_csv_delimiter": ";",
             }
 
         if "rules" not in self.config_data:
@@ -179,11 +185,11 @@ class SettingsWindow(QDialog):
             "Weight",
         )
         self._add_page(
-            _TagCategoriesPage(self.config_data.get("tag_categories", {"version": 2, "categories": {}})),
+            _TagCategoriesPage(
+                self.config_data.get("tag_categories", {"version": 2, "categories": {}})
+            ),
             "Tag Categories",
         )
-        self._add_page(_ColumnConfigPage(self.parent()), "Column Config")
-
         self._build_settings_nav()
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -222,7 +228,9 @@ class SettingsWindow(QDialog):
                 if page_name not in self._page_index_by_name:
                     continue
                 item = QListWidgetItem(page_name)
-                item.setData(Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name])
+                item.setData(
+                    Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name]
+                )
                 self._settings_nav.addItem(item)
         self._settings_nav.currentItemChanged.connect(self._on_settings_nav_changed)
         self._restore_nav_selection()
@@ -283,7 +291,11 @@ class SettingsWindow(QDialog):
             self.save_button.setText("Saving...")
             self._is_saving = True
 
-            worker = Worker(self.profile_manager.save_shopify_config, self.client_id, self.config_data)
+            worker = Worker(
+                self.profile_manager.save_shopify_config,
+                self.client_id,
+                self.config_data,
+            )
             worker.signals.result.connect(self._on_save_settings_result)
             worker.signals.error.connect(self._on_save_settings_error)
             # Keep a strong reference until the worker finishes -- a bare
@@ -299,14 +311,15 @@ class SettingsWindow(QDialog):
             QMessageBox.critical(
                 self,
                 "Validation Error",
-                f"Invalid value entered:\n\n{e!s}\n\nPlease check your inputs."
+                f"Invalid value entered:\n\n{e!s}\n\nPlease check your inputs.",
             )
         except Exception as e:
             import traceback
+
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Failed to save settings:\n\n{e!s}\n\n{traceback.format_exc()}"
+                f"Failed to save settings:\n\n{e!s}\n\n{traceback.format_exc()}",
             )
 
     def _on_save_settings_result(self, success: bool):
@@ -318,7 +331,10 @@ class SettingsWindow(QDialog):
             self.accept()
         else:
             import json
-            config_size = len(json.dumps(self.config_data, ensure_ascii=False).encode("utf-8"))
+
+            config_size = len(
+                json.dumps(self.config_data, ensure_ascii=False).encode("utf-8")
+            )
             num_sets = len(self.config_data.get("set_decoders", {}))
             QMessageBox.critical(
                 self,
@@ -330,7 +346,7 @@ class SettingsWindow(QDialog):
                 f"• File is locked by another user\n"
                 f"• Network connection issue\n"
                 f"• Insufficient permissions\n\n"
-                f"Please wait a few seconds and try again."
+                f"Please wait a few seconds and try again.",
             )
 
     def _on_save_settings_error(self, error):
@@ -374,29 +390,3 @@ class _TagCategoriesPage(SettingsPage):
         if ok:
             return True, []
         return False, ["Tag Categories validation errors:", *[f"- {e}" for e in errors]]
-
-
-class _ColumnConfigPage(SettingsPage):
-    """Adapter: ColumnConfigPanel self-saves through table_config_manager
-    and contributes nothing to save_settings()'s collect loop."""
-
-    def __init__(self, main_window, parent=None):
-        super().__init__(parent)
-        layout = QVBoxLayout(self)
-        if main_window is None or not hasattr(main_window, "table_config_manager"):
-            layout.addWidget(QLabel("Column configuration is not available in this context."))
-            return
-
-        from gui.column_config_dialog import ColumnConfigPanel
-
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.addWidget(FormSection(
-            "Column Configuration",
-            "Configure which columns are visible in the analysis table, "
-            "their order, and saved views.",
-        ))
-
-        self.panel = ColumnConfigPanel(
-            main_window.table_config_manager, main_window=main_window, parent=self
-        )
-        layout.addWidget(self.panel)

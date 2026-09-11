@@ -22,7 +22,7 @@ OWNED = {
     ): "Bundle 10 (9.23) owns settings save feedback",
     ("gui/settings/window.py", "*"): "Bundle 10 (9.23)",
     ("gui/settings/sets.py", "*"): "Bundle 10 (9.23)",
-    ("gui/column_config_dialog.py", "*"): "Bundles 10 (9.23) and 13 (9.16)",
+    ("gui/column_config_dialog.py", "*"): "Bundle 13 (9.16) replaces ColumnConfigPanel",
     (
         "gui/main_window_pyside.py",
         "_init_managers",

@@ -11,6 +11,7 @@ Fixtures (qapp, no_modals, started_workers, window, make_settings_config)
 all come from conftest.py -- tests/ is not a package, so cross-file fixture
 imports do not work.
 """
+
 import copy
 from unittest.mock import Mock
 
@@ -19,9 +20,14 @@ from gui.settings.window import SettingsWindow
 
 def test_window_registers_every_page(window):
     assert list(window._page_index_by_name) == [
-        "General", "Rules", "Reports",
-        "Orders Mapping", "Stock Mapping",
-        "Sets", "Weight", "Tag Categories", "Column Config",
+        "General",
+        "Rules",
+        "Reports",
+        "Orders Mapping",
+        "Stock Mapping",
+        "Sets",
+        "Weight",
+        "Tag Categories",
     ]
 
 
