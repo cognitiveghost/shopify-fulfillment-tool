@@ -10,24 +10,33 @@ import pandas as pd
 import pytest
 from PySide6.QtWebEngineCore import QWebEngineScript
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from pytestqt.exceptions import TimeoutError as QtBotTimeoutError
 
 from gui.results_bridge import PAGE, THEME_MARKER, ResultsBridge, mount_results_page
 from gui.theme_manager import get_theme_manager
 from shared.theme import DARK_THEME, LIGHT_THEME
 
 
-def _eval(qtbot, view, expr):
+def _eval(qtbot, view, expr, timeout=5000):
     box = []
     view.page().runJavaScript(expr, 0, box.append)
-    qtbot.waitUntil(lambda: bool(box), timeout=5000)
+    qtbot.waitUntil(lambda: bool(box), timeout=timeout)
     return box[0]
 
 
 def _until_js(qtbot, view, expr, timeout_s=15):
+    # A single slow round-trip (e.g. a cold QWebEngineView/Chromium spin-up
+    # under CI load) can outlast _eval's own per-call timeout; catch that and
+    # keep retrying against this function's own deadline instead of failing
+    # on the first slow iteration.
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if _eval(qtbot, view, expr) is True:
-            return
+        remaining_ms = max(int((deadline - time.monotonic()) * 1000), 50)
+        try:
+            if _eval(qtbot, view, expr, timeout=min(remaining_ms, 5000)) is True:
+                return
+        except QtBotTimeoutError:
+            continue
         qtbot.wait(50)
     pytest.fail(f"never became true in the page: {expr}")
 
