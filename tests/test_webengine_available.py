@@ -4,10 +4,11 @@ It arrives via PySide6-Addons, which the PySide6 metapackage depends on --
 nothing names it directly, so a well-meaning switch to PySide6-Essentials
 would remove it silently and only break the frozen Windows build.
 
-find_spec, not import: importing loads libQt6WebEngineCore, which needs NSS
-and friends that the Ubuntu CI image does not install. Packaging is what is
-being guarded here, not runtime.
+find_spec, not import: this test guards packaging, not runtime. Runtime is
+tests/test_results_bridge.py, which drives a real Chromium -- the CI verify
+job installs the NSS and X client libraries that needs.
 """
+
 import importlib.util
 
 

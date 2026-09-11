@@ -29,7 +29,10 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y libegl1 libpango-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
+          # Second half: QtWebEngine's runtime (NSS and X client libs), measured
+          # with ldd against libQt6WebEngineCore and QtWebEngineProcess, so
+          # tests/test_results_bridge.py drives a real Chromium on every PR.
+          sudo apt-get update && sudo apt-get install -y libegl1 libpango-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libxkbfile1 libxtst6 libxkbcommon0 libgbm1 libasound2t64 libxcb-dri3-0
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
@@ -101,6 +104,7 @@ jobs:
           pyinstaller --name ShopifyFulfillmentTool --onedir --windowed --noconfirm
           --add-data "shopify_tool/templates;shopify_tool/templates"
           --add-data "shared/assets;shared/assets"
+          --add-data "gui/web;gui/web"
           --collect-data blabel
           --collect-submodules reportlab.graphics.barcode
           gui_main.py
@@ -117,7 +121,7 @@ jobs:
         # hundred-MB download. Fail here, in the step named for it, instead.
         shell: pwsh
         run: |
-          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe") {
+          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html") {
             if (-not (Get-ChildItem -Path "dist\ShopifyFulfillmentTool" -Recurse -Filter $name)) {
               throw "PyInstaller did not bundle $name."
             }
