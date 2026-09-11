@@ -44,15 +44,12 @@ class ProfileManagerError(Exception):
     """Base exception for ProfileManager errors."""
 
 
-
 class NetworkError(ProfileManagerError):
     """Raised when file server is not accessible."""
 
 
-
 class ValidationError(ProfileManagerError):
     """Raised when validation fails."""
-
 
 
 PROD_SERVER_PATH = r"\\192.168.88.101\_Fulfilment_\0UFulfilment"
@@ -117,7 +114,9 @@ class ProfileManager:
         # local ./logs/ folder instead of the network share.
         log_level_str = os.environ.get("FULFILLMENT_LOG_LEVEL", "INFO")
         log_level = getattr(logging, log_level_str.upper(), logging.INFO)
-        setup_logging("ShopifyTool", str(self.base_path), level=log_level, retention_days=30)
+        setup_logging(
+            "ShopifyTool", str(self.base_path), level=log_level, retention_days=30
+        )
 
         # Log which environment we're using
         if self._is_dev_environment():
@@ -186,7 +185,9 @@ class ProfileManager:
         Returns:
             Base path string
         """
-        path = resolve_server_path("ShopifyTool", "FULFILLMENT_SERVER_PATH", PROD_SERVER_PATH)
+        path = resolve_server_path(
+            "ShopifyTool", "FULFILLMENT_SERVER_PATH", PROD_SERVER_PATH
+        )
         logger.info(f"Using server path: {path}")
         return path
 
@@ -221,9 +222,7 @@ class ProfileManager:
             logger.exception("Network connection FAILED - OS error (network issue?)")
             return False
         except Exception:
-            logger.exception(
-                "Network connection FAILED - Unexpected error"
-            )
+            logger.exception("Network connection FAILED - Unexpected error")
             return False
 
         if test_path_reachable(str(self.base_path), self.connection_timeout):
@@ -301,7 +300,7 @@ class ProfileManager:
             clients = []
             for item in self.clients_dir.iterdir():
                 if item.is_dir() and item.name.startswith("CLIENT_"):
-                    client_id = item.name[len("CLIENT_"):]
+                    client_id = item.name[len("CLIENT_") :]
                     clients.append(client_id)
 
             return sorted(clients)
@@ -417,6 +416,8 @@ class ProfileManager:
                     "Notes": "Notes",
                     "Total": "Total_Price",
                     "Subtotal": "Subtotal",
+                    "Shipping Name": "Customer",
+                    "Created at": "Created_At",
                 },
                 "stock": {
                     "Артикул": "SKU",
@@ -714,7 +715,11 @@ class ProfileManager:
     # --- Set/Bundle Management Methods ---
 
     def save_inventory_memory(
-        self, client_id: str, stock_dict: dict, config: dict | None = None, names_dict: dict | None = None
+        self,
+        client_id: str,
+        stock_dict: dict,
+        config: dict | None = None,
+        names_dict: dict | None = None,
     ) -> bool:
         """Persist final stock snapshot to shopify_config inventory_memory section.
 

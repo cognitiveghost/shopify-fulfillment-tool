@@ -11,6 +11,43 @@
 <script src="results.js" defer></script>
 </head>
 <body>
-<main id="results"></main>
+<main id="results">
+  <section id="kpis" class="kpis" aria-label="Session numbers"></section>
+
+  <div id="filterbar" class="filterbar">
+    <input id="search" type="search" placeholder="Order, customer or SKU"
+           aria-label="Search orders" autocomplete="off" spellcheck="false">
+    <div id="chips" class="chips"></div>
+    <div class="menu-anchor">
+      <button id="add-filter" class="btn ghost" type="button"
+              aria-haspopup="menu" aria-expanded="false">Add filter</button>
+      <div id="filter-menu" class="menu" role="menu" hidden></div>
+    </div>
+    <button id="clear-all" class="btn ghost" type="button" hidden>Clear all</button>
+    <span class="spacer"></span>
+    <span id="count" class="count"></span>
+    <button id="screen-menu" class="btn ghost icon" type="button"
+            title="More actions for this screen" aria-label="More actions for this screen">⋯</button>
+    <button id="export" class="btn primary" type="button" disabled>Export</button>
+  </div>
+
+  <section id="table-area" class="table-area">
+    <div id="table" class="table" role="grid" tabindex="0" aria-label="Orders" data-visible-rows="0">
+      <div id="scroller" class="scroller">
+        <div id="header" class="row header" role="row"></div>
+        <div id="rows" class="rows" role="rowgroup"></div>
+      </div>
+    </div>
+    <div id="results-empty" class="state" hidden>
+      <p class="state-title">Nothing analysed yet</p>
+      <p class="state-text">Load the orders and stock files in Setup, then run the analysis. Every order it finds lands here.</p>
+    </div>
+    <div id="results-no-match" class="state" hidden>
+      <p class="state-title">No orders match</p>
+      <p class="state-text">Remove a filter or clear the search.</p>
+      <button id="no-match-clear" class="btn ghost" type="button">Clear all</button>
+    </div>
+  </section>
+</main>
 </body>
 </html>

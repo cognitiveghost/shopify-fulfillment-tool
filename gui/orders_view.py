@@ -12,7 +12,8 @@ import math
 import numpy as np
 import pandas as pd
 
-from gui.pandas_model import REPEAT_COLUMN, cell_search_text, is_repeat
+from gui.pandas_model import REPEAT_COLUMN, is_repeat
+from shopify_tool.tag_manager import parse_tags
 
 # Constant across every line of an order, by construction in analysis.py's
 # output_columns (analysis.py:1119).
@@ -29,6 +30,8 @@ ORDER_LEVEL_COLUMNS = (
     "Internal_Tags",
     "Total_Price",
     "Subtotal",
+    "Customer",
+    "Created_At",
 )
 
 # Varies line by line; these live in the detail pane, not on the order row.
@@ -50,15 +53,10 @@ LINE_LEVEL_COLUMNS = (
 # of the order. The reason is the analysis's to compute; this module only reads.
 BLOCKER_PREFIX = "Cannot fulfill: "
 
-# Hidden column carrying the order's line text so a SKU search still finds the
-# order that contains it. The view hides it; the filter proxy still scans it.
-SEARCH_COLUMN = "_search_text"
-
-# Derived, and hidden from every surface that walks the frame's columns: the
-# table view, the column-config dialog, and the filter-scope dropdown.
-HIDDEN_COLUMNS = (SEARCH_COLUMN, REPEAT_COLUMN)
-
 ORDER_KEY = "Order_Number"
+
+FULFILLABLE = "Fulfillable"
+NO_COURIER = "No courier"
 
 
 def _order_level_extras(df: pd.DataFrame, unknown: list[str]) -> set[str]:
@@ -126,12 +124,12 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Fold ``df`` to one row per ``Order_Number``, preserving row order.
 
     Adds three columns that exist only at the order level: ``Items`` (line
-    count), ``Blocker`` (the reason, extracted) and ``SEARCH_COLUMN``.
+    count), ``Blocker`` (the reason, extracted) and ``REPEAT_COLUMN``.
     """
     if df is None or df.empty or ORDER_KEY not in df.columns:
         return pd.DataFrame()
 
-    order_level, line_level = classify_columns(df)
+    order_level, _line_level = classify_columns(df)
     carried = [col for col in order_level if col != ORDER_KEY]
 
     # groupby drops null keys. analysis.py writes Order_Number for every line,
@@ -158,21 +156,6 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         out[REPEAT_COLUMN] = False
-
-    if line_level:
-        # Series.map, not DataFrame.map: the latter only exists from pandas 2.1
-        # and this stays readable either way.
-        # cell_search_text, not cell_display_text: a Lot_Details cell displays
-        # as "1 lot" but must stay findable by its batch number and expiry.
-        parts = [df[col].map(cell_search_text) for col in line_level]
-        line_text = parts[0]
-        for part in parts[1:]:
-            line_text = line_text.str.cat(part, sep=" ")
-        out[SEARCH_COLUMN] = out[ORDER_KEY].map(
-            line_text.groupby(df[ORDER_KEY], sort=False).agg(" ".join)
-        )
-    else:
-        out[SEARCH_COLUMN] = ""
 
     return out
 
@@ -206,13 +189,24 @@ def _json_value(value):
     return str(value)
 
 
+def _iso_or_none(value):
+    """An orders-file timestamp as ISO 8601 in UTC, or None if it isn't one."""
+    if isinstance(value, (list, dict)):
+        return None
+    stamp = pd.to_datetime(value, utc=True, errors="coerce")
+    return None if pd.isna(stamp) else stamp.isoformat()
+
+
+def _per_order_any(df: pd.DataFrame, mask: pd.Series) -> pd.Series:
+    return mask.groupby(df[ORDER_KEY], sort=False).any()
+
+
 def order_payload(df: pd.DataFrame) -> list[dict]:
     """The order frame with each order's lines nested -- what the bridge sends.
 
     One entry per order in the frame's row order: the order-level columns once,
     under their own names, and ``lines``, the line-level columns one dict per
-    line. SEARCH_COLUMN stays behind -- it is the Qt filter proxy's helper, and
-    the web tier filters on its own terms (9.13).
+    line. The page builds its own search text from these (9.13).
     """
     orders = orders_frame(df)
     if orders.empty:
@@ -225,12 +219,110 @@ def order_payload(df: pd.DataFrame) -> list[dict]:
         ]
         for key, group in df.groupby(ORDER_KEY, sort=False)
     }
-    columns = [ORDER_KEY] + [
-        c for c in orders.columns if c not in (ORDER_KEY, SEARCH_COLUMN)
-    ]
+    columns = [ORDER_KEY] + [c for c in orders.columns if c != ORDER_KEY]
+    by_order = df[ORDER_KEY]
+    units = (
+        pd.to_numeric(df["Quantity"], errors="coerce")
+        .fillna(0)
+        .groupby(by_order, sort=False)
+        .sum()
+        if "Quantity" in df.columns
+        else pd.Series(dtype=float)
+    )
+    unknown_sku = (
+        _per_order_any(df, df["Has_SKU"].eq(False))
+        if "Has_SKU" in df.columns
+        else pd.Series(dtype=bool)
+    )
+    low_stock = (
+        _per_order_any(df, df["Stock_Alert"].fillna("").astype(str).str.strip().ne(""))
+        if "Stock_Alert" in df.columns
+        else pd.Series(dtype=bool)
+    )
+
     payload = []
     for row in orders[columns].itertuples(index=False, name=None):
+        key = row[0]
         entry = dict(zip(columns, map(_json_value, row)))
-        entry["lines"] = lines.get(row[0], [])
+        entry["lines"] = lines.get(key, [])
+        # Derived per order, for the results document (Bundle 12 spec §4.1).
+        entry["Units"] = int(units.get(key, 0))
+        entry["Created_At"] = _iso_or_none(entry.get("Created_At"))
+        entry["Tag_List"] = parse_tags(entry.get("Internal_Tags"))
+        entry["Unknown_SKU"] = bool(unknown_sku.get(key, False))
+        entry["Low_Stock"] = bool(low_stock.get(key, False))
         payload.append(entry)
     return payload
+
+
+def _order_values(df: pd.DataFrame) -> pd.Series:
+    """Each order's Total_Price, once: the column repeats on every line."""
+    firsts = df.groupby(ORDER_KEY, sort=False)["Total_Price"].first()
+    return pd.to_numeric(firsts, errors="coerce").fillna(0.0)
+
+
+def _labels_by_courier(df: pd.DataFrame, fulfillable_orders: set) -> list:
+    """One label per fulfillable order, counted per courier, biggest first."""
+    if not fulfillable_orders:
+        return []
+    ready = df[df[ORDER_KEY].isin(fulfillable_orders)].drop_duplicates(ORDER_KEY)
+    if "Shipping_Provider" in ready.columns:
+        couriers = ready["Shipping_Provider"].fillna("").astype(str).str.strip()
+        couriers = couriers.mask(couriers.eq(""), NO_COURIER)
+    else:
+        couriers = pd.Series(NO_COURIER, index=ready.index)
+    pairs = [[str(name), int(count)] for name, count in couriers.value_counts().items()]
+    return sorted(pairs, key=lambda pair: (-pair[1], pair[0]))
+
+
+def _oldest(df: pd.DataFrame):
+    """The order created longest ago, among those with a readable Created_At."""
+    if "Created_At" not in df.columns:
+        return None
+    firsts = df.groupby(ORDER_KEY, sort=False)["Created_At"].first()
+    iso = firsts.map(_iso_or_none).dropna()
+    if iso.empty:
+        return None
+    stamps = pd.to_datetime(iso, utc=True)
+    key = stamps.idxmin()
+    return {"order_number": _json_value(key), "created_at": stamps[key].isoformat()}
+
+
+def results_summary(df: pd.DataFrame) -> dict:
+    """The KPI strip's numbers, over the whole session (Bundle 12 spec §4.2).
+
+    Computed from the line frame, as the Qt strip was: quantities, SKUs and
+    lines only exist there. Never narrowed by the page's filters.
+    """
+    if df is None or df.empty or ORDER_KEY not in df.columns:
+        return {}
+
+    if "Order_Fulfillment_Status" in df.columns:
+        ready_mask = df["Order_Fulfillment_Status"].eq(FULFILLABLE)
+    else:
+        ready_mask = pd.Series(False, index=df.index)
+    fulfillable_orders = set(df.loc[ready_mask, ORDER_KEY])
+    blocked_rows = df[~df[ORDER_KEY].isin(fulfillable_orders)]
+    has_sku = "SKU" in df.columns
+    orders = int(df[ORDER_KEY].nunique())
+
+    summary = {
+        "orders": orders,
+        "lines": len(df),
+        "skus": int(df["SKU"].nunique()) if has_sku else 0,
+        "fulfillable": len(fulfillable_orders),
+        "blocked": orders - len(fulfillable_orders),
+        "blocked_lines": len(blocked_rows),
+        "blocked_skus": int(blocked_rows["SKU"].nunique()) if has_sku else 0,
+        "labels_by_courier": _labels_by_courier(df, fulfillable_orders),
+        "value_ready": None,
+        "value_total": None,
+        "oldest": _oldest(df),
+    }
+    if "Total_Price" in df.columns:
+        values = _order_values(df)
+        summary["value_total"] = float(values.sum())
+        summary["value_ready"] = float(
+            values[values.index.isin(fulfillable_orders)].sum()
+        )
+    return summary

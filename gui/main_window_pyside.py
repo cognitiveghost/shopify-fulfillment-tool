@@ -4,12 +4,10 @@ import os
 import sys
 
 import pandas as pd
-from PySide6.QtCore import QModelIndex, QPoint, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QThreadPool, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
-    QMenu,
     QMessageBox,
 )
 
@@ -22,16 +20,13 @@ from gui.file_handler import FileHandler
 from gui.log_entry import LogEntry
 from gui.log_handler import QtLogHandler
 from gui.log_model import LogBufferModel
-from gui.pandas_model import FulfillmentFilterProxy
 from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
 from gui.worker import Worker
-from shared.icons import icon
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
 from shopify_tool.session_manager import SessionManager
-from shopify_tool.tag_manager import _normalize_tag_categories
 from shopify_tool.undo_manager import UndoManager
 
 logger = logging.getLogger(__name__)
@@ -55,8 +50,6 @@ class MainWindow(QMainWindow):
         analysis_stats (dict): A dictionary of statistics derived from the
             analysis results.
         threadpool (QThreadPool): A thread pool for running background tasks.
-        proxy_model (QSortFilterProxyModel): The proxy model for filtering and
-            sorting the main results table.
         ui_manager (UIManager): Handles the creation and state of UI widgets.
         file_handler (FileHandler): Manages file selection and loading logic.
         actions_handler (ActionsHandler): Handles user actions like running
@@ -91,22 +84,10 @@ class MainWindow(QMainWindow):
         self.orders_file_path = None
         self.stock_file_path = None
         self.analysis_results_df = None
-        # The display projection of analysis_results_df, one row per order.
-        self.orders_df = None
         self.analysis_stats = None
         self.threadpool = QThreadPool()
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
         self._analysis_running = False  # Guard against duplicate analysis runs
-
-        # Table display attributes
-        self.all_columns = []
-        self.visible_columns = []
-        self.is_syncing_selection = False
-
-        # Models
-        # Parented: an unowned proxy outlives the window that made it and
-        # keeps pointing at the source PandasModel Qt already freed.
-        self.proxy_model = FulfillmentFilterProxy(self)
 
         # Initialize new architecture managers
         self._init_managers()
@@ -115,11 +96,7 @@ class MainWindow(QMainWindow):
         self.undo_manager = UndoManager(self)
 
         # Initialize selection helper for bulk operations
-        self.selection_helper = SelectionHelper(
-            table_view=None,  # Will be set after UI creation
-            proxy_model=self.proxy_model,
-            main_window=self,
-        )
+        self.selection_helper = SelectionHelper(main_window=self)
 
         # Initialize handlers
         self.ui_manager = UIManager(self)
@@ -269,8 +246,8 @@ class MainWindow(QMainWindow):
 
                 # Disable report buttons until new analysis
                 self.run_analysis_button.setEnabled(False)
-                if hasattr(self, "generate_reports_button_tab2"):
-                    self.generate_reports_button_tab2.setEnabled(False)
+                if hasattr(self, "results_bridge"):
+                    self.ui_manager.set_export_enabled(False)
                 if hasattr(self, "add_product_button_tab2"):
                     self.add_product_button_tab2.setEnabled(False)
 
@@ -381,26 +358,8 @@ class MainWindow(QMainWindow):
         # Main actions
         self.run_analysis_button.clicked.connect(self.actions_handler.run_analysis)
 
-        # Table interactions
-        self.tableView.customContextMenuRequested.connect(self.show_context_menu)
-        self.tableView.doubleClicked.connect(self.on_table_double_clicked)
-        self.order_detail_pane.lines_table.customContextMenuRequested.connect(
-            self.show_line_context_menu
-        )
-
         # Custom signals
         self.actions_handler.data_changed.connect(self._update_all_views)
-
-        # Filter input. Typing is debounced so we don't re-scan the whole
-        # DataFrame on every keystroke; the other controls fire immediately.
-        self._filter_debounce = QTimer(self)
-        self._filter_debounce.setSingleShot(True)
-        self._filter_debounce.setInterval(200)
-        self._filter_debounce.timeout.connect(self.filter_table)
-        self.filter_input.textChanged.connect(self._filter_debounce.start)
-        self.filter_column_selector.currentIndexChanged.connect(self.filter_table)
-        self.case_sensitive_checkbox.stateChanged.connect(self.filter_table)
-        self.tag_filter_combo.currentIndexChanged.connect(self.filter_table)
 
         # Inventory memory toggle
         if hasattr(self, "inventory_memory_checkbox"):
@@ -422,10 +381,16 @@ class MainWindow(QMainWindow):
         )
 
         # Add Ctrl+F shortcut for Filter
-        QShortcut(QKeySequence("Ctrl+F"), self, lambda: self.filter_input.setFocus())
+        QShortcut(QKeySequence("Ctrl+F"), self, self._focus_results_search)
 
         # Add Ctrl+Z shortcut for Undo
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_operation)
+
+    def _focus_results_search(self):
+        """Ctrl+F: the search field lives in the results document now."""
+        self.main_tabs.setCurrentIndex(1)
+        self.results_view.setFocus()
+        self.results_bridge.focusSearchRequested.emit()
 
     def undo_last_operation(self):
         """Undo the last DataFrame modification."""
@@ -454,181 +419,6 @@ class MainWindow(QMainWindow):
         else:
             logger.error(f"Undo failed: {message}")
             show_error(self, "Undo didn't complete", "Details are in Logs.")
-
-    def _apply_tag_operation(self, mask, description: str, params: dict, tag: str):
-        """Apply add_tag to DataFrame rows matching mask, record undo, and refresh UI."""
-        from shopify_tool.tag_manager import add_tag
-
-        if "Internal_Tags" not in self.analysis_results_df.columns:
-            self.analysis_results_df["Internal_Tags"] = "[]"
-
-        affected_rows_before = self.analysis_results_df[mask].copy()
-        self.analysis_results_df.loc[mask, "Internal_Tags"] = (
-            self.analysis_results_df.loc[mask, "Internal_Tags"].apply(
-                lambda t: add_tag(t, tag)
-            )
-        )
-        self.undo_manager.record_operation(
-            operation_type="add_internal_tag",
-            description=description,
-            params=params,
-            affected_rows_before=affected_rows_before,
-        )
-        self.save_session_state()
-        self._update_all_views()
-        self.log_activity("Internal Tag", description)
-        if hasattr(self, "undo_button"):
-            self.undo_button.setEnabled(True)
-            self.undo_button.setToolTip(f"Undo: {description} (Ctrl+Z)")
-
-    def add_internal_tag_to_order(self, order_number, tag):
-        """Add an Internal Tag to all rows of an order (called from tag_management_panel signal)."""
-        if self.analysis_results_df is None or self.analysis_results_df.empty:
-            return
-        mask = self.analysis_results_df["Order_Number"] == order_number
-        self._apply_tag_operation(
-            mask,
-            description=f"Add Internal Tag: {tag} to order {order_number}",
-            params={"order_number": order_number, "tag": tag},
-            tag=tag,
-        )
-        if (
-            hasattr(self, "tag_management_panel")
-            and self.tag_management_panel.isVisible()
-        ):
-            self.on_results_selection_changed()
-
-    def remove_internal_tag_from_order(self, order_number, tag):
-        """Remove an Internal Tag from all items in an order.
-
-        Args:
-            order_number: Order number to remove tag from
-            tag: Tag to remove
-        """
-        from shopify_tool.tag_manager import remove_tag
-
-        # Ensure Internal_Tags column exists
-        if "Internal_Tags" not in self.analysis_results_df.columns:
-            return
-
-        # Get affected rows (all items in the order) BEFORE modification
-        mask = self.analysis_results_df["Order_Number"] == order_number
-        affected_rows_before = self.analysis_results_df[mask].copy()
-
-        # Update tags for all items in the order
-        current_tags = self.analysis_results_df.loc[mask, "Internal_Tags"]
-        new_tags = current_tags.apply(lambda t: remove_tag(t, tag))
-        self.analysis_results_df.loc[mask, "Internal_Tags"] = new_tags
-
-        # Record operation for undo (AFTER modification)
-        self.undo_manager.record_operation(
-            operation_type="remove_internal_tag",
-            description=f"Remove Internal Tag: {tag} from order {order_number}",
-            params={"order_number": order_number, "tag": tag},
-            affected_rows_before=affected_rows_before,
-        )
-
-        # Save state and update UI
-        self.save_session_state()
-        self._update_all_views()
-        self.log_activity("Internal Tag", f"Removed '{tag}' from order {order_number}")
-
-        # Update undo button
-        if hasattr(self, "undo_button"):
-            self.undo_button.setEnabled(True)
-            self.undo_button.setToolTip(f"Undo: Remove Internal Tag: {tag} (Ctrl+Z)")
-
-        # Update tag panel if visible
-        if (
-            hasattr(self, "tag_management_panel")
-            and self.tag_management_panel.isVisible()
-        ):
-            self.on_results_selection_changed()
-
-    def on_results_selection_changed(self):
-        """One order row selected -> pane shows it; every selected order's
-        lines go into SelectionHelper, which is what the bulk actions read."""
-        from gui.orders_view import ORDER_KEY
-
-        orders_df = getattr(self, "orders_df", None)
-        if orders_df is None or orders_df.empty:
-            self.order_detail_pane.clear()
-            self.selection_helper.clear_selection()
-            self._update_selection_bar_state()
-            return
-
-        column = orders_df.columns.get_loc(ORDER_KEY)
-        selected = []
-        for index in self.tableView.selectionModel().selectedRows():
-            source_row = self.proxy_model.mapToSource(index).row()
-            selected.append(orders_df.iat[source_row, column])
-
-        self.selection_helper.set_selected_orders(selected)
-        self._update_selection_bar_state()
-
-        current = self.tableView.selectionModel().currentIndex()
-        if not selected or not current.isValid():
-            self.order_detail_pane.clear()
-            return
-
-        source_row = self.proxy_model.mapToSource(current).row()
-        order_number = orders_df.iat[source_row, column]
-        self.order_detail_pane.set_order(
-            order_number,
-            orders_df.iloc[source_row],
-            self._pane_lines(order_number),
-        )
-
-    def _pane_lines(self, order_number):
-        """The order's lines, minus any line-level column the client hid.
-
-        Spec section 4: the saved column config keeps its meaning, split across
-        the order table and the pane. Falls back to every column rather than
-        showing an empty table if the config hides all of them.
-        """
-        from gui.orders_view import order_lines
-
-        lines = order_lines(self.analysis_results_df, order_number)
-        manager = getattr(self, "table_config_manager", None)
-        if manager is None or lines.empty:
-            return lines
-        keep = [col for col in lines.columns if manager.get_column_visibility(col)]
-        return lines[keep] if keep else lines
-
-    def open_column_config_dialog(self):
-        """Open the Column Configuration Dialog."""
-        if not hasattr(self, "table_config_manager"):
-            logger.warning("TableConfigManager not initialized")
-            return
-
-        if not hasattr(self, "current_client_id") or not self.current_client_id:
-            logger.warning("open_column_config_dialog called with no client selected")
-            return
-
-        from gui.column_config_dialog import ColumnConfigDialog
-
-        dialog = ColumnConfigDialog(self.table_config_manager, self)
-        dialog.config_applied.connect(self._on_column_config_applied)
-        dialog.exec()
-
-    def _on_column_config_applied(self):
-        """Handle column configuration applied signal."""
-        logger.info("Column configuration has been applied")
-        # Update hidden columns indicator in summary bar
-        if hasattr(self, "ui_manager"):
-            self.ui_manager.update_hidden_columns_indicator()
-
-    def _update_selection_bar_state(self):
-        """Show the bar, and name what is selected, or hide it."""
-        if not hasattr(self, "selection_bar"):
-            return
-
-        orders_count, items_count = self.selection_helper.get_selection_summary()
-        self.selection_bar.set_selection(
-            ""
-            if orders_count == 0
-            else f"{orders_count} orders · {items_count} items selected"
-        )
 
     def update_session_info_label(self):
         """Update global header session info label."""
@@ -687,12 +477,10 @@ class MainWindow(QMainWindow):
         # Reports and actions
         reports_enabled = has_session and has_analysis
 
-        if hasattr(self, "generate_reports_button_tab2"):
-            self.generate_reports_button_tab2.setEnabled(reports_enabled)
+        if hasattr(self, "results_bridge"):
+            self.ui_manager.set_export_enabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
             self.add_product_button_tab2.setEnabled(has_analysis and has_stock)
-        if hasattr(self, "configure_columns_button_tab2"):
-            self.configure_columns_button_tab2.setEnabled(has_analysis)
 
         # Update status bar
         if has_analysis:
@@ -1051,6 +839,9 @@ class MainWindow(QMainWindow):
             # first is creating one. Both have to say so, or the bar shows
             # New Session while a session is open. Spec §3.1.
             self.command_bar.set_state(BarState.SESSION)
+            # Before the analysis loads: a session without one must not keep
+            # the previous session's chips.
+            self.ui_manager.update_session_chips()
 
             # Reload undo history for this session
             if hasattr(self, "undo_manager"):
@@ -1095,73 +886,29 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to load session")
             show_error(self, "The session wasn't loaded", "Details are in Logs.")
 
-    def filter_table(self):
-        """Applies the current filter settings to the results table view.
-
-        Reads the filter text, selected column, and case sensitivity setting
-        from the UI controls and applies them to the proxy model. The text
-        filter and tag filter are combined (ANDed), so the user can narrow by
-        tag and text at the same time.
-        """
-        selected_tag = None
-        if hasattr(self, "tag_filter_combo"):
-            selected_tag = self.tag_filter_combo.currentData()
-
-        # The proxy resolves df_col positionally against the frame the table
-        # shows -- the order frame. Resolve by name, never by combo position:
-        # the two frames have different column sets and different order.
-        df_col = -1
-        column_name = self.filter_column_selector.currentData()
-        orders_df = getattr(self, "orders_df", None)
-        if column_name and orders_df is not None and column_name in orders_df.columns:
-            df_col = orders_df.columns.get_loc(column_name)
-
-        self.proxy_model.set_text_filter(
-            self.filter_input.text(),
-            df_col=df_col,
-            case_sensitive=self.case_sensitive_checkbox.isChecked(),
-        )
-        self.proxy_model.set_tag_filter(selected_tag)
-        self.ui_manager.update_filter_count()
-
     def _update_all_views(self):
-        """Central slot to refresh all UI components after data changes.
+        """Central slot to refresh every view after `analysis_results_df` changes.
 
-        This method is called whenever the main `analysis_results_df` is
-        modified. It recalculates statistics, updates the main results table,
-        and repopulates the column filter dropdown. It acts as a single point
-        of refresh for the UI.
+        Statistics are recalculated here; the results document folds the line
+        frame to orders and KPI numbers itself (gui/orders_view.py), so one
+        push is the whole refresh.
         """
-        # Update statistics ONLY if analysis results exist
         if self.analysis_results_df is not None and not self.analysis_results_df.empty:
             try:
                 self.analysis_stats = recalculate_statistics(self.analysis_results_df)
-                self.ui_manager.update_results_table(self.analysis_results_df)
             except Exception:
                 logger.exception("Failed to recalculate statistics")
                 self.analysis_stats = None
         else:
-            # No analysis results - clear statistics
             self.analysis_stats = None
-            self.ui_manager.update_results_table(pd.DataFrame())
 
-        self.ui_manager.update_kpi_strip()
-
-        # Populate filter dropdown
-        # Offer the columns the table actually shows. Line-level columns are not
-        # here on purpose -- they are in the pane, and "All Columns" still finds
-        # an order by its SKUs through the hidden search column.
-        self.filter_column_selector.clear()
-        self.filter_column_selector.addItem("All Columns", None)
-        orders_df = getattr(self, "orders_df", None)
-        if orders_df is not None and not orders_df.empty:
-            from gui.orders_view import HIDDEN_COLUMNS
-
-            for col in orders_df.columns:
-                if col not in HIDDEN_COLUMNS:
-                    self.filter_column_selector.addItem(col, col)
-        self.ui_manager.set_ui_busy(False)
-        # The column manager button is enabled within update_results_table
+        try:
+            self.results_bridge.set_orders(self.analysis_results_df)
+        except Exception:
+            logger.exception("Failed to refresh the results document")
+        finally:
+            # Never skipped: a failed push must not leave the window stuck busy.
+            self.ui_manager.set_ui_busy(False)
 
     def _on_analysis_mode_changed(self, index: int):
         """Save the analysis mode selection to shopify_config when the combo changes."""
@@ -1192,183 +939,6 @@ class MainWindow(QMainWindow):
         self.log_viewer.append(
             LogEntry.activity(op_type, desc), LogBufferModel.ACTIVITY
         )
-
-    def on_table_double_clicked(self, index: QModelIndex):
-        """Handles double-click events on the results table.
-
-        A double-click on a row triggers the toggling of the fulfillment
-        status for the corresponding order.
-
-        Args:
-            index (QModelIndex): The model index of the cell that was
-                double-clicked.
-        """
-        if not index.isValid():
-            return
-
-        orders_df = getattr(self, "orders_df", None)
-        if orders_df is None or orders_df.empty:
-            return
-
-        source_row = self.proxy_model.mapToSource(index).row()
-        order_number = orders_df.iat[
-            source_row, orders_df.columns.get_loc("Order_Number")
-        ]
-
-        if order_number:
-            self.actions_handler.toggle_fulfillment_status_for_order(order_number)
-
-    def show_context_menu(self, pos: QPoint):
-        """Shows a context menu for the results table view.
-
-        The menu is populated with actions relevant to the clicked row,
-        such as changing order status, copying data, or removing items/orders.
-
-        Args:
-            pos (QPoint): The position where the right-click occurred, in the
-                table's viewport coordinates.
-        """
-        if self.analysis_results_df is None or self.analysis_results_df.empty:
-            return
-        table = self.sender()
-        index = table.indexAt(pos)
-        if not index.isValid():
-            return
-
-        orders_df = getattr(self, "orders_df", None)
-        if orders_df is None or orders_df.empty:
-            return
-
-        source_row = self.proxy_model.mapToSource(index).row()
-        order_number = orders_df.iat[
-            source_row, orders_df.columns.get_loc("Order_Number")
-        ]
-
-        if not order_number:
-            return
-
-        from functools import partial
-
-        menu = QMenu()
-
-        # Change Status
-        change_status_action = QAction(
-            icon("refresh-cw"),
-            "Change Status",
-            self,
-        )
-        change_status_action.triggered.connect(
-            partial(
-                self.actions_handler.toggle_fulfillment_status_for_order,
-                order_number,
-            )
-        )
-        menu.addAction(change_status_action)
-
-        # Add Tag
-        add_tag_action = QAction(
-            icon("tag"),
-            "Add Tag Manually...",
-            self,
-        )
-        add_tag_action.triggered.connect(
-            partial(self.actions_handler.add_tag_manually, order_number)
-        )
-        menu.addAction(add_tag_action)
-
-        # Internal Tags submenu
-        tags_menu = menu.addMenu("Internal Tags")
-        tags_menu.setIcon(icon("tags"))
-
-        # Get tag categories from config
-        tag_categories = self.active_profile_config.get("tag_categories", {})
-        # Normalize to handle both v1 and v2 formats
-        tag_categories = _normalize_tag_categories(tag_categories)
-
-        for category, config in tag_categories.items():
-            category_label = config.get("label", category)
-            category_menu = tags_menu.addMenu(category_label)
-
-            for tag in config.get("tags", []):
-                add_tag_action = QAction(f"Add {tag}", self)
-                add_tag_action.triggered.connect(
-                    partial(self.add_internal_tag_to_order, order_number, tag)
-                )
-                category_menu.addAction(add_tag_action)
-
-        menu.addSeparator()
-
-        # Remove Order
-        remove_order_action = QAction(
-            icon("trash-2"),
-            f"Remove Entire Order {order_number}",
-            self,
-        )
-        remove_order_action.triggered.connect(
-            partial(self.actions_handler.remove_entire_order, order_number)
-        )
-        menu.addAction(remove_order_action)
-
-        menu.addSeparator()
-
-        # Copy Order Number
-        copy_order_action = QAction(
-            icon("copy"),
-            "Copy Order Number",
-            self,
-        )
-        copy_order_action.triggered.connect(
-            partial(QApplication.clipboard().setText, str(order_number))
-        )
-        menu.addAction(copy_order_action)
-
-        menu.exec(table.viewport().mapToGlobal(pos))
-
-    def show_line_context_menu(self, pos: QPoint):
-        """Per-line actions, on the line itself.
-
-        The old table-level version had to guess which line a right-click on an
-        order meant, and carried a row snapshot to notice when it had guessed on
-        a row that moved. The snapshot guard stays -- it now guards a click on
-        the thing it acts on.
-        """
-        from functools import partial
-
-        table = self.order_detail_pane.lines_table
-        index = table.indexAt(pos)
-        if not index.isValid():
-            return
-
-        lines = table.model()._dataframe
-        row = index.row()
-        sku = lines.iloc[row]["SKU"]
-        order_number = self.order_detail_pane._order_number
-        row_label = lines.index[row]
-        row_position = self.analysis_results_df.index.get_loc(row_label)
-        row_snapshot = self.analysis_results_df.loc[row_label].to_dict()
-
-        menu = QMenu()
-        remove_item_action = QAction(
-            icon("circle-minus"), f"Remove Item {sku} from Order", self
-        )
-        remove_item_action.triggered.connect(
-            partial(
-                self.actions_handler.remove_item_from_order,
-                order_number,
-                sku,
-                row_position,
-                row_snapshot,
-            )
-        )
-        menu.addAction(remove_item_action)
-
-        copy_sku_action = QAction(icon("copy"), f"Copy SKU {sku}", self)
-        copy_sku_action.triggered.connect(
-            lambda: QApplication.clipboard().setText(str(sku))
-        )
-        menu.addAction(copy_sku_action)
-
-        menu.exec(table.viewport().mapToGlobal(pos))
 
     def closeEvent(self, event):
         """Handles the application window being closed.

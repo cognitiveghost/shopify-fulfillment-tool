@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from gui.orders_view import SEARCH_COLUMN, order_payload
+from gui.orders_view import order_payload
 
 
 def _analysis_frame() -> pd.DataFrame:
@@ -66,7 +66,7 @@ def test_order_level_columns_appear_once_with_the_derived_ones():
     assert order["Shipping_Provider"] == "DHL"
     assert order["Items"] == 2 and type(order["Items"]) is int
     assert order["Blocker"] == "TS-4409-B short"
-    assert "SKU" not in order and SEARCH_COLUMN not in order
+    assert "SKU" not in order
 
 
 def test_every_value_is_json_native():

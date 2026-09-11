@@ -6,8 +6,9 @@ still reads the current value with no handshake; what JS reports crosses as a
 Slot. Channel members are camelCase because JS calls them.
 
 The full catalogue, and which bundle adds each member, is section 5.2 of
-docs/superpowers/specs/2026-09-11-phase9-bundle11-seam-design.md. Add a
-member there before adding it here.
+docs/superpowers/specs/2026-09-11-phase9-bundle11-seam-design.md, as amended
+by Bundle 12 (docs/superpowers/specs/2026-09-11-phase9-bundle12-results-doc-design.md
+section 5). Add a member there before adding it here.
 """
 
 from pathlib import Path
@@ -16,7 +17,7 @@ from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
-from gui.orders_view import order_payload
+from gui.orders_view import order_payload, results_summary
 from gui.theme_manager import get_theme_manager
 from shared.theme import on_theme_changed, theme_css_vars
 
@@ -27,18 +28,26 @@ CHANNEL_NAME = "results"
 
 
 class ResultsBridge(QObject):
-    """Bundle 11's three members: orders, themeCss, setSelection."""
+    """The results document's one channel object (Bundles 11 and 12)."""
 
     ordersChanged = Signal()
+    summaryChanged = Signal()
     themeCssChanged = Signal()
-    # Python-facing. JS reports a selection through setSelection() and never
-    # connects to this, so a selection cannot echo back into the page.
+    exportEnabledChanged = Signal()
+    # JS-facing: Ctrl+F in the Qt window focuses the page's search field.
+    focusSearchRequested = Signal()
+    # Python-facing. JS reports through the slots below and never connects to
+    # these, so nothing it sends can echo back into the page.
     selectionChanged = Signal(list)
+    exportRequested = Signal()
+    screenMenuRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._orders: list = []
+        self._summary: dict = {}
         self._theme_css = ""
+        self._export_enabled = False
         self._selection: list[str] = []
 
     # --- out: Python -> JS -------------------------------------------------
@@ -48,10 +57,20 @@ class ResultsBridge(QObject):
 
     orders = Property("QVariantList", _get_orders, notify=ordersChanged)
 
+    def _get_summary(self) -> dict:
+        return self._summary
+
+    summary = Property("QVariantMap", _get_summary, notify=summaryChanged)
+
     def _get_theme_css(self) -> str:
         return self._theme_css
 
     themeCss = Property(str, _get_theme_css, notify=themeCssChanged)
+
+    def _get_export_enabled(self) -> bool:
+        return self._export_enabled
+
+    exportEnabled = Property(bool, _get_export_enabled, notify=exportEnabledChanged)
 
     # --- in: JS -> Python --------------------------------------------------
 
@@ -63,14 +82,32 @@ class ResultsBridge(QObject):
         self._selection = selection
         self.selectionChanged.emit(selection)
 
+    @Slot()
+    def openExport(self) -> None:
+        self.exportRequested.emit()
+
+    @Slot()
+    def openScreenMenu(self) -> None:
+        self.screenMenuRequested.emit()
+
     # --- Python-facing API -------------------------------------------------
 
     def selection(self) -> list[str]:
         return list(self._selection)
 
     def set_orders(self, df) -> None:
+        """Push the session: the order payload and the KPI numbers, together."""
         self._orders = order_payload(df)
+        self._summary = results_summary(df)
+        self.summaryChanged.emit()
         self.ordersChanged.emit()
+
+    def set_export_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._export_enabled:
+            return
+        self._export_enabled = enabled
+        self.exportEnabledChanged.emit()
 
     def set_theme_css(self, css: str) -> None:
         if css == self._theme_css:

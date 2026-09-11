@@ -38,6 +38,28 @@ lines counted rather than listed. What the Qt tier's table shows.
 **Order payload** — the order frame as the web tier receives it: one entry
 per order, with that order's lines nested inside it.
 
+## Results
+
+**Results document** — the web tier's one page: KPI strip, filter bar and
+order table, with a slot beside the table for the detail pane. It owns its
+view state (ADR 0005). Not the "results table", which named the Qt table it
+replaced.
+
+**Fulfillable order** — an order the session can ship complete. This is the
+display word everywhere; the v2 canvas's "Ready" and "Ship complete" are not
+used. Its complement is a **blocked order**.
+
+**Label count** — one courier label per fulfillable order, split by courier.
+What the Labels card counts.
+
+**Customer** — the order's recipient, from the orders-file column mapped to
+`Customer` (Shopify's `Shipping Name` by default). Shows a dash when the
+profile maps nothing to it.
+
+**Order age** — how long ago the order was created in the shop, from the
+column mapped to `Created_At`. Distinguished from **stock age**: how old the
+stock file was when the analysis ran.
+
 ## Assets
 
 **Asset library** — `shared/assets/`, plus the two modules that read it

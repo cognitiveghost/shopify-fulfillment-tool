@@ -68,7 +68,10 @@ def _parse_expiry_date(raw) -> date | None:
         return None
 
     if len(s) == 6:
-        candidate_specs = [("YYMMDD", s[0:2], s[2:4], s[4:6]), ("DDMMYY", s[4:6], s[2:4], s[0:2])]
+        candidate_specs = [
+            ("YYMMDD", s[0:2], s[2:4], s[4:6]),
+            ("DDMMYY", s[4:6], s[2:4], s[0:2]),
+        ]
     elif len(s) == 8:
         candidate_specs = [("YYYYMMDD", s[0:4], s[4:6], s[6:8])]
     elif len(s) == 4:
@@ -221,6 +224,8 @@ def _clean_and_prepare_data(
                 "Notes": "Notes",
                 "Total": "Total_Price",
                 "Subtotal": "Subtotal",
+                "Shipping Name": "Customer",
+                "Created at": "Created_At",
             },
             "stock": {
                 "Артикул": "SKU",
@@ -291,6 +296,12 @@ def _clean_and_prepare_data(
     if "Tags" in orders_df.columns:
         orders_df["Tags"] = orders_df["Tags"].ffill()
 
+    # Shopify writes these on an order's first line only. Filled within the
+    # order, never from the one above it: an order with no customer stays blank.
+    for col in ("Customer", "Created_At"):
+        if col in orders_df.columns:
+            orders_df[col] = orders_df.groupby("Order_Number")[col].ffill()
+
     # Forward-fill additional order-level columns from config
     if additional_columns_config:
         order_level_additional = [
@@ -318,6 +329,8 @@ def _clean_and_prepare_data(
         "Notes",
         "Total_Price",
         "Subtotal",
+        "Customer",
+        "Created_At",
     ]
 
     # Get enabled additional columns from config
@@ -1086,9 +1099,9 @@ def _merge_results_to_dataframe(
             final_df.loc[no_sku_mask, "System_note"] = final_df.loc[
                 no_sku_mask, "System_note"
             ].apply(
-                lambda note: f"{note} [NO_SKU]"
-                if pd.notna(note) and note != ""
-                else "[NO_SKU]"
+                lambda note: (
+                    f"{note} [NO_SKU]" if pd.notna(note) and note != "" else "[NO_SKU]"
+                )
             )
             logger.info(f"Marked {no_sku_mask.sum()} NO_SKU items as Not Fulfillable")
 
@@ -1137,6 +1150,9 @@ def _merge_results_to_dataframe(
         "Status_Note",
         "Internal_Tags",  # Structured tagging system
         "Lot_Details",  # Per-lot FIFO allocation data (None when no lot tracking)
+        # Appended last so the positional inserts below (3, 6, 7) do not move.
+        "Customer",
+        "Created_At",
     ]
     if "Total_Price" in final_df.columns:
         # Insert 'Total_Price' into the list at a specific position for consistent column order.
@@ -1622,9 +1638,9 @@ def recalculate_statistics(df):
                 exploded = (
                     rows_df[["Order_Number", "Internal_Tags"]]
                     .assign(
-                        Internal_Tags=lambda d: d["Internal_Tags"]
-                        .fillna("[]")
-                        .apply(parse_tags)
+                        Internal_Tags=lambda d: (
+                            d["Internal_Tags"].fillna("[]").apply(parse_tags)
+                        )
                     )
                     .explode("Internal_Tags")
                     .rename(columns={"Internal_Tags": "tag"})
@@ -1658,9 +1674,11 @@ def recalculate_statistics(df):
         # Create a helper column for fulfillable quantity
         df_temp = df.copy()
         df_temp["Fulfillable_Qty"] = df_temp.apply(
-            lambda row: row["Quantity"]
-            if row["Order_Fulfillment_Status"] == "Fulfillable"
-            else 0,
+            lambda row: (
+                row["Quantity"]
+                if row["Order_Fulfillment_Status"] == "Fulfillable"
+                else 0
+            ),
             axis=1,
         )
 

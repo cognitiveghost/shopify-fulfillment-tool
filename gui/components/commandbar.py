@@ -50,13 +50,14 @@ class BarState(enum.Enum):
     SESSION = "session"
     RUNNING = "running"
 
+
 # What a dropdown row is, at Qt.UserRole. The payload at Qt.UserRole + 1 is a
 # client id for ROW_CLIENT and the action's own label for ROW_ACTION.
 ROW_SECTION = "section"
 ROW_CLIENT = "client"
 ROW_ACTION = "action"
 
-_DOT_PX = 10          # matches StatusDot's default diameter
+_DOT_PX = 10  # matches StatusDot's default diameter
 _NEW_CLIENT = "New client…"
 _MANAGE_GROUPS = "Manage groups…"
 _REFRESH = "Refresh clients"
@@ -66,9 +67,9 @@ _ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS)
 # take the session ID first because it is the longest string in the row --
 # and an elided ID is a wrong ID.
 _LADDER = (
-    (1100, "spacer"),      # inter-group spacer collapses to 8px
-    (900, "client"),       # client name elides inside its 200px
-    (700, "progress"),     # progress drops the phase name, keeps the percent
+    (1100, "spacer"),  # inter-group spacer collapses to 8px
+    (900, "client"),  # client name elides inside its 200px
+    (700, "progress"),  # progress drops the phase name, keeps the percent
     (500, "new_session"),  # New Session goes icon-only
 )
 
@@ -85,7 +86,7 @@ class _ClientCombo(QComboBox):
     """
 
     def wheelEvent(self, event) -> None:
-        event.ignore()          # a client switch is never a scroll gesture
+        event.ignore()  # a client switch is never a scroll gesture
 
     def keyPressEvent(self, event) -> None:
         if event.key() in (Qt.Key_Up, Qt.Key_Down) and not self.view().isVisible():
@@ -189,8 +190,13 @@ class CommandBar(QWidget):
         layout.addWidget(self.open_folder_button)
 
         self.status_chip = StatusChip("text_secondary", "", theme, parent=self)
-        self.status_chip.hide()   # an empty chip still paints a tinted pill
+        self.status_chip.hide()  # an empty chip still paints a tinted pill
         layout.addWidget(self.status_chip)
+
+        # W3's second chip: how old the stock file was when the analysis ran.
+        self.stock_chip = StatusChip("text_secondary", "", theme, parent=self)
+        self.stock_chip.hide()
+        layout.addWidget(self.stock_chip)
 
         self.progress_label = QLabel("", self)
         self.progress_label.setStyleSheet(font_css("caption"))
@@ -271,8 +277,11 @@ class CommandBar(QWidget):
                 listed.update(pinned)
 
             for group in data.get("custom_groups", []):
-                members = [c for c in data["group_members"].get(group.get("id"), [])
-                           if c in data["all_clients"]]
+                members = [
+                    c
+                    for c in data["group_members"].get(group.get("id"), [])
+                    if c in data["all_clients"]
+                ]
                 if not members:
                     continue
                 self._add_section(group.get("name", "Unknown"))
@@ -301,7 +310,7 @@ class CommandBar(QWidget):
     def _add_section(self, title: str) -> None:
         item = QStandardItem(title)
         item.setData(ROW_SECTION, Qt.UserRole)
-        item.setFlags(Qt.NoItemFlags)          # a caption, never a choice
+        item.setFlags(Qt.NoItemFlags)  # a caption, never a choice
         self.client_selector.model().appendRow(item)
 
     def _add_client(self, client_id: str, data: dict) -> None:
@@ -396,8 +405,10 @@ class CommandBar(QWidget):
         model = self.client_selector.model()
         for i in range(model.rowCount()):
             item = model.item(i)
-            if (item.data(Qt.UserRole) == ROW_CLIENT
-                    and item.data(Qt.UserRole + 1) == client_id):
+            if (
+                item.data(Qt.UserRole) == ROW_CLIENT
+                and item.data(Qt.UserRole + 1) == client_id
+            ):
                 self.client_selector.setCurrentIndex(i)
                 return
 
@@ -424,10 +435,14 @@ class CommandBar(QWidget):
         self._refresh()
 
     def set_status(self, role: str, text: str) -> None:
-        self.status_chip.set_status(
-            role, text, get_theme_manager().get_current_theme()
-        )
+        self.status_chip.set_status(role, text, get_theme_manager().get_current_theme())
         self.status_chip.setVisible(bool(text))
+
+    def set_stock_age(self, text: str) -> None:
+        self.stock_chip.set_status(
+            "text_secondary", text, get_theme_manager().get_current_theme()
+        )
+        self.stock_chip.setVisible(bool(text))
 
     def set_action(self, label: str) -> QPushButton:
         """Label and reveal the screen's single primary action.
@@ -438,6 +453,7 @@ class CommandBar(QWidget):
         actionTriggered and the button that is no longer on screen.
         """
         self._unbind()
+        set_button_role(self.action_button, "primary")
         self.action_button.setToolTip("")
         self.action_button.setEnabled(True)
         self.action_button.setText(label)
@@ -450,13 +466,15 @@ class CommandBar(QWidget):
             self._bound_action.removeEventFilter(self)
             self._bound_action = None
 
-    def bind_action(self, button: QPushButton | None) -> None:
+    def bind_action(self, button: QPushButton | None, role: str = "primary") -> None:
         """Mirror a screen's own primary button in the bar's action slot.
 
         The bound button stays the command: its clicked connections and the
         setEnabled call sites in file_handler and main_window_pyside keep working
         untouched, and the bar is a second presentation of it rather than a
         replacement. Passing None hides the slot, for a screen with no primary.
+        role is the slot's button role: Results re-runs the analysis as a
+        secondary action (W3).
 
         ponytail: a hidden QPushButton as the command's model is what QAction
         does properly, but QPushButton cannot consume a QAction -- only
@@ -470,6 +488,7 @@ class CommandBar(QWidget):
             self._refresh()
             return
         self._bound_action = button
+        set_button_role(self.action_button, role)
         button.installEventFilter(self)
         self.action_button.setToolTip(button.toolTip())
         self.action_button.setEnabled(button.isEnabled())
@@ -483,8 +502,7 @@ class CommandBar(QWidget):
 
     def eventFilter(self, watched, event):
         # QWidget has no enabledChanged signal; this event is Qt's only notice.
-        if (watched is self._bound_action
-                and event.type() == QEvent.Type.EnabledChange):
+        if watched is self._bound_action and event.type() == QEvent.Type.EnabledChange:
             self.action_button.setEnabled(watched.isEnabled())
         return super().eventFilter(watched, event)
 
@@ -519,6 +537,7 @@ class CommandBar(QWidget):
                 self.session_button.setEnabled(state is BarState.SESSION)
         self.open_folder_button.setVisible(has_session)
         self.status_chip.setVisible(has_session and bool(self.status_chip.text()))
+        self.stock_chip.setVisible(has_session and bool(self.stock_chip.text()))
 
         self.new_session_button.setVisible(state is BarState.NO_SESSION)
         self.cancel_button.setVisible(state is BarState.RUNNING)
@@ -548,6 +567,4 @@ class CommandBar(QWidget):
         else:
             self.progress_label.setText(f"{phase} {percent}%")
 
-        self.new_session_button.setText(
-            "" if "new_session" in fired else "New Session"
-        )
+        self.new_session_button.setText("" if "new_session" in fired else "New Session")

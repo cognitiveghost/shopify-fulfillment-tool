@@ -158,3 +158,46 @@ def test_a_density_change_reaches_the_type_scale(qtbot, page):
         "getComputedStyle(document.documentElement)"
         ".getPropertyValue('--type-body-size').trim() === '12pt'",
     )
+
+
+def test_set_orders_also_sets_the_summary(qapp):
+    bridge = ResultsBridge()
+    seen = []
+    bridge.summaryChanged.connect(lambda: seen.append(bridge.summary))
+    bridge.set_orders(pd.DataFrame({"Order_Number": ["#1", "#2"], "SKU": ["A", "B"]}))
+    assert seen and seen[-1]["orders"] == 2
+
+
+def test_open_export_is_a_request_python_hears(qapp):
+    bridge = ResultsBridge()
+    heard = []
+    bridge.exportRequested.connect(lambda: heard.append(True))
+    bridge.openExport()
+    assert heard == [True]
+
+
+def test_open_screen_menu_is_a_request_python_hears(qapp):
+    bridge = ResultsBridge()
+    heard = []
+    bridge.screenMenuRequested.connect(lambda: heard.append(True))
+    bridge.openScreenMenu()
+    assert heard == [True]
+
+
+def test_export_enabled_notifies_only_on_change(qapp):
+    bridge = ResultsBridge()
+    changes = []
+    bridge.exportEnabledChanged.connect(lambda: changes.append(bridge.exportEnabled))
+    bridge.set_export_enabled(True)
+    bridge.set_export_enabled(True)
+    bridge.set_export_enabled(False)
+    assert changes == [True, False]
+
+
+def test_the_summary_arrives_in_js(qtbot, page):
+    view, bridge = page
+    bridge.set_orders(
+        pd.DataFrame({"Order_Number": ["#1", "#1", "#2"], "SKU": ["A", "B", "C"]})
+    )
+    _until_js(qtbot, view, "window.resultsBridge.summary.orders === 2")
+    assert _eval(qtbot, view, "window.resultsBridge.summary.lines") == 3

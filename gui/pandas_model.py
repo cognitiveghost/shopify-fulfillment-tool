@@ -1,100 +1,12 @@
-import json
-
 import pandas as pd
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 
 from gui.theme_manager import get_theme_manager
 
 # The row's status as a theme role token name -- resolved against the live
-# theme by StatusEdgeDelegate, not here. Qt.UserRole is unused on this model
-# and TagDelegate reads none; +20 leaves room for both.
+# theme by StatusEdgeDelegate, not here. Qt.UserRole is unused on this model;
+# +20 leaves room.
 ROLE_STATUS = Qt.ItemDataRole.UserRole + 20
-
-
-class FulfillmentFilterProxy(QSortFilterProxyModel):
-    """Proxy that combines a plain-substring text filter with a tag filter.
-
-    Replaces the default ``setFilterRegularExpression`` behaviour, which
-    treated raw user input as a regex (so typing ``(``, ``+`` or ``[`` broke
-    the filter or silently hid every row). Matching is plain substring on the
-    cell's search text (see :func:`cell_search_text` — the display text, widened
-    for lot cells so batch numbers and expiry dates stay findable), and the text
-    and tag filters are ANDed together instead of being mutually exclusive.
-
-    Columns are addressed by *DataFrame* index (``-1`` = all columns); the
-    proxy reads the source ``PandasModel``'s frame directly via ``iat``, so it
-    addresses the source frame's own column positions.
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._df_col = -1  # -1 = search all columns
-        self._case_sensitive = False
-        self._needle = ""  # text filter, pre-folded to match case sensitivity
-        self._tag_needle = None  # tag filter as quoted JSON token, e.g. '"URGENT"'
-
-    def set_text_filter(self, text, df_col=-1, case_sensitive=False):
-        text = text or ""
-        self._df_col = df_col
-        self._case_sensitive = case_sensitive
-        self._needle = text if case_sensitive else text.casefold()
-        self.invalidateFilter()
-
-    def set_tag_filter(self, tag):
-        self._tag_needle = f'"{tag}"' if tag else None
-        self.invalidateFilter()
-
-    def clear_filters(self):
-        self._df_col = -1
-        self._needle = ""
-        self._tag_needle = None
-        self.invalidateFilter()
-
-    def filterAcceptsRow(self, source_row, source_parent):
-        model = self.sourceModel()
-        df = getattr(model, "_dataframe", None) if model is not None else None
-        if df is None:
-            return True
-
-        # Tag filter: Internal_Tags stores tags as a JSON array, so a quoted
-        # match ("URGENT") avoids matching substrings of other tag names.
-        if self._tag_needle:
-            if "Internal_Tags" not in df.columns:
-                return False
-            val = df.iat[source_row, df.columns.get_loc("Internal_Tags")]
-            if isinstance(val, list):
-                # Internal_Tags is normally a JSON string, but is sometimes stored
-                # unserialized (tag_manager.py:78, barcode_processor.py:82). json.dumps,
-                # not str(): repr uses single quotes, so the double-quoted needle misses.
-                # default=str: tag_manager returns the list verbatim, so a
-                # non-string element would otherwise raise across the Qt boundary.
-                hay = json.dumps(val, default=str)
-            else:
-                hay = "" if pd.isna(val) else str(val)
-            if self._tag_needle not in hay:
-                return False
-
-        if not self._needle:
-            return True
-
-        if self._df_col < 0:
-            # Every column *except* REPEAT_COLUMN: it is a derived bool, so
-            # cell_search_text renders it "True"/"False" and a needle of "f",
-            # "al" or "true" would match every row through a column the user
-            # cannot see. _search_text is derived too, but exists to be searched.
-            col_indices = [c for c, name in enumerate(df.columns) if name != REPEAT_COLUMN]
-        elif self._df_col < len(df.columns):
-            col_indices = (self._df_col,)
-        else:
-            return True  # stale column index after a data reload
-
-        fold = (lambda s: s) if self._case_sensitive else str.casefold
-        for c in col_indices:
-            cell = df.iat[source_row, c]
-            hay = cell_search_text(cell)
-            if self._needle in fold(hay):
-                return True
-        return False
 
 
 def _format_lot(lot: dict) -> str:
@@ -102,7 +14,11 @@ def _format_lot(lot: dict) -> str:
     qty = lot.get("qty_allocated", lot.get("qty", 0))
     qty_str = f"{qty:g}" if isinstance(qty, float) else str(qty)
     expiry_dt = lot.get("expiry_dt")
-    expiry_str = f"exp {expiry_dt.isoformat()}" if expiry_dt is not None else f"exp unparsed ({lot.get('expiry')!r})"
+    expiry_str = (
+        f"exp {expiry_dt.isoformat()}"
+        if expiry_dt is not None
+        else f"exp unparsed ({lot.get('expiry')!r})"
+    )
     batch = lot.get("batch")
     batch_str = f", Batch {batch}" if batch else ""
     return f"{qty_str}x, {expiry_str}{batch_str}"
@@ -265,7 +181,12 @@ class PandasModel(QAbstractTableModel):
 
         return None
 
-    def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.ItemDataRole.DisplayRole):
+    def headerData(
+        self,
+        section: int,
+        orientation: Qt.Orientation,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
         """Returns the header data for the given section and orientation.
 
         Args:
@@ -311,9 +232,13 @@ class PandasModel(QAbstractTableModel):
                 visible.
         """
         self.beginResetModel()
-        existing_columns = [col for col in all_columns_in_order if col in self._dataframe.columns]
+        existing_columns = [
+            col for col in all_columns_in_order if col in self._dataframe.columns
+        ]
         self._dataframe = self._dataframe[existing_columns]
-        self.hidden_columns = [col for col in all_columns_in_order if col not in visible_columns]
+        self.hidden_columns = [
+            col for col in all_columns_in_order if col not in visible_columns
+        ]
         self.endResetModel()
 
     def _build_row_status_cache(self):

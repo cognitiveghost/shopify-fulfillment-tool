@@ -1,38 +1,32 @@
 """Selection helper utilities for bulk operations.
 
-This module provides the SelectionHelper class that manages table selection
-and checkbox state for bulk operations on the Analysis Results table.
+This module provides the SelectionHelper class, which holds the order
+selection the results document reports through ResultsBridge, for bulk
+operations.
 """
-
 
 import pandas as pd
 
 
 class SelectionHelper:
-    """Manages table selection and checkbox state for bulk operations.
+    """Holds the page's order selection for bulk operations.
 
-    This class tracks which rows are "checked" (selected for bulk operations)
-    independently from Qt's native row selection. The checked state is stored
-    as a set of source DataFrame indexes.
+    The results document owns the gesture (ADR 0005) and reports order
+    numbers; this class stores them as the source DataFrame indexes of those
+    orders' lines.
 
     Attributes:
-        table_view: Reference to the QTableView widget
-        proxy_model: Reference to the QSortFilterProxyModel
         main_window: Reference to the MainWindow instance
         checked_rows: Set of analysis_results_df index labels for the lines of
             the selected orders.
     """
 
-    def __init__(self, table_view, proxy_model, main_window):
+    def __init__(self, main_window):
         """Initialize SelectionHelper.
 
         Args:
-            table_view: QTableView widget (can be None, set later)
-            proxy_model: QSortFilterProxyModel for the table
             main_window: MainWindow instance containing analysis_results_df
         """
-        self.table_view = table_view
-        self.proxy_model = proxy_model
         self.main_window = main_window
         self.checked_rows: set[int] = set()  # Set of source DataFrame indexes
 
@@ -77,9 +71,13 @@ class SelectionHelper:
         if selected_df.empty:
             return (0, 0)
 
-        unique_orders = selected_df['Order_Number'].nunique()
+        unique_orders = selected_df["Order_Number"].nunique()
         # Sum quantities instead of counting rows
-        total_items = int(selected_df['Quantity'].sum()) if 'Quantity' in selected_df.columns else len(selected_df)
+        total_items = (
+            int(selected_df["Quantity"].sum())
+            if "Quantity" in selected_df.columns
+            else len(selected_df)
+        )
 
         return (unique_orders, total_items)
 
@@ -109,14 +107,6 @@ class SelectionHelper:
     def clear_selection(self):
         """Uncheck all rows."""
         self.checked_rows.clear()
-
-    def set_table_view(self, table_view):
-        """Set the table view reference.
-
-        Args:
-            table_view: QTableView widget
-        """
-        self.table_view = table_view
 
     def get_checked_count(self) -> int:
         """Get the number of checked rows.

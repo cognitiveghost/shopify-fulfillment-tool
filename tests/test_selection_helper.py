@@ -2,6 +2,7 @@
 change via a filtered "Select All" used to only touch the visible/matching
 rows, not every row of the orders they belong to -- leaving
 Order_Fulfillment_Status inconsistent across an order's own line items)."""
+
 import pandas as pd
 import pytest
 
@@ -14,11 +15,28 @@ class _FakeMainWindow:
 
 
 def _multi_item_orders_df():
-    return pd.DataFrame([
-        {"Order_Number": "#1", "SKU": "A1", "Quantity": 2, "Order_Fulfillment_Status": "Fulfillable"},
-        {"Order_Number": "#1", "SKU": "B1", "Quantity": 1, "Order_Fulfillment_Status": "Fulfillable"},
-        {"Order_Number": "#2", "SKU": "A1", "Quantity": 3, "Order_Fulfillment_Status": "Fulfillable"},
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "Order_Number": "#1",
+                "SKU": "A1",
+                "Quantity": 2,
+                "Order_Fulfillment_Status": "Fulfillable",
+            },
+            {
+                "Order_Number": "#1",
+                "SKU": "B1",
+                "Quantity": 1,
+                "Order_Fulfillment_Status": "Fulfillable",
+            },
+            {
+                "Order_Number": "#2",
+                "SKU": "A1",
+                "Quantity": 3,
+                "Order_Fulfillment_Status": "Fulfillable",
+            },
+        ]
+    )
 
 
 @pytest.fixture
@@ -40,7 +58,7 @@ def helper_with_df():
     class _MainWindow:
         analysis_results_df = df
 
-    return SelectionHelper(table_view=None, proxy_model=None, main_window=_MainWindow())
+    return SelectionHelper(main_window=_MainWindow())
 
 
 def test_set_selected_orders_checks_every_line_of_each_order(helper_with_df):
