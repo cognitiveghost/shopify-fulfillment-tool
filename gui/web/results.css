@@ -1,5 +1,6 @@
-/* The web tier's base. Every value is a token from theme_css_vars(): no hex,
-   and nothing the Qt tier cannot draw (ADR 0001, shared/style_lint.py). */
+/* The results document (Bundle 12). Every value is a token from
+   theme_css_vars(): no hex, and nothing the Qt tier cannot draw
+   (ADR 0001, shared/style_lint.py). Geometry: spec section 6. */
 
 /* Chromium cannot see fonts registered with Qt's QFontDatabase, so the
    bundled Inter the Qt tier renders in is declared again here. The relative
@@ -20,9 +21,313 @@
 html, body { margin: 0; height: 100%; }
 
 body {
+  overflow: hidden;
   background: var(--surface);
   color: var(--text);
   font-family: var(--font-family);
   font-size: var(--type-body-size);
   font-variant-numeric: tabular-nums;
 }
+
+button, input { font: inherit; color: inherit; }
+
+[hidden] { display: none !important; }
+
+/* --- page: 88 KPI + 40 filter bar + table, 12 apart, 16 in from the edge -- */
+
+#results {
+  height: 100%;
+  padding: var(--spacing-lg);
+  display: grid;
+  grid-template-rows: 88px 40px minmax(0, 1fr);
+  row-gap: var(--spacing-md);
+  container-type: inline-size;
+}
+
+/* --- KPI strip ----------------------------------------------------------- */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-raised);   /* the Card rule in build_stylesheet */
+  border-radius: var(--radius-md);
+}
+
+.kpi-label, .kpi-sub {
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
+
+.kpi-label { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.kpi-value {
+  font-size: var(--type-display-xl-size);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.kpi-wide { display: none; }
+
+/* The one container query: a page of 1544px (a 1600px window) is a content
+   box of 1512px once the 16px padding is off both sides. */
+@container (min-width: 1512px) {
+  .kpis.has-wide { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .kpis.has-wide .kpi-wide { display: flex; }
+}
+
+/* --- filter bar ------------------------------------------------------------- */
+
+.filterbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+#search {
+  flex: 0 0 280px;
+  height: var(--control-height);
+  padding: 0 var(--padding-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+#search::placeholder { color: var(--text-placeholder); }
+#search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+
+.chips { display: flex; gap: var(--spacing-xs); min-width: 0; overflow: hidden; }
+
+.chip-filter {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font-size: var(--type-caption-size);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chip-filter:hover { background: var(--hover); }
+
+.spacer { flex: 1 1 auto; }
+
+.count {
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.btn {
+  flex-shrink: 0;
+  height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn.ghost:hover { background: var(--hover); }
+.btn.icon { width: var(--control-height); padding: 0; }
+.btn.primary { background: var(--accent-fill); color: var(--on-accent); font-weight: 700; }
+.btn.primary:hover { background: var(--accent-fill-hover); }
+.btn.primary:active { background: var(--accent-fill-active); }
+/* QPushButton[role=…]:disabled in build_stylesheet. */
+.btn:disabled,
+.btn:disabled:hover {
+  background: var(--surface);
+  color: var(--text-disabled);
+  border-color: var(--border-subtle);
+  cursor: default;
+}
+
+.btn:focus-visible,
+.chip-filter:focus-visible,
+.menu-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+.menu-anchor { position: relative; flex-shrink: 0; }
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 3;
+  min-width: 220px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: var(--spacing-xs) 0;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.menu-group {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--hover); }
+
+.check {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  visibility: hidden;
+}
+.menu-item[aria-checked="true"] .check { visibility: visible; }
+
+/* --- table ------------------------------------------------------------------ */
+
+.table-area { position: relative; min-height: 0; }
+
+.table:focus { outline: none; }
+.table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+.scroller { overflow: auto; }
+
+.row {
+  display: grid;
+  grid-template-columns: var(--cols);
+  min-width: 780px;
+  background: var(--surface);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 28px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.rows { position: relative; min-width: 780px; }
+
+.rows .row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--row-height);
+}
+.rows .row:hover { background: var(--hover); }
+/* The selection ring: a closed rectangle, never a left border (F4). */
+.rows .row.selected {
+  background: var(--selection-bg);
+  outline: 2px solid var(--selection-border);
+  outline-offset: -2px;
+}
+
+.cell {
+  padding: 0 8px;
+  line-height: var(--row-height);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.head {
+  line-height: 27px;
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.head.sorted { color: var(--text); }
+.head.select { cursor: default; }
+
+.caret {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: middle;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  visibility: hidden;
+}
+.head:hover .caret, .head.sorted .caret { visibility: visible; }
+
+.num { text-align: right; }
+.cell.order { font-family: var(--font-family-mono); }
+.cell.age, .cell.missing { color: var(--text-secondary); }
+
+/* Pinned when the table scrolls sideways. No z-index, so the row's selection
+   outline still paints over them. */
+.cell.select, .cell.status { position: sticky; background: inherit; }
+.cell.select { left: 0; text-align: center; }
+.cell.status { left: 32px; }
+.cell.select input { margin: 0; vertical-align: middle; }
+
+/* --- status chip: shared.theme.StatusChip's "chip" variant, same geometry -- */
+
+.chip {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: normal;
+  padding: 2px 8px 2px 20px;
+  border: 1px solid var(--chip-fg);
+  border-radius: var(--radius);
+  color: var(--chip-fg);
+  font-size: var(--type-caption-size);
+}
+/* The mark: hollow, because the run derived the status (CONTEXT.md "Mark"). */
+.chip::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border: 1.5px solid var(--chip-fg);
+  border-radius: 50%;
+}
+.chip.success { --chip-fg: var(--status-success); }
+.chip.danger { --chip-fg: var(--status-danger); background: var(--status-danger-bg); }
+
+/* --- states -------------------------------------------------------------------- */
+
+.state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  text-align: center;
+}
+.state-title { margin: 0; font-weight: 700; }
+.state-text { margin: 0; max-width: 420px; color: var(--text-secondary); }
