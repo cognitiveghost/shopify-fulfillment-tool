@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 from PySide6.QtCore import QThreadPool
-from PySide6.QtWidgets import QInputDialog, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
@@ -106,43 +106,26 @@ def mw_with_tags():
     return mw
 
 
-def test_bulk_add_tag_writes_every_row_of_a_multi_line_order(mw_with_tags, monkeypatch):
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
-    monkeypatch.setattr(
-        QInputDialog, "getItem", lambda *a, **k: ("--- Custom Tag ---", True)
-    )
-    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("FRAGILE", True))
-
-    mw_with_tags.selection_helper.checked_rows = {
-        0
-    }  # only line 1 of order 1001 checked
+def test_bulk_add_tag_writes_every_row_of_a_multi_line_order(mw_with_tags):
     handler = ActionsHandler(mw_with_tags)
 
-    handler.bulk_add_tag()
+    # order_numbers names the whole order; every one of its lines is written,
+    # not just a line that happened to be checked before this bundle.
+    handler.bulk_add_tag(["1001"], "FRAGILE")
 
     tags = mw_with_tags.analysis_results_df.set_index("SKU")["Internal_Tags"]
     assert '"FRAGILE"' in tags.loc["A1"]
-    assert (
-        '"FRAGILE"' in tags.loc["A2"]
-    )  # order 1001's other line, not just the checked one
+    assert '"FRAGILE"' in tags.loc["A2"]  # order 1001's other line
     assert '"FRAGILE"' not in tags.loc["B1"]  # different order, untouched
 
 
-def test_bulk_remove_tag_removes_from_every_row_of_a_multi_line_order(
-    mw_with_tags, monkeypatch
-):
+def test_bulk_remove_tag_removes_from_every_row_of_a_multi_line_order(mw_with_tags):
     df = mw_with_tags.analysis_results_df
     df.loc[df["Order_Number"] == "1001", "Internal_Tags"] = '["URGENT"]'
 
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
-    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("URGENT", True))
-
-    mw_with_tags.selection_helper.checked_rows = {
-        0
-    }  # only line 1 of order 1001 checked
     handler = ActionsHandler(mw_with_tags)
 
-    handler.bulk_remove_tag()
+    handler.bulk_remove_tag(["1001"], "URGENT")
 
     tags = mw_with_tags.analysis_results_df.set_index("SKU")["Internal_Tags"]
     assert tags.loc["A1"] == "[]"
