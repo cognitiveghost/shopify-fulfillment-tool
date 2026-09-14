@@ -18,6 +18,11 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* Page geometry the theme does not own. The selection bar's height is read
+   back in JS to take its 44px out of the row budget, so it has to be stated
+   once rather than repeated at each use (spec section 3.1). */
+:root { --selection-bar-height: 44px; }
+
 html, body { margin: 0; height: 100%; }
 
 body {
@@ -36,6 +41,7 @@ button, input { font: inherit; color: inherit; }
 /* --- page: 88 KPI + 40 filter bar + table, 12 apart, 16 in from the edge -- */
 
 #results {
+  position: relative;
   height: 100%;
   padding: var(--spacing-lg);
   display: grid;
@@ -195,6 +201,9 @@ button, input { font: inherit; color: inherit; }
   cursor: pointer;
 }
 .menu-item:hover { background: var(--hover); }
+.menu-separator { height: 1px; margin: var(--spacing-xs) 0; background: var(--border-subtle); }
+.menu-item.danger { color: var(--status-danger); }
+.menu-hint { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
 
 .check {
   flex-shrink: 0;
@@ -229,6 +238,93 @@ button, input { font: inherit; color: inherit; }
 .table-area[data-slot="none"] .slot { display: none; }
 .table-wrap, .slot { position: relative; min-width: 0; min-height: 0; }
 .cell.filler { padding: 0; }
+
+/* --- selection bar (Bundle 14) ------------------------------------------- */
+
+.selection-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  height: var(--selection-bar-height);
+  padding: 0 var(--spacing-md);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.selection-counts { display: flex; align-items: baseline; gap: var(--spacing-sm); }
+.selection-count { color: var(--text-primary); font-weight: 700; }
+.selection-sub { color: var(--text-secondary); font-size: var(--type-caption-size); }
+.selection-separator {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--spacing-sm);
+  background: var(--border-subtle);
+}
+
+.bulk-popover {
+  position: absolute;
+  z-index: 3;
+  top: var(--selection-bar-height);
+  right: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-height: 380px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.bulk-title { padding: var(--spacing-sm) var(--spacing-md); font-weight: 700; }
+.bulk-list { flex: 1; min-height: 0; overflow-y: auto; }
+.bulk-list .menu-group { position: sticky; top: 0; background: var(--surface-overlay); }
+.bulk-row.picked { background: var(--selection-bg); }
+.bulk-count { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
+.bulk-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+}
+.bulk-list .new-tag,
+.bulk-list .bulk-search {
+  display: block;
+  margin: var(--spacing-xs) var(--spacing-md);
+  width: calc(100% - 2 * var(--spacing-md));
+  height: var(--control-height);
+  padding: 0 var(--padding-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.bulk-list .new-tag:focus,
+.bulk-list .bulk-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+
+/* Mirrors gui/components/toast.py: 16px margin, 360 max, no fade (ADR 0007). */
+.toast {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  max-width: 360px;
+  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+.toast-badge {
+  min-width: 18px;
+  padding: 0 var(--spacing-xs);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--type-caption-size);
+  text-align: center;
+}
 
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }

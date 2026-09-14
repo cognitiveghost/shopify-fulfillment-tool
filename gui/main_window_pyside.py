@@ -402,17 +402,19 @@ class MainWindow(QMainWindow):
             self.log_activity("Undo", message)
             self.save_session_state()
 
-            # Update undo button state
-            if hasattr(self, "undo_button"):
-                self.undo_button.setEnabled(self.undo_manager.can_undo())
-                # Update tooltip with next undo description
-                next_undo = self.undo_manager.get_undo_description()
-                if next_undo:
-                    self.undo_button.setToolTip(f"Undo: {next_undo} (Ctrl+Z)")
-                else:
-                    self.undo_button.setToolTip("Undo last operation (Ctrl+Z)")
+            # The button and the page's undoAvailable are both downstream of
+            # can_undo(), and this is the one place that recomputes them.
+            if hasattr(self, "actions_handler"):
+                self.actions_handler._update_undo_button()
 
-            toast(self, message)
+            # ADR 0007: a Qt toast lands behind the results view's native
+            # surface, so an undo raised while that screen is showing has to
+            # go into the document instead. Elsewhere the Qt toast is visible.
+            results_view = getattr(self, "results_view", None)
+            if results_view is not None and results_view.isVisible():
+                self.results_bridge.raise_toast(message)
+            else:
+                toast(self, message)
         else:
             logger.error(f"Undo failed: {message}")
             show_error(self, "Undo didn't complete", "Details are in Logs.")

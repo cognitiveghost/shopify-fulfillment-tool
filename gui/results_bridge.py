@@ -80,6 +80,20 @@ class ResultsBridge(QObject):
     tagAddRequested = Signal(str, str)
     tagRemovalRequested = Signal(str, str)
     columnSettingsChanged = Signal(dict)
+    undoAvailableChanged = Signal()
+    # JS-facing: the page draws its own toast, because a Qt child widget
+    # cannot paint above this view's surface (ADR 0007).
+    toastRaised = Signal(str, bool)
+    # Python-facing (Bundle 14): the selection bar's verbs. Named bulk* so
+    # nothing collides with Bundle 13's singular pane signals.
+    bulkStatusRequested = Signal(list, bool)
+    bulkTagAddRequested = Signal(list, str)
+    bulkTagRemovalRequested = Signal(list, str)
+    bulkExcludeRequested = Signal(list)
+    bulkSkuRemovalRequested = Signal(list, str)
+    bulkOrderRemovalRequested = Signal(list, str)
+    bulkExportRequested = Signal(list, str)
+    undoRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -90,6 +104,7 @@ class ResultsBridge(QObject):
         self._selection: list[str] = []
         self._columns: dict = {**normalize_column_settings(None), "extras": []}
         self._tag_categories: dict = {}
+        self._undo_available = False
 
     # --- out: Python -> JS -------------------------------------------------
 
@@ -124,6 +139,11 @@ class ResultsBridge(QObject):
     tagCategories = Property(
         "QVariantMap", _get_tag_categories, notify=tagCategoriesChanged
     )
+
+    def _get_undo_available(self) -> bool:
+        return self._undo_available
+
+    undoAvailable = Property(bool, _get_undo_available, notify=undoAvailableChanged)
 
     # --- in: JS -> Python --------------------------------------------------
 
@@ -188,6 +208,44 @@ class ResultsBridge(QObject):
     def setAutoHideEmpty(self, on) -> None:
         self._store_columns(auto_hide_empty=bool(on))
 
+    EXPORT_FORMATS = ("xlsx", "csv")
+
+    @Slot("QVariantList", bool)
+    def setStatus(self, order_numbers, fulfillable) -> None:
+        self.bulkStatusRequested.emit(_orders(order_numbers), bool(fulfillable))
+
+    @Slot("QVariantList", str)
+    def addTag(self, order_numbers, tag) -> None:
+        self.bulkTagAddRequested.emit(_orders(order_numbers), str(tag))
+
+    @Slot("QVariantList", str)
+    def removeTag(self, order_numbers, tag) -> None:
+        self.bulkTagRemovalRequested.emit(_orders(order_numbers), str(tag))
+
+    @Slot("QVariantList")
+    def excludeOrders(self, order_numbers) -> None:
+        self.bulkExcludeRequested.emit(_orders(order_numbers))
+
+    @Slot("QVariantList", str)
+    def removeSkuFromOrders(self, order_numbers, sku) -> None:
+        self.bulkSkuRemovalRequested.emit(_orders(order_numbers), str(sku))
+
+    @Slot("QVariantList", str)
+    def removeOrdersWithSku(self, order_numbers, sku) -> None:
+        self.bulkOrderRemovalRequested.emit(_orders(order_numbers), str(sku))
+
+    @Slot("QVariantList", str)
+    def exportSelection(self, order_numbers, fmt) -> None:
+        # A format, not a verb: §5.1's ban is on a string that selects
+        # behaviour, and an unknown one is dropped rather than guessed.
+        if str(fmt) not in self.EXPORT_FORMATS:
+            return
+        self.bulkExportRequested.emit(_orders(order_numbers), str(fmt))
+
+    @Slot()
+    def undo(self) -> None:
+        self.undoRequested.emit()
+
     def _store_columns(self, **changes) -> None:
         stored = normalize_column_settings({**self._columns, **changes})
         self._columns = {**stored, "extras": self._columns["extras"]}
@@ -236,6 +294,21 @@ class ResultsBridge(QObject):
             return
         self._theme_css = css
         self.themeCssChanged.emit()
+
+    def set_undo_available(self, available: bool) -> None:
+        available = bool(available)
+        if available == self._undo_available:
+            return
+        self._undo_available = available
+        self.undoAvailableChanged.emit()
+
+    def raise_toast(self, message: str, undoable: bool = False) -> None:
+        self.toastRaised.emit(str(message), bool(undoable))
+
+
+def _orders(raw) -> list[str]:
+    """Order numbers as JS sent them, made str and deduplicated in order."""
+    return list(dict.fromkeys(str(n) for n in (raw or [])))
 
 
 def mount_results_page(view: QWebEngineView) -> ResultsBridge:

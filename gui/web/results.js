@@ -228,6 +228,7 @@ function render() {
   renderStates();
   renderSlot();
   renderHeader();
+  renderSelectionBar();
   layout();
   renderRows();
   reportSelection();
@@ -435,7 +436,8 @@ function layout() {
     renderSlot();
   }
   state.rowH = parseFloat(cssVar("--row-height")) || 28;
-  const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - HEADER_PX) / state.rowH));
+  const barPx = els.selectionBar.hidden ? 0 : selectionBarPx();
+  const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - barPx - HEADER_PX) / state.rowH));
   state.visible = rows;
   els.scroller.style.height = HEADER_PX + rows * state.rowH + "px";
   els.rows.style.height = state.view.length * state.rowH + "px";
@@ -651,6 +653,13 @@ function bind() {
     themeVars: "theme-vars",
     columnsButton: "columns-button", pane: "pane", paneStrip: "pane-strip",
     paneShow: "pane-show", columnsPanel: "columns-panel",
+    selectionBar: "selection-bar", selectionCount: "selection-count",
+    selectionSub: "selection-sub", selectionMark: "selection-mark",
+    selectionHold: "selection-hold", selectionMore: "selection-more",
+    selectionMenu: "selection-menu", selectionExclude: "selection-exclude",
+    selectionClear: "selection-clear",
+    toast: "toast", toastText: "toast-text", toastBadge: "toast-badge",
+    toastUndo: "toast-undo",
   };
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 
@@ -666,7 +675,9 @@ function bind() {
     }
   });
   document.addEventListener("mousedown", (e) => {
-    if (!els.menu.hidden && !e.target.closest(".menu-anchor")) closeMenu();
+    // This menu's own anchor, not any .menu-anchor: the selection bar's More
+    // is one too, and clicking it used to leave this menu open behind it.
+    if (!els.menu.hidden && !e.target.closest("#filter-anchor")) closeMenu();
   });
   els.clearAll.addEventListener("click", clearFilters);
   els.noMatchClear.addEventListener("click", clearFilters);
@@ -681,6 +692,8 @@ function bind() {
   }).observe(els.tableArea);
   bindPane();
   bindColumns();
+  bindSelectionBar();
+  bindToast();
 }
 
 bind();
@@ -706,6 +719,8 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   bridge.exportEnabledChanged.connect(renderExport);
   bridge.focusSearchRequested.connect(() => els.search.focus());
   bridge.columnsChanged.connect(onColumns);
+  bridge.toastRaised.connect((text, undoable) => raiseToast(text, undoable));
+  bridge.undoAvailableChanged.connect(updateToastUndo);
   state.columnSettings = Object.assign(state.columnSettings, bridge.columns || {});
   onOrders();
   window.resultsBridge = bridge;

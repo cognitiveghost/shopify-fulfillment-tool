@@ -15,7 +15,6 @@ ROOT = Path(__file__).resolve().parent.parent
 KINDS = {"information", "warning", "critical", "question"}
 
 OWNED = {
-    ("gui/actions_handler.py", "bulk_*"): "Bundle 14 (9.17) replaces these chains",
     (
         "gui/main_window_pyside.py",
         "_init_managers",

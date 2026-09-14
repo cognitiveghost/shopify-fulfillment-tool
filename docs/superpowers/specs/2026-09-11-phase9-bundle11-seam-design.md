@@ -216,6 +216,10 @@ nothing else.
 | in | `undo()` | slot | 14 (9.17) |
 | out | `undoAvailable: bool` | property | 14 (9.17) |
 | out | `toastRaised(message: str, undoable: bool)` | signal | 14 (9.17) |
+| in | `setStatus(orderNumbers: list[str], fulfillable: bool)` | slot | 14 (9.17) — added by Bundle 14 §8.1; the catalogue named no bulk status verb |
+| in | `removeSkuFromOrders(orderNumbers: list[str], sku: str)` | slot | 14 (9.17) — added by Bundle 14 §8.1, restored by the owner |
+| in | `removeOrdersWithSku(orderNumbers: list[str], sku: str)` | slot | 14 (9.17) — added by Bundle 14 §8.1, restored by the owner |
+| in | `exportSelection(orderNumbers: list[str], fmt: str)` | slot | 14 (9.17) — added by Bundle 14 §8.1; `fmt` is `"xlsx"` or `"csv"`, validated Python-side |
 
 9.14 names its own pane verbs, because the pane's action set is its brief.
 Export was first kept off the bridge; Bundle 12 moved it into the document per canvas W3.
