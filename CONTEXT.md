@@ -166,6 +166,18 @@ is nothing to show: nothing-loaded, working, no-results, or failed. Names the
 cause, names the file or filter that caused it, and offers the action that
 resolves it.
 
+**Selection bar** — the 44px bar that exists only while orders are selected.
+It counts the selection in two units, orders and units, and holds every verb
+that acts on more than one order. It takes its height from the table rather
+than floating over rows. The results document has one; the Session Browser has
+a Qt one of the same composition and no shared code.
+
+**Bulk popover** — one surface carrying a whole bulk action: what it will
+affect, the choice it needs, and the verb naming the consequence. It replaces
+a chain of blocking dialogs. It never confirms, because the verb states the
+count and Undo is real; the three verbs that destroy data raise a **confirm**
+on top of it instead.
+
 ## Messages
 
 **Message route** — where one message to the operator goes: a toast, an inline
