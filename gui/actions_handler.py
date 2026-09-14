@@ -896,6 +896,93 @@ class ActionsHandler(QObject):
             )
             show_error(self.mw, f"Order {order_number}'s status didn't change", result)
 
+    def _order_mask(self, order_number):
+        df = self.mw.analysis_results_df
+        return df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
+
+    def set_order_fulfillable(self, order_number, fulfillable: bool):
+        """The pane's Hold / Mark fulfillable. A no-op when already so, so a
+        page that is one push behind cannot flip an order the wrong way."""
+        df = self.mw.analysis_results_df
+        if df is None or df.empty:
+            return
+        mask = self._order_mask(order_number)
+        if not mask.any():
+            self.log.warning(f"Order {order_number} is no longer in the analysis")
+            return
+        is_fulfillable = (
+            df.loc[mask, "Order_Fulfillment_Status"].iloc[0] == "Fulfillable"
+        )
+        if is_fulfillable != bool(fulfillable):
+            self.toggle_fulfillment_status_for_order(order_number)
+
+    def remove_line(self, order_number, line_index: int, sku):
+        """The pane's Remove this line: the order's `line_index`-th line, in
+        frame order, only while it still carries `sku`."""
+        df = self.mw.analysis_results_df
+        if df is None or df.empty:
+            return
+        labels = df.index[self._order_mask(order_number)]
+        if not 0 <= line_index < len(labels):
+            self.log.warning("Aborted line removal: the line is gone")
+            return
+        label = labels[line_index]
+        own_sku = df.loc[label, "SKU"]
+        own = "" if pd.isna(own_sku) else str(own_sku).strip()
+        if own != str(sku).strip():
+            self.log.warning("Aborted line removal: the line moved")
+            return
+        # The frame's own SKU value, so a no-SKU line (NaN) still matches.
+        self.remove_item_from_order(order_number, own_sku, df.index.get_loc(label))
+
+    def add_internal_tag(self, order_number, tag):
+        self._change_internal_tag(order_number, tag, adding=True)
+
+    def remove_internal_tag(self, order_number, tag):
+        self._change_internal_tag(order_number, tag, adding=False)
+
+    def _change_internal_tag(self, order_number, tag, adding: bool):
+        """Restored from Bundle 12's deleted MainWindow._apply_tag_operation."""
+        from shopify_tool.tag_manager import add_tag, has_tag, remove_tag
+
+        tag = str(tag).strip()
+        df = self.mw.analysis_results_df
+        if not tag or df is None or df.empty:
+            return
+        mask = self._order_mask(order_number)
+        if not mask.any():
+            return
+        if "Internal_Tags" not in df.columns:
+            if not adding:
+                return
+            df["Internal_Tags"] = "[]"
+        if (
+            not adding
+            and not df.loc[mask, "Internal_Tags"].map(lambda t: has_tag(t, tag)).any()
+        ):
+            return
+
+        affected_rows_before = df[mask].copy()
+        change = add_tag if adding else remove_tag
+        df.loc[mask, "Internal_Tags"] = df.loc[mask, "Internal_Tags"].apply(
+            lambda t: change(t, tag)
+        )
+        description = (
+            f"Added internal tag '{tag}' to order {order_number}"
+            if adding
+            else f"Removed internal tag '{tag}' from order {order_number}"
+        )
+        self.mw.undo_manager.record_operation(
+            "add_internal_tag" if adding else "remove_internal_tag",
+            description,
+            {"order_number": order_number, "tag": tag},
+            affected_rows_before,
+        )
+        self.data_changed.emit()
+        self.mw.save_session_state()
+        self._update_undo_button()
+        self.mw.log_activity("Internal Tag", description)
+
     def add_tag_manually(self, order_number):
         """Opens a dialog to add a manual tag to an order's 'Status_Note'.
 
