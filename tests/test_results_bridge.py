@@ -12,7 +12,13 @@ from PySide6.QtWebEngineCore import QWebEngineScript
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from pytestqt.exceptions import TimeoutError as QtBotTimeoutError
 
-from gui.results_bridge import PAGE, THEME_MARKER, ResultsBridge, mount_results_page
+from gui.results_bridge import (
+    PAGE,
+    THEME_MARKER,
+    ResultsBridge,
+    mount_results_page,
+    normalize_column_settings,
+)
 from gui.theme_manager import get_theme_manager
 from shared.theme import DARK_THEME, LIGHT_THEME
 
@@ -201,3 +207,89 @@ def test_the_summary_arrives_in_js(qtbot, page):
     )
     _until_js(qtbot, view, "window.resultsBridge.summary.orders === 2")
     assert _eval(qtbot, view, "window.resultsBridge.summary.lines") == 3
+
+
+def test_normalize_column_settings_cleans_junk():
+    assert normalize_column_settings(None) == {
+        "order": None,
+        "visible": None,
+        "auto_hide_empty": False,
+    }
+    assert normalize_column_settings(
+        {"order": ["age", 3, "age", "lines"], "visible": "x", "auto_hide_empty": 1}
+    ) == {"order": ["age", "lines"], "visible": None, "auto_hide_empty": True}
+
+
+@pytest.mark.parametrize(
+    ("slot", "args", "signal"),
+    [
+        ("holdOrder", ("#1",), "holdRequested"),
+        ("fulfillOrder", ("#1",), "fulfillRequested"),
+        ("excludeOrder", ("#1",), "excludeRequested"),
+        ("removeLine", ("#1", 2, "SKU-A"), "lineRemovalRequested"),
+        ("addOrderTag", ("#1", "vip"), "tagAddRequested"),
+        ("removeOrderTag", ("#1", "vip"), "tagRemovalRequested"),
+    ],
+)
+def test_each_pane_verb_is_a_request_python_hears(qtbot, slot, args, signal):
+    bridge = ResultsBridge()
+    with qtbot.waitSignal(getattr(bridge, signal), timeout=1000) as blocker:
+        getattr(bridge, slot)(*args)
+    assert tuple(blocker.args) == args
+
+
+def test_column_slots_store_names_and_announce_them(qtbot):
+    bridge = ResultsBridge()
+    with qtbot.waitSignal(bridge.columnSettingsChanged, timeout=1000) as blocker:
+        bridge.setColumnOrder(["age", "lines"])
+    assert blocker.args[0] == {
+        "order": ["age", "lines"],
+        "visible": None,
+        "auto_hide_empty": False,
+    }
+    bridge.setVisibleColumns(["age"])
+    bridge.setAutoHideEmpty(True)
+    assert bridge.columns["visible"] == ["age"]
+    bridge.resetColumns()
+    assert bridge.columns["order"] is None
+    assert bridge.columns["visible"] is None
+    assert bridge.columns["auto_hide_empty"] is True
+
+
+def test_set_orders_names_the_clients_extra_order_columns(qapp):
+    bridge = ResultsBridge()
+    df = pd.DataFrame(
+        [
+            {"Order_Number": "1", "SKU": "A", "Channel": "web"},
+            {"Order_Number": "1", "SKU": "B", "Channel": "web"},
+            {"Order_Number": "2", "SKU": "C", "Channel": "shop"},
+        ]
+    )
+    bridge.set_orders(df)
+    assert bridge.columns["extras"] == ["Channel"]
+
+
+def test_set_column_settings_keeps_extras(qapp):
+    bridge = ResultsBridge()
+    bridge._columns["extras"] = ["Channel"]
+    bridge.set_column_settings({"visible": ["age"]})
+    assert bridge.columns == {
+        "order": None,
+        "visible": ["age"],
+        "auto_hide_empty": False,
+        "extras": ["Channel"],
+    }
+
+
+def test_copy_text_reaches_the_clipboard(qapp):
+    from PySide6.QtGui import QGuiApplication
+
+    ResultsBridge().copyText("#10445")
+    assert QGuiApplication.clipboard().text() == "#10445"
+
+
+def test_tag_categories_notify(qtbot):
+    bridge = ResultsBridge()
+    with qtbot.waitSignal(bridge.tagCategoriesChanged, timeout=1000):
+        bridge.set_tag_categories({"prio": {"label": "Priority", "tags": ["vip"]}})
+    assert bridge.tagCategories["prio"]["tags"] == ["vip"]
