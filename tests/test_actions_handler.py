@@ -34,6 +34,7 @@ def mw():
         undo_last_operation=Mock(),
         save_session_state=Mock(),
         log_activity=Mock(),
+        results_bridge=Mock(),
     )
 
 
@@ -199,15 +200,14 @@ def test_removing_an_item_asks_nothing_and_offers_undo(mw, monkeypatch):
         raise AssertionError("an undoable removal must not confirm")
 
     monkeypatch.setattr(QMessageBox, "question", refuse)
-    toasts = Mock()
-    monkeypatch.setattr("gui.actions_handler.toast", toasts)
 
     ActionsHandler(mw).remove_item_from_order("1001", "SKU-A", row_position=1)
 
-    toasts.assert_called_once()
-    assert "SKU-A" in toasts.call_args.args[1]
-    assert toasts.call_args.kwargs["action_text"] == "Undo"
-    assert toasts.call_args.kwargs["on_action"] is mw.undo_last_operation
+    # The Results screen's toast lives in the document (ADR 0007), not the
+    # Qt-widget toast the rest of the app uses.
+    mw.results_bridge.raise_toast.assert_called_once()
+    assert "SKU-A" in mw.results_bridge.raise_toast.call_args.args[0]
+    assert mw.results_bridge.raise_toast.call_args.kwargs["undoable"] is True
 
 
 def test_settings_that_save_but_fail_to_reload_say_so(monkeypatch):

@@ -397,5 +397,44 @@ function openSkuPopover(mode) {
   });
 }
 
-// Task 8 replaces this with the real toast.
-function raiseToast() {}
+// Mirrors gui/components/toast.py. Two implementations, one appearance --
+// change one and change the other (ADR 0007).
+const TOAST_MS = 4000;
+const TOAST_BADGE_AT = 3;
+let toastTimer = null;
+let toastRun = 0;
+let toastUndoable = false;
+
+function raiseToast(text, undoable) {
+  toastRun += 1;
+  els.toastText.textContent = text;
+  els.toastBadge.hidden = toastRun < TOAST_BADGE_AT;
+  els.toastBadge.textContent = String(toastRun);
+  toastUndoable = Boolean(undoable);
+  updateToastUndo();
+  els.toast.hidden = false;
+  if (toastTimer !== null) clearTimeout(toastTimer);
+  toastTimer = setTimeout(dismissToast, TOAST_MS);
+}
+
+// QWebChannel can deliver toastRaised before a same-tick undoAvailable
+// property push lands, so results.js also calls this from
+// undoAvailableChanged rather than trusting a single read at raise time.
+function updateToastUndo() {
+  els.toastUndo.hidden = !(toastUndoable && state.bridge && state.bridge.undoAvailable);
+}
+
+function dismissToast() {
+  if (toastTimer !== null) clearTimeout(toastTimer);
+  toastTimer = null;
+  toastRun = 0;
+  toastUndoable = false;
+  els.toast.hidden = true;
+}
+
+function bindToast() {
+  els.toastUndo.addEventListener("click", () => {
+    dismissToast();
+    if (state.bridge) state.bridge.undo();
+  });
+}

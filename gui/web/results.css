@@ -36,6 +36,7 @@ button, input { font: inherit; color: inherit; }
 /* --- page: 88 KPI + 40 filter bar + table, 12 apart, 16 in from the edge -- */
 
 #results {
+  position: relative;
   height: 100%;
   padding: var(--spacing-lg);
   display: grid;
@@ -293,6 +294,32 @@ button, input { font: inherit; color: inherit; }
 }
 .bulk-list .new-tag:focus,
 .bulk-list .bulk-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+
+/* Mirrors gui/components/toast.py: 16px margin, 360 max, no fade (ADR 0007). */
+.toast {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  max-width: 360px;
+  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+.toast-badge {
+  min-width: 18px;
+  padding: 0 var(--spacing-xs);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--type-caption-size);
+  text-align: center;
+}
 
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }

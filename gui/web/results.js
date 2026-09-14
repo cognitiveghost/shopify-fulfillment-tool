@@ -658,6 +658,8 @@ function bind() {
     selectionHold: "selection-hold", selectionMore: "selection-more",
     selectionMenu: "selection-menu", selectionExclude: "selection-exclude",
     selectionClear: "selection-clear",
+    toast: "toast", toastText: "toast-text", toastBadge: "toast-badge",
+    toastUndo: "toast-undo",
   };
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 
@@ -689,6 +691,7 @@ function bind() {
   bindPane();
   bindColumns();
   bindSelectionBar();
+  bindToast();
 }
 
 bind();
@@ -714,6 +717,8 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   bridge.exportEnabledChanged.connect(renderExport);
   bridge.focusSearchRequested.connect(() => els.search.focus());
   bridge.columnsChanged.connect(onColumns);
+  bridge.toastRaised.connect((text, undoable) => raiseToast(text, undoable));
+  bridge.undoAvailableChanged.connect(updateToastUndo);
   state.columnSettings = Object.assign(state.columnSettings, bridge.columns || {});
   onOrders();
   window.resultsBridge = bridge;

@@ -1074,11 +1074,8 @@ class ActionsHandler(QObject):
         self.mw.log_activity(
             "Data Edit", f"Removed {line_name} from order {order_number}."
         )
-        toast(
-            self.mw,
-            f"Removed {line_name} from order {order_number}.",
-            action_text="Undo",
-            on_action=self.mw.undo_last_operation,
+        self._results_toast(
+            f"Removed {line_name} from order {order_number}.", undoable=True
         )
 
     def remove_entire_order(self, order_number):
@@ -1111,12 +1108,7 @@ class ActionsHandler(QObject):
         self.mw.save_session_state()
         self._update_undo_button()
         self.mw.log_activity("Data Edit", f"Removed order {order_number}.")
-        toast(
-            self.mw,
-            f"Removed order {order_number}.",
-            action_text="Undo",
-            on_action=self.mw.undo_last_operation,
-        )
+        self._results_toast(f"Removed order {order_number}.", undoable=True)
 
     def show_add_product_dialog(self):
         """Show dialog to add product to order."""
