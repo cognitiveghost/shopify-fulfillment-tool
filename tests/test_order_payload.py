@@ -51,12 +51,14 @@ def test_lines_are_nested_with_only_the_line_level_columns():
             "Quantity": 6,
             "Stock": 4.0,
             "System_note": "Cannot fulfill: TS-4409-B short",
+            "Short": False,
         },
         {
             "SKU": "C",
             "Quantity": 2,
             "Stock": None,
             "System_note": "Cannot fulfill: TS-4409-B short",
+            "Short": False,
         },
     ]
 
