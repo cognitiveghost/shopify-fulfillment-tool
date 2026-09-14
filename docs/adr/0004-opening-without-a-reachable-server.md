@@ -58,8 +58,8 @@ Decided: **C**, by the repo owner, 2026-09-04.
 
 Every path `ProfileManager` publishes (`base_path`, `clients_dir`, …) is
 still a real `Path` when degraded — `require_connection=False` never
-substitutes `None`. `SessionManager`, `GroupsManager` and
-`TableConfigManager` all take the manager, not the share, and none of their
+substitutes `None`. `SessionManager` and `GroupsManager`
+both take the manager, not the share, and none of their
 methods runs against an unreachable path unless a caller is already
 reachable through a control that `connectionChanged` did not disable.
 

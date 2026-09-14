@@ -377,6 +377,7 @@ class ActionsHandler(QObject):
                         self.mw.current_client_id
                     )
                 )
+                self.mw.push_tag_categories()
 
                 self.log.info("Re-validating files with updated settings...")
                 if self.mw.orders_file_path:
@@ -420,6 +421,7 @@ class ActionsHandler(QObject):
             try:
                 # Update config
                 self.mw.active_profile_config["tag_categories"] = updated_categories
+                self.mw.push_tag_categories()
 
                 # Save to file
                 self.mw.profile_manager.save_shopify_config(
@@ -482,6 +484,7 @@ class ActionsHandler(QObject):
 
             # Update main window config
             self.mw.active_profile_config = fresh_config
+            self.mw.push_tag_categories()
 
         except Exception:
             self.log.exception("Failed to load client configuration")
@@ -846,8 +849,7 @@ class ActionsHandler(QObject):
         """
         # Get affected rows BEFORE operation
         affected_rows = self.mw.analysis_results_df[
-            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-            == str(order_number).strip()
+            self._order_mask(order_number)
         ].copy()
 
         success, result, updated_df = toggle_order_fulfillment(
@@ -856,11 +858,7 @@ class ActionsHandler(QObject):
         if success:
             self.mw.analysis_results_df = updated_df
 
-            # Use consistent filtering approach with type conversion and strip
-            mask = (
-                updated_df["Order_Number"].astype(str).str.strip()
-                == str(order_number).strip()
-            )
+            mask = self._order_mask(order_number, updated_df)
             matching_rows = updated_df.loc[mask, "Order_Fulfillment_Status"]
 
             if matching_rows.empty:
@@ -895,6 +893,100 @@ class ActionsHandler(QObject):
                 f"Failed to toggle status for order {order_number}: {result}"
             )
             show_error(self.mw, f"Order {order_number}'s status didn't change", result)
+
+    def _order_mask(self, order_number, df=None):
+        """Rows belonging to one order, in `df` or the analysis frame.
+
+        Order numbers arrive as int, float or str depending on the CSV, so
+        every comparison has to go through str + strip. One helper, so a
+        change to that rule cannot land in some call sites and not others.
+        """
+        if df is None:
+            df = self.mw.analysis_results_df
+        return df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
+
+    def set_order_fulfillable(self, order_number, fulfillable: bool):
+        """The pane's Hold / Mark fulfillable. A no-op when already so, so a
+        page that is one push behind cannot flip an order the wrong way."""
+        df = self.mw.analysis_results_df
+        if df is None or df.empty:
+            return
+        mask = self._order_mask(order_number)
+        if not mask.any():
+            self.log.warning(f"Order {order_number} is no longer in the analysis")
+            return
+        is_fulfillable = (
+            df.loc[mask, "Order_Fulfillment_Status"].iloc[0] == "Fulfillable"
+        )
+        if is_fulfillable != bool(fulfillable):
+            self.toggle_fulfillment_status_for_order(order_number)
+
+    def remove_line(self, order_number, line_index: int, sku):
+        """The pane's Remove this line: the order's `line_index`-th line, in
+        frame order, only while it still carries `sku`."""
+        df = self.mw.analysis_results_df
+        if df is None or df.empty:
+            return
+        labels = df.index[self._order_mask(order_number)]
+        if not 0 <= line_index < len(labels):
+            self.log.warning("Aborted line removal: the line is gone")
+            return
+        label = labels[line_index]
+        own_sku = df.loc[label, "SKU"]
+        own = "" if pd.isna(own_sku) else str(own_sku).strip()
+        if own != str(sku).strip():
+            self.log.warning("Aborted line removal: the line moved")
+            return
+        # The frame's own SKU value, so a no-SKU line (NaN) still matches.
+        self.remove_item_from_order(order_number, own_sku, df.index.get_loc(label))
+
+    def add_internal_tag(self, order_number, tag):
+        self._change_internal_tag(order_number, tag, adding=True)
+
+    def remove_internal_tag(self, order_number, tag):
+        self._change_internal_tag(order_number, tag, adding=False)
+
+    def _change_internal_tag(self, order_number, tag, adding: bool):
+        """Restored from Bundle 12's deleted MainWindow._apply_tag_operation."""
+        from shopify_tool.tag_manager import add_tag, has_tag, remove_tag
+
+        tag = str(tag).strip()
+        df = self.mw.analysis_results_df
+        if not tag or df is None or df.empty:
+            return
+        mask = self._order_mask(order_number)
+        if not mask.any():
+            return
+        if "Internal_Tags" not in df.columns:
+            if not adding:
+                return
+            df["Internal_Tags"] = "[]"
+        if (
+            not adding
+            and not df.loc[mask, "Internal_Tags"].map(lambda t: has_tag(t, tag)).any()
+        ):
+            return
+
+        affected_rows_before = df[mask].copy()
+        change = add_tag if adding else remove_tag
+        df.loc[mask, "Internal_Tags"] = df.loc[mask, "Internal_Tags"].apply(
+            lambda t: change(t, tag)
+        )
+        description = (
+            f"Added internal tag '{tag}' to order {order_number}"
+            if adding
+            else f"Removed internal tag '{tag}' from order {order_number}"
+        )
+        self.mw.undo_manager.record_operation(
+            "add_internal_tag" if adding else "remove_internal_tag",
+            description,
+            {"order_number": order_number, "tag": tag},
+            affected_rows_before,
+        )
+        self.data_changed.emit()
+        self.mw.save_session_state()
+        self._update_undo_button()
+        self.mw.log_activity("Internal Tag", description)
 
     def add_tag_manually(self, order_number):
         """Opens a dialog to add a manual tag to an order's 'Status_Note'.
@@ -995,10 +1087,14 @@ class ActionsHandler(QObject):
 
         self.mw.analysis_results_df = df[~mask].reset_index(drop=True)
 
+        # A no-SKU line matches on NaN by design, but "Removed item nan" is
+        # not a sentence. The undo payload keeps the raw value either way.
+        line_name = "a line with no SKU" if pd.isna(sku) else f"item {sku}"
+
         # Record for undo
         self.mw.undo_manager.record_operation(
             "remove_item",
-            f"Removed item {sku} from order {order_number}",
+            f"Removed {line_name} from order {order_number}",
             {"order_number": order_number, "sku": sku},
             affected_rows,
         )
@@ -1008,11 +1104,11 @@ class ActionsHandler(QObject):
         self.mw.save_session_state()
         self._update_undo_button()
         self.mw.log_activity(
-            "Data Edit", f"Removed item {sku} from order {order_number}."
+            "Data Edit", f"Removed {line_name} from order {order_number}."
         )
         toast(
             self.mw,
-            f"Removed {sku} from order {order_number}.",
+            f"Removed {line_name} from order {order_number}.",
             action_text="Undo",
             on_action=self.mw.undo_last_operation,
         )
@@ -1023,19 +1119,12 @@ class ActionsHandler(QObject):
         Args:
             order_number (str): The order number to remove completely.
         """
-        # Convert to string for comparison to handle int/float order numbers
-        order_number_str = str(order_number).strip()
+        this_order = self._order_mask(order_number)
 
         # Get affected rows BEFORE operation
-        affected_rows = self.mw.analysis_results_df[
-            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-            == order_number_str
-        ].copy()
+        affected_rows = self.mw.analysis_results_df[this_order].copy()
 
-        order_mask = (
-            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-            != order_number_str
-        )
+        order_mask = ~this_order
 
         self.mw.analysis_results_df = self.mw.analysis_results_df[
             order_mask

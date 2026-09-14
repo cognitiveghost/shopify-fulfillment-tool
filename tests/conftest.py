@@ -218,6 +218,7 @@ def settings_fixture_config():
                 "Годност": "Expiry_Date",
                 "Партида": "Batch",
             },
+            "additional_columns": [],
         },
         "courier_mappings": {
             "DHL": {"patterns": ["dhl", "DHL Express"], "case_sensitive": False}

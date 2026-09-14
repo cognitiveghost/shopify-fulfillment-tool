@@ -60,6 +60,35 @@ profile maps nothing to it.
 column mapped to `Created_At`. Distinguished from **stock age**: how old the
 stock file was when the analysis ran.
 
+**Detail pane** — what the results document's slot shows by default: the
+cursor order's identity, verdict, lines, tags, notes and actions. It shows one
+order, never the multi-selection. It replaces the Qt tier's order detail pane.
+
+**Verdict** — the pane's one sentence saying whether an order ships and, if
+not, why. It is built from the run's reason codes, not from the status.
+
+**Reason code** — one cause the run recorded for not shipping an order: short,
+out of stock, invalid quantity, or no SKU. It names the SKU, and the quantities
+where it has them.
+
+**Set by a person** — an order whose status disagrees with its reason codes. It
+was either marked fulfillable although the run blocked it, or held although
+nothing was short. Drawn with a solid mark. Its opposite is **detected by the
+run**.
+
+**Stock left** — a SKU's stock after the whole run has allocated
+(`Final_Stock`). It is what Mark fulfillable draws on. Not the stock an order
+saw at its own turn, which is what its reason code quotes.
+
+**Column manager** — the slot's other occupant. It chooses and orders the
+table's columns and is saved per client. The pane comes back when it closes.
+
+**Pinned column** — Status and Order: always first and always shown.
+
+**Additional column** — an orders-file column with no mapping, which the
+analysis carries through under its own name when it is enabled. An order-level
+one is filled down onto every line of its order.
+
 ## Assets
 
 **Asset library** — `shared/assets/`, plus the two modules that read it

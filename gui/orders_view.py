@@ -8,6 +8,7 @@ computed on demand, never persisted, never written back to. See
 
 import datetime
 import math
+import re
 
 import numpy as np
 import pandas as pd
@@ -52,6 +53,16 @@ LINE_LEVEL_COLUMNS = (
 # analysis.py:1072 writes exactly this prefix into System_note, for every line
 # of the order. The reason is the analysis's to compute; this module only reads.
 BLOCKER_PREFIX = "Cannot fulfill: "
+
+NO_SKU_SUFFIX = " [NO_SKU]"
+# The allocation's own reason strings (analysis.py, legacy and FIFO paths).
+_SHORT = re.compile(
+    r"^(?P<sku>.+): Insufficient stock \(need (?P<need>\d+), have (?P<have>\d+)\)$"
+)
+_OUT_OF_STOCK = re.compile(r"^(?P<sku>.+): Out of stock$")
+_INVALID_QTY = re.compile(r"^(?P<sku>.+): Missing/invalid quantity$")
+_DATA_CODES = {"invalid_quantity", "no_sku", "other"}
+_STOCK_CODES = {"short", "out_of_stock"}
 
 ORDER_KEY = "Order_Number"
 
@@ -109,15 +120,85 @@ def classify_columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
     return order_level, line_level
 
 
+def _blank(value) -> bool:
+    """Missing in the sense the notes column means: no note at all."""
+    return (
+        value is None or value is pd.NA or (isinstance(value, float) and pd.isna(value))
+    )
+
+
 def _first_blocker(notes) -> str:
     """The reason out of the first System_note that carries one, else ""."""
     for note in notes:
-        if note is None or (isinstance(note, float) and pd.isna(note)):
+        if _blank(note):
             continue
         _, sep, tail = str(note).partition(BLOCKER_PREFIX)
         if sep:
             return tail
     return ""
+
+
+def _reason_problems(notes) -> list[dict]:
+    """The problems in the first note carrying a blocker, in the run's order."""
+    for note in notes:
+        if _blank(note):
+            continue
+        text = str(note)
+        text = text.removesuffix(NO_SKU_SUFFIX)
+        _, sep, tail = text.partition(BLOCKER_PREFIX)
+        if not sep:
+            continue
+        problems = []
+        for part in (p.strip() for p in tail.split("; ")):
+            if not part:
+                continue
+            if m := _SHORT.match(part):
+                problems.append(
+                    {
+                        "code": "short",
+                        "sku": m["sku"],
+                        "need": int(m["need"]),
+                        "have": int(m["have"]),
+                    }
+                )
+            elif m := _OUT_OF_STOCK.match(part):
+                problems.append({"code": "out_of_stock", "sku": m["sku"]})
+            elif m := _INVALID_QTY.match(part):
+                problems.append({"code": "invalid_quantity", "sku": m["sku"]})
+            else:
+                problems.append({"code": "other", "text": part})
+        return problems
+    return []
+
+
+def order_verdict(status, notes, line_skus, has_sku) -> dict:
+    """Whether the order ships and why not, from the run's reason codes (§3.1).
+
+    `by_hand` is true when the status disagrees with the run: a manual toggle
+    rewrites Order_Fulfillment_Status and never System_note.
+    """
+    skus = {str(s) for s in line_skus if not _blank(s)}
+    problems, seen = [], set()
+    for p in _reason_problems(notes):
+        if "sku" in p and p["sku"] not in skus:
+            continue  # its line was removed after the run
+        key = (p["code"], p.get("sku"), p.get("text"))
+        if key not in seen:
+            seen.add(key)
+            problems.append(p)
+    missing = sum(1 for h in has_sku if isinstance(h, (bool, np.bool_)) and not h)
+    if missing:
+        problems.append({"code": "no_sku", "lines": missing})
+
+    fulfillable = status == FULFILLABLE
+    by_hand = fulfillable == bool(problems)
+    if by_hand or any(p["code"] in _DATA_CODES for p in problems):
+        state = "review"
+    elif not fulfillable:
+        state = "short"
+    else:
+        state = "ready"
+    return {"state": state, "by_hand": by_hand, "problems": problems}
 
 
 def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -212,13 +293,23 @@ def order_payload(df: pd.DataFrame) -> list[dict]:
     if orders.empty:
         return []
     _, line_level = classify_columns(df)
-    lines = {
-        key: [
+    lines, verdicts = {}, {}
+    for key, group in df.groupby(ORDER_KEY, sort=False):
+        lines[key] = [
             dict(zip(line_level, map(_json_value, row)))
             for row in group[line_level].itertuples(index=False, name=None)
         ]
-        for key, group in df.groupby(ORDER_KEY, sort=False)
-    }
+        status = (
+            group["Order_Fulfillment_Status"].iloc[0]
+            if "Order_Fulfillment_Status" in group
+            else ""
+        )
+        verdicts[key] = order_verdict(
+            status,
+            group["System_note"].tolist() if "System_note" in group else [],
+            group["SKU"].tolist() if "SKU" in group else [],
+            group["Has_SKU"].tolist() if "Has_SKU" in group else [],
+        )
     columns = [ORDER_KEY] + [c for c in orders.columns if c != ORDER_KEY]
     by_order = df[ORDER_KEY]
     units = (
@@ -245,6 +336,13 @@ def order_payload(df: pd.DataFrame) -> list[dict]:
         key = row[0]
         entry = dict(zip(columns, map(_json_value, row)))
         entry["lines"] = lines.get(key, [])
+        verdict = verdicts.get(
+            key, {"state": "review", "by_hand": True, "problems": []}
+        )
+        entry["Verdict"] = _json_value(verdict)
+        short = {p["sku"] for p in verdict["problems"] if p["code"] in _STOCK_CODES}
+        for line in entry["lines"]:
+            line["Short"] = line.get("SKU") is not None and str(line["SKU"]) in short
         # Derived per order, for the results document (Bundle 12 spec §4.1).
         entry["Units"] = int(units.get(key, 0))
         entry["Created_At"] = _iso_or_none(entry.get("Created_At"))

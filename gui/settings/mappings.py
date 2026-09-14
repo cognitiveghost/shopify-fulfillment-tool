@@ -5,7 +5,9 @@ import json
 import logging
 from typing import ClassVar
 
+import pandas as pd
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -22,9 +24,14 @@ from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
 from gui.theme_manager import set_button_role
 from shared.theme import on_theme_changed
-from shopify_tool.csv_utils import read_csv_headers
+from shopify_tool.csv_utils import discover_additional_columns, read_csv_headers
 
 logger = logging.getLogger(__name__)
+
+ADDITIONAL_COLUMNS_UNREADABLE = object()
+"""Passed as `fallback_additional_columns` when the client config could not be
+read, so the page can tell "there are none" from "we don't know" (ADR 0006).
+Saving the first over the second would discard the profile's real list."""
 
 
 class _MappingPageBase(SettingsPage):
@@ -130,6 +137,10 @@ class _MappingPageBase(SettingsPage):
             return
 
         self.mapping_widget.set_available_headers(headers)
+        self._headers_loaded(headers)
+
+    def _headers_loaded(self, headers: list[str]) -> None:
+        """Called with a picked CSV's headers after the dropdowns take them."""
 
 
 class OrdersMappingPage(_MappingPageBase):
@@ -156,11 +167,44 @@ class OrdersMappingPage(_MappingPageBase):
         "Created_At",
     ]
 
-    def __init__(self, column_mappings: dict, courier_mappings: dict, parent=None):
+    def __init__(
+        self,
+        column_mappings: dict,
+        courier_mappings: dict,
+        fallback_additional_columns=None,
+        parent=None,
+    ):
         super().__init__(column_mappings, parent)
         self.courier_mappings = courier_mappings
         self.courier_mapping_widgets = []
         self.orders_mapping_widget = self.mapping_widget  # name used by tests/callers
+
+        # ADR 0006: the list lives in column_mappings; a profile not saved
+        # since Bundle 13 still has it only in the client config.
+        source = (
+            column_mappings.get("additional_columns")
+            if "additional_columns" in column_mappings
+            else fallback_additional_columns
+        )
+        # A client config that could not be read means the stored list is unknown,
+        # not empty -- collect() must leave it alone rather than save [] over it.
+        self.additional_columns_known = source is not ADDITIONAL_COLUMNS_UNREADABLE
+        if not self.additional_columns_known:
+            source = []
+        self.additional_entries = [
+            _additional_entry(e) for e in (source or []) if _is_entry(e)
+        ]
+        additional_box = FormSection(
+            "Additional columns",
+            "Orders-file columns the analysis carries through under their own names. "
+            "Load headers from CSV to list the file's unmapped columns.",
+        )
+        self.additional_container = QWidget()
+        self.additional_layout = QVBoxLayout(self.additional_container)
+        self.additional_layout.setContentsMargins(0, 0, 0, 0)
+        additional_box.add_widget(self.additional_container)
+        self.scroll_layout.addWidget(additional_box)
+        self._render_additional_columns()
 
         courier_box = FormSection(
             "Courier Mappings",
@@ -266,9 +310,63 @@ class OrdersMappingPage(_MappingPageBase):
                 }
         return new_couriers
 
+    @staticmethod
+    def _entry_setter(entry: dict, key: str):
+        """A toggled handler writing one key of one entry, bound per row."""
+
+        def set_value(on: bool) -> None:
+            entry[key] = on
+
+        return set_value
+
+    def _render_additional_columns(self):
+        while self.additional_layout.count():
+            widget = self.additional_layout.takeAt(0).widget()
+            if widget is not None:
+                widget.deleteLater()
+        if not self.additional_entries:
+            empty = QLabel(
+                "No additional columns yet. Load headers from CSV to list the file's unmapped columns."
+            )
+            empty.setWordWrap(True)
+            _secondary(empty)
+            self.additional_layout.addWidget(empty)
+            return
+        for entry in self.additional_entries:
+            row = QWidget()
+            layout = QHBoxLayout(row)
+            layout.setContentsMargins(0, 2, 0, 2)
+            enabled = QCheckBox(entry["csv_name"])
+            enabled.setChecked(bool(entry.get("enabled")))
+            enabled.toggled.connect(self._entry_setter(entry, "enabled"))
+            order_level = QCheckBox("Order-level")
+            order_level.setChecked(bool(entry.get("is_order_level", True)))
+            order_level.setToolTip("Filled down onto every line of a multi-line order")
+            order_level.toggled.connect(self._entry_setter(entry, "is_order_level"))
+            layout.addWidget(enabled)
+            layout.addStretch()
+            layout.addWidget(order_level)
+            if entry.get("exists_in_df") is False:
+                missing = QLabel("Not in this file")
+                _secondary(missing)
+                layout.addWidget(missing)
+            self.additional_layout.addWidget(row)
+
+    def _headers_loaded(self, headers):
+        # Discovering from the file supersedes whatever could not be read.
+        self.additional_columns_known = True
+        self.additional_entries = discover_additional_columns(
+            pd.DataFrame(columns=headers),
+            {"orders": self.mapping_widget.get_mappings()},
+            self.additional_entries,
+        )
+        self._render_additional_columns()
+
     def snapshot(self) -> str:
         return json.dumps(
-            [super().snapshot(), self._courier_rows()], sort_keys=True, default=str
+            [super().snapshot(), self._courier_rows(), self.additional_entries],
+            sort_keys=True,
+            default=str,
         )
 
     def collect(self) -> dict:
@@ -278,10 +376,10 @@ class OrdersMappingPage(_MappingPageBase):
         self.courier_mappings.clear()
         self.courier_mappings.update(new_couriers)
 
-        return {
-            "column_mappings": self._collect_column_mappings(),
-            "courier_mappings": self.courier_mappings,
-        }
+        mappings = self._collect_column_mappings()
+        if self.additional_columns_known:
+            mappings["additional_columns"] = [dict(e) for e in self.additional_entries]
+        return {"column_mappings": mappings, "courier_mappings": self.courier_mappings}
 
 
 class StockMappingPage(_MappingPageBase):
@@ -303,3 +401,26 @@ class StockMappingPage(_MappingPageBase):
 
     def collect(self) -> dict:
         return {"column_mappings": self._collect_column_mappings()}
+
+
+def _is_entry(value) -> bool:
+    return isinstance(value, dict) and bool(value.get("csv_name"))
+
+
+def _additional_entry(value: dict) -> dict:
+    """A stored entry with every key discover_additional_columns reads."""
+    name = str(value["csv_name"])
+    return {
+        "csv_name": name,
+        "internal_name": value.get("internal_name")
+        or name.strip().replace(" ", "_").replace("-", "_"),
+        "enabled": bool(value.get("enabled", False)),
+        "is_order_level": bool(value.get("is_order_level", True)),
+        "exists_in_df": value.get("exists_in_df", True),
+    }
+
+
+def _secondary(label: QLabel) -> None:
+    on_theme_changed(
+        label, lambda t: label.setStyleSheet(f"color: {t.text_secondary};")
+    )

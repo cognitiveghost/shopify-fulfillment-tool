@@ -1,5 +1,6 @@
 """The Analysis Results screen is the results document (Bundle 12 spec §7)."""
 
+import json
 import re
 from pathlib import Path
 
@@ -220,3 +221,91 @@ def test_opening_a_session_drops_the_previous_sessions_chips(
     main_window.load_existing_session(str(tmp_path))
     assert bar.status_chip.text() == ""
     assert bar.stock_chip.text() == ""
+
+
+class _Profiles:
+    """ProfileManager's client-config surface, in memory."""
+
+    def __init__(self):
+        self.client = {}
+        self.saved = 0
+
+    def load_client_config(self, client_id):
+        return json.loads(json.dumps(self.client))
+
+    def save_client_config(self, client_id, config):
+        self.client = config
+        self.saved += 1
+        return True
+
+    def load_shopify_config(self, client_id):
+        return {"tag_categories": {}}
+
+
+def test_the_column_layout_round_trips_through_the_client_config(
+    main_window, qtbot, monkeypatch
+):
+    profiles = _Profiles()
+    monkeypatch.setattr(main_window, "profile_manager", profiles)
+    main_window.current_client_id = "ACME"
+    layout = {"order": ["age"], "visible": ["age", "type"], "auto_hide_empty": True}
+    main_window.schedule_results_columns_save(layout)
+    qtbot.waitUntil(lambda: profiles.saved == 1, timeout=5000)
+    assert profiles.client["ui_settings"]["results_columns"] == layout
+    _shopify, settings = main_window._load_client_data("ACME")
+    assert settings == layout
+
+
+@pytest.mark.parametrize(
+    ("signal", "args", "handler", "expected"),
+    [
+        ("holdRequested", ("1001",), "set_order_fulfillable", ("1001", False)),
+        ("fulfillRequested", ("1001",), "set_order_fulfillable", ("1001", True)),
+        ("excludeRequested", ("1001",), "remove_entire_order", ("1001",)),
+        ("lineRemovalRequested", ("1001", 0, "A"), "remove_line", ("1001", 0, "A")),
+        ("tagAddRequested", ("1001", "vip"), "add_internal_tag", ("1001", "vip")),
+        (
+            "tagRemovalRequested",
+            ("1001", "vip"),
+            "remove_internal_tag",
+            ("1001", "vip"),
+        ),
+    ],
+)
+def test_each_pane_request_reaches_its_handler(
+    main_window, monkeypatch, signal, args, handler, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        main_window.actions_handler, handler, lambda *a: calls.append(a)
+    )
+    getattr(main_window.results_bridge, signal).emit(*args)
+    assert calls == [expected]
+
+
+def test_the_profiles_tag_categories_reach_the_page(main_window):
+    main_window.active_profile_config = {
+        "tag_categories": {
+            "prio": {"label": "Priority", "color": "#e53935", "tags": ["vip"]}
+        }
+    }
+    main_window.push_tag_categories()
+    assert main_window.results_bridge.tagCategories["prio"]["tags"] == ["vip"]
+
+
+GONE_COLUMN_MANAGER = re.compile(
+    r"ColumnConfigPanel|ColumnConfigDialog|TableConfigManager|table_config_manager|column_config_dialog"
+)
+
+
+def test_the_qt_column_manager_is_gone():
+    root = Path(__file__).resolve().parents[1]
+    hits = [
+        f"{path.relative_to(root)}:{number}"
+        for base in ("gui", "tests")
+        for path in sorted((root / base).rglob("*.py"))
+        if path.name != "test_results_screen.py"  # this pattern names them
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if GONE_COLUMN_MANAGER.search(line)
+    ]
+    assert hits == []

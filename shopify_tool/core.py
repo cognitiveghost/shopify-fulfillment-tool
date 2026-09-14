@@ -236,9 +236,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
             "error": f"Invalid DataFrame: {e}",
         }
     except Exception as e:
-        logger.exception(
-            "Unexpected error creating analysis data for packing"
-        )
+        logger.exception("Unexpected error creating analysis data for packing")
         return {
             "analyzed_at": datetime.now().astimezone().isoformat(),
             "total_orders": 0,
@@ -649,7 +647,9 @@ def _load_and_validate_files(
         if orders_file_path is not None:
             orders_file_path = _normalize_unc_path(orders_file_path)
             if not os.path.exists(orders_file_path):
-                raise FileNotFoundError(f"Orders file not found at path: {orders_file_path}")
+                raise FileNotFoundError(
+                    f"Orders file not found at path: {orders_file_path}"
+                )
             column_mappings = config.get("column_mappings", {})
             orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
             orders_df = pd.read_csv(
@@ -779,6 +779,20 @@ def _load_history_data(
     return history_df
 
 
+def effective_additional_columns(column_mappings, client_config) -> list:
+    """The additional-columns list the analysis uses (ADR 0006).
+
+    Settings writes it under column_mappings; profiles never saved since
+    Bundle 13 still carry it in client_config.ui_settings.table_view.
+    """
+    if isinstance(column_mappings, dict) and "additional_columns" in column_mappings:
+        return list(column_mappings["additional_columns"] or [])
+    ui_settings = (client_config or {}).get("ui_settings", {}) or {}
+    return list(
+        (ui_settings.get("table_view", {}) or {}).get("additional_columns", []) or []
+    )
+
+
 def _run_analysis_and_rules(
     orders_df: pd.DataFrame,
     stock_df: pd.DataFrame,
@@ -811,13 +825,10 @@ def _run_analysis_and_rules(
         column_mappings = {}
     column_mappings["set_decoders"] = config.get("set_decoders", {})
 
-    # Add additional columns from UI settings to column_mappings
+    # Additional columns: the mappings' own list, else the pre-Bundle-13
+    # client-config key (ADR 0006).
     client_config = config.get("_client_config", {})  # Passed from main_window
-    ui_settings = client_config.get("ui_settings", {})
-    table_view = ui_settings.get("table_view", {})
-    additional_columns = table_view.get("additional_columns", [])
-
-    # Inject into column_mappings so analysis receives it
+    additional_columns = effective_additional_columns(column_mappings, client_config)
     column_mappings["additional_columns"] = additional_columns
     logger.debug(f"Additional columns config: {len(additional_columns)} columns")
     logger.debug(f"Using column mappings: {column_mappings}")
@@ -1046,9 +1057,7 @@ def _save_results_and_reports(
             )
             # Continue with the workflow even if initial state save fails
         except Exception:
-            logger.exception(
-                "Unexpected error saving initial session state"
-            )
+            logger.exception("Unexpected error saving initial session state")
             # Continue with the workflow even if initial state save fails
 
     # Session mode: Export analysis_data.json and update session_info
@@ -1094,14 +1103,10 @@ def _save_results_and_reports(
             )
             # Continue with the workflow even if export fails
         except SessionManagerError:
-            logger.exception(
-                "Session manager error updating session info"
-            )
+            logger.exception("Session manager error updating session info")
             # Continue with the workflow even if export fails
         except Exception:
-            logger.exception(
-                "Unexpected error exporting analysis data"
-            )
+            logger.exception("Unexpected error exporting analysis data")
             # Continue with the workflow even if export fails
 
     # Update fulfillment history
@@ -1111,7 +1116,9 @@ def _save_results_and_reports(
     ].drop_duplicates()
 
     if not newly_fulfilled.empty:
-        newly_fulfilled["Execution_Date"] = datetime.now().astimezone().strftime("%Y-%m-%d")
+        newly_fulfilled["Execution_Date"] = (
+            datetime.now().astimezone().strftime("%Y-%m-%d")
+        )
         updated_history = _merge_fulfillment_history(history_df, newly_fulfilled)
 
         # Determine history path (same logic as load)
@@ -1170,11 +1177,16 @@ def _save_results_and_reports(
                 if "Warehouse_Name" in final_df.columns:
                     names_dict = {
                         sku: name
-                        for sku, name in final_df.groupby("SKU")["Warehouse_Name"].first().items()
+                        for sku, name in final_df.groupby("SKU")["Warehouse_Name"]
+                        .first()
+                        .items()
                         if name and name != "N/A"
                     } or None
                 profile_manager.save_inventory_memory(
-                    client_id, final_stock_dict, config=full_config, names_dict=names_dict
+                    client_id,
+                    final_stock_dict,
+                    config=full_config,
+                    names_dict=names_dict,
                 )
                 logger.info(f"Inventory memory updated: {len(final_stock_dict)} SKUs")
         except Exception as e:
@@ -1302,10 +1314,8 @@ def run_full_analysis(
             config["_client_config"] = client_config
 
             # Check if there are additional columns configured
-            additional_cols = (
-                client_config.get("ui_settings", {})
-                .get("table_view", {})
-                .get("additional_columns", [])
+            additional_cols = effective_additional_columns(
+                config.get("column_mappings", {}), client_config
             )
             enabled_cols = [col for col in additional_cols if col.get("enabled", False)]
             logger.info(
@@ -1443,9 +1453,7 @@ def create_packing_list_report(
         error_message = (
             f"Configuration error for report '{report_name}': Missing key {e}."
         )
-        logger.exception(
-            f"Config error for packing list '{report_name}'"
-        )
+        logger.exception(f"Config error for packing list '{report_name}'")
         return False, error_message
     except PermissionError:
         output_filename = report_config.get("output_filename", "N/A")
@@ -1562,15 +1570,11 @@ def create_stock_export_report(
         error_message = (
             f"Configuration error for stock export '{report_name}': Missing key {e}."
         )
-        logger.exception(
-            f"Config error for stock export '{report_name}'"
-        )
+        logger.exception(f"Config error for stock export '{report_name}'")
         return False, error_message
     except PermissionError:
         error_message = "Permission denied. Could not write stock export."
-        logger.exception(
-            f"Permission error creating stock export '{report_name}'"
-        )
+        logger.exception(f"Permission error creating stock export '{report_name}'")
         return False, error_message
     except Exception:
         error_message = (
@@ -1651,21 +1655,15 @@ def create_writeoff_report(
         error_message = (
             f"Configuration error for writeoff report '{report_name}': Missing key {e}."
         )
-        logger.exception(
-            f"Config error for writeoff report '{report_name}'"
-        )
+        logger.exception(f"Config error for writeoff report '{report_name}'")
         return False, error_message
     except PermissionError:
         error_message = "Permission denied. Could not write writeoff report."
-        logger.exception(
-            f"Permission error creating writeoff report '{report_name}'"
-        )
+        logger.exception(f"Permission error creating writeoff report '{report_name}'")
         return False, error_message
     except Exception:
         error_message = (
             f"Failed to create writeoff report '{report_name}'. See logs for details."
         )
-        logger.exception(
-            f"Error creating writeoff report '{report_name}'"
-        )
+        logger.exception(f"Error creating writeoff report '{report_name}'")
         return False, error_message

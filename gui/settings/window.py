@@ -25,7 +25,11 @@ from gui.components.inline_message import InlineMessage
 from gui.components.toast import toast
 from gui.settings.base import SettingsPage
 from gui.settings.general import GeneralPage
-from gui.settings.mappings import OrdersMappingPage, StockMappingPage
+from gui.settings.mappings import (
+    ADDITIONAL_COLUMNS_UNREADABLE,
+    OrdersMappingPage,
+    StockMappingPage,
+)
 from gui.settings.reports import ReportsPage
 from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
@@ -33,6 +37,7 @@ from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
 from shared.theme import font_css, on_theme_changed
+from shopify_tool.core import effective_additional_columns
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +236,7 @@ class SettingsWindow(QDialog):
             OrdersMappingPage(
                 self.config_data.get("column_mappings", {}),
                 self.config_data.get("courier_mappings", {}),
+                fallback_additional_columns=self._stored_additional_columns(),
             ),
             "Orders Mapping",
         )
@@ -331,6 +337,20 @@ class SettingsWindow(QDialog):
         self._pages_by_name[name] = page
         self.tab_widget.addWidget(page)
         self._page_index_by_name[name] = self.tab_widget.count() - 1
+
+    def _stored_additional_columns(self):
+        """The list's pre-Bundle-13 home, read only as a fallback (ADR 0006).
+
+        Returns ADDITIONAL_COLUMNS_UNREADABLE rather than [] when the read
+        fails, so a blip on the share cannot make Save write an empty list
+        over the profile's real one.
+        """
+        try:
+            client_config = self.profile_manager.load_client_config(self.client_id)
+            return effective_additional_columns({}, client_config)
+        except Exception:
+            logger.exception("The client config's additional columns couldn't be read")
+            return ADDITIONAL_COLUMNS_UNREADABLE
 
     def _build_settings_nav(self) -> None:
         """Populate the left-nav list from SETTINGS_NAV_GROUPS with

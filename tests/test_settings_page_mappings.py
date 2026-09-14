@@ -212,7 +212,7 @@ def test_collect_order_does_not_matter(qapp):
     orders_page.collect()
     result = stock_page.collect()["column_mappings"]
 
-    assert set(result) == {"version", "orders", "stock"}
+    assert set(result) == {"version", "orders", "stock", "additional_columns"}
     assert result["orders"] and result["stock"]
 
 

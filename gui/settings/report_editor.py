@@ -135,8 +135,9 @@ class ReportEditor(QGroupBox):
             columns_layout.addWidget(self.columns_list)
             # ponytail: checkbox list gives column choice but not arbitrary
             # column order -- the saved order is the picker's. Add Move Up /
-            # Move Down buttons (see ColumnConfigPanel, which already does
-            # exactly this) if a user asks to reorder printed columns.
+            # Move Down buttons (see the results document's column manager,
+            # gui/web/columns.js, which already does exactly this) if a user
+            # asks to reorder printed columns.
             layout.addWidget(columns_box)
 
         self.delete_button = QPushButton("Delete report")

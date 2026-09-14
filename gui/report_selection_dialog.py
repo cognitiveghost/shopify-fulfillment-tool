@@ -202,9 +202,9 @@ class GenerateReportsDialog(_BaseReportDialog):
     exports in one pass.
 
     Both kinds share one checkable list under non-selectable section header
-    rows, following the header-row pattern in column_config_dialog
-    (_CATEGORY_HEADER_MARKER): a row flagged Qt.NoItemFlags with a sentinel in
-    Qt.UserRole so it can't be checked or selected but still renders inline.
+    rows (_SECTION_HEADER_MARKER): a row flagged Qt.NoItemFlags with a
+    sentinel in Qt.UserRole so it can't be checked or selected but still
+    renders inline.
     """
 
     reportsSelected = Signal(list)

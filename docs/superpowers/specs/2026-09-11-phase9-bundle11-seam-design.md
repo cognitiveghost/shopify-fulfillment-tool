@@ -194,11 +194,22 @@ nothing else.
 | out | `focusSearchRequested()` | signal | 12 (9.13) |
 | in | `openExport()` | slot | 12 (9.13) — canvas W3 puts Export in the document |
 | in | `openScreenMenu()` | slot | 12 (9.13) |
-| in | one slot per pane action, `<verb>Order(orderNumber: str)` | slot | 13 (9.14) |
-| out | `columns: list[{name, visible, pinned}]` | property | 13 (9.16) |
+| ~~out~~ | ~~`columns: list[{name, visible, pinned}]`~~ | removed | amended by Bundle 13 spec §4 |
+| ~~in~~ | ~~`setColumnVisible(name: str, visible: bool)`~~ | removed | amended by Bundle 13 spec §4 |
+| out | `columns: dict` | notify property | 13 (9.16) — `{"order", "visible", "auto_hide_empty", "extras"}` |
+| out | `tagCategories: dict` | notify property | 13 (9.16) |
+| in | `holdOrder(orderNumber: str)` | slot → `holdRequested(str)` | 13 (9.14) |
+| in | `fulfillOrder(orderNumber: str)` | slot → `fulfillRequested(str)` | 13 (9.14) |
+| in | `excludeOrder(orderNumber: str)` | slot → `excludeRequested(str)` | 13 (9.14) |
+| in | `removeLine(orderNumber: str, lineIndex: int, sku: str)` | slot → `lineRemovalRequested(str, int, str)` | 13 (9.14) |
+| in | `addOrderTag(orderNumber: str, tag: str)` | slot → `tagAddRequested(str, str)` | 13 (9.14) |
+| in | `removeOrderTag(orderNumber: str, tag: str)` | slot → `tagRemovalRequested(str, str)` | 13 (9.14) |
+| in | `copyText(text: str)` | slot, handled in the bridge | 13 (9.14) |
 | in | `setColumnOrder(names: list[str])` | slot | 13 (9.16) |
-| in | `setColumnVisible(name: str, visible: bool)` | slot | 13 (9.16) |
+| in | `setVisibleColumns(names: list[str])` | slot | 13 (9.16) |
 | in | `resetColumns()` | slot | 13 (9.16) |
+| in | `setAutoHideEmpty(on: bool)` | slot | 13 (9.16) |
+| out | `columnSettingsChanged(settings: dict)` | signal | 13 (9.16) — the four column slots all emit it; `MainWindow` saves the layout per client |
 | in | `addTag(orderNumbers: list[str], tag: str)` | slot | 14 (9.17) |
 | in | `removeTag(orderNumbers: list[str], tag: str)` | slot | 14 (9.17) |
 | in | `excludeOrders(orderNumbers: list[str])` | slot | 14 (9.17) |

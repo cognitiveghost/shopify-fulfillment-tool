@@ -10,6 +10,7 @@ const OVERSCAN = 4;
 const TABLE_MIN_PX = 780;
 const DASH = "—";
 const FULFILLABLE = "Fulfillable";
+const BLOCKED = "Blocked";
 const NO_COURIER = "No courier";
 const NUMBER = new Intl.NumberFormat("en-US");
 
@@ -18,6 +19,12 @@ const NUMBER = new Intl.NumberFormat("en-US");
 const CHEVRON_DOWN = "m6 9 6 6 6-6";
 const CHEVRON_UP = "m18 15-6-6-6 6";
 const CHECK = "M20 6 9 17l-5-5";
+
+// Widths are the canvas's (W3); a column grows to its widest real value but
+// never reflows after that. Only Customer stretches (9.15). The registry
+// (columns.js) replaces the fixed list.
+const SELECT_COLUMN = { key: "select", title: "", width: 32 };
+const SLOT_NARROW_PX = 1192; // table minimum 780 + gap 12 + pane 400
 
 const els = {};
 const state = {
@@ -32,6 +39,14 @@ const state = {
   cursorKey: null, // the row the arrow keys move from
   rowH: 28,
   visible: 0,
+  columnSettings: { order: null, visible: null, auto_hide_empty: false, extras: [] },
+  emptyKeys: new Set(),
+  tableCols: [SELECT_COLUMN],
+  filler: false,
+  narrow: false,
+  paneHidden: false,
+  paneForced: false,
+  columnsOpen: false,
 };
 
 // --- formatting -------------------------------------------------------------
@@ -82,6 +97,11 @@ function plural(n, word) {
 function isFulfillable(o) {
   return o.Order_Fulfillment_Status === FULFILLABLE;
 }
+// One source for the Status cell's words: the chip renders it and the column
+// registry measures and empties on it.
+function statusText(o) {
+  return isFulfillable(o) ? FULFILLABLE : BLOCKED;
+}
 function courierOf(o) {
   return str(o.Shipping_Provider).trim() || NO_COURIER;
 }
@@ -93,20 +113,6 @@ function svg(path, cls) {
 }
 
 // --- columns, filters, sort -----------------------------------------------
-
-// Widths are the canvas's (W3); a column grows to its widest real value but
-// never reflows after that. Only Customer stretches (9.15).
-const COLUMNS = [
-  { key: "select", title: "", width: 32 },
-  { key: "status", title: "Status", width: 132, sortValue: (o) => (isFulfillable(o) ? 0 : 1) },
-  { key: "order", title: "Order", width: 84, mono: true, text: (o) => str(o.Order_Number), sortValue: (o) => str(o.Order_Number) },
-  { key: "customer", title: "Customer", stretch: true, text: (o) => str(o.Customer), sortValue: (o) => str(o.Customer) },
-  { key: "lines", title: "Lines", width: 56, numeric: true, text: (o) => fmtInt(o.Items), sortValue: (o) => num(o.Items) },
-  { key: "units", title: "Units", width: 56, numeric: true, text: (o) => fmtInt(o.Units), sortValue: (o) => num(o.Units) },
-  { key: "value", title: "Value", width: 84, numeric: true, text: (o) => fmtMoney(o.Total_Price), sortValue: (o) => num(o.Total_Price) },
-  { key: "courier", title: "Courier", width: 76, text: (o) => str(o.Shipping_Provider), sortValue: (o) => str(o.Shipping_Provider) },
-  { key: "age", title: "Age", width: 56, numeric: true, text: (o) => fmtAge(o.Created_At), sortValue: (o) => ageMs(o.Created_At) },
-];
 
 const FLAGS = [
   { value: "repeat", label: "Repeat", test: (o) => o._repeat === true },
@@ -200,7 +206,7 @@ function compare(col, dir) {
 function recompute() {
   let view = state.records.filter(matches);
   if (state.sort) {
-    const col = COLUMNS.find((c) => c.key === state.sort.key);
+    const col = allColumns().find((c) => c.key === state.sort.key);
     view = view.slice().sort(compare(col, state.sort.dir));
   }
   state.view = view;
@@ -220,6 +226,7 @@ function render() {
   renderCount();
   renderExport();
   renderStates();
+  renderSlot();
   renderHeader();
   layout();
   renderRows();
@@ -353,7 +360,7 @@ function renderHeader() {
   els.header.textContent = "";
   const picked = state.view.filter((r) => state.selected.has(r.key)).length;
   const all = picked > 0 && picked === state.view.length;
-  for (const col of COLUMNS) {
+  for (const col of state.tableCols) {
     const cell = document.createElement("div");
     cell.className = "cell head " + col.key + (col.numeric ? " num" : "");
     cell.setAttribute("role", "columnheader");
@@ -379,16 +386,18 @@ function renderHeader() {
     }
     els.header.appendChild(cell);
   }
+  if (state.filler) els.header.insertAdjacentHTML("beforeend", '<div class="cell filler" role="presentation">');
 }
 
 function measureColumns() {
   measureColumns.ctx = measureColumns.ctx || document.createElement("canvas").getContext("2d");
   const ctx = measureColumns.ctx;
+  const cols = [SELECT_COLUMN].concat(visibleColumns());
   const body = getComputedStyle(document.body);
   const sans = body.fontSize + " " + body.fontFamily;
   const mono = body.fontSize + " " + cssVar("--font-family-mono");
   const caption = cssVar("--type-caption-size") + " " + body.fontFamily;
-  const widths = COLUMNS.map((col) => {
+  const widths = cols.map((col) => {
     if (col.key === "select" || col.stretch) return col.width || 0;
     ctx.font = "700 " + caption;
     let widest = ctx.measureText(col.title).width + 14; // + the sort caret
@@ -399,14 +408,18 @@ function measureColumns() {
       ctx.font = col.mono ? mono : sans;
       for (const r of state.records) widest = Math.max(widest, ctx.measureText(col.text(r.o) || DASH).width);
     }
-    return Math.max(col.width, Math.ceil(widest + 16));
+    const width = Math.max(col.width, Math.ceil(widest + 16));
+    return col.maxWidth ? Math.min(col.maxWidth, width) : width;
   });
   const fixed = widths.reduce((a, b) => a + b, 0);
-  const customerMin = Math.max(120, TABLE_MIN_PX - fixed);
-  const template = COLUMNS.map((col, i) => (col.stretch ? "minmax(" + customerMin + "px, 1fr)" : widths[i] + "px"));
+  const stretch = cols.some((c) => c.stretch);
+  const customerMin = stretch ? Math.max(120, TABLE_MIN_PX - fixed) : 0;
+  const template = cols.map((col, i) => (col.stretch ? "minmax(" + customerMin + "px, 1fr)" : widths[i] + "px"));
+  // Customer hidden: an empty track takes the growth, so no column stretches.
+  if (!stretch) template.push("minmax(0, 1fr)");
+  state.tableCols = cols;
+  state.filler = !stretch;
   els.table.style.setProperty("--cols", template.join(" "));
-  // A column grown past its canvas width raises the floor with it, or the
-  // cells past 780 would overflow the row box.
   els.table.style.setProperty("--table-min", fixed + customerMin + "px");
 }
 
@@ -415,12 +428,62 @@ function measureColumns() {
 // ponytail: a horizontal scrollbar (page < 812px) eats into the last row; that
 // state is unreachable at 1366, so it is not compensated for.
 function layout() {
+  const narrow = els.tableArea.clientWidth < SLOT_NARROW_PX;
+  if (narrow !== state.narrow) {
+    state.narrow = narrow;
+    if (!narrow) state.paneForced = false;
+    renderSlot();
+  }
   state.rowH = parseFloat(cssVar("--row-height")) || 28;
   const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - HEADER_PX) / state.rowH));
   state.visible = rows;
   els.scroller.style.height = HEADER_PX + rows * state.rowH + "px";
   els.rows.style.height = state.view.length * state.rowH + "px";
   els.table.dataset.visibleRows = String(Math.min(rows, state.view.length));
+}
+
+function refreshColumns() {
+  const empty = (col) => state.records.every((r) => {
+    const t = col.text(r.o);
+    return t === "" || t === DASH;
+  });
+  state.emptyKeys = new Set(allColumns().filter(empty).map((c) => c.key));
+  if (state.sort && !visibleColumns().some((c) => c.key === state.sort.key)) state.sort = null;
+  measureColumns();
+  render();
+}
+
+function slotMode() {
+  if (!state.records.length) return "none";
+  if (state.columnsOpen) return "columns";
+  return state.paneHidden || (state.narrow && !state.paneForced) ? "strip" : "pane";
+}
+
+function renderSlot() {
+  const mode = slotMode();
+  els.tableArea.dataset.slot = mode;
+  els.pane.hidden = mode !== "pane";
+  els.paneStrip.hidden = mode !== "strip";
+  els.columnsPanel.hidden = mode !== "columns";
+  els.columnsButton.disabled = mode === "none";
+  els.columnsButton.setAttribute("aria-pressed", String(state.columnsOpen));
+  els.columnsButton.textContent = "Columns " + visibleColumns().length + "/" + allColumns().length;
+  if (mode === "pane") renderPane();
+  if (mode === "columns") renderColumnsPanel();
+}
+
+// The bridge hands `columns` over as a QVariantMap, which reaches JS with its keys
+// sorted; the local literal keeps insertion order. Compare the values positionally
+// so the page's own write does not read back as a change and re-render twice.
+function columnsKey(c) {
+  return JSON.stringify([c.order || null, c.visible || null, Boolean(c.auto_hide_empty), c.extras || []]);
+}
+
+function onColumns() {
+  const next = state.bridge.columns || {};
+  if (columnsKey(next) === columnsKey(state.columnSettings)) return;
+  state.columnSettings = Object.assign({ order: null, visible: null, auto_hide_empty: false, extras: [] }, next);
+  refreshColumns();
 }
 
 function renderRows() {
@@ -441,7 +504,8 @@ function rowElement(record, index) {
   row.dataset.order = record.key;
   row.dataset.index = String(index);
   row.style.top = index * state.rowH + "px";
-  for (const col of COLUMNS) row.appendChild(cellElement(col, record, selected));
+  for (const col of state.tableCols) row.appendChild(cellElement(col, record, selected));
+  if (state.filler) row.insertAdjacentHTML("beforeend", '<div class="cell filler" role="presentation">');
   return row;
 }
 
@@ -460,7 +524,7 @@ function cellElement(col, record, selected) {
     const ok = isFulfillable(record.o);
     const chip = document.createElement("span");
     chip.className = "chip " + (ok ? "success" : "danger");
-    chip.textContent = ok ? "Fulfillable" : "Blocked";
+    chip.textContent = statusText(record.o);
     cell.appendChild(chip);
   } else {
     const text = col.text(record.o);
@@ -567,9 +631,8 @@ function clearFilters() {
 function onOrders() {
   const orders = state.bridge.orders || [];
   state.records = orders.map((o, index) => ({ o: o, index: index, key: str(o.Order_Number), hay: searchText(o) }));
-  measureColumns();
   renderKpis();
-  render();
+  refreshColumns();
 }
 
 function onTheme() {
@@ -586,6 +649,8 @@ function bind() {
     tableArea: "table-area", table: "table", scroller: "scroller", header: "header", rows: "rows",
     empty: "results-empty", noMatch: "results-no-match", noMatchClear: "no-match-clear",
     themeVars: "theme-vars",
+    columnsButton: "columns-button", pane: "pane", paneStrip: "pane-strip",
+    paneShow: "pane-show", columnsPanel: "columns-panel",
   };
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 
@@ -614,6 +679,8 @@ function bind() {
     layout();
     renderRows();
   }).observe(els.tableArea);
+  bindPane();
+  bindColumns();
 }
 
 bind();
@@ -638,6 +705,8 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   });
   bridge.exportEnabledChanged.connect(renderExport);
   bridge.focusSearchRequested.connect(() => els.search.focus());
+  bridge.columnsChanged.connect(onColumns);
+  state.columnSettings = Object.assign(state.columnSettings, bridge.columns || {});
   onOrders();
   window.resultsBridge = bridge;
   document.documentElement.dataset.bridge = "ready";

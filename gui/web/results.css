@@ -212,7 +212,23 @@ button, input { font: inherit; color: inherit; }
 /* min-width: 0 overrides the grid item's default min-content size, which
    would otherwise stretch to the row's 780px floor and push the whole page
    wider than the viewport instead of scrolling inside #scroller. */
-.table-area { position: relative; min-width: 0; min-height: 0; }
+/* The slot (Bundle 13 §6.1): pane or column manager 400 + 12, strip 36. */
+.table-area {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.table-area[data-slot="pane"],
+.table-area[data-slot="columns"] {
+  grid-template-columns: minmax(0, 1fr) 400px;
+  column-gap: var(--spacing-md);
+}
+.table-area[data-slot="strip"] { grid-template-columns: minmax(0, 1fr) 36px; }
+.table-area[data-slot="none"] .slot { display: none; }
+.table-wrap, .slot { position: relative; min-width: 0; min-height: 0; }
+.cell.filler { padding: 0; }
 
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
@@ -334,3 +350,212 @@ button, input { font: inherit; color: inherit; }
 }
 .state-title { margin: 0; font-weight: 700; }
 .state-text { margin: 0; max-width: 420px; color: var(--text-secondary); }
+
+/* --- detail pane and column manager planes (Bundle 13 §6.2, §6.9) ----------- */
+
+.pane, .columns-panel {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-lg);
+  overflow: hidden;
+  background: var(--surface-raised);   /* the Card rule, as the KPI cards */
+  border-radius: var(--radius-md);
+}
+.pane { gap: var(--spacing-md); }
+
+.pane-head { flex-shrink: 0; display: flex; align-items: center; gap: var(--spacing-sm); height: 28px; }
+.pane-order { font-family: var(--font-family-mono); font-size: var(--type-heading-size); font-weight: 700; }
+.pane-age, .pane-position { font-size: var(--type-caption-size); color: var(--text-secondary); white-space: nowrap; }
+.btn.pane-icon { width: 24px; height: 24px; }
+.glyph { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; vertical-align: middle; }
+
+.pane-who { flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.verdict { flex-shrink: 0; }
+.verdict[data-role="success"] { --role: var(--status-success); }
+.verdict[data-role="danger"] { --role: var(--status-danger); }
+.verdict[data-role="warning"] { --role: var(--status-warning); }
+.verdict-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--type-label-size);
+  font-weight: 700;
+}
+/* The mark (CONTEXT.md): hollow when detected by the run, solid when set by a person. */
+.mark { flex-shrink: 0; width: 8px; height: 8px; border: 1.5px solid var(--role); border-radius: 50%; }
+.mark.solid { background: var(--role); }
+.verdict-text {
+  margin: var(--spacing-xs) 0 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.verdict-source { margin: var(--spacing-xs) 0 0; font-size: var(--type-caption-size); color: var(--text-secondary); }
+.pane-numbers { flex-shrink: 0; font-size: var(--type-caption-size); color: var(--text-secondary); }
+
+/* Lines scroll inside the pane; the pane itself never scrolls. */
+.lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.line {
+  position: relative;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 48px 48px 24px;
+  align-items: center;
+  height: 28px;
+}
+.line.line-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-raised);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.line-cell { padding: 0 var(--spacing-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.line-cell.sku { font-family: var(--font-family-mono); }
+.line-cell.product { color: var(--text-secondary); }
+/* Short lines are edged, not tinted. */
+.line.short::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  background: var(--status-danger);
+}
+.btn.line-menu-button { visibility: hidden; width: 24px; height: 24px; padding: 0; }
+.line:hover .line-menu-button, .line:focus-within .line-menu-button { visibility: visible; }
+
+.pane-tags { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-xs); }
+.flag-chip {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
+.btn.small { height: 24px; padding: 0 var(--spacing-sm); font-size: var(--type-caption-size); }
+.pane-notes {
+  flex-shrink: 0;
+  margin: 0;
+  white-space: pre-line;
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.pane-actions { flex-shrink: 0; display: flex; gap: var(--spacing-sm); }
+
+.pane-menu { top: auto; max-height: 240px; }
+.pane-menu .new-tag {
+  display: block;
+  margin: var(--spacing-xs) var(--spacing-md);
+  width: calc(100% - 2 * var(--spacing-md));
+  height: var(--control-height);
+  padding: 0 var(--padding-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.pane-menu .new-tag:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+
+.pane-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  text-align: center;
+}
+
+.pane-strip { height: 100%; }
+.btn.strip-button { width: 36px; height: 28px; }
+
+.btn.secondary { border-color: var(--border); background: var(--surface); }
+.btn.secondary:hover { background: var(--hover); }
+.btn.secondary:active { background: var(--selection-bg); }
+.btn.danger { border-color: var(--status-danger); color: var(--status-danger); }
+.btn.danger:hover, .btn.danger:active { background: var(--status-danger-bg); }
+.btn.secondary:focus-visible, .btn.danger:focus-visible, .tag-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* --- the column manager (Bundle 13 §6.9) ------------------------------------ */
+/* 16 + 40 + 8 + 32 + 8 + scroller + 8 + 32 + 16 = 508, so the scroller is 348. */
+
+.columns-panel { gap: var(--spacing-sm); }
+
+.columns-head { flex-shrink: 0; display: flex; align-items: flex-start; height: 40px; }
+.columns-titles { min-width: 0; }
+.columns-title { font-size: var(--type-label-size); font-weight: 700; }
+.columns-count-line { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.btn.columns-close { width: 32px; height: 32px; }
+
+.columns-search {
+  flex: 0 0 32px;
+  width: 100%;
+  padding: 0 var(--padding-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.columns-search::placeholder { color: var(--text-placeholder); }
+.columns-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+
+.columns-scroller { flex: 1; min-height: 0; overflow-y: auto; }
+
+.col-group {
+  position: sticky;
+  top: 0;
+  z-index: 1; /* .col-row is positioned and comes later, so it paints over an auto z-index */
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: var(--surface-raised);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.col-group-count { font-weight: 400; letter-spacing: normal; }
+
+.col-row {
+  position: relative;
+  height: 30px;
+  display: grid;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+.col-row:hover { background: var(--hover); }
+.col-row:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.col-grip { display: flex; align-items: center; color: var(--text-secondary); cursor: grab; }
+.grip { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.col-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.col-title.muted { color: var(--text-secondary); }
+.col-note { font-size: var(--type-caption-size); color: var(--text-secondary); white-space: nowrap; }
+
+/* The insertion line a drop would land on. */
+.col-row[data-drop]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--focus-ring);
+}
+.col-row[data-drop="before"]::before { top: 0; }
+.col-row[data-drop="after"]::before { bottom: 0; }
+
+.columns-foot { flex: 0 0 32px; display: flex; align-items: center; gap: var(--spacing-sm); }
+.columns-hide-empty { display: flex; align-items: center; gap: var(--spacing-xs); white-space: nowrap; }
