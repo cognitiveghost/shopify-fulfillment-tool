@@ -4,7 +4,7 @@ import os
 import sys
 
 import pandas as pd
-from PySide6.QtCore import QThreadPool, Signal
+from PySide6.QtCore import QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -20,6 +20,7 @@ from gui.file_handler import FileHandler
 from gui.log_entry import LogEntry
 from gui.log_handler import QtLogHandler
 from gui.log_model import LogBufferModel
+from gui.results_bridge import normalize_column_settings
 from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
 from gui.worker import Worker
@@ -27,6 +28,7 @@ from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
 from shopify_tool.session_manager import SessionManager
+from shopify_tool.tag_manager import _normalize_tag_categories
 from shopify_tool.undo_manager import UndoManager
 
 logger = logging.getLogger(__name__)
@@ -120,8 +122,7 @@ class MainWindow(QMainWindow):
 
         GroupsManager captured base_path as a string, so a path that moved
         leaves it pointed at the old server and it has to be rebuilt.
-        SessionManager and TableConfigManager hold the ProfileManager itself
-        and follow it. ADR 0004.
+        SessionManager holds the ProfileManager itself and follows it. ADR 0004.
         """
         if self.profile_manager.recheck_connection():
             self.groups_manager = GroupsManager(
@@ -160,13 +161,8 @@ class MainWindow(QMainWindow):
                 base_path=str(self.profile_manager.base_path)
             )
 
-            # Initialize TableConfigManager for table customization
-            from gui.table_config_manager import TableConfigManager
-
-            self.table_config_manager = TableConfigManager(self, self.profile_manager)
-
             logger.info(
-                "ProfileManager, SessionManager, GroupsManager, and TableConfigManager initialized successfully"
+                "ProfileManager, SessionManager, and GroupsManager initialized successfully"
             )
         except Exception as e:
             QMessageBox.critical(
@@ -192,6 +188,7 @@ class MainWindow(QMainWindow):
 
             if config:
                 self.active_profile_config = config
+                self.push_tag_categories()
                 self.current_client_id = client_id
                 logger.info(f"Loaded configuration for CLIENT_{client_id}")
 
@@ -517,17 +514,17 @@ class MainWindow(QMainWindow):
 
     # --- Client and Session Management (New Architecture) ---
     def _load_client_data(self, client_id: str):
-        """Pure IO for a client switch -- no UI calls, safe to run in a Worker.
+        """Worker-thread IO for a client switch.
 
-        Returns (shopify_config, table_config). table_config is None if
-        table_config_manager isn't set up yet (mirrors the existing
-        `hasattr(self, "table_config_manager")` guard).
+        Returns (shopify_config, column_settings): the results table's saved
+        column layout, normalized (Bundle 13 spec §7.3).
         """
         shopify_config = self.profile_manager.load_shopify_config(client_id)
-        table_config = None
-        if hasattr(self, "table_config_manager"):
-            table_config = self.table_config_manager.load_config(client_id)
-        return shopify_config, table_config
+        client_config = self.profile_manager.load_client_config(client_id) or {}
+        column_settings = normalize_column_settings(
+            (client_config.get("ui_settings") or {}).get("results_columns")
+        )
+        return shopify_config, column_settings
 
     def _on_client_menu_requested(self, client_id: str, position):
         """The bar has no ProfileManager, so it asks for the menu here."""
@@ -574,7 +571,7 @@ class MainWindow(QMainWindow):
 
     def _on_client_data_loaded(self, client_id: str, result):
         """Apply client-switch IO results to the UI (main thread only)."""
-        shopify_config, table_config = result
+        shopify_config, column_settings = result
 
         if client_id != self.current_client_id:
             # User switched again before this load finished -- discard stale result.
@@ -603,9 +600,7 @@ class MainWindow(QMainWindow):
             # switch -- it's read throughout actions_handler.py/file_handler.py
             # for delimiters, column mappings, and tag categories.
             self.load_client_config(client_id)
-
-            if table_config is not None:
-                logger.info(f"Table configuration loaded for CLIENT_{client_id}")
+            self.results_bridge.set_column_settings(column_settings)
 
             # Clear currently loaded files (they're for different client)
             self.orders_file_path = None
@@ -640,6 +635,42 @@ class MainWindow(QMainWindow):
         _exctype, value, tb = error
         logger.error(f"Error loading client data: {value}\n{tb}")
         show_error(self, "The client couldn't be switched", "Details are in Logs.")
+
+    def schedule_results_columns_save(self, settings: dict):
+        """Debounced: a drag sends a burst of layouts, the share gets one write."""
+        self._pending_columns = (self.current_client_id, dict(settings))
+        if not hasattr(self, "_columns_save_timer"):
+            self._columns_save_timer = QTimer(self)
+            self._columns_save_timer.setSingleShot(True)
+            self._columns_save_timer.setInterval(500)
+            self._columns_save_timer.timeout.connect(self._flush_results_columns)
+        self._columns_save_timer.start()
+
+    def _flush_results_columns(self):
+        client_id, settings = self._pending_columns
+        if not client_id:
+            return
+        worker = Worker(self._write_results_columns, client_id, settings)
+        # A layout preference: a failed write is logged, and the next change retries.
+        worker.signals.error.connect(
+            lambda error: logger.warning(f"The column layout wasn't saved: {error[1]}")
+        )
+        self._columns_save_worker = worker  # see _client_load_worker for why
+        QThreadPool.globalInstance().start(worker)
+
+    def _write_results_columns(self, client_id: str, settings: dict):
+        config = self.profile_manager.load_client_config(client_id) or {}
+        config.setdefault("ui_settings", {})["results_columns"] = settings
+        self.profile_manager.save_client_config(client_id, config)
+
+    def push_tag_categories(self):
+        """The profile's tag vocabulary, for the pane's "+ Tag" menu."""
+        if hasattr(self, "results_bridge"):
+            self.results_bridge.set_tag_categories(
+                _normalize_tag_categories(
+                    (self.active_profile_config or {}).get("tag_categories", {})
+                )
+            )
 
     def on_sidebar_refresh(self):
         """Handle manual client list refresh request."""

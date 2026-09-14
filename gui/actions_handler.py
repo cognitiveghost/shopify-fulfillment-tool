@@ -377,6 +377,7 @@ class ActionsHandler(QObject):
                         self.mw.current_client_id
                     )
                 )
+                self.mw.push_tag_categories()
 
                 self.log.info("Re-validating files with updated settings...")
                 if self.mw.orders_file_path:
@@ -420,6 +421,7 @@ class ActionsHandler(QObject):
             try:
                 # Update config
                 self.mw.active_profile_config["tag_categories"] = updated_categories
+                self.mw.push_tag_categories()
 
                 # Save to file
                 self.mw.profile_manager.save_shopify_config(
@@ -482,6 +484,7 @@ class ActionsHandler(QObject):
 
             # Update main window config
             self.mw.active_profile_config = fresh_config
+            self.mw.push_tag_categories()
 
         except Exception:
             self.log.exception("Failed to load client configuration")

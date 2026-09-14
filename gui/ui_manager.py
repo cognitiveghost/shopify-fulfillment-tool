@@ -626,6 +626,30 @@ class UIManager:
         bridge.screenMenuRequested.connect(
             lambda: self.mw.results_menu.popup(QCursor.pos())
         )
+
+        # The detail pane's verbs (Bundle 13 spec §7.1). Resolved at call
+        # time: actions_handler is built after this tab.
+        def actions():
+            return self.mw.actions_handler
+
+        bridge.holdRequested.connect(
+            lambda n: actions().set_order_fulfillable(n, False)
+        )
+        bridge.fulfillRequested.connect(
+            lambda n: actions().set_order_fulfillable(n, True)
+        )
+        bridge.excludeRequested.connect(lambda n: actions().remove_entire_order(n))
+        bridge.lineRemovalRequested.connect(
+            lambda n, i, s: actions().remove_line(n, i, s)
+        )
+        bridge.tagAddRequested.connect(lambda n, t: actions().add_internal_tag(n, t))
+        bridge.tagRemovalRequested.connect(
+            lambda n, t: actions().remove_internal_tag(n, t)
+        )
+        bridge.columnSettingsChanged.connect(
+            lambda s: self.mw.schedule_results_columns_save(s)
+        )
+
         layout.addWidget(view, 1)
         return tab
 
