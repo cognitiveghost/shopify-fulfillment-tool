@@ -650,6 +650,25 @@ class UIManager:
             lambda s: self.mw.schedule_results_columns_save(s)
         )
 
+        # Bundle 14: the selection bar's verbs. The page sends the order list
+        # it counted, so the set written is the set the button named.
+        def bulk(name):
+            def run(order_numbers, *args):
+                handler = actions()
+                handler._set_selection(order_numbers)
+                getattr(handler, name)(order_numbers, *args)
+
+            return run
+
+        bridge.bulkStatusRequested.connect(bulk("bulk_change_status"))
+        bridge.bulkTagAddRequested.connect(bulk("bulk_add_tag"))
+        bridge.bulkTagRemovalRequested.connect(bulk("bulk_remove_tag"))
+        bridge.bulkExcludeRequested.connect(bulk("bulk_delete_orders"))
+        bridge.bulkSkuRemovalRequested.connect(bulk("bulk_remove_sku_from_orders"))
+        bridge.bulkOrderRemovalRequested.connect(bulk("bulk_remove_orders_with_sku"))
+        bridge.bulkExportRequested.connect(bulk("bulk_export_selection"))
+        bridge.undoRequested.connect(lambda: self.mw.undo_last_operation())
+
         layout.addWidget(view, 1)
         return tab
 
