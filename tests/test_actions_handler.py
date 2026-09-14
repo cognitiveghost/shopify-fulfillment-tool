@@ -13,7 +13,6 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 from PySide6.QtCore import QThreadPool
-from PySide6.QtWidgets import QMessageBox
 
 from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
@@ -199,7 +198,9 @@ def test_removing_an_item_asks_nothing_and_offers_undo(mw, monkeypatch):
     def refuse(*a, **k):
         raise AssertionError("an undoable removal must not confirm")
 
-    monkeypatch.setattr(QMessageBox, "question", refuse)
+    # ConfirmDialog, not QMessageBox: Bundle 14 took the last QMessageBox out
+    # of actions_handler, so patching that one could no longer fail.
+    monkeypatch.setattr("gui.actions_handler.ConfirmDialog.ask", refuse)
 
     ActionsHandler(mw).remove_item_from_order("1001", "SKU-A", row_position=1)
 

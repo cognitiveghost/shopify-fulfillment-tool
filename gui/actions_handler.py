@@ -249,7 +249,9 @@ class ActionsHandler(QObject):
             if hasattr(self.mw, "update_ui_state"):
                 self.mw.update_ui_state()
 
-            toast(self.mw, "Analysis complete.")
+            # Raised two lines after switching to the Results tab, so it is a
+            # Results-screen toast and belongs in the document (ADR 0007).
+            self._results_toast("Analysis complete.")
         else:
             self.log.error(f"Analysis failed: {result_msg}")
             show_error(self.mw, "The analysis didn't finish", "Details are in Logs.")
@@ -913,6 +915,17 @@ class ActionsHandler(QObject):
         """Act on exactly the orders the page counted, not on ambient state."""
         self.mw.selection_helper.set_selected_orders([str(n) for n in order_numbers])
 
+    def _orders_tag_changed(self, current_tags, new_tags) -> int:
+        """How many orders the tag write actually moved.
+
+        The popover's verb counts the orders the write will change -- the
+        selection minus the ones already carrying the tag on add, and only the
+        ones carrying it on remove -- and spec 6 requires the toast to repeat
+        that number rather than the size of the selection.
+        """
+        changed = new_tags.index[new_tags != current_tags]
+        return int(self.mw.analysis_results_df.loc[changed, "Order_Number"].nunique())
+
     def _results_toast(self, text: str, undoable: bool = False) -> None:
         """The Results screen's toast lives in the document (ADR 0007)."""
         bridge = getattr(self.mw, "results_bridge", None)
@@ -1309,8 +1322,10 @@ class ActionsHandler(QObject):
         # Step 9: Auto-save session state after modification
         self.mw.save_session_state()
 
-        # Step 10: Show success message
-        toast(self.mw, f"Added {quantity}x {sku} to order {order_num}.")
+        # Step 10: Show success message. This verb hangs off the Results
+        # screen's overflow menu, so its toast belongs in the document too
+        # (ADR 0007).
+        self._results_toast(f"Added {quantity}x {sku} to order {order_num}.")
 
         self.mw.log_activity(
             "Manual Addition", f"Added {quantity}x {sku} to order {order_num}"
@@ -1509,6 +1524,7 @@ class ActionsHandler(QObject):
 
         current_tags = self.mw.analysis_results_df.loc[mask, "Internal_Tags"]
         new_tags = current_tags.apply(lambda t: add_tag(t, tag_value))
+        tagged_count = self._orders_tag_changed(current_tags, new_tags)
         self.mw.analysis_results_df.loc[mask, "Internal_Tags"] = new_tags
 
         self.mw.undo_manager.record_operation(
@@ -1532,7 +1548,7 @@ class ActionsHandler(QObject):
         )
         self._update_undo_button()
         self._results_toast(
-            f"{tag_value} added to {_plural(orders_count, 'order')}", undoable=True
+            f"{tag_value} added to {_plural(tagged_count, 'order')}", undoable=True
         )
 
     def bulk_remove_tag(self, order_numbers, tag):
@@ -1555,6 +1571,7 @@ class ActionsHandler(QObject):
 
         current_tags = self.mw.analysis_results_df.loc[mask, "Internal_Tags"]
         new_tags = current_tags.apply(lambda t: remove_tag(t, tag_value))
+        untagged_count = self._orders_tag_changed(current_tags, new_tags)
         self.mw.analysis_results_df.loc[mask, "Internal_Tags"] = new_tags
 
         self.mw.undo_manager.record_operation(
@@ -1578,7 +1595,8 @@ class ActionsHandler(QObject):
         )
         self._update_undo_button()
         self._results_toast(
-            f"{tag_value} removed from {_plural(orders_count, 'order')}", undoable=True
+            f"{tag_value} removed from {_plural(untagged_count, 'order')}",
+            undoable=True,
         )
 
     def bulk_remove_sku_from_orders(self, order_numbers, sku):

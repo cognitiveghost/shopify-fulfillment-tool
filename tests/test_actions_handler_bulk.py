@@ -120,6 +120,25 @@ def test_bulk_add_tag_toasts_with_undo(handler, mw):
     )
 
 
+def test_bulk_add_tag_toasts_the_count_the_popover_promised(handler, mw):
+    """Spec section 6: "its count matches the count on the button that caused
+    it". 10443 already carries FRAGILE, so the popover's verb reads "Add to
+    2 orders" and the toast has to say two, not the whole selection's three.
+    """
+    handler.bulk_add_tag(["10443", "10444", "10445"], "FRAGILE")
+    mw.results_bridge.raise_toast.assert_called_once_with(
+        "FRAGILE added to 2 orders", undoable=True
+    )
+
+
+def test_bulk_remove_tag_toasts_only_the_orders_that_carried_it(handler, mw):
+    """The same rule the other way: only 10443 has FRAGILE to lose."""
+    handler.bulk_remove_tag(["10443", "10444", "10445"], "FRAGILE")
+    mw.results_bridge.raise_toast.assert_called_once_with(
+        "FRAGILE removed from 1 order", undoable=True
+    )
+
+
 def test_bulk_remove_tag_writes_from_its_arguments(handler, mw):
     handler.bulk_remove_tag(["10443"], "FRAGILE")
     tags = mw.analysis_results_df.loc[

@@ -295,3 +295,102 @@ def test_a_search_row_appears_only_above_ten_skus(qtbot, page):
     view, _ = page
     _open_sku(qtbot, view, ["10443"], "more-remove-sku")
     assert _eval(qtbot, view, "document.querySelectorAll('#bulk-search').length") == 0
+
+
+def test_the_remove_tag_list_is_ungrouped(qtbot, page):
+    """Spec section 5.2: "ungrouped -- a tag's category does not help you find
+    a tag you can see". The add list groups; this one must not."""
+    view, _ = page
+    _open_remove_tag(qtbot, view, ["10443"])
+    assert (
+        _eval(qtbot, view, "document.querySelectorAll('#bulk-list .menu-group').length")
+        == 0
+    )
+    assert _text(qtbot, view, "[data-tag='FRAGILE'] .bulk-count") == "on 1 of 1"
+
+
+def wide_sku_orders():
+    """#10443 carries 11 distinct SKUs, #10444 exactly 10 -- the two sides of
+    section 5.3's "the search row shows above 10 rows"."""
+    rows = []
+    for order, count in (("10443", 11), ("10444", 10)):
+        for i in range(count):
+            rows.append(
+                {
+                    "Order_Number": order,
+                    "SKU": f"{order}-SKU-{i:02d}",
+                    "Product_Name": "Product",
+                    "Quantity": 1,
+                    "Final_Stock": 10,
+                    "Order_Fulfillment_Status": "Fulfillable",
+                    "Shipping_Provider": "DPD",
+                    "Total_Price": 10.0,
+                    "Internal_Tags": "[]",
+                    "Customer": "A",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+@pytest.fixture
+def wide_page(qtbot):
+    view = QWebEngineView()
+    qtbot.addWidget(view)
+    bridge = mount_results_page(view)
+    view.resize(1366, 768)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    bridge.set_tag_categories(CATEGORIES)
+    bridge.set_orders(wide_sku_orders())
+    _until_js(qtbot, view, "document.querySelectorAll('#rows .row').length === 2")
+    return view, bridge
+
+
+def test_exactly_ten_skus_is_still_no_search_row(qtbot, wide_page):
+    view, _ = wide_page
+    _open_sku(qtbot, view, ["10444"], "more-remove-sku")
+    assert _eval(qtbot, view, "document.querySelectorAll('.bulk-row').length") == 10
+    assert _eval(qtbot, view, "document.querySelectorAll('#bulk-search').length") == 0
+
+
+def test_above_ten_skus_the_search_row_appears_and_filters(qtbot, wide_page):
+    view, _ = wide_page
+    _open_sku(qtbot, view, ["10443"], "more-remove-sku")
+    assert _eval(qtbot, view, "document.querySelectorAll('#bulk-search').length") == 1
+
+    _eval(
+        qtbot,
+        view,
+        "const s = document.getElementById('bulk-search');"
+        "s.value = 'SKU-07'; s.dispatchEvent(new Event('input', {bubbles: true})); true",
+    )
+    shown = _json(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('.bulk-row')].filter(r => !r.hidden)"
+        ".map(r => r.dataset.tag)",
+    )
+    assert shown == ["10443-SKU-07"]
+
+
+def test_the_arrows_skip_the_rows_the_search_hid(qtbot, wide_page):
+    """The walker filters on .hidden, so a filtered list must not step into
+    a row the operator cannot see."""
+    view, _ = wide_page
+    _open_sku(qtbot, view, ["10443"], "more-remove-sku")
+    _eval(
+        qtbot,
+        view,
+        "const s = document.getElementById('bulk-search');"
+        "s.value = 'SKU-0'; s.dispatchEvent(new Event('input', {bubbles: true})); true",
+    )
+    _eval(
+        qtbot,
+        view,
+        "const first = [...document.querySelectorAll('.bulk-row')]"
+        ".filter(r => !r.hidden)[0];"
+        "first.focus();"
+        "first.dispatchEvent(new KeyboardEvent('keydown', "
+        "{key: 'ArrowDown', bubbles: true})); true",
+    )
+    assert _eval(qtbot, view, "document.activeElement.dataset.tag") == "10443-SKU-01"

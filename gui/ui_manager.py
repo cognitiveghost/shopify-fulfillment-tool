@@ -651,14 +651,10 @@ class UIManager:
         )
 
         # Bundle 14: the selection bar's verbs. The page sends the order list
-        # it counted, so the set written is the set the button named.
+        # it counted, so the set written is the set the button named -- each
+        # handler sets the selection from that list itself, first thing.
         def bulk(name):
-            def run(order_numbers, *args):
-                handler = actions()
-                handler._set_selection(order_numbers)
-                getattr(handler, name)(order_numbers, *args)
-
-            return run
+            return lambda *args: getattr(actions(), name)(*args)
 
         bridge.bulkStatusRequested.connect(bulk("bulk_change_status"))
         bridge.bulkTagAddRequested.connect(bulk("bulk_add_tag"))

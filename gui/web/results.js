@@ -436,7 +436,7 @@ function layout() {
     renderSlot();
   }
   state.rowH = parseFloat(cssVar("--row-height")) || 28;
-  const barPx = els.selectionBar.hidden ? 0 : SELECTION_BAR_PX;
+  const barPx = els.selectionBar.hidden ? 0 : selectionBarPx();
   const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - barPx - HEADER_PX) / state.rowH));
   state.visible = rows;
   els.scroller.style.height = HEADER_PX + rows * state.rowH + "px";
@@ -675,7 +675,9 @@ function bind() {
     }
   });
   document.addEventListener("mousedown", (e) => {
-    if (!els.menu.hidden && !e.target.closest(".menu-anchor")) closeMenu();
+    // This menu's own anchor, not any .menu-anchor: the selection bar's More
+    // is one too, and clicking it used to leave this menu open behind it.
+    if (!els.menu.hidden && !e.target.closest("#filter-anchor")) closeMenu();
   });
   els.clearAll.addEventListener("click", clearFilters);
   els.noMatchClear.addEventListener("click", clearFilters);

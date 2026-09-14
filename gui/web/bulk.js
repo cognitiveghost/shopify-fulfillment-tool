@@ -4,7 +4,11 @@
 // Spec: docs/superpowers/specs/2026-09-14-phase9-bundle14-selection-bulk-design.md
 "use strict";
 
-const SELECTION_BAR_PX = 44;
+// The bar's height is CSS's to state (--selection-bar-height) and JS's to
+// read, so the row budget can never disagree with what is drawn.
+function selectionBarPx() {
+  return parseFloat(cssVar("--selection-bar-height")) || 44;
+}
 
 function selectedOrders() {
   return state.view.filter((r) => state.selected.has(r.key)).map((r) => r.o);
@@ -52,8 +56,9 @@ function renderSelectionBar() {
   if (s.value !== null) parts.push(fmtMoney(s.value));
   parts.push(countedWord(s.couriers, "courier"));
   els.selectionSub.textContent = parts.join(" · ");
-  els.selectionMark.textContent = n === 1 ? "Mark fulfillable" : "Mark " + n + " fulfillable";
-  els.selectionHold.textContent = n === 1 ? "Hold" : "Hold these " + n;
+  els.selectionMark.textContent =
+    n === 1 ? "Mark fulfillable" : "Mark " + NUMBER.format(n) + " fulfillable";
+  els.selectionHold.textContent = n === 1 ? "Hold" : "Hold these " + NUMBER.format(n);
 }
 
 function clearSelection() {
@@ -90,13 +95,16 @@ function bindSelectionBar() {
     }
   });
   // Capture phase: results.js's own Escape handler would otherwise clear the
-  // selection before this can close just the popover.
+  // selection before this can close just the innermost thing. Popover, then
+  // menu, then -- by falling through -- the selection (spec section 10).
   document.addEventListener(
     "keydown",
     (e) => {
-      if (e.key !== "Escape" || !document.getElementById("bulk-popover")) return;
+      if (e.key !== "Escape") return;
+      if (document.getElementById("bulk-popover")) closeBulkPopover();
+      else if (!els.selectionMenu.hidden) closeSelectionMenu();
+      else return;
       e.stopPropagation();
-      closeBulkPopover();
       els.selectionMore.focus();
     },
     { capture: true }
@@ -123,8 +131,16 @@ function moreItems() {
       run: () => openTagPopover("remove"),
     },
     { id: "more-copy", label: "Copy " + countedWord(n, "order number"), hint: "Ctrl+C", run: copySelection },
-    { id: "more-export-xlsx", label: "Export just these " + n + " to Excel", run: () => exportSelectionAs("xlsx") },
-    { id: "more-export-csv", label: "Export just these " + n + " to CSV", run: () => exportSelectionAs("csv") },
+    {
+      id: "more-export-xlsx",
+      label: "Export just these " + NUMBER.format(n) + " to Excel",
+      run: () => exportSelectionAs("xlsx"),
+    },
+    {
+      id: "more-export-csv",
+      label: "Export just these " + NUMBER.format(n) + " to CSV",
+      run: () => exportSelectionAs("csv"),
+    },
     { separator: true },
     { id: "more-remove-sku", label: "Remove a SKU from these " + orders, danger: true, run: () => openSkuPopover("line") },
     { id: "more-remove-orders", label: "Remove whole orders containing a SKU", danger: true, run: () => openSkuPopover("order") },
@@ -189,17 +205,24 @@ function tagRows(categories, exclude) {
   return rows;
 }
 
-function renderTagList(host, rows, counts, onPick) {
+// `badge` is {total, counts} or null for the pane, which wants no counts. A
+// row with no label is drawn without a group header -- remove-a-tag lists
+// tags you can already see, so a category does not help you find one.
+function renderTagList(host, rows, badge, onPick) {
   for (const row of rows) {
-    host.appendChild(el("div", "menu-group", row.label));
+    if (row.label) host.appendChild(el("div", "menu-group", row.label));
     for (const tag of row.tags) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "menu-item bulk-row";
       button.dataset.tag = tag;
       button.appendChild(document.createTextNode(tag));
-      const on = counts ? counts.get(tag) || 0 : 0;
-      if (on) button.appendChild(el("span", "bulk-count", "on " + on + " of " + counts.get("__total__")));
+      const on = badge ? badge.counts.get(tag) || 0 : 0;
+      if (on) {
+        button.appendChild(
+          el("span", "bulk-count", "on " + NUMBER.format(on) + " of " + NUMBER.format(badge.total))
+        );
+      }
       button.addEventListener("click", () => onPick(tag, button));
       host.appendChild(button);
     }
@@ -208,9 +231,7 @@ function renderTagList(host, rows, counts, onPick) {
 
 function tagCounts(tags) {
   const counts = new Map();
-  const orders = selectedOrders();
-  counts.set("__total__", orders.length);
-  for (const o of orders) {
+  for (const o of selectedOrders()) {
     for (const t of o.Tag_List || []) {
       const key = String(t);
       if (tags.has(key)) counts.set(key, (counts.get(key) || 0) + 1);
@@ -293,16 +314,17 @@ function openTagPopover(mode) {
   const categories = (state.bridge && state.bridge.tagCategories) || {};
   const present = new Set(selectionTags());
   const add = mode === "add";
-  const rows = add ? tagRows(categories, null) : [{ id: "on", label: "On these orders", tags: [...present] }];
+  // Section 5.2: the remove list is ungrouped, so its one row carries no label.
+  const rows = add ? tagRows(categories, null) : [{ id: "on", label: "", tags: [...present] }];
   const known = new Set();
   for (const row of rows) for (const t of row.tags) known.add(t);
-  const counts = tagCounts(known);
+  const badge = { total: n, counts: tagCounts(known) };
 
   openBulkPopover({
     title: (add ? "Add a tag to " : "Remove a tag from ") + orders,
     danger: false,
     fill: (host, onPick) => {
-      renderTagList(host, rows, counts, onPick);
+      renderTagList(host, rows, badge, onPick);
       if (!add) return;
       host.appendChild(el("div", "menu-group", "NEW"));
       const input = el("input", "new-tag");
@@ -319,10 +341,10 @@ function openTagPopover(mode) {
       host.appendChild(input);
     },
     verb: (tag) => {
-      const on = counts.get(tag) || 0;
+      const on = badge.counts.get(tag) || 0;
       if (add) {
         return on === n
-          ? { text: "Already on all " + n, disabled: true }
+          ? { text: "Already on all " + NUMBER.format(n), disabled: true }
           : { text: "Add to " + countedWord(n - on, "order"), disabled: false };
       }
       return { text: "Remove from " + countedWord(on, "order"), disabled: on === 0 };
@@ -335,13 +357,12 @@ function openTagPopover(mode) {
   });
 }
 
-const BULK_SEARCH_FROM = 10;
+// Section 5.3: "the search row shows above 10 rows" -- at exactly ten, no row.
+const BULK_SEARCH_ABOVE = 10;
 
 function skuCounts() {
   const counts = new Map();
-  const orders = selectedOrders();
-  counts.set("__total__", orders.length);
-  for (const o of orders) {
+  for (const o of selectedOrders()) {
     const own = new Set();
     for (const line of o.lines || []) {
       const sku = str(line.SKU).trim();
@@ -354,10 +375,10 @@ function skuCounts() {
 
 function openSkuPopover(mode) {
   const n = state.selected.size;
-  const counts = skuCounts();
-  const skus = [...counts.keys()]
-    .filter((k) => k !== "__total__")
-    .sort((a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b));
+  const badge = { total: n, counts: skuCounts() };
+  const skus = [...badge.counts.keys()].sort(
+    (a, b) => badge.counts.get(b) - badge.counts.get(a) || a.localeCompare(b)
+  );
   const line = mode === "line";
 
   openBulkPopover({
@@ -366,7 +387,7 @@ function openSkuPopover(mode) {
       : "Remove whole orders containing a SKU",
     danger: true,
     fill: (host, onPick) => {
-      if (skus.length >= BULK_SEARCH_FROM) {
+      if (skus.length > BULK_SEARCH_ABOVE) {
         const search = el("input", "bulk-search");
         search.id = "bulk-search";
         search.type = "search";
@@ -380,10 +401,10 @@ function openSkuPopover(mode) {
         });
         host.appendChild(search);
       }
-      renderTagList(host, [{ id: "skus", label: "SKUs on these orders", tags: skus }], counts, onPick);
+      renderTagList(host, [{ id: "skus", label: "SKUs on these orders", tags: skus }], badge, onPick);
     },
     verb: (sku) => {
-      const on = counts.get(sku) || 0;
+      const on = badge.counts.get(sku) || 0;
       return {
         text: (line ? "Remove from " : "Remove ") + countedWord(on, "order"),
         disabled: on === 0,

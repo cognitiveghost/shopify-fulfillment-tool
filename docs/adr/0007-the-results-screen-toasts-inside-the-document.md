@@ -6,11 +6,18 @@ Bundle 9 § 4.1 (the toast route), Bundle 13 § 9 (which deferred this here)
 
 ## The decision
 
-Every toast raised by the Results screen — the selection bar's bulk actions and
-the detail pane's per-order verbs alike — is emitted into the web document
-through `ResultsBridge.toastRaised` and drawn by `gui/web/bulk.js`. The Qt
-`Toast` component is not used on this screen. Everywhere else in both apps, it
-still is.
+Every toast raised by the Results screen — the selection bar's bulk actions, the
+detail pane's per-order verbs, the overflow menu's Add Product, the "Analysis
+complete" that lands the operator on the screen, and Undo — is emitted into the
+web document through `ResultsBridge.toastRaised` and drawn by `gui/web/bulk.js`.
+The Qt `Toast` component is not used on this screen. Everywhere else in both
+apps, it still is.
+
+Undo is the one that has to ask. `main_window_pyside.undo_last_operation` is
+reachable from the Results overflow menu and from the web toast's own Undo, but
+also from a global Ctrl+Z on any tab, so it picks its tier from whether the
+results view is currently visible. Everything else on this list is reachable
+only from the Results screen and goes straight to the document.
 
 Two implementations, one appearance. `shared/style_lint.py` scans both tiers
 and enforces the shared tokens; the duration, badge threshold, width and margin
@@ -52,5 +59,6 @@ carries an Undo also reachable from the rail, that is not a loss.
 
 Qt gaining a reliable way to composite a child widget above a
 `QWebEngineView`'s surface on Windows, which is the only platform this app
-ships to. If that happens, the web toast is deleted and the eleven call sites
-in `actions_handler.py` go back to `toast()`.
+ships to. If that happens, the web toast is deleted, the eleven
+`_results_toast` call sites in `actions_handler.py` go back to `toast()`, and
+`undo_last_operation` stops asking which tier to use.

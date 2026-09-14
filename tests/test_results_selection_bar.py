@@ -137,6 +137,21 @@ def test_the_bar_takes_its_height_from_the_table(qtbot, page):
     assert before - after == 1
 
 
+def test_the_row_budget_reads_the_bar_height_from_css(qtbot, page):
+    """CSS states the height and JS reads it back, so the two can never
+    disagree about how much the bar costs the table (spec section 3.1)."""
+    view, _ = page
+    assert _eval(qtbot, view, "selectionBarPx()") == 44
+    assert (
+        _eval(
+            qtbot,
+            view,
+            "getComputedStyle(document.getElementById('selection-bar')).height",
+        )
+        == "44px"
+    )
+
+
 def test_mounting_the_bar_does_not_move_focus(qtbot, page):
     view, _ = page
     _eval(qtbot, view, "document.getElementById('search').focus(); true")
@@ -235,3 +250,94 @@ def test_export_items_send_their_format(qtbot, page):
     with qtbot.waitSignal(bridge.bulkExportRequested, timeout=3000) as blocker:
         _eval(qtbot, view, "document.getElementById('more-export-csv').click(); true")
     assert list(blocker.args) == [["10443"], "csv"]
+
+
+def _escape(qtbot, view):
+    _eval(
+        qtbot,
+        view,
+        "document.dispatchEvent(new KeyboardEvent('keydown', "
+        "{key: 'Escape', bubbles: true})); true",
+    )
+
+
+def test_escape_closes_the_more_menu_and_keeps_the_selection(qtbot, page):
+    """Spec section 10: Escape closes the innermost thing -- popover, then
+    menu, then the selection. With the menu open it is the menu's turn."""
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    assert (
+        _eval(qtbot, view, "document.getElementById('selection-menu').hidden") is False
+    )
+
+    _escape(qtbot, view)
+
+    assert (
+        _eval(qtbot, view, "document.getElementById('selection-menu').hidden") is True
+    )
+    assert _eval(qtbot, view, "state.selected.size") == 1
+    assert _eval(qtbot, view, "document.activeElement.id") == "selection-more"
+
+
+def test_escape_with_nothing_open_still_clears_the_selection(qtbot, page):
+    """The fall-through: once the menu and the popover are shut, Escape goes
+    back to meaning what it meant before this bundle. Dispatched on the table,
+    which is where results.js binds the handler that clears the selection.
+    """
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    _eval(
+        qtbot,
+        view,
+        "document.getElementById('table').dispatchEvent(new KeyboardEvent("
+        "'keydown', {key: 'Escape', bubbles: true})); true",
+    )
+    assert _eval(qtbot, view, "state.selected.size") == 0
+
+
+def test_escape_closes_the_menu_before_it_clears_the_selection(qtbot, page):
+    """Innermost first: the same key on the same element must shut the menu
+    and leave the selection alone, then clear it on a second press."""
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+
+    def escape_on_table():
+        _eval(
+            qtbot,
+            view,
+            "document.getElementById('table').dispatchEvent(new KeyboardEvent("
+            "'keydown', {key: 'Escape', bubbles: true})); true",
+        )
+
+    escape_on_table()
+    assert (
+        _eval(qtbot, view, "document.getElementById('selection-menu').hidden") is True
+    )
+    assert _eval(qtbot, view, "state.selected.size") == 1
+
+    escape_on_table()
+    assert _eval(qtbot, view, "state.selected.size") == 0
+
+
+def test_opening_more_closes_the_filter_menu(qtbot, page):
+    """Both hang off a .menu-anchor, so the filter menu's outside-click guard
+    used to treat a click on More as a click on itself."""
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    _eval(qtbot, view, "document.getElementById('add-filter').click(); true")
+    assert _eval(qtbot, view, "document.getElementById('filter-menu').hidden") is False
+
+    _eval(
+        qtbot,
+        view,
+        "document.getElementById('selection-more').dispatchEvent("
+        "new MouseEvent('mousedown', {bubbles: true}));"
+        "document.getElementById('selection-more').click(); true",
+    )
+
+    assert _eval(qtbot, view, "document.getElementById('filter-menu').hidden") is True
+    assert (
+        _eval(qtbot, view, "document.getElementById('selection-menu').hidden") is False
+    )

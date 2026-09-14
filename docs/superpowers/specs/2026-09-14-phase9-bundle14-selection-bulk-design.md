@@ -83,13 +83,14 @@ is a bar you act on before it has arrived, and `shared/style_lint.py` bans
 `layout()` loses 44px from the row budget when the bar is up:
 
 ```js
-const SELECTION_BAR_PX = 44;
-const barPx = els.selectionBar.hidden ? 0 : SELECTION_BAR_PX;
+const barPx = els.selectionBar.hidden ? 0 : selectionBarPx();
 const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - barPx - HEADER_PX) / state.rowH));
 ```
 
-At 768 that is 17 rows without a selection and 15 with one. The rows come off
-the table, never out from under it.
+44px against a 28px row is a row and a half, so the floor drops exactly one:
+at 768 that is 17 rows without a selection and 16 with one. (An earlier draft
+of this line said 15. It is one row, and `test_results_selection_bar.py` pins
+`before - after == 1`.) The rows come off the table, never out from under it.
 
 ### 3.2 Anatomy, left to right
 
@@ -323,15 +324,22 @@ a footer. Rather than a second list builder that has to be kept looking like the
 first, `bulk.js` exports one:
 
 ```js
-// rows: [{ id, label, tags: [{ tag, count }] }], count omitted for the pane
-function tagRows(categories, exclude)      // grouping and filtering, no DOM
-function renderTagList(host, rows, onPick) // DOM, no policy
+// rows:  [{ id, label, tags: [tag] }]  -- an empty label draws no group header
+// badge: { total, counts: Map(tag -> n) } or null for the pane, which wants none
+function tagRows(categories, exclude)             // grouping and filtering, no DOM
+function renderTagList(host, rows, badge, onPick) // DOM, no policy
 ```
 
-The pane passes its order's own tags as `exclude` and no counts; the popover
-passes nothing as `exclude` and counts from the selection. Two real callers, so
-the seam is real rather than hypothetical. If a third ever wants it, it is
-already the interface.
+The pane passes its order's own tags as `exclude` and `null` for `badge`; the
+popover passes nothing as `exclude` and `{total, counts}` from the selection.
+Two real callers, so the seam is real rather than hypothetical. If a third ever
+wants it, it is already the interface.
+
+`badge` carries the total beside the counts rather than inside the same map:
+the row badge reads `on 6 of 34`, and a selection size hidden under a reserved
+key in a map of tag names is a tag called `__total__` waiting to corrupt it.
+A row whose `label` is empty is drawn with no group header, which is how § 5.2
+gets its ungrouped remove-a-tag list out of the same builder.
 
 Deleting `renderTagList` would push the same twenty lines of grouped-list DOM
 into two files — which is the test for whether it earns its keep.

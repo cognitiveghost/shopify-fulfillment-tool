@@ -248,3 +248,75 @@ def test_undo_with_nothing_to_undo_says_nothing(main_window, monkeypatch):
 
     toasts.assert_not_called()
     assert main_window.error_banner.isHidden()
+
+
+class _OneShotUndo:
+    """An undo manager with exactly one operation left in it."""
+
+    def __init__(self):
+        self.done = False
+
+    def can_undo(self):
+        return not self.done
+
+    def undo(self):
+        self.done = True
+        return True, "Undid the last thing"
+
+    def get_undo_description(self):
+        return None
+
+
+@pytest.fixture
+def one_shot_undo(main_window, monkeypatch):
+    main_window.undo_manager = _OneShotUndo()
+    monkeypatch.setattr(main_window, "_update_all_views", Mock())
+    monkeypatch.setattr(main_window, "save_session_state", Mock())
+    monkeypatch.setattr(main_window, "log_activity", Mock())
+    return main_window
+
+
+def test_undo_tells_the_results_page_there_is_nothing_left_to_undo(
+    one_shot_undo, monkeypatch
+):
+    """Spec section 6: a toast whose operation has already been undone must
+    stop offering Undo. That only holds if undo_last_operation pushes the new
+    undoAvailable across the bridge, not just repaints the Qt button.
+    """
+    monkeypatch.setattr("gui.main_window_pyside.toast", Mock())
+    one_shot_undo.results_bridge.set_undo_available(True)
+
+    one_shot_undo.undo_last_operation()
+
+    assert one_shot_undo.results_bridge.undoAvailable is False
+
+
+def test_undo_toasts_into_the_document_while_the_results_screen_shows(
+    one_shot_undo, monkeypatch
+):
+    """ADR 0007: a Qt toast raised over the results view lands behind it."""
+    qt_toast = Mock()
+    monkeypatch.setattr("gui.main_window_pyside.toast", qt_toast)
+    monkeypatch.setattr(one_shot_undo.results_view, "isVisible", lambda: True)
+    raised = Mock()
+    monkeypatch.setattr(one_shot_undo.results_bridge, "raise_toast", raised)
+
+    one_shot_undo.undo_last_operation()
+
+    raised.assert_called_once_with("Undid the last thing")
+    qt_toast.assert_not_called()
+
+
+def test_undo_keeps_the_qt_toast_when_another_screen_shows(one_shot_undo, monkeypatch):
+    """The other side of the same branch: off the Results screen the Qt toast
+    is the visible one, so rerouting everything would lose the message."""
+    qt_toast = Mock()
+    monkeypatch.setattr("gui.main_window_pyside.toast", qt_toast)
+    monkeypatch.setattr(one_shot_undo.results_view, "isVisible", lambda: False)
+    raised = Mock()
+    monkeypatch.setattr(one_shot_undo.results_bridge, "raise_toast", raised)
+
+    one_shot_undo.undo_last_operation()
+
+    qt_toast.assert_called_once()
+    raised.assert_not_called()
