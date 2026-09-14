@@ -73,7 +73,7 @@ repeat its reasoning.
   `undoAvailableChanged`; Python-facing `set_undo_available(bool)` and
   `raise_toast(str, undoable=False)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_results_bridge_bulk.py`:
 
@@ -164,12 +164,12 @@ def test_raise_toast_emits_text_and_undoability(bridge):
     assert seen == [("3 orders held", False), ("FRAGILE added to 28 orders", True)]
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bridge_bulk.py -q`
 Expected: every test errors with `AttributeError: 'ResultsBridge' object has no attribute 'setStatus'` or similar.
 
-- [ ] **Step 3: Add the members**
+- [x] **Step 3: Add the members**
 
 In `gui/results_bridge.py`, beside the Bundle 13 signals, add:
 
@@ -267,12 +267,12 @@ def _orders(raw) -> list[str]:
     return list(dict.fromkeys(str(n) for n in (raw or [])))
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bridge_bulk.py -q`
 Expected: 11 passed.
 
-- [ ] **Step 5: Record the catalogue amendment**
+- [x] **Step 5: Record the catalogue amendment**
 
 The catalogue in
 `docs/superpowers/specs/2026-09-11-phase9-bundle11-seam-design.md` § 5.2 must
@@ -286,7 +286,7 @@ block, matching the table's existing format:
 | in | `exportSelection(orderNumbers: list[str], fmt: str)` | slot | 14 (9.17) — added by Bundle 14 §8.1; `fmt` is `"xlsx"` or `"csv"`, validated Python-side |
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gui/results_bridge.py tests/test_results_bridge_bulk.py docs/superpowers/specs/2026-09-11-phase9-bundle11-seam-design.md
@@ -332,7 +332,7 @@ The three destructive verbs (`bulk_delete_orders`,
 but as `ConfirmDialog.ask(...)` rather than `QMessageBox.question`, with the
 copy from spec § 5.3.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_actions_handler_bulk.py`. The fixture builds a real
 `ActionsHandler` against a stub main window — follow the pattern in
@@ -424,14 +424,14 @@ Write the same four-part shape (`writes from arguments`, `records undo`,
 `(str(tmp_path / "s.csv"), "")` and assert the file exists and the toast names
 it.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_actions_handler_bulk.py -q`
 Expected: `test_no_input_dialog_survives_in_actions_handler` fails on the
 assertion; the rest fail on `TypeError: bulk_change_status() takes 2 positional
 arguments but 3 were given`.
 
-- [ ] **Step 3: Add the two helpers**
+- [x] **Step 3: Add the two helpers**
 
 In `gui/actions_handler.py`, beside `_order_mask`:
 
@@ -451,7 +451,7 @@ Import `ConfirmDialog` at the top: `from gui.components import ConfirmDialog,
 show_error, toast` — check `gui/components/__init__.py` exports it, and add it
 to `__all__` there if it does not.
 
-- [ ] **Step 4: Rewrite the seven handlers and delete `add_tag_manually`**
+- [x] **Step 4: Rewrite the seven handlers and delete `add_tag_manually`**
 
 Work one handler at a time, running its tests after each. Delete
 `add_tag_manually` entirely, then remove `QInputDialog` from the
@@ -466,14 +466,14 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 ```
 
-- [ ] **Step 5: Run the whole file and watch it pass**
+- [x] **Step 5: Run the whole file and watch it pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_actions_handler_bulk.py tests/test_actions_handler.py -q`
 Expected: all pass. If a pre-existing test in `test_actions_handler.py` calls
 one of these verbs with no arguments, update it — the signature change is the
 point of this task.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gui/actions_handler.py gui/components/__init__.py tests/test_actions_handler_bulk.py tests/test_actions_handler.py
@@ -493,7 +493,7 @@ git commit -m "Bundle 14: the bulk verbs take arguments and raise no dialogs"
 - Consumes: Task 1's signals, Task 2's handler signatures.
 - Produces: nothing new; the seam is closed after this task.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_results_bridge_bulk.py`:
 
@@ -507,12 +507,12 @@ def test_update_undo_button_pushes_availability_to_the_page(handler, mw):
 Reuse the `handler` / `mw` fixtures from Task 2 by moving them into
 `tests/conftest.py` if they are not already shared.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bridge_bulk.py -q`
 Expected: `AssertionError: Expected call not found`.
 
-- [ ] **Step 3: Add the connections and the push**
+- [x] **Step 3: Add the connections and the push**
 
 In `gui/ui_manager.py`, directly after the Bundle 13 block that ends with
 `bridge.columnSettingsChanged.connect(...)`:
@@ -549,12 +549,12 @@ In `actions_handler._update_undo_button`, add as its last line:
             bridge.set_undo_available(self.mw.undo_manager.can_undo())
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bridge_bulk.py tests/test_ui_manager.py -q`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gui/ui_manager.py gui/actions_handler.py tests/
@@ -580,7 +580,7 @@ git commit -m "Bundle 14: the bulk verbs reach the page"
   constant `SELECTION_BAR_PX = 44`. `results.js` calls `renderSelectionBar()`
   from `render()`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_results_selection_bar.py`, driving a real page the way
 `tests/test_results_pane.py` does — copy that file's fixture and its
@@ -655,12 +655,12 @@ Pin the fixture's order payload so `19 units`, `334.60` and `2 couriers` are
 the true numbers for those three orders — build it explicitly in the fixture
 rather than reusing a shared one whose values may move.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_selection_bar.py -q`
 Expected: every test fails — `#selection-bar` does not exist.
 
-- [ ] **Step 3: Add the markup**
+- [x] **Step 3: Add the markup**
 
 In `gui/web/results.html`, inside `.table-wrap`, immediately above
 `<div id="table" …>`:
@@ -689,7 +689,7 @@ In `gui/web/results.html`, inside `.table-wrap`, immediately above
 And add `<script src="bulk.js" defer></script>` between the `pane.js` and
 `results.js` script tags.
 
-- [ ] **Step 4: Add the CSS**
+- [x] **Step 4: Add the CSS**
 
 In `gui/web/results.css`:
 
@@ -714,7 +714,7 @@ In `gui/web/results.css`:
 }
 ```
 
-- [ ] **Step 5: Write `bulk.js`**
+- [x] **Step 5: Write `bulk.js`**
 
 Create `gui/web/bulk.js`. Every name from `results.js` is referenced inside a
 function body only:
@@ -803,7 +803,7 @@ then, add two no-op stubs at the bottom of the file and delete them when the
 real ones land — a `ReferenceError` inside `renderSelectionBar` would break
 every test in this task.
 
-- [ ] **Step 6: Hook it into `results.js`**
+- [x] **Step 6: Hook it into `results.js`**
 
 Add the element lookups where `els` is populated (match the existing style in
 that function — `els.selectionBar = document.getElementById("selection-bar")`
@@ -826,12 +826,12 @@ In `layout()`, replace the `rows` line with:
 In `renderExport()`, leave the text and `disabled` logic alone —
 `renderSelectionBar` owns the class now.
 
-- [ ] **Step 7: Run it and watch it pass**
+- [x] **Step 7: Run it and watch it pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_selection_bar.py -q`
 Expected: 9 passed.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gui/web/ tests/test_results_selection_bar.py
@@ -852,7 +852,7 @@ git commit -m "Bundle 14: the selection bar mounts with the selection"
 - Produces: `openSelectionMenu()`, `closeSelectionMenu()`, and
   `moreItems()` returning `[{id, label, hint, danger, disabled, title, run}]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/test_results_selection_bar.py`:
 
@@ -922,12 +922,12 @@ def test_export_items_send_their_format(page, bridge_calls):
 such helper, install a recording stub over `state.bridge`'s methods in JS and
 read the record back with `_eval`.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_selection_bar.py -q -k "more or copy or ctrl or export_items"`
 Expected: failures — `#selection-menu` renders nothing.
 
-- [ ] **Step 3: Build the menu**
+- [x] **Step 3: Build the menu**
 
 In `gui/web/bulk.js`, replacing the `closeSelectionMenu` stub:
 
@@ -1023,7 +1023,7 @@ Add to `bindSelectionBar()`:
   });
 ```
 
-- [ ] **Step 4: Add the CSS and the shortcut**
+- [x] **Step 4: Add the CSS and the shortcut**
 
 In `results.css`:
 
@@ -1047,12 +1047,12 @@ In `results.js`'s document keydown handler, beside the existing shortcuts:
   }
 ```
 
-- [ ] **Step 5: Run it and watch it pass**
+- [x] **Step 5: Run it and watch it pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_selection_bar.py -q`
 Expected: 15 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gui/web/ tests/test_results_selection_bar.py
@@ -1077,7 +1077,7 @@ git commit -m "Bundle 14: More, Copy and the two export routes"
   `openBulkPopover({anchor, title, rows, counts, verb, onCommit, danger})`;
   `closeBulkPopover()`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_results_bulk_popover.py`, with the same page fixture as
 Task 4:
@@ -1184,12 +1184,12 @@ Give the page fixture a `tagCategories` of exactly
 "priority": {"label": "Priority", "tags": ["URGENT"]}}` and put `FRAGILE` on
 order 10443 only, so every count above is the true one.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bulk_popover.py -q`
 Expected: failures — no `#bulk-popover` exists.
 
-- [ ] **Step 3: Write the shared builder and the popover**
+- [x] **Step 3: Write the shared builder and the popover**
 
 In `gui/web/bulk.js`:
 
@@ -1364,7 +1364,7 @@ ordering by running `test_escape_closes_the_popover_and_keeps_the_selection`;
 if `results.js` wins, register this one in the capture phase
 (`{capture: true}`).
 
-- [ ] **Step 4: Move the pane onto the shared builder**
+- [x] **Step 4: Move the pane onto the shared builder**
 
 In `gui/web/pane.js`, replace `openTagMenu`'s grouping loop with a call to the
 shared pair, keeping every other line of the function as it is:
@@ -1384,7 +1384,7 @@ function openTagMenu(anchor, o) {
 `renderTagList` gives its rows `class="menu-item bulk-row"`, which the pane's
 CSS already styles through `.menu-item`. Do not add a pane-specific rule.
 
-- [ ] **Step 5: Add the popover CSS**
+- [x] **Step 5: Add the popover CSS**
 
 ```css
 .bulk-popover {
@@ -1417,14 +1417,14 @@ CSS already styles through `.menu-item`. Do not add a pane-specific rule.
 `.selection-bar` needs `position: relative` for the popover's anchoring — add
 it to that rule.
 
-- [ ] **Step 6: Run both files and watch them pass**
+- [x] **Step 6: Run both files and watch them pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bulk_popover.py tests/test_results_pane.py -q`
 Expected: all pass. `test_results_pane.py` must pass **without being edited** —
 if it does not, the shared builder changed the pane's behaviour and the builder
 is wrong, not the test.
 
-- [ ] **Step 7: Walk the rows with the arrows**
+- [x] **Step 7: Walk the rows with the arrows**
 
 Spec § 10: inside a popover the arrows walk rows and Enter picks — the same
 gesture `columns.js` already uses. Add the test:
@@ -1459,7 +1459,7 @@ Enter needs no handler: the rows are `<button>`s, so Enter clicks them.
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bulk_popover.py -q`
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add gui/web/ tests/
@@ -1479,7 +1479,7 @@ git commit -m "Bundle 14: one tag picker, two callers, and the add/remove-tag po
 - Produces: `openSkuPopover(mode)` where `mode` is `"line"` or `"order"`, and
   `skuCounts()` returning a `Map` of SKU → number of selected orders carrying it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def _open_sku(page, orders, item):
@@ -1534,12 +1534,12 @@ def test_a_search_row_appears_only_above_ten_skus(page):
     assert _eval(page, "document.querySelectorAll('#bulk-search').length") == 0
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bulk_popover.py -q -k sku`
 Expected: `openSkuPopover is not defined`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `gui/web/bulk.js`, replacing the `openSkuPopover` stub:
 
@@ -1609,12 +1609,12 @@ The search input is inside the scroller so it scrolls away; that matches the
 column manager, whose search sits in the chrome — accept the difference here
 because this list is short and the search appears only when it is not.
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_bulk_popover.py -q`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add gui/web/bulk.js tests/test_results_bulk_popover.py
@@ -1635,7 +1635,7 @@ git commit -m "Bundle 14: the two SKU removals, restored behind one popover"
 - Consumes: Task 1's `toastRaised` and `undoAvailable`.
 - Produces: `raiseToast(text, undoable)`, `bindToast()`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_results_toast.py`:
 
@@ -1699,12 +1699,12 @@ def test_it_dismisses_itself(page, bridge):
 `_wait_until` polls `_eval` — reuse `tests/test_results_pane.py`'s waiting
 helper if it has one rather than writing a second.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_toast.py -q`
 Expected: failures — `#toast` does not exist.
 
-- [ ] **Step 3: Markup and CSS**
+- [x] **Step 3: Markup and CSS**
 
 In `results.html`, as the last child of `<main id="results">`:
 
@@ -1749,7 +1749,7 @@ stay equal to it:
 
 `#results` needs `position: relative` if it does not already have it.
 
-- [ ] **Step 4: The JS**
+- [x] **Step 4: The JS**
 
 In `gui/web/bulk.js`:
 
@@ -1795,7 +1795,7 @@ and connect the signal where the other bridge signals are connected:
     state.bridge.toastRaised.connect((text, undoable) => raiseToast(text, undoable));
 ```
 
-- [ ] **Step 5: Reroute the pane's three verbs**
+- [x] **Step 5: Reroute the pane's three verbs**
 
 In `gui/actions_handler.py`, change the `toast(...)` calls inside
 `remove_entire_order`, `remove_line` and `set_order_fulfillable` to
@@ -1804,12 +1804,12 @@ every other `toast(...)` call in the file and in the app untouched — this is a
 Results-screen change only. If `set_order_fulfillable` raises no toast today
 (the pane shows the change), leave it alone.
 
-- [ ] **Step 6: Run it and watch it pass**
+- [x] **Step 6: Run it and watch it pass**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_results_toast.py tests/test_results_pane.py -q`
 Expected: all pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add gui/web/ gui/actions_handler.py tests/test_results_toast.py
@@ -1823,17 +1823,17 @@ git commit -m "Bundle 14: the Results screen toasts inside its own document"
 **Files:**
 - Modify: whatever the gate turns up.
 
-- [ ] **Step 1: The whole suite**
+- [x] **Step 1: The whole suite**
 
 Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q`
 Expected: every test passes. The baseline before this bundle was 1664.
 
-- [ ] **Step 2: Lint**
+- [x] **Step 2: Lint**
 
 Run: `.venv/bin/python -m ruff check . --exclude shared`
 Expected: no findings.
 
-- [ ] **Step 3: Style lint, both tiers**
+- [x] **Step 3: Style lint, both tiers**
 
 ```bash
 .venv/bin/python -c "
@@ -1845,19 +1845,19 @@ print('\n'.join(find_style_literals([Path('gui'), Path('shopify_tool')])) or 'cl
 Expected: `clean`. A hex literal, a `box-shadow`, a `transition` or a
 non-token colour in `bulk.js` or `results.css` fails here.
 
-- [ ] **Step 4: The Done-when, by hand**
+- [x] **Step 4: The Done-when, by hand**
 
 ```bash
 grep -n "QInputDialog" gui/actions_handler.py || echo "no QInputDialog: done-when met"
 ```
 Expected: the `echo`.
 
-- [ ] **Step 5: Refresh the graph**
+- [x] **Step 5: Refresh the graph**
 
 Run: `graphify update .`
 Expected: it completes. The repo's CLAUDE.md requires this after any code change.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
