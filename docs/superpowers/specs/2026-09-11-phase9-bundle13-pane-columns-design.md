@@ -300,7 +300,7 @@ lines, and `plural()` is the helper `results.js` already has.
 | Case | Title | Text | Source line |
 |---|---|---|---|
 | `ready` | **Ships complete** | `All {n} lines are in stock and reserved for this order. One parcel, {units} units{, value}. Nothing is waiting on anyone.` (`n == 1`: `Its one line is in stock…`) | — |
-| `short` | **Cannot ship: {k} of {n} lines are short** | problem sentences, then ` The other {n−k} lines are covered.` when `n > k` | — |
+| `short` | **Cannot ship: {k} of {n} lines are short** (`k == 1`: `… is short`) | problem sentences, then ` The other {n−k} lines are covered.` when `n > k` (`n − k == 1`: ` The other line is covered.`) | — |
 | `review`, not by hand | **Fix the data before this ships** | problem sentences | **Detected by the run, not set by a person.** |
 | `review`, by hand, fulfillable | **Marked fulfillable by hand** | `The run could not ship it. ` + problem sentences + ` Someone marked it fulfillable anyway.` | **Set by a person, not detected by the run.** |
 | `review`, by hand, not fulfillable | **On hold** | `Nothing in this order is short now. It stays blocked until someone marks it fulfillable.` | **Set by a person, not detected by the run.** |
