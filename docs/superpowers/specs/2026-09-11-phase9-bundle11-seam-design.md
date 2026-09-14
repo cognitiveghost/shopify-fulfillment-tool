@@ -209,6 +209,7 @@ nothing else.
 | in | `setVisibleColumns(names: list[str])` | slot | 13 (9.16) |
 | in | `resetColumns()` | slot | 13 (9.16) |
 | in | `setAutoHideEmpty(on: bool)` | slot | 13 (9.16) |
+| out | `columnSettingsChanged(settings: dict)` | signal | 13 (9.16) — the four column slots all emit it; `MainWindow` saves the layout per client |
 | in | `addTag(orderNumbers: list[str], tag: str)` | slot | 14 (9.17) |
 | in | `removeTag(orderNumbers: list[str], tag: str)` | slot | 14 (9.17) |
 | in | `excludeOrders(orderNumbers: list[str])` | slot | 14 (9.17) |

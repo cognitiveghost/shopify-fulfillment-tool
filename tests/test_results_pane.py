@@ -242,6 +242,17 @@ def test_the_tag_menu_offers_only_tags_the_order_lacks(qtbot, doc):
     assert list(blocker.args) == ["#10449", "rush"]
 
 
+def test_choosing_a_tag_returns_focus_to_add_tag(qtbot, doc):
+    """Spec §6.5: a choice closes the menu and focus returns to "+ Tag"."""
+    view, bridge = doc
+    _select(qtbot, view, "#10449")
+    _js(qtbot, view, "document.getElementById('pane-add-tag').click()")
+    with qtbot.waitSignal(bridge.tagAddRequested, timeout=3000):
+        _js(qtbot, view, _menu_item("tag-menu", "rush"))
+    assert _eval(qtbot, view, "document.querySelectorAll('.pane-menu').length") == 0
+    assert _eval(qtbot, view, "document.activeElement.id") == "pane-add-tag"
+
+
 def test_a_new_tag_is_typed_and_entered(qtbot, doc):
     view, bridge = doc
     _select(qtbot, view, "#10443")

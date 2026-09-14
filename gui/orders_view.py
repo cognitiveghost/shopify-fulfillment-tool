@@ -120,19 +120,22 @@ def classify_columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
     return order_level, line_level
 
 
+def _blank(value) -> bool:
+    """Missing in the sense the notes column means: no note at all."""
+    return (
+        value is None or value is pd.NA or (isinstance(value, float) and pd.isna(value))
+    )
+
+
 def _first_blocker(notes) -> str:
     """The reason out of the first System_note that carries one, else ""."""
     for note in notes:
-        if note is None or (isinstance(note, float) and pd.isna(note)):
+        if _blank(note):
             continue
         _, sep, tail = str(note).partition(BLOCKER_PREFIX)
         if sep:
             return tail
     return ""
-
-
-def _blank(value) -> bool:
-    return value is None or (isinstance(value, float) and pd.isna(value))
 
 
 def _reason_problems(notes) -> list[dict]:

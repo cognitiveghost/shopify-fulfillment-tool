@@ -516,6 +516,7 @@ button, input { font: inherit; color: inherit; }
 .col-group {
   position: sticky;
   top: 0;
+  z-index: 1; /* .col-row is positioned and comes later, so it paints over an auto z-index */
   height: 22px;
   display: flex;
   align-items: center;

@@ -10,6 +10,7 @@ const OVERSCAN = 4;
 const TABLE_MIN_PX = 780;
 const DASH = "—";
 const FULFILLABLE = "Fulfillable";
+const BLOCKED = "Blocked";
 const NO_COURIER = "No courier";
 const NUMBER = new Intl.NumberFormat("en-US");
 
@@ -95,6 +96,11 @@ function plural(n, word) {
 }
 function isFulfillable(o) {
   return o.Order_Fulfillment_Status === FULFILLABLE;
+}
+// One source for the Status cell's words: the chip renders it and the column
+// registry measures and empties on it.
+function statusText(o) {
+  return isFulfillable(o) ? FULFILLABLE : BLOCKED;
 }
 function courierOf(o) {
   return str(o.Shipping_Provider).trim() || NO_COURIER;
@@ -466,9 +472,16 @@ function renderSlot() {
   if (mode === "columns") renderColumnsPanel();
 }
 
+// The bridge hands `columns` over as a QVariantMap, which reaches JS with its keys
+// sorted; the local literal keeps insertion order. Compare the values positionally
+// so the page's own write does not read back as a change and re-render twice.
+function columnsKey(c) {
+  return JSON.stringify([c.order || null, c.visible || null, Boolean(c.auto_hide_empty), c.extras || []]);
+}
+
 function onColumns() {
   const next = state.bridge.columns || {};
-  if (JSON.stringify(next) === JSON.stringify(state.columnSettings)) return;
+  if (columnsKey(next) === columnsKey(state.columnSettings)) return;
   state.columnSettings = Object.assign({ order: null, visible: null, auto_hide_empty: false, extras: [] }, next);
   refreshColumns();
 }
@@ -511,7 +524,7 @@ function cellElement(col, record, selected) {
     const ok = isFulfillable(record.o);
     const chip = document.createElement("span");
     chip.className = "chip " + (ok ? "success" : "danger");
-    chip.textContent = ok ? "Fulfillable" : "Blocked";
+    chip.textContent = statusText(record.o);
     cell.appendChild(chip);
   } else {
     const text = col.text(record.o);

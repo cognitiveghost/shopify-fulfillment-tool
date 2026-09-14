@@ -650,11 +650,19 @@ class MainWindow(QMainWindow):
         client_id, settings = self._pending_columns
         if not client_id:
             return
+        # save_client_config locks the share and writes a backup on every call,
+        # so a layout that came back to what is already stored writes nothing.
+        if (client_id, settings) == getattr(self, "_written_columns", None):
+            return
+        self._written_columns = (client_id, dict(settings))
         worker = Worker(self._write_results_columns, client_id, settings)
+
         # A layout preference: a failed write is logged, and the next change retries.
-        worker.signals.error.connect(
-            lambda error: logger.warning(f"The column layout wasn't saved: {error[1]}")
-        )
+        def failed(error):
+            self._written_columns = None  # so the same layout can be retried
+            logger.warning(f"The column layout wasn't saved: {error[1]}")
+
+        worker.signals.error.connect(failed)
         self._columns_save_worker = worker  # see _client_load_worker for why
         QThreadPool.globalInstance().start(worker)
 

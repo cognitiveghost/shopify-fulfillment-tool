@@ -217,8 +217,15 @@ function paneActions(o) {
   return box;
 }
 
-function closePaneMenus() {
-  for (const menu of els.pane.querySelectorAll(".pane-menu")) menu.remove();
+// Spec 6.5: Esc, an outside click, or a choice all return focus to the opener.
+// newMenu() passes restoreFocus=false -- it closes only to replace, and placeMenu
+// focuses the new menu's first item straight after.
+function closePaneMenus(restoreFocus = true) {
+  const menus = els.pane.querySelectorAll(".pane-menu");
+  if (!menus.length) return;
+  for (const menu of menus) menu.remove();
+  if (restoreFocus && paneMenuOpener && paneMenuOpener.isConnected) paneMenuOpener.focus();
+  paneMenuOpener = null;
 }
 
 // Menus open upward inside the pane, which clips anything outside it.
@@ -234,7 +241,7 @@ function placeMenu(menu, anchor) {
 }
 
 function newMenu(id) {
-  closePaneMenus();
+  closePaneMenus(false);
   const menu = el("div", "menu pane-menu");
   menu.id = id;
   menu.setAttribute("role", "menu");
@@ -306,7 +313,6 @@ function bindPane() {
     if (e.key !== "Escape" || !els.pane.querySelector(".pane-menu")) return;
     e.stopPropagation();
     closePaneMenus();
-    if (paneMenuOpener && paneMenuOpener.isConnected) paneMenuOpener.focus();
   });
   document.addEventListener("mousedown", (e) => {
     if (!e.target.closest(".pane-menu, .line-menu-button, #pane-add-tag, #pane-more")) closePaneMenus();

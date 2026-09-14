@@ -28,6 +28,11 @@ from shopify_tool.csv_utils import discover_additional_columns, read_csv_headers
 
 logger = logging.getLogger(__name__)
 
+ADDITIONAL_COLUMNS_UNREADABLE = object()
+"""Passed as `fallback_additional_columns` when the client config could not be
+read, so the page can tell "there are none" from "we don't know" (ADR 0006).
+Saving the first over the second would discard the profile's real list."""
+
 
 class _MappingPageBase(SettingsPage):
     """Shared scaffolding: one scroll area, one column-mapping widget.
@@ -181,6 +186,11 @@ class OrdersMappingPage(_MappingPageBase):
             if "additional_columns" in column_mappings
             else fallback_additional_columns
         )
+        # A client config that could not be read means the stored list is unknown,
+        # not empty -- collect() must leave it alone rather than save [] over it.
+        self.additional_columns_known = source is not ADDITIONAL_COLUMNS_UNREADABLE
+        if not self.additional_columns_known:
+            source = []
         self.additional_entries = [
             _additional_entry(e) for e in (source or []) if _is_entry(e)
         ]
@@ -300,6 +310,15 @@ class OrdersMappingPage(_MappingPageBase):
                 }
         return new_couriers
 
+    @staticmethod
+    def _entry_setter(entry: dict, key: str):
+        """A toggled handler writing one key of one entry, bound per row."""
+
+        def set_value(on: bool) -> None:
+            entry[key] = on
+
+        return set_value
+
     def _render_additional_columns(self):
         while self.additional_layout.count():
             widget = self.additional_layout.takeAt(0).widget()
@@ -319,13 +338,11 @@ class OrdersMappingPage(_MappingPageBase):
             layout.setContentsMargins(0, 2, 0, 2)
             enabled = QCheckBox(entry["csv_name"])
             enabled.setChecked(bool(entry.get("enabled")))
-            enabled.toggled.connect(lambda on, e=entry: e.__setitem__("enabled", on))
+            enabled.toggled.connect(self._entry_setter(entry, "enabled"))
             order_level = QCheckBox("Order-level")
             order_level.setChecked(bool(entry.get("is_order_level", True)))
             order_level.setToolTip("Filled down onto every line of a multi-line order")
-            order_level.toggled.connect(
-                lambda on, e=entry: e.__setitem__("is_order_level", on)
-            )
+            order_level.toggled.connect(self._entry_setter(entry, "is_order_level"))
             layout.addWidget(enabled)
             layout.addStretch()
             layout.addWidget(order_level)
@@ -336,6 +353,8 @@ class OrdersMappingPage(_MappingPageBase):
             self.additional_layout.addWidget(row)
 
     def _headers_loaded(self, headers):
+        # Discovering from the file supersedes whatever could not be read.
+        self.additional_columns_known = True
         self.additional_entries = discover_additional_columns(
             pd.DataFrame(columns=headers),
             {"orders": self.mapping_widget.get_mappings()},
@@ -358,7 +377,8 @@ class OrdersMappingPage(_MappingPageBase):
         self.courier_mappings.update(new_couriers)
 
         mappings = self._collect_column_mappings()
-        mappings["additional_columns"] = [dict(e) for e in self.additional_entries]
+        if self.additional_columns_known:
+            mappings["additional_columns"] = [dict(e) for e in self.additional_entries]
         return {"column_mappings": mappings, "courier_mappings": self.courier_mappings}
 
 

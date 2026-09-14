@@ -233,8 +233,9 @@ Its `data-slot` attribute picks the tracks:
 `#pane` is on the `--surface-raised` plane with `--radius-md` and no border,
 the KPI card's rule. Padding is 16. It is a flex column with a 12px gap, full
 height, and `overflow: hidden`, so **the pane itself never scrolls**. The
-sections appear in this order in every state; only the verdict block and the
-action labels change.
+sections appear in this order whenever an order is selected; only the verdict
+block and the action labels change. With nothing selected the pane keeps only
+the head and the centred empty block (§6.4).
 
 1. **Head** (28px row):
    - `Order_Number` in `--font-family-mono`, `--type-heading-size`, bold;
@@ -641,8 +642,8 @@ test, like Bundle 12's.
    - At 1310×692: `.table-wrap` is 866 wide and `#pane` is 400×508, with
      `data-visible-rows == 17`.
    - Nothing selected → `#pane-empty` reads "No order selected".
-   - Clicking a short order → the title reads `Cannot ship: 1 of 3 lines are
-     short`, the text contains its SKU and both numbers, and one `.line.short`.
+   - Clicking a short order → the title reads `Cannot ship: 1 of 3 lines is
+     short` (§6.3's `k == 1` form), the text contains its SKU and both numbers, and one `.line.short`.
    - Ready, review-by-run and review-by-hand → their titles, source lines
      and `data-by-hand`.
    - The actions each reach their signal (`qtbot.waitSignal`):

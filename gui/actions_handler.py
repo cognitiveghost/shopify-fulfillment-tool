@@ -849,8 +849,7 @@ class ActionsHandler(QObject):
         """
         # Get affected rows BEFORE operation
         affected_rows = self.mw.analysis_results_df[
-            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-            == str(order_number).strip()
+            self._order_mask(order_number)
         ].copy()
 
         success, result, updated_df = toggle_order_fulfillment(
@@ -859,11 +858,7 @@ class ActionsHandler(QObject):
         if success:
             self.mw.analysis_results_df = updated_df
 
-            # Use consistent filtering approach with type conversion and strip
-            mask = (
-                updated_df["Order_Number"].astype(str).str.strip()
-                == str(order_number).strip()
-            )
+            mask = self._order_mask(order_number, updated_df)
             matching_rows = updated_df.loc[mask, "Order_Fulfillment_Status"]
 
             if matching_rows.empty:
@@ -899,8 +894,15 @@ class ActionsHandler(QObject):
             )
             show_error(self.mw, f"Order {order_number}'s status didn't change", result)
 
-    def _order_mask(self, order_number):
-        df = self.mw.analysis_results_df
+    def _order_mask(self, order_number, df=None):
+        """Rows belonging to one order, in `df` or the analysis frame.
+
+        Order numbers arrive as int, float or str depending on the CSV, so
+        every comparison has to go through str + strip. One helper, so a
+        change to that rule cannot land in some call sites and not others.
+        """
+        if df is None:
+            df = self.mw.analysis_results_df
         return df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
 
     def set_order_fulfillable(self, order_number, fulfillable: bool):
@@ -1085,10 +1087,14 @@ class ActionsHandler(QObject):
 
         self.mw.analysis_results_df = df[~mask].reset_index(drop=True)
 
+        # A no-SKU line matches on NaN by design, but "Removed item nan" is
+        # not a sentence. The undo payload keeps the raw value either way.
+        line_name = "a line with no SKU" if pd.isna(sku) else f"item {sku}"
+
         # Record for undo
         self.mw.undo_manager.record_operation(
             "remove_item",
-            f"Removed item {sku} from order {order_number}",
+            f"Removed {line_name} from order {order_number}",
             {"order_number": order_number, "sku": sku},
             affected_rows,
         )
@@ -1098,11 +1104,11 @@ class ActionsHandler(QObject):
         self.mw.save_session_state()
         self._update_undo_button()
         self.mw.log_activity(
-            "Data Edit", f"Removed item {sku} from order {order_number}."
+            "Data Edit", f"Removed {line_name} from order {order_number}."
         )
         toast(
             self.mw,
-            f"Removed {sku} from order {order_number}.",
+            f"Removed {line_name} from order {order_number}.",
             action_text="Undo",
             on_action=self.mw.undo_last_operation,
         )
@@ -1113,19 +1119,12 @@ class ActionsHandler(QObject):
         Args:
             order_number (str): The order number to remove completely.
         """
-        # Convert to string for comparison to handle int/float order numbers
-        order_number_str = str(order_number).strip()
+        this_order = self._order_mask(order_number)
 
         # Get affected rows BEFORE operation
-        affected_rows = self.mw.analysis_results_df[
-            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-            == order_number_str
-        ].copy()
+        affected_rows = self.mw.analysis_results_df[this_order].copy()
 
-        order_mask = (
-            self.mw.analysis_results_df["Order_Number"].astype(str).str.strip()
-            != order_number_str
-        )
+        order_mask = ~this_order
 
         self.mw.analysis_results_df = self.mw.analysis_results_df[
             order_mask

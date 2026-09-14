@@ -8,7 +8,7 @@ const COLUMN_GROUPS = ["Order", "Customer", "Money", "Shipping", "Tags & notes",
 
 const REGISTRY = [
   { key: "status", title: "Status", group: "Order", width: 132, pinned: true, shown: true,
-    text: (o) => (isFulfillable(o) ? FULFILLABLE : "Blocked"), sortValue: (o) => (isFulfillable(o) ? 0 : 1) },
+    text: (o) => statusText(o), sortValue: (o) => (isFulfillable(o) ? 0 : 1) },
   { key: "order", title: "Order", group: "Order", width: 84, pinned: true, shown: true, mono: true,
     text: (o) => str(o.Order_Number) },
   { key: "customer", title: "Customer", group: "Customer", stretch: true, shown: true, text: (o) => str(o.Customer) },

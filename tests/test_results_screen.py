@@ -1,5 +1,6 @@
 """The Analysis Results screen is the results document (Bundle 12 spec §7)."""
 
+import json
 import re
 from pathlib import Path
 
@@ -220,9 +221,6 @@ def test_opening_a_session_drops_the_previous_sessions_chips(
     main_window.load_existing_session(str(tmp_path))
     assert bar.status_chip.text() == ""
     assert bar.stock_chip.text() == ""
-
-
-import json
 
 
 class _Profiles:

@@ -327,3 +327,69 @@ def test_escape_closes_the_manager(qtbot, doc):
     _until_js(
         qtbot, view, "document.getElementById('table-area').dataset.slot === 'pane'"
     )
+
+
+def _sorted_header(qtbot, view):
+    """The title of the header cell currently marked sorted, else ""."""
+    return _eval(
+        qtbot,
+        view,
+        "(() => { const c = document.querySelector('#header .cell.sorted');"
+        " return c ? c.textContent.trim() : ''; })()",
+    )
+
+
+def test_hiding_the_sorted_column_clears_the_sort(qtbot, doc):
+    """Spec §6.8: the one manager action that changes what the table shows."""
+    view, bridge = doc
+    _eval(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('#header .cell')]"
+        ".find(c => c.textContent.trim() === 'Customer').click()",
+    )
+    _until_js(qtbot, view, "document.querySelector('#header .cell.sorted') !== null")
+    assert _sorted_header(qtbot, view) == "Customer"
+
+    _open_columns(qtbot, view)
+    stored = _settings(
+        qtbot, view, bridge, ROW.format("customer", ".col-check") + ".click()"
+    )
+
+    assert "customer" not in stored["visible"]
+    _until_js(qtbot, view, "!" + _has_header("Customer"))
+    assert _sorted_header(qtbot, view) == ""
+
+
+def test_the_group_header_stays_above_the_rows_it_is_stuck_over(qtbot, doc):
+    """Spec §6.9: sticky means visible. .col-row is positioned and comes later,
+    so without a z-index the rows paint over the header."""
+    view, _ = doc
+    _open_columns(qtbot, view)
+    assert _eval(
+        qtbot,
+        view,
+        "(() => { const s = document.getElementById('columns-scroller');"
+        " s.scrollTop = 120;"
+        " const g = s.querySelector('.col-group');"
+        " const r = g.getBoundingClientRect();"
+        " const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);"
+        " return Boolean(hit && hit.closest('.col-group')); })()",
+    )
+
+
+def test_the_bridge_echoing_the_pages_own_layout_does_not_rerender(qtbot, doc):
+    """Spec §4: the page ignores a columnsChanged equal to what it applied.
+    The bridge's QVariantMap arrives with sorted keys, so the comparison has
+    to be positional, not a raw JSON.stringify of the two dicts."""
+    view, bridge = doc
+    _open_columns(qtbot, view)
+    stored = _settings(
+        qtbot, view, bridge, ROW.format("type", ".col-check") + ".click()"
+    )
+    _eval(qtbot, view, "document.querySelector('.col-row').dataset.sentinel = 'kept'")
+
+    bridge.set_column_settings(stored)
+    qtbot.wait(200)
+
+    assert _eval(qtbot, view, "document.querySelector('.col-row').dataset.sentinel") == "kept"
