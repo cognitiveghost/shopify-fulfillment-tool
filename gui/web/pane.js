@@ -270,13 +270,10 @@ function openTagMenu(anchor, o) {
   const own = new Set((o.Tag_List || []).map(String));
   const categories = (state.bridge && state.bridge.tagCategories) || {};
   const menu = newMenu("tag-menu");
-  for (const id of Object.keys(categories)) {
-    const category = categories[id] || {};
-    const tags = (category.tags || []).map(String).filter((t) => !own.has(t));
-    if (!tags.length) continue;
-    menu.append(el("div", "menu-group", str(category.label) || id));
-    for (const tag of tags) menu.append(menuItem(tag, () => state.bridge.addOrderTag(order, tag)));
-  }
+  renderTagList(menu, tagRows(categories, own), null, (tag) => {
+    closePaneMenus();
+    if (state.bridge) state.bridge.addOrderTag(order, tag);
+  });
   const input = el("input", "new-tag");
   input.id = "new-tag";
   input.placeholder = "New tag";

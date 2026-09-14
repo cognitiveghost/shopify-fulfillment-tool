@@ -79,6 +79,7 @@ function bindSelectionBar() {
   });
   document.addEventListener("mousedown", (e) => {
     if (!e.target.closest("#selection-menu, #selection-more")) closeSelectionMenu();
+    if (!e.target.closest("#bulk-popover, #selection-menu, #selection-more")) closeBulkPopover();
   });
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && state.selected.size) {
@@ -88,6 +89,18 @@ function bindSelectionBar() {
       copySelection();
     }
   });
+  // Capture phase: results.js's own Escape handler would otherwise clear the
+  // selection before this can close just the popover.
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Escape" || !document.getElementById("bulk-popover")) return;
+      e.stopPropagation();
+      closeBulkPopover();
+      els.selectionMore.focus();
+    },
+    { capture: true }
+  );
 }
 
 function selectionTags() {
@@ -165,8 +178,163 @@ function closeSelectionMenu() {
   els.selectionMore.setAttribute("aria-expanded", "false");
 }
 
-// Task 6/7/8 replace these with the real popovers and toast.
-function closeBulkPopover() {}
-function openTagPopover() {}
+function tagRows(categories, exclude) {
+  const skip = exclude || new Set();
+  const rows = [];
+  for (const id of Object.keys(categories || {})) {
+    const category = categories[id] || {};
+    const tags = (category.tags || []).map(String).filter((t) => !skip.has(t));
+    if (tags.length) rows.push({ id: id, label: str(category.label) || id, tags: tags });
+  }
+  return rows;
+}
+
+function renderTagList(host, rows, counts, onPick) {
+  for (const row of rows) {
+    host.appendChild(el("div", "menu-group", row.label));
+    for (const tag of row.tags) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "menu-item bulk-row";
+      button.dataset.tag = tag;
+      button.appendChild(document.createTextNode(tag));
+      const on = counts ? counts.get(tag) || 0 : 0;
+      if (on) button.appendChild(el("span", "bulk-count", "on " + on + " of " + counts.get("__total__")));
+      button.addEventListener("click", () => onPick(tag, button));
+      host.appendChild(button);
+    }
+  }
+}
+
+function tagCounts(tags) {
+  const counts = new Map();
+  const orders = selectedOrders();
+  counts.set("__total__", orders.length);
+  for (const o of orders) {
+    for (const t of o.Tag_List || []) {
+      const key = String(t);
+      if (tags.has(key)) counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+let bulkPicked = null;
+
+function closeBulkPopover() {
+  const open = document.getElementById("bulk-popover");
+  if (open) open.remove();
+  bulkPicked = null;
+}
+
+function openBulkPopover(opts) {
+  closeBulkPopover();
+  const box = el("div", "bulk-popover");
+  box.id = "bulk-popover";
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-label", opts.title);
+
+  const title = el("div", "bulk-title", opts.title);
+  title.id = "bulk-title";
+  box.appendChild(title);
+
+  const list = el("div", "bulk-list");
+  list.id = "bulk-list";
+  box.appendChild(list);
+
+  const verb = document.createElement("button");
+  verb.type = "button";
+  verb.id = "bulk-verb";
+  verb.className = "btn " + (opts.danger ? "danger" : "primary");
+  verb.disabled = true;
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn ghost";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", closeBulkPopover);
+  const footer = el("div", "bulk-footer");
+  footer.append(cancel, verb);
+  box.appendChild(footer);
+
+  opts.fill(list, (value, row) => {
+    bulkPicked = value;
+    for (const other of list.querySelectorAll(".bulk-row")) other.classList.remove("picked");
+    row.classList.add("picked");
+    const label = opts.verb(value);
+    verb.textContent = label.text;
+    verb.disabled = label.disabled;
+  });
+
+  list.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const rows = [...list.querySelectorAll(".bulk-row")].filter((r) => !r.hidden);
+    const here = rows.indexOf(document.activeElement);
+    const next = here + (e.key === "ArrowDown" ? 1 : -1);
+    if (next < 0 || next >= rows.length) return;
+    e.preventDefault();
+    rows[next].focus();
+  });
+
+  verb.addEventListener("click", () => {
+    const value = bulkPicked;
+    closeBulkPopover();
+    opts.onCommit(value);
+  });
+
+  els.selectionBar.appendChild(box);
+  const first = list.querySelector(".bulk-row");
+  if (first) first.focus();
+  return box;
+}
+
+function openTagPopover(mode) {
+  const n = state.selected.size;
+  const orders = countedWord(n, "order");
+  const categories = (state.bridge && state.bridge.tagCategories) || {};
+  const present = new Set(selectionTags());
+  const add = mode === "add";
+  const rows = add ? tagRows(categories, null) : [{ id: "on", label: "On these orders", tags: [...present] }];
+  const known = new Set();
+  for (const row of rows) for (const t of row.tags) known.add(t);
+  const counts = tagCounts(known);
+
+  openBulkPopover({
+    title: (add ? "Add a tag to " : "Remove a tag from ") + orders,
+    danger: false,
+    fill: (host, onPick) => {
+      renderTagList(host, rows, counts, onPick);
+      if (!add) return;
+      host.appendChild(el("div", "menu-group", "NEW"));
+      const input = el("input", "new-tag");
+      input.id = "bulk-new-tag";
+      input.placeholder = "New tag";
+      input.setAttribute("aria-label", "New tag");
+      input.addEventListener("keydown", (e) => {
+        const tag = input.value.trim();
+        if (e.key !== "Enter" || !tag) return;
+        const keys = selectedKeys();
+        closeBulkPopover();
+        state.bridge.addTag(keys, tag);
+      });
+      host.appendChild(input);
+    },
+    verb: (tag) => {
+      const on = counts.get(tag) || 0;
+      if (add) {
+        return on === n
+          ? { text: "Already on all " + n, disabled: true }
+          : { text: "Add to " + countedWord(n - on, "order"), disabled: false };
+      }
+      return { text: "Remove from " + countedWord(on, "order"), disabled: on === 0 };
+    },
+    onCommit: (tag) => {
+      const keys = selectedKeys();
+      if (add) state.bridge.addTag(keys, tag);
+      else state.bridge.removeTag(keys, tag);
+    },
+  });
+}
+
+// Task 7/8 replace these with the real popover and toast.
 function openSkuPopover() {}
 function raiseToast() {}

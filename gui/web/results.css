@@ -255,6 +255,32 @@ button, input { font: inherit; color: inherit; }
 .menu-item.danger { color: var(--status-danger); }
 .menu-hint { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
 
+.bulk-popover {
+  position: absolute;
+  z-index: 3;
+  top: 44px;
+  right: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-height: 380px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.bulk-title { padding: var(--spacing-sm) var(--spacing-md); font-weight: 700; }
+.bulk-list { flex: 1; min-height: 0; overflow-y: auto; }
+.bulk-list .menu-group { position: sticky; top: 0; background: var(--surface-overlay); }
+.bulk-row.picked { background: var(--selection-bg); }
+.bulk-count { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
+.bulk-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
