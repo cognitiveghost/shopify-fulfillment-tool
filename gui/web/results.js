@@ -228,6 +228,7 @@ function render() {
   renderStates();
   renderSlot();
   renderHeader();
+  renderSelectionBar();
   layout();
   renderRows();
   reportSelection();
@@ -435,7 +436,8 @@ function layout() {
     renderSlot();
   }
   state.rowH = parseFloat(cssVar("--row-height")) || 28;
-  const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - HEADER_PX) / state.rowH));
+  const barPx = els.selectionBar.hidden ? 0 : SELECTION_BAR_PX;
+  const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - barPx - HEADER_PX) / state.rowH));
   state.visible = rows;
   els.scroller.style.height = HEADER_PX + rows * state.rowH + "px";
   els.rows.style.height = state.view.length * state.rowH + "px";
@@ -651,6 +653,11 @@ function bind() {
     themeVars: "theme-vars",
     columnsButton: "columns-button", pane: "pane", paneStrip: "pane-strip",
     paneShow: "pane-show", columnsPanel: "columns-panel",
+    selectionBar: "selection-bar", selectionCount: "selection-count",
+    selectionSub: "selection-sub", selectionMark: "selection-mark",
+    selectionHold: "selection-hold", selectionMore: "selection-more",
+    selectionMenu: "selection-menu", selectionExclude: "selection-exclude",
+    selectionClear: "selection-clear",
   };
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 
@@ -681,6 +688,7 @@ function bind() {
   }).observe(els.tableArea);
   bindPane();
   bindColumns();
+  bindSelectionBar();
 }
 
 bind();

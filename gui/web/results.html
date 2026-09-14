@@ -10,6 +10,7 @@
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <script src="columns.js" defer></script>
 <script src="pane.js" defer></script>
+<script src="bulk.js" defer></script>
 <script src="results.js" defer></script>
 </head>
 <body>
@@ -36,6 +37,24 @@
 
   <section id="table-area" class="table-area" data-slot="none">
     <div class="table-wrap">
+      <div id="selection-bar" class="selection-bar" role="toolbar"
+           aria-label="Actions for the selected orders" hidden>
+        <div class="selection-counts">
+          <span id="selection-count" class="selection-count" aria-live="polite"></span>
+          <span id="selection-sub" class="selection-sub"></span>
+        </div>
+        <span class="spacer"></span>
+        <button id="selection-mark" class="btn primary" type="button"></button>
+        <button id="selection-hold" class="btn secondary" type="button"></button>
+        <div class="menu-anchor">
+          <button id="selection-more" class="btn ghost" type="button"
+                  aria-haspopup="menu" aria-expanded="false">More</button>
+          <div id="selection-menu" class="menu" role="menu" hidden></div>
+        </div>
+        <span class="selection-separator" role="presentation"></span>
+        <button id="selection-exclude" class="btn danger" type="button">Exclude from run</button>
+        <button id="selection-clear" class="btn ghost" type="button">Clear</button>
+      </div>
       <div id="table" class="table" role="grid" tabindex="0" aria-label="Orders" data-visible-rows="0">
         <div id="scroller" class="scroller">
           <div id="header" class="row header" role="row"></div>

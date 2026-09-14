@@ -230,6 +230,28 @@ button, input { font: inherit; color: inherit; }
 .table-wrap, .slot { position: relative; min-width: 0; min-height: 0; }
 .cell.filler { padding: 0; }
 
+/* --- selection bar (Bundle 14) ------------------------------------------- */
+
+.selection-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  height: 44px;
+  padding: 0 var(--spacing-md);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.selection-counts { display: flex; align-items: baseline; gap: var(--spacing-sm); }
+.selection-count { color: var(--text-primary); font-weight: 700; }
+.selection-sub { color: var(--text-secondary); font-size: var(--type-caption-size); }
+.selection-separator {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--spacing-sm);
+  background: var(--border-subtle);
+}
+
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
