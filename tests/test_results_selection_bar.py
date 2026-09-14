@@ -1,5 +1,7 @@
 """Bundle 14: the bar that exists only while orders are selected."""
 
+import json
+
 import pandas as pd
 import pytest
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -77,6 +79,12 @@ def _select(qtbot, view, order_numbers):
     _eval(qtbot, view, f"state.selected = new Set([{keys}]); render(); true")
 
 
+def _json(qtbot, view, expr):
+    # A bare array/object result marshals to '' on this Qt build; round-trip
+    # through JSON.stringify like the rest of the results-document suite.
+    return json.loads(_eval(qtbot, view, f"JSON.stringify({expr})"))
+
+
 def test_the_bar_is_absent_with_no_selection(qtbot, page):
     view, _ = page
     assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
@@ -141,3 +149,89 @@ def test_clear_empties_the_selection_and_hides_the_bar(qtbot, page):
     _select(qtbot, view, ["10443"])
     _eval(qtbot, view, "document.getElementById('selection-clear').click(); true")
     assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
+
+
+def test_more_lists_its_seven_items_in_order(qtbot, page):
+    view, _ = page
+    _select(qtbot, view, ["10443", "10444", "10445"])
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    labels = _json(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('#selection-menu .menu-item')]"
+        ".map(b => b.firstChild.textContent.trim())",
+    )
+    assert labels == [
+        "Add a tag to 3 orders",
+        "Remove a tag from 3 orders",
+        "Copy 3 order numbers",
+        "Export just these 3 to Excel",
+        "Export just these 3 to CSV",
+        "Remove a SKU from these 3 orders",
+        "Remove whole orders containing a SKU",
+    ]
+
+
+def test_a_separator_sits_above_the_two_destructive_items(qtbot, page):
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    assert (
+        _eval(
+            qtbot,
+            view,
+            "document.querySelectorAll('#selection-menu .menu-separator').length",
+        )
+        == 1
+    )
+
+
+def test_remove_a_tag_is_disabled_when_nothing_carries_one(qtbot, page):
+    view, _ = page
+    _select(qtbot, view, ["10445"])  # no order in this fixture carries a tag
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    assert (
+        _eval(qtbot, view, "document.getElementById('more-remove-tag').disabled")
+        is True
+    )
+    assert _text(qtbot, view, "#more-remove-tag") == "Remove a tag from 1 order"
+    assert (
+        _eval(qtbot, view, "document.getElementById('more-remove-tag').title")
+        == "None of these 1 order carry a tag"
+    )
+
+
+def test_copy_sends_the_order_numbers_one_per_line(qtbot, page):
+    from PySide6.QtGui import QGuiApplication
+
+    view, _ = page
+    _select(qtbot, view, ["10443", "10444"])
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    _eval(qtbot, view, "document.getElementById('more-copy').click(); true")
+    assert QGuiApplication.clipboard().text() == "10443\n10444"
+
+
+def test_ctrl_c_copies_without_opening_the_menu(qtbot, page):
+    from PySide6.QtGui import QGuiApplication
+
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    _eval(
+        qtbot,
+        view,
+        "document.dispatchEvent(new KeyboardEvent('keydown', "
+        "{key: 'c', ctrlKey: true, bubbles: true})); true",
+    )
+    assert QGuiApplication.clipboard().text() == "10443"
+    assert (
+        _eval(qtbot, view, "document.getElementById('selection-menu').hidden") is True
+    )
+
+
+def test_export_items_send_their_format(qtbot, page):
+    view, bridge = page
+    _select(qtbot, view, ["10443"])
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    with qtbot.waitSignal(bridge.bulkExportRequested, timeout=3000) as blocker:
+        _eval(qtbot, view, "document.getElementById('more-export-csv').click(); true")
+    assert list(blocker.args) == [["10443"], "csv"]

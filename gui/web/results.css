@@ -251,6 +251,9 @@ button, input { font: inherit; color: inherit; }
   margin: 0 var(--spacing-sm);
   background: var(--border-subtle);
 }
+.menu-separator { height: 1px; margin: var(--spacing-xs) 0; background: var(--border-subtle); }
+.menu-item.danger { color: var(--status-danger); }
+.menu-hint { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
 
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
