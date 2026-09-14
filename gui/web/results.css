@@ -280,6 +280,19 @@ button, input { font: inherit; color: inherit; }
   padding: var(--spacing-sm) var(--spacing-md);
   border-top: 1px solid var(--border-subtle);
 }
+.bulk-list .new-tag,
+.bulk-list .bulk-search {
+  display: block;
+  margin: var(--spacing-xs) var(--spacing-md);
+  width: calc(100% - 2 * var(--spacing-md));
+  height: var(--control-height);
+  padding: 0 var(--padding-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.bulk-list .new-tag:focus,
+.bulk-list .bulk-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }

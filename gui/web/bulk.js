@@ -335,6 +335,67 @@ function openTagPopover(mode) {
   });
 }
 
-// Task 7/8 replace these with the real popover and toast.
-function openSkuPopover() {}
+const BULK_SEARCH_FROM = 10;
+
+function skuCounts() {
+  const counts = new Map();
+  const orders = selectedOrders();
+  counts.set("__total__", orders.length);
+  for (const o of orders) {
+    const own = new Set();
+    for (const line of o.lines || []) {
+      const sku = str(line.SKU).trim();
+      if (sku) own.add(sku);
+    }
+    for (const sku of own) counts.set(sku, (counts.get(sku) || 0) + 1);
+  }
+  return counts;
+}
+
+function openSkuPopover(mode) {
+  const n = state.selected.size;
+  const counts = skuCounts();
+  const skus = [...counts.keys()]
+    .filter((k) => k !== "__total__")
+    .sort((a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b));
+  const line = mode === "line";
+
+  openBulkPopover({
+    title: line
+      ? "Remove a SKU from these " + countedWord(n, "order")
+      : "Remove whole orders containing a SKU",
+    danger: true,
+    fill: (host, onPick) => {
+      if (skus.length >= BULK_SEARCH_FROM) {
+        const search = el("input", "bulk-search");
+        search.id = "bulk-search";
+        search.type = "search";
+        search.placeholder = "Find a SKU";
+        search.setAttribute("aria-label", "Find a SKU");
+        search.addEventListener("input", () => {
+          const q = search.value.trim().toLowerCase();
+          for (const row of host.querySelectorAll(".bulk-row")) {
+            row.hidden = q !== "" && !row.dataset.tag.toLowerCase().includes(q);
+          }
+        });
+        host.appendChild(search);
+      }
+      renderTagList(host, [{ id: "skus", label: "SKUs on these orders", tags: skus }], counts, onPick);
+    },
+    verb: (sku) => {
+      const on = counts.get(sku) || 0;
+      return {
+        text: (line ? "Remove from " : "Remove ") + countedWord(on, "order"),
+        disabled: on === 0,
+      };
+    },
+    onCommit: (sku) => {
+      const keys = selectedKeys();
+      if (line) state.bridge.removeSkuFromOrders(keys, sku);
+      else state.bridge.removeOrdersWithSku(keys, sku);
+    },
+  });
+}
+
+// Task 8 replaces this with the real toast.
 function raiseToast() {}
