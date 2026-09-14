@@ -488,3 +488,73 @@ button, input { font: inherit; color: inherit; }
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
+
+/* --- the column manager (Bundle 13 §6.9) ------------------------------------ */
+/* 16 + 40 + 8 + 32 + 8 + scroller + 8 + 32 + 16 = 508, so the scroller is 348. */
+
+.columns-panel { gap: var(--spacing-sm); }
+
+.columns-head { flex-shrink: 0; display: flex; align-items: flex-start; height: 40px; }
+.columns-titles { min-width: 0; }
+.columns-title { font-size: var(--type-label-size); font-weight: 700; }
+.columns-count-line { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.btn.columns-close { width: 32px; height: 32px; }
+
+.columns-search {
+  flex: 0 0 32px;
+  width: 100%;
+  padding: 0 var(--padding-h);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.columns-search::placeholder { color: var(--text-placeholder); }
+.columns-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+
+.columns-scroller { flex: 1; min-height: 0; overflow-y: auto; }
+
+.col-group {
+  position: sticky;
+  top: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: var(--surface-raised);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.col-group-count { font-weight: 400; letter-spacing: normal; }
+
+.col-row {
+  position: relative;
+  height: 30px;
+  display: grid;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+.col-row:hover { background: var(--hover); }
+.col-row:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.col-grip { display: flex; align-items: center; color: var(--text-secondary); cursor: grab; }
+.grip { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.col-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.col-title.muted { color: var(--text-secondary); }
+.col-note { font-size: var(--type-caption-size); color: var(--text-secondary); white-space: nowrap; }
+
+/* The insertion line a drop would land on. */
+.col-row[data-drop]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--focus-ring);
+}
+.col-row[data-drop="before"]::before { top: 0; }
+.col-row[data-drop="after"]::before { bottom: 0; }
+
+.columns-foot { flex: 0 0 32px; display: flex; align-items: center; gap: var(--spacing-sm); }
+.columns-hide-empty { display: flex; align-items: center; gap: var(--spacing-xs); white-space: nowrap; }
