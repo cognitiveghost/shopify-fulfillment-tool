@@ -294,7 +294,10 @@ class SessionBrowserWidget(QWidget):
 
         header = self.sessions_tree.header()
         for column, width in (
-            (1, 90),
+            # Wide enough for the archive-countdown form age_label() produces
+            # ("26d · archives in 4d", spec 6.1's own example) -- a plain "3d"
+            # or "2w" just centers in the extra room.
+            (1, 130),
             (2, 140),
             (3, 80),
             (4, 80),

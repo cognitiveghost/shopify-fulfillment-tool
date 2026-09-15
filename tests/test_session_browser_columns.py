@@ -2,6 +2,7 @@
 
 Spec: docs/superpowers/specs/2026-09-04-phase9-bundle6-session-browser-design.md
 """
+
 from datetime import datetime
 from unittest.mock import Mock
 
@@ -14,8 +15,16 @@ from gui.theme_manager import get_density_profile
 from shared.theme import theme_notifier
 from shopify_tool.session_lifecycle import display_status
 
-HEADERS = ["Session", "Age", "Status", "Orders", "Items",
-           "Blocked", "Packing", "Comment"]
+HEADERS = [
+    "Session",
+    "Age",
+    "Status",
+    "Orders",
+    "Items",
+    "Blocked",
+    "Packing",
+    "Comment",
+]
 
 
 @pytest.fixture(scope="module")
@@ -55,10 +64,18 @@ def _session(name, status="active", lists=(), progress=None, **overrides):
 def calm_sessions():
     """Fully packed and closed out -- neither needs attention."""
     return [
-        _session("alpha", status="completed", lists=["a"],
-                 progress={"a": {"status": "completed"}}),
-        _session("beta", status="completed", lists=["a", "b"],
-                 progress={"a": {"status": "completed"}, "b": {"status": "completed"}}),
+        _session(
+            "alpha",
+            status="completed",
+            lists=["a"],
+            progress={"a": {"status": "completed"}},
+        ),
+        _session(
+            "beta",
+            status="completed",
+            lists=["a", "b"],
+            progress={"a": {"status": "completed"}, "b": {"status": "completed"}},
+        ),
     ]
 
 
@@ -66,10 +83,17 @@ def calm_sessions():
 def two_group_sessions():
     """One paused (needs attention), one closed out (does not)."""
     return [
-        _session("stuck", lists=["a", "b"],
-                 progress={"a": {"status": "completed"}, "b": {"status": "paused"}}),
-        _session("fine", status="completed", lists=["a"],
-                 progress={"a": {"status": "completed"}}),
+        _session(
+            "stuck",
+            lists=["a", "b"],
+            progress={"a": {"status": "completed"}, "b": {"status": "paused"}},
+        ),
+        _session(
+            "fine",
+            status="completed",
+            lists=["a"],
+            progress={"a": {"status": "completed"}},
+        ),
     ]
 
 
@@ -81,8 +105,12 @@ def commented_session():
 @pytest.fixture
 def sessions_with_archived():
     return [
-        _session("live", status="completed", lists=["a"],
-                 progress={"a": {"status": "completed"}}),
+        _session(
+            "live",
+            status="completed",
+            lists=["a"],
+            progress={"a": {"status": "completed"}},
+        ),
         _session("gone1", status="archived"),
         _session("gone2", status="archived"),
         _session("gone3", status="archived"),
@@ -92,8 +120,7 @@ def sessions_with_archived():
 def _column_text(browser, header):
     tree = browser.sessions_tree
     col = next(
-        c for c in range(tree.columnCount())
-        if tree.headerItem().text(c) == header
+        c for c in range(tree.columnCount()) if tree.headerItem().text(c) == header
     )
     return [
         tree.topLevelItem(g).child(i).text(col)
@@ -130,7 +157,9 @@ class TestColumnsAndGroups:
         browser.sessions_data = calm_sessions
         browser._populate_tree()
         assert browser.sessions_tree.topLevelItemCount() == 1
-        assert browser.sessions_tree.topLevelItem(0).text(0).startswith("Everything else")
+        assert (
+            browser.sessions_tree.topLevelItem(0).text(0).startswith("Everything else")
+        )
 
     def test_blocked_is_blank_at_zero_and_at_none(self, browser, calm_sessions):
         browser.sessions_data = calm_sessions
@@ -166,7 +195,11 @@ class TestPackingColumn:
 
     def test_full_session_key_reads_as_complete(self, browser):
         browser.sessions_data = [
-            _session("s1", lists=["a", "b"], progress={"full_session": {"status": "completed"}})
+            _session(
+                "s1",
+                lists=["a", "b"],
+                progress={"full_session": {"status": "completed"}},
+            )
         ]
         browser._populate_tree()
         assert _column_text(browser, "Packing") == ["2/2"]
@@ -224,7 +257,9 @@ class TestEmptyStates:
         assert not browser.sessions_tree.isVisibleTo(browser)
         assert browser.empty_panel.button.text() == "New session"
 
-    def test_a_filter_that_hides_everything_offers_to_clear_it(self, browser, calm_sessions):
+    def test_a_filter_that_hides_everything_offers_to_clear_it(
+        self, browser, calm_sessions
+    ):
         browser.sessions_data = calm_sessions
         browser.filter_bar.search_field.setText("tuesday")
         browser._populate_tree()
@@ -254,7 +289,9 @@ class TestArchiveFooter:
         browser._populate_tree()
         assert not browser.archive_line.isVisibleTo(browser)
 
-    def test_the_line_counts_the_archived_sessions(self, browser, sessions_with_archived):
+    def test_the_line_counts_the_archived_sessions(
+        self, browser, sessions_with_archived
+    ):
         browser.sessions_data = sessions_with_archived
         browser._populate_tree()
         assert browser.archive_line.isVisibleTo(browser)
@@ -273,8 +310,9 @@ class TestArchiveFooter:
     def test_the_old_toggle_button_is_gone(self, browser):
         assert not hasattr(browser, "show_archived_btn")
 
-    def test_a_middot_separates_the_count_from_the_verb(self, browser,
-                                                        sessions_with_archived):
+    def test_a_middot_separates_the_count_from_the_verb(
+        self, browser, sessions_with_archived
+    ):
         browser.sessions_data = sessions_with_archived
         browser._populate_tree()
         labels = browser.archive_line.findChildren(QLabel)
@@ -325,9 +363,12 @@ class TestRowPresentation:
         # Spec section 4's label table, and the word the status filter above
         # the tree already uses for the same stored status.
         browser.sessions_data = [
-            _session("s1", lists=["a", "b"],
-                     progress={"a": {"status": "completed"}},
-                     last_updated=datetime.now().astimezone().isoformat())
+            _session(
+                "s1",
+                lists=["a", "b"],
+                progress={"a": {"status": "completed"}},
+                last_updated=datetime.now().astimezone().isoformat(),
+            )
         ]
         browser._populate_tree()
         assert _column_text(browser, "Status") == ["Active"]
@@ -351,6 +392,14 @@ class TestRowPresentation:
         browser._populate_tree()
         item = browser.sessions_tree.topLevelItem(0).child(0)
         assert f"Comment: {text}" in item.toolTip(0)
+
+    def test_the_age_column_fits_the_archive_countdown(self, browser):
+        # Spec 6.1's own example: "26d · archives in 4d" -- the widest form
+        # age_label() produces -- must not be cut off.
+        header = browser.sessions_tree.header()
+        metrics = browser.sessions_tree.fontMetrics()
+        needed = metrics.horizontalAdvance("26d · archives in 4d") + 16
+        assert header.sectionSize(1) >= needed
 
 
 def test_a_theme_toggle_rebuilds_the_rows_that_baked_theme_colours_in(
