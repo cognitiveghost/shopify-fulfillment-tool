@@ -23,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
+from shared.atomic_write import atomic_write_json
 from shared.logger import setup_logging
 from shared.server_connection import resolve_server_path, test_path_reachable
 from shopify_tool.profile_migrations import (
@@ -650,67 +651,17 @@ class ProfileManager:
             f"{config_size:,} bytes, {num_sets} sets"
         )
 
-        max_retries = 5  # Reduced from 10 to minimize UI blocking
-        retry_delay = 0.5  # Reduced from 1.0s (total worst case: 2.5s instead of 10s)
-        timeout_seconds = 5  # Maximum time for entire save operation
+        try:
+            atomic_write_json(config_path, config)
+        except OSError as e:
+            error_msg = f"Failed to save config for CLIENT_{client_id}: {e}"
+            logger.exception(error_msg)
+            raise ProfileManagerError(error_msg) from e
 
-        for attempt in range(max_retries):
-            # Check timeout to avoid blocking UI for too long
-            if time.perf_counter() - start_time > timeout_seconds:
-                logger.error(
-                    f"Save operation timed out after {timeout_seconds}s "
-                    f"(attempt {attempt + 1}/{max_retries})"
-                )
-                break
-
-            try:
-                # Use platform-specific file locking
-                if os.name == "nt":  # Windows
-                    success = self._save_with_windows_lock(config_path, config)
-                else:  # Unix-like
-                    success = self._save_with_unix_lock(config_path, config)
-
-                if success:
-                    # Invalidate cache
-                    cache_key = f"{self.base_path}::shopify_{client_id}"
-                    self._config_cache.pop(cache_key, None)
-
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000
-                    logger.info(
-                        f"Config saved successfully for CLIENT_{client_id} "
-                        f"in {elapsed_ms:.2f}ms (attempt {attempt + 1}/{max_retries})"
-                    )
-                    return True
-                else:
-                    # File lock failed, retry
-                    if attempt < max_retries - 1:
-                        logger.warning(
-                            f"Save failed (attempt {attempt + 1}/{max_retries}), "
-                            f"retrying in {retry_delay}s: File is locked"
-                        )
-                        time.sleep(retry_delay)
-
-            except OSError as e:
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        f"Save failed (attempt {attempt + 1}/{max_retries}), "
-                        f"retrying in {retry_delay}s: {e}"
-                    )
-                    time.sleep(retry_delay)
-                else:
-                    logger.exception(
-                        f"Save failed after {max_retries} attempts, "
-                        f"config size: {config_size:,} bytes, {num_sets} sets"
-                    )
-                    raise ProfileManagerError(
-                        "Configuration is locked by another user. Please try again."
-                    )
-
-        logger.error(
-            f"Save failed after {max_retries} attempts, "
-            f"config size: {config_size:,} bytes, {num_sets} sets"
-        )
-        return False
+        self._config_cache.pop(f"{self.base_path}::shopify_{client_id}", None)
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"Config saved for CLIENT_{client_id} in {elapsed_ms:.0f}ms")
+        return True
 
     # --- Set/Bundle Management Methods ---
 
@@ -897,101 +848,6 @@ class ProfileManager:
 
         return success
 
-    def _save_with_windows_lock(self, file_path: Path, data: dict) -> bool:
-        """Save file with Windows file locking (locks entire file).
-
-        Args:
-            file_path (Path): Path to file
-            data (Dict): Data to save
-
-        Returns:
-            bool: True if saved successfully
-        """
-        import msvcrt
-
-        # Write to temp file first
-        temp_path = file_path.with_suffix(".tmp")
-
-        try:
-            # Pre-serialize to know exact size
-            json_str = json.dumps(data, indent=2, ensure_ascii=False)
-            file_size = len(json_str.encode("utf-8"))
-
-            logger.debug(f"Attempting to save config, size: {file_size:,} bytes")
-
-            with open(temp_path, "w", encoding="utf-8") as f:
-                # Try to acquire exclusive lock for entire file
-                try:
-                    # Ensure file position is at start before locking
-                    f.seek(0)
-                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, file_size)
-                    logger.debug(f"Lock acquired for {file_size:,} bytes")
-                except OSError as e:
-                    logger.warning(f"Lock failed: {e}")
-                    return False
-
-                try:
-                    # Write pre-serialized JSON
-                    f.write(json_str)
-                    f.flush()
-                    os.fsync(f.fileno())  # Force write to disk
-                    logger.debug("File written and flushed successfully")
-                finally:
-                    # Unlock with same size - must seek to start first
-                    f.seek(0)
-                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, file_size)
-                    logger.debug("Lock released")
-
-            # Atomic move
-            logger.debug(f"Renaming {temp_path.name} → {file_path.name}")
-            shutil.move(str(temp_path), str(file_path))
-            logger.debug(f"Config saved successfully: {file_path.name}")
-            return True
-
-        except Exception:
-            logger.exception("Failed to save with Windows lock")
-            if temp_path.exists():
-                temp_path.unlink()
-            return False
-
-    def _save_with_unix_lock(self, file_path: Path, data: dict) -> bool:
-        """Save file with Unix file locking.
-
-        Args:
-            file_path (Path): Path to file
-            data (Dict): Data to save
-
-        Returns:
-            bool: True if saved successfully
-        """
-        import fcntl
-
-        # Write to temp file first
-        temp_path = file_path.with_suffix(".tmp")
-
-        try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                # Try to acquire exclusive lock
-                try:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except OSError:
-                    return False
-
-                try:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-                finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-
-            # Atomic move
-            shutil.move(str(temp_path), str(file_path))
-            return True
-
-        except Exception:
-            logger.exception("Failed to save with Unix lock")
-            if temp_path.exists():
-                temp_path.unlink()
-            return False
-
     def _create_backup(self, client_id: str, file_path: Path, file_type: str):
         """Create timestamped backup of a configuration file.
 
@@ -1117,62 +973,16 @@ class ProfileManager:
         config["last_updated"] = datetime.now().astimezone().isoformat()
         config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
-        max_retries = 5  # Reduced from 10 to minimize UI blocking
-        retry_delay = 0.5  # Reduced from 1.0s (total worst case: 2.5s instead of 10s)
-        timeout_seconds = 5  # Maximum time for entire save operation
-        start_time = time.perf_counter()
+        try:
+            atomic_write_json(config_path, config)
+        except OSError as e:
+            error_msg = f"Failed to save client config for CLIENT_{client_id}: {e}"
+            logger.exception(error_msg)
+            raise ProfileManagerError(error_msg) from e
 
-        for attempt in range(max_retries):
-            # Check timeout to avoid blocking UI for too long
-            if time.perf_counter() - start_time > timeout_seconds:
-                logger.error(
-                    f"Client config save timed out after {timeout_seconds}s "
-                    f"(attempt {attempt + 1}/{max_retries})"
-                )
-                break
-
-            try:
-                # Use platform-specific file locking
-                if os.name == "nt":  # Windows
-                    success = self._save_with_windows_lock(config_path, config)
-                else:  # Unix-like
-                    success = self._save_with_unix_lock(config_path, config)
-
-                if success:
-                    # Invalidate cache
-                    cache_key = f"{self.base_path}::client_{client_id}"
-                    self._config_cache.pop(cache_key, None)
-
-                    logger.info(
-                        f"Client config saved successfully for CLIENT_{client_id} "
-                        f"(attempt {attempt + 1}/{max_retries})"
-                    )
-                    return True
-                else:
-                    # File lock failed, retry
-                    if attempt < max_retries - 1:
-                        logger.warning(
-                            f"Save failed (attempt {attempt + 1}/{max_retries}), "
-                            f"retrying in {retry_delay}s: File is locked"
-                        )
-                        time.sleep(retry_delay)
-
-            except OSError as e:
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        f"Save failed (attempt {attempt + 1}/{max_retries}), "
-                        f"retrying in {retry_delay}s: {e}"
-                    )
-                    time.sleep(retry_delay)
-                else:
-                    error_msg = f"Failed to save client config after {max_retries} attempts: {e}"
-                    logger.exception(error_msg)
-                    raise ProfileManagerError(error_msg)
-
-        # If we get here, all retries failed
-        error_msg = f"Failed to save client config after {max_retries} attempts"
-        logger.error(error_msg)
-        raise ProfileManagerError(error_msg)
+        self._config_cache.pop(f"{self.base_path}::client_{client_id}", None)
+        logger.info(f"Client config saved for CLIENT_{client_id}")
+        return True
 
     def update_ui_settings(self, client_id: str, ui_settings: dict[str, Any]) -> bool:
         """Update client UI settings with partial updates support.
