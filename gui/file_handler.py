@@ -140,7 +140,7 @@ class FileHandler:
                 self.log.exception(f"Failed to save {kind} delimiter")
                 toast(
                     self.mw,
-                    f"The {kind} delimiter was not saved. Details are in Logs.",
+                    f"The {kind} delimiter wasn't saved. Details are in Logs.",
                     role="error",
                 )
                 return

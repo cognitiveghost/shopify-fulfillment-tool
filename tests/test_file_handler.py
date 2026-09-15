@@ -168,4 +168,4 @@ def test_a_failed_delimiter_save_tells_the_user(main_window, monkeypatch):
 
     assert seen, "a failed save must raise a toast"
     assert seen[-1][1] == "error"
-    assert "couldn't" in seen[-1][0].lower() or "not saved" in seen[-1][0].lower()
+    assert "wasn't saved" in seen[-1][0].lower()

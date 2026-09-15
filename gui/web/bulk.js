@@ -131,7 +131,11 @@ function moreItems() {
       id: "more-remove-tag",
       label: "Remove a tag from " + orders,
       disabled: !tagged,
-      title: tagged ? "" : "None of these " + orders + " carry a tag",
+      title: tagged
+        ? ""
+        : n === 1
+          ? "This order doesn't carry a tag"
+          : "None of these " + orders + " carry a tag",
       run: () => openTagPopover("remove"),
     },
     { id: "more-copy", label: "Copy " + countedWord(n, "order number"), hint: "Ctrl+C", run: copySelection },

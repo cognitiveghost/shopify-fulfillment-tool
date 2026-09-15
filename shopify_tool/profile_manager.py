@@ -12,6 +12,7 @@ Key Features:
     - Validation of client IDs and configurations
 """
 
+import contextlib
 import copy
 import json
 import logging
@@ -608,9 +609,11 @@ class ProfileManager:
             return None
 
     def save_shopify_config(self, client_id: str, config: dict) -> bool:
-        """Save Shopify configuration with file locking and backup.
+        """Save Shopify configuration atomically, with a backup.
 
-        Uses file locking to prevent concurrent write conflicts.
+        The write goes through shared/atomic_write.py, so a reader sees either
+        the whole old document or the whole new one. Concurrent writers are
+        last-writer-wins, not serialised -- see ADR 0008.
         Creates automatic backup before saving.
 
         Args:
@@ -640,27 +643,29 @@ class ProfileManager:
         config["last_updated"] = datetime.now().astimezone().isoformat()
         config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
-        # Calculate config size and metrics for logging
         start_time = time.perf_counter()
-        json_str = json.dumps(config, indent=2, ensure_ascii=False)
-        config_size = len(json_str.encode("utf-8"))
         num_sets = len(config.get("set_decoders", {}))
-
-        logger.info(
-            f"Saving config for CLIENT_{client_id}: "
-            f"{config_size:,} bytes, {num_sets} sets"
-        )
+        logger.info(f"Saving config for CLIENT_{client_id}: {num_sets} sets")
 
         try:
             atomic_write_json(config_path, config)
-        except OSError as e:
+        # Not just OSError: atomic_write_json re-raises whatever failed, so a
+        # non-serialisable value arrives as TypeError. The declared contract
+        # here is ProfileManagerError -- keep it true for every failure.
+        except Exception as e:
             error_msg = f"Failed to save config for CLIENT_{client_id}: {e}"
             logger.exception(error_msg)
             raise ProfileManagerError(error_msg) from e
 
         self._config_cache.pop(f"{self.base_path}::shopify_{client_id}", None)
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(f"Config saved for CLIENT_{client_id} in {elapsed_ms:.0f}ms")
+        # Size from the file, not a second json.dumps of the whole config --
+        # this is the save path the share makes slow. A stat that fails here
+        # must not turn a save that succeeded into an error.
+        size = ""
+        with contextlib.suppress(OSError):
+            size = f"{config_path.stat().st_size:,} bytes, "
+        logger.info(f"Config saved for CLIENT_{client_id}: {size}{elapsed_ms:.0f}ms")
         return True
 
     # --- Set/Bundle Management Methods ---
@@ -940,10 +945,10 @@ class ProfileManager:
         return migrated
 
     def save_client_config(self, client_id: str, config: dict) -> bool:
-        """Save client_config.json with file locking and backup.
+        """Save client_config.json atomically, with a backup.
 
         Similar to save_shopify_config but for client_config.json.
-        Uses file locking to prevent concurrent write conflicts.
+        Last-writer-wins between warehouse PCs -- see ADR 0008.
         Creates automatic backup before saving.
 
         Args:
@@ -975,7 +980,7 @@ class ProfileManager:
 
         try:
             atomic_write_json(config_path, config)
-        except OSError as e:
+        except Exception as e:  # see save_shopify_config
             error_msg = f"Failed to save client config for CLIENT_{client_id}: {e}"
             logger.exception(error_msg)
             raise ProfileManagerError(error_msg) from e

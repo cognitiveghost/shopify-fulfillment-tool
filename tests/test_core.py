@@ -332,6 +332,100 @@ class TestPackedOrdersAreDetectionOnly:
         assert "#LONG_GONE" not in set(written["Order_Number"])
 
 
+class TestInventoryMemoryEndToEnd:
+    """The snapshot has to survive the trip through run_full_analysis.
+
+    build_inventory_snapshot needs internal column names, but the stock frame
+    core loads carries the client's own CSV headers -- analysis renames only
+    its own local copy. Unit-testing the builder alone never crosses that
+    boundary, so it passed while the feature was inert in production.
+    """
+
+    def test_unordered_sku_reaches_memory_under_the_default_mappings(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(core, "load_packed_orders", lambda _pm, _cid: None)
+        monkeypatch.setattr(
+            core,
+            "get_persistent_data_path",
+            lambda _name: tmp_path / "fulfillment_history.csv",
+        )
+
+        orders_csv = tmp_path / "orders.csv"
+        pd.DataFrame(
+            [
+                {
+                    "Name": "#1001",
+                    "Lineitem sku": "A1",
+                    "Lineitem quantity": 3,
+                    "Shipping Method": "Standard",
+                }
+            ]
+        ).to_csv(orders_csv, index=False)
+
+        # Bulgarian headers -- the default client mapping, not SKU/Stock.
+        stock_csv = tmp_path / "stock.csv"
+        pd.DataFrame(
+            [
+                {"Артикул": "A1", "Име": "Widget", "Наличност": 100},
+                {"Артикул": "Z9", "Име": "Untouched", "Наличност": 42},
+            ]
+        ).to_csv(stock_csv, index=False)
+
+        saved = {}
+
+        class FakeProfileManager:
+            def load_shopify_config(self, _client_id):
+                return {"inventory_memory": {"enabled": True}}
+
+            def load_client_config(self, _client_id):
+                return {}
+
+            def get_inventory_memory(self, _client_id, *_args, **_kwargs):
+                return None  # a real stock file is supplied, so memory is unused
+
+            def get_client_directory(self, _client_id):
+                client_dir = tmp_path / "client"
+                client_dir.mkdir(exist_ok=True)
+                return client_dir
+
+            def save_inventory_memory(
+                self, _client_id, stock_dict, config=None, names_dict=None
+            ):
+                saved["stock"] = stock_dict
+                saved["names"] = names_dict
+                return True
+
+        ok, msg, _final_df, _stats = core.run_full_analysis(
+            str(stock_csv),
+            str(orders_csv),
+            str(tmp_path / "out"),
+            ",",
+            ",",
+            {
+                "settings": {"repeat_detection_days": 1},
+                "column_mappings": {
+                    "orders": _ORDERS_MAPPING,
+                    "stock": {
+                        "Артикул": "SKU",
+                        "Име": "Product_Name",
+                        "Наличност": "Stock",
+                    },
+                },
+            },
+            client_id="CLIENT_TEST",
+            profile_manager=FakeProfileManager(),
+        )
+        assert ok, msg
+
+        # Z9 was never ordered, so it only reaches memory via the stock-file
+        # seed -- and it keeps its opening level, not a zero.
+        assert saved["stock"] == {"A1": 97.0, "Z9": 42.0}
+        # ...and it carries a real name, so the next memory-mode run does not
+        # render "N/A" for it.
+        assert saved["names"]["Z9"] == "Untouched"
+
+
 class TestBuildInventorySnapshot:
     def test_keeps_skus_with_no_orders(self):
         """A SKU present in stock but absent from every order must still be remembered."""

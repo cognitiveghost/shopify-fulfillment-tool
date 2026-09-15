@@ -305,6 +305,11 @@ def test_bulk_menu_reads_naturally_for_one_order(qtbot, page):
     assert "Export this order to Excel" in labels
     assert "Export this order to CSV" in labels
     assert not any(label and "these 1" in label for label in labels)
+    # Tooltips are copy too -- "None of these 1 order carry a tag" is the same
+    # defect one attribute over.
+    titles = _json(qtbot, view, "moreItems().map(i => i.title || '')")
+    assert not any("these 1" in title for title in titles)
+    assert "This order doesn't carry a tag" in titles
 
 
 def test_the_sku_popover_title_reads_naturally_for_one_order(qtbot, page):

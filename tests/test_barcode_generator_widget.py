@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from gui.barcode_generator_widget import BarcodeGeneratorWidget
+from gui.barcode_generator_widget import IDLE_STATUS, BarcodeGeneratorWidget
 
 
 class _FakeWidget:
@@ -36,12 +36,9 @@ class _FakeWidget:
         self.print_qr_btn = Mock()
         self.last_barcode_pdf = None
         self.last_qr_pdf = None
-        self.packing_list_combo = Mock()
-        self.packing_list_combo.currentText.return_value = "PL1"
-        self.filtered_orders_df = Mock()
-        self.filtered_orders_df.__getitem__ = Mock(
-            return_value=Mock(nunique=Mock(return_value=0))
-        )
+        # Pinned at launch by _on_generate_clicked; the completion slot reads
+        # this rather than the still-live combo.
+        self._generating = ("PL1", 0)
 
     def _generate_pdf_from_results(self, results):
         self.pdf_render_calls += 1
@@ -203,12 +200,7 @@ def test_barcode_generation_complete_logs_the_counts_for_a_repro(monkeypatch):
     widget = _FakeWidget(pdf_ok=True)
     widget.auto_open_pdf_checkbox.isChecked.return_value = True
     widget.add_qr_checkbox.isChecked.return_value = False
-    widget.packing_list_combo = Mock()
-    widget.packing_list_combo.currentText.return_value = "PL1"
-    widget.filtered_orders_df = Mock()
-    widget.filtered_orders_df.__getitem__ = Mock(
-        return_value=Mock(nunique=Mock(return_value=2))
-    )
+    widget._generating = ("PL1", 2)
     results = [
         {"success": True, "order_number": "#1"},
         {"success": False, "order_number": "#2"},
@@ -220,3 +212,37 @@ def test_barcode_generation_complete_logs_the_counts_for_a_repro(monkeypatch):
     assert "PL1" in logged
     assert "2 orders filtered" in logged
     assert "1 labels written, 1 failed" in logged
+
+
+def test_changing_the_packing_list_mid_run_still_writes_the_pdf(monkeypatch):
+    """Only the generate button is disabled during a run, so the operator can
+    still switch lists -- which clears filtered_orders_df. The completion slot
+    must not read that state, or the PDF is lost to a TypeError."""
+    monkeypatch.setattr("gui.barcode_generator_widget.toast", Mock())
+    monkeypatch.setattr("gui.barcode_generator_widget.show_error", Mock())
+
+    widget = _FakeWidget(pdf_ok=True)
+    widget.auto_open_pdf_checkbox.isChecked.return_value = False
+    widget.add_qr_checkbox.isChecked.return_value = False
+    widget._generating = ("PL1", 2)
+    # The operator switched lists while the worker ran.
+    widget.filtered_orders_df = None
+
+    BarcodeGeneratorWidget._on_generation_complete(
+        widget, [{"success": True, "order_number": "#1"}]
+    )
+
+    assert widget.pdf_render_calls == 1
+    logged = " ".join(str(c.args[0]) for c in widget.log.info.call_args_list)
+    # ...and the line still names the list that was actually generated.
+    assert "PL1" in logged
+    assert "2 orders filtered" in logged
+
+
+def test_status_label_shows_guidance_again_when_the_selection_clears():
+    """Clearing a stale count must not leave the status row blank."""
+    widget = _FakeSelectionWidget()
+
+    BarcodeGeneratorWidget._on_packing_list_changed(widget, -1)
+
+    assert widget.status_label.setText.call_args.args[0] == IDLE_STATUS

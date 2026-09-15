@@ -54,6 +54,15 @@ logger = logging.getLogger(__name__)
 GROUP_ATTENTION = "Needs attention"
 GROUP_REST = "Everything else"
 
+# The widest string the Age cell can hold (session_lifecycle.age_label), plus
+# the cell's own margins -- the Age column is sized from these, not a constant.
+AGE_WIDEST_FORM = "26d · archives in 4d"
+AGE_COLUMN_PADDING_PX = 16
+# Floor under the measured width. The tree's font is not final until Qt has
+# polished the stylesheet, so a measurement taken during construction can come
+# out a few pixels short of what the column eventually renders with.
+AGE_MIN_WIDTH_PX = 130
+
 
 # Columns whose cell text is a rendering, not the value: Age reads "3d"/"2w"
 # and Packing reads "10/12", both of which sort wrongly as strings. Each
@@ -294,10 +303,7 @@ class SessionBrowserWidget(QWidget):
 
         header = self.sessions_tree.header()
         for column, width in (
-            # Wide enough for the archive-countdown form age_label() produces
-            # ("26d · archives in 4d", spec 6.1's own example) -- a plain "3d"
-            # or "2w" just centers in the extra room.
-            (1, 130),
+            (1, 0),  # Age -- measured from the font, see _size_age_column
             (2, 140),
             (3, 80),
             (4, 80),
@@ -308,6 +314,7 @@ class SessionBrowserWidget(QWidget):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
             header.resizeSection(column, width)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self._size_age_column()
 
         main_layout.addWidget(self.sessions_tree)
 
@@ -377,7 +384,28 @@ class SessionBrowserWidget(QWidget):
         # re-run the recipe, so the rows are rebuilt from self.sessions_data,
         # which is already in memory. The same signal carries a density change,
         # which is what refreshes the row-height hint above.
-        on_theme_changed(self, lambda _tokens: self._populate_tree())
+        # The same signal can carry a different font, and the Age column is
+        # sized from font metrics -- so re-measure it here rather than trusting
+        # the width taken before the theme was applied.
+        on_theme_changed(
+            self, lambda _tokens: (self._size_age_column(), self._populate_tree())
+        )
+
+    def _size_age_column(self) -> None:
+        """Width the Age column from the font actually in use.
+
+        Wide enough for the archive-countdown form the Age cell produces
+        ("26d · archives in 4d", spec 6.1's own example) -- a plain "3d" or
+        "2w" just centers in the extra room. Measured, not pinned: Windows
+        renders Segoe UI wider than the Linux dev font, which is how the
+        column came to clip at a number that looked right on CI.
+        """
+        needed = max(
+            AGE_MIN_WIDTH_PX,
+            self.sessions_tree.fontMetrics().horizontalAdvance(AGE_WIDEST_FORM)
+            + AGE_COLUMN_PADDING_PX,
+        )
+        self.sessions_tree.header().resizeSection(1, needed)
 
     def set_client(self, client_id: str, auto_refresh: bool = True):
         """Set the client to show sessions for.

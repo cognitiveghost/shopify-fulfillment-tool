@@ -483,7 +483,7 @@ Leave `"Add a tag to " + orders` and `"Copy " + countedWord(n, "order number")` 
 
 ```bash
 QT_QPA_PLATFORM=offscreen python -m pytest tests/test_results_bulk_popover.py -v
-python scripts/style_lint.py
+python -m shared.style_lint gui/
 git add gui/web/bulk.js tests/test_results_bulk_popover.py
 git commit -m "Bulk menu reads 'this order' at one, not 'these 1 order'"
 ```
@@ -525,7 +525,7 @@ Confirm `--border` exists in this stylesheet before using it; if the token is na
 
 ```bash
 QT_QPA_PLATFORM=offscreen python -m pytest -k column -v
-python scripts/style_lint.py
+python -m shared.style_lint gui/
 git add gui/web/results.css
 git commit -m "Column manager: reserve the scrollbar gutter so pinned/empty stop clipping"
 ```
@@ -641,7 +641,7 @@ Ensure every button in both groups is `setCheckable(True)`, the group is `setExc
 
 ```bash
 QT_QPA_PLATFORM=offscreen python -m pytest tests/test_log_viewer.py tests/test_log_viewer_theme.py -v
-python scripts/style_lint.py
+python -m shared.style_lint gui/
 git add gui/log_viewer.py tests/test_log_viewer.py
 git commit -m "Logs: the source switch and the level filter are visibly different controls"
 ```
@@ -726,7 +726,7 @@ Check what `shared/theme.py` actually exposes for this and use that name — do 
 
 ```bash
 QT_QPA_PLATFORM=offscreen python -m pytest -k client -v
-python scripts/style_lint.py
+python -m shared.style_lint gui/
 git add gui/ui_manager.py tests/
 git commit -m "Client menu: a separator before the actions, and a themed scrollbar"
 ```
@@ -778,7 +778,7 @@ The scroll area in the Reports pane ends flush against the row below it. Add bot
 
 ```bash
 QT_QPA_PLATFORM=offscreen python -m pytest -k settings -v
-python scripts/style_lint.py
+python -m shared.style_lint gui/
 git add gui/settings/ tests/
 git commit -m "Settings: unclip the search placeholder, the spinbox width and the column list"
 ```
@@ -816,7 +816,7 @@ For the checkbox appearance, apply the same QSS the rest of the Phase 9 dialogs 
 
 ```bash
 QT_QPA_PLATFORM=offscreen python -m pytest tests/test_generate_reports_dialog.py -v
-python scripts/style_lint.py
+python -m shared.style_lint gui/
 git add gui/report_selection_dialog.py tests/test_generate_reports_dialog.py
 git commit -m "Generate Reports: the list is not editable and the checkboxes match Phase 9"
 ```
@@ -830,7 +830,7 @@ git commit -m "Generate Reports: the list is not editable and the checkboxes mat
 ```bash
 QT_QPA_PLATFORM=offscreen python -m pytest
 ruff check . --exclude shared
-python scripts/style_lint.py
+python -m shared.style_lint gui/
 ```
 
 Expected: at least 1749 passing (the `d070c2e` baseline) plus the new regression tests, ruff clean, style lint clean.

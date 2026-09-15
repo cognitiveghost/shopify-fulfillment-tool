@@ -127,6 +127,15 @@ def test_a_separator_precedes_the_action_rows(qapp):
     assert rows[first_action - 1][0] == ROW_SECTION
 
 
+def test_no_clients_means_no_separator_above_the_actions(qapp):
+    """With nothing above them, the separator is just a gap over the actions."""
+    bar = CommandBar()
+    bar.set_clients_from({"groups": [], "special_groups": {}, "all_clients": []})
+    rows = _rows(bar)
+
+    assert [kind for kind, _p, _t in rows] == [ROW_ACTION] * 3
+
+
 def test_the_popup_scrollbar_is_themed_not_native(qapp):
     """The dropdown popup is a QAbstractItemView, themed by the app-wide
     stylesheet (ThemeManager.apply_theme -> QApplication.setStyleSheet); a

@@ -212,7 +212,7 @@ def test_remove_a_tag_is_disabled_when_nothing_carries_one(qtbot, page):
     assert _text(qtbot, view, "#more-remove-tag") == "Remove a tag from 1 order"
     assert (
         _eval(qtbot, view, "document.getElementById('more-remove-tag').title")
-        == "None of these 1 order carry a tag"
+        == "This order doesn't carry a tag"
     )
 
 

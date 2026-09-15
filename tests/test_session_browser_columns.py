@@ -10,7 +10,11 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel
 
-from gui.session_browser_widget import SessionBrowserWidget
+from gui.session_browser_widget import (
+    AGE_COLUMN_PADDING_PX,
+    AGE_WIDEST_FORM,
+    SessionBrowserWidget,
+)
 from gui.theme_manager import get_density_profile
 from shared.theme import theme_notifier
 from shopify_tool.session_lifecycle import display_status
@@ -398,7 +402,7 @@ class TestRowPresentation:
         # age_label() produces -- must not be cut off.
         header = browser.sessions_tree.header()
         metrics = browser.sessions_tree.fontMetrics()
-        needed = metrics.horizontalAdvance("26d · archives in 4d") + 16
+        needed = metrics.horizontalAdvance(AGE_WIDEST_FORM) + AGE_COLUMN_PADDING_PX
         assert header.sectionSize(1) >= needed
 
 

@@ -144,7 +144,9 @@ class GroupsManager:
             return self._create_default_groups()
 
     def save_groups(self, groups_data: dict[str, Any]) -> bool:
-        """Save groups configuration with file locking and backup.
+        """Save groups configuration atomically, with a backup.
+
+        Last-writer-wins between warehouse PCs -- see ADR 0008.
 
         Args:
             groups_data: Groups configuration dict
@@ -153,7 +155,7 @@ class GroupsManager:
             bool: True if saved successfully
 
         Raises:
-            GroupsManagerError: If save fails after retries
+            GroupsManagerError: If the write fails
         """
         # Create backup before saving
         if self.groups_path.exists():
@@ -164,7 +166,8 @@ class GroupsManager:
 
         try:
             atomic_write_json(self.groups_path, groups_data)
-        except OSError as e:
+        # atomic_write_json re-raises whatever failed, which is not always OSError.
+        except Exception as e:
             error_msg = f"Failed to save groups configuration: {e}"
             logger.exception(error_msg)
             raise GroupsManagerError(error_msg) from e

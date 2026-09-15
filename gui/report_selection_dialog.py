@@ -236,14 +236,20 @@ class GenerateReportsDialog(_BaseReportDialog):
         # list wants.
         self.report_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
         # QListView::indicator, not a new rule: the same border/background/
-        # checked look as the app's QCheckBox::indicator (shared/theme.py),
-        # reusing its checkmark glyph rather than Qt's native one.
-        r = self.theme.radius
+        # checked look as the app's QCheckBox::indicator, reusing its checkmark
+        # glyph rather than Qt's native one.
+        #
+        # This deliberately duplicates build_stylesheet's QCheckBox::indicator
+        # block in shared/theme.py. shared/ is owned by packing-tool and synced
+        # one-way (CLAUDE.md), so the selector cannot be added upstream from
+        # here. If the checkbox look changes there, change it here too -- or
+        # add QListView::indicator to that block in packing-tool and drop this.
+        radius = self.theme.radius
         self.report_list.setStyleSheet(
             "QListView::indicator {"
             f"width: 18px; height: 18px;"
             f"border: 2px solid {self.theme.border};"
-            f"border-radius: {r}px;"
+            f"border-radius: {radius}px;"
             f"background-color: {self.theme.surface};"
             "}"
             "QListView::indicator:checked {"
