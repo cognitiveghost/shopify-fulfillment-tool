@@ -260,6 +260,9 @@ class BarcodeGeneratorWidget(QWidget):
 
     def _on_packing_list_changed(self, index):
         """Handle packing list selection change."""
+        self.status_label.setText("")
+        self.status_label.setStyleSheet("")
+
         if index < 0:
             self.current_packing_list = None
             self.filtered_orders_df = None
@@ -454,8 +457,10 @@ class BarcodeGeneratorWidget(QWidget):
         )
 
         self.log.info(
-            f"Barcode generation complete: {len(successful)} successful, "
-            f"{len(failed)} failed"
+            f"Barcode generation complete for packing list "
+            f"{self.packing_list_combo.currentText()!r}: "
+            f"{self.filtered_orders_df['Order_Number'].nunique()} orders filtered, "
+            f"{len(successful)} labels written, {len(failed)} failed"
         )
 
         pdf_generated = (

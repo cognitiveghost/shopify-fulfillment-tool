@@ -35,6 +35,12 @@ class _FakeWidget:
         self.print_qr_btn = Mock()
         self.last_barcode_pdf = None
         self.last_qr_pdf = None
+        self.packing_list_combo = Mock()
+        self.packing_list_combo.currentText.return_value = "PL1"
+        self.filtered_orders_df = Mock()
+        self.filtered_orders_df.__getitem__ = Mock(
+            return_value=Mock(nunique=Mock(return_value=0))
+        )
 
     def _generate_pdf_from_results(self, results):
         self.pdf_render_calls += 1
@@ -150,3 +156,52 @@ def test_qr_checkbox_off_leaves_print_qr_button_disabled(monkeypatch):
     widget, _info, _critical = _run(monkeypatch, pdf_ok=True, add_qr=False)
     assert widget.last_qr_pdf is None
     widget.print_qr_btn.setEnabled.assert_called_with(False)
+
+
+class _FakeSelectionWidget:
+    """Stand-in exposing only what _on_packing_list_changed() touches when no
+    packing list is selected (index < 0) -- avoids constructing a real
+    BarcodeGeneratorWidget (needs a live session)."""
+
+    def __init__(self):
+        self.status_label = Mock()
+        self.order_count_label = Mock()
+        self.output_dir_label = Mock()
+        self.generate_btn = Mock()
+
+
+def test_status_label_clears_when_packing_list_changes():
+    """A previous run's count must not linger over a newly chosen packing list."""
+    widget = _FakeSelectionWidget()
+
+    BarcodeGeneratorWidget._on_packing_list_changed(widget, -1)
+
+    widget.status_label.setText.assert_any_call("")
+
+
+def test_barcode_generation_complete_logs_the_counts_for_a_repro(monkeypatch):
+    """The log line must carry what a Windows repro needs: which packing
+    list, how many orders were filtered, and the success/fail split."""
+    monkeypatch.setattr("gui.barcode_generator_widget.toast", Mock())
+    monkeypatch.setattr("gui.barcode_generator_widget.show_error", Mock())
+
+    widget = _FakeWidget(pdf_ok=True)
+    widget.auto_open_pdf_checkbox.isChecked.return_value = True
+    widget.add_qr_checkbox.isChecked.return_value = False
+    widget.packing_list_combo = Mock()
+    widget.packing_list_combo.currentText.return_value = "PL1"
+    widget.filtered_orders_df = Mock()
+    widget.filtered_orders_df.__getitem__ = Mock(
+        return_value=Mock(nunique=Mock(return_value=2))
+    )
+    results = [
+        {"success": True, "order_number": "#1"},
+        {"success": False, "order_number": "#2"},
+    ]
+
+    BarcodeGeneratorWidget._on_generation_complete(widget, results)
+
+    logged = " ".join(str(c.args[0]) for c in widget.log.info.call_args_list)
+    assert "PL1" in logged
+    assert "2 orders filtered" in logged
+    assert "1 labels written, 1 failed" in logged
