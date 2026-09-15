@@ -923,8 +923,40 @@ def _merge_fulfillment_history(
     )
 
 
+def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:
+    """Post-fulfilment stock per SKU, seeded from the whole stock file.
+
+    Every SKU in the stock file is remembered. SKUs the run actually touched
+    get their post-fulfilment Final_Stock; the rest keep their opening level.
+    A SKU absent from the stock file drops out -- the stock file is the truth
+    for what still exists (spec 2026-09-15 section 7 Q2).
+    """
+    snapshot = {}
+
+    if stock_df is not None and {"SKU", "Stock"} <= set(stock_df.columns):
+        snapshot = (
+            stock_df.groupby("SKU")["Stock"]
+            .last()
+            .dropna()
+            .apply(lambda x: max(0.0, float(x)))
+            .to_dict()
+        )
+
+    if final_df is not None and {"SKU", "Final_Stock"} <= set(final_df.columns):
+        snapshot.update(
+            final_df.groupby("SKU")["Final_Stock"]
+            .last()
+            .dropna()
+            .apply(lambda x: max(0.0, float(x)))
+            .to_dict()
+        )
+
+    return snapshot
+
+
 def _save_results_and_reports(
     final_df: pd.DataFrame,
+    stock_df: pd.DataFrame,
     summary_present_df: pd.DataFrame,
     summary_missing_df: pd.DataFrame,
     stats: dict,
@@ -946,6 +978,8 @@ def _save_results_and_reports(
 
     Args:
         final_df: Final analysis DataFrame
+        stock_df: Loaded stock DataFrame (SKU + Stock), used to seed the
+            inventory-memory snapshot with SKUs the run itself never touched
         summary_present_df: Summary of fulfillable items
         summary_missing_df: Summary of missing items
         stats: Statistics dictionary
@@ -1159,15 +1193,7 @@ def _save_results_and_reports(
             full_config = profile_manager.load_shopify_config(client_id) or {}
             inv_mem = full_config.get("inventory_memory", {})
             if inv_mem.get("enabled", False):
-                # Build final_stock_dict: last Final_Stock per SKU (true post-fulfillment state;
-                # min() would understate when cancellations/restocks make rows non-monotonic)
-                final_stock_dict = (
-                    final_df.groupby("SKU")["Final_Stock"]
-                    .last()
-                    .dropna()
-                    .apply(lambda x: max(0.0, float(x)))
-                    .to_dict()
-                )
+                final_stock_dict = build_inventory_snapshot(final_df, stock_df)
                 # Carry the display name along so the next run's memory-reconstructed
                 # stock_df doesn't show "N/A" in Warehouse_Name for every SKU.
                 # Only pass a non-empty dict -- an empty/None dict means "leave
@@ -1338,6 +1364,7 @@ def run_full_analysis(
         logger.info("Step 5: Saving results and reports...")
         primary_path, _ = _save_results_and_reports(
             final_df,
+            stock_df,
             summary_present_df,
             summary_missing_df,
             stats,
