@@ -297,6 +297,31 @@ def test_a_search_row_appears_only_above_ten_skus(qtbot, page):
     assert _eval(qtbot, view, "document.querySelectorAll('#bulk-search').length") == 0
 
 
+def test_bulk_menu_reads_naturally_for_one_order(qtbot, page):
+    view, _ = page
+    _select(qtbot, view, ["10444"])
+    labels = _json(qtbot, view, "moreItems().map(i => i.label)")
+    assert "Remove a SKU from this order" in labels
+    assert "Export this order to Excel" in labels
+    assert "Export this order to CSV" in labels
+    assert not any(label and "these 1" in label for label in labels)
+
+
+def test_the_sku_popover_title_reads_naturally_for_one_order(qtbot, page):
+    view, _ = page
+    _open_sku(qtbot, view, ["10444"], "more-remove-sku")
+    assert _text(qtbot, view, "#bulk-title") == "Remove a SKU from this order"
+
+
+def test_bulk_menu_still_pluralises_for_many(qtbot, page):
+    view, _ = page
+    _select(qtbot, view, ["10443", "10444", "10445"])
+    labels = _json(qtbot, view, "moreItems().map(i => i.label)")
+    assert "Remove a SKU from these 3 orders" in labels
+    assert "Export these 3 orders to Excel" in labels
+    assert "Export these 3 orders to CSV" in labels
+
+
 def test_the_remove_tag_list_is_ungrouped(qtbot, page):
     """Spec section 5.2: "ungrouped -- a tag's category does not help you find
     a tag you can see". The add list groups; this one must not."""
