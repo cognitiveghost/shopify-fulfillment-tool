@@ -79,22 +79,33 @@ last-writer-wins between two warehouse PCs.
 ## 2. Settings changes don't apply until the client is reloaded
 
 Subtask `6hWGG6753QC539WV` ("sniffer is not apply changes until you reload a
-client"). The delimiter *detection* in `shopify_tool/csv_utils.py` is sound.
-The staleness is one layer up:
+client"). The delimiter *detection* in `shopify_tool/csv_utils.py` is sound,
+and the in-memory snapshot is **not** the culprit — `actions_handler.py:381`
+reloads `active_profile_config` after the Settings dialog, and
+`file_handler._save_default_delimiter:132` mutates it in place. Both paths
+refresh correctly. That hypothesis is disproved; do not re-investigate it.
 
-- `gui/actions_handler.py:153,1146` read the delimiter from
-  `self.mw.active_profile_config` — an in-memory snapshot taken when the
-  client is loaded.
-- `gui/file_handler.py:91-99` detects a delimiter that disagrees with the
-  config and **persists the corrected value to disk**.
-- Nothing refreshes `active_profile_config`. The next run still uses the
-  snapshot. Reloading the client is the only way to pick the change up.
+What is established is that **saves fail silently**:
 
-Compounded by §1: when the save silently fails, the value never reaches disk
-either.
+- `gui/file_handler.py:135` calls `save_shopify_config` and ignores the return
+  value. So does every other caller.
+- `gui/actions_handler.py:379` — "The window has already toasted *Settings
+  saved*" — the toast fires when the dialog is accepted, before the write is
+  confirmed. The user is told the save worked whether or not it did.
+- The log proves the write really does fail:
+  `WARNING The column layout wasn't saved: Failed to save client config after
+  5 attempts`.
+- Invalidation at `profile_manager.py:676` runs **only on success**, so a
+  failed save leaves the pre-edit config cached under a still-matching mtime.
 
-Fix: refresh `active_profile_config` from the single place that writes client
-config, so the snapshot can never outlive the file.
+So the value lives in memory, never reaches the share, and the next process to
+read the file gets the old one. Whether that is the whole of what the operator
+sees is not provable from the screenshots — §1 has to land first, then this is
+re-tested on Windows.
+
+Fix: make the write reliable (§1), then make failure visible — check the
+return value at every `save_shopify_config` / `save_client_config` call site,
+and only toast success after the write actually succeeded.
 
 ---
 
@@ -174,15 +185,37 @@ landed.
 
 ---
 
-## 7. Decisions needed before the plan
+## 7. Decisions — answered 2026-09-15
 
-1. **Sequencing** — one PR for all of it, or correctness (§1-§3) first and the
-   UI list (§5) second?
-2. **Inventory memory** — whole stock file, or only SKUs ever ordered?
-3. **Two PCs, one config** — after §1, writes are atomic but last-writer-wins.
-   Accept, merge per-section, or warn on conflict?
-4. **Barcodes** — a reproduction (client, packing list, log excerpt).
-5. **Settings interior** — full Phase 9 restyle, or only the clipped/broken
-   bits?
+1. **Sequencing: everything in one PR.** As the task says, one flow. The plan
+   is ordered correctness-first anyway so the important commits land early and
+   review can start at the top.
+2. **Inventory memory: every SKU in the stock file.** Seed the snapshot from
+   the full stock frame, then overlay post-fulfilment `Final_Stock` for the
+   SKUs the run touched. A SKU with no orders keeps its real level instead of
+   disappearing. Not accumulate-forever — each run's stock file is the truth,
+   so a discontinued SKU drops out when it leaves the file.
+3. **Two PCs, one config: last writer wins.** Atomic writes make the file
+   always-valid JSON, which was the actual harm. No revision stamps, no merge
+   pass, no extra network read per save. Recorded in ADR 0008.
+4. **Barcodes: fix the stale label, instrument for a repro.** The "1 label"
+   report gets no speculative fix. Clear the status label when the packing
+   list changes, and log packing list / filtered order count / labels written
+   so the next Windows run captures its own evidence.
+5. **Settings interior: fix what is broken, not the style.** Clipped
+   placeholder, list cut mid-row, native scrollbars, full-bleed spinbox. The
+   trailing colons and label styling stay — a full Phase 9 pass on the form
+   interior is a bundle, not a quick fix, and is not in this batch.
 
-Answers land in §8 and the plan follows.
+## 8. Scope after the decisions
+
+In, correctness: §1 atomic config writes; §2 config-snapshot refresh;
+§3 inventory memory from the stock file; §4 stale barcode label + diagnostics.
+
+In, UI: B1, B2, B3, B6, B7, B8, B9, and the *broken* half of B4/B5.
+
+Out: the Settings form restyle (colons, label style, field widths beyond the
+full-bleed spinbox); any change to the barcode generation path itself; any
+change under `shared/`.
+
+Plan: `docs/superpowers/plans/2026-09-15-post-phase9-quickfixes-plan.md`.

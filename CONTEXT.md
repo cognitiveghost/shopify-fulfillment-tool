@@ -246,6 +246,12 @@ opens: the slot persists and changes state, the picker appears and closes.
 combo rather than the thing it chose and collided with the Orders/Stock
 "Load Mode" on the same screen.
 
+**Inventory memory** — the stock level per SKU carried from one run to the
+next, so a run can proceed without a fresh stock export. It covers **every SKU
+in the stock file**, not only the SKUs an order touched: a SKU the run left
+alone keeps its opening level. Each run's stock file is the truth, so a SKU
+that leaves the file leaves memory — memory accumulates levels, never SKUs.
+
 ## Sessions
 
 **Blocked order** — an order this session cannot fulfil, counted as
