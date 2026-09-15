@@ -1,6 +1,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QDialog,
     QFrame,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
+from shared.icons import glyph_url
 from shopify_tool.report_filters import match_counts
 
 
@@ -228,6 +230,28 @@ class GenerateReportsDialog(_BaseReportDialog):
         super()._init_ui()
         self.footer_label = QLabel("0 selected")
         self.layout().addWidget(self.footer_label)
+
+        # Every row is checkable; Qt's default edit triggers open a text
+        # editor over a double-clicked row, which is never what a checkable
+        # list wants.
+        self.report_list.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # QListView::indicator, not a new rule: the same border/background/
+        # checked look as the app's QCheckBox::indicator (shared/theme.py),
+        # reusing its checkmark glyph rather than Qt's native one.
+        r = self.theme.radius
+        self.report_list.setStyleSheet(
+            "QListView::indicator {"
+            f"width: 18px; height: 18px;"
+            f"border: 2px solid {self.theme.border};"
+            f"border-radius: {r}px;"
+            f"background-color: {self.theme.surface};"
+            "}"
+            "QListView::indicator:checked {"
+            f"background-color: {self.theme.accent_fill};"
+            f"border: 2px solid {self.theme.accent_fill};"
+            f"image: {glyph_url('check', self.theme.on_accent, size=14)};"
+            "}"
+        )
 
     def _add_extra_sections(self, layout):
         """Add the Writeoff section, same as StockExportDialog."""
