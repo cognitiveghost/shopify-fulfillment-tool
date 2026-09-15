@@ -36,8 +36,10 @@ def test_general_page_writes_every_key_it_owns(qapp):
     page._settings = {}
 
     assert set(page.collect()["settings"]) == {
-        "stock_csv_delimiter", "orders_csv_delimiter",
-        "low_stock_threshold", "repeat_detection_days",
+        "stock_csv_delimiter",
+        "orders_csv_delimiter",
+        "low_stock_threshold",
+        "repeat_detection_days",
     }
 
 
@@ -49,3 +51,8 @@ def test_general_page_falls_back_to_defaults(qapp):
         "low_stock_threshold": 5,
         "repeat_detection_days": 1,
     }
+
+
+def test_repeat_window_spinbox_is_not_full_bleed(qapp):
+    page = GeneralPage({})
+    assert page.repeat_days_input.maximumWidth() <= 120

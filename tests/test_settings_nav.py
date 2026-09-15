@@ -130,6 +130,13 @@ def test_no_match_says_so_and_clearing_restores_every_page(window):
     assert window._no_match_label.isHidden()
 
 
+def test_search_placeholder_is_not_clipped(window):
+    field = window._nav_search
+    metrics = field.fontMetrics()
+    needed = metrics.horizontalAdvance(field.placeholderText()) + 24
+    assert field.minimumWidth() >= needed
+
+
 def test_enter_opens_the_first_match(window):
     window._nav_search.setText("courier")
     window._nav_search.returnPressed.emit()

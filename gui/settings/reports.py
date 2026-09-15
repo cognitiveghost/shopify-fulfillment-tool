@@ -113,7 +113,10 @@ class ReportsPage(SettingsPage):
         # A report with a dozen filters is taller than a warehouse screen.
         editor_host = QWidget()
         self._editor_layout = QVBoxLayout(editor_host)
-        self._editor_layout.setContentsMargins(0, 0, 0, 0)
+        # Bottom padding on the scrolled content, not the QScrollArea itself
+        # (a frame around the viewport) -- otherwise the columns list's last
+        # row sits flush against the viewport edge and reads as clipped.
+        self._editor_layout.setContentsMargins(0, 0, 0, 16)
         editor_scroll = QScrollArea()
         editor_scroll.setWidgetResizable(True)
         editor_scroll.setFrameShape(QFrame.Shape.NoFrame)

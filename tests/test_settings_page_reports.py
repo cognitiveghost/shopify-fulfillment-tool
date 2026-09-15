@@ -319,3 +319,12 @@ def test_opening_a_legacy_report_does_not_mark_the_page_unsaved():
     page._lists[PACKING_LISTS].setCurrentRow(1)
 
     assert page.is_dirty() is False
+
+
+def test_the_editor_scroll_area_leaves_bottom_padding():
+    """The columns list's last row must not sit flush against the scroll
+    area's bottom edge -- padding belongs on the scrolled content, not on
+    the QScrollArea itself, which is a frame around the viewport."""
+    page = ReportsPage(PACKING, STOCK, analysis_df=None)
+    margins = page._editor_layout.contentsMargins()
+    assert margins.bottom() > 0

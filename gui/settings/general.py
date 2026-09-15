@@ -33,7 +33,9 @@ class GeneralPage(SettingsPage):
             ),
         )
 
-        self.orders_delimiter_edit = QLineEdit(settings.get("orders_csv_delimiter", ","))
+        self.orders_delimiter_edit = QLineEdit(
+            settings.get("orders_csv_delimiter", ",")
+        )
         self.orders_delimiter_edit.setMaximumWidth(100)
         self.orders_delimiter_edit.setPlaceholderText(",")
         section.add_row(
@@ -65,6 +67,7 @@ class GeneralPage(SettingsPage):
         self.repeat_days_input.setMinimum(1)
         self.repeat_days_input.setMaximum(365)
         self.repeat_days_input.setValue(settings.get("repeat_detection_days", 1))
+        self.repeat_days_input.setMaximumWidth(100)
         section.add_row(
             "Repeat Detection Window (days):",
             self.repeat_days_input,
@@ -79,10 +82,12 @@ class GeneralPage(SettingsPage):
         main_layout.addStretch()
 
     def collect(self) -> dict:
-        self._settings.update({
-            "stock_csv_delimiter": self.stock_delimiter_edit.text(),
-            "orders_csv_delimiter": self.orders_delimiter_edit.text(),
-            "low_stock_threshold": int(self.low_stock_edit.text()),
-            "repeat_detection_days": self.repeat_days_input.value(),
-        })
+        self._settings.update(
+            {
+                "stock_csv_delimiter": self.stock_delimiter_edit.text(),
+                "orders_csv_delimiter": self.orders_delimiter_edit.text(),
+                "low_stock_threshold": int(self.low_stock_edit.text()),
+                "repeat_detection_days": self.repeat_days_input.value(),
+            }
+        )
         return {"settings": self._settings}
