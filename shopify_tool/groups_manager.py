@@ -16,11 +16,12 @@ import json
 import logging
 import os
 import shutil
-import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from shared.atomic_write import atomic_write_json
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -89,15 +90,15 @@ class GroupsManager:
                     "display_order": -1,
                     "name": "Pinned",
                     "color": "#FFC107",
-                    "collapsible": False
+                    "collapsible": False,
                 },
                 "all": {
                     "display_order": 999,
                     "name": "All Clients",
                     "color": "#9E9E9E",
-                    "collapsible": True
-                }
-            }
+                    "collapsible": True,
+                },
+            },
         }
 
     def load_groups(self) -> dict[str, Any]:
@@ -119,13 +120,13 @@ class GroupsManager:
             return self._create_default_groups()
 
         try:
-            with open(self.groups_path, 'r', encoding='utf-8') as f:
+            with open(self.groups_path, "r", encoding="utf-8") as f:
                 groups_data = json.load(f)
 
             # Validate structure
             if "version" not in groups_data or "groups" not in groups_data:
                 logger.warning("Invalid groups.json structure, recreating")
-                backup_path = self.groups_path.with_suffix('.corrupted.bak')
+                backup_path = self.groups_path.with_suffix(".corrupted.bak")
                 shutil.copy2(self.groups_path, backup_path)
                 logger.info(f"Corrupted file backed up to {backup_path}")
                 return self._create_default_groups()
@@ -134,7 +135,7 @@ class GroupsManager:
 
         except json.JSONDecodeError:
             logger.exception("Corrupted JSON in groups.json")
-            backup_path = self.groups_path.with_suffix('.corrupted.bak')
+            backup_path = self.groups_path.with_suffix(".corrupted.bak")
             shutil.copy2(self.groups_path, backup_path)
             logger.info(f"Corrupted file backed up to {backup_path}")
             return self._create_default_groups()
@@ -143,7 +144,9 @@ class GroupsManager:
             return self._create_default_groups()
 
     def save_groups(self, groups_data: dict[str, Any]) -> bool:
-        """Save groups configuration with file locking and backup.
+        """Save groups configuration atomically, with a backup.
+
+        Last-writer-wins between warehouse PCs -- see ADR 0008.
 
         Args:
             groups_data: Groups configuration dict
@@ -152,7 +155,7 @@ class GroupsManager:
             bool: True if saved successfully
 
         Raises:
-            GroupsManagerError: If save fails after retries
+            GroupsManagerError: If the write fails
         """
         # Create backup before saving
         if self.groups_path.exists():
@@ -161,131 +164,16 @@ class GroupsManager:
         # Update timestamp
         groups_data["last_updated"] = datetime.now().astimezone().isoformat()
 
-        max_retries = 10
-        retry_delay = 1.0
-
-        for attempt in range(max_retries):
-            try:
-                # Use platform-specific file locking
-                if os.name == 'nt':  # Windows
-                    success = self._save_with_windows_lock(self.groups_path, groups_data)
-                else:  # Unix-like
-                    success = self._save_with_unix_lock(self.groups_path, groups_data)
-
-                if success:
-                    logger.info(f"Groups configuration saved successfully (attempt {attempt + 1}/{max_retries})")
-                    return True
-                else:
-                    # File lock failed, retry
-                    if attempt < max_retries - 1:
-                        logger.warning(
-                            f"Save failed (attempt {attempt + 1}/{max_retries}), "
-                            f"retrying in {retry_delay}s: File is locked"
-                        )
-                        time.sleep(retry_delay)
-
-            except OSError as e:
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        f"Save failed (attempt {attempt + 1}/{max_retries}), "
-                        f"retrying in {retry_delay}s: {e}"
-                    )
-                    time.sleep(retry_delay)
-                else:
-                    error_msg = f"Failed to save groups configuration after {max_retries} attempts: {e}"
-                    logger.exception(error_msg)
-                    raise GroupsManagerError(error_msg)
-
-        # If we get here, all retries failed
-        error_msg = f"Failed to save groups configuration after {max_retries} attempts"
-        logger.error(error_msg)
-        raise GroupsManagerError(error_msg)
-
-    def _save_with_windows_lock(self, file_path: Path, data: dict) -> bool:
-        """Save file with Windows file locking (locks entire file).
-
-        Args:
-            file_path: Path to file
-            data: Data to save
-
-        Returns:
-            bool: True if saved successfully
-        """
-        import msvcrt
-
-        # Write to temp file first
-        temp_path = file_path.with_suffix('.tmp')
-
         try:
-            # Pre-serialize to know exact size
-            json_str = json.dumps(data, indent=2, ensure_ascii=False)
-            file_size = len(json_str.encode('utf-8'))
+            atomic_write_json(self.groups_path, groups_data)
+        # atomic_write_json re-raises whatever failed, which is not always OSError.
+        except Exception as e:
+            error_msg = f"Failed to save groups configuration: {e}"
+            logger.exception(error_msg)
+            raise GroupsManagerError(error_msg) from e
 
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                # Try to acquire exclusive lock for entire file
-                try:
-                    f.seek(0)
-                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, file_size)
-                except OSError:
-                    return False
-
-                try:
-                    # Write pre-serialized JSON
-                    f.write(json_str)
-                    f.flush()
-                    os.fsync(f.fileno())  # Force write to disk
-                finally:
-                    # Unlock with same size - must seek to start first
-                    f.seek(0)
-                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, file_size)
-
-            # Atomic move
-            shutil.move(str(temp_path), str(file_path))
-            return True
-
-        except Exception:
-            logger.exception("Failed to save with Windows lock")
-            if temp_path.exists():
-                temp_path.unlink()
-            return False
-
-    def _save_with_unix_lock(self, file_path: Path, data: dict) -> bool:
-        """Save file with Unix file locking.
-
-        Args:
-            file_path: Path to file
-            data: Data to save
-
-        Returns:
-            bool: True if saved successfully
-        """
-        import fcntl
-
-        # Write to temp file first
-        temp_path = file_path.with_suffix('.tmp')
-
-        try:
-            with open(temp_path, 'w', encoding='utf-8') as f:
-                # Try to acquire exclusive lock
-                try:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except OSError:
-                    return False
-
-                try:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-                finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-
-            # Atomic move
-            shutil.move(str(temp_path), str(file_path))
-            return True
-
-        except Exception:
-            logger.exception("Failed to save with Unix lock")
-            if temp_path.exists():
-                temp_path.unlink()
-            return False
+        logger.info("Groups configuration saved")
+        return True
 
     def _create_backup(self) -> None:
         """Create backup of groups.json before destructive operations.
@@ -306,7 +194,11 @@ class GroupsManager:
             logger.info(f"Backup created: {backup_path.name}")
 
             # Keep only last 10 backups
-            backups = sorted(backups_dir.glob("groups_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            backups = sorted(
+                backups_dir.glob("groups_*.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
             for old_backup in backups[10:]:
                 old_backup.unlink()
                 logger.debug(f"Removed old backup: {old_backup.name}")
@@ -327,22 +219,28 @@ class GroupsManager:
             try:
                 if os.name == "nt":
                     import msvcrt
+
                     msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
                 else:
                     import fcntl
+
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
                 yield
             finally:
                 if os.name == "nt":
                     import msvcrt
+
                     lock_file.seek(0)
                     msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     import fcntl
+
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
-    def _name_collides_with_special_group(groups_data: dict[str, Any], name: str) -> bool:
+    def _name_collides_with_special_group(
+        groups_data: dict[str, Any], name: str
+    ) -> bool:
         special_groups = groups_data.get("special_groups", {})
         return any(
             special.get("name", "").lower() == name.lower()
@@ -394,7 +292,7 @@ class GroupsManager:
                 "name": name,
                 "color": color,
                 "display_order": display_order,
-                "created_at": datetime.now().astimezone().isoformat()
+                "created_at": datetime.now().astimezone().isoformat(),
             }
 
             groups_data["groups"].append(new_group)
@@ -405,7 +303,9 @@ class GroupsManager:
 
             return group_id
 
-    def update_group(self, group_id: str, name: str | None = None, color: str | None = None) -> bool:
+    def update_group(
+        self, group_id: str, name: str | None = None, color: str | None = None
+    ) -> bool:
         """Update existing group.
 
         Args:
@@ -442,8 +342,13 @@ class GroupsManager:
                 if self._name_collides_with_special_group(groups_data, name):
                     raise GroupsManagerError(f"Group with name '{name}' already exists")
                 for group in groups_data.get("groups", []):
-                    if group.get("id") != group_id and group.get("name", "").lower() == name.lower():
-                        raise GroupsManagerError(f"Group with name '{name}' already exists")
+                    if (
+                        group.get("id") != group_id
+                        and group.get("name", "").lower() == name.lower()
+                    ):
+                        raise GroupsManagerError(
+                            f"Group with name '{name}' already exists"
+                        )
 
                 target_group["name"] = name
 
@@ -457,7 +362,7 @@ class GroupsManager:
 
             return True
 
-    def delete_group(self, group_id: str, profile_manager = None) -> bool:
+    def delete_group(self, group_id: str, profile_manager=None) -> bool:
         """Delete group and unassign all clients.
 
         Args:
@@ -480,7 +385,9 @@ class GroupsManager:
             groups_data = self.load_groups()
 
             # Check if group exists
-            group_exists = any(group.get("id") == group_id for group in groups_data.get("groups", []))
+            group_exists = any(
+                group.get("id") == group_id for group in groups_data.get("groups", [])
+            )
             if not group_exists:
                 raise GroupsManagerError(f"Group with ID '{group_id}' not found")
 
@@ -498,13 +405,17 @@ class GroupsManager:
                         ):
                             config["ui_settings"]["group_id"] = None
                             profile_manager.save_client_config(client_id, config)
-                            logger.info(f"Unassigned CLIENT_{client_id} from group {group_id}")
+                            logger.info(
+                                f"Unassigned CLIENT_{client_id} from group {group_id}"
+                            )
                     except Exception:
                         logger.exception(f"Failed to unassign CLIENT_{client_id}")
                         # Continue with other clients
 
             # Remove group from groups.json
-            groups_data["groups"] = [g for g in groups_data["groups"] if g.get("id") != group_id]
+            groups_data["groups"] = [
+                g for g in groups_data["groups"] if g.get("id") != group_id
+            ]
 
             # Save
             self.save_groups(groups_data)

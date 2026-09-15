@@ -923,8 +923,75 @@ def _merge_fulfillment_history(
     )
 
 
+def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:
+    """Post-fulfilment stock per SKU, seeded from the whole stock file.
+
+    Every SKU in the stock file is remembered. SKUs the run actually touched
+    get their post-fulfilment Final_Stock; the rest keep their opening level.
+    A SKU absent from the stock file drops out -- the stock file is the truth
+    for what still exists (spec 2026-09-15 section 7 Q2).
+
+    `stock_df` must already carry internal column names -- pass it through
+    `analysis.stock_with_internal_columns` first, or a CSV-headered frame
+    silently contributes nothing and memory falls back to ordered SKUs only.
+    """
+    snapshot = {}
+
+    if stock_df is not None and {"SKU", "Stock"} <= set(stock_df.columns):
+        snapshot = (
+            stock_df.groupby("SKU")["Stock"]
+            .last()
+            .dropna()
+            .apply(lambda x: max(0.0, float(x)))
+            .to_dict()
+        )
+
+    if final_df is not None and {"SKU", "Final_Stock"} <= set(final_df.columns):
+        snapshot.update(
+            final_df.groupby("SKU")["Final_Stock"]
+            .last()
+            .dropna()
+            .apply(lambda x: max(0.0, float(x)))
+            .to_dict()
+        )
+
+    return snapshot
+
+
+def build_inventory_names(
+    final_df: pd.DataFrame, stock_df: pd.DataFrame
+) -> dict | None:
+    """Display name per SKU for inventory memory, or None if none are usable.
+
+    Seeded from the stock file's Product_Name so the SKUs that only
+    `build_inventory_snapshot`'s seed contributes still have a name, then
+    overlaid with the run's own Warehouse_Name. None (rather than an empty
+    dict) means "leave previously-saved names alone" -- see
+    save_inventory_memory -- so a degraded run never wipes out good names.
+
+    Both frames must already carry internal column names.
+    """
+
+    def usable(series) -> dict:
+        return {
+            sku: name
+            for sku, name in series.dropna().items()
+            if name and str(name) != "N/A"
+        }
+
+    names = {}
+    if stock_df is not None and {"SKU", "Product_Name"} <= set(stock_df.columns):
+        names = usable(stock_df.groupby("SKU")["Product_Name"].first())
+
+    if final_df is not None and {"SKU", "Warehouse_Name"} <= set(final_df.columns):
+        names.update(usable(final_df.groupby("SKU")["Warehouse_Name"].first()))
+
+    return names or None
+
+
 def _save_results_and_reports(
     final_df: pd.DataFrame,
+    stock_df: pd.DataFrame,
     summary_present_df: pd.DataFrame,
     summary_missing_df: pd.DataFrame,
     stats: dict,
@@ -946,6 +1013,8 @@ def _save_results_and_reports(
 
     Args:
         final_df: Final analysis DataFrame
+        stock_df: Loaded stock DataFrame (SKU + Stock), used to seed the
+            inventory-memory snapshot with SKUs the run itself never touched
         summary_present_df: Summary of fulfillable items
         summary_missing_df: Summary of missing items
         stats: Statistics dictionary
@@ -1159,29 +1228,10 @@ def _save_results_and_reports(
             full_config = profile_manager.load_shopify_config(client_id) or {}
             inv_mem = full_config.get("inventory_memory", {})
             if inv_mem.get("enabled", False):
-                # Build final_stock_dict: last Final_Stock per SKU (true post-fulfillment state;
-                # min() would understate when cancellations/restocks make rows non-monotonic)
-                final_stock_dict = (
-                    final_df.groupby("SKU")["Final_Stock"]
-                    .last()
-                    .dropna()
-                    .apply(lambda x: max(0.0, float(x)))
-                    .to_dict()
-                )
+                final_stock_dict = build_inventory_snapshot(final_df, stock_df)
                 # Carry the display name along so the next run's memory-reconstructed
                 # stock_df doesn't show "N/A" in Warehouse_Name for every SKU.
-                # Only pass a non-empty dict -- an empty/None dict means "leave
-                # previously-saved names alone" (see save_inventory_memory), so a
-                # degraded run with no real names never wipes out good ones.
-                names_dict = None
-                if "Warehouse_Name" in final_df.columns:
-                    names_dict = {
-                        sku: name
-                        for sku, name in final_df.groupby("SKU")["Warehouse_Name"]
-                        .first()
-                        .items()
-                        if name and name != "N/A"
-                    } or None
+                names_dict = build_inventory_names(final_df, stock_df)
                 profile_manager.save_inventory_memory(
                     client_id,
                     final_stock_dict,
@@ -1338,6 +1388,11 @@ def run_full_analysis(
         logger.info("Step 5: Saving results and reports...")
         primary_path, _ = _save_results_and_reports(
             final_df,
+            # Internal column names: the frame loaded from CSV still carries the
+            # client's own headers, and analysis renames only its own local copy.
+            analysis.stock_with_internal_columns(
+                stock_df, config.get("column_mappings", {})
+            ),
             summary_present_df,
             summary_missing_df,
             stats,

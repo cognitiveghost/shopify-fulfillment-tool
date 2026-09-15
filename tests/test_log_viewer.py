@@ -100,3 +100,29 @@ def test_jump_to_latest_resumes_following(qapp):
     viewer.jump_button.click()
     assert viewer.follow.following is True
     assert viewer.follow.pending == 0
+
+
+def test_source_and_level_groups_are_separated(qapp):
+    from PySide6.QtWidgets import QWidget
+
+    viewer = LogViewer()
+    names = [w.objectName() for w in viewer.findChildren(QWidget)]
+    assert "logs-source-group" in names
+    assert "logs-level-group" in names
+
+
+def test_the_current_source_and_level_are_visibly_checked(qapp):
+    from PySide6.QtWidgets import QPushButton
+
+    viewer = LogViewer()
+    checked = [b.text() for b in viewer.findChildren(QPushButton) if b.isChecked()]
+    assert "Execution" in checked  # a source is always active (LogBufferModel default)
+    assert any(t in checked for t in ("All", "Info", "Warning", "Error"))
+
+
+def test_a_checked_toggle_gets_a_visible_style(qapp):
+    """A checkable button with no checked styling is invisible in the
+    Windows build -- the checked button must carry a distinct stylesheet."""
+    viewer = LogViewer()
+    checked_button = next(b for b in viewer._source_group.buttons() if b.isChecked())
+    assert checked_button.styleSheet().strip() != ""

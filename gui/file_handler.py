@@ -132,9 +132,18 @@ class FileHandler:
             return
         self.mw.active_profile_config["settings"][f"{kind}_csv_delimiter"] = delimiter
         if client_id and hasattr(self.mw, "profile_manager"):
-            self.mw.profile_manager.save_shopify_config(
-                client_id, self.mw.active_profile_config
-            )
+            try:
+                self.mw.profile_manager.save_shopify_config(
+                    client_id, self.mw.active_profile_config
+                )
+            except Exception:
+                self.log.exception(f"Failed to save {kind} delimiter")
+                toast(
+                    self.mw,
+                    f"The {kind} delimiter wasn't saved. Details are in Logs.",
+                    role="error",
+                )
+                return
             self.log.info(f"Saved {kind} delimiter '{delimiter}' to config")
 
     def select_stock_file(self):

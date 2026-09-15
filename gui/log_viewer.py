@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -71,6 +72,10 @@ class LogViewer(QWidget):
     def _build_control_row(self):
         row = QHBoxLayout()
 
+        source_group_widget = QWidget(self)
+        source_group_widget.setObjectName("logs-source-group")
+        source_row = QHBoxLayout(source_group_widget)
+        source_row.setContentsMargins(0, 0, 0, 0)
         self._source_group = QButtonGroup(self)
         for source in (LogBufferModel.ACTIVITY, LogBufferModel.EXECUTION):
             button = QPushButton(source, self)
@@ -78,8 +83,19 @@ class LogViewer(QWidget):
             button.setChecked(source == self.model.current_source())
             button.clicked.connect(lambda _c, s=source: self.set_source(s))
             self._source_group.addButton(button)
-            row.addWidget(button)
+            source_row.addWidget(button)
+        row.addWidget(source_group_widget)
 
+        divider = QFrame(self)
+        divider.setFrameShape(QFrame.VLine)
+        divider.setFixedWidth(1)
+        row.addWidget(divider)
+        self._control_divider = divider
+
+        level_group_widget = QWidget(self)
+        level_group_widget.setObjectName("logs-level-group")
+        level_row = QHBoxLayout(level_group_widget)
+        level_row.setContentsMargins(0, 0, 0, 0)
         self._level_group = QButtonGroup(self)
         for label, floor in _LEVEL_FLOORS:
             button = QPushButton(label, self)
@@ -87,7 +103,8 @@ class LogViewer(QWidget):
             button.setChecked(floor == logging.NOTSET)
             button.clicked.connect(lambda _c, f=floor: self.proxy.set_level_floor(f))
             self._level_group.addButton(button)
-            row.addWidget(button)
+            level_row.addWidget(button)
+        row.addWidget(level_group_widget)
 
         self.search_input = QLineEdit(self)
         self.search_input.setPlaceholderText("Search logs…")
@@ -252,3 +269,15 @@ class LogViewer(QWidget):
             f"color: {theme.text}; background: {theme.surface}; "
             f"border: 1px solid {theme.border};"
         )
+        self._control_divider.setStyleSheet(
+            f"background: {theme.border}; border: none;"
+        )
+        toggle_css = (
+            "QPushButton:checked {"
+            f"background: {theme.selection_bg};"
+            f"border: 1px solid {theme.selection_border};"
+            f"color: {theme.text};"
+            "}"
+        )
+        for button in (*self._source_group.buttons(), *self._level_group.buttons()):
+            button.setStyleSheet(toggle_css)

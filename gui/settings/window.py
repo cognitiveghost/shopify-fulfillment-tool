@@ -42,6 +42,10 @@ from shopify_tool.core import effective_additional_columns
 logger = logging.getLogger(__name__)
 
 NAV_ICON_PX = 12
+NAV_MIN_WIDTH_PX = 170
+NAV_SEARCH_PLACEHOLDER = "Search settings"
+# Clear button, frame and text margins the placeholder has to share the field with.
+NAV_SEARCH_CHROME_PX = 44
 UNSAVED_DOT_PX = 8
 DIRTY_POLL_MS = 400
 
@@ -175,15 +179,24 @@ class SettingsWindow(QDialog):
 
         self._settings_nav = QListWidget()
         self._settings_nav.setObjectName("settingsNav")
-        self._settings_nav.setFixedWidth(170)
         self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._settings_nav.setIconSize(QSize(NAV_ICON_PX, NAV_ICON_PX))
 
         nav_column = QVBoxLayout()
         self._nav_search = QLineEdit()
-        self._nav_search.setPlaceholderText("Search settings")
+        self._nav_search.setPlaceholderText(NAV_SEARCH_PLACEHOLDER)
         self._nav_search.setClearButtonEnabled(True)
-        self._nav_search.setFixedWidth(170)
+
+        # The column is as wide as the placeholder needs, never narrower than
+        # the Phase 9 width. A hard 170 clipped "Search settings" under Segoe
+        # UI, which is wider than the Linux dev font -- so measure, don't guess.
+        nav_width = max(
+            NAV_MIN_WIDTH_PX,
+            self._nav_search.fontMetrics().horizontalAdvance(NAV_SEARCH_PLACEHOLDER)
+            + NAV_SEARCH_CHROME_PX,
+        )
+        self._settings_nav.setFixedWidth(nav_width)
+        self._nav_search.setFixedWidth(nav_width)
         self._nav_search.textChanged.connect(self.filter_nav)
         self._nav_search.returnPressed.connect(self._select_first_visible_page)
         nav_column.addWidget(self._nav_search)

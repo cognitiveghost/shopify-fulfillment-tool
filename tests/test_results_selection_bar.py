@@ -180,8 +180,8 @@ def test_more_lists_its_seven_items_in_order(qtbot, page):
         "Add a tag to 3 orders",
         "Remove a tag from 3 orders",
         "Copy 3 order numbers",
-        "Export just these 3 to Excel",
-        "Export just these 3 to CSV",
+        "Export these 3 orders to Excel",
+        "Export these 3 orders to CSV",
         "Remove a SKU from these 3 orders",
         "Remove whole orders containing a SKU",
     ]
@@ -212,7 +212,7 @@ def test_remove_a_tag_is_disabled_when_nothing_carries_one(qtbot, page):
     assert _text(qtbot, view, "#more-remove-tag") == "Remove a tag from 1 order"
     assert (
         _eval(qtbot, view, "document.getElementById('more-remove-tag').title")
-        == "None of these 1 order carry a tag"
+        == "This order doesn't carry a tag"
     )
 
 

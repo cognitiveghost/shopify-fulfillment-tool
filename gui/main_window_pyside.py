@@ -511,8 +511,13 @@ class MainWindow(QMainWindow):
             # Re-evaluate run button (memory mode may unlock it)
             if hasattr(self, "update_ui_state"):
                 self.update_ui_state()
-        except Exception as e:
-            logger.warning(f"Failed to save inventory memory toggle: {e}")
+        except Exception:
+            logger.exception("Failed to save inventory memory toggle")
+            toast(
+                self,
+                "Inventory memory wasn't saved. Details are in Logs.",
+                role="error",
+            )
 
     # --- Client and Session Management (New Architecture) ---
     def _load_client_data(self, client_id: str):
@@ -966,6 +971,11 @@ class MainWindow(QMainWindow):
             )
         except Exception:
             logger.exception("Failed to save analysis_mode")
+            toast(
+                self,
+                "The analysis mode wasn't saved. Details are in Logs.",
+                role="error",
+            )
 
     def log_activity(self, op_type, desc):
         """Records an operator action in the Logs destination.

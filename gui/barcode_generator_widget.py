@@ -42,6 +42,8 @@ from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 from shared.theme import on_theme_changed
 
+IDLE_STATUS = "Select a packing list to begin"
+
 
 class BarcodeGeneratorWidget(QWidget):
     """Widget for generating barcode labels from packing lists."""
@@ -67,6 +69,8 @@ class BarcodeGeneratorWidget(QWidget):
         self.barcodes_dir = None
         self.last_barcode_pdf = None
         self.last_qr_pdf = None
+        # What the in-flight run is about, pinned at launch -- see _on_generate_clicked
+        self._generating = None
 
         self._init_ui()
         self._connect_signals()
@@ -164,7 +168,7 @@ class BarcodeGeneratorWidget(QWidget):
         self.progress_bar.setTextVisible(True)
         area.addWidget(self.progress_bar)
 
-        self.status_label = QLabel("Select a packing list to begin")
+        self.status_label = QLabel(IDLE_STATUS)
         self.status_label.setWordWrap(True)
         area.addWidget(self.status_label)
 
@@ -260,6 +264,9 @@ class BarcodeGeneratorWidget(QWidget):
 
     def _on_packing_list_changed(self, index):
         """Handle packing list selection change."""
+        self.status_label.setText("")
+        self.status_label.setStyleSheet("")
+
         if index < 0:
             self.current_packing_list = None
             self.filtered_orders_df = None
@@ -267,6 +274,8 @@ class BarcodeGeneratorWidget(QWidget):
 
             self.order_count_label.setText("No packing list selected")
             self.output_dir_label.setText("Choose a packing list")
+            # Clearing a previous run's count must not leave the row blank.
+            self.status_label.setText(IDLE_STATUS)
             self.generate_btn.setEnabled(False)
             return
 
@@ -359,6 +368,12 @@ class BarcodeGeneratorWidget(QWidget):
             verb="Replace barcodes",
         ):
             return
+
+        # Pin what this run is about. Only the button is disabled below, so the
+        # operator can still change the packing list mid-run -- which clears
+        # filtered_orders_df. Reading either back in the completion slot would
+        # report the wrong list, or raise on None and lose the PDF entirely.
+        self._generating = (self.packing_list_combo.currentText(), order_count)
 
         # Disable UI during generation
         self.generate_btn.setEnabled(False)
@@ -453,9 +468,11 @@ class BarcodeGeneratorWidget(QWidget):
             f"color: {theme.status_success}; font-weight: bold;"
         )
 
+        list_name, order_count = self._generating or ("unknown", "?")
         self.log.info(
-            f"Barcode generation complete: {len(successful)} successful, "
-            f"{len(failed)} failed"
+            f"Barcode generation complete for packing list {list_name!r}: "
+            f"{order_count} orders filtered, "
+            f"{len(successful)} labels written, {len(failed)} failed"
         )
 
         pdf_generated = (

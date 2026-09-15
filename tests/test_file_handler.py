@@ -147,3 +147,25 @@ def test_a_delimiter_mismatch_loads_with_the_detected_one_and_offers_to_save_it(
     assert toasts.call_args.kwargs["role"] == "info"
     assert toasts.call_args.kwargs["action_text"] == "Save as default"
     assert ";" in toasts.call_args.args[1]
+
+
+def test_a_failed_delimiter_save_tells_the_user(main_window, monkeypatch):
+    """A save that raises must not leave the user believing it worked."""
+    from shopify_tool.profile_manager import ProfileManagerError
+
+    def boom(*a, **kw):
+        raise ProfileManagerError("share unreachable")
+
+    monkeypatch.setattr(main_window.profile_manager, "save_shopify_config", boom)
+
+    seen = []
+    monkeypatch.setattr(
+        "gui.file_handler.toast",
+        lambda parent, text, **kw: seen.append((text, kw.get("role"))),
+    )
+
+    main_window.file_handler._save_default_delimiter("orders", ";", "ACME")
+
+    assert seen, "a failed save must raise a toast"
+    assert seen[-1][1] == "error"
+    assert "wasn't saved" in seen[-1][0].lower()

@@ -36,6 +36,27 @@ def _resolve_stock_mappings(stock_mappings: dict[str, str]) -> dict[str, str]:
     return {**stock_mappings, **missing} if missing else stock_mappings
 
 
+def stock_with_internal_columns(
+    stock_df: pd.DataFrame, column_mappings: dict | None
+) -> pd.DataFrame:
+    """Return the stock frame with internal column names (SKU/Stock/...).
+
+    A stock frame loaded from CSV carries the client's own headers ("Артикул",
+    "Наличност"); one reconstructed from inventory memory already carries
+    internal names. Renaming is a no-op for the second shape, so callers that
+    need internal names can apply this to either without checking which they
+    hold.
+    """
+    mappings = _resolve_stock_mappings((column_mappings or {}).get("stock", {}))
+    # Only rename columns that exist in the DataFrame AND differ from the internal name
+    rename_map = {
+        csv_col: internal_col
+        for csv_col, internal_col in mappings.items()
+        if csv_col in stock_df.columns and csv_col != internal_col
+    }
+    return stock_df.rename(columns=rename_map) if rename_map else stock_df
+
+
 def _parse_expiry_date(raw) -> date | None:
     """Parse a raw expiry string from the stock CSV to a comparable date object.
 
@@ -238,9 +259,6 @@ def _clean_and_prepare_data(
 
     # Get mappings for orders and stock
     orders_mappings = column_mappings.get("orders", {})
-    stock_mappings = column_mappings.get("stock", {})
-
-    stock_mappings = _resolve_stock_mappings(stock_mappings)
 
     # Apply mappings to orders DataFrame
     # Only rename columns that exist in the DataFrame AND are different from internal names
@@ -253,13 +271,7 @@ def _clean_and_prepare_data(
         orders_df = orders_df.rename(columns=orders_rename_map)
 
     # Apply mappings to stock DataFrame
-    stock_rename_map = {
-        csv_col: internal_col
-        for csv_col, internal_col in stock_mappings.items()
-        if csv_col in stock_df.columns and csv_col != internal_col
-    }
-    if stock_rename_map:
-        stock_df = stock_df.rename(columns=stock_rename_map)
+    stock_df = stock_with_internal_columns(stock_df, column_mappings)
 
     # Rename additional columns from CSV names to internal names
     if additional_columns_config:

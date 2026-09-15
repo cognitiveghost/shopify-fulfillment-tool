@@ -607,7 +607,10 @@ button, input { font: inherit; color: inherit; }
 .columns-search::placeholder { color: var(--text-placeholder); }
 .columns-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 
-.columns-scroller { flex: 1; min-height: 0; overflow-y: auto; }
+.columns-scroller { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.columns-scroller::-webkit-scrollbar { width: 10px; }
+.columns-scroller::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+.columns-scroller::-webkit-scrollbar-track { background: transparent; }
 
 .col-group {
   position: sticky;

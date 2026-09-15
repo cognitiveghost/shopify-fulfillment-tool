@@ -79,6 +79,21 @@ def test_generate_button_is_disabled_until_something_is_checked():
     assert dialog.generate_button.isEnabled() is True
 
 
+def test_report_list_is_not_editable():
+    """A double-click on a row must toggle its checkbox, not open an editor
+    that renders over it -- the default QListWidget edit triggers do the
+    latter for any checkable row."""
+    from PySide6.QtWidgets import QAbstractItemView
+
+    dialog = _dialog()
+    assert dialog.report_list.editTriggers() == QAbstractItemView.NoEditTriggers
+
+
+def test_the_checkbox_indicator_is_themed_not_native():
+    dialog = _dialog()
+    assert "indicator" in dialog.report_list.styleSheet()
+
+
 def test_one_failing_report_does_not_cost_the_user_the_others(monkeypatch):
     """The whole point of generating a batch in one pass.
 

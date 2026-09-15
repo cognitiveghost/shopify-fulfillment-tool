@@ -149,6 +149,19 @@ def test_every_registry_column_has_a_row_and_the_scroller_reaches_the_last(qtbot
     )
 
 
+def test_the_scroller_reserves_a_gutter_so_meta_text_never_clips(qtbot, doc):
+    view, _ = doc
+    _open_columns(qtbot, view)
+    assert (
+        _eval(
+            qtbot,
+            view,
+            "getComputedStyle(document.getElementById('columns-scroller')).scrollbarGutter",
+        )
+        == "stable"
+    )
+
+
 def test_a_pinned_row_is_checked_disabled_and_has_no_drag_handle(qtbot, doc):
     view, _ = doc
     _open_columns(qtbot, view)
@@ -392,4 +405,7 @@ def test_the_bridge_echoing_the_pages_own_layout_does_not_rerender(qtbot, doc):
     bridge.set_column_settings(stored)
     qtbot.wait(200)
 
-    assert _eval(qtbot, view, "document.querySelector('.col-row').dataset.sentinel") == "kept"
+    assert (
+        _eval(qtbot, view, "document.querySelector('.col-row').dataset.sentinel")
+        == "kept"
+    )

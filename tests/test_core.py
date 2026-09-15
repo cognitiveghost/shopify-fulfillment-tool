@@ -1,11 +1,14 @@
 """core.py orchestration accuracy (priority: inventory memory accuracy)."""
+
 import pandas as pd
 
 from shopify_tool import core
 
 _ORDERS_MAPPING = {
-    "Name": "Order_Number", "Lineitem sku": "SKU",
-    "Lineitem quantity": "Quantity", "Shipping Method": "Shipping_Method",
+    "Name": "Order_Number",
+    "Lineitem sku": "SKU",
+    "Lineitem quantity": "Quantity",
+    "Shipping Method": "Shipping_Method",
 }
 
 
@@ -14,7 +17,9 @@ class TestReadCsvHeaders:
         path = tmp_path / "stock.csv"
         path.write_text("Артикул;Име;Цена\nA1;Widget;9.99\n")
         assert core.read_csv_headers(path, delimiter=";") == [
-            "Артикул", "Име", "Цена",
+            "Артикул",
+            "Име",
+            "Цена",
         ]
 
     def test_a_header_only_file_still_returns_its_columns(self, tmp_path):
@@ -47,15 +52,22 @@ class TestCountCsvRows:
 
 class TestInventoryMemoryStockReconstruction:
     def test_reconstructed_stock_has_sku_product_name_and_stock_columns(self):
-        orders_df = pd.DataFrame([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 2, "Shipping Method": "Standard"}])
+        orders_df = pd.DataFrame(
+            [
+                {
+                    "Name": "#1",
+                    "Lineitem sku": "A1",
+                    "Lineitem quantity": 2,
+                    "Shipping Method": "Standard",
+                }
+            ]
+        )
         config = {
             "test_orders_df": orders_df,
             "_inventory_memory": {"enabled": True, "skus": {"A1": 8.0}},
             "column_mappings": {"orders": _ORDERS_MAPPING, "stock": {}},
         }
-        _orders, stock_df = core._load_and_validate_files(
-            None, None, ",", ",", config
-        )
+        _orders, stock_df = core._load_and_validate_files(None, None, ",", ",", config)
         assert list(stock_df.columns) == ["SKU", "Product_Name", "Stock"]
         assert stock_df.iloc[0]["SKU"] == "A1"
         assert stock_df.iloc[0]["Stock"] == 8.0
@@ -63,15 +75,30 @@ class TestInventoryMemoryStockReconstruction:
     def test_reconstructed_stock_preserves_warehouse_name(self):
         from shopify_tool import analysis
 
-        orders_df = pd.DataFrame([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 2, "Shipping Method": "Standard"}])
+        orders_df = pd.DataFrame(
+            [
+                {
+                    "Name": "#1",
+                    "Lineitem sku": "A1",
+                    "Lineitem quantity": 2,
+                    "Shipping Method": "Standard",
+                }
+            ]
+        )
         config = {
             "test_orders_df": orders_df,
             # A real inventory-memory snapshot should be able to carry the
             # last-known product name alongside the quantity.
-            "_inventory_memory": {"enabled": True, "skus": {"A1": 8.0}, "names": {"A1": "Widget A1"}},
+            "_inventory_memory": {
+                "enabled": True,
+                "skus": {"A1": 8.0},
+                "names": {"A1": "Widget A1"},
+            },
             "column_mappings": {"orders": _ORDERS_MAPPING, "stock": {}},
         }
-        _orders_clean, stock_df = core._load_and_validate_files(None, None, ",", ",", config)
+        _orders_clean, stock_df = core._load_and_validate_files(
+            None, None, ",", ",", config
+        )
         history_df = pd.DataFrame({"Order_Number": [], "Execution_Date": []})
         final_df, *_ = analysis.run_analysis(stock_df, orders_df, history_df)
         assert final_df.iloc[0]["Warehouse_Name"] == "Widget A1"
@@ -88,15 +115,19 @@ class TestFulfillmentHistoryMerge:
     def test_reanalysis_preserves_original_execution_date(self):
         from shopify_tool.core import _merge_fulfillment_history
 
-        history = pd.DataFrame({
-            "Order_Number": ["#11014590", "#11014599"],
-            "Execution_Date": ["2025-11-27", "2025-11-27"],
-        })
+        history = pd.DataFrame(
+            {
+                "Order_Number": ["#11014590", "#11014599"],
+                "Execution_Date": ["2025-11-27", "2025-11-27"],
+            }
+        )
         # A re-analysis today finds #11014590 still Fulfillable.
-        newly_fulfilled = pd.DataFrame({
-            "Order_Number": ["#11014590"],
-            "Execution_Date": ["2026-08-18"],
-        })
+        newly_fulfilled = pd.DataFrame(
+            {
+                "Order_Number": ["#11014590"],
+                "Execution_Date": ["2026-08-18"],
+            }
+        )
 
         merged = _merge_fulfillment_history(history, newly_fulfilled)
         dates = dict(zip(merged["Order_Number"], merged["Execution_Date"]))
@@ -109,14 +140,18 @@ class TestFulfillmentHistoryMerge:
     def test_genuinely_new_order_is_added(self):
         from shopify_tool.core import _merge_fulfillment_history
 
-        history = pd.DataFrame({
-            "Order_Number": ["#11014590"],
-            "Execution_Date": ["2025-11-27"],
-        })
-        newly_fulfilled = pd.DataFrame({
-            "Order_Number": ["#99999"],
-            "Execution_Date": ["2026-08-18"],
-        })
+        history = pd.DataFrame(
+            {
+                "Order_Number": ["#11014590"],
+                "Execution_Date": ["2025-11-27"],
+            }
+        )
+        newly_fulfilled = pd.DataFrame(
+            {
+                "Order_Number": ["#99999"],
+                "Execution_Date": ["2026-08-18"],
+            }
+        )
 
         merged = _merge_fulfillment_history(history, newly_fulfilled)
         dates = dict(zip(merged["Order_Number"], merged["Execution_Date"]))
@@ -130,14 +165,18 @@ class TestFulfillmentHistoryMerge:
         and NaT is not earliest."""
         from shopify_tool.core import _merge_fulfillment_history
 
-        history = pd.DataFrame({
-            "Order_Number": ["#11014590"],
-            "Execution_Date": [None],
-        })
-        newly_fulfilled = pd.DataFrame({
-            "Order_Number": ["#11014590"],
-            "Execution_Date": ["2026-08-18"],
-        })
+        history = pd.DataFrame(
+            {
+                "Order_Number": ["#11014590"],
+                "Execution_Date": [None],
+            }
+        )
+        newly_fulfilled = pd.DataFrame(
+            {
+                "Order_Number": ["#11014590"],
+                "Execution_Date": ["2026-08-18"],
+            }
+        )
 
         merged = _merge_fulfillment_history(history, newly_fulfilled)
         assert len(merged) == 1
@@ -148,14 +187,18 @@ class TestFulfillmentHistoryMerge:
         row came first in the file is not necessarily the earliest."""
         from shopify_tool.core import _merge_fulfillment_history
 
-        history = pd.DataFrame({
-            "Order_Number": ["#A", "#A"],
-            "Execution_Date": ["2026-03-01", "2025-11-27"],
-        })
-        newly_fulfilled = pd.DataFrame({
-            "Order_Number": ["#A"],
-            "Execution_Date": ["2026-08-18"],
-        })
+        history = pd.DataFrame(
+            {
+                "Order_Number": ["#A", "#A"],
+                "Execution_Date": ["2026-03-01", "2025-11-27"],
+            }
+        )
+        newly_fulfilled = pd.DataFrame(
+            {
+                "Order_Number": ["#A"],
+                "Execution_Date": ["2026-08-18"],
+            }
+        )
 
         merged = _merge_fulfillment_history(history, newly_fulfilled)
         assert len(merged) == 1
@@ -165,14 +208,15 @@ class TestFulfillmentHistoryMerge:
         from shopify_tool.core import _merge_fulfillment_history
 
         history = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
-        newly_fulfilled = pd.DataFrame({
-            "Order_Number": ["#1", "#2"],
-            "Execution_Date": ["2026-08-18", "2026-08-18"],
-        })
+        newly_fulfilled = pd.DataFrame(
+            {
+                "Order_Number": ["#1", "#2"],
+                "Execution_Date": ["2026-08-18", "2026-08-18"],
+            }
+        )
 
         merged = _merge_fulfillment_history(history, newly_fulfilled)
         assert set(merged["Order_Number"]) == {"#1", "#2"}
-
 
 
 class TestPackedOrdersAreDetectionOnly:
@@ -190,27 +234,51 @@ class TestPackedOrdersAreDetectionOnly:
         # Legacy mode writes history via get_persistent_data_path; keep it in
         # tmp_path so the test never touches the real app-data directory.
         history_path = tmp_path / "fulfillment_history.csv"
-        monkeypatch.setattr(core, "get_persistent_data_path", lambda _name: history_path)
+        monkeypatch.setattr(
+            core, "get_persistent_data_path", lambda _name: history_path
+        )
 
         orders_csv = tmp_path / "orders.csv"
-        pd.DataFrame([
-            {"Name": "#PACKED", "Lineitem sku": "A1", "Lineitem quantity": 1, "Shipping Method": "Standard"},
-            {"Name": "#FRESH", "Lineitem sku": "A1", "Lineitem quantity": 1, "Shipping Method": "Standard"},
-        ]).to_csv(orders_csv, index=False)
+        pd.DataFrame(
+            [
+                {
+                    "Name": "#PACKED",
+                    "Lineitem sku": "A1",
+                    "Lineitem quantity": 1,
+                    "Shipping Method": "Standard",
+                },
+                {
+                    "Name": "#FRESH",
+                    "Lineitem sku": "A1",
+                    "Lineitem quantity": 1,
+                    "Shipping Method": "Standard",
+                },
+            ]
+        ).to_csv(orders_csv, index=False)
 
         stock_csv = tmp_path / "stock.csv"
-        pd.DataFrame([
-            {"Артикул": "A1", "Име": "Widget", "Наличност": 100},
-        ]).to_csv(stock_csv, index=False)
+        pd.DataFrame(
+            [
+                {"Артикул": "A1", "Име": "Widget", "Наличност": 100},
+            ]
+        ).to_csv(stock_csv, index=False)
 
         ok, _msg, final_df, _stats = core.run_full_analysis(
-            str(stock_csv), str(orders_csv), str(tmp_path / "out"), ",", ",",
+            str(stock_csv),
+            str(orders_csv),
+            str(tmp_path / "out"),
+            ",",
+            ",",
             {
                 # core reads this from "settings", not "analysis".
                 "settings": {"repeat_detection_days": 1},
                 "column_mappings": {
                     "orders": _ORDERS_MAPPING,
-                    "stock": {"Артикул": "SKU", "Име": "Product_Name", "Наличност": "Stock"},
+                    "stock": {
+                        "Артикул": "SKU",
+                        "Име": "Product_Name",
+                        "Наличност": "Stock",
+                    },
                 },
             },
         )
@@ -232,8 +300,14 @@ class TestPackedOrdersAreDetectionOnly:
         final_df, history_path = self._run(tmp_path, monkeypatch, packed)
 
         # Detection saw the packed order...
-        assert final_df[final_df["Order_Number"] == "#PACKED"].iloc[0]["System_note"] == "Repeat"
-        assert final_df[final_df["Order_Number"] == "#FRESH"].iloc[0]["System_note"] != "Repeat"
+        assert (
+            final_df[final_df["Order_Number"] == "#PACKED"].iloc[0]["System_note"]
+            == "Repeat"
+        )
+        assert (
+            final_df[final_df["Order_Number"] == "#FRESH"].iloc[0]["System_note"]
+            != "Repeat"
+        )
 
         # ...but the written history carries TODAY's date for #PACKED, from
         # this run's own fulfilment -- not the packed frame's yesterday. If
@@ -256,3 +330,118 @@ class TestPackedOrdersAreDetectionOnly:
 
         written = pd.read_csv(history_path)
         assert "#LONG_GONE" not in set(written["Order_Number"])
+
+
+class TestInventoryMemoryEndToEnd:
+    """The snapshot has to survive the trip through run_full_analysis.
+
+    build_inventory_snapshot needs internal column names, but the stock frame
+    core loads carries the client's own CSV headers -- analysis renames only
+    its own local copy. Unit-testing the builder alone never crosses that
+    boundary, so it passed while the feature was inert in production.
+    """
+
+    def test_unordered_sku_reaches_memory_under_the_default_mappings(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(core, "load_packed_orders", lambda _pm, _cid: None)
+        monkeypatch.setattr(
+            core,
+            "get_persistent_data_path",
+            lambda _name: tmp_path / "fulfillment_history.csv",
+        )
+
+        orders_csv = tmp_path / "orders.csv"
+        pd.DataFrame(
+            [
+                {
+                    "Name": "#1001",
+                    "Lineitem sku": "A1",
+                    "Lineitem quantity": 3,
+                    "Shipping Method": "Standard",
+                }
+            ]
+        ).to_csv(orders_csv, index=False)
+
+        # Bulgarian headers -- the default client mapping, not SKU/Stock.
+        stock_csv = tmp_path / "stock.csv"
+        pd.DataFrame(
+            [
+                {"Артикул": "A1", "Име": "Widget", "Наличност": 100},
+                {"Артикул": "Z9", "Име": "Untouched", "Наличност": 42},
+            ]
+        ).to_csv(stock_csv, index=False)
+
+        saved = {}
+
+        class FakeProfileManager:
+            def load_shopify_config(self, _client_id):
+                return {"inventory_memory": {"enabled": True}}
+
+            def load_client_config(self, _client_id):
+                return {}
+
+            def get_inventory_memory(self, _client_id, *_args, **_kwargs):
+                return None  # a real stock file is supplied, so memory is unused
+
+            def get_client_directory(self, _client_id):
+                client_dir = tmp_path / "client"
+                client_dir.mkdir(exist_ok=True)
+                return client_dir
+
+            def save_inventory_memory(
+                self, _client_id, stock_dict, config=None, names_dict=None
+            ):
+                saved["stock"] = stock_dict
+                saved["names"] = names_dict
+                return True
+
+        ok, msg, _final_df, _stats = core.run_full_analysis(
+            str(stock_csv),
+            str(orders_csv),
+            str(tmp_path / "out"),
+            ",",
+            ",",
+            {
+                "settings": {"repeat_detection_days": 1},
+                "column_mappings": {
+                    "orders": _ORDERS_MAPPING,
+                    "stock": {
+                        "Артикул": "SKU",
+                        "Име": "Product_Name",
+                        "Наличност": "Stock",
+                    },
+                },
+            },
+            client_id="CLIENT_TEST",
+            profile_manager=FakeProfileManager(),
+        )
+        assert ok, msg
+
+        # Z9 was never ordered, so it only reaches memory via the stock-file
+        # seed -- and it keeps its opening level, not a zero.
+        assert saved["stock"] == {"A1": 97.0, "Z9": 42.0}
+        # ...and it carries a real name, so the next memory-mode run does not
+        # render "N/A" for it.
+        assert saved["names"]["Z9"] == "Untouched"
+
+
+class TestBuildInventorySnapshot:
+    def test_keeps_skus_with_no_orders(self):
+        """A SKU present in stock but absent from every order must still be remembered."""
+        stock_df = pd.DataFrame(
+            {
+                "SKU": ["A-1", "B-2", "C-3"],
+                "Stock": [10.0, 5.0, 7.0],
+            }
+        )
+        final_df = pd.DataFrame(
+            {  # only A-1 was ordered
+                "SKU": ["A-1"],
+                "Final_Stock": [6.0],
+            }
+        )
+
+        result = core.build_inventory_snapshot(final_df, stock_df)
+
+        assert result == {"A-1": 6.0, "B-2": 5.0, "C-3": 7.0}

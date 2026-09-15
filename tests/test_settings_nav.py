@@ -130,6 +130,25 @@ def test_no_match_says_so_and_clearing_restores_every_page(window):
     assert window._no_match_label.isHidden()
 
 
+def test_search_placeholder_is_not_clipped(window):
+    """Windows renders Segoe UI wider than the Linux dev font, so the width has
+    to come from the font itself -- a hard number measured here would pass on
+    CI and still clip on the machine the defect was reported from."""
+    from gui.settings.window import NAV_SEARCH_CHROME_PX
+
+    field = window._nav_search
+    needed = (
+        field.fontMetrics().horizontalAdvance(field.placeholderText())
+        + NAV_SEARCH_CHROME_PX
+    )
+    assert field.width() >= needed
+
+
+def test_the_search_field_and_the_nav_list_stay_the_same_width(window):
+    """They sit in one column; a field that outgrew the list would step out of it."""
+    assert window._nav_search.width() == window._settings_nav.width()
+
+
 def test_enter_opens_the_first_match(window):
     window._nav_search.setText("courier")
     window._nav_search.returnPressed.emit()

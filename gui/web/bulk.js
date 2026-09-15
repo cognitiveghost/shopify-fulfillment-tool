@@ -40,6 +40,10 @@ function countedWord(n, word) {
   return NUMBER.format(n) + " " + word + (n === 1 ? "" : "s");
 }
 
+function theseOrders(n) {
+  return n === 1 ? "this order" : "these " + countedWord(n, "order");
+}
+
 function renderSelectionBar() {
   const n = state.selected.size;
   els.selectionBar.hidden = n === 0;
@@ -127,22 +131,26 @@ function moreItems() {
       id: "more-remove-tag",
       label: "Remove a tag from " + orders,
       disabled: !tagged,
-      title: tagged ? "" : "None of these " + orders + " carry a tag",
+      title: tagged
+        ? ""
+        : n === 1
+          ? "This order doesn't carry a tag"
+          : "None of these " + orders + " carry a tag",
       run: () => openTagPopover("remove"),
     },
     { id: "more-copy", label: "Copy " + countedWord(n, "order number"), hint: "Ctrl+C", run: copySelection },
     {
       id: "more-export-xlsx",
-      label: "Export just these " + NUMBER.format(n) + " to Excel",
+      label: "Export " + theseOrders(n) + " to Excel",
       run: () => exportSelectionAs("xlsx"),
     },
     {
       id: "more-export-csv",
-      label: "Export just these " + NUMBER.format(n) + " to CSV",
+      label: "Export " + theseOrders(n) + " to CSV",
       run: () => exportSelectionAs("csv"),
     },
     { separator: true },
-    { id: "more-remove-sku", label: "Remove a SKU from these " + orders, danger: true, run: () => openSkuPopover("line") },
+    { id: "more-remove-sku", label: "Remove a SKU from " + theseOrders(n), danger: true, run: () => openSkuPopover("line") },
     { id: "more-remove-orders", label: "Remove whole orders containing a SKU", danger: true, run: () => openSkuPopover("order") },
   ];
 }
@@ -383,7 +391,7 @@ function openSkuPopover(mode) {
 
   openBulkPopover({
     title: line
-      ? "Remove a SKU from these " + countedWord(n, "order")
+      ? "Remove a SKU from " + theseOrders(n)
       : "Remove whole orders containing a SKU",
     danger: true,
     fill: (host, onPick) => {

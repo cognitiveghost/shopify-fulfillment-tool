@@ -1,4 +1,5 @@
 """Client/app configuration + inventory memory accuracy (priorities 5 & 6)."""
+
 import json
 
 import pytest
@@ -36,7 +37,11 @@ class TestClientProfileCreation:
         assert config["client_id"] == "M"
         assert config["client_name"] == "My Client"
         assert config["inventory_memory"] == {
-            "enabled": False, "skus": {}, "names": {}, "last_updated": None, "total_units": 0,
+            "enabled": False,
+            "skus": {},
+            "names": {},
+            "last_updated": None,
+            "total_units": 0,
         }
 
     def test_duplicate_creation_returns_false_not_exception(self, profile_manager):
@@ -64,13 +69,19 @@ class TestInventoryMemoryRoundTrip:
 
     def test_names_dict_round_trips(self, profile_manager):
         profile_manager.create_client_profile("M", "Client")
-        profile_manager.save_inventory_memory("M", {"A1": 5}, names_dict={"A1": "Widget A1"})
+        profile_manager.save_inventory_memory(
+            "M", {"A1": 5}, names_dict={"A1": "Widget A1"}
+        )
         mem = profile_manager.get_inventory_memory("M")
         assert mem["names"] == {"A1": "Widget A1"}
 
-    def test_omitting_names_dict_preserves_previously_saved_names(self, profile_manager):
+    def test_omitting_names_dict_preserves_previously_saved_names(
+        self, profile_manager
+    ):
         profile_manager.create_client_profile("M", "Client")
-        profile_manager.save_inventory_memory("M", {"A1": 5}, names_dict={"A1": "Widget A1"})
+        profile_manager.save_inventory_memory(
+            "M", {"A1": 5}, names_dict={"A1": "Widget A1"}
+        )
         # A later save that only has quantities (e.g. a run whose stock source
         # had no Product_Name column) must not wipe out the name already on file.
         profile_manager.save_inventory_memory("M", {"A1": 6})
@@ -90,7 +101,10 @@ class TestInventoryMemoryRoundTrip:
         config_path = profile_manager.get_client_directory("M") / "shopify_config.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
         config["inventory_memory"] = {
-            "enabled": False, "skus": {"A1": 5.0}, "last_updated": None, "total_units": 5,
+            "enabled": False,
+            "skus": {"A1": 5.0},
+            "last_updated": None,
+            "total_units": 5,
         }
         config_path.write_text(json.dumps(config), encoding="utf-8")
 
@@ -113,7 +127,9 @@ class TestInventoryMemoryRoundTrip:
         mem = profile_manager.get_inventory_memory("M")
         assert "5170" in mem["skus"]
 
-    def test_saving_empty_stock_dict_does_not_erase_previous_snapshot(self, profile_manager):
+    def test_saving_empty_stock_dict_does_not_erase_previous_snapshot(
+        self, profile_manager
+    ):
         profile_manager.create_client_profile("M", "Client")
         profile_manager.save_inventory_memory("M", {"A1": 5, "B1": 3})
         profile_manager.save_inventory_memory("M", {})
@@ -133,7 +149,10 @@ class TestColumnMappingsMigrationBug:
     def test_unversioned_custom_mapping_is_not_silently_replaced(self, profile_manager):
         profile_manager.create_client_profile("M", "Client")
         config = profile_manager.load_shopify_config("M")
-        config["column_mappings"] = {"orders": {"MyCol": "SKU"}, "stock": {"X": "Stock"}}
+        config["column_mappings"] = {
+            "orders": {"MyCol": "SKU"},
+            "stock": {"X": "Stock"},
+        }
         profile_manager.save_shopify_config("M", config)
 
         reloaded = profile_manager.load_shopify_config("M")
@@ -175,6 +194,7 @@ class TestLoadClientConfigCaching:
         data["client_name"] = "Changed Externally"
         config_path.write_text(json.dumps(data))
         import os
+
         # Ensure a distinct mtime on filesystems with coarse mtime resolution.
         newer = os.path.getmtime(config_path) + 1
         os.utime(config_path, (newer, newer))
@@ -203,12 +223,16 @@ class TestLoadShopifyConfigCaching:
         second = profile_manager.load_shopify_config("M")
         assert second["inventory_memory"]["enabled"] is False
 
-    def test_shopify_config_is_cached_after_a_migration(self, profile_manager, monkeypatch):
+    def test_shopify_config_is_cached_after_a_migration(
+        self, profile_manager, monkeypatch
+    ):
         """A migrating load must leave the cache warm, like load_client_config does."""
         profile_manager.create_client_profile("M", "Client")
         config_path = profile_manager.get_client_directory("M") / "shopify_config.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
-        del config["weight_config"]  # stale key -- forces migrate_add_weight_config to fire
+        del config[
+            "weight_config"
+        ]  # stale key -- forces migrate_add_weight_config to fire
         config_path.write_text(json.dumps(config), encoding="utf-8")
 
         profile_manager.load_shopify_config("M")  # runs migrations, caches (or not)
@@ -224,3 +248,34 @@ class TestLoadShopifyConfigCaching:
         monkeypatch.setattr("builtins.open", counting_open)
         profile_manager.load_shopify_config("M")
         assert reads == [], "second load re-read the file instead of using the cache"
+
+
+class TestSaveIsAtomic:
+    def test_save_shopify_config_is_atomic_and_leaves_no_temp(self, profile_manager):
+        """A shorter document must fully replace a longer one, with no .tmp left behind."""
+        profile_manager.create_client_profile("ALMA", "Alma")
+
+        big = profile_manager.load_shopify_config("ALMA")
+        big["filler"] = ["x"] * 500
+        assert profile_manager.save_shopify_config("ALMA", big) is True
+
+        small = profile_manager.load_shopify_config("ALMA")
+        del small["filler"]
+        assert profile_manager.save_shopify_config("ALMA", small) is True
+
+        config_path = (
+            profile_manager.get_client_directory("ALMA") / "shopify_config.json"
+        )
+        reloaded = json.loads(config_path.read_text(encoding="utf-8"))
+        assert "filler" not in reloaded  # no surviving tail from the longer write
+        assert list(config_path.parent.glob("*.tmp")) == []
+
+    def test_save_shopify_config_has_no_fixed_temp_name(self):
+        import inspect
+
+        from shopify_tool.profile_manager import ProfileManager
+
+        src = inspect.getsource(ProfileManager)
+        assert 'with_suffix(".tmp")' not in src
+        assert "msvcrt" not in src
+        assert "shutil.move" not in src

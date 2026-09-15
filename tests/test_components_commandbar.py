@@ -109,10 +109,44 @@ def test_the_dropdown_is_pinned_then_groups_then_the_rest(qapp):
         (ROW_CLIENT, "B"),
         (ROW_SECTION, "All Clients"),
         (ROW_CLIENT, "Q"),
+        (ROW_SECTION, ""),
         (ROW_ACTION, "Refresh clients"),
         (ROW_ACTION, "New client…"),
         (ROW_ACTION, "Manage groups…"),
     ]
+
+
+def test_a_separator_precedes_the_action_rows(qapp):
+    # No QComboBox.insertSeparator() (see _add_action's own comment) -- the
+    # separator is a ROW_SECTION row, the mechanism this popup already has.
+    bar = CommandBar()
+    bar.set_clients_from(DATA)
+    rows = _rows(bar)
+
+    first_action = next(i for i, (k, _p, _t) in enumerate(rows) if k == ROW_ACTION)
+    assert rows[first_action - 1][0] == ROW_SECTION
+
+
+def test_no_clients_means_no_separator_above_the_actions(qapp):
+    """With nothing above them, the separator is just a gap over the actions."""
+    bar = CommandBar()
+    bar.set_clients_from({"groups": [], "special_groups": {}, "all_clients": []})
+    rows = _rows(bar)
+
+    assert [kind for kind, _p, _t in rows] == [ROW_ACTION] * 3
+
+
+def test_the_popup_scrollbar_is_themed_not_native(qapp):
+    """The dropdown popup is a QAbstractItemView, themed by the app-wide
+    stylesheet (ThemeManager.apply_theme -> QApplication.setStyleSheet); a
+    per-widget combo.view().setStyleSheet() would just duplicate it. This
+    pins that the global QSS actually carries both halves of the fix: the
+    popup's own colours and its scrollbar."""
+    from shared.theme import build_stylesheet, get_theme
+
+    qss = build_stylesheet(get_theme("dark"))
+    assert "QComboBox QAbstractItemView" in qss
+    assert "QScrollBar:vertical" in qss
 
 
 def test_section_captions_cannot_be_chosen(qapp):
@@ -120,8 +154,11 @@ def test_section_captions_cannot_be_chosen(qapp):
     bar.set_clients_from(DATA)
     model = bar.client_selector.model()
 
-    captions = [i for i in range(model.rowCount())
-                if model.item(i).data(Qt.UserRole) == ROW_SECTION]
+    captions = [
+        i
+        for i in range(model.rowCount())
+        if model.item(i).data(Qt.UserRole) == ROW_SECTION
+    ]
     assert captions
     for i in captions:
         assert not model.item(i).isEnabled()
@@ -160,8 +197,11 @@ def test_choosing_an_action_row_does_not_change_the_client(qapp):
     bar.manageGroupsRequested.connect(lambda: opened.append(True))
 
     rows = _rows(bar)
-    action_row = next(i for i, (k, _p, t) in enumerate(rows)
-                      if k == ROW_ACTION and t == "Manage groups…")
+    action_row = next(
+        i
+        for i, (k, _p, t) in enumerate(rows)
+        if k == ROW_ACTION and t == "Manage groups…"
+    )
     bar.client_selector.activated.emit(action_row)
 
     assert opened == [True]
@@ -179,8 +219,9 @@ def test_set_current_client_selects_the_first_matching_row(qapp):
 
 
 def _action_row(bar, label):
-    return next(i for i, (k, _p, t) in enumerate(_rows(bar))
-                if k == ROW_ACTION and t == label)
+    return next(
+        i for i, (k, _p, t) in enumerate(_rows(bar)) if k == ROW_ACTION and t == label
+    )
 
 
 def test_the_refresh_row_asks_for_a_refresh(qapp):
@@ -210,8 +251,14 @@ def test_a_wheel_notch_never_changes_the_client_or_fires_an_action(qapp):
     for delta in (120, -120, -120, -120):
         bar.client_selector.wheelEvent(
             QWheelEvent(
-                QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, delta),
-                Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False,
+                QPointF(5, 5),
+                QPointF(5, 5),
+                QPoint(0, 0),
+                QPoint(0, delta),
+                Qt.NoButton,
+                Qt.NoModifier,
+                Qt.NoScrollPhase,
+                False,
             )
         )
 
@@ -227,13 +274,13 @@ def test_arrow_keys_on_a_closed_box_step_over_the_action_rows(qapp):
 
     bar = CommandBar()
     bar.set_clients_from(DATA)
-    bar.set_current_client("Q")          # the last client row
+    bar.set_current_client("Q")  # the last client row
     created = []
     bar.createClientRequested.connect(lambda: created.append(True))
 
     down = QKeyEvent(QEvent.KeyPress, Qt.Key_Down, Qt.NoModifier)
     bar.client_selector.keyPressEvent(down)
-    assert bar.current_client() == "Q"   # nowhere left to go
+    assert bar.current_client() == "Q"  # nowhere left to go
     assert created == []
 
     up = QKeyEvent(QEvent.KeyPress, Qt.Key_Up, Qt.NoModifier)
@@ -257,7 +304,7 @@ def test_a_selection_made_before_the_rows_arrive_still_wins(qapp):
     bar.set_clients_from(DATA)
     bar.set_current_client("A")
 
-    bar.set_current_client("NEW")        # not in the model yet
+    bar.set_current_client("NEW")  # not in the model yet
     assert bar.current_client() == "A"
 
     with_new = dict(DATA, all_clients=[*DATA["all_clients"], "NEW"])

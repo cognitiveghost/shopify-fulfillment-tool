@@ -295,6 +295,13 @@ class CommandBar(QWidget):
                 for client_id in rest:
                     self._add_client(client_id, data)
 
+            # A blank ROW_SECTION row -- the popup's own non-selectable
+            # divider mechanism -- separates the actions from the client
+            # list above them. Not QComboBox.insertSeparator(): see
+            # _add_action's comment for why. With no clients there is nothing
+            # to separate from, and the row would just be a gap above them.
+            if self.client_selector.count():
+                self._add_section("")
             for label in _ACTIONS:
                 self._add_action(label)
             # The first appendRow drags currentIndex to row 0, which is always
