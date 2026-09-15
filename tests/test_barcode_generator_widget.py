@@ -8,6 +8,7 @@ no PDF ever written (CodeRabbit review on PR #259). Extended to cover the
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from gui.barcode_generator_widget import BarcodeGeneratorWidget
@@ -168,6 +169,20 @@ class _FakeSelectionWidget:
         self.order_count_label = Mock()
         self.output_dir_label = Mock()
         self.generate_btn = Mock()
+
+
+def test_output_folder_row_is_never_blank(qtbot):
+    """The Output folder row must say something before a packing list is chosen."""
+    widget = BarcodeGeneratorWidget(SimpleNamespace(session_path=None))
+    qtbot.addWidget(widget)
+    assert widget.output_dir_label.text().strip() != ""
+
+
+def test_order_count_label_wraps_instead_of_eliding(qtbot):
+    """The count sentence must wrap, not elide, when it doesn't fit the card."""
+    widget = BarcodeGeneratorWidget(SimpleNamespace(session_path=None))
+    qtbot.addWidget(widget)
+    assert widget.order_count_label.wordWrap() is True
 
 
 def test_status_label_clears_when_packing_list_changes():
