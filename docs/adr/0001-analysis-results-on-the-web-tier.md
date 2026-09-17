@@ -107,3 +107,9 @@ the second slot stays unspent even though the design freed it.
 **Ship the CSS-feature fixes in Qt and keep the current screen.** Rejected by
 the same reasoning as the first alternative — it is a third patch, not a
 different screen.
+
+## Note (2026-09-17)
+
+The line saying Packing Tool stays entirely Qt is superseded: Packing Tool's
+Packer Mode order document moves to the web tier too. See packing-tool
+`docs/adr/0001-packer-mode-on-the-web-tier.md`.

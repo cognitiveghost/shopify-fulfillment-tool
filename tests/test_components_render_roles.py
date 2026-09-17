@@ -7,14 +7,15 @@ rule inside it. Asserting `button.property("role")` cannot see that: the
 property is set correctly, it just never reaches the pixels. These tests
 sample what actually renders.
 """
+
 from collections import Counter
 
 import pytest
 from PySide6.QtWidgets import QApplication
 
 from gui.components.commandbar import CommandBar
-from gui.components.state_panel import StatePanel
 from gui.theme_manager import get_theme_manager
+from shared.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
 from shared.theme import StatusChip, build_stylesheet
@@ -100,7 +101,9 @@ def _pixels_of(widget, color: str) -> int:
 
 @pytest.mark.parametrize("theme_name", ["light", "dark"])
 @pytest.mark.parametrize("label,role,live", ELEVEN_STATES)
-def test_every_status_chip_renders_in_both_themes(styled_app, theme_name, label, role, live):
+def test_every_status_chip_renders_in_both_themes(
+    styled_app, theme_name, label, role, live
+):
     """9.3's `Done when`: eleven states, four live/manual combinations, two
     themes -- proved here rather than merely asserted by StatusStyle math.
 
@@ -134,11 +137,15 @@ def test_every_status_chip_renders_in_both_themes(styled_app, theme_name, label,
 @pytest.mark.parametrize(
     "panel_factory",
     [
-        lambda: StatePanel.nothing_loaded("No orders loaded", "Choose a file.", "Choose file…"),
+        lambda: StatePanel.nothing_loaded(
+            "No orders loaded", "Choose a file.", "Choose file…"
+        ),
         lambda: StatePanel.working("Analysing", "Matching orders against stock"),
         lambda: StatePanel.no_results("No orders match", "Filter: status is Blocked."),
         lambda: StatePanel.failed(
-            "The stock file could not be read", "Nothing can load.", "no column Quantity",
+            "The stock file could not be read",
+            "Nothing can load.",
+            "no column Quantity",
             "Choose another file…",
         ),
     ],

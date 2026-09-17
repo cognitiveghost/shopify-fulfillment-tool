@@ -9,7 +9,7 @@ uses -- not three different widgets.
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
-from gui.theme_manager import font_css
+from shared.theme import font_css
 
 
 class Card(QFrame):
