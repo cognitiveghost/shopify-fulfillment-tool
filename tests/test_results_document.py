@@ -8,6 +8,7 @@ import json
 
 import pandas as pd
 import pytest
+from PySide6.QtGui import QColor
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from test_results_bridge import _eval, _until_js
 
@@ -382,3 +383,38 @@ def test_sorting_value_twice_is_descending(qtbot, doc):
         view,
         "document.querySelector('#rows .row[data-index=\"0\"]').dataset.order === '#10312'",
     )
+
+
+def test_the_selection_ring_closes_across_the_frozen_cells(qtbot, doc):
+    """The select and status cells are sticky, so they paint over anything the
+    row draws: the ring has to be a pseudo-element above them, or it comes out
+    open on its left end. Only pixels can tell -- getComputedStyle cannot."""
+    view, _ = doc
+    _click_order(qtbot, view, "#10001")
+    rect = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify(document.querySelector('#rows .row.selected')"
+            ".getBoundingClientRect())",
+        )
+    )
+    ring = QColor(
+        _eval(
+            qtbot,
+            view,
+            "getComputedStyle(document.documentElement)"
+            ".getPropertyValue('--selection-border').trim()",
+        )
+    ).name()
+    top = int(rect["top"]) + 1  # inside the 2px ring
+    # Right of every sticky cell the ring always worked; wait for the click to
+    # reach the compositor there, or an unpainted grab passes on every sample.
+    plain_x = int(rect["right"]) - 40
+    qtbot.waitUntil(
+        lambda: view.grab().toImage().pixelColor(plain_x, top).name() == ring,
+        timeout=5000,
+    )
+    image = view.grab().toImage()
+    for x in (int(rect["left"]) + 16, 40, 100):  # the checkbox, then the chip
+        assert image.pixelColor(x, top).name() == ring, f"gap at x={x}"

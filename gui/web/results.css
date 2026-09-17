@@ -18,10 +18,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-/* Page geometry the theme does not own. The selection bar's height is read
-   back in JS to take its 44px out of the row budget, so it has to be stated
-   once rather than repeated at each use (spec section 3.1). */
-:root { --selection-bar-height: 44px; }
+/* Page geometry the theme does not own. The selection bar takes the table
+   header's place rather than pushing the table down (Shopify-style), so the
+   two are one height, stated once. */
+:root { --table-head-height: 28px; }
 
 html, body { margin: 0; height: 100%; }
 
@@ -241,16 +241,25 @@ button, input { font: inherit; color: inherit; }
 
 /* --- selection bar (Bundle 14) ------------------------------------------- */
 
+/* Covers the header row instead of sitting above it: the column names give
+   way to the actions while a selection is up, and the rows never move. The
+   left edge is measureColumns' job -- it clears the select-all box. */
 .selection-bar {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3; /* over the sticky .header */
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  height: var(--selection-bar-height);
-  padding: 0 var(--spacing-md);
+  height: var(--table-head-height);
+  padding: 0 var(--spacing-md) 0 var(--spacing-sm);
   background: var(--surface-raised);
   border-bottom: 1px solid var(--border-subtle);
 }
+/* Full-size controls do not fit a header row; the bar runs compact ones. */
+.selection-bar .btn { height: 24px; padding: 0 var(--spacing-sm); }
 .selection-counts { display: flex; align-items: baseline; gap: var(--spacing-sm); }
 .selection-count { color: var(--text-primary); font-weight: 700; }
 .selection-sub { color: var(--text-secondary); font-size: var(--type-caption-size); }
@@ -264,7 +273,7 @@ button, input { font: inherit; color: inherit; }
 .bulk-popover {
   position: absolute;
   z-index: 3;
-  top: var(--selection-bar-height);
+  top: var(--table-head-height);
   right: var(--spacing-md);
   display: flex;
   flex-direction: column;
@@ -342,7 +351,7 @@ button, input { font: inherit; color: inherit; }
   position: sticky;
   top: 0;
   z-index: 2;
-  height: 28px;
+  height: var(--table-head-height);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -355,11 +364,17 @@ button, input { font: inherit; color: inherit; }
   height: var(--row-height);
 }
 .rows .row:hover { background: var(--hover); }
-/* The selection ring: a closed rectangle, never a left border (F4). */
-.rows .row.selected {
-  background: var(--selection-bg);
-  outline: 2px solid var(--selection-border);
-  outline-offset: -2px;
+/* The selection ring: a closed rectangle, never a left border (F4). Drawn as
+   a pseudo-element, not an outline: the sticky select/status cells are
+   positioned, so they paint over anything the row itself draws. */
+.rows .row.selected { background: var(--selection-bg); }
+.rows .row.selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1; /* over the sticky cells, which sit at auto */
+  border: 2px solid var(--selection-border);
+  pointer-events: none;
 }
 
 .cell {
