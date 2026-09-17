@@ -129,27 +129,29 @@ def test_export_drops_to_secondary_while_the_bar_is_up(qtbot, page):
     )
 
 
-def test_the_bar_takes_its_height_from_the_table(qtbot, page):
+def test_the_bar_covers_the_header_so_the_table_never_moves(qtbot, page):
+    """The bar takes the header row's place instead of pushing the table
+    down, so clicking an order leaves every row where it was."""
     view, _ = page
     before = int(_eval(qtbot, view, "state.visible"))
+    top = _eval(qtbot, view, "document.getElementById('rows').getBoundingClientRect().top")
     _select(qtbot, view, ["10443"])
-    after = int(_eval(qtbot, view, "state.visible"))
-    assert before - after == 1
+    assert int(_eval(qtbot, view, "state.visible")) == before
+    assert _eval(qtbot, view, "document.getElementById('rows').getBoundingClientRect().top") == top
 
 
-def test_the_row_budget_reads_the_bar_height_from_css(qtbot, page):
-    """CSS states the height and JS reads it back, so the two can never
-    disagree about how much the bar costs the table (spec section 3.1)."""
+def test_the_bar_is_exactly_the_header_row_it_covers(qtbot, page):
+    """One CSS height serves both, so the bar can never leave a sliver of the
+    column names showing or spill onto the first row."""
     view, _ = page
-    assert _eval(qtbot, view, "selectionBarPx()") == 44
-    assert (
-        _eval(
-            qtbot,
-            view,
-            "getComputedStyle(document.getElementById('selection-bar')).height",
-        )
-        == "44px"
+    _select(qtbot, view, ["10443"])
+    bar = _json(
+        qtbot, view, "document.getElementById('selection-bar').getBoundingClientRect()"
     )
+    head = _json(
+        qtbot, view, "document.getElementById('header').getBoundingClientRect()"
+    )
+    assert (bar["top"], bar["height"]) == (head["top"], head["height"])
 
 
 def test_mounting_the_bar_does_not_move_focus(qtbot, page):

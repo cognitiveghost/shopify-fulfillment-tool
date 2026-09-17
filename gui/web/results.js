@@ -422,6 +422,9 @@ function measureColumns() {
   state.filler = !stretch;
   els.table.style.setProperty("--cols", template.join(" "));
   els.table.style.setProperty("--table-min", fixed + customerMin + "px");
+  // The selection bar covers the header from the first named column on, so the
+  // select-all box in the header stays reachable while a selection is up.
+  els.selectionBar.style.left = widths[0] + "px";
 }
 
 // Whole rows only: the table is as tall as the rows that fit, and whatever is
@@ -436,8 +439,9 @@ function layout() {
     renderSlot();
   }
   state.rowH = parseFloat(cssVar("--row-height")) || 28;
-  const barPx = els.selectionBar.hidden ? 0 : selectionBarPx();
-  const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - barPx - HEADER_PX) / state.rowH));
+  // The selection bar covers the header rather than adding to it, so the row
+  // budget is the same whether or not anything is selected.
+  const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - HEADER_PX) / state.rowH));
   state.visible = rows;
   els.scroller.style.height = HEADER_PX + rows * state.rowH + "px";
   els.rows.style.height = state.view.length * state.rowH + "px";

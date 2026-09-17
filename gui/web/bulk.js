@@ -4,12 +4,6 @@
 // Spec: docs/superpowers/specs/2026-09-14-phase9-bundle14-selection-bulk-design.md
 "use strict";
 
-// The bar's height is CSS's to state (--selection-bar-height) and JS's to
-// read, so the row budget can never disagree with what is drawn.
-function selectionBarPx() {
-  return parseFloat(cssVar("--selection-bar-height")) || 44;
-}
-
 function selectedOrders() {
   return state.view.filter((r) => state.selected.has(r.key)).map((r) => r.o);
 }
