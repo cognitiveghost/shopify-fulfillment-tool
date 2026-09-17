@@ -8,18 +8,17 @@ No icons: seven items with seven icons is a colour chart. Section headers are
 disabled QActions rather than QMenu.addSection(), because addSection hands the
 drawing to Qt and the artboard pins the type treatment.
 
-Spec: docs/superpowers/specs/2026-09-04-phase9-bundle4-shell-design.md §4
+Spec: shopify-fulfillment-tool docs/superpowers/specs/2026-09-04-phase9-bundle4-shell-design.md §4
 """
 
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import QMenu, QToolButton
 
-from gui.theme_manager import get_theme_manager
-from shared.theme import font_css, on_theme_changed
+from shared.theme import current_tokens, font_css, on_theme_changed
 
 MENU_WIDTH = 284
 ROW_HEIGHT = 28
-MARK_COLUMN = 16   # keeps labels aligned whether or not anything is ticked
+MARK_COLUMN = 16  # keeps labels aligned whether or not anything is ticked
 
 
 class OverflowMenu(QMenu):
@@ -34,7 +33,7 @@ class OverflowMenu(QMenu):
         on_theme_changed(self, lambda _t: self._apply_theme())
 
     def _apply_theme(self) -> None:
-        theme = get_theme_manager().get_current_theme()
+        theme = current_tokens()
         self.setStyleSheet(
             f"QMenu {{ background-color: {theme.surface_overlay};"
             f" border: 1px solid {theme.border};"
@@ -98,11 +97,6 @@ def overflow_button(menu: OverflowMenu, parent=None) -> QToolButton:
     build_stylesheet has a QPushButton rule but no QToolButton one, so the
     global `QWidget { background-color: surface }` would leave this flat with
     no border and no hover.
-
-    ponytail: this QSS is a near-copy of ui_manager._style_results_overflow.
-    Not extracted, because Bundle 12 replaces the Analysis Results screen with
-    the web tier and takes that call site with it. If Bundle 12 slips past
-    Bundle 10, hoist this and delete the copy there.
     """
     button = QToolButton(parent)
     button.setText("⋯")
@@ -110,7 +104,7 @@ def overflow_button(menu: OverflowMenu, parent=None) -> QToolButton:
     button.setMenu(menu)
 
     def restyle(_tokens=None):
-        theme = get_theme_manager().get_current_theme()
+        theme = current_tokens()
         button.setStyleSheet(
             f"QToolButton {{ background-color: {theme.surface_raised};"
             f" border: 1px solid {theme.border};"

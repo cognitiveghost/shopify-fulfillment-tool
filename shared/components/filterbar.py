@@ -9,7 +9,7 @@ abstraction this phase keeps deleting.
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
-from gui.theme_manager import font_css, get_theme_manager, set_button_role
+from shared.theme import current_tokens, font_css, on_theme_changed, set_button_role
 
 
 class _FilterChip(QPushButton):
@@ -29,8 +29,7 @@ class FilterBar(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self._apply_theme()
-        get_theme_manager().theme_changed.connect(self._apply_theme)
+        on_theme_changed(self, lambda _t: self._apply_theme())
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -53,7 +52,7 @@ class FilterBar(QWidget):
         layout.addWidget(self.count_label)
 
     def _apply_theme(self) -> None:
-        theme = get_theme_manager().get_current_theme()
+        theme = current_tokens()
         self.setStyleSheet(f"FilterBar {{ background-color: {theme.surface}; }}")
 
     def add_filter(self, key: str, text: str) -> None:

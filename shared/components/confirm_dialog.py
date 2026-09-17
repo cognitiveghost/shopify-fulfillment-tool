@@ -4,7 +4,7 @@ The accept button is the verb, so the consequence is written on the thing you
 press. Cancel is the default, so a reflexive Enter destroys nothing. An
 undoable act never confirms; its toast carries Undo instead.
 
-Spec: docs/superpowers/specs/2026-09-10-phase9-bundle9-message-boxes-design.md §4.2
+Spec: shopify-fulfillment-tool docs/superpowers/specs/2026-09-10-phase9-bundle9-message-boxes-design.md §4.2
 """
 
 from PySide6.QtWidgets import (
@@ -15,8 +15,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from gui.theme_manager import apply_dialog_button_roles
-from shared.theme import font_css
+from shared.theme import apply_dialog_button_roles, font_css
 
 _VERBS_THAT_NAME_NO_ACT = {"ok", "yes", "confirm", "continue"}
 

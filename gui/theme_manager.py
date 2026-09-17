@@ -21,12 +21,13 @@ from shared.theme import (
     DensityProfile,  # noqa: F401
     ThemeTokens,
     TypeStyle,  # noqa: F401
+    apply_dialog_button_roles,  # noqa: F401 -- re-exported
     build_palette,
     build_stylesheet,
     font_css,  # noqa: F401
     get_density,
     get_density_profile,
-    set_button_role,
+    set_button_role,  # noqa: F401 -- re-exported
     set_current,
     set_density,
     theme_notifier,
@@ -36,20 +37,6 @@ from shared.theme import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def apply_dialog_button_roles(box) -> None:
-    """Mark a dialog's accept button primary. Everything else keeps the default.
-
-    Since the default role became secondary, only the one button that commits the
-    dialog needs marking. AcceptRole is Qt's own answer to "which button is that",
-    so a Close-only box correctly comes out with no primary at all.
-    """
-    from PySide6.QtWidgets import QDialogButtonBox
-
-    for button in box.buttons():
-        if box.buttonRole(button) == QDialogButtonBox.ButtonRole.AcceptRole:
-            set_button_role(button, "primary")
 
 
 class ThemeManager(QObject):
@@ -160,7 +147,9 @@ class ThemeManager(QObject):
         try:
             settings = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
             saved_theme = settings.value("theme", "light")
-            self._current_theme_name = saved_theme if saved_theme in ("light", "dark") else "light"
+            self._current_theme_name = (
+                saved_theme if saved_theme in ("light", "dark") else "light"
+            )
         except Exception:
             logger.exception("Failed to load theme preference")
             self._current_theme_name = "light"
@@ -193,8 +182,9 @@ def get_theme_manager() -> ThemeManager:
     return _theme_manager_instance
 
 
-
-def apply_font(target, role: str, bold: bool | None = None, tabular: bool = False) -> None:
+def apply_font(
+    target, role: str, bold: bool | None = None, tabular: bool = False
+) -> None:
     """Apply a scale role to anything exposing .font()/.setFont().
 
     Covers QWidget, QListWidgetItem and QPainter with one helper. Reads the
@@ -304,6 +294,6 @@ def density_stylesheet() -> str:
         {selector} {{
             min-height: {profile.control_content_height}px;
             padding: {profile.padding_v}px {profile.padding_h}px;
-            font-size: {type_style('body').size_pt}pt;
+            font-size: {type_style("body").size_pt}pt;
         }}
     """

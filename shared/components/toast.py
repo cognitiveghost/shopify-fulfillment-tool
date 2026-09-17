@@ -7,7 +7,7 @@ oldest, and a badge counts a fast run of them.
 No fade: the brief allows "at most" 150ms, and a toast you can click before it
 has arrived is worse than none.
 
-Spec: docs/superpowers/specs/2026-09-10-phase9-bundle9-message-boxes-design.md §4.1
+Spec: shopify-fulfillment-tool docs/superpowers/specs/2026-09-10-phase9-bundle9-message-boxes-design.md §4.1
 """
 
 from collections.abc import Callable

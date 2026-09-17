@@ -31,13 +31,13 @@ from PySide6.QtWidgets import (
 from gui.components.error_banner import show_error
 from gui.components.form_section import FormSection
 from gui.components.inline_message import InlineMessage
-from gui.components.toast import toast
 from gui.settings.base import SettingsPage
 from gui.theme_manager import (
     apply_dialog_button_roles,
     font_css,
     set_button_role,
 )
+from shared.components.toast import toast
 from shared.theme import on_theme_changed
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
 

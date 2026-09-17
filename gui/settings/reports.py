@@ -23,10 +23,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.components.state_panel import StatePanel
 from gui.settings.base import SettingsPage
 from gui.settings.report_editor import PACKING_LISTS, STOCK_EXPORTS, ReportEditor
 from gui.theme_manager import set_button_role
+from shared.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.theme import font_css, on_theme_changed
 

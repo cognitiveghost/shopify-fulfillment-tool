@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from gui.components.commandbar import BarState, CommandBar
 from gui.components.error_banner import ErrorBanner, show_error
-from gui.components.state_panel import StatePanel
+from shared.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog

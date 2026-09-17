@@ -28,8 +28,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.components.overflow import OverflowMenu, overflow_button
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
+from shared.components.overflow import OverflowMenu, overflow_button
 from shared.icons import icon
 from shared.theme import StatusChip, on_theme_changed
 

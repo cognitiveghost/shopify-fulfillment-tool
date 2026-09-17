@@ -13,13 +13,13 @@ className() exactly (see build_stylesheet's own note), so a subclass would
 need its own selector in shared/theme.py -- a packing-tool PR for a plane this
 widget can have for free by composing.
 
-Spec: docs/superpowers/specs/2026-09-04-phase9-bundle3-components-design.md §5
+Spec: shopify-fulfillment-tool docs/superpowers/specs/2026-09-04-phase9-bundle3-components-design.md §5
 """
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
-from gui.components.card import Card
+from shared.components.card import Card
 from shared.theme import font_css, on_theme_changed, set_button_role
 
 
@@ -92,12 +92,16 @@ class StatePanel(QWidget):
     def no_results(cls, title, cause, action_text="Clear all filters", parent=None):
         """A filter emptied the list. Secondary, because the operator may
         actually want the empty answer."""
-        return cls(title, cause, action_text=action_text,
-                   action_role="secondary", parent=parent)
+        return cls(
+            title,
+            cause,
+            action_text=action_text,
+            action_role="secondary",
+            parent=parent,
+        )
 
     @classmethod
     def failed(cls, title, cause, detail, action_text, parent=None):
         """Something broke. State the consequence, then the cause in the
         file's own words, then the way out."""
-        return cls(title, cause, detail=detail, action_text=action_text,
-                   parent=parent)
+        return cls(title, cause, detail=detail, action_text=action_text, parent=parent)
