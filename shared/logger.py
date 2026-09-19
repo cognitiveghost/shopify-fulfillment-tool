@@ -18,6 +18,7 @@ import logging
 import os
 import socket
 import sys
+import threading
 import time
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
@@ -163,6 +164,45 @@ def setup_logging(
     startup_logger.info(f"Log level: {logging.getLevelName(level)}")
     startup_logger.info(f"Log file: {log_file}")
     startup_logger.info("=" * 80)
+
+
+def install_crash_logging(logger_name: str = "") -> None:
+    """Send unhandled exceptions to the log instead of to stderr.
+
+    A frozen Windows GUI build has no console, so a traceback printed to
+    stderr is discarded and a crash leaves no trace at all. Both hooks are
+    installed -- a worker thread's crash is exactly as invisible as the main
+    thread's -- and each chains to whatever was there before, so a debugger or
+    a test harness that installed its own hook keeps working.
+
+    Safe to call more than once: the second call chains onto the first, which
+    logs the same record twice but never loses one.
+    """
+    crash_logger = logging.getLogger(logger_name)
+    previous_hook = sys.excepthook
+    previous_thread_hook = threading.excepthook
+
+    def _log_unhandled(exc_type, exc_value, exc_tb):
+        # Ctrl-C is a person leaving, not a fault. Logging it at CRITICAL
+        # would put a false crash in the file every time the app is closed
+        # from a console during development.
+        if not issubclass(exc_type, KeyboardInterrupt):
+            crash_logger.critical(
+                "Unhandled exception", exc_info=(exc_type, exc_value, exc_tb)
+            )
+        previous_hook(exc_type, exc_value, exc_tb)
+
+    def _log_unhandled_in_thread(args):
+        if args.exc_type is not SystemExit:
+            crash_logger.critical(
+                "Unhandled exception in thread %s",
+                getattr(args.thread, "name", "?"),
+                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            )
+        previous_thread_hook(args)
+
+    sys.excepthook = _log_unhandled
+    threading.excepthook = _log_unhandled_in_thread
 
 
 if __name__ == "__main__":
