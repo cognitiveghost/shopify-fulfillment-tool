@@ -13,11 +13,13 @@ filename only ever has exactly one writer for its whole lifetime. Contrast
 with shared.stats_manager, where every process genuinely shares one file
 and needs shared.file_lock.
 """
+
 import json
 import logging
 import os
 import socket
 import sys
+import threading
 import time
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
@@ -52,7 +54,9 @@ class UnifiedJSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
-            "timestamp": datetime.fromtimestamp(record.created).astimezone().isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created)
+            .astimezone()
+            .isoformat(),
             "level": record.levelname,
             "tool": self.tool_name,
             "module": record.module,
@@ -131,7 +135,9 @@ def setup_logging(
     except OSError as e:
         log_dir = Path.home() / f".{tool_name.lower()}" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Warning: could not access server logs directory. Using local: {log_dir}. Error: {e}")
+        print(
+            f"Warning: could not access server logs directory. Using local: {log_dir}. Error: {e}"
+        )
 
     log_file = log_dir / f"{tool_name}_{socket.gethostname()}_{os.getpid()}.log"
 
@@ -146,10 +152,12 @@ def setup_logging(
     if sys.stderr is not None:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(level)
-        console_handler.setFormatter(logging.Formatter(
-            fmt="%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        console_handler.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
         root_logger.addHandler(console_handler)
         _active_handlers.append(console_handler)
 
@@ -165,6 +173,45 @@ def setup_logging(
     startup_logger.info("=" * 80)
 
 
+def install_crash_logging(logger_name: str = "") -> None:
+    """Send unhandled exceptions to the log instead of to stderr.
+
+    A frozen Windows GUI build has no console, so a traceback printed to
+    stderr is discarded and a crash leaves no trace at all. Both hooks are
+    installed -- a worker thread's crash is exactly as invisible as the main
+    thread's -- and each chains to whatever was there before, so a debugger or
+    a test harness that installed its own hook keeps working.
+
+    Safe to call more than once: the second call chains onto the first, which
+    logs the same record twice but never loses one.
+    """
+    crash_logger = logging.getLogger(logger_name)
+    previous_hook = sys.excepthook
+    previous_thread_hook = threading.excepthook
+
+    def _log_unhandled(exc_type, exc_value, exc_tb):
+        # Ctrl-C is a person leaving, not a fault. Logging it at CRITICAL
+        # would put a false crash in the file every time the app is closed
+        # from a console during development.
+        if not issubclass(exc_type, KeyboardInterrupt):
+            crash_logger.critical(
+                "Unhandled exception", exc_info=(exc_type, exc_value, exc_tb)
+            )
+        previous_hook(exc_type, exc_value, exc_tb)
+
+    def _log_unhandled_in_thread(args):
+        if args.exc_type is not SystemExit:
+            crash_logger.critical(
+                "Unhandled exception in thread %s",
+                getattr(args.thread, "name", "?"),
+                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            )
+        previous_thread_hook(args)
+
+    sys.excepthook = _log_unhandled
+    threading.excepthook = _log_unhandled_in_thread
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -176,20 +223,28 @@ if __name__ == "__main__":
         files = list(log_dir.glob("SelfCheckTool_*.log"))
         assert len(files) == 1, f"expected 1 log file, found {files}"
 
-        lines = [line for line in files[0].read_text(encoding="utf-8").splitlines() if '"hello"' in line]
+        lines = [
+            line
+            for line in files[0].read_text(encoding="utf-8").splitlines()
+            if '"hello"' in line
+        ]
         assert len(lines) == 1
         record = json.loads(lines[0])
         assert record["extra"]["client_id"] == "M"
 
         handlers_before = len(_active_handlers)
         setup_logging("SelfCheckTool", tmp, level=logging.DEBUG)
-        assert len(_active_handlers) == handlers_before, "setup_logging() must not stack duplicate handlers"
+        assert len(_active_handlers) == handlers_before, (
+            "setup_logging() must not stack duplicate handlers"
+        )
 
         old_file = log_dir / "old.log"
         old_file.write_text("stale")
         old_time = time.time() - 40 * 86400
         os.utime(old_file, (old_time, old_time))
         _sweep_old_logs(log_dir, retention_days=30)
-        assert not old_file.exists(), "sweep should delete files older than retention_days"
+        assert not old_file.exists(), (
+            "sweep should delete files older than retention_days"
+        )
 
     print("shared/logger.py self-check OK")
