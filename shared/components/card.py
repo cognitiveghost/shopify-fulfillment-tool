@@ -9,7 +9,7 @@ uses -- not three different widgets.
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from shared.theme import current_tokens, font_css, on_theme_changed
+from shared.theme import font_css, on_theme_changed
 
 
 class Card(QFrame):
@@ -86,8 +86,16 @@ class Card(QFrame):
         row.addStretch()
 
         value_widget = QLabel(value)
-        family = f" font-family: {current_tokens().font_family_mono};" if mono else ""
-        value_widget.setStyleSheet(f"{font_css('caption', bold=not mono)}{family}")
+        # Re-run rather than baked: on_theme_changed also carries density
+        # changes, which move font_css -- baking it leaves the value at the
+        # old size while the label beside it follows.
+        on_theme_changed(
+            value_widget,
+            lambda tokens, w=value_widget: w.setStyleSheet(
+                f"{font_css('caption', bold=not mono)}"
+                + (f" font-family: {tokens.font_family_mono};" if mono else "")
+            ),
+        )
         row.addWidget(value_widget)
 
         self.layout().addLayout(row)

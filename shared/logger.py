@@ -13,7 +13,6 @@ filename only ever has exactly one writer for its whole lifetime. Contrast
 with shared.stats_manager, where every process genuinely shares one file
 and needs shared.file_lock.
 """
-
 import json
 import logging
 import os
@@ -54,9 +53,7 @@ class UnifiedJSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
-            "timestamp": datetime.fromtimestamp(record.created)
-            .astimezone()
-            .isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created).astimezone().isoformat(),
             "level": record.levelname,
             "tool": self.tool_name,
             "module": record.module,
@@ -135,9 +132,7 @@ def setup_logging(
     except OSError as e:
         log_dir = Path.home() / f".{tool_name.lower()}" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
-        print(
-            f"Warning: could not access server logs directory. Using local: {log_dir}. Error: {e}"
-        )
+        print(f"Warning: could not access server logs directory. Using local: {log_dir}. Error: {e}")
 
     log_file = log_dir / f"{tool_name}_{socket.gethostname()}_{os.getpid()}.log"
 
@@ -152,12 +147,10 @@ def setup_logging(
     if sys.stderr is not None:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(level)
-        console_handler.setFormatter(
-            logging.Formatter(
-                fmt="%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
+        console_handler.setFormatter(logging.Formatter(
+            fmt="%(asctime)s | %(name)s | %(levelname)s | %(funcName)s:%(lineno)d | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
         root_logger.addHandler(console_handler)
         _active_handlers.append(console_handler)
 
@@ -223,28 +216,20 @@ if __name__ == "__main__":
         files = list(log_dir.glob("SelfCheckTool_*.log"))
         assert len(files) == 1, f"expected 1 log file, found {files}"
 
-        lines = [
-            line
-            for line in files[0].read_text(encoding="utf-8").splitlines()
-            if '"hello"' in line
-        ]
+        lines = [line for line in files[0].read_text(encoding="utf-8").splitlines() if '"hello"' in line]
         assert len(lines) == 1
         record = json.loads(lines[0])
         assert record["extra"]["client_id"] == "M"
 
         handlers_before = len(_active_handlers)
         setup_logging("SelfCheckTool", tmp, level=logging.DEBUG)
-        assert len(_active_handlers) == handlers_before, (
-            "setup_logging() must not stack duplicate handlers"
-        )
+        assert len(_active_handlers) == handlers_before, "setup_logging() must not stack duplicate handlers"
 
         old_file = log_dir / "old.log"
         old_file.write_text("stale")
         old_time = time.time() - 40 * 86400
         os.utime(old_file, (old_time, old_time))
         _sweep_old_logs(log_dir, retention_days=30)
-        assert not old_file.exists(), (
-            "sweep should delete files older than retention_days"
-        )
+        assert not old_file.exists(), "sweep should delete files older than retention_days"
 
     print("shared/logger.py self-check OK")

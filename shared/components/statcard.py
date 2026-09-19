@@ -11,7 +11,7 @@ class StatCard(QWidget):
 
     Attributes:
         value_label: the big number.
-        label_label: what it counts.
+        caption_label: what it counts.
     """
 
     def __init__(
@@ -21,8 +21,8 @@ class StatCard(QWidget):
         self._card = Card(margins=(12, 8, 12, 8), spacing=2)
         self.value_label = self._card.add_text(value, "label" if small else "display")
         self.value_label.setAlignment(Qt.AlignCenter)
-        self.label_label = self._card.add_text(label, "caption")
-        self.label_label.setAlignment(Qt.AlignCenter)
+        self.caption_label = self._card.add_text(label, "caption")
+        self.caption_label.setAlignment(Qt.AlignCenter)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
