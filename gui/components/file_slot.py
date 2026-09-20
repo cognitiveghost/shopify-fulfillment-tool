@@ -39,6 +39,7 @@ class FileSlot(QFrame):
     chooseFolderRequested = Signal()
     mapColumnsRequested = Signal()
     pathDropped = Signal(str)
+    clearRequested = Signal()
 
     def __init__(self, title: str, hint: str, parent=None) -> None:
         super().__init__(parent)
@@ -100,6 +101,10 @@ class FileSlot(QFrame):
         self.replace_button = QPushButton("Choose a different file", page)
         self.replace_button.clicked.connect(self.chooseFileRequested.emit)
         row.addWidget(self.replace_button)
+        self.clear_button = QPushButton("Clear", page)
+        self.clear_button.setToolTip("Empty this slot without choosing another file")
+        self.clear_button.clicked.connect(self.clearRequested.emit)
+        row.addWidget(self.clear_button)
         row.addStretch()
         layout.addLayout(row)
         return page
@@ -122,6 +127,12 @@ class FileSlot(QFrame):
         self.choose_other_button = QPushButton("Choose a different file", page)
         self.choose_other_button.clicked.connect(self.chooseFileRequested.emit)
         row.addWidget(self.choose_other_button)
+        self.clear_invalid_button = QPushButton("Clear", page)
+        self.clear_invalid_button.setToolTip(
+            "Empty this slot without choosing another file"
+        )
+        self.clear_invalid_button.clicked.connect(self.clearRequested.emit)
+        row.addWidget(self.clear_invalid_button)
         row.addStretch()
         layout.addLayout(row)
         return page

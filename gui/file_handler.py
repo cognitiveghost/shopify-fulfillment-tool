@@ -272,9 +272,7 @@ class FileHandler:
                         verb="Use this stock file",
                     ):
                         # Cancel: clear the stock selection
-                        self.mw.stock_file_path = None
-                        self.mw.stock_slot.clear()
-                        self.check_files_ready()
+                        self.clear_file("stock")
                         return
 
                 # Memory is updated with Final Stock after analysis (not raw stock on load)
@@ -443,6 +441,16 @@ class FileHandler:
         else:
             self.mw.run_analysis_button.setEnabled(False)
         return orders_ok and stock_ok
+
+    def clear_file(self, file_type: str) -> None:
+        """Empty one slot: forget the path, reset the widget, re-gate the run.
+
+        slot.clear() emits `changed`, which is already connected to
+        check_files_ready, so Run Analysis re-gates itself.
+        """
+        setattr(self.mw, f"{file_type}_file_path", None)
+        getattr(self.mw, f"{file_type}_slot").clear()
+        self.log.info(f"Cleared the {file_type} slot")
 
     def accept_dropped_path(self, file_type: str, path: str) -> None:
         """A file or a folder was dropped on a FileSlot -- load it in place.

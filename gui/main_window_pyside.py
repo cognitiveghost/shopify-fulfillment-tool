@@ -342,6 +342,7 @@ class MainWindow(QMainWindow):
                 )
             )
             slot.changed.connect(self.file_handler.check_files_ready)
+            slot.clearRequested.connect(lambda k=kind: self.file_handler.clear_file(k))
 
         # Session browser (new architecture)
         self.session_browser.session_selected.connect(self.on_session_selected)

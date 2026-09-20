@@ -32,9 +32,7 @@ def test_loading_a_file_makes_the_slot_valid(slot):
 
 
 def test_an_invalid_file_is_not_valid_and_keeps_its_missing_columns(slot):
-    slot.set_invalid(
-        Path("/tmp/stock.csv"), ["Stock"], ["Артикул", "Име", "Цена"]
-    )
+    slot.set_invalid(Path("/tmp/stock.csv"), ["Stock"], ["Артикул", "Име", "Цена"])
     assert slot.path == Path("/tmp/stock.csv")
     assert slot.is_valid is False
     assert slot.missing_columns == ["Stock"]
@@ -69,3 +67,19 @@ def test_every_transition_emits_changed(slot, qtbot):
         slot.set_invalid(Path("/tmp/orders.csv"), ["SKU"], ["Name"])
     with qtbot.waitSignal(slot.changed):
         slot.clear()
+
+
+def test_a_loaded_slot_can_be_emptied(slot, qtbot):
+    slot.set_loaded(Path("/tmp/stock.csv"), "5 rows · 2 columns matched")
+    emitted = []
+    slot.clearRequested.connect(lambda: emitted.append(True))
+    slot.clear_button.click()
+    assert emitted == [True]
+
+
+def test_an_invalid_slot_can_be_emptied_too(slot):
+    slot.set_invalid(Path("/tmp/stock.csv"), ["Stock"], ["SKU"])
+    emitted = []
+    slot.clearRequested.connect(lambda: emitted.append(True))
+    slot.clear_invalid_button.click()
+    assert emitted == [True]

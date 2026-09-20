@@ -216,3 +216,24 @@ def test_a_genuinely_different_client_file_still_asks(main_window):
     )
     assert is_anomaly is True
     assert "0% SKU overlap" in msg
+
+
+def test_clearing_a_slot_forgets_the_path_and_regates_run_analysis(
+    main_window, tmp_path
+):
+    handler = main_window.file_handler
+    orders = tmp_path / "orders.csv"
+    stock = tmp_path / "stock.csv"
+    orders.write_text("x")
+    stock.write_text("x")
+    main_window.orders_file_path = str(orders)
+    main_window.stock_file_path = str(stock)
+    main_window.orders_slot.set_loaded(orders, "1 row")
+    main_window.stock_slot.set_loaded(stock, "1 row")
+    assert handler.check_files_ready() is True
+
+    handler.clear_file("stock")
+
+    assert main_window.stock_file_path is None
+    assert main_window.stock_slot.is_valid is False
+    assert main_window.run_analysis_button.isEnabled() is False
