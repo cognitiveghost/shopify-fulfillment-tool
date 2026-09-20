@@ -66,11 +66,22 @@ def test_restoring_a_session_points_at_the_files_it_ran_on(main_window):
 
     assert main_window.stock_file_path is not None
     assert main_window.stock_file_path.endswith("inventory.csv")
-    assert main_window.orders_file_path.endswith("orders_export.csv")
-    # The slots, not just the paths -- a restored path the Setup screen still
+    # The slot, not just the path -- a restored path the Setup screen still
     # shows as an empty slot is the half of this defect the user actually sees.
     assert main_window.stock_slot.is_valid is True
-    assert main_window.orders_slot.is_valid is True
+
+
+def test_the_orders_file_is_deliberately_not_restored(main_window):
+    """Restoring it would re-enable Run Analysis in a resumed session, and
+    run_analysis reuses the open session_path -- one click would overwrite the
+    session's results with no confirm. Owner's call, 2026-09-20."""
+    path = _session_with_inputs(main_window)
+    main_window.session_path = path
+    main_window._restore_session_inputs(path)
+    main_window.update_ui_state()
+
+    assert main_window.orders_file_path is None
+    assert main_window.run_analysis_button.isEnabled() is False
 
 
 def test_add_product_is_reachable_in_a_restored_session(main_window):
@@ -87,14 +98,12 @@ def test_add_product_is_reachable_in_a_restored_session(main_window):
 
 def test_a_session_whose_input_files_are_gone_restores_nothing(main_window):
     path = main_window.session_manager.create_session("acme")
-    # Seed both paths first, or this passes against an empty method body.
+    # Seed the path first, or this passes against an empty method body.
     main_window.stock_file_path = "/gone/inventory.csv"
-    main_window.orders_file_path = "/gone/orders_export.csv"
 
     main_window._restore_session_inputs(path)
 
     assert main_window.stock_file_path == "/gone/inventory.csv"
-    assert main_window.orders_file_path == "/gone/orders_export.csv"
     assert main_window.stock_slot.is_valid is False
 
 

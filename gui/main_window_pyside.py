@@ -872,12 +872,13 @@ class MainWindow(QMainWindow):
             return False
 
     def _restore_session_inputs(self, session_path: str) -> None:
-        """Point the file paths and slots at the files this session ran on.
+        """Point the stock path and slot at the file this session ran on.
 
         run_full_analysis copies both inputs into <session>/input/ under fixed
         names and records them in session_info.json. Without this, a resumed
         session had results but no stock_file_path, which left Add Product to
-        Order greyed out with nothing on screen saying why.
+        Order greyed out with nothing on screen saying why. Only the stock
+        file is restored -- see the loop below for why the orders file is not.
         """
         from pathlib import Path
 
@@ -888,10 +889,13 @@ class MainWindow(QMainWindow):
             return
 
         info = self.session_manager.get_session_info(session_path) or {}
-        for kind, default_name in (
-            ("orders", "orders_export.csv"),
-            ("stock", "inventory.csv"),
-        ):
+        # Stock only, deliberately. Restoring orders_file_path as well would
+        # satisfy update_ui_state's has_orders and re-enable Run Analysis in a
+        # resumed session -- and run_analysis reuses the open session_path, so
+        # one click would overwrite that session's analysis state, discarding
+        # the Add Product additions this very method exists to make reachable.
+        # There is no confirm on that path. Owner's call, 2026-09-20.
+        for kind, default_name in (("stock", "inventory.csv"),):
             recorded = info.get(f"{kind}_file") or default_name
             path = Path(input_dir) / recorded
             if not path.exists():
