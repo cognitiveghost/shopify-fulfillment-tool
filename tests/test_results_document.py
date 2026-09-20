@@ -5,6 +5,8 @@ Qt chrome. 1366x768 -> 1310x692, 1920x1080 -> 1864x1004. Never mark skip.
 """
 
 import json
+import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -418,3 +420,28 @@ def test_the_selection_ring_closes_across_the_frozen_cells(qtbot, doc):
     image = view.grab().toImage()
     for x in (int(rect["left"]) + 16, 40, 100):  # the checkbox, then the chip
         assert image.pixelColor(x, top).name() == ring, f"gap at x={x}"
+
+
+_CSS = Path(__file__).resolve().parents[1] / "gui" / "web" / "results.css"
+
+
+def _layers() -> dict:
+    """The named layer scale, read out of :root."""
+    text = _CSS.read_text(encoding="utf-8")
+    return {
+        name: int(value) for name, value in re.findall(r"--z-([a-z]+):\s*(\d+)", text)
+    }
+
+
+def test_a_popover_is_never_covered_by_the_selection_bar():
+    """The Add filter menu opened underneath the selection bar because the two
+    tied at z-index 3 and the bar came later in the document."""
+    z = _layers()
+    assert z["popover"] > z["bar"] > z["header"] > z["sticky"]
+    assert z["toast"] > z["popover"]
+
+
+def test_no_bare_z_index_survives_in_results_css():
+    text = _CSS.read_text(encoding="utf-8")
+    bare = re.findall(r"z-index:\s*(\d+)", text)
+    assert bare == [], f"z-index must come from the layer scale, found {bare}"

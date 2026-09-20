@@ -2,7 +2,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QCheckBox,
     QDialog,
     QFrame,
     QGroupBox,
@@ -10,6 +9,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QRadioButton,
     QSplitter,
     QTextEdit,
     QVBoxLayout,
@@ -266,18 +266,27 @@ class GenerateReportsDialog(_BaseReportDialog):
         sep.setFrameShadow(QFrame.Sunken)
         layout.addWidget(sep)
 
-        writeoff_group = QGroupBox("Writeoff Report")
+        writeoff_group = QGroupBox("Packaging write-off")
         writeoff_layout = QVBoxLayout(writeoff_group)
 
-        self.writeoff_checkbox = QCheckBox(
-            "Include Packaging Materials in export (SKU Writeoff)"
+        self.writeoff_off = QRadioButton("Leave packaging materials out")
+        self.writeoff_merged = QRadioButton("Include them in the stock export")
+        self.writeoff_separate = QRadioButton("Write them to a file of their own")
+        self.writeoff_off.setChecked(True)
+        self.writeoff_merged.setToolTip(
+            "Orders carrying a packaging tag add its packaging SKU as extra "
+            "rows in the same export (e.g. 'BOX' adds PKG-BOX-SMALL)."
         )
-        self.writeoff_checkbox.setToolTip(
-            "When enabled, packaging materials (based on Internal Tags) will be\n"
-            "automatically added to the stock export as separate SKU lines.\n"
-            "Example: Orders with 'BOX' tag will add PKG-BOX-SMALL to the export."
+        self.writeoff_separate.setToolTip(
+            "Packaging SKUs go to <name>_packaging.xls beside the stock export, "
+            "so the warehouse system imports the two separately."
         )
-        writeoff_layout.addWidget(self.writeoff_checkbox)
+        for button in (
+            self.writeoff_off,
+            self.writeoff_merged,
+            self.writeoff_separate,
+        ):
+            writeoff_layout.addWidget(button)
 
         layout.addWidget(writeoff_group)
 
@@ -361,8 +370,14 @@ class GenerateReportsDialog(_BaseReportDialog):
                 continue
             kind, _index, cfg = data
             entry = {**cfg, "report_type": kind}
-            if kind == "stock_exports" and hasattr(self, "writeoff_checkbox"):
-                entry["apply_writeoff"] = self.writeoff_checkbox.isChecked()
+            if kind == "stock_exports" and hasattr(self, "writeoff_separate"):
+                entry["writeoff_mode"] = (
+                    "separate"
+                    if self.writeoff_separate.isChecked()
+                    else "merged"
+                    if self.writeoff_merged.isChecked()
+                    else "off"
+                )
             batch.append(entry)
 
         if not batch:

@@ -671,6 +671,10 @@ class ActionsHandler(QObject):
             # ========================================
             # GENERATE REPORT USING PROPER MODULES
             # ========================================
+            # Set by a "separate" packaging write-off, which saves a second
+            # file the status message below has to name.
+            packaging_file = None
+
             if report_type == "packing_lists":
                 self.log.info("Creating packing list using packing_lists module")
 
@@ -767,17 +771,17 @@ class ActionsHandler(QObject):
                 self.log.info("Creating stock export using stock_export module")
 
                 # Get writeoff setting from report_config
-                apply_writeoff = report_config.get("apply_writeoff", False)
+                writeoff_mode = report_config.get("writeoff_mode", "off")
                 tag_categories = self.mw.active_profile_config.get("tag_categories", {})
 
                 # Use the proper stock_export module
                 # Pass UNFILTERED DataFrame - the module will apply filters itself
-                stock_export.create_stock_export(
+                packaging_file = stock_export.create_stock_export(
                     analysis_df=self.mw.analysis_results_df,
                     output_file=output_file,
                     report_name=report_name,
                     filters=filters,
-                    apply_writeoff=apply_writeoff,
+                    writeoff_mode=writeoff_mode,
                     tag_categories=tag_categories,
                 )
 
@@ -787,8 +791,11 @@ class ActionsHandler(QObject):
             # SUCCESS MESSAGE - Status bar instead of blocking dialog
             # ========================================
             # Show brief status message instead of blocking dialog
+            saved = os.path.basename(output_file)
+            if packaging_file:
+                saved += f" + {os.path.basename(packaging_file)}"
             self.mw.statusBar().showMessage(
-                f"Report saved: {os.path.basename(output_file)}",
+                f"Report saved: {saved}",
                 5000,  # 5 seconds
             )
             self.log.info(f"Report generated: {output_file}")
@@ -1135,10 +1142,20 @@ class ActionsHandler(QObject):
             or self.mw.analysis_results_df is None
         ):
             self.log.warning("show_add_product_dialog called with no analysis data")
+            show_error(
+                self.mw,
+                "There are no analysis results to add a product to",
+                "Run the analysis first.",
+            )
             return
 
         if not hasattr(self.mw, "stock_file_path") or not self.mw.stock_file_path:
             self.log.warning("show_add_product_dialog called with no stock file")
+            show_error(
+                self.mw,
+                "This session's stock file couldn't be found",
+                "Load a stock file in Setup, then try again.",
+            )
             return
 
         # Load stock DataFrame
@@ -1218,15 +1235,22 @@ class ActionsHandler(QObject):
             )
 
         # Show dialog
-        dialog = AddProductDialog(
-            parent=self.mw,
-            analysis_df=self.mw.analysis_results_df,
-            stock_df=stock_df,
-            live_stock=live_stock,
-            low_stock_threshold=self.mw.active_profile_config.get("settings", {}).get(
-                "low_stock_threshold", 5
-            ),
-        )
+        try:
+            dialog = AddProductDialog(
+                parent=self.mw,
+                analysis_df=self.mw.analysis_results_df,
+                stock_df=stock_df,
+                live_stock=live_stock,
+                low_stock_threshold=self.mw.active_profile_config.get(
+                    "settings", {}
+                ).get("low_stock_threshold", 5),
+            )
+        except Exception:
+            self.log.exception("Add Product dialog could not be built")
+            show_error(
+                self.mw, "Add Product couldn't be opened", "Details are in Logs."
+            )
+            return
 
         if dialog.exec() == QDialog.Accepted:
             result = dialog.get_result()

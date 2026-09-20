@@ -6,6 +6,7 @@ check_files_ready(). FileSlot (Task 3) now owns that fact as data.
 
 from unittest.mock import Mock
 
+import pandas as pd
 import pytest
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
@@ -169,3 +170,99 @@ def test_a_failed_delimiter_save_tells_the_user(main_window, monkeypatch):
     assert seen, "a failed save must raise a toast"
     assert seen[-1][1] == "error"
     assert "wasn't saved" in seen[-1][0].lower()
+
+
+def _memory(skus: dict, total: int) -> dict:
+    return {"enabled": True, "skus": skus, "total_units": total}
+
+
+def test_a_sku_listed_once_per_location_is_not_a_hundred_percent_jump(main_window):
+    """The stock file lists each SKU once per warehouse location. Memory counts
+    one row per SKU, so summing raw rows read as a doubling on every load."""
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": ["A", "A", "B", "B"], "Stock": [10, 10, 5, 5]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"A": 10.0, "B": 5.0}, 15)
+    )
+    assert is_anomaly is False, msg
+
+
+def test_float_skus_from_pandas_still_match_normalised_memory(main_window):
+    """pandas reads numeric SKUs as float64; memory stores normalise_sku'd
+    strings. Comparing them raw made every overlap 0%."""
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": [5170.0, 5171.0], "Stock": [4, 6]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"5170": 4.0, "5171": 6.0}, 10)
+    )
+    assert is_anomaly is False, msg
+
+
+def test_a_real_collapse_in_stock_still_asks(main_window):
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": ["A", "B"], "Stock": [1, 1]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"A": 50.0, "B": 50.0}, 100)
+    )
+    assert is_anomaly is True
+    assert "-98%" in msg
+
+
+def test_a_genuinely_different_client_file_still_asks(main_window):
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": ["X", "Y"], "Stock": [10, 10]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"A": 10.0, "B": 10.0}, 20)
+    )
+    assert is_anomaly is True
+    assert "0% SKU overlap" in msg
+
+
+def test_clearing_a_slot_forgets_the_path_and_regates_run_analysis(
+    main_window, tmp_path
+):
+    handler = main_window.file_handler
+    orders = tmp_path / "orders.csv"
+    stock = tmp_path / "stock.csv"
+    orders.write_text("x")
+    stock.write_text("x")
+    main_window.orders_file_path = str(orders)
+    main_window.stock_file_path = str(stock)
+    main_window.orders_slot.set_loaded(orders, "1 row")
+    main_window.stock_slot.set_loaded(stock, "1 row")
+    assert handler.check_files_ready() is True
+
+    handler.clear_file("stock")
+
+    assert main_window.stock_file_path is None
+    assert main_window.stock_slot.is_valid is False
+    assert main_window.run_analysis_button.isEnabled() is False
+
+
+def test_clearing_the_stock_slot_keeps_run_analysis_alive_in_memory_mode(
+    main_window, tmp_path
+):
+    """Memory mode can run without a stock file. check_files_ready only knows
+    about the two slots, so re-gating through it alone greyed Run Analysis out
+    for good -- for exactly the user who wanted the wrong file gone."""
+    handler = main_window.file_handler
+    orders = tmp_path / "orders.csv"
+    stock = tmp_path / "stock.csv"
+    orders.write_text("x")
+    stock.write_text("x")
+    main_window.orders_file_path = str(orders)
+    main_window.stock_file_path = str(stock)
+    main_window.orders_slot.set_loaded(orders, "1 row")
+    main_window.stock_slot.set_loaded(stock, "1 row")
+    main_window.session_path = main_window.session_manager.create_session("acme")
+    main_window.active_profile_config["inventory_memory"] = {
+        "enabled": True,
+        "skus": {"A": 10.0},
+        "total_units": 10,
+    }
+    main_window.inventory_memory_checkbox.setChecked(True)
+
+    handler.clear_file("stock")
+
+    assert main_window.stock_file_path is None
+    assert main_window.run_analysis_button.isEnabled() is True

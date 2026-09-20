@@ -297,6 +297,11 @@ file is. Shown while the filter is being written.
 which is the order they are offered and generated in. Set by dragging within
 one kind; packing lists and stock exports never mix.
 
+**Packaging write-off** — the packaging material SKUs a run consumes, derived
+from the orders' internal tags. A stock export either carries them among its
+product rows, writes them to a file of their own beside it, or leaves them out.
+Supersedes "SKU writeoff", which names the config key rather than the thing.
+
 ## Repos
 
 **Canonical source** — `packing-tool`. Every `shared/` change is authored
