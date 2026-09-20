@@ -1578,11 +1578,12 @@ def create_stock_export_report(
     Args:
         analysis_df (pd.DataFrame): The main analysis DataFrame.
         report_config (dict): The configuration for the specific stock export.
-            Can include 'apply_writeoff' key (bool) to enable writeoff deduction.
+            Can include a 'writeoff_mode' key ("off"/"merged"/"separate") to
+            control packaging write-off.
         session_manager (SessionManager, optional): Session manager for session-based workflow.
         session_path (str, optional): Path to current session directory.
         tag_categories (dict, optional): Tag categories config with writeoff mappings.
-            Required if apply_writeoff is enabled in report_config.
+            Required if writeoff_mode is "merged" or "separate" in report_config.
 
     Returns:
         tuple[bool, str]: A tuple containing a success flag and a status message.
@@ -1606,14 +1607,14 @@ def create_stock_export_report(
                 os.makedirs(output_dir)
 
         filters = report_config.get("filters")
-        apply_writeoff = report_config.get("apply_writeoff", False)
+        writeoff_mode = report_config.get("writeoff_mode", "off")
 
         stock_export.create_stock_export(
             analysis_df,
             output_filename,
             report_name=report_name,
             filters=filters,
-            apply_writeoff=apply_writeoff,
+            writeoff_mode=writeoff_mode,
             tag_categories=tag_categories,
         )
 

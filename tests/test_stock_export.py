@@ -4,6 +4,9 @@ Output columns are positional (Артикул, blank spacer, Мярка, Бро�
 Партида) -- the warehouse ERP auto-detects them by position, so tests read
 back by column index rather than by header name.
 """
+
+from typing import ClassVar
+
 import pandas as pd
 
 from shopify_tool.stock_export import (
@@ -18,8 +21,11 @@ COL_SKU, COL_BLANK, COL_UNIT, COL_QTY, COL_EXPIRY, COL_BATCH = range(6)
 
 def _analysis_df(rows):
     defaults = {
-        "Order_Number": "#1", "SKU": "A1", "Quantity": 1,
-        "Order_Fulfillment_Status": "Fulfillable", "Lot_Details": None,
+        "Order_Number": "#1",
+        "SKU": "A1",
+        "Quantity": 1,
+        "Order_Fulfillment_Status": "Fulfillable",
+        "Lot_Details": None,
     }
     return pd.DataFrame([{**defaults, **r} for r in rows])
 
@@ -30,11 +36,28 @@ def _read(path):
 
 class TestBasicExport:
     def test_only_fulfillable_rows_summed_by_sku(self, tmp_path):
-        df = _analysis_df([
-            {"Order_Number": "#1", "SKU": "A1", "Quantity": 3, "Order_Fulfillment_Status": "Fulfillable"},
-            {"Order_Number": "#2", "SKU": "A1", "Quantity": 2, "Order_Fulfillment_Status": "Fulfillable"},
-            {"Order_Number": "#3", "SKU": "A1", "Quantity": 100, "Order_Fulfillment_Status": "Not Fulfillable"},
-        ])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 3,
+                    "Order_Fulfillment_Status": "Fulfillable",
+                },
+                {
+                    "Order_Number": "#2",
+                    "SKU": "A1",
+                    "Quantity": 2,
+                    "Order_Fulfillment_Status": "Fulfillable",
+                },
+                {
+                    "Order_Number": "#3",
+                    "SKU": "A1",
+                    "Quantity": 100,
+                    "Order_Fulfillment_Status": "Not Fulfillable",
+                },
+            ]
+        )
         out = tmp_path / "export.xls"
         create_stock_export(df, str(out))
         result = _read(out)
@@ -50,10 +73,12 @@ class TestBasicExport:
         assert result.iloc[0, COL_UNIT] == "брой"
 
     def test_multiple_skus_each_get_own_row(self, tmp_path):
-        df = _analysis_df([
-            {"Order_Number": "#1", "SKU": "A1", "Quantity": 3},
-            {"Order_Number": "#1", "SKU": "A2", "Quantity": 5},
-        ])
+        df = _analysis_df(
+            [
+                {"Order_Number": "#1", "SKU": "A1", "Quantity": 3},
+                {"Order_Number": "#1", "SKU": "A2", "Quantity": 5},
+            ]
+        )
         out = tmp_path / "export.xls"
         create_stock_export(df, str(out))
         result = _read(out)
@@ -61,12 +86,28 @@ class TestBasicExport:
         assert totals == {"A1": 3, "A2": 5}
 
     def test_custom_filter_applied(self, tmp_path):
-        df = _analysis_df([
-            {"Order_Number": "#1", "SKU": "A1", "Quantity": 3, "Shipping_Provider": "DHL"},
-            {"Order_Number": "#2", "SKU": "A2", "Quantity": 5, "Shipping_Provider": "DPD"},
-        ])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 3,
+                    "Shipping_Provider": "DHL",
+                },
+                {
+                    "Order_Number": "#2",
+                    "SKU": "A2",
+                    "Quantity": 5,
+                    "Shipping_Provider": "DPD",
+                },
+            ]
+        )
         out = tmp_path / "export.xls"
-        create_stock_export(df, str(out), filters=[{"field": "Shipping_Provider", "operator": "==", "value": "DHL"}])
+        create_stock_export(
+            df,
+            str(out),
+            filters=[{"field": "Shipping_Provider", "operator": "==", "value": "DHL"}],
+        )
         result = _read(out)
         assert list(result.iloc[:, COL_SKU]) == ["A1"]
 
@@ -85,7 +126,16 @@ class TestLotAggregation:
             {"expiry": "260601", "batch": "B1", "qty_allocated": 3},
             {"expiry": "270101", "batch": "B2", "qty_allocated": 2},
         ]
-        df = _analysis_df([{"Order_Number": "#1", "SKU": "A1", "Quantity": 5, "Lot_Details": lot_details}])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 5,
+                    "Lot_Details": lot_details,
+                }
+            ]
+        )
         out = tmp_path / "export.xls"
         create_stock_export(df, str(out))
         result = _read(out)
@@ -95,7 +145,16 @@ class TestLotAggregation:
 
     def test_lot_sentinel_one_renders_blank(self, tmp_path):
         lot_details = [{"expiry": "1", "batch": "1", "qty_allocated": 4}]
-        df = _analysis_df([{"Order_Number": "#1", "SKU": "A1", "Quantity": 4, "Lot_Details": lot_details}])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 4,
+                    "Lot_Details": lot_details,
+                }
+            ]
+        )
         out = tmp_path / "export.xls"
         create_stock_export(df, str(out))
         result = _read(out)
@@ -107,7 +166,16 @@ class TestLotAggregation:
         # _finalize_export_df could round -- the finalizer cannot recover a
         # fraction that was already thrown away.
         lot_details = [{"expiry": "260601", "batch": "B1", "qty_allocated": 1.5}]
-        df = _analysis_df([{"Order_Number": "#1", "SKU": "A1", "Quantity": 1.5, "Lot_Details": lot_details}])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 1.5,
+                    "Lot_Details": lot_details,
+                }
+            ]
+        )
         out = tmp_path / "export.xls"
         create_stock_export(df, str(out))
         result = _read(out)
@@ -115,13 +183,29 @@ class TestLotAggregation:
 
 
 class TestConfirmedBugs:
-    def test_missing_order_number_does_not_drop_distinct_lot_allocations(self, tmp_path):
-        df = _analysis_df([
-            {"Order_Number": "", "SKU": "A1", "Quantity": 3,
-             "Lot_Details": [{"expiry": "260601", "batch": None, "qty_allocated": 3}]},
-            {"Order_Number": "", "SKU": "A1", "Quantity": 2,
-             "Lot_Details": [{"expiry": "270101", "batch": None, "qty_allocated": 2}]},
-        ])
+    def test_missing_order_number_does_not_drop_distinct_lot_allocations(
+        self, tmp_path
+    ):
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "",
+                    "SKU": "A1",
+                    "Quantity": 3,
+                    "Lot_Details": [
+                        {"expiry": "260601", "batch": None, "qty_allocated": 3}
+                    ],
+                },
+                {
+                    "Order_Number": "",
+                    "SKU": "A1",
+                    "Quantity": 2,
+                    "Lot_Details": [
+                        {"expiry": "270101", "batch": None, "qty_allocated": 2}
+                    ],
+                },
+            ]
+        )
         out = tmp_path / "export.xls"
         create_stock_export(df, str(out))
         result = _read(out)
@@ -136,11 +220,19 @@ class TestMergeSessionStockExportsBug:
     def _write_session(self, session_dir, rows):
         analysis_dir = session_dir / "analysis"
         analysis_dir.mkdir(parents=True)
-        df = pd.DataFrame([{
-            "Order_Number": "#1", "SKU": "A1", "Quantity": 1,
-            "Order_Fulfillment_Status": "Fulfillable", "Lot_Details": None,
-            **row,
-        } for row in rows])
+        df = pd.DataFrame(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 1,
+                    "Order_Fulfillment_Status": "Fulfillable",
+                    "Lot_Details": None,
+                    **row,
+                }
+                for row in rows
+            ]
+        )
         df.to_pickle(analysis_dir / "current_state.pkl")
 
     def test_same_sku_without_lot_tracking_sums_into_one_row(self, tmp_path):
@@ -153,14 +245,30 @@ class TestMergeSessionStockExportsBug:
 
     def test_same_sku_from_different_lots_across_sessions_still_summed(self, tmp_path):
         s1, s2 = tmp_path / "s1", tmp_path / "s2"
-        self._write_session(s1, [{
-            "SKU": "A1", "Quantity": 3,
-            "Lot_Details": [{"expiry": "260601", "batch": "B1", "qty_allocated": 3}],
-        }])
-        self._write_session(s2, [{
-            "SKU": "A1", "Quantity": 2,
-            "Lot_Details": [{"expiry": "270101", "batch": "B2", "qty_allocated": 2}],
-        }])
+        self._write_session(
+            s1,
+            [
+                {
+                    "SKU": "A1",
+                    "Quantity": 3,
+                    "Lot_Details": [
+                        {"expiry": "260601", "batch": "B1", "qty_allocated": 3}
+                    ],
+                }
+            ],
+        )
+        self._write_session(
+            s2,
+            [
+                {
+                    "SKU": "A1",
+                    "Quantity": 2,
+                    "Lot_Details": [
+                        {"expiry": "270101", "batch": "B2", "qty_allocated": 2}
+                    ],
+                }
+            ],
+        )
         result = merge_session_stock_exports([s1, s2], client_id="TEST")
         a1_rows = result[result.iloc[:, COL_SKU] == "A1"]
         assert len(a1_rows) == 1
@@ -236,11 +344,18 @@ class TestQuantityRounding:
                 }
             },
         }
-        df = _analysis_df([
-            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
-        ])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 1,
+                    "Internal_Tags": '["BOX"]',
+                },
+            ]
+        )
         out = tmp_path / "export.xls"
-        create_stock_export(df, str(out), apply_writeoff=True, tag_categories=config)
+        create_stock_export(df, str(out), writeoff_mode="merged", tag_categories=config)
         result = _read(out)
         packaging = result[result.iloc[:, COL_SKU] == "PKG-BOX"]
         assert len(packaging) == 1
@@ -260,13 +375,30 @@ class TestQuantityRounding:
             },
         }
         # 3 orders x 0.5 = 1.5 -> 2. Truncation gave 1.
-        df = _analysis_df([
-            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
-            {"Order_Number": "#2", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
-            {"Order_Number": "#3", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
-        ])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 1,
+                    "Internal_Tags": '["BOX"]',
+                },
+                {
+                    "Order_Number": "#2",
+                    "SKU": "A1",
+                    "Quantity": 1,
+                    "Internal_Tags": '["BOX"]',
+                },
+                {
+                    "Order_Number": "#3",
+                    "SKU": "A1",
+                    "Quantity": 1,
+                    "Internal_Tags": '["BOX"]',
+                },
+            ]
+        )
         out = tmp_path / "export.xls"
-        create_stock_export(df, str(out), apply_writeoff=True, tag_categories=config)
+        create_stock_export(df, str(out), writeoff_mode="merged", tag_categories=config)
         result = _read(out)
         packaging = result[result.iloc[:, COL_SKU] == "PKG-BOX"]
         assert packaging.iloc[0, COL_QTY] == 2
@@ -288,32 +420,120 @@ class TestQuantityRounding:
                 }
             },
         }
-        df = _analysis_df([
-            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Internal_Tags": '["BOX"]'},
-        ])
+        df = _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 1,
+                    "Internal_Tags": '["BOX"]',
+                },
+            ]
+        )
         out = tmp_path / "export.xls"
-        create_stock_export(df, str(out), apply_writeoff=True, tag_categories=config)
+        create_stock_export(df, str(out), writeoff_mode="merged", tag_categories=config)
         result = _read(out)
         assert "PKG-TAPE" not in set(result.iloc[:, COL_SKU])
         assert (result.iloc[:, COL_QTY] > 0).all()
 
 
+class TestWriteoffModes:
+    """Packaging write-off: out, among the product rows, or beside them."""
+
+    CONFIG: ClassVar[dict] = {
+        "version": 2,
+        "categories": {
+            "packaging": {
+                "tags": ["BOX"],
+                "sku_writeoff": {
+                    "enabled": True,
+                    "mappings": {"BOX": [{"sku": "PKG-BOX", "quantity": 1}]},
+                },
+            }
+        },
+    }
+
+    def _df(self):
+        return _analysis_df(
+            [
+                {
+                    "Order_Number": "#1",
+                    "SKU": "A1",
+                    "Quantity": 2,
+                    "Internal_Tags": '["BOX"]',
+                },
+            ]
+        )
+
+    def test_separate_mode_writes_packaging_to_its_own_file(self, tmp_path):
+        out = tmp_path / "export.xls"
+        create_stock_export(
+            self._df(),
+            str(out),
+            writeoff_mode="separate",
+            tag_categories=self.CONFIG,
+        )
+        packaging = tmp_path / "export_packaging.xls"
+        assert packaging.exists()
+
+        products = list(_read(out).iloc[:, COL_SKU])
+        packs = list(_read(packaging).iloc[:, COL_SKU])
+        assert "PKG-BOX" not in products
+        assert products == ["A1"]
+        assert packs == ["PKG-BOX"]
+
+    def test_separate_mode_with_no_packaging_writes_one_file(self, tmp_path):
+        out = tmp_path / "export.xls"
+        create_stock_export(
+            self._df(), str(out), writeoff_mode="separate", tag_categories={}
+        )
+        assert out.exists()
+        assert not (tmp_path / "export_packaging.xls").exists()
+
+    def test_merged_mode_keeps_both_in_one_file(self, tmp_path):
+        out = tmp_path / "export.xls"
+        create_stock_export(
+            self._df(),
+            str(out),
+            writeoff_mode="merged",
+            tag_categories=self.CONFIG,
+        )
+        assert not (tmp_path / "export_packaging.xls").exists()
+        assert "PKG-BOX" in list(_read(out).iloc[:, COL_SKU])
+
+    def test_off_mode_leaves_packaging_out_entirely(self, tmp_path):
+        out = tmp_path / "export.xls"
+        create_stock_export(
+            self._df(),
+            str(out),
+            writeoff_mode="off",
+            tag_categories=self.CONFIG,
+        )
+        assert not (tmp_path / "export_packaging.xls").exists()
+        assert "PKG-BOX" not in list(_read(out).iloc[:, COL_SKU])
+
+
 def test_not_in_filter_excludes_the_listed_skus(tmp_path):
     """stock_export.py carried a verbatim copy of the packing-list query
     builder, so it carried the same defect."""
-    df = pd.DataFrame({
-        "Order_Number": ["#1001", "#1002", "#1003"],
-        "SKU": ["AB-01", "CD-02", "EF-03"],
-        "Product_Name": ["Widget", "Gadget", "Doohickey"],
-        "Quantity": [1, 2, 3],
-        "Final_Stock": [10, 20, 30],
-        "Shipping_Provider": ["DHL", "DPD", "DHL"],
-        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
-    })
+    df = pd.DataFrame(
+        {
+            "Order_Number": ["#1001", "#1002", "#1003"],
+            "SKU": ["AB-01", "CD-02", "EF-03"],
+            "Product_Name": ["Widget", "Gadget", "Doohickey"],
+            "Quantity": [1, 2, 3],
+            "Final_Stock": [10, 20, 30],
+            "Shipping_Provider": ["DHL", "DPD", "DHL"],
+            "Order_Fulfillment_Status": ["Fulfillable"] * 3,
+        }
+    )
     out = tmp_path / "notin.xls"
 
-    create_stock_export(df, str(out),
-                        filters=[{"field": "SKU", "operator": "not in", "value": "AB-01,CD-02"}])
+    create_stock_export(
+        df,
+        str(out),
+        filters=[{"field": "SKU", "operator": "not in", "value": "AB-01,CD-02"}],
+    )
 
     written = pd.read_excel(out)
     assert "AB-01" not in written.to_string()

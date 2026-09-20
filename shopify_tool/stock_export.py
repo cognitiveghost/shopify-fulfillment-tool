@@ -143,12 +143,38 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
     return _finalize_export_df(pd.DataFrame(records))
 
 
+def _write_xls(export_df, output_file) -> None:
+    """One sheet, header row, then the rows. The warehouse system reads the
+    first sheet of the file and nothing else, which is why a separate
+    write-off goes in a separate file rather than a second sheet."""
+    import xlwt
+
+    workbook = xlwt.Workbook()
+    sheet = workbook.add_sheet("Sheet1")
+    for col_num, value in enumerate(export_df.columns):
+        sheet.write(0, col_num, value)
+    # enumerate, not iterrows() index: export_df may carry a gapped index
+    # (e.g. from the Quantity > 0 filter), which would skip/misplace rows.
+    for row_num, (_, row) in enumerate(export_df.iterrows()):
+        for col_num, value in enumerate(row):
+            sheet.write(row_num + 1, col_num, value)
+    workbook.save(output_file)
+
+
+def _packaging_path(output_file):
+    """Sibling of the product export: export.xls -> export_packaging.xls."""
+    from pathlib import Path
+
+    p = Path(output_file)
+    return str(p.with_name(f"{p.stem}_packaging{p.suffix}"))
+
+
 def create_stock_export(
     analysis_df,
     output_file,
     report_name="Stock Export",
     filters=None,
-    apply_writeoff=False,
+    writeoff_mode="off",
     tag_categories=None,
 ):
     """Creates a stock export .xls file from scratch.
@@ -177,12 +203,13 @@ def create_stock_export(
             Defaults to "Stock Export".
         filters (list[dict], optional): A list of dictionaries defining filter
             conditions to apply before summarizing the data. Defaults to None.
-        apply_writeoff (bool, optional): If True, adds packaging material SKUs
-            to the export based on Internal Tags and configured mappings.
-            Defaults to False.
-        tag_categories (dict, optional): Tag categories config (required if
-            apply_writeoff=True). Contains sku_writeoff mappings that define
-            which packaging SKUs to add for each tag.
+        writeoff_mode (str, optional): One of "off" (no packaging materials),
+            "merged" (packaging SKUs added as rows in this same export), or
+            "separate" (packaging SKUs written to a sibling
+            <output_file>_packaging.xls instead). Defaults to "off".
+        tag_categories (dict, optional): Tag categories config (required for
+            "merged" or "separate"). Contains sku_writeoff mappings that
+            define which packaging SKUs to add for each tag.
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -243,16 +270,18 @@ def create_stock_export(
                     )
                 )
 
-        # Add packaging materials if writeoff enabled (runs for both lot and non-lot paths)
-        if apply_writeoff and tag_categories:
+        # Packaging write-off: either among the product rows or beside them.
+        if writeoff_mode in ("merged", "separate") and tag_categories:
             logger.info(f"Calculating packaging materials for report '{report_name}'")
             from shopify_tool.sku_writeoff import calculate_writeoff_quantities
 
-            # Calculate packaging materials needed from FILTERED items
             writeoff_df = calculate_writeoff_quantities(filtered_items, tag_categories)
 
-            if not writeoff_df.empty:
-                # Convert packaging materials to the canonical export layout
+            if writeoff_df.empty:
+                logger.info(
+                    "No packaging materials required (no writeoff mappings triggered)"
+                )
+            else:
                 packaging_rows = _finalize_export_df(
                     pd.DataFrame(
                         {
@@ -261,35 +290,26 @@ def create_stock_export(
                         }
                     )
                 )
-
-                # APPEND packaging materials as additional rows
-                export_df = pd.concat([export_df, packaging_rows], ignore_index=True)
-
-                logger.info(
-                    f"Added {len(packaging_rows)} packaging SKUs to export "
-                    f"(total: {packaging_rows[QTY_COL].sum()} units)"
-                )
-            else:
-                logger.info(
-                    "No packaging materials required (no writeoff mappings triggered)"
-                )
+                if writeoff_mode == "merged":
+                    export_df = pd.concat(
+                        [export_df, packaging_rows], ignore_index=True
+                    )
+                    logger.info(
+                        f"Added {len(packaging_rows)} packaging SKUs to export "
+                        f"(total: {packaging_rows[QTY_COL].sum()} units)"
+                    )
+                else:
+                    packaging_file = _packaging_path(output_file)
+                    _write_xls(packaging_rows, packaging_file)
+                    logger.info(
+                        f"Wrote {len(packaging_rows)} packaging SKUs to "
+                        f"'{packaging_file}'"
+                    )
 
         # Guard against any path that bypassed _finalize_export_df
         export_df = _finalize_export_df(export_df)
 
-        # Save to an .xls file using direct xlwt (pandas dropped xlwt engine support)
-        import xlwt
-
-        workbook = xlwt.Workbook()
-        sheet = workbook.add_sheet("Sheet1")
-        for col_num, value in enumerate(export_df.columns):
-            sheet.write(0, col_num, value)
-        # enumerate, not iterrows() index: export_df may carry a gapped index
-        # (e.g. from the Quantity > 0 filter), which would skip/misplace rows.
-        for row_num, (_, row) in enumerate(export_df.iterrows()):
-            for col_num, value in enumerate(row):
-                sheet.write(row_num + 1, col_num, value)
-        workbook.save(output_file)
+        _write_xls(export_df, output_file)
         logger.info(
             f"Stock export '{report_name}' created successfully at '{output_file}'."
         )
