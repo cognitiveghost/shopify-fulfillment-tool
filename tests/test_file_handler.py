@@ -6,6 +6,7 @@ check_files_ready(). FileSlot (Task 3) now owns that fact as data.
 
 from unittest.mock import Mock
 
+import pandas as pd
 import pytest
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
@@ -169,3 +170,49 @@ def test_a_failed_delimiter_save_tells_the_user(main_window, monkeypatch):
     assert seen, "a failed save must raise a toast"
     assert seen[-1][1] == "error"
     assert "wasn't saved" in seen[-1][0].lower()
+
+
+def _memory(skus: dict, total: int) -> dict:
+    return {"enabled": True, "skus": skus, "total_units": total}
+
+
+def test_a_sku_listed_once_per_location_is_not_a_hundred_percent_jump(main_window):
+    """The stock file lists each SKU once per warehouse location. Memory counts
+    one row per SKU, so summing raw rows read as a doubling on every load."""
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": ["A", "A", "B", "B"], "Stock": [10, 10, 5, 5]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"A": 10.0, "B": 5.0}, 15)
+    )
+    assert is_anomaly is False, msg
+
+
+def test_float_skus_from_pandas_still_match_normalised_memory(main_window):
+    """pandas reads numeric SKUs as float64; memory stores normalise_sku'd
+    strings. Comparing them raw made every overlap 0%."""
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": [5170.0, 5171.0], "Stock": [4, 6]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"5170": 4.0, "5171": 6.0}, 10)
+    )
+    assert is_anomaly is False, msg
+
+
+def test_a_real_collapse_in_stock_still_asks(main_window):
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": ["A", "B"], "Stock": [1, 1]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"A": 50.0, "B": 50.0}, 100)
+    )
+    assert is_anomaly is True
+    assert "-98%" in msg
+
+
+def test_a_genuinely_different_client_file_still_asks(main_window):
+    handler = main_window.file_handler
+    new_stock = pd.DataFrame({"SKU": ["X", "Y"], "Stock": [10, 10]})
+    is_anomaly, msg = handler._check_inventory_anomaly(
+        new_stock, _memory({"A": 10.0, "B": 10.0}, 20)
+    )
+    assert is_anomaly is True
+    assert "0% SKU overlap" in msg

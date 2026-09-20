@@ -295,9 +295,14 @@ class FileHandler:
         """
         if not memory.get("skus"):
             return False, ""
+        from shopify_tool.csv_utils import normalize_sku
+
         old_skus = set(memory["skus"])
+        # Memory stores normalise_sku'd keys (profile_manager.save_inventory_memory).
+        # pandas reads numeric SKUs as float64, so an un-normalised 5170.0 never
+        # matched a stored "5170" and every overlap read as 0%.
         new_skus = (
-            set(new_stock_df["SKU"].unique())
+            {normalize_sku(s) for s in new_stock_df["SKU"].unique()}
             if "SKU" in new_stock_df.columns
             else set()
         )
@@ -308,9 +313,7 @@ class FileHandler:
                 f"Only {overlap:.0%} SKU overlap with saved inventory ({len(old_skus)} known SKUs). Wrong client file?",
             )
         old_total = memory.get("total_units", 0)
-        new_total = (
-            new_stock_df["Stock"].sum() if "Stock" in new_stock_df.columns else 0
-        )
+        new_total = core.inventory_total_units(new_stock_df)
         if old_total > 0 and abs(new_total - old_total) / old_total > 0.40:
             return (
                 True,

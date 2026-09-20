@@ -958,6 +958,24 @@ def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> 
     return snapshot
 
 
+def inventory_total_units(stock_df: pd.DataFrame) -> float:
+    """Total units in a stock frame, counted the way inventory memory counts.
+
+    One row per SKU -- a stock file lists a SKU once per warehouse location --
+    and negatives clamped to zero. Those are exactly the two rules
+    build_inventory_snapshot and save_inventory_memory apply between them, so
+    a freshly loaded file and a saved snapshot are only comparable when both
+    sides use this. Summing raw rows instead made a SKU listed twice read as a
+    100% jump on every single load.
+    """
+    if stock_df is None or not {"SKU", "Stock"} <= set(stock_df.columns):
+        return 0.0
+    per_sku = pd.to_numeric(
+        stock_df.groupby("SKU")["Stock"].last(), errors="coerce"
+    ).dropna()
+    return float(per_sku.clip(lower=0).sum())
+
+
 def build_inventory_names(
     final_df: pd.DataFrame, stock_df: pd.DataFrame
 ) -> dict | None:
