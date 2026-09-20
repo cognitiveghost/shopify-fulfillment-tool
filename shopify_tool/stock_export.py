@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import pandas as pd
 
@@ -163,8 +164,6 @@ def _write_xls(export_df, output_file) -> None:
 
 def _packaging_path(output_file):
     """Sibling of the product export: export.xls -> export_packaging.xls."""
-    from pathlib import Path
-
     p = Path(output_file)
     return str(p.with_name(f"{p.stem}_packaging{p.suffix}"))
 
@@ -210,6 +209,12 @@ def create_stock_export(
         tag_categories (dict, optional): Tag categories config (required for
             "merged" or "separate"). Contains sku_writeoff mappings that
             define which packaging SKUs to add for each tag.
+
+    Returns:
+        str | None: the packaging file's path when "separate" mode actually
+        wrote one, so the caller can name it alongside `output_file` — it is
+        the only path the caller does not already hold. None otherwise,
+        including on failure.
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -271,6 +276,9 @@ def create_stock_export(
                 )
 
         # Packaging write-off: either among the product rows or beside them.
+        # "separate" only stages the rows here -- the file is written after the
+        # product export, below.
+        packaging_rows = None
         if writeoff_mode in ("merged", "separate") and tag_categories:
             logger.info(f"Calculating packaging materials for report '{report_name}'")
             from shopify_tool.sku_writeoff import calculate_writeoff_quantities
@@ -282,7 +290,7 @@ def create_stock_export(
                     "No packaging materials required (no writeoff mappings triggered)"
                 )
             else:
-                packaging_rows = _finalize_export_df(
+                rows = _finalize_export_df(
                     pd.DataFrame(
                         {
                             "Артикул": writeoff_df["SKU"],
@@ -291,20 +299,13 @@ def create_stock_export(
                     )
                 )
                 if writeoff_mode == "merged":
-                    export_df = pd.concat(
-                        [export_df, packaging_rows], ignore_index=True
-                    )
+                    export_df = pd.concat([export_df, rows], ignore_index=True)
                     logger.info(
-                        f"Added {len(packaging_rows)} packaging SKUs to export "
-                        f"(total: {packaging_rows[QTY_COL].sum()} units)"
+                        f"Added {len(rows)} packaging SKUs to export "
+                        f"(total: {rows[QTY_COL].sum()} units)"
                     )
                 else:
-                    packaging_file = _packaging_path(output_file)
-                    _write_xls(packaging_rows, packaging_file)
-                    logger.info(
-                        f"Wrote {len(packaging_rows)} packaging SKUs to "
-                        f"'{packaging_file}'"
-                    )
+                    packaging_rows = rows
 
         # Guard against any path that bypassed _finalize_export_df
         export_df = _finalize_export_df(export_df)
@@ -314,8 +315,25 @@ def create_stock_export(
             f"Stock export '{report_name}' created successfully at '{output_file}'."
         )
 
+        # Only now, with the export the caller actually asked for safely on
+        # disk: a failure writing the packaging file (the ERP holding it open,
+        # a permission on the share) must not cost them the product export too.
+        packaging_file = _packaging_path(output_file)
+        if packaging_rows is None:
+            # An earlier run in "separate" mode may have left one beside this
+            # export -- filenames are deterministic within a day -- and an
+            # operator importing the folder would write that packaging off a
+            # second time.
+            Path(packaging_file).unlink(missing_ok=True)
+            return None
+
+        _write_xls(packaging_rows, packaging_file)
+        logger.info(f"Wrote {len(packaging_rows)} packaging SKUs to '{packaging_file}'")
+        return packaging_file
+
     except Exception:
         logger.exception(f"Error while creating stock export '{report_name}'")
+        return None
 
 
 def merge_session_stock_exports(

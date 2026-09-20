@@ -295,8 +295,11 @@ class FileHandler:
             return False, ""
         from shopify_tool.csv_utils import normalize_sku
 
-        old_skus = set(memory["skus"])
-        # Memory stores normalise_sku'd keys (profile_manager.save_inventory_memory).
+        # Normalise both sides, not just the new one: save_inventory_memory has
+        # normalised its keys since #247, but a config written before that still
+        # holds raw ones, and an un-normalised key would read as 0% overlap
+        # forever -- the same bug, from the other direction.
+        old_skus = {normalize_sku(k) for k in memory["skus"]}
         # pandas reads numeric SKUs as float64, so an un-normalised 5170.0 never
         # matched a stored "5170" and every overlap read as 0%.
         new_skus = (
@@ -445,11 +448,15 @@ class FileHandler:
     def clear_file(self, file_type: str) -> None:
         """Empty one slot: forget the path, reset the widget, re-gate the run.
 
-        slot.clear() emits `changed`, which is already connected to
-        check_files_ready, so Run Analysis re-gates itself.
+        slot.clear() emits `changed` -> check_files_ready, but that only knows
+        about the two slots. update_ui_state is the one that also knows
+        inventory memory can stand in for a stock file, so without it the
+        memory-mode user -- the very one who wants an unwanted stock file
+        gone -- clears the slot and watches Run Analysis go grey for good.
         """
         setattr(self.mw, f"{file_type}_file_path", None)
         getattr(self.mw, f"{file_type}_slot").clear()
+        self.mw.update_ui_state()
         self.log.info(f"Cleared the {file_type} slot")
 
     def accept_dropped_path(self, file_type: str, path: str) -> None:

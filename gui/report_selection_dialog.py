@@ -273,6 +273,10 @@ class GenerateReportsDialog(_BaseReportDialog):
         self.writeoff_merged = QRadioButton("Include them in the stock export")
         self.writeoff_separate = QRadioButton("Write them to a file of their own")
         self.writeoff_off.setChecked(True)
+        self.writeoff_merged.setToolTip(
+            "Orders carrying a packaging tag add its packaging SKU as extra "
+            "rows in the same export (e.g. 'BOX' adds PKG-BOX-SMALL)."
+        )
         self.writeoff_separate.setToolTip(
             "Packaging SKUs go to <name>_packaging.xls beside the stock export, "
             "so the warehouse system imports the two separately."

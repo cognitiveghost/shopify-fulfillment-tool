@@ -127,3 +127,22 @@ def test_an_unknown_sku_needs_a_second_press_not_a_dialog(dialog, monkeypatch):
     assert "SKU-NOPE" in dialog.sku_error.text()
     dialog.sku_input.setText("SKU-A")
     assert dialog.add_btn.text() == "Add Product"
+
+
+def test_a_stock_file_missing_its_sku_column_is_a_clear_error():
+    """Both frames come off a network share, so a missing column is real. It
+    used to raise KeyError out of __init__ into the Qt event loop, where the
+    dialog simply never appeared and the user saw nothing happen at all."""
+    analysis_df = pd.DataFrame([{"Order_Number": "1001"}])
+    stock_df = pd.DataFrame([{"Product_Name": "Widget A"}])
+
+    with pytest.raises(ValueError, match="stock file has no SKU column"):
+        AddProductDialog(None, analysis_df, stock_df, {})
+
+
+def test_analysis_results_missing_order_number_is_a_clear_error():
+    analysis_df = pd.DataFrame([{"Something_Else": "1001"}])
+    stock_df = pd.DataFrame([{"SKU": "SKU-A"}])
+
+    with pytest.raises(ValueError, match="analysis results has no Order_Number"):
+        AddProductDialog(None, analysis_df, stock_df, {})

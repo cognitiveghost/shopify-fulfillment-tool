@@ -467,7 +467,7 @@ class TestWriteoffModes:
 
     def test_separate_mode_writes_packaging_to_its_own_file(self, tmp_path):
         out = tmp_path / "export.xls"
-        create_stock_export(
+        returned = create_stock_export(
             self._df(),
             str(out),
             writeoff_mode="separate",
@@ -475,6 +475,9 @@ class TestWriteoffModes:
         )
         packaging = tmp_path / "export_packaging.xls"
         assert packaging.exists()
+        # Returned so the caller can name it: the second file is otherwise
+        # discoverable only by browsing the folder.
+        assert returned == str(packaging)
 
         products = list(_read(out).iloc[:, COL_SKU])
         packs = list(_read(packaging).iloc[:, COL_SKU])
@@ -484,11 +487,62 @@ class TestWriteoffModes:
 
     def test_separate_mode_with_no_packaging_writes_one_file(self, tmp_path):
         out = tmp_path / "export.xls"
-        create_stock_export(
+        returned = create_stock_export(
             self._df(), str(out), writeoff_mode="separate", tag_categories={}
         )
         assert out.exists()
         assert not (tmp_path / "export_packaging.xls").exists()
+        assert returned is None
+
+    def test_regenerating_without_packaging_clears_the_stale_packaging_file(
+        self, tmp_path
+    ):
+        """Report filenames are deterministic within a day, so the second run
+        overwrites the product export but used to leave the first run's
+        packaging file beside it -- and an operator importing the folder
+        writes that packaging off a second time."""
+        out = tmp_path / "export.xls"
+        packaging = tmp_path / "export_packaging.xls"
+        create_stock_export(
+            self._df(),
+            str(out),
+            writeoff_mode="separate",
+            tag_categories=self.CONFIG,
+        )
+        assert packaging.exists()
+
+        create_stock_export(
+            self._df(), str(out), writeoff_mode="off", tag_categories=self.CONFIG
+        )
+        assert not packaging.exists()
+
+    def test_a_failing_packaging_write_still_leaves_the_product_export(
+        self, tmp_path, monkeypatch
+    ):
+        """The packaging file goes last on purpose: the ERP holding it open, or
+        a permission on the share, must not cost the caller the export they
+        asked for."""
+        import shopify_tool.stock_export as mod
+
+        real = mod._write_xls
+        out = tmp_path / "export.xls"
+
+        def explode(df, path):
+            if str(path).endswith("_packaging.xls"):
+                raise PermissionError(path)
+            return real(df, path)
+
+        monkeypatch.setattr(mod, "_write_xls", explode)
+        returned = create_stock_export(
+            self._df(),
+            str(out),
+            writeoff_mode="separate",
+            tag_categories=self.CONFIG,
+        )
+
+        assert out.exists()
+        assert list(_read(out).iloc[:, COL_SKU]) == ["A1"]
+        assert returned is None
 
     def test_merged_mode_keeps_both_in_one_file(self, tmp_path):
         out = tmp_path / "export.xls"

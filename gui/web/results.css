@@ -21,12 +21,12 @@
 /* Page geometry the theme does not own. The selection bar takes the table
    header's place rather than pushing the table down (Shopify-style), so the
    two are one height, stated once. */
-:root { --table-head-height: 28px; }
-
-/* One layer scale for every stacked surface on this screen. Two surfaces used
-   to tie at 3 -- .menu and .selection-bar -- and the tie was broken by
-   document order, which put the Add filter menu underneath the bar. */
+/* The --z-* scale below is one layer scale for every stacked surface on this
+   screen. Two surfaces used to tie at 3 -- .menu and .selection-bar -- and the
+   tie was broken by document order, which put the Add filter menu underneath
+   the bar. */
 :root {
+  --table-head-height: 28px;
   --z-sticky: 1;
   --z-header: 2;
   --z-bar: 3;

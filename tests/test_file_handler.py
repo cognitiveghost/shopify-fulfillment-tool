@@ -237,3 +237,32 @@ def test_clearing_a_slot_forgets_the_path_and_regates_run_analysis(
     assert main_window.stock_file_path is None
     assert main_window.stock_slot.is_valid is False
     assert main_window.run_analysis_button.isEnabled() is False
+
+
+def test_clearing_the_stock_slot_keeps_run_analysis_alive_in_memory_mode(
+    main_window, tmp_path
+):
+    """Memory mode can run without a stock file. check_files_ready only knows
+    about the two slots, so re-gating through it alone greyed Run Analysis out
+    for good -- for exactly the user who wanted the wrong file gone."""
+    handler = main_window.file_handler
+    orders = tmp_path / "orders.csv"
+    stock = tmp_path / "stock.csv"
+    orders.write_text("x")
+    stock.write_text("x")
+    main_window.orders_file_path = str(orders)
+    main_window.stock_file_path = str(stock)
+    main_window.orders_slot.set_loaded(orders, "1 row")
+    main_window.stock_slot.set_loaded(stock, "1 row")
+    main_window.session_path = main_window.session_manager.create_session("acme")
+    main_window.active_profile_config["inventory_memory"] = {
+        "enabled": True,
+        "skus": {"A": 10.0},
+        "total_units": 10,
+    }
+    main_window.inventory_memory_checkbox.setChecked(True)
+
+    handler.clear_file("stock")
+
+    assert main_window.stock_file_path is None
+    assert main_window.run_analysis_button.isEnabled() is True

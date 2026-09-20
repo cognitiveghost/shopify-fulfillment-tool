@@ -671,6 +671,10 @@ class ActionsHandler(QObject):
             # ========================================
             # GENERATE REPORT USING PROPER MODULES
             # ========================================
+            # Set by a "separate" packaging write-off, which saves a second
+            # file the status message below has to name.
+            packaging_file = None
+
             if report_type == "packing_lists":
                 self.log.info("Creating packing list using packing_lists module")
 
@@ -772,7 +776,7 @@ class ActionsHandler(QObject):
 
                 # Use the proper stock_export module
                 # Pass UNFILTERED DataFrame - the module will apply filters itself
-                stock_export.create_stock_export(
+                packaging_file = stock_export.create_stock_export(
                     analysis_df=self.mw.analysis_results_df,
                     output_file=output_file,
                     report_name=report_name,
@@ -787,8 +791,11 @@ class ActionsHandler(QObject):
             # SUCCESS MESSAGE - Status bar instead of blocking dialog
             # ========================================
             # Show brief status message instead of blocking dialog
+            saved = os.path.basename(output_file)
+            if packaging_file:
+                saved += f" + {os.path.basename(packaging_file)}"
             self.mw.statusBar().showMessage(
-                f"Report saved: {os.path.basename(output_file)}",
+                f"Report saved: {saved}",
                 5000,  # 5 seconds
             )
             self.log.info(f"Report generated: {output_file}")

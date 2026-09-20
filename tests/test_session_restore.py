@@ -33,14 +33,26 @@ def main_window(tmp_path, monkeypatch):
 
 
 def _session_with_inputs(win):
-    """A session directory holding the two files an analysis copies into it."""
+    """A session directory holding the two files an analysis copies into it.
+
+    Their columns are the ones the client profile requires, because that is
+    what a session's inputs are: files that already passed validation once.
+    Anything else drives the restored slots into the invalid face.
+    """
     path = win.session_manager.create_session("acme")
     input_dir = win.session_manager.get_input_dir(path)
-    pd.DataFrame({"Order_Number": [1], "SKU": ["A"], "Quantity": [1]}).to_csv(
-        input_dir / "orders_export.csv", index=False
-    )
-    pd.DataFrame({"SKU": ["A"], "Stock": [5]}).to_csv(
-        input_dir / "inventory.csv", index=False
+    pd.DataFrame(
+        {
+            "Name": ["#1001"],
+            "Lineitem sku": ["A"],
+            "Lineitem quantity": [1],
+            "Shipping Method": ["DHL"],
+        }
+    ).to_csv(input_dir / "orders_export.csv", index=False)
+    # Semicolons: the profile's stock_csv_delimiter default, and validation
+    # reads the file with it.
+    pd.DataFrame({"Артикул": ["A"], "Наличност": [5]}).to_csv(
+        input_dir / "inventory.csv", index=False, sep=";"
     )
     win.session_manager.update_session_info(
         path, {"orders_file": "orders_export.csv", "stock_file": "inventory.csv"}
@@ -55,6 +67,10 @@ def test_restoring_a_session_points_at_the_files_it_ran_on(main_window):
     assert main_window.stock_file_path is not None
     assert main_window.stock_file_path.endswith("inventory.csv")
     assert main_window.orders_file_path.endswith("orders_export.csv")
+    # The slots, not just the paths -- a restored path the Setup screen still
+    # shows as an empty slot is the half of this defect the user actually sees.
+    assert main_window.stock_slot.is_valid is True
+    assert main_window.orders_slot.is_valid is True
 
 
 def test_add_product_is_reachable_in_a_restored_session(main_window):
@@ -71,7 +87,22 @@ def test_add_product_is_reachable_in_a_restored_session(main_window):
 
 def test_a_session_whose_input_files_are_gone_restores_nothing(main_window):
     path = main_window.session_manager.create_session("acme")
+    # Seed both paths first, or this passes against an empty method body.
+    main_window.stock_file_path = "/gone/inventory.csv"
+    main_window.orders_file_path = "/gone/orders_export.csv"
+
     main_window._restore_session_inputs(path)
 
-    assert main_window.stock_file_path is None
-    assert main_window.orders_file_path is None
+    assert main_window.stock_file_path == "/gone/inventory.csv"
+    assert main_window.orders_file_path == "/gone/orders_export.csv"
+    assert main_window.stock_slot.is_valid is False
+
+
+def test_opening_a_session_restores_its_inputs(main_window):
+    """The seam the user actually reaches: load_existing_session, not the
+    private helper. Nothing covered the call site itself."""
+    path = _session_with_inputs(main_window)
+    main_window.load_existing_session(path)
+
+    assert main_window.stock_file_path.endswith("inventory.csv")
+    assert main_window.stock_slot.is_valid is True
