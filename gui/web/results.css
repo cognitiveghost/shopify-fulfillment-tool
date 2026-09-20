@@ -23,6 +23,17 @@
    two are one height, stated once. */
 :root { --table-head-height: 28px; }
 
+/* One layer scale for every stacked surface on this screen. Two surfaces used
+   to tie at 3 -- .menu and .selection-bar -- and the tie was broken by
+   document order, which put the Add filter menu underneath the bar. */
+:root {
+  --z-sticky: 1;
+  --z-header: 2;
+  --z-bar: 3;
+  --z-popover: 5;
+  --z-toast: 6;
+}
+
 html, body { margin: 0; height: 100%; }
 
 body {
@@ -171,7 +182,7 @@ button, input { font: inherit; color: inherit; }
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 3;
+  z-index: var(--z-popover);
   min-width: 220px;
   max-height: 360px;
   overflow-y: auto;
@@ -249,7 +260,7 @@ button, input { font: inherit; color: inherit; }
   top: 0;
   left: 0;
   right: 0;
-  z-index: 3; /* over the sticky .header */
+  z-index: var(--z-bar); /* over the sticky .header */
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -272,7 +283,7 @@ button, input { font: inherit; color: inherit; }
 
 .bulk-popover {
   position: absolute;
-  z-index: 3;
+  z-index: var(--z-popover);
   top: var(--table-head-height);
   right: var(--spacing-md);
   display: flex;
@@ -314,7 +325,7 @@ button, input { font: inherit; color: inherit; }
   position: absolute;
   right: 16px;
   bottom: 16px;
-  z-index: 4;
+  z-index: var(--z-toast);
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -350,7 +361,7 @@ button, input { font: inherit; color: inherit; }
 .header {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: var(--z-header);
   height: var(--table-head-height);
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -372,7 +383,7 @@ button, input { font: inherit; color: inherit; }
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 1; /* over the sticky cells, which sit at auto */
+  z-index: var(--z-sticky); /* over the sticky cells, which sit at auto */
   border: 2px solid var(--selection-border);
   pointer-events: none;
 }
@@ -520,7 +531,7 @@ button, input { font: inherit; color: inherit; }
 .line.line-head {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: var(--z-sticky);
   background: var(--surface-raised);
   font-size: var(--type-caption-size);
   font-weight: 700;
@@ -630,7 +641,7 @@ button, input { font: inherit; color: inherit; }
 .col-group {
   position: sticky;
   top: 0;
-  z-index: 1; /* .col-row is positioned and comes later, so it paints over an auto z-index */
+  z-index: var(--z-sticky); /* .col-row is positioned and comes later, so it paints over an auto z-index */
   height: 22px;
   display: flex;
   align-items: center;
