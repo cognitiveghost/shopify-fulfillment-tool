@@ -150,7 +150,19 @@ class AddProductDialog(QDialog):
         return box
 
     def setup_autocompleters(self):
-        """Setup autocomplete for order and SKU inputs."""
+        """Setup autocomplete for order and SKU inputs.
+
+        Both frames are built by the caller from files on a network share, so
+        a missing column is a real possibility. It used to raise out of
+        __init__ into the event loop, where the dialog simply never appeared.
+        """
+        for frame, column, what in (
+            (self.analysis_df, "Order_Number", "analysis results"),
+            (self.stock_df, "SKU", "stock file"),
+        ):
+            if frame is None or column not in frame.columns:
+                raise ValueError(f"The {what} has no {column} column")
+
         # Order number autocomplete - convert to strings and strip whitespace
         order_numbers = self.analysis_df["Order_Number"].astype(str).unique().tolist()
         order_numbers = [

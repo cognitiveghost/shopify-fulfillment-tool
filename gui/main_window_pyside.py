@@ -870,6 +870,37 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to load session analysis")
             return False
 
+    def _restore_session_inputs(self, session_path: str) -> None:
+        """Point the file paths and slots at the files this session ran on.
+
+        run_full_analysis copies both inputs into <session>/input/ under fixed
+        names and records them in session_info.json. Without this, a resumed
+        session had results but no stock_file_path, which left Add Product to
+        Order greyed out with nothing on screen saying why.
+        """
+        from pathlib import Path
+
+        try:
+            input_dir = self.session_manager.get_input_dir(session_path)
+        except Exception:
+            logger.exception("Could not resolve the session input directory")
+            return
+
+        info = self.session_manager.get_session_info(session_path) or {}
+        for kind, default_name in (
+            ("orders", "orders_export.csv"),
+            ("stock", "inventory.csv"),
+        ):
+            recorded = info.get(f"{kind}_file") or default_name
+            path = Path(input_dir) / recorded
+            if not path.exists():
+                continue
+            setattr(self, f"{kind}_file_path", str(path))
+            # validate_file drives the slot into its loaded or invalid face and
+            # is the same call the file pickers make.
+            self.file_handler.validate_file(kind)
+        self.file_handler.check_files_ready()
+
     def load_existing_session(self, session_path: str):
         """Load data from an existing session.
 
@@ -900,6 +931,8 @@ class MainWindow(QMainWindow):
             session_info = self.session_manager.get_session_info(session_path)
 
             if session_info:
+                self._restore_session_inputs(session_path)
+
                 # Try to load analysis data if it exists
                 if self._load_session_analysis(session_path):
                     # Analysis loaded successfully
