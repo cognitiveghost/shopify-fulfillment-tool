@@ -13,7 +13,8 @@ def order_number_mask(df: pd.DataFrame, order_numbers) -> pd.Series:
 
     Order numbers arrive as int, float or str depending on the CSV and on
     which tier sent them (the results page always sends str), so both sides
-    go through str + strip. The one matching rule for an order number.
+    go through str + strip. The GUI's one matching rule for an order
+    number; shopify_tool (undo_manager, analysis) still inlines its own.
     """
     wanted = {str(n).strip() for n in order_numbers}
     return df["Order_Number"].astype(str).str.strip().isin(wanted)

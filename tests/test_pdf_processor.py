@@ -243,6 +243,21 @@ class TestProcessReferenceLabelsPikepdf:
         assert (float(page.mediabox.width), float(page.mediabox.height)) == (432, 288)
         assert "REF: REF-001" in page.extract_text()
 
+    def test_cropped_label_on_letter_sizes_from_crop(self, tmp_path):
+        """A 4x6 label cropped out of a Letter sheet: the stamped page is the
+        label's size, not the sheet's with the label blown up to fill it."""
+        import pikepdf
+
+        pdf_path = tmp_path / "courier.pdf"
+        _make_courier_pdf(pdf_path, width_pt=612, height_pt=792)
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+            pdf.pages[0].CropBox = pikepdf.Array([0, 360, 288, 792])
+            pdf.save(pdf_path)
+        result = self._run(tmp_path, pdf_path)
+        page = PdfReader(result["output_file"]).pages[0]
+        assert (float(page.mediabox.width), float(page.mediabox.height)) == (288, 432)
+        assert "REF: REF-001" in page.extract_text()
+
     def test_unmatched_page_passes_through_untouched(self, tmp_path):
         pdf_path = tmp_path / "other.pdf"
         c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))

@@ -254,7 +254,10 @@ def _stamp_reference(out: "pikepdf.Pdf", page: "pikepdf.Page", ref: str) -> None
     in, so the new page takes the courier page's *visual* size and the
     strip always lands on the visual bottom.
     """
-    box = page.mediabox
+    # The TrimBox (CropBox by default), not the MediaBox: add_overlay places
+    # the page by its TrimBox, so a 4x6 label cropped on Letter stock sizes
+    # from the label, not the sheet.
+    box = page.trimbox
     width, height = float(box[2] - box[0]), float(box[3] - box[1])
     if int(page.obj.get("/Rotate", 0)) % 180:
         width, height = height, width
