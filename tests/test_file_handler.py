@@ -4,11 +4,12 @@ The bug this replaces: validity was the string "✓" in a QLabel, read back by
 check_files_ready(). FileSlot (Task 3) now owns that fact as data.
 """
 
-from unittest.mock import Mock
+import os
+from pathlib import Path
 
 import pandas as pd
 import pytest
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QFileDialog
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -126,50 +127,65 @@ def test_a_dropped_missing_file_shows_the_invalid_state_instead_of_raising(
     assert main_window.orders_slot.is_valid is False
 
 
-def test_a_delimiter_mismatch_loads_with_the_detected_one_and_offers_to_save_it(
+def test_a_semicolon_orders_file_loads_under_auto_without_a_toast(
     main_window, tmp_path, monkeypatch
 ):
     orders = tmp_path / "orders.csv"
     orders.write_text(
         "Name;Lineitem sku;Lineitem quantity;Shipping Method\n#1;A1;2;Standard\n"
     )
+    main_window.active_profile_config.setdefault("settings", {})[
+        "orders_csv_delimiter"
+    ] = "auto"
     monkeypatch.setattr(
         QFileDialog, "getOpenFileName", lambda *a, **k: (str(orders), "")
     )
-    monkeypatch.setattr(
-        QMessageBox, "question", Mock(side_effect=AssertionError("no question"))
-    )
-    toasts = Mock()
-    monkeypatch.setattr("gui.file_handler.toast", toasts)
 
     main_window.file_handler.select_orders_file()
 
-    toasts.assert_called_once()
-    assert toasts.call_args.kwargs["role"] == "info"
-    assert toasts.call_args.kwargs["action_text"] == "Save as default"
-    assert ";" in toasts.call_args.args[1]
+    assert main_window.orders_slot.is_valid is True
 
 
-def test_a_failed_delimiter_save_tells_the_user(main_window, monkeypatch):
-    """A save that raises must not leave the user believing it worked."""
-    from shopify_tool.profile_manager import ProfileManagerError
-
-    def boom(*a, **kw):
-        raise ProfileManagerError("share unreachable")
-
-    monkeypatch.setattr(main_window.profile_manager, "save_shopify_config", boom)
-
-    seen = []
+def test_a_folder_merge_keeps_repeat_lines_and_reports_overlaps(
+    main_window, tmp_path, monkeypatch
+):
+    folder = tmp_path / "exports"
+    folder.mkdir()
+    header = "Name,Lineitem sku,Lineitem quantity,Shipping Method\n"
+    old, new = folder / "a.csv", folder / "b.csv"
+    old.write_text(header + "#4148,501,1,Standard\n#4148,501,1,\n#9,X,1,Standard\n")
+    new.write_text(header + "#9,X,1,Standard\n")
+    os.utime(old, (1000, 1000))
+    os.utime(new, (2000, 2000))
     monkeypatch.setattr(
-        "gui.file_handler.toast",
-        lambda parent, text, **kw: seen.append((text, kw.get("role"))),
+        main_window.file_handler, "show_file_preview", lambda *a, **k: True
     )
 
-    main_window.file_handler._save_default_delimiter("orders", ";", "ACME")
+    main_window.file_handler.accept_dropped_path("orders", str(folder))
 
-    assert seen, "a failed save must raise a toast"
-    assert seen[-1][1] == "error"
-    assert "wasn't saved" in seen[-1][0].lower()
+    text = main_window.orders_slot._loaded_summary.text()
+    assert "2 files merged" in text
+    assert "3 rows" in text
+    assert "1 overlapping order skipped" in text
+    merged = pd.read_csv(main_window.orders_file_path)
+    assert (merged["Name"] == "#4148").sum() == 2
+
+
+def test_the_merged_file_is_written_with_the_override(main_window, tmp_path):
+    header = "Name;Lineitem sku;Lineitem quantity;Shipping Method\n"
+    f = tmp_path / "a.csv"
+    f.write_text(header + "#1;A1;1;Standard\n")
+    main_window.active_profile_config.setdefault("settings", {})[
+        "orders_csv_delimiter"
+    ] = ";"
+
+    path, rows, skipped = main_window.file_handler.merge_and_save_files(
+        [str(f)], "orders", str(tmp_path)
+    )
+
+    header_line = Path(path).read_text(encoding="utf-8-sig").splitlines()[0]
+    assert header_line.count(";") == 4
+    assert (rows, skipped) == (1, 0)
 
 
 def _memory(skus: dict, total: int) -> dict:

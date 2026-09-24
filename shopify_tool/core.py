@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from . import analysis, packing_lists, stock_export
-from .csv_utils import normalize_sku
+from .csv_utils import normalize_sku, resolve_delimiter
 from .packed_orders import load_packed_orders, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
@@ -559,9 +559,10 @@ def _load_and_validate_files(
         # Load stock file with error handling
         try:
             logger.info(f"Reading stock file from normalized path: {stock_file_path}")
+            stock_sep = resolve_delimiter(stock_file_path, stock_delimiter, "stock")
             stock_df = pd.read_csv(
                 stock_file_path,
-                delimiter=stock_delimiter,
+                delimiter=stock_sep,
                 encoding="utf-8-sig",
                 dtype=stock_dtype,
             )
@@ -571,7 +572,7 @@ def _load_and_validate_files(
         except pd.errors.ParserError as e:
             error_msg = (
                 f"Failed to parse stock file. The file may have incorrect delimiter.\n"
-                f"Current delimiter: '{stock_delimiter}'\n"
+                f"Current delimiter: '{stock_sep}'\n"
                 f"Error: {e!s}"
             )
             logger.exception(error_msg)
@@ -601,9 +602,12 @@ def _load_and_validate_files(
         # Load orders file with error handling
         try:
             logger.info(f"Reading orders file from normalized path: {orders_file_path}")
+            orders_sep = resolve_delimiter(
+                orders_file_path, orders_delimiter, "orders"
+            )
             orders_df = pd.read_csv(
                 orders_file_path,
-                delimiter=orders_delimiter,
+                delimiter=orders_sep,
                 encoding="utf-8-sig",
                 dtype=orders_dtype,
             )
@@ -613,7 +617,7 @@ def _load_and_validate_files(
         except pd.errors.ParserError as e:
             error_msg = (
                 f"Failed to parse orders file. The file may have incorrect delimiter.\n"
-                f"Current delimiter: '{orders_delimiter}'\n"
+                f"Current delimiter: '{orders_sep}'\n"
                 f"Error: {e!s}"
             )
             logger.exception(error_msg)
@@ -654,7 +658,9 @@ def _load_and_validate_files(
             orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
             orders_df = pd.read_csv(
                 orders_file_path,
-                delimiter=orders_delimiter,
+                delimiter=resolve_delimiter(
+                    orders_file_path, orders_delimiter, "orders"
+                ),
                 encoding="utf-8-sig",
                 dtype=orders_dtype,
             )

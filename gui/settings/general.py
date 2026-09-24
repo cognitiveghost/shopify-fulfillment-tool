@@ -1,9 +1,33 @@
 """General settings: CSV delimiters and analysis thresholds."""
 
-from PySide6.QtWidgets import QLineEdit, QSpinBox, QVBoxLayout
+from PySide6.QtWidgets import QComboBox, QLineEdit, QSpinBox, QVBoxLayout
 
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
+
+_DELIMITERS = [
+    ("Auto — detect per file", "auto"),
+    ("Comma  ,", ","),
+    ("Semicolon  ;", ";"),
+    ("Tab", "\t"),
+    ("Pipe  |", "|"),
+]
+_DELIMITER_TOOLTIP = (
+    "Auto reads each file's own delimiter.\n"
+    "Pick a character only for a client whose files Auto reads wrong."
+)
+
+
+def _delimiter_combo(value: str) -> QComboBox:
+    combo = QComboBox()
+    for label, data in _DELIMITERS:
+        combo.addItem(label, data)
+    index = combo.findData(value)
+    if index < 0:  # hand-edited value: keep it rather than rewrite it on save
+        combo.addItem(repr(value), value)
+        index = combo.count() - 1
+    combo.setCurrentIndex(index)
+    return combo
 
 
 class GeneralPage(SettingsPage):
@@ -19,37 +43,22 @@ class GeneralPage(SettingsPage):
 
         section = FormSection("General Settings")
 
-        self.stock_delimiter_edit = QLineEdit(settings.get("stock_csv_delimiter", ";"))
-        self.stock_delimiter_edit.setMaximumWidth(100)
+        self.stock_delimiter_combo = _delimiter_combo(
+            settings.get("stock_csv_delimiter", "auto")
+        )
         section.add_row(
             "Stock CSV Delimiter:",
-            self.stock_delimiter_edit,
-            tooltip=(
-                "Character used to separate columns in stock CSV file.\n\n"
-                "Common values:\n"
-                "  • Semicolon (;) - for exports from local warehouse\n"
-                "  • Comma (,) - for Shopify exports\n\n"
-                "Make sure this matches your stock CSV file format."
-            ),
+            self.stock_delimiter_combo,
+            tooltip=_DELIMITER_TOOLTIP,
         )
 
-        self.orders_delimiter_edit = QLineEdit(
-            settings.get("orders_csv_delimiter", ",")
+        self.orders_delimiter_combo = _delimiter_combo(
+            settings.get("orders_csv_delimiter", "auto")
         )
-        self.orders_delimiter_edit.setMaximumWidth(100)
-        self.orders_delimiter_edit.setPlaceholderText(",")
         section.add_row(
             "Orders CSV Delimiter:",
-            self.orders_delimiter_edit,
-            tooltip=(
-                "Character used to separate columns in orders CSV file.\n\n"
-                "Common values:\n"
-                "  • Comma (,) - standard Shopify exports\n"
-                "  • Semicolon (;) - European Excel exports\n"
-                "  • Tab (\\t) - tab-separated files\n\n"
-                "The tool will auto-detect delimiter when you select a file,\n"
-                "but you can override it here if needed."
-            ),
+            self.orders_delimiter_combo,
+            tooltip=_DELIMITER_TOOLTIP,
         )
 
         self.low_stock_edit = QLineEdit(str(settings.get("low_stock_threshold", 5)))
@@ -84,8 +93,8 @@ class GeneralPage(SettingsPage):
     def collect(self) -> dict:
         self._settings.update(
             {
-                "stock_csv_delimiter": self.stock_delimiter_edit.text(),
-                "orders_csv_delimiter": self.orders_delimiter_edit.text(),
+                "stock_csv_delimiter": self.stock_delimiter_combo.currentData(),
+                "orders_csv_delimiter": self.orders_delimiter_combo.currentData(),
                 "low_stock_threshold": int(self.low_stock_edit.text()),
                 "repeat_detection_days": self.repeat_days_input.value(),
             }

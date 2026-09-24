@@ -153,7 +153,9 @@ class SettingsWindow(QDialog):
         if "settings" not in self.config_data:
             self.config_data["settings"] = {
                 "low_stock_threshold": 5,
-                "stock_csv_delimiter": ";",
+                "stock_csv_delimiter": "auto",
+                "orders_csv_delimiter": "auto",
+                "delimiter_auto_migrated": True,
             }
 
         if "rules" not in self.config_data:
@@ -262,7 +264,9 @@ class SettingsWindow(QDialog):
             WeightPage(
                 self.config_data.get("weight_config", {}),
                 self.config_data.get("column_mappings", {}),
-                self.config_data.get("settings", {}).get("stock_csv_delimiter", ";"),
+                self.config_data.get("settings", {}).get(
+                    "stock_csv_delimiter", "auto"
+                ),
             ),
             "Weight",
         )

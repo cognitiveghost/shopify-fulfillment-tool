@@ -119,6 +119,23 @@ def detect_csv_delimiter(file_path: str, encoding: str = 'utf-8-sig') -> tuple[s
     return ',', 'default'
 
 
+AUTO_DELIMITER = "auto"
+FALLBACK_DELIMITERS = {"orders": ",", "stock": ";"}
+
+
+def resolve_delimiter(path: str, setting: str | None, kind: str) -> str:
+    """The delimiter to read `path` with. An override wins; Auto detects.
+
+    `setting` is the client's delimiter setting for `kind` ("orders" or
+    "stock"): "auto" (or empty) reads the file's own delimiter, anything else
+    is an override someone set on purpose (ADR 0009).
+    """
+    if setting and setting != AUTO_DELIMITER:
+        return setting
+    detected, method = detect_csv_delimiter(path)
+    return FALLBACK_DELIMITERS[kind] if method == "default" else detected
+
+
 def read_csv_headers(file_path: str, encoding: str = 'utf-8-sig') -> list[str]:
     """Return a CSV's column names without loading any of its rows.
 
@@ -317,121 +334,79 @@ def normalize_sku_for_matching(sku: Any) -> str:
 
 def merge_csv_files(
     file_paths: list[str],
-    delimiter: str,
-    encoding: str = 'utf-8-sig',
+    delimiter_setting: str | None,
+    kind: str,
+    encoding: str = "utf-8-sig",
     dtype_dict: dict | None = None,
     add_source_column: bool = True,
-    remove_duplicates: bool = False,
-    duplicate_keys: list[str] | None = None
-) -> pd.DataFrame:
-    """
-    Merge multiple CSV files into single DataFrame.
+    owner_key: str | None = None,
+) -> tuple[pd.DataFrame, int]:
+    """Merge a folder's CSVs into one frame under the owning-file rule.
 
-    Args:
-        file_paths: List of CSV file paths to merge
-        delimiter: CSV delimiter (e.g., "," or ";")
-        encoding: File encoding (default: utf-8-sig)
-        dtype_dict: Column dtype specs (e.g., {"Lineitem sku": str})
-        add_source_column: Add _source_file column for tracking
-        remove_duplicates: Remove duplicate rows after merge
-        duplicate_keys: Columns to check for duplicates (CSV column names)
+    Each key (`owner_key`'s value: an order number, or a normalized SKU) is
+    owned by the newest file containing it -- modified time, ties by filename. Every row of
+    the owning file is kept; the key's rows in other files are skipped. A row
+    is never dropped for repeating another row in the same file: an order may
+    carry one SKU on several real lines (CONTEXT.md: order line).
 
-    Returns:
-        pd.DataFrame: Merged DataFrame
+    Returns the merged frame (newest file first) and how many distinct keys
+    were skipped from non-owning files.
 
     Raises:
         ValueError: If file_paths is empty
         CSVLoadError: If any file fails to load
-
-    Example:
-        >>> files = ["shop1.csv", "shop2.csv", "shop3.csv"]
-        >>> merged = merge_csv_files(
-        ...     files,
-        ...     delimiter=",",
-        ...     dtype_dict={"Lineitem sku": str},
-        ...     remove_duplicates=True,
-        ...     duplicate_keys=["Name", "Lineitem sku"]
-        ... )
-        >>> print(len(merged))
-        470  # After removing 5 duplicates
     """
     if not file_paths:
         raise ValueError("No files provided for merging")
 
-    logger.info(f"Starting merge of {len(file_paths)} files")
-    dataframes = []
-
-    for filepath in file_paths:
+    ranked = sorted(
+        file_paths, key=lambda p: (-os.path.getmtime(p), os.path.basename(p))
+    )
+    frames = []
+    owned: set = set()
+    skipped: set = set()
+    for filepath in ranked:
         try:
             df = pd.read_csv(
                 filepath,
-                delimiter=delimiter,
+                delimiter=resolve_delimiter(filepath, delimiter_setting, kind),
                 encoding=encoding,
-                dtype=dtype_dict
+                dtype=dtype_dict,
             )
-
-            # Add source tracking column
-            if add_source_column:
-                df['_source_file'] = os.path.basename(filepath)
-
-            dataframes.append(df)
-            logger.info(f"✓ Loaded {len(df)} rows from {os.path.basename(filepath)}")
-
         except Exception as e:
             logger.exception(f"✗ Failed to load {os.path.basename(filepath)}")
-            raise CSVLoadError(f"Failed to load {os.path.basename(filepath)}: {e}") from e
+            raise CSVLoadError(
+                f"Failed to load {os.path.basename(filepath)}: {e}"
+            ) from e
 
-    # Concatenate all DataFrames
-    merged_df = pd.concat(dataframes, ignore_index=True)
-    logger.info(f"Merged {len(dataframes)} files → {len(merged_df)} total rows")
-
-    # Remove duplicates if requested
-    if remove_duplicates:
-        original_count = len(merged_df)
-
-        if duplicate_keys:
-            # Ensure duplicate_keys is a list of strings, not pandas Index or other type
-            if hasattr(duplicate_keys, 'tolist'):
-                # Convert pandas Index/Series to list
-                duplicate_keys = duplicate_keys.tolist()
-            elif not isinstance(duplicate_keys, list):
-                # Convert any other iterable to list
-                duplicate_keys = list(duplicate_keys)
-
-            # Validate that all keys exist in merged_df columns
-            missing_keys = [key for key in duplicate_keys if key not in merged_df.columns]
-            if missing_keys:
-                logger.warning(f"Duplicate keys not found in data: {missing_keys}")
-                # Filter to only existing columns
-                duplicate_keys = [key for key in duplicate_keys if key in merged_df.columns]
-
-            if duplicate_keys:
-                logger.info(f"Checking duplicates on columns: {duplicate_keys}")
-                try:
-                    merged_df = merged_df.drop_duplicates(
-                        subset=duplicate_keys,
-                        keep='first'
-                    )
-                except Exception:
-                    logger.exception(f"Error removing duplicates with keys {duplicate_keys}")
-                    raise
+        if owner_key and owner_key in df.columns:
+            keys = df[owner_key]
+            if kind == "orders":
+                # A blank order number continues the order above it, so a
+                # skipped order's later lines go with it.
+                keys = keys.ffill()
             else:
-                logger.warning("No valid duplicate keys found, skipping duplicate removal")
-        else:
-            # Check duplicates across all columns (excluding _source_file if present)
-            # We exclude _source_file because it's just for tracking and shouldn't affect duplicate detection
-            cols_to_check = [col for col in merged_df.columns if col != '_source_file']
-            if cols_to_check:
-                merged_df = merged_df.drop_duplicates(subset=cols_to_check, keep='first')
-            else:
-                # Fallback if somehow no columns left
-                merged_df = merged_df.drop_duplicates(keep='first')
+                # "501" and "501.0" are one SKU.
+                keys = keys.map(normalize_sku, na_action="ignore")
+                keys = keys.mask(keys == "")
+            taken = keys.notna() & keys.isin(owned)
+            skipped.update(keys[taken])
+            df = df[~taken]
+            owned.update(keys.dropna())
+        elif owner_key:
+            logger.warning(f"{os.path.basename(filepath)} has no '{owner_key}' column")
 
-        removed = original_count - len(merged_df)
-        if removed > 0:
-            logger.info(f"Removed {removed} duplicate rows")
+        if add_source_column:
+            df = df.assign(_source_file=os.path.basename(filepath))
+        frames.append(df)
+        logger.info(f"✓ Loaded {len(df)} rows from {os.path.basename(filepath)}")
 
-    return merged_df
+    merged = pd.concat(frames, ignore_index=True)
+    if skipped:
+        logger.info(
+            f"Skipped {len(skipped)} overlapping {owner_key} values from older files"
+        )
+    return merged, len(skipped)
 
 
 def discover_additional_columns(

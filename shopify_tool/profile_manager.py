@@ -33,6 +33,7 @@ from shopify_tool.profile_migrations import (
     migrate_add_weight_config,
     migrate_column_mappings_v1_to_v2,
     migrate_delimiter_config_v1_to_v2,
+    migrate_delimiters_to_auto,
     migrate_tag_categories_v1_to_v2,
     migrate_tag_category_labels_to_english,
 )
@@ -440,8 +441,9 @@ class ProfileManager:
             "analysis_mode": "multi_first",
             "settings": {
                 "low_stock_threshold": 5,
-                "stock_csv_delimiter": ";",
-                "orders_csv_delimiter": ",",
+                "stock_csv_delimiter": "auto",
+                "orders_csv_delimiter": "auto",
+                "delimiter_auto_migrated": True,
                 "repeat_detection_days": 1,
             },
             "rules": [],
@@ -571,6 +573,7 @@ class ProfileManager:
             # Check if migrations are needed
             migrated_mappings = migrate_column_mappings_v1_to_v2(client_id, config)
             migrated_delimiters = migrate_delimiter_config_v1_to_v2(client_id, config)
+            migrated_auto_delimiters = migrate_delimiters_to_auto(client_id, config)
             migrated_tag_categories = migrate_add_tag_categories(client_id, config)
             migrated_tag_categories_v2 = migrate_tag_categories_v1_to_v2(
                 client_id, config
@@ -584,6 +587,7 @@ class ProfileManager:
             if (
                 migrated_mappings
                 or migrated_delimiters
+                or migrated_auto_delimiters
                 or migrated_tag_categories
                 or migrated_tag_categories_v2
                 or migrated_tag_labels

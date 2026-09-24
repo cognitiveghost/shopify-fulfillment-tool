@@ -297,36 +297,28 @@ def _clean_and_prepare_data(
     # Forward-fill order-level columns
     if "Order_Number" in orders_df.columns:
         orders_df["Order_Number"] = orders_df["Order_Number"].ffill()
-    if "Shipping_Method" in orders_df.columns:
-        orders_df["Shipping_Method"] = orders_df["Shipping_Method"].ffill()
-    if "Shipping_Country" in orders_df.columns:
-        orders_df["Shipping_Country"] = orders_df["Shipping_Country"].ffill()
-    if "Total_Price" in orders_df.columns:
-        orders_df["Total_Price"] = orders_df["Total_Price"].ffill()
-    if "Subtotal" in orders_df.columns:
-        orders_df["Subtotal"] = orders_df["Subtotal"].ffill()
-    if "Tags" in orders_df.columns:
-        orders_df["Tags"] = orders_df["Tags"].ffill()
 
-    # Shopify writes these on an order's first line only. Filled within the
-    # order, never from the one above it: an order with no customer stays blank.
-    for col in ("Customer", "Created_At"):
-        if col in orders_df.columns:
-            orders_df[col] = orders_df.groupby("Order_Number")[col].ffill()
-
-    # Forward-fill additional order-level columns from config
+    # Shopify writes order-level fields on an order's first line only. Fill
+    # within the order, never from the one above it: an order with no tags or
+    # no shipping method must not inherit the previous order's (F3).
+    order_level = [
+        "Shipping_Method",
+        "Shipping_Country",
+        "Total_Price",
+        "Subtotal",
+        "Tags",
+        "Customer",
+        "Created_At",
+    ]
     if additional_columns_config:
-        order_level_additional = [
+        order_level += [
             col["internal_name"]
             for col in additional_columns_config
             if col.get("is_order_level", False) and col.get("enabled", True)
         ]
-        for col_name in order_level_additional:
-            if col_name in orders_df.columns:
-                orders_df[col_name] = orders_df[col_name].ffill()
-                logger.debug(
-                    f"Forward-filled order-level additional column: {col_name}"
-                )
+    for col in order_level:
+        if col in orders_df.columns:
+            orders_df[col] = orders_df.groupby("Order_Number")[col].ffill()
 
     # Keep only relevant columns (internal names)
     # Base columns (critical + standard optional)
@@ -450,6 +442,15 @@ def _clean_and_prepare_data(
             f"Missing required columns in stock DataFrame after mapping: {missing_stock_cols}"
         )
 
+    # Normalize before any dedupe or aggregation: "501 " and "501.0" are one
+    # SKU, and deduping first let both through to double every order line
+    # the merge matched against them (F4). Blank SKUs stay blank so dropna
+    # still drops them -- normalize_sku(NaN) would return "".
+    stock_df = stock_df.copy()
+    stock_df["SKU"] = stock_df["SKU"].astype(object)  # float SKUs take strings
+    has_sku = stock_df["SKU"].notna()
+    stock_df.loc[has_sku, "SKU"] = stock_df.loc[has_sku, "SKU"].map(normalize_sku)
+
     # Detect whether lot columns (Expiry_Date / Batch) are present after mapping
     stock_lot_cols = [c for c in ["Expiry_Date", "Batch"] if c in stock_df.columns]
     lot_columns_present = bool(stock_lot_cols)
@@ -459,22 +460,16 @@ def _clean_and_prepare_data(
         stock_clean_df = stock_df[stock_cols_to_keep].copy()
         stock_clean_df = stock_clean_df.dropna(subset=["SKU"])
         stock_clean_df = stock_clean_df.drop_duplicates(subset=["SKU"], keep="first")
-        stock_clean_df["SKU"] = stock_clean_df["SKU"].apply(normalize_sku)
         fifo_lots = None
     else:
         # NEW PATH — build FIFO lot structure before aggregation, then aggregate
         # totals per SKU so downstream merge/display shows correct total stock
         fifo_lots = _build_fifo_lots(stock_df)
-        # Normalize keys to match the normalized SKU format used in orders_clean
-        if fifo_lots:
-            fifo_lots = {normalize_sku(k): v for k, v in fifo_lots.items()}
         agg_dict: dict = {"Stock": ("Stock", "sum")}
         if "Product_Name" in stock_df.columns:
             agg_dict["Product_Name"] = ("Product_Name", "first")
         stock_agg = stock_df.groupby("SKU", as_index=False).agg(**agg_dict)
         stock_clean_df = stock_agg.dropna(subset=["SKU"]).copy()
-        # CRITICAL: Normalize SKU to standard format for consistent merging
-        stock_clean_df["SKU"] = stock_clean_df["SKU"].apply(normalize_sku)
 
     # --- Set/Bundle Decoding ---
     # Expand sets into component SKUs before fulfillment simulation

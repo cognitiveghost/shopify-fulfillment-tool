@@ -236,6 +236,23 @@ disabling is the guard, not a decoration on top of one.
 
 ## Session setup
 
+**Order line** — one row of an orders export: one SKU at one quantity. An order
+may carry the same SKU on several lines, and each one is real. Never collapse
+two lines because they look alike.
+
+**Folder merge** — loading every CSV in a folder into one file slot as a single
+file.
+
+**Owning file** — in a folder merge, the one file a key's rows are taken from:
+the newest file that contains it. The key is the order number for orders and
+the SKU for stock. The key's rows in any other file are an **overlapping
+order** (or **overlapping SKU**) and are skipped. Rows are never dropped for
+repeating each other inside one file.
+
+**Delimiter setting** — per client and per file kind, either **Auto** (read
+from each file) or an **override**: a fixed character someone set because Auto
+reads that client's files wrong. See ADR 0009.
+
 **File slot** — the widget holding one of the two input files. One slot per
 file, three states (empty, loaded, invalid), and the only thing that knows
 whether its file is usable. Not a **file picker**, which is the dialog a slot
