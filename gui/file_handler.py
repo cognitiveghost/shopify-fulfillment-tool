@@ -6,8 +6,13 @@ from pathlib import Path
 import pandas as pd
 from PySide6.QtWidgets import QFileDialog
 
-from gui.components import ConfirmDialog, show_error, toast
+from gui.components import ConfirmDialog, show_error
 from shopify_tool import core
+from shopify_tool.csv_utils import (
+    AUTO_DELIMITER,
+    merge_csv_files,
+    resolve_delimiter,
+)
 
 # Folder mode used to ask for these with two checkboxes each, in the widget
 # cluster Bundle 5 deleted. Spec §10.3 puts them back inside the loaded slot;
@@ -16,7 +21,6 @@ from shopify_tool import core
 # ponytail: constants, not settings. Bind them to the slot's toggles when
 # §10.3's in-slot controls get built.
 _FOLDER_SCAN_RECURSIVE = True
-_FOLDER_REMOVE_DUPLICATES = True
 
 
 class FileHandler:
@@ -42,13 +46,18 @@ class FileHandler:
         self.mw = main_window
         self.log = logging.getLogger(__name__)
 
+    def _delimiter_for(self, kind: str, path: str) -> str:
+        """The delimiter `path` is read with: the client's override, or Auto."""
+        settings = (self.mw.active_profile_config or {}).get("settings", {})
+        return resolve_delimiter(path, settings.get(f"{kind}_csv_delimiter"), kind)
+
     def select_orders_file(self):
         """Opens a file dialog for the user to select the orders CSV file.
 
         After a file is selected, it updates the corresponding UI labels,
         triggers header validation for the file, and checks if the application
-        is ready to run the analysis. Auto-detects delimiter and prompts user
-        if detected delimiter differs from configured one.
+        is ready to run the analysis. The file is read with the client's
+        delimiter setting: Auto detects it per file, an override is used as is.
         """
         filepath, _ = QFileDialog.getOpenFileName(
             self.mw, "Select Orders File", "", "CSV files (*.csv)"
@@ -59,46 +68,7 @@ class FileHandler:
         self.mw.orders_file_path = filepath
         self.log.info(f"Orders file selected: {filepath}")
 
-        # Get delimiter from config (default to comma for Shopify exports)
-        config = self.mw.active_profile_config
-        config_delimiter = config.get("settings", {}).get("orders_csv_delimiter", ",")
-
-        # Auto-detect delimiter
-        from shopify_tool.csv_utils import detect_csv_delimiter
-
-        try:
-            detected_delimiter, method = detect_csv_delimiter(filepath)
-            self.log.info(
-                f"Orders file: detected delimiter '{detected_delimiter}' using {method}"
-            )
-        except FileNotFoundError:
-            self.log.exception("Orders file not found for delimiter detection")
-            detected_delimiter = ","  # fallback to comma
-        except PermissionError:
-            self.log.exception("Permission denied reading orders file")
-            detected_delimiter = ","  # fallback to comma
-        except UnicodeDecodeError:
-            self.log.exception("Encoding error in orders file")
-            detected_delimiter = ","  # fallback to comma
-        except Exception:
-            self.log.exception("Unexpected error detecting delimiter for orders")
-            detected_delimiter = ","  # fallback to comma
-
-        # Determine which delimiter to use
-        delimiter = detected_delimiter  # Default to detected
-
-        # If detected differs from config, load with it and offer to save it
-        if detected_delimiter != config_delimiter:
-            self.log.info(f"Using detected delimiter: '{delimiter}'")
-            toast(
-                self.mw,
-                f"Loaded with {delimiter!r} — settings say {config_delimiter!r}.",
-                role="info",
-                action_text="Save as default",
-                on_action=lambda: self._save_default_delimiter(
-                    "orders", detected_delimiter, config.get("client_id")
-                ),
-            )
+        delimiter = self._delimiter_for("orders", filepath)
 
         # Load and store original orders DataFrame for column discovery
         try:
@@ -119,39 +89,11 @@ class FileHandler:
         self.validate_file("orders")
         self.check_files_ready()
 
-    def _save_default_delimiter(
-        self, kind: str, delimiter: str, client_id: str | None
-    ) -> None:
-        """Persist a detected delimiter as the client's default for `kind` ('orders' or 'stock').
-
-        `client_id` is the client the file was loaded under: the toast offering
-        this can outlive a client switch, and the delimiter is not the new client's.
-        """
-        if client_id != self.mw.active_profile_config.get("client_id"):
-            self.log.warning(f"Not saving {kind} delimiter: the client has changed")
-            return
-        self.mw.active_profile_config["settings"][f"{kind}_csv_delimiter"] = delimiter
-        if client_id and hasattr(self.mw, "profile_manager"):
-            try:
-                self.mw.profile_manager.save_shopify_config(
-                    client_id, self.mw.active_profile_config
-                )
-            except Exception:
-                self.log.exception(f"Failed to save {kind} delimiter")
-                toast(
-                    self.mw,
-                    f"The {kind} delimiter wasn't saved. Details are in Logs.",
-                    role="error",
-                )
-                return
-            self.log.info(f"Saved {kind} delimiter '{delimiter}' to config")
-
     def select_stock_file(self):
         """Opens file dialog for stock CSV selection and loads file.
 
         After a file is selected, it validates the file with the correct
-        delimiter from the client configuration. Auto-detects delimiter
-        and prompts user if detected delimiter differs from configured one.
+        delimiter setting: Auto detects it per file, an override is used as is.
         """
         filepath, _ = QFileDialog.getOpenFileName(
             self.mw, "Select Stock File", "", "CSV files (*.csv);;All Files (*)"
@@ -163,44 +105,7 @@ class FileHandler:
         self.mw.stock_file_path = filepath
         self.log.info(f"Stock file selected: {filepath}")
 
-        # Get delimiter from config
-        config = self.mw.active_profile_config
-        config_delimiter = config.get("settings", {}).get("stock_csv_delimiter", ";")
-
-        # Auto-detect delimiter
-        from shopify_tool.csv_utils import detect_csv_delimiter
-
-        try:
-            detected_delimiter, method = detect_csv_delimiter(filepath)
-            self.log.info(f"Detected delimiter '{detected_delimiter}' using {method}")
-        except FileNotFoundError:
-            self.log.exception("Stock file not found for delimiter detection")
-            detected_delimiter = ";"  # fallback
-        except PermissionError:
-            self.log.exception("Permission denied reading stock file")
-            detected_delimiter = ";"  # fallback
-        except UnicodeDecodeError:
-            self.log.exception("Encoding error in stock file")
-            detected_delimiter = ";"  # fallback
-        except Exception:
-            self.log.exception("Unexpected error detecting delimiter for stock")
-            detected_delimiter = ";"  # fallback
-
-        # Determine which delimiter to use
-        delimiter = detected_delimiter  # Default to detected
-
-        # If detected differs from config, load with it and offer to save it
-        if detected_delimiter != config_delimiter:
-            self.log.info(f"Using detected delimiter: '{delimiter}'")
-            toast(
-                self.mw,
-                f"Loaded with {delimiter!r} — settings say {config_delimiter!r}.",
-                role="info",
-                action_text="Save as default",
-                on_action=lambda: self._save_default_delimiter(
-                    "stock", detected_delimiter, config.get("client_id")
-                ),
-            )
+        delimiter = self._delimiter_for("stock", filepath)
 
         # Try to load CSV with determined delimiter to verify it's readable
         # Force SKU columns to string type to prevent float conversion
@@ -227,7 +132,7 @@ class FileHandler:
             show_error(
                 self.mw,
                 "The stock file wasn't loaded",
-                f"Check the delimiter setting (currently {delimiter!r}), then choose the file again.",
+                f"Check the stock delimiter in Settings › General (it read {delimiter!r}), then choose the file again.",
             )
             return
 
@@ -356,7 +261,6 @@ class FileHandler:
 
         if file_type == "orders":
             path = self.mw.orders_file_path
-            delimiter = ","
 
             # Get CSV column names from v2 mappings
             orders_mappings = column_mappings.get("orders", {})
@@ -380,9 +284,6 @@ class FileHandler:
 
         else:  # stock
             path = self.mw.stock_file_path
-            delimiter = client_config.get("settings", {}).get(
-                "stock_csv_delimiter", ";"
-            )
 
             # Get CSV column names from v2 mappings
             stock_mappings = column_mappings.get("stock", {})
@@ -403,6 +304,7 @@ class FileHandler:
             self.log.warning(f"Validation skipped for '{file_type}': path is missing.")
             return
 
+        delimiter = self._delimiter_for(file_type, path)
         self.log.info(f"Validating '{file_type}' file: {path}")
         is_valid, missing_cols = core.validate_csv_headers(
             path, required_cols, delimiter
@@ -542,7 +444,9 @@ class FileHandler:
             return  # User cancelled
 
         try:
-            merged_path = self.merge_and_save_files(valid_files, file_type, folder_path)
+            merged_path, rows, skipped = self.merge_and_save_files(
+                valid_files, file_type, folder_path
+            )
         except Exception:
             self.log.exception("Failed to merge files")
             show_error(self.mw, "The files weren't merged", "Details are in Logs.")
@@ -556,9 +460,12 @@ class FileHandler:
             self.mw.stock_file_path = merged_path
             self.mw.stock_source_files = valid_files
 
-        files = f"{len(valid_files)} files merged"
-        rows = f"{total_rows:,} rows".replace(",", " ")
-        summary = f"{files} · {rows}"
+        summary = f"{len(valid_files)} files merged · " + f"{rows:,} rows".replace(
+            ",", " "
+        )
+        if skipped:
+            noun = "order" if file_type == "orders" else "SKU"
+            summary += f" · {skipped} overlapping {noun}{'' if skipped == 1 else 's'} skipped"
         if invalid_files:
             summary += f" · {len(invalid_files)} skipped"
 
@@ -575,9 +482,7 @@ class FileHandler:
         the only thing lost is the settings screen's column suggestions.
         """
         try:
-            delimiter = self.mw.active_profile_config.get("settings", {}).get(
-                "orders_csv_delimiter", ","
-            )
+            delimiter = self._delimiter_for("orders", path)
             orders_df = pd.read_csv(path, delimiter=delimiter, encoding="utf-8-sig")
             self.mw.last_loaded_orders_df = orders_df.copy()
             self.log.info(
@@ -651,13 +556,9 @@ class FileHandler:
         if file_type == "orders":
             REQUIRED_INTERNAL = ["Order_Number", "SKU", "Quantity", "Shipping_Method"]
             mappings = column_mappings.get("orders", {})
-            delimiter_key = "orders_csv_delimiter"
-            default_delimiter = ","
         else:  # stock
             REQUIRED_INTERNAL = ["SKU", "Stock"]
             mappings = column_mappings.get("stock", {})
-            delimiter_key = "stock_csv_delimiter"
-            default_delimiter = ";"
 
         # Get CSV column names that map to required internal names
         required_csv_cols = [
@@ -666,22 +567,13 @@ class FileHandler:
             if internal_name in REQUIRED_INTERNAL
         ]
 
-        # Get delimiter from config
-        config.get("settings", {}).get(delimiter_key, default_delimiter)
-
         self.log.info(f"Validating {len(file_paths)} {file_type} files...")
         self.log.info(f"Required columns: {required_csv_cols}")
 
         # Validate each file
         for filepath in file_paths:
             try:
-                # Auto-detect delimiter for this file
-                from shopify_tool.csv_utils import detect_csv_delimiter
-
-                detected_delimiter, _ = detect_csv_delimiter(filepath)
-
-                # Use detected delimiter
-                file_delimiter = detected_delimiter
+                file_delimiter = self._delimiter_for(file_type, filepath)
 
                 # Validate headers
                 is_valid, missing_cols = core.validate_csv_headers(
@@ -751,8 +643,8 @@ class FileHandler:
                 msg += f"  ... and {len(invalid_files) - 5} more\n"
             msg += "\n"
 
-        if _FOLDER_REMOVE_DUPLICATES:
-            msg += "Duplicates will be removed (keep first occurrence)\n\n"
+        thing = "An order" if file_type == "orders" else "A SKU"
+        msg += f"{thing} found in more than one file is taken from the newest file.\n\n"
 
         n = len(valid_files)
         return ConfirmDialog.ask(
@@ -761,9 +653,12 @@ class FileHandler:
 
     def merge_and_save_files(
         self, file_paths: list[str], file_type: str, original_folder: str
-    ) -> str:
+    ) -> tuple[str, int, int]:
         """
         Merge CSV files and save to temp location.
+
+        A key found in several files is taken whole from the newest one
+        (csv_utils.merge_csv_files: the owning-file rule).
 
         Args:
             file_paths: List of valid file paths
@@ -771,68 +666,37 @@ class FileHandler:
             original_folder: Original folder path (for logging)
 
         Returns:
-            Path to merged CSV file
+            (merged CSV path, rows written, distinct keys skipped from
+            non-owning files)
         """
-        from shopify_tool.csv_utils import merge_csv_files
-
-        # Get config
         config = self.mw.active_profile_config
-        column_mappings = config.get("column_mappings", {})
+        mappings = config.get("column_mappings", {}).get(file_type, {})
 
-        # Get settings based on file type
-        if file_type == "orders":
-            delimiter = config.get("settings", {}).get("orders_csv_delimiter", ",")
+        # Force SKU columns to string type
+        dtype_dict = {col: str for col, n in mappings.items() if n == "SKU"}
 
-            # Get SKU columns to force as string type
-            orders_mappings = column_mappings.get("orders", {})
-            sku_columns = [
-                csv_col
-                for csv_col, internal_name in orders_mappings.items()
-                if internal_name == "SKU"
-            ]
-            dtype_dict = {col: str for col in sku_columns}
+        owner_key = next(
+            (
+                c
+                for c, n in mappings.items()
+                if n == ("Order_Number" if file_type == "orders" else "SKU")
+            ),
+            None,
+        )
+        if owner_key is None:
+            self.log.warning(
+                f"No column mapped as the {file_type} key; merging without the owning-file rule"
+            )
+        setting = config.get("settings", {}).get(f"{file_type}_csv_delimiter")
 
-            # Dynamically find duplicate key columns from mappings
-            # For orders: check duplicates on Order_Number + SKU
-            duplicate_keys = []
-            for csv_col, internal_name in orders_mappings.items():
-                if internal_name in ["Order_Number", "SKU"]:
-                    duplicate_keys.append(csv_col)
-        else:  # stock
-            delimiter = config.get("settings", {}).get("stock_csv_delimiter", ";")
-
-            # Get SKU columns to force as string type
-            stock_mappings = column_mappings.get("stock", {})
-            sku_columns = [
-                csv_col
-                for csv_col, internal_name in stock_mappings.items()
-                if internal_name == "SKU"
-            ]
-            dtype_dict = {col: str for col in sku_columns}
-
-            # Try to find the SKU column name from mappings
-            sku_col_name = None
-            for csv_col, internal_name in stock_mappings.items():
-                if internal_name == "SKU":
-                    sku_col_name = csv_col
-                    break
-
-            duplicate_keys = [sku_col_name] if sku_col_name else []
-
-        # Merge files
         self.log.info(f"Merging {len(file_paths)} {file_type} files...")
-        self.log.info(f"Duplicate keys for {file_type}: {duplicate_keys}")
-        self.log.info(f"Remove duplicates: {_FOLDER_REMOVE_DUPLICATES}")
-
-        merged_df = merge_csv_files(
+        merged_df, skipped = merge_csv_files(
             file_paths,
-            delimiter=delimiter,
+            setting,
+            file_type,
             dtype_dict=dtype_dict,
             add_source_column=True,
-            remove_duplicates=_FOLDER_REMOVE_DUPLICATES,
-            duplicate_keys=duplicate_keys
-            if (_FOLDER_REMOVE_DUPLICATES and duplicate_keys)
-            else None,
+            owner_key=owner_key,
         )
 
         self.log.info(f"Merge complete: {len(merged_df)} rows")
@@ -849,8 +713,11 @@ class FileHandler:
         merged_path = temp_dir / merged_filename
 
         # Save
-        merged_df.to_csv(merged_path, index=False, encoding="utf-8-sig")
+        # The merge is written in the override if there is one, else comma;
+        # the analysis reads it back through the same setting.
+        sep = "," if not setting or setting == AUTO_DELIMITER else setting
+        merged_df.to_csv(merged_path, index=False, encoding="utf-8-sig", sep=sep)
 
         self.log.info(f"Saved merged file: {merged_path}")
 
-        return str(merged_path)
+        return str(merged_path), len(merged_df), skipped
