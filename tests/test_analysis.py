@@ -3,6 +3,7 @@
 Uses the REAL default Shopify/Bulgarian-ERP column names (column_mappings=None)
 so these tests exercise exactly the code path production traffic takes.
 """
+import io
 from datetime import date
 
 import pandas as pd
@@ -459,3 +460,74 @@ def test_lot_defaults_are_not_injected_when_the_internal_name_is_already_mapped(
     # Batch is still unmapped, so its default is still injected.
     assert resolved["Партида"] == "Batch"
     assert _LOT_COLUMN_DEFAULTS == {"Годност": "Expiry_Date", "Партида": "Batch"}
+
+
+# --- Phase 12 Bundle 3: order-data integrity (F3, F4) -----------------------
+
+_F_MAPS = {
+    "orders": {
+        "Name": "Order_Number",
+        "Lineitem sku": "SKU",
+        "Lineitem quantity": "Quantity",
+        "Tags": "Tags",
+        "Shipping Method": "Shipping_Method",
+    },
+    "stock": {"SKU": "SKU", "Stock": "Stock"},
+}
+_F_ORDERS = (
+    "Name,Lineitem sku,Lineitem quantity,Tags,Shipping Method\n"
+    "#4148,501,1,vip,DHL\n#4148,501,1,,\n#4149,777,2,,\n"
+)
+
+
+def _f_orders():
+    return pd.read_csv(io.StringIO(_F_ORDERS), dtype={"Lineitem sku": str})
+
+
+def _f_stock(text):
+    return pd.read_csv(io.StringIO(text), sep=";", dtype={"SKU": str})
+
+
+def test_an_untagged_order_does_not_inherit_the_previous_orders_tags_or_courier():
+    """F3: #4149 used to come out tagged 'vip' and shipped by DHL."""
+    orders, _, _ = analysis._clean_and_prepare_data(
+        _f_orders(), _f_stock("SKU;Stock\n501;5\n777;5\n"), _F_MAPS
+    )
+    by_order = orders.set_index("Order_Number")
+    assert pd.isna(by_order.loc["#4149", "Tags"])
+    assert pd.isna(by_order.loc["#4149", "Shipping_Method"])
+    assert (orders[orders["Order_Number"] == "#4148"]["Shipping_Method"] == "DHL").all()
+
+
+def test_stock_sku_variants_collapse_to_one_sku():
+    """F4: '501 ' and '501.0' are one SKU, normalized before dedupe."""
+    _, stock, _ = analysis._clean_and_prepare_data(
+        _f_orders(), _f_stock("SKU;Stock\n501 ;5\n501.0;3\n777;1\n"), _F_MAPS
+    )
+    assert stock["SKU"].tolist().count("501") == 1
+
+
+def test_blank_stock_skus_are_still_dropped():
+    _, stock, _ = analysis._clean_and_prepare_data(
+        _f_orders(), _f_stock("SKU;Stock\n;9\n501;5\n"), _F_MAPS
+    )
+    assert "" not in stock["SKU"].tolist()
+    assert stock["SKU"].notna().all()
+
+
+def test_missing_optional_columns_still_clean():
+    bare = pd.read_csv(
+        io.StringIO("Name,Lineitem sku,Lineitem quantity\n#1,A,1\n"),
+        dtype={"Lineitem sku": str},
+    )
+    orders, _, _ = analysis._clean_and_prepare_data(
+        bare, _f_stock("SKU;Stock\nA;1\n"), _F_MAPS
+    )
+    assert len(orders) == 1
+
+
+def test_every_order_line_in_is_one_line_out():
+    """Invariant: without set decoders, analysis never adds or drops a line."""
+    stock = _f_stock("SKU;Stock\n501 ;5\n501.0;3\n777;9\n")
+    final = analysis.run_analysis(stock, _f_orders(), _history(), _F_MAPS)[0]
+    assert final.groupby("Order_Number").size().to_dict() == {"#4148": 2, "#4149": 1}
