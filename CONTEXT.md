@@ -273,6 +273,15 @@ target (**Raw ZPL**). Chosen per tool and per PC.
 **Print options** — one tool's print mode and the settings that mode needs.
 Stored on the PC, not in the client profile.
 
+**Actual size** — a label PDF printed at its own page dimensions, scaled
+uniformly only when the chosen paper differs, and never shrunk into page
+margins. What Adobe's "Actual size" does, and what driver mode prints.
+
+**Reference strip** — the band Reference Labels adds along the bottom of a
+matched courier page, carrying the REF number and its barcode. The courier
+content is shrunk to make room for it, so a stamped label is smaller than the
+courier's original on purpose.
+
 **Fold** — a closed row that states the current values of the controls it
 hides. It is opened to change a value, never to check one. Distinguished from
 an **overflow**, which holds actions rather than values.

@@ -244,6 +244,18 @@ def test_bulk_export_selection_writes_the_file_and_toasts(
     )
 
 
+def test_bulk_change_status_works_for_int_order_numbers(handler, mw):
+    """A non-Shopify client: int64 Order_Number, page sends strings."""
+    df = mw.analysis_results_df
+    mw.analysis_results_df = df.assign(Order_Number=df["Order_Number"].astype(int))
+    handler.bulk_change_status(["10443", "10444"], False)
+    written = mw.analysis_results_df.loc[
+        mw.analysis_results_df["Order_Number"].isin([10443, 10444]),
+        "Order_Fulfillment_Status",
+    ]
+    assert set(written) == {"Not Fulfillable"}
+
+
 def test_update_undo_button_pushes_availability_to_the_page(handler, mw):
     mw.undo_manager.can_undo.return_value = True
     handler._update_undo_button()

@@ -121,7 +121,7 @@ jobs:
         # hundred-MB download. Fail here, in the step named for it, instead.
         shell: pwsh
         run: |
-          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html") {
+          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html", "pikepdf") {
             if (-not (Get-ChildItem -Path "dist\ShopifyFulfillmentTool" -Recurse -Filter $name)) {
               throw "PyInstaller did not bundle $name."
             }

@@ -17,6 +17,16 @@ def _make_courier_pdf(path, width_pt=288, height_pt=432, name="Acme Warehouse Co
     c.save()
 
 
+class TestExtractPostoneNumber:
+    def test_number_split_from_its_letter_by_a_line_break(self):
+        # Rotated label text (InPost) extracts as "P\n8732810087".
+        assert pdf_processor.extract_postone_number("uwagi P\n8732810087\n#1") == "P8732810087"
+
+    def test_unbroken_number_wins_over_a_split_one(self):
+        text = "R\n1111111111 then P2222222222"
+        assert pdf_processor.extract_postone_number(text) == "P2222222222"
+
+
 class TestCreateReferenceOverlaySignature:
     def test_order_number_parameter_removed(self):
         params = list(inspect.signature(pdf_processor.create_reference_overlay).parameters)
@@ -216,3 +226,145 @@ class TestCreateReferenceOverlayLayout:
         assert y1 == pytest.approx(strip_height)
         assert y1 == pytest.approx(y2)
         assert x2 > x1
+
+
+_MAPPING = "PostOne,Tracking,Reference,Col3,Col4,Col5,Name\n,,REF-001,,,,Acme Warehouse Co\n"
+
+
+class TestProcessReferenceLabelsPikepdf:
+    def _run(self, tmp_path, pdf_path):
+        csv_path = tmp_path / "mapping.csv"
+        csv_path.write_text(_MAPPING)
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        return pdf_processor.process_reference_labels(str(pdf_path), str(csv_path), str(out_dir))
+
+    def test_rotate_270_bakes_to_visual_size(self, tmp_path):
+        import pikepdf
+
+        pdf_path = tmp_path / "courier.pdf"
+        _make_courier_pdf(pdf_path, width_pt=288, height_pt=432)
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+            pdf.pages[0].Rotate = 270
+            pdf.save(pdf_path)
+        result = self._run(tmp_path, pdf_path)
+        page = PdfReader(result["output_file"]).pages[0]
+        assert page.rotation == 0
+        assert (float(page.mediabox.width), float(page.mediabox.height)) == (432, 288)
+        assert "REF: REF-001" in page.extract_text()
+
+    @pytest.mark.parametrize("rotate", [90, 270, -90])
+    def test_rotated_label_fills_its_visual_page(self, qapp, tmp_path, rotate):
+        """Couriers write /Rotate -90 as often as 270. qpdf's add_overlay only
+        honours 0/90/180/270, so an unnormalized -90 left the label portrait,
+        shrunk into the middle of a landscape page."""
+        import pikepdf
+        from PySide6.QtCore import QSize
+        from PySide6.QtPdf import QPdfDocument
+
+        pdf_path = tmp_path / "courier.pdf"
+        c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))
+        c.rect(0, 0, 288, 432, fill=1)  # ink edge to edge
+        c.setFillColorRGB(1, 1, 1)
+        c.drawString(20, 400, "Acme Warehouse Co")
+        c.showPage()
+        c.save()
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+            pdf.pages[0].Rotate = rotate
+            pdf.save(pdf_path)
+
+        result = self._run(tmp_path, pdf_path)
+        assert result["matched"] == 1
+
+        doc = QPdfDocument()
+        doc.load(result["output_file"])
+        image = doc.render(0, QSize(432, 288))
+        # Content sits in the top 88%; scan well above the strip.
+        # Unpainted pixels render transparent, so count opaque dark ones.
+        row = [image.pixelColor(x, image.height() // 3) for x in range(image.width())]
+        dark = [x for x, px in enumerate(row) if px.alpha() > 128 and px.lightness() < 128]
+        assert dark and (max(dark) - min(dark)) / image.width() > 0.8
+
+    def test_cropped_label_on_letter_sizes_from_crop(self, tmp_path):
+        """A 4x6 label cropped out of a Letter sheet: the stamped page is the
+        label's size, not the sheet's with the label blown up to fill it."""
+        import pikepdf
+
+        pdf_path = tmp_path / "courier.pdf"
+        _make_courier_pdf(pdf_path, width_pt=612, height_pt=792)
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+            pdf.pages[0].CropBox = pikepdf.Array([0, 360, 288, 792])
+            pdf.save(pdf_path)
+        result = self._run(tmp_path, pdf_path)
+        page = PdfReader(result["output_file"]).pages[0]
+        assert (float(page.mediabox.width), float(page.mediabox.height)) == (288, 432)
+        assert "REF: REF-001" in page.extract_text()
+
+    def test_unmatched_page_passes_through_untouched(self, tmp_path):
+        pdf_path = tmp_path / "other.pdf"
+        c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))
+        c.drawString(20, 400, "Nobody we know")
+        c.save()
+        result = self._run(tmp_path, pdf_path)
+        assert result["unmatched"] == 1
+        page = PdfReader(result["output_file"]).pages[0]
+        assert "REF:" not in page.extract_text()
+        assert (float(page.mediabox.width), float(page.mediabox.height)) == (288, 432)
+
+    def test_file_pypdf_cannot_open_still_processes_unmatched(self, tmp_path, monkeypatch):
+        pdf_path = tmp_path / "courier.pdf"
+        _make_courier_pdf(pdf_path)
+
+        def broken(*_a, **_k):
+            raise ValueError("pypdf choked")
+
+        monkeypatch.setattr(pdf_processor, "PdfReader", broken)
+        result = self._run(tmp_path, pdf_path)
+        assert result["matched"] == 0 and result["unmatched"] == 1
+
+    def test_source_pdf_is_closed_after_processing(self, tmp_path, monkeypatch):
+        """Windows cannot replace or delete a file pikepdf still holds open.
+        A closed pikepdf.Pdf raises nothing on access, so spy on close()
+        itself; patching the class attribute works."""
+        import pikepdf
+
+        opened, closed = [], []
+        real_open, real_close = pikepdf.open, pikepdf.Pdf.close
+
+        def spy_open(*a, **k):
+            pdf = real_open(*a, **k)
+            opened.append(pdf)
+            return pdf
+
+        def spy_close(self):
+            closed.append(self)
+            return real_close(self)
+
+        monkeypatch.setattr(pikepdf, "open", spy_open)
+        monkeypatch.setattr(pikepdf.Pdf, "close", spy_close)
+        pdf_path = tmp_path / "courier.pdf"
+        _make_courier_pdf(pdf_path)
+        self._run(tmp_path, pdf_path)
+        assert any(c is opened[0] for c in closed)  # opened[0] is the source
+
+    def test_mixed_batch_stamps_matched_and_keeps_unmatched_rotation(self, tmp_path):
+        import pikepdf
+
+        pdf_path = tmp_path / "mixed.pdf"
+        c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))
+        c.drawString(20, 400, "Nobody we know")
+        c.showPage()
+        c.drawString(20, 400, "Acme Warehouse Co")
+        c.showPage()
+        c.save()
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+            pdf.pages[0].Rotate = 90
+            pdf.save(pdf_path)
+
+        result = self._run(tmp_path, pdf_path)
+
+        assert (result["matched"], result["unmatched"]) == (1, 1)
+        pages = PdfReader(result["output_file"]).pages
+        assert "REF: REF-001" in pages[0].extract_text()  # matched sorts first
+        assert "REF:" not in pages[1].extract_text()
+        assert pages[1].rotation == 90

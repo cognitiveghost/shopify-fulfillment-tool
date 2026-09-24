@@ -676,29 +676,6 @@ def contrast_ratio(fg: str, bg: str) -> float:
     return (lighter + 0.05) / (darker + 0.05)
 
 
-def clamp_geometry(
-    x: int,
-    y: int,
-    w: int,
-    h: int,
-    avail_x: int,
-    avail_y: int,
-    avail_w: int,
-    avail_h: int,
-) -> tuple:
-    """Clamp a saved window rect to fit inside the available screen rect.
-
-    Shrinks w/h to fit if larger than the screen, then clamps x/y so the
-    whole window is on-screen. Pure function — no Qt dependency — so a
-    saved-on-a-different-monitor geometry can never restore off-screen.
-    """
-    w = min(w, avail_w)
-    h = min(h, avail_h)
-    x = max(avail_x, min(x, avail_x + avail_w - w))
-    y = max(avail_y, min(y, avail_y + avail_h - h))
-    return (x, y, w, h)
-
-
 class StatusStyle(NamedTuple):
     """How one status renders, resolved once for both renderers.
 
@@ -1012,34 +989,20 @@ def save_window_geometry(window, settings, key: str = "window_geometry") -> None
 
 
 def restore_window_geometry(window, settings, key: str = "window_geometry") -> bool:
-    """Restore previously-saved geometry, clamped to the available screen.
+    """Restore previously-saved geometry.
 
     Returns True if geometry was restored, False if there was nothing saved
     (caller should fall back to its own default size in that case).
-    """
-    from PySide6.QtGui import QGuiApplication
 
+    Qt's restoreGeometry already moves an off-screen rect back inside the
+    available screen, frame included, and keeps maximized state intact. Do
+    not clamp again or call setGeometry after it: that re-clamps the client
+    rect without its title bar and breaks a maximized window (QTBUG-4397).
+    """
     raw = settings.value(key)
     if raw is None:
         return False
-    if not window.restoreGeometry(raw):
-        return False
-
-    screen = window.screen() or QGuiApplication.primaryScreen()
-    avail = screen.availableGeometry()
-    geo = window.geometry()
-    x, y, w, h = clamp_geometry(
-        geo.x(),
-        geo.y(),
-        geo.width(),
-        geo.height(),
-        avail.x(),
-        avail.y(),
-        avail.width(),
-        avail.height(),
-    )
-    window.setGeometry(x, y, w, h)
-    return True
+    return bool(window.restoreGeometry(raw))
 
 
 # A QPushButton with no `role` property is secondary. Primary is opt-in via

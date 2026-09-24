@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSizeF
+from PySide6.QtCore import QRectF, QSettings, QSizeF
 from PySide6.QtGui import QPageSize, QPainter
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
@@ -116,6 +116,22 @@ def _apply_default_page_size(printer: QPrinter, document: QPdfDocument) -> None:
     printer.setPageSize(QPageSize(size_mm, QPageSize.Unit.Millimeter))
 
 
+def _fit_rect(page_pt: QSizeF, paper: QRectF) -> QRectF:
+    """page_pt scaled uniformly to fit paper, centred in it.
+
+    Actual size when the paper matches the PDF page, which
+    _apply_default_page_size arranges; never stretched when the operator
+    picks other paper.
+    """
+    if page_pt.isEmpty():
+        return QRectF(paper)
+    scale = min(paper.width() / page_pt.width(), paper.height() / page_pt.height())
+    w, h = page_pt.width() * scale, page_pt.height() * scale
+    return QRectF(
+        paper.x() + (paper.width() - w) / 2, paper.y() + (paper.height() - h) / 2, w, h
+    )
+
+
 def _print_pdf_driver_mode(
     parent,
     pdf_path: Path,
@@ -133,6 +149,9 @@ def _print_pdf_driver_mode(
     if driver_printer_name:
         printer.setPrinterName(driver_printer_name)
     _apply_default_page_size(printer, document)
+    # Draw on the whole sheet: with full page off, Qt's default 10pt margins
+    # shrank every label and offset it by a second margin (spec §3).
+    printer.setFullPage(True)
 
     if output_path is not None:
         # Test-only escape hatch: PDF output needs no OS printer and no
@@ -150,12 +169,13 @@ def _print_pdf_driver_mode(
 
     try:
         painter = QPainter(printer)
-        page_rect = printer.pageRect(QPrinter.Unit.DevicePixel).toRect()
+        paper = printer.paperRect(QPrinter.Unit.DevicePixel)
         for page in range(first_page, last_page + 1):
             if page > first_page:
                 printer.newPage()
-            image = document.render(page, page_rect.size())
-            painter.drawImage(page_rect, image)
+            target = _fit_rect(document.pagePointSize(page), paper)
+            image = document.render(page, target.size().toSize())
+            painter.drawImage(target, image)
         painter.end()
         return True
     except Exception:
