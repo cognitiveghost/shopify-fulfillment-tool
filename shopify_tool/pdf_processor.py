@@ -18,7 +18,8 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
-from pypdf import PdfReader, PdfWriter, Transformation
+import pikepdf
+from pypdf import PdfReader
 from reportlab.graphics.barcode import code128
 from reportlab.pdfgen import canvas
 
@@ -88,14 +89,15 @@ def process_reference_labels(
 
     logger.info(f"Starting PDF processing: {pdf_path}")
 
+    src = None
     try:
         # Step 1: Load and validate PDF
         if progress_callback:
             progress_callback(0, 100, "Loading PDF...")
 
         try:
-            reader = PdfReader(pdf_path)
-            total_pages = len(reader.pages)
+            src = pikepdf.open(pdf_path)
+            total_pages = len(src.pages)
 
             if total_pages == 0:
                 raise InvalidPDFError("PDF file has no pages")
@@ -130,7 +132,9 @@ def process_reference_labels(
         matched = 0
         unmatched = 0
 
-        for i, page in enumerate(reader.pages):
+        page_texts = _page_texts(pdf_path, total_pages)
+
+        for i, page in enumerate(src.pages):
             # Update progress
             progress_pct = 10 + int((i / total_pages) * 70)
             if progress_callback:
@@ -140,15 +144,8 @@ def process_reference_labels(
                     f"Processing page {i+1}/{total_pages}"
                 )
 
-            # Extract page text
-            try:
-                page_text = page.extract_text()
-            except Exception as e:
-                logger.warning(f"Failed to extract text from page {i+1}: {e}")
-                page_text = ""
-
             # Match reference
-            ref_data = match_reference(page_text, mapping)
+            ref_data = match_reference(page_texts[i], mapping)
 
             if ref_data:
                 matched += 1
@@ -177,7 +174,7 @@ def process_reference_labels(
         if progress_callback:
             progress_callback(85, 100, "Adding reference labels...")
 
-        writer = PdfWriter()
+        out = pikepdf.new()
 
         for page_data in sorted_pages:
             page = page_data['page']
@@ -185,30 +182,12 @@ def process_reference_labels(
 
             if ref:
                 try:
-                    # Courier PDFs set wildly different page /Rotate values (some
-                    # ship pre-rotated 90/270 label stock instead of authoring
-                    # content upright). Bake rotation into content first so
-                    # mediabox always reflects the true visual page -- otherwise
-                    # the "bottom" strip below lands on a different physical edge
-                    # (top/left/right) depending on which courier produced the PDF.
-                    page.transfer_rotation_to_content()
-
-                    page_width = float(page.mediabox.width)
-                    page_height = float(page.mediabox.height)
-
-                    transform = Transformation().scale(_CONTENT_SCALE, _CONTENT_SCALE).translate(
-                        tx=page_width * (1 - _CONTENT_SCALE) / 2,
-                        ty=page_height * (1 - _CONTENT_SCALE),
-                    )
-                    page.add_transformation(transform)
-
-                    overlay = create_reference_overlay(ref, page_width, page_height)
-                    page.merge_page(PdfReader(overlay).pages[0])
-
+                    _stamp_reference(out, page, ref)
+                    continue
                 except Exception:
                     logger.exception(f"Failed to add overlay for ref {ref}")
 
-            writer.add_page(page)
+            out.pages.append(page)
 
         # Step 6: Save output PDF
         if progress_callback:
@@ -216,8 +195,7 @@ def process_reference_labels(
 
         output_file = Path(output_dir) / generate_output_filename()
 
-        with open(output_file, 'wb') as f:
-            writer.write(f)
+        out.save(output_file)
 
         processing_time = time.time() - start_time
 
@@ -244,6 +222,62 @@ def process_reference_labels(
         # Catch all other errors
         logger.exception("Unexpected error during PDF processing")
         raise PDFProcessorError(f"Unexpected error: {e}")
+    finally:
+        if src is not None:
+            src.close()
+
+
+def _page_texts(pdf_path: str, total_pages: int) -> list[str]:
+    """Each page's text, read by pypdf: reference matching was tuned
+    against its extraction (spec D4). A file pypdf cannot open still
+    processes -- its pages just come out unmatched."""
+    try:
+        reader = PdfReader(pdf_path)
+    except Exception:
+        logger.warning(f"pypdf could not open {pdf_path}; pages will be unmatched", exc_info=True)
+        return [""] * total_pages
+    texts = []
+    for i in range(total_pages):
+        try:
+            texts.append(reader.pages[i].extract_text() or "")
+        except Exception as e:
+            logger.warning(f"Failed to extract text from page {i+1}: {e}")
+            texts.append("")
+    return texts
+
+
+def _stamp_reference(out: "pikepdf.Pdf", page: "pikepdf.Page", ref: str) -> None:
+    """Append page to out, its content shrunk into the top of a same-size
+    page with the reference strip below.
+
+    Courier PDFs set varied /Rotate values; add_overlay bakes the rotation
+    in, so the new page takes the courier page's *visual* size and the
+    strip always lands on the visual bottom.
+    """
+    box = page.mediabox
+    width, height = float(box[2] - box[0]), float(box[3] - box[1])
+    if int(page.obj.get("/Rotate", 0)) % 180:
+        width, height = height, width
+
+    # Keep the strip's Pdf referenced until add_overlay returns: a
+    # temporary raises "getFormXObjectForPage called with a direct object".
+    strip = pikepdf.open(create_reference_overlay(ref, width, height))
+    out.add_blank_page(page_size=(width, height))
+    stamped = out.pages[-1]
+    try:
+        stamped.add_overlay(
+            page,
+            pikepdf.Rectangle(
+                width * (1 - _CONTENT_SCALE) / 2,
+                height * (1 - _CONTENT_SCALE),
+                width * (1 + _CONTENT_SCALE) / 2,
+                height,
+            ),
+        )
+        stamped.add_overlay(strip.pages[0], pikepdf.Rectangle(0, 0, width, height))
+    except Exception:
+        del out.pages[-1]
+        raise
 
 
 def load_csv_mapping(csv_path: str) -> dict[str, dict]:
@@ -526,7 +560,7 @@ def create_reference_overlay(
     """
     Create PDF overlay with the Reference Number and a horizontal Code-128
     barcode encoding it, centered as one block in the bottom-middle of the
-    strip freed up by process_reference_labels()'s content-shrink transform,
+    strip freed up by _stamp_reference()'s content shrink,
     with a separator line marking the strip off from the original content.
 
     Args:

@@ -38,7 +38,8 @@ typing_extensions>=4.0.0  # Backported type hints for older Python versions
 
 # PDF Processing (Feature #4 - Reference Labels)
 # -----------------------------------------------
-pypdf>=4.0.0           # PDF reading and manipulation (formerly PyPDF2)
+pypdf>=4.0.0           # page text for Reference Labels matching
+pikepdf>=9.0           # Reference Labels page handling (rotation, overlay, merge)
 reportlab>=4.0.0       # PDF generation and text overlay
 
 # Barcode Generation (Feature #5 - Barcode Generator)
