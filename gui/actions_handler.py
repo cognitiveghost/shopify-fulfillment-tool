@@ -14,6 +14,7 @@ from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
 from shopify_tool import core, packing_lists, stock_export
 from shopify_tool.analysis import toggle_order_fulfillment
+from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
 from shopify_tool.session_manager import SessionManagerError
 
@@ -152,10 +153,10 @@ class ActionsHandler(QObject):
         self.mw.ui_manager.set_ui_busy(True)
         self.log.info("Starting analysis thread.")
         stock_delimiter = self.mw.active_profile_config.get("settings", {}).get(
-            "stock_csv_delimiter", ";"
+            "stock_csv_delimiter", AUTO_DELIMITER
         )
         orders_delimiter = self.mw.active_profile_config.get("settings", {}).get(
-            "orders_csv_delimiter", ","
+            "orders_csv_delimiter", AUTO_DELIMITER
         )
 
         worker = Worker(
@@ -1159,13 +1160,15 @@ class ActionsHandler(QObject):
 
         # Load stock DataFrame
         try:
-            stock_delimiter = self.mw.active_profile_config.get("settings", {}).get(
-                "stock_csv_delimiter", ";"
+            setting = self.mw.active_profile_config.get("settings", {}).get(
+                "stock_csv_delimiter"
             )
 
             # Load raw stock file
             stock_df = pd.read_csv(
-                self.mw.stock_file_path, delimiter=stock_delimiter, encoding="utf-8-sig"
+                self.mw.stock_file_path,
+                delimiter=resolve_delimiter(self.mw.stock_file_path, setting, "stock"),
+                encoding="utf-8-sig",
             )
             self.log.info(f"Loaded stock data: {len(stock_df)} rows")
 

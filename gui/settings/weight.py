@@ -25,6 +25,7 @@ from gui.components import InlineMessage, show_error, toast
 from gui.settings.base import SettingsPage
 from gui.theme_manager import font_css, set_button_role
 from shared.theme import on_theme_changed
+from shopify_tool.csv_utils import resolve_delimiter
 
 logger = logging.getLogger(__name__)
 
@@ -546,7 +547,11 @@ class WeightPage(SettingsPage):
             return
 
         try:
-            df = pd.read_csv(file_path, sep=self.stock_csv_delimiter, dtype=str)
+            df = pd.read_csv(
+                file_path,
+                sep=resolve_delimiter(file_path, self.stock_csv_delimiter, "stock"),
+                dtype=str,
+            )
 
             # Find SKU and Name columns via column_mappings
             stock_mappings = (

@@ -332,6 +332,38 @@ class TestPackedOrdersAreDetectionOnly:
         assert "#LONG_GONE" not in set(written["Order_Number"])
 
 
+def test_auto_reads_each_file_with_its_own_delimiter(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "load_packed_orders", lambda _pm, _cid: None)
+    monkeypatch.setattr(core, "get_persistent_data_path", lambda _n: tmp_path / "h.csv")
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name;Lineitem sku;Lineitem quantity;Shipping Method\n#1;A1;1;Standard\n",
+        encoding="utf-8",
+    )
+    stock = tmp_path / "stock.csv"
+    stock.write_text("Артикул,Име,Наличност\nA1,Widget,5\n", encoding="utf-8")
+    ok, msg, final_df, _ = core.run_full_analysis(
+        str(stock),
+        str(orders),
+        str(tmp_path / "out"),
+        "auto",
+        "auto",
+        {
+            "settings": {"repeat_detection_days": 1},
+            "column_mappings": {
+                "orders": _ORDERS_MAPPING,
+                "stock": {
+                    "Артикул": "SKU",
+                    "Име": "Product_Name",
+                    "Наличност": "Stock",
+                },
+            },
+        },
+    )
+    assert ok, msg
+    assert final_df["Order_Number"].tolist() == ["#1"]
+
+
 class TestInventoryMemoryEndToEnd:
     """The snapshot has to survive the trip through run_full_analysis.
 
