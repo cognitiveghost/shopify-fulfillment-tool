@@ -1,14 +1,18 @@
 """SKU normalization and order-number sort accuracy (priority: order/SKU accuracy)."""
+import os
+
 import pandas as pd
 import pytest
 
 from shopify_tool.csv_utils import (
+    AUTO_DELIMITER,
     discover_additional_columns,
     merge_csv_files,
     normalize_sku,
     normalize_sku_for_matching,
     order_number_sort_key,
     read_csv_headers,
+    resolve_delimiter,
 )
 
 
@@ -122,24 +126,100 @@ class TestDiscoverAdditionalColumns:
         }]
 
 
-class TestMergeCsvFiles:
-    def test_merges_and_dedupes_on_keys(self, tmp_path):
-        f1 = tmp_path / "a.csv"
-        f2 = tmp_path / "b.csv"
-        f1.write_text("Name,Lineitem sku\n#1,A1\n#2,A2\n", encoding="utf-8")
-        f2.write_text("Name,Lineitem sku\n#2,A2\n#3,A3\n", encoding="utf-8")  # #2 duplicated
+class TestResolveDelimiter:
+    def test_an_override_is_returned_untouched(self, tmp_path):
+        f = tmp_path / "x.csv"
+        f.write_text("a,b\n1,2\n", encoding="utf-8")
+        assert resolve_delimiter(str(f), ";", "orders") == ";"
 
-        merged = merge_csv_files(
-            [str(f1), str(f2)],
-            delimiter=",",
-            remove_duplicates=True,
-            duplicate_keys=["Name", "Lineitem sku"],
+    @pytest.mark.parametrize("setting", [AUTO_DELIMITER, "", None])
+    def test_auto_reads_the_file(self, tmp_path, setting):
+        f = tmp_path / "x.csv"
+        f.write_text("a;b;c\n1;2;3\n4;5;6\n", encoding="utf-8")
+        assert resolve_delimiter(str(f), setting, "orders") == ";"
+
+    def test_undetectable_falls_back_per_kind(self, tmp_path):
+        f = tmp_path / "x.csv"
+        f.write_text("onlyonecolumn\nvalue\n", encoding="utf-8")
+        assert resolve_delimiter(str(f), AUTO_DELIMITER, "stock") == ";"
+        assert resolve_delimiter(str(f), AUTO_DELIMITER, "orders") == ","
+
+
+def _write(path, text, mtime):
+    path.write_text(text, encoding="utf-8")
+    os.utime(path, (mtime, mtime))
+
+
+class TestMergeCsvFiles:
+    H = "Name,Lineitem sku,Lineitem quantity\n"
+
+    def test_a_repeated_line_in_one_file_survives(self, tmp_path):
+        """F1, the reported bug: #4148 carries SKU 501 on two real lines."""
+        f = tmp_path / "a.csv"
+        _write(f, self.H + "#4148,501,1\n#4148,501,1\n", 1000)
+        merged, skipped = merge_csv_files([str(f)], ",", "orders", owner_key="Name")
+        assert len(merged) == 2
+        assert skipped == 0
+
+    def test_an_overlapping_order_comes_whole_from_the_newest_file(self, tmp_path):
+        old, new = tmp_path / "old.csv", tmp_path / "new.csv"
+        _write(old, self.H + "#1,A,1\n#2,B,1\n", 1000)
+        _write(new, self.H + "#2,B,1\n#2,C,1\n#3,D,1\n", 2000)
+        merged, skipped = merge_csv_files(
+            [str(old), str(new)], ",", "orders", owner_key="Name"
         )
-        assert sorted(merged["Name"].tolist()) == ["#1", "#2", "#3"]
+        two = merged[merged["Name"] == "#2"]
+        assert sorted(two["Lineitem sku"]) == ["B", "C"]
+        assert set(two["_source_file"]) == {"new.csv"}
+        assert sorted(merged["Name"].unique()) == ["#1", "#2", "#3"]
+        assert skipped == 1
+
+    def test_an_mtime_tie_falls_to_the_filename(self, tmp_path):
+        a, b = tmp_path / "a.csv", tmp_path / "b.csv"
+        _write(a, self.H + "#1,FROM_A,1\n", 1000)
+        _write(b, self.H + "#1,FROM_B,1\n", 1000)
+        merged, _ = merge_csv_files([str(b), str(a)], ",", "orders", owner_key="Name")
+        assert merged["Lineitem sku"].tolist() == ["FROM_A"]
+
+    def test_every_lot_row_of_a_sku_survives(self, tmp_path):
+        """F2: lot-tracked stock lists a SKU once per lot."""
+        f = tmp_path / "s.csv"
+        _write(f, "SKU;Stock;Batch\n501;3;L1\n501;4;L2\n", 1000)
+        merged, _ = merge_csv_files([str(f)], ";", "stock", owner_key="SKU")
+        assert merged["Batch"].tolist() == ["L1", "L2"]
+
+    def test_mixed_delimiters_merge(self, tmp_path):
+        a, b = tmp_path / "a.csv", tmp_path / "b.csv"
+        _write(a, self.H + "#1,A,1\n", 1000)
+        _write(b, "Name;Lineitem sku;Lineitem quantity\n#2;B;1\n", 2000)
+        merged, _ = merge_csv_files(
+            [str(a), str(b)], "auto", "orders", owner_key="Name"
+        )
+        assert sorted(merged["Name"]) == ["#1", "#2"]
+
+    def test_blank_keys_are_never_dropped(self, tmp_path):
+        a, b = tmp_path / "a.csv", tmp_path / "b.csv"
+        _write(a, self.H + ",A,1\n", 1000)
+        _write(b, self.H + ",A,1\n", 2000)
+        merged, skipped = merge_csv_files(
+            [str(a), str(b)], ",", "orders", owner_key="Name"
+        )
+        assert len(merged) == 2
+        assert skipped == 0
+
+    def test_no_owner_key_is_a_plain_concat(self, tmp_path):
+        a, b = tmp_path / "a.csv", tmp_path / "b.csv"
+        _write(a, self.H + "#1,A,1\n", 1000)
+        _write(b, self.H + "#1,A,1\n", 2000)
+        merged, skipped = merge_csv_files(
+            [str(a), str(b)], ",", "orders", owner_key=None
+        )
+        assert len(merged) == 2
+        assert skipped == 0
 
     def test_empty_file_list_raises(self):
         with pytest.raises(ValueError):
-            merge_csv_files([], delimiter=",")
+            merge_csv_files([], ",", "orders")
 
 
 def test_read_csv_headers_semicolon_delimited(tmp_path):
