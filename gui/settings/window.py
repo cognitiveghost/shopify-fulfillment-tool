@@ -154,6 +154,8 @@ class SettingsWindow(QDialog):
             self.config_data["settings"] = {
                 "low_stock_threshold": 5,
                 "stock_csv_delimiter": "auto",
+                "orders_csv_delimiter": "auto",
+                "delimiter_auto_migrated": True,
             }
 
         if "rules" not in self.config_data:

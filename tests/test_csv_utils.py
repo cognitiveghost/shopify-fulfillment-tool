@@ -207,6 +207,35 @@ class TestMergeCsvFiles:
         assert len(merged) == 2
         assert skipped == 0
 
+    def test_a_skipped_orders_blank_continuation_lines_go_with_it(self, tmp_path):
+        old, new = tmp_path / "old.csv", tmp_path / "new.csv"
+        _write(old, self.H + "#1,X,1\n#2,A,1\n,B,1\n", 1000)
+        _write(new, self.H + "#2,A,1\n", 2000)
+        merged, skipped = merge_csv_files(
+            [str(old), str(new)], ",", "orders", owner_key="Name"
+        )
+        assert sorted(merged["Lineitem sku"]) == ["A", "X"]
+        assert skipped == 1
+
+    def test_the_skipped_count_counts_orders_not_lines(self, tmp_path):
+        old, new = tmp_path / "old.csv", tmp_path / "new.csv"
+        _write(old, self.H + "#2,A,1\n#2,B,1\n", 1000)
+        _write(new, self.H + "#2,A,1\n", 2000)
+        _, skipped = merge_csv_files(
+            [str(old), str(new)], ",", "orders", owner_key="Name"
+        )
+        assert skipped == 1
+
+    def test_stock_ownership_matches_normalized_skus(self, tmp_path):
+        old, new = tmp_path / "old.csv", tmp_path / "new.csv"
+        _write(old, "SKU;Stock\n501.0;9\n", 1000)
+        _write(new, "SKU;Stock\n501;3\n", 2000)
+        merged, skipped = merge_csv_files(
+            [str(old), str(new)], ";", "stock", dtype_dict={"SKU": str}, owner_key="SKU"
+        )
+        assert merged["Stock"].tolist() == [3]
+        assert skipped == 1
+
     def test_no_owner_key_is_a_plain_concat(self, tmp_path):
         a, b = tmp_path / "a.csv", tmp_path / "b.csv"
         _write(a, self.H + "#1,A,1\n", 1000)

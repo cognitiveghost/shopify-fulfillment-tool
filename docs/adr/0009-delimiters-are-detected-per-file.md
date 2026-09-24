@@ -38,4 +38,8 @@ again, so an override set afterwards is permanent.
 - The merged file the app writes for a folder is comma-separated under Auto,
   and uses the override when there is one. It is never read with a character
   it was not written with.
+- Profiles live on the shared file server, so the first PC on this version
+  writes `"auto"` into them. An older build reads `"auto"` as a literal
+  delimiter and loads every file as one column. Update every warehouse PC
+  before any of them opens a client on this version.
 - The "Save as default" toast is gone: there is no default left to save.

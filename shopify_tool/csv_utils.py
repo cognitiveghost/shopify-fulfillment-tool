@@ -343,8 +343,8 @@ def merge_csv_files(
 ) -> tuple[pd.DataFrame, int]:
     """Merge a folder's CSVs into one frame under the owning-file rule.
 
-    Each key (`owner_key`'s value: an order number, or a SKU) is owned by the
-    newest file containing it -- modified time, ties by filename. Every row of
+    Each key (`owner_key`'s value: an order number, or a normalized SKU) is
+    owned by the newest file containing it -- modified time, ties by filename. Every row of
     the owning file is kept; the key's rows in other files are skipped. A row
     is never dropped for repeating another row in the same file: an order may
     carry one SKU on several real lines (CONTEXT.md: order line).
@@ -381,6 +381,14 @@ def merge_csv_files(
 
         if owner_key and owner_key in df.columns:
             keys = df[owner_key]
+            if kind == "orders":
+                # A blank order number continues the order above it, so a
+                # skipped order's later lines go with it.
+                keys = keys.ffill()
+            else:
+                # "501" and "501.0" are one SKU.
+                keys = keys.map(normalize_sku, na_action="ignore")
+                keys = keys.mask(keys == "")
             taken = keys.notna() & keys.isin(owned)
             skipped.update(keys[taken])
             df = df[~taken]

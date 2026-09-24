@@ -6,7 +6,6 @@ check_files_ready(). FileSlot (Task 3) now owns that fact as data.
 
 import os
 from pathlib import Path
-from unittest.mock import Mock
 
 import pandas as pd
 import pytest
@@ -141,12 +140,9 @@ def test_a_semicolon_orders_file_loads_under_auto_without_a_toast(
     monkeypatch.setattr(
         QFileDialog, "getOpenFileName", lambda *a, **k: (str(orders), "")
     )
-    toasts = Mock()
-    monkeypatch.setattr("gui.file_handler.toast", toasts, raising=False)
 
     main_window.file_handler.select_orders_file()
 
-    toasts.assert_not_called()
     assert main_window.orders_slot.is_valid is True
 
 

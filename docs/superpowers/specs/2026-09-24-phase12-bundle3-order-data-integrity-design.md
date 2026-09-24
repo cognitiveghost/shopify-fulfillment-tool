@@ -73,8 +73,10 @@ def merge_csv_files(
   frame's row order is the ranked file order.
 - Each file is read with `resolve_delimiter(path, delimiter_setting, kind)` (§4), so a folder may mix delimiters.
 - A key's rows in a non-owning file are dropped; the returned count is the
-  number of **distinct keys** dropped that way. Rows whose key is blank are
-  never dropped.
+  number of **distinct keys** dropped that way. A blank order number belongs
+  to the order above it in the same file (continuation lines go with their
+  order); blank keys at the top of a file are never dropped. Stock keys compare
+  as `normalize_sku` values.
 - `remove_duplicates` and the whole-row dedupe path are **deleted**. The
   whole-row path would drop two identical real lines, the same bug as F1, and no
   production caller uses it.
