@@ -324,6 +324,53 @@ class TestPrintPdfDriverModeRendersAtCorrectSize:
         assert rendered_size.height() > point_size.height()
 
 
+class TestFitRect:
+    def test_same_aspect_fills_the_paper(self):
+        from PySide6.QtCore import QRectF, QSizeF
+
+        r = pdf_printing._fit_rect(QSizeF(100, 150), QRectF(0, 0, 1000, 1500))
+        assert (r.x(), r.y(), r.width(), r.height()) == (0, 0, 1000, 1500)
+
+    def test_other_aspect_scales_uniformly_and_centres(self):
+        from PySide6.QtCore import QRectF, QSizeF
+
+        # A 100x150 label on square paper: height-bound, centred horizontally.
+        r = pdf_printing._fit_rect(QSizeF(100, 150), QRectF(0, 0, 1500, 1500))
+        assert r.height() == pytest.approx(1500)
+        assert r.width() == pytest.approx(1000)
+        assert r.x() == pytest.approx(250)
+        assert r.y() == pytest.approx(0)
+
+
+class TestPrintPdfDriverModeActualSize:
+    def test_label_fills_the_page_with_no_margin_shrink(self, tmp_path):
+        """Qt's default 10pt margins used to shrink a label to ~93%x95% and
+        offset it by a second margin (spec §3). A border 1mm inside the page
+        edge must print 1mm inside the page edge."""
+        import pypdfium2 as pdfium
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+
+        src_pdf = tmp_path / "border.pdf"
+        c = canvas.Canvas(str(src_pdf), pagesize=(100 * mm, 150 * mm))
+        c.setLineWidth(2)
+        c.rect(1 * mm, 1 * mm, 98 * mm, 148 * mm)
+        c.save()
+
+        out_pdf = tmp_path / "out.pdf"
+        assert pdf_printing._print_pdf_driver_mode(None, src_pdf, output_path=out_pdf)
+
+        image = (
+            pdfium.PdfDocument(str(out_pdf))[0].render(scale=2, grayscale=True).to_pil()
+        )
+        left, top, right, bottom = image.point(
+            lambda v: 255 if v < 128 else 0
+        ).getbbox()
+        w, h = image.size
+        assert left / w <= 0.02 and top / h <= 0.02
+        assert right / w >= 0.98 and bottom / h >= 0.98
+
+
 class TestPrintPdfDriverModeDefaultPrinter:
     def test_applies_stored_default_printer_name(self, monkeypatch, tmp_path):
         from reportlab.lib.units import mm
