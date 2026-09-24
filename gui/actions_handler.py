@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QFileDialog
 
 from gui.components import ConfirmDialog, show_error, toast
 from gui.components.commandbar import BarState
+from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
@@ -910,13 +911,11 @@ class ActionsHandler(QObject):
     def _order_mask(self, order_number, df=None):
         """Rows belonging to one order, in `df` or the analysis frame.
 
-        Order numbers arrive as int, float or str depending on the CSV, so
-        every comparison has to go through str + strip. One helper, so a
-        change to that rule cannot land in some call sites and not others.
+        See order_number_mask: the one matching rule for order numbers.
         """
         if df is None:
             df = self.mw.analysis_results_df
-        return df["Order_Number"].astype(str).str.strip() == str(order_number).strip()
+        return order_number_mask(df, [order_number])
 
     def _set_selection(self, order_numbers) -> None:
         """Act on exactly the orders the page counted, not on ambient state."""

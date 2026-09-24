@@ -106,3 +106,30 @@ def test_toggle_row_is_gone():
 
     assert not hasattr(SelectionHelper, "toggle_row")
     assert not hasattr(SelectionHelper, "is_row_checked")
+
+
+def _int_order_frame():
+    # A non-Shopify client whose order numbers are plain digits: pandas
+    # loads the column as int64, while the page always sends strings.
+    return pd.DataFrame(
+        {
+            "Order_Number": [10443, 10443, 10444],
+            "SKU": ["A", "B", "C"],
+            "Quantity": [1, 1, 1],
+        }
+    )
+
+
+def test_set_selected_orders_matches_int_order_numbers_sent_as_str():
+    helper = SelectionHelper(_FakeMainWindow(_int_order_frame()))
+    helper.set_selected_orders(["10443"])
+    assert helper.get_selected_source_rows() == [0, 1]
+
+
+def test_order_number_mask_strips_and_crosses_types():
+    from gui.selection_helper import order_number_mask
+
+    df = _int_order_frame()
+    assert order_number_mask(df, [" 10444 "]).tolist() == [False, False, True]
+    str_df = df.assign(Order_Number=df["Order_Number"].astype(str))
+    assert order_number_mask(str_df, [10443]).tolist() == [True, True, False]

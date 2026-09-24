@@ -8,6 +8,17 @@ operations.
 import pandas as pd
 
 
+def order_number_mask(df: pd.DataFrame, order_numbers) -> pd.Series:
+    """Rows of df whose Order_Number is one of order_numbers.
+
+    Order numbers arrive as int, float or str depending on the CSV and on
+    which tier sent them (the results page always sends str), so both sides
+    go through str + strip. The one matching rule for an order number.
+    """
+    wanted = {str(n).strip() for n in order_numbers}
+    return df["Order_Number"].astype(str).str.strip().isin(wanted)
+
+
 class SelectionHelper:
     """Holds the page's order selection for bulk operations.
 
@@ -102,7 +113,7 @@ class SelectionHelper:
         if df is None or df.empty or "Order_Number" not in df.columns:
             return
 
-        self.checked_rows = set(df.index[df["Order_Number"].isin(wanted)])
+        self.checked_rows = set(df.index[order_number_mask(df, wanted)])
 
     def clear_selection(self):
         """Uncheck all rows."""
