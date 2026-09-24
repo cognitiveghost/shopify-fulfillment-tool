@@ -17,6 +17,16 @@ def _make_courier_pdf(path, width_pt=288, height_pt=432, name="Acme Warehouse Co
     c.save()
 
 
+class TestExtractPostoneNumber:
+    def test_number_split_from_its_letter_by_a_line_break(self):
+        # Rotated label text (InPost) extracts as "P\n8732810087".
+        assert pdf_processor.extract_postone_number("uwagi P\n8732810087\n#1") == "P8732810087"
+
+    def test_unbroken_number_wins_over_a_split_one(self):
+        text = "R\n1111111111 then P2222222222"
+        assert pdf_processor.extract_postone_number(text) == "P2222222222"
+
+
 class TestCreateReferenceOverlaySignature:
     def test_order_number_parameter_removed(self):
         params = list(inspect.signature(pdf_processor.create_reference_overlay).parameters)
@@ -242,6 +252,38 @@ class TestProcessReferenceLabelsPikepdf:
         assert page.rotation == 0
         assert (float(page.mediabox.width), float(page.mediabox.height)) == (432, 288)
         assert "REF: REF-001" in page.extract_text()
+
+    @pytest.mark.parametrize("rotate", [90, 270, -90])
+    def test_rotated_label_fills_its_visual_page(self, qapp, tmp_path, rotate):
+        """Couriers write /Rotate -90 as often as 270. qpdf's add_overlay only
+        honours 0/90/180/270, so an unnormalized -90 left the label portrait,
+        shrunk into the middle of a landscape page."""
+        import pikepdf
+        from PySide6.QtCore import QSize
+        from PySide6.QtPdf import QPdfDocument
+
+        pdf_path = tmp_path / "courier.pdf"
+        c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))
+        c.rect(0, 0, 288, 432, fill=1)  # ink edge to edge
+        c.setFillColorRGB(1, 1, 1)
+        c.drawString(20, 400, "Acme Warehouse Co")
+        c.showPage()
+        c.save()
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+            pdf.pages[0].Rotate = rotate
+            pdf.save(pdf_path)
+
+        result = self._run(tmp_path, pdf_path)
+        assert result["matched"] == 1
+
+        doc = QPdfDocument()
+        doc.load(result["output_file"])
+        image = doc.render(0, QSize(432, 288))
+        # Content sits in the top 88%; scan well above the strip.
+        # Unpainted pixels render transparent, so count opaque dark ones.
+        row = [image.pixelColor(x, image.height() // 3) for x in range(image.width())]
+        dark = [x for x, px in enumerate(row) if px.alpha() > 128 and px.lightness() < 128]
+        assert dark and (max(dark) - min(dark)) / image.width() > 0.8
 
     def test_cropped_label_on_letter_sizes_from_crop(self, tmp_path):
         """A 4x6 label cropped out of a Letter sheet: the stamped page is the

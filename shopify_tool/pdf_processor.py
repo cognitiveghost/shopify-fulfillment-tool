@@ -259,7 +259,12 @@ def _stamp_reference(out: "pikepdf.Pdf", page: "pikepdf.Page", ref: str) -> None
     # from the label, not the sheet.
     box = page.trimbox
     width, height = float(box[2] - box[0]), float(box[3] - box[1])
-    if int(page.obj.get("/Rotate", 0)) % 180:
+    rotate = int(page.obj.get("/Rotate", 0)) % 360
+    if rotate:
+        # Couriers write -90 as often as 270; add_overlay only honours
+        # 90/180/270 and treats anything else as upright.
+        page.obj.Rotate = rotate
+    if rotate % 180:
         width, height = height, width
 
     # Keep the strip's Pdf referenced until add_overlay returns: a
@@ -464,7 +469,11 @@ def extract_postone_number(text: str) -> str | None:
     """
     try:
         match = re.search(r'[RP]\d{10}', text)
-        return match.group(0) if match else None
+        if match:
+            return match.group(0)
+        # Rotated label text (InPost) can extract as "P\n8732810087".
+        match = re.search(r'([RP])\s+(\d{10})', text)
+        return match.group(1) + match.group(2) if match else None
     except Exception:
         return None
 
