@@ -5,6 +5,7 @@ check_files_ready(). FileSlot (Task 3) now owns that fact as data.
 """
 
 import os
+from pathlib import Path
 from unittest.mock import Mock
 
 import pandas as pd
@@ -186,7 +187,8 @@ def test_the_merged_file_is_written_with_the_override(main_window, tmp_path):
         [str(f)], "orders", str(tmp_path)
     )
 
-    assert open(path, encoding="utf-8-sig").readline().count(";") == 4
+    header_line = Path(path).read_text(encoding="utf-8-sig").splitlines()[0]
+    assert header_line.count(";") == 4
     assert (rows, skipped) == (1, 0)
 
 

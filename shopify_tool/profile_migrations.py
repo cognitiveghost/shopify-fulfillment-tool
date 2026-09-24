@@ -10,6 +10,7 @@ import logging
 import os
 from datetime import datetime
 
+from shopify_tool.csv_utils import AUTO_DELIMITER
 from shopify_tool.tag_manager import DEFAULT_TAG_CATEGORIES
 
 logger = logging.getLogger(__name__)
@@ -387,3 +388,19 @@ def migrate_tag_category_labels_to_english(client_id: str, config: dict) -> bool
         logger.info(f"Relabeled tag categories to English for CLIENT_{client_id}")
 
     return changed
+
+
+def migrate_delimiters_to_auto(client_id: str, config: dict) -> bool:
+    """Move a profile's CSV delimiters to Auto, once (ADR 0009).
+
+    Stored delimiters were defaults nobody picked. After this runs the
+    marker stays set, so an override chosen later is never reset.
+    """
+    settings = config.setdefault("settings", {})
+    if settings.get("delimiter_auto_migrated"):
+        return False
+    settings["stock_csv_delimiter"] = AUTO_DELIMITER
+    settings["orders_csv_delimiter"] = AUTO_DELIMITER
+    settings["delimiter_auto_migrated"] = True
+    logger.info(f"Delimiters set to Auto for CLIENT_{client_id}")
+    return True

@@ -46,8 +46,8 @@ def test_general_page_writes_every_key_it_owns(qapp):
 def test_general_page_falls_back_to_defaults(qapp):
     page = GeneralPage({})
     assert page.collect()["settings"] == {
-        "stock_csv_delimiter": ";",
-        "orders_csv_delimiter": ",",
+        "stock_csv_delimiter": "auto",
+        "orders_csv_delimiter": "auto",
         "low_stock_threshold": 5,
         "repeat_detection_days": 1,
     }
@@ -56,3 +56,30 @@ def test_general_page_falls_back_to_defaults(qapp):
 def test_repeat_window_spinbox_is_not_full_bleed(qapp):
     page = GeneralPage({})
     assert page.repeat_days_input.maximumWidth() <= 120
+
+
+def test_auto_and_tab_round_trip(qapp):
+    settings = {
+        **sample_settings(),
+        "stock_csv_delimiter": "auto",
+        "orders_csv_delimiter": "\t",
+    }
+    expected = dict(settings)
+    assert GeneralPage(settings).collect() == {"settings": expected}
+
+
+def test_unknown_delimiter_survives_a_round_trip(qapp):
+    settings = {**sample_settings(), "orders_csv_delimiter": "::"}
+    expected = dict(settings)
+    assert GeneralPage(settings).collect() == {"settings": expected}
+
+
+def test_delimiters_are_offered_as_a_list(qapp):
+    page = GeneralPage({})
+    assert [page.orders_delimiter_combo.itemData(i) for i in range(5)] == [
+        "auto",
+        ",",
+        ";",
+        "\t",
+        "|",
+    ]
