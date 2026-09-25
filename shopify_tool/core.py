@@ -1489,13 +1489,17 @@ def create_packing_list_report(
             output_file = report_config["output_filename"]
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-        packing_lists.create_packing_list(
+        written = packing_lists.create_packing_list(
             analysis_df=analysis_df,
             output_file=output_file,
             report_name=report_name,
             filters=report_config.get("filters"),
             exclude_skus=report_config.get("exclude_skus"),  # Pass the new parameter
         )
+
+        if not written:
+            Path(output_file).unlink(missing_ok=True)
+            return False, f"No orders matched '{report_name}'; no packing list was written."
 
         # Verify file was actually created before updating session info
         if not os.path.exists(output_file):

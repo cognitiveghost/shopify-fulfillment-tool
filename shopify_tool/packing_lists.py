@@ -121,6 +121,9 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
         columns (list[str], optional): The columns to print, in order. None
             keeps the default layout. Columns not present in the data are
             dropped with a warning rather than raising.
+
+    Returns:
+        int: orders written; 0 means nothing matched and no file was written.
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -137,7 +140,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
 
         if filtered_orders.empty:
             logger.warning(f"Report '{report_name}': No orders found matching the criteria.")
-            return
+            return 0
 
         logger.info(f"Found {filtered_orders['Order_Number'].nunique()} orders for the report.")
 
@@ -325,6 +328,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
             worksheet.fit_to_pages(1, 0)  # Fit to 1 page wide
 
         logger.info(f"Report '{report_name}' created successfully.")
+        return int(sorted_list["Order_Number"].nunique())
 
     except Exception:
         logger.exception("ERROR while creating packing list")

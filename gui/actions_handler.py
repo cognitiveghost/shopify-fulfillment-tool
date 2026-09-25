@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 from PySide6.QtCore import QObject, Signal
@@ -14,6 +15,7 @@ from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
 from shopify_tool import (
+    barcode_processor,
     core,
     packing_lists,
     report_filters,
@@ -677,7 +679,6 @@ class ActionsHandler(QObject):
             session_path (Path): Current session directory
         """
         import json
-        from pathlib import Path
 
         report_name = report_config.get("name", "Unknown")
         self.log.info(f"Generating {report_type}: {report_name}")
@@ -729,13 +730,14 @@ class ActionsHandler(QObject):
             # Set by a "separate" packaging write-off, which saves a second
             # file the status message below has to name.
             packaging_file = None
+            removed_empty = False
 
             if report_type == "packing_lists":
                 self.log.info("Creating packing list using packing_lists module")
 
                 # Use the proper packing_lists module
                 # Pass UNFILTERED DataFrame - the module will apply filters itself
-                packing_lists.create_packing_list(
+                written = packing_lists.create_packing_list(
                     analysis_df=self.mw.analysis_results_df,
                     output_file=output_file,
                     report_name=report_name,
@@ -743,8 +745,11 @@ class ActionsHandler(QObject):
                     exclude_skus=report_config.get("exclude_skus"),
                     columns=report_config.get("columns"),
                 )
-
-                self.log.info(f"Packing list XLSX created: {output_file}")
+                # Label PDFs from before could label orders this list no
+                # longer holds (AUDIT-04-12)
+                barcode_processor.invalidate_label_pdfs(
+                    session_path, Path(base_filename).stem
+                )
 
                 # ========================================
                 # CREATE JSON COPY FOR PACKING TOOL
@@ -752,34 +757,34 @@ class ActionsHandler(QObject):
                 json_filename = base_filename.replace(".xlsx", ".json")
                 json_path = str(output_dir / json_filename)
 
-                try:
-                    # Apply filters to get data for JSON
-                    filtered_df = self._apply_filters(
-                        self.mw.analysis_results_df, filters
-                    )
+                if not written:
+                    # An empty list must not leave the last run's files
+                    # behind for the packers to pick up (AUDIT-04-3)
+                    Path(output_file).unlink(missing_ok=True)
+                    Path(json_path).unlink(missing_ok=True)
+                    removed_empty = True
+                else:
+                    self.log.info(f"Packing list XLSX created: {output_file}")
+                    try:
+                        filtered_df = self._apply_filters(
+                            self.mw.analysis_results_df, filters
+                        )
 
-                    # Same exclusion as the XLSX (AUDIT-04-4)
-                    json_df = report_filters.exclude_skus(
-                        filtered_df, report_config.get("exclude_skus")
-                    )
+                        # Same exclusion as the XLSX (AUDIT-04-4)
+                        json_df = report_filters.exclude_skus(
+                            filtered_df, report_config.get("exclude_skus")
+                        )
 
-                    if not json_df.empty:
                         analysis_json = self._create_analysis_json(json_df)
 
                         with open(json_path, "w", encoding="utf-8") as f:
                             json.dump(analysis_json, f, ensure_ascii=False, indent=2)
 
-                        self.log.info(
-                            f"Packing list JSON created (exclude_skus applied): {json_path}"
-                        )
-                    else:
-                        self.log.warning(
-                            "Skipping JSON creation - no data after filtering and exclude_skus"
-                        )
+                        self.log.info(f"Packing list JSON created: {json_path}")
 
-                except Exception:
-                    self.log.exception("Failed to create JSON")
-                    # Don't fail the whole report if JSON fails
+                    except Exception:
+                        self.log.exception("Failed to create JSON")
+                        # Don't fail the whole report if JSON fails
 
             elif report_type == "stock_exports":
                 self.log.info("Creating stock export using stock_export module")
@@ -805,13 +810,19 @@ class ActionsHandler(QObject):
             # SUCCESS MESSAGE - Status bar instead of blocking dialog
             # ========================================
             # Show brief status message instead of blocking dialog
-            saved = os.path.basename(output_file)
-            if packaging_file:
-                saved += f" + {os.path.basename(packaging_file)}"
-            self.mw.statusBar().showMessage(
-                f"Report saved: {saved}",
-                5000,  # 5 seconds
-            )
+            if removed_empty:
+                self.mw.statusBar().showMessage(
+                    f"No orders matched {report_name}; its old files were removed",
+                    5000,
+                )
+            else:
+                saved = os.path.basename(output_file)
+                if packaging_file:
+                    saved += f" + {os.path.basename(packaging_file)}"
+                self.mw.statusBar().showMessage(
+                    f"Report saved: {saved}",
+                    5000,  # 5 seconds
+                )
             self.log.info(f"Report generated: {output_file}")
 
             self.mw.log_activity("Report", f"Generated: {report_name}")
@@ -859,6 +870,14 @@ class ActionsHandler(QObject):
                     self.log.warning(f"Failed to update session statistics: {e}")
                     # Don't fail the report if statistics update fails
 
+        except PermissionError as e:
+            self.log.exception(f"Failed to generate report '{report_name}'")
+            locked = Path(e.filename).name if e.filename else "The file"
+            show_error(
+                self.mw,
+                f"{report_name!r} wasn't generated",
+                f"{locked} is open in another program. Close it, then generate again.",
+            )
         except Exception:
             self.log.exception(f"Failed to generate report '{report_name}'")
             show_error(

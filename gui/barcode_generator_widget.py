@@ -41,6 +41,7 @@ from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 from shared.theme import on_theme_changed
+from shopify_tool.barcode_processor import barcode_pdf_path, qr_pdf_path
 from shopify_tool.report_filters import fulfillable_only
 
 IDLE_STATUS = "Select a packing list to begin"
@@ -356,7 +357,7 @@ class BarcodeGeneratorWidget(QWidget):
         # Confirm generation
         order_count = self.filtered_orders_df["Order_Number"].nunique()
 
-        output_path = self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf"
+        output_path = barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
         if output_path.exists() and not ConfirmDialog.ask(
             self,
             title=f"Replace barcodes for {self.current_packing_list}?",
@@ -467,7 +468,7 @@ class BarcodeGeneratorWidget(QWidget):
         )
 
         self.last_barcode_pdf = (
-            self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf"
+            barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
             if pdf_generated
             else None
         )
@@ -479,7 +480,7 @@ class BarcodeGeneratorWidget(QWidget):
         )
 
         self.last_qr_pdf = (
-            self.barcodes_dir / f"{self.current_packing_list}_qr_labels.pdf"
+            qr_pdf_path(self.barcodes_dir, self.current_packing_list)
             if qr_pdf_generated
             else None
         )
@@ -508,11 +509,11 @@ class BarcodeGeneratorWidget(QWidget):
         if self.auto_open_pdf_checkbox.isChecked():
             if pdf_generated:
                 self._open_pdf(
-                    self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf"
+                    barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
                 )
             if qr_pdf_generated:
                 self._open_pdf(
-                    self.barcodes_dir / f"{self.current_packing_list}_qr_labels.pdf"
+                    qr_pdf_path(self.barcodes_dir, self.current_packing_list)
                 )
 
         # Emit signal
@@ -552,8 +553,7 @@ class BarcodeGeneratorWidget(QWidget):
         try:
             from shopify_tool.barcode_processor import generate_code128_labels_pdf
 
-            pdf_filename = f"{self.current_packing_list}_barcodes.pdf"
-            pdf_path = self.barcodes_dir / pdf_filename
+            pdf_path = barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
 
             generate_code128_labels_pdf(results, pdf_path)
 
@@ -572,8 +572,7 @@ class BarcodeGeneratorWidget(QWidget):
         try:
             from shopify_tool.barcode_processor import generate_qr_labels_pdf
 
-            pdf_filename = f"{self.current_packing_list}_qr_labels.pdf"
-            pdf_path = self.barcodes_dir / pdf_filename
+            pdf_path = qr_pdf_path(self.barcodes_dir, self.current_packing_list)
 
             generate_qr_labels_pdf(results, pdf_path)
 

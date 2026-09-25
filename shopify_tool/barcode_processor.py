@@ -41,6 +41,27 @@ class BarcodeGenerationError(BarcodeProcessorError):
     """Error during barcode generation."""
 
 
+def barcode_pdf_path(barcodes_dir: Path, list_stem: str) -> Path:
+    return Path(barcodes_dir) / f"{list_stem}_barcodes.pdf"
+
+
+def qr_pdf_path(barcodes_dir: Path, list_stem: str) -> Path:
+    return Path(barcodes_dir) / f"{list_stem}_qr_labels.pdf"
+
+
+def invalidate_label_pdfs(session_path, list_stem: str) -> list[Path]:
+    """Deletes a packing list's barcode and QR label PDFs. Called whenever
+    the list is regenerated: a PDF left from before could label orders the
+    new list no longer holds (AUDIT-04-12)."""
+    barcodes_dir = Path(session_path) / "barcodes" / list_stem
+    removed = []
+    for path in (barcode_pdf_path(barcodes_dir, list_stem), qr_pdf_path(barcodes_dir, list_stem)):
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    return removed
+
+
 # === UTILITY FUNCTIONS ===
 
 def sanitize_order_number(order_number: str) -> str:

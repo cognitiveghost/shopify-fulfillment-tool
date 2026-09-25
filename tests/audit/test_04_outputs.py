@@ -187,7 +187,6 @@ def test_stock_export_write_failure_is_not_silent(tmp_path, monkeypatch):
         create_stock_export(frame([("#1", "A", 1, FF)]), str(tmp_path / "e.xls"))
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-3: an empty packing list leaves the previous XLSX/JSON in place")
 def test_regenerating_an_empty_packing_list_replaces_the_old_files(tmp_path):
     df = frame([("#1", "A", 1, FF), ("#2", "B", 2, FF)])
     handler = handler_for(df)
