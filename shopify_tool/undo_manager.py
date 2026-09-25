@@ -16,6 +16,8 @@ from typing import Any
 
 import pandas as pd
 
+from shopify_tool.stock_ledger import with_stock_left
+
 
 class UndoManager:
     """Manages undo history for DataFrame operations.
@@ -84,6 +86,7 @@ class UndoManager:
                 "description": description,
                 "params": params,
                 "affected_rows_before": affected_rows_serialized,
+                "row_positions": [int(i) for i in affected_rows_before.index],
                 "stats_before": stats_before,
                 # Context tracking
                 "client_id": current_client_id,
@@ -168,6 +171,7 @@ class UndoManager:
 
             # Convert serialized rows back to DataFrame
             affected_rows_before = pd.DataFrame(affected_rows_serialized)
+            affected_rows_before.attrs["row_positions"] = operation.get("row_positions")
 
             # Perform undo based on operation type
             if operation_type == "toggle_status":
@@ -199,6 +203,10 @@ class UndoManager:
                 return False, f"Unknown operation type: {operation_type}"
 
             if success:
+                self.main_window.analysis_results_df = with_stock_left(
+                    self.main_window.analysis_results_df
+                )
+
                 # Move position back
                 self.current_position -= 1
 
@@ -217,6 +225,42 @@ class UndoManager:
             self.log.exception("Undo failed")
             return False, f"Undo failed: {e!s}"
 
+    def _reinsert(self, rows: pd.DataFrame) -> None:
+        """Put removed rows back where they were (AUDIT-01-11).
+
+        Undo is last-in-first-out, so the frame is exactly as the removal left
+        it and the recorded positions still hold. Records from older builds
+        have no positions: those rows are appended, as before.
+        """
+        current = self.main_window.analysis_results_df
+        positions = rows.attrs.get("row_positions")
+        total = len(current) + len(rows)
+        if not positions or len(positions) != len(rows) or max(positions) >= total:
+            self.main_window.analysis_results_df = pd.concat([current, rows], ignore_index=True)
+            return
+        taken = set(positions)
+        rest = [p for p in range(total) if p not in taken]
+        current = current.copy()
+        current.index = rest
+        rows = rows.copy()
+        rows.index = positions
+        self.main_window.analysis_results_df = (
+            pd.concat([current, rows]).sort_index().reset_index(drop=True)
+        )
+
+    def _restore_statuses_by_position(self, rows: pd.DataFrame) -> bool:
+        """Put each line's own status back. False when positions can't be trusted."""
+        df = self.main_window.analysis_results_df
+        positions = rows.attrs.get("row_positions")
+        if not positions or len(positions) != len(rows) or max(positions) >= len(df):
+            return False
+        here = df["Order_Number"].iloc[positions].astype(str).str.strip().tolist()
+        saved = rows["Order_Number"].astype(str).str.strip().tolist()
+        if here != saved:
+            return False
+        df.loc[df.index[positions], "Order_Fulfillment_Status"] = rows["Order_Fulfillment_Status"].values
+        return True
+
     def _undo_toggle_status(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo toggle status operation.
 
@@ -228,6 +272,9 @@ class UndoManager:
             True if successful
         """
         try:
+            if self._restore_statuses_by_position(affected_rows_before):
+                return True
+
             order_number = params["order_number"]
 
             # Get current DataFrame
@@ -340,11 +387,7 @@ class UndoManager:
             True if successful
         """
         try:
-            # Restore the removed row by concatenating it back
-            self.main_window.analysis_results_df = pd.concat(
-                [self.main_window.analysis_results_df, affected_rows_before],
-                ignore_index=True
-            )
+            self._reinsert(affected_rows_before)
 
             order_number = params.get("order_number", "unknown")
             sku = params.get("sku", "unknown")
@@ -367,11 +410,7 @@ class UndoManager:
             True if successful
         """
         try:
-            # Restore all removed rows by concatenating them back
-            self.main_window.analysis_results_df = pd.concat(
-                [self.main_window.analysis_results_df, affected_rows_before],
-                ignore_index=True
-            )
+            self._reinsert(affected_rows_before)
 
             order_number = params.get("order_number", "unknown")
             self.log.info(f"Restored order {order_number} with {len(affected_rows_before)} items")
@@ -502,6 +541,9 @@ class UndoManager:
                 self.log.warning("No affected rows to restore")
                 return False
 
+            if self._restore_statuses_by_position(affected_rows_before):
+                return True
+
             # affected_rows_before round-trips through JSON (to_dict('records') /
             # pd.DataFrame(...)) between record and undo, which discards its original
             # pandas index and replaces it with a fresh 0..n-1 range. That range does
@@ -620,11 +662,7 @@ class UndoManager:
                 self.log.warning("No affected rows to restore")
                 return False
 
-            # Restore removed rows
-            self.main_window.analysis_results_df = pd.concat(
-                [self.main_window.analysis_results_df, affected_rows_before],
-                ignore_index=True
-            )
+            self._reinsert(affected_rows_before)
 
             sku = params.get("sku", "unknown")
             removed_count = params.get("removed_count", len(affected_rows_before))
@@ -651,11 +689,7 @@ class UndoManager:
                 self.log.warning("No affected rows to restore")
                 return False
 
-            # Restore removed rows
-            self.main_window.analysis_results_df = pd.concat(
-                [self.main_window.analysis_results_df, affected_rows_before],
-                ignore_index=True
-            )
+            self._reinsert(affected_rows_before)
 
             removed_orders = params.get("removed_orders", 0)
             removed_items = params.get("removed_items", len(affected_rows_before))
@@ -682,11 +716,7 @@ class UndoManager:
                 self.log.warning("No affected rows to restore")
                 return False
 
-            # Restore deleted rows
-            self.main_window.analysis_results_df = pd.concat(
-                [self.main_window.analysis_results_df, affected_rows_before],
-                ignore_index=True
-            )
+            self._reinsert(affected_rows_before)
 
             deleted_orders = params.get("deleted_orders", 0)
             deleted_items = params.get("deleted_items", len(affected_rows_before))

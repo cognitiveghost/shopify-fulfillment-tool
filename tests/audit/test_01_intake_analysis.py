@@ -107,10 +107,6 @@ def test_add_product_to_fulfillable_order_keeps_it_fulfillable():
     assert final_stock(out, "B") == 9
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-2: undoing a status toggle restores the status but not Stock left",
-)
 def test_undo_of_toggle_restores_stock_left():
     df, *_ = analyse(stock([("A", 5)]), orders([("#1", "A", 2)]))
     mw = window(df)
@@ -196,10 +192,6 @@ def test_set_import_keeps_sku_text(tmp_path):
     assert import_sets_from_csv(str(p)) == {"0100": [{"sku": "0042", "quantity": 2}]}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-11: undoing a removal puts the rows back at the end, not where they were",
-)
 def test_undo_of_removed_order_restores_row_order():
     df, *_ = analyse(
         stock([("A", 9)]), orders([("#1", "A", 1), ("#2", "A", 1), ("#3", "A", 1)])
