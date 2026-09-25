@@ -343,10 +343,6 @@ def test_status_derivation_matches_the_production_shapes():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-7: a session comment that fails to save is dropped without telling anyone",
-)
 def test_a_comment_that_fails_to_save_is_reported(qapp, monkeypatch):
     manager = Mock()
     manager.update_session_info.side_effect = OSError("share went away")
