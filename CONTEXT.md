@@ -288,6 +288,14 @@ the four stored statuses plus packing progress and idle time. Distinguished
 from **stored status**, the four values `SessionManager.VALID_STATUSES`
 accepts and a person can set.
 
+**Session state** — the session's analysis as saved in
+`analysis/current_state.pkl`. Every edit rewrites it whole, from one PC's copy.
+Not **stored status**, which lives in `session_info.json`.
+
+**Stale** — this PC's copy of the session state is older than the one on the
+server, because another PC saved it after this PC loaded or last saved it. A
+stale PC's saves and exports are refused until it reopens the session.
+
 ## Printing
 
 **Print mode** — how a label PDF reaches a printer: through the operating

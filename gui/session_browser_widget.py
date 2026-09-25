@@ -938,8 +938,7 @@ class SessionBrowserWidget(QWidget):
 
         except Exception:
             logger.exception("Failed to update comments")
-            # Don't show error dialog for comments (less critical)
-            # Just log the error
+            show_error(self, "The comment wasn't saved", "Details are in Logs.")
 
     def showEvent(self, event):
         """Refresh only if something changed since the last load -- avoids

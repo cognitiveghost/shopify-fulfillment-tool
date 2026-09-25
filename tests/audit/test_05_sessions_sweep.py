@@ -71,10 +71,15 @@ def _pc(session_path, df, session_manager=None):
     )
 
 
-def _reopen(session_path):
+def _open_on_a_pc(session_path):
+    """One PC opening the session: the loaded namespace, stamp included."""
     pc = _pc(session_path, None)
     assert MainWindow._load_session_analysis(pc, session_path)
-    return pc.analysis_results_df
+    return pc
+
+
+def _reopen(session_path):
+    return _open_on_a_pc(session_path).analysis_results_df
 
 
 # --------------------------------------------------------------------------
@@ -82,10 +87,6 @@ def _reopen(session_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-1: create_session rmtree()s a same-named session another PC just created",
-)
 def test_a_session_name_another_pc_just_took_is_never_deleted(sessions, monkeypatch):
     # PC A created today's session a moment ago and copied its inputs in.
     other = sessions.create_session("M")
@@ -138,10 +139,6 @@ def _session_with_analysis(win, df):
     return path
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-2: opening a session with no analysis keeps the previous session's orders",
-)
 def test_opening_a_session_without_analysis_drops_the_previous_orders(main_window):
     first = _session_with_analysis(main_window, _orders("Fulfillable", "Fulfillable"))
     main_window.load_existing_session(first)
@@ -156,10 +153,6 @@ def test_opening_a_session_without_analysis_drops_the_previous_orders(main_windo
     assert main_window.analysis_results_df is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-2: New session keeps the previous session's orders loaded and exportable",
-)
 def test_a_new_session_starts_without_the_previous_orders(main_window):
     first = _session_with_analysis(main_window, _orders("Fulfillable"))
     main_window.load_existing_session(first)
@@ -189,16 +182,14 @@ def test_opening_a_session_writes_nothing_into_it(main_window):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-3: a second PC's save overwrites the first PC's edits in the same session",
-)
-def test_a_hold_made_on_one_pc_survives_a_save_from_another(sessions):
+def test_a_hold_made_on_one_pc_survives_a_save_from_another(sessions, monkeypatch):
+    told = []
+    monkeypatch.setattr(main_window_module, "show_error", lambda *a, **k: told.append(a))
     path = sessions.create_session("M")
     MainWindow.save_session_state(_pc(path, _orders("Fulfillable", "Fulfillable")))
 
-    pc_a = _pc(path, _reopen(path))
-    pc_b = _pc(path, _reopen(path))
+    pc_a = _open_on_a_pc(path)
+    pc_b = _open_on_a_pc(path)
 
     pc_a.analysis_results_df.loc[0, "Order_Fulfillment_Status"] = "Not Fulfillable"
     MainWindow.save_session_state(pc_a)  # PC A holds #1001
@@ -207,6 +198,7 @@ def test_a_hold_made_on_one_pc_survives_a_save_from_another(sessions):
 
     saved = _reopen(path).set_index("Order_Number")["Order_Fulfillment_Status"]
     assert saved["#1001"] == "Not Fulfillable"
+    assert told and told[-1][1] == "Another PC changed this session"
 
 
 def test_one_pc_reopening_its_session_gets_its_last_save(sessions):
@@ -227,10 +219,6 @@ def test_one_pc_reopening_its_session_gets_its_last_save(sessions):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-4: a failed session_info.json write leaves it torn and the session unreadable",
-)
 def test_a_failed_session_info_write_keeps_the_old_file(sessions):
     path = sessions.create_session("M")
     # object() stands in for any failure after the first byte is written: a
@@ -275,10 +263,6 @@ def test_packing_tools_lock_excludes_our_session_info_writes(sessions):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-5: save_session_state swallows a failed save; nobody is told the edit is lost",
-)
 def test_a_failed_save_of_an_edit_reaches_the_person(sessions, monkeypatch):
     path = sessions.create_session("M")
     told = []
@@ -303,10 +287,6 @@ def test_a_failed_save_of_an_edit_reaches_the_person(sessions, monkeypatch):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-6: Blocked column keeps the analysis-time count after statuses are edited",
-)
 def test_blocked_count_follows_edits(sessions):
     path = sessions.create_session("M")
     sessions.update_session_info(
@@ -363,10 +343,6 @@ def test_status_derivation_matches_the_production_shapes():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-7: a session comment that fails to save is dropped without telling anyone",
-)
 def test_a_comment_that_fails_to_save_is_reported(qapp, monkeypatch):
     manager = Mock()
     manager.update_session_info.side_effect = OSError("share went away")
@@ -384,10 +360,6 @@ def test_a_comment_that_fails_to_save_is_reported(qapp, monkeypatch):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-8: a failed atomic_write_json re-closes a closed fd and reports EBADF instead",
-)
 def test_atomic_write_reports_the_real_error(tmp_path):
     with pytest.raises(TypeError):
         atomic_write_json(tmp_path / "x.json", {"a": object()}, retries=1)

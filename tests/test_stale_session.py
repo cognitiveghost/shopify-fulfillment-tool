@@ -1,0 +1,206 @@
+"""The stamp's life cycle on a real MainWindow (ADR 0011)."""
+
+import pandas as pd
+import pytest
+from PySide6.QtWidgets import QApplication
+
+import gui.actions_handler as actions_module
+import gui.main_window_pyside as main_window_module
+import gui.session_browser_widget as browser_module
+from gui.main_window_pyside import MainWindow
+from shopify_tool import session_state
+
+
+@pytest.fixture
+def main_window(tmp_path, monkeypatch, qapp):
+    monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
+    monkeypatch.setattr(browser_module.SessionBrowserWidget, "USE_ASYNC", False)
+    win = MainWindow()
+    win.show()
+    QApplication.processEvents()
+    win.profile_manager.create_client_profile("acme", "Client Acme")
+    win.current_client_id = "acme"
+    win.load_client_config("acme")
+    yield win
+    win.close()
+
+
+@pytest.fixture
+def told(monkeypatch):
+    got = []
+    record = lambda *a, **k: got.append(a[1])  # headline only
+    monkeypatch.setattr(main_window_module, "show_error", record)
+    monkeypatch.setattr(actions_module, "show_error", record)
+    return got
+
+
+def _orders(*statuses):
+    return pd.DataFrame(
+        {
+            "Order_Number": [f"#{1001 + i}" for i in range(len(statuses))],
+            "SKU": [f"SKU-{i}" for i in range(len(statuses))],
+            "Quantity": [1] * len(statuses),
+            "Stock": [5] * len(statuses),
+            "Order_Fulfillment_Status": list(statuses),
+        }
+    )
+
+
+def _open_with_state(win, df):
+    path = win.session_manager.create_session("acme")
+    session_state.save_state(path, df, None)
+    win.load_existing_session(path)
+    return path
+
+
+def _another_pc_saves(path, df):
+    session_state.save_state(path, df, session_state.state_stamp(path))
+
+
+def test_an_edit_after_analysis_saves(main_window, told):
+    path = main_window.session_manager.create_session("acme")
+    main_window.session_path = path
+    df = _orders("Fulfillable", "Fulfillable")
+    session_state.save_state(path, df, None)  # what core.run_full_analysis writes
+    main_window.actions_handler.on_analysis_complete((True, "report.xlsx", df, {}))
+
+    main_window.analysis_results_df.loc[0, "Order_Fulfillment_Status"] = "Not Fulfillable"
+    main_window.save_session_state()
+
+    assert told == []
+    assert main_window._state_stamp == session_state.state_stamp(path)
+
+
+def test_two_edits_in_a_row_both_save(main_window, told):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    for i in (0, 1):
+        main_window.analysis_results_df.loc[i, "Order_Fulfillment_Status"] = "Not Fulfillable"
+        main_window.save_session_state()
+    assert told == []
+    saved = pd.read_pickle(main_window.session_manager.get_analysis_dir(path) / "current_state.pkl")
+    assert saved["Order_Fulfillment_Status"].tolist() == ["Not Fulfillable"] * 2
+
+
+def test_a_save_after_another_pc_saved_is_refused(main_window, told):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+
+    main_window.analysis_results_df.loc[1, "Order_Fulfillment_Status"] = "Not Fulfillable"
+    main_window.save_session_state()
+
+    assert told == ["Another PC changed this session"]
+
+
+def test_generate_reports_is_refused_when_stale(main_window, told, monkeypatch):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+    loaded = []
+    # Stands in for everything after the check; returning None also stops a
+    # regression from opening the modal dialog and hanging the test.
+    monkeypatch.setattr(
+        main_window.profile_manager, "load_shopify_config", lambda *a: loaded.append(a)
+    )
+
+    main_window.actions_handler.open_generate_reports_dialog()
+
+    assert told == ["Another PC changed this session"]
+    assert loaded == []
+
+
+def test_export_selection_is_refused_when_stale(main_window, told, monkeypatch):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+    asked = []
+    monkeypatch.setattr(
+        actions_module.QFileDialog,
+        "getSaveFileName",
+        lambda *a, **k: asked.append(a) or ("", ""),
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == ["Another PC changed this session"]
+    assert asked == []
+
+
+def test_an_export_that_cannot_check_is_refused(main_window, told, monkeypatch):
+    _open_with_state(main_window, _orders("Fulfillable"))
+
+    def unreachable(_path):
+        raise OSError("The network path was not found")
+
+    monkeypatch.setattr(actions_module.session_state, "state_stamp", unreachable)
+    monkeypatch.setattr(
+        actions_module.QFileDialog, "getSaveFileName", lambda *a, **k: ("", "")
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == ["The session couldn't be checked"]
+
+
+def test_a_fresh_session_exports(main_window, told, monkeypatch):
+    _open_with_state(main_window, _orders("Fulfillable"))
+    asked = []
+    monkeypatch.setattr(
+        actions_module.QFileDialog,
+        "getSaveFileName",
+        lambda *a, **k: asked.append(a) or ("", ""),
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == [] and len(asked) == 1
+
+
+def test_a_failed_new_session_keeps_the_open_one(main_window, told, monkeypatch):
+    from shopify_tool.session_manager import SessionManagerError
+
+    path = _open_with_state(main_window, _orders("Fulfillable"))
+
+    def refuse(_client):
+        raise SessionManagerError("share is read-only")
+
+    monkeypatch.setattr(main_window.session_manager, "create_session", refuse)
+    main_window.actions_handler.create_new_session()
+
+    assert main_window.session_path == path
+    assert main_window.analysis_results_df is not None
+
+
+def test_a_hold_made_while_the_save_dialog_is_open_is_refused(
+    main_window, told, monkeypatch, tmp_path
+):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    out = tmp_path / "selection.csv"
+
+    def operator_is_choosing_a_file(*_a, **_k):
+        _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+        return str(out), ""
+
+    monkeypatch.setattr(
+        actions_module.QFileDialog, "getSaveFileName", operator_is_choosing_a_file
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == ["Another PC changed this session"]
+    assert not out.exists()
+
+
+def test_a_hold_made_while_the_reports_dialog_is_open_is_refused(
+    main_window, told, monkeypatch
+):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+    generated = []
+    monkeypatch.setattr(
+        main_window.actions_handler,
+        "_generate_single_report",
+        lambda *a: generated.append(a),
+    )
+
+    main_window.actions_handler._generate_reports([{"report_type": "packing"}], path)
+
+    assert told == ["Another PC changed this session"]
+    assert generated == []

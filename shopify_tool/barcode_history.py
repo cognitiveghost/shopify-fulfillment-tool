@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from shared.atomic_write import atomic_write_json
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,8 +56,7 @@ class BarcodeHistory:
             data = self.data
 
         try:
-            with open(self.history_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.history_file, data, indent=2)
 
             logger.debug(f"Saved history: {len(data.get('generated_barcodes', []))} entries")
 

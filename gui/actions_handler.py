@@ -12,7 +12,8 @@ from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
-from shopify_tool import core, packing_lists, stock_export, stock_ledger
+from shared.atomic_write import atomic_write_json
+from shopify_tool import core, packing_lists, session_state, stock_export, stock_ledger
 from shopify_tool.analysis import toggle_order_fulfillment
 from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
@@ -86,6 +87,8 @@ class ActionsHandler(QObject):
             finally:
                 progress.close()
 
+            # Only now: a failed create keeps the open session as it was.
+            self.mw._reset_session_state()
             self.mw.session_path = session_path
             self.mw.command_bar.set_state(BarState.SESSION)
             self.mw.ui_manager.update_session_chips()
@@ -201,6 +204,15 @@ class ActionsHandler(QObject):
         if success:
             self.mw.analysis_results_df = df
             self.mw.analysis_stats = stats
+            # run_full_analysis just rewrote current_state.pkl; without this
+            # the first edit after every analysis is refused as stale.
+            if self.mw.session_path:
+                try:
+                    self.mw._state_stamp = session_state.state_stamp(self.mw.session_path)
+                except OSError:
+                    # No stamp makes the next save refuse: the safe direction.
+                    self.log.exception("Could not stamp the session state")
+                    self.mw._state_stamp = None
             self.data_changed.emit()
             self.mw.log_activity(
                 "Analysis", f"Analysis complete. Report saved to: {result_msg}"
@@ -454,6 +466,32 @@ class ActionsHandler(QObject):
         dialog.categories_updated.connect(on_categories_updated)
         dialog.exec()
 
+    def _refuse_stale_export(self) -> bool:
+        """True, after telling the operator, when this PC's copy is stale.
+
+        An export ships what is on screen, so a PC that loaded the session
+        before another PC held an order would ship it (ADR 0011). Fails safe:
+        a check that can't reach the server refuses too.
+        """
+        try:
+            stale = session_state.is_stale(self.mw.session_path, self.mw._state_stamp)
+        except OSError:
+            self.log.exception("Could not check the session state before exporting")
+            show_error(
+                self.mw,
+                "The session couldn't be checked",
+                "Check the connection to the server, then export again.",
+            )
+            return True
+        if stale:
+            show_error(
+                self.mw,
+                "Another PC changed this session",
+                "Nothing was exported. Reopen the session from Sessions to load "
+                "their changes, then export again.",
+            )
+        return stale
+
     def open_generate_reports_dialog(self):
         """Opens the multi-select dialog for generating packing lists and
         stock exports in one pass."""
@@ -479,6 +517,9 @@ class ActionsHandler(QObject):
             self.log.warning(
                 "open_generate_reports_dialog called with no active session"
             )
+            return
+
+        if self._refuse_stale_export():
             return
 
         # FIX: Reload fresh config before opening dialog
@@ -535,6 +576,9 @@ class ActionsHandler(QObject):
         One report failing must not cost the user the others -- that is the
         whole point of generating them in one pass.
         """
+        # Again here: another PC may have held an order while the dialog was open.
+        if self._refuse_stale_export():
+            return
         failures = []
         for report_config in batch:
             report_type = report_config.get("report_type")
@@ -1407,8 +1451,7 @@ class ActionsHandler(QObject):
 
         # Save back
         try:
-            with open(additions_file, "w", encoding="utf-8") as f:
-                json.dump(additions, f, indent=2, ensure_ascii=False)
+            atomic_write_json(additions_file, additions, indent=2)
             self.log.info(f"Saved manual addition to {additions_file}")
         except Exception:
             self.log.exception("Failed to save manual additions")
@@ -1839,6 +1882,9 @@ class ActionsHandler(QObject):
         if selected_df.empty:
             return
 
+        if self.mw.session_path and self._refuse_stale_export():
+            return
+
         orders_count, _items_count = self.mw.selection_helper.get_selection_summary()
 
         if format_type == "xlsx":
@@ -1859,6 +1905,9 @@ class ActionsHandler(QObject):
             self.mw, "Export Selected Orders", default_path, file_filter
         )
         if not file_path:
+            return
+        # Again here: another PC may have held an order while the dialog was open.
+        if self.mw.session_path and self._refuse_stale_export():
             return
 
         try:

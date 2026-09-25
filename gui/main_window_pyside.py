@@ -24,6 +24,8 @@ from gui.results_bridge import normalize_column_settings
 from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
 from gui.worker import Worker
+from shared.atomic_write import atomic_write_json
+from shopify_tool import session_state
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
@@ -88,6 +90,8 @@ class MainWindow(QMainWindow):
         self.stock_file_path = None
         self.analysis_results_df = None
         self.analysis_stats = None
+        # current_state.pkl as this PC last loaded or saved it (ADR 0011).
+        self._state_stamp = None
         self.threadpool = QThreadPool()
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
         self._analysis_running = False  # Guard against duplicate analysis runs
@@ -211,18 +215,13 @@ class MainWindow(QMainWindow):
                 )
 
                 # Reset analysis data when switching clients
-                self.analysis_results_df = None
-                self.analysis_stats = None
+                self._reset_session_state()
                 self.session_path = None
                 self.command_bar.set_state(BarState.NO_SESSION)
                 self.ui_manager._refresh_setup_panel()
                 self.setup_stack.setCurrentIndex(
                     1 if self.is_connected() and self.current_client_id else 0
                 )
-                # Clear undo history when switching clients
-                if hasattr(self, "undo_manager"):
-                    self.undo_manager.reset_for_session()
-                self._update_all_views()
 
                 # Restore inventory memory checkbox state from config
                 if hasattr(self, "inventory_memory_checkbox"):
@@ -611,16 +610,9 @@ class MainWindow(QMainWindow):
             self.load_client_config(client_id)
             self.results_bridge.set_column_settings(column_settings)
 
-            # Clear currently loaded files (they're for different client)
-            self.orders_file_path = None
-            self.stock_file_path = None
-            self.orders_slot.clear()
-            self.stock_slot.clear()
-
-            # Clear session
+            # load_client_config resets too, but only when the config loads.
+            self._reset_session_state()
             self.session_path = None
-            if hasattr(self, "undo_manager"):
-                self.undo_manager.reset_for_session()
             self.update_session_info_label()
 
             # Update session browser to show this client's sessions
@@ -714,7 +706,8 @@ class MainWindow(QMainWindow):
         Only saves if session exists and analysis data is present.
 
         This method is called after every DataFrame modification to ensure
-        state persistence across session reloads.
+        state persistence across session reloads. A save another PC has made
+        stale is refused, and a failed one is reported (ADR 0011).
         """
         from pathlib import Path
 
@@ -728,36 +721,49 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            session_path = Path(self.session_path)
-            analysis_dir = session_path / "analysis"
-
-            # Ensure analysis directory exists
-            analysis_dir.mkdir(parents=True, exist_ok=True)
-
-            # Define file paths
-            pkl_path = analysis_dir / "current_state.pkl"
-            xlsx_path = analysis_dir / "current_state.xlsx"
-            stats_path = analysis_dir / "analysis_stats.json"
-
-            # Save DataFrame to pickle (fast, primary format)
-            logger.info(f"Saving session state to {pkl_path}")
-            self.analysis_results_df.to_pickle(pkl_path)
-
-            # Save DataFrame to Excel (backup, human-readable)
-            logger.info(f"Saving session state backup to {xlsx_path}")
-            self.analysis_results_df.to_excel(xlsx_path, index=False)
-
-            # Save statistics to JSON
-            if self.analysis_stats:
-                logger.info(f"Saving statistics to {stats_path}")
-                with open(stats_path, "w", encoding="utf-8") as f:
-                    json.dump(self.analysis_stats, f, indent=2, ensure_ascii=False)
-
-            logger.info("Session state saved successfully")
-
+            self._state_stamp = session_state.save_state(
+                self.session_path,
+                self.analysis_results_df,
+                getattr(self, "_state_stamp", None),
+            )
+        except session_state.StaleSessionError:
+            logger.warning(f"Refused a stale save to {self.session_path}")
+            show_error(
+                self,
+                "Another PC changed this session",
+                "Your change wasn't saved. Reopen the session from Sessions to "
+                "load their changes, then make it again.",
+            )
+            return
         except Exception:
-            # Don't block UI if save fails - just log the error
             logger.exception("Failed to save session state")
+            show_error(
+                self,
+                "Your last change wasn't saved",
+                "Check the connection to the server. Your next change saves "
+                "everything on screen. Details are in Logs.",
+            )
+            return
+
+        # current_state.pkl above is the state; these only mirror it, so a
+        # failure here is logged, not shown.
+        analysis_dir = Path(self.session_path) / "analysis"
+        try:
+            self.analysis_results_df.to_excel(analysis_dir / "current_state.xlsx", index=False)
+            if self.analysis_stats:
+                atomic_write_json(analysis_dir / "analysis_stats.json", self.analysis_stats)
+        except Exception:
+            logger.exception("Failed to write the session state backups")
+
+        # The browser's Blocked column reads these counts (AUDIT-05-6).
+        session_manager = getattr(self, "session_manager", None)
+        if session_manager is not None:
+            try:
+                session_manager.update_session_info(
+                    self.session_path, session_state.order_counts(self.analysis_results_df)
+                )
+            except Exception:
+                logger.exception("Failed to update the session's order counts")
 
     def _load_session_analysis(self, session_path):
         """Load analysis data from session directory.
@@ -778,6 +784,10 @@ class MainWindow(QMainWindow):
         try:
             session_path = Path(session_path)
             analysis_dir = session_path / "analysis"
+
+            # Before the read: a write landing between the two makes the next
+            # save refuse needlessly, never overwrite (ADR 0011).
+            self._state_stamp = session_state.state_stamp(session_path)
 
             # Priority 1: Try loading from current_state.pkl
             pkl_path = analysis_dir / "current_state.pkl"
@@ -907,6 +917,25 @@ class MainWindow(QMainWindow):
             self.file_handler.validate_file(kind)
         self.file_handler.check_files_ready()
 
+    def _reset_session_state(self):
+        """Forget the open session's orders, inputs, undo history and stamp.
+
+        Every way into a session calls this first (AUDIT-05-2); without it the
+        previous session's orders stayed loaded and exportable, and the next
+        edit saved them into the new session. Leaves session_path to the
+        caller.
+        """
+        self.analysis_results_df = None
+        self.analysis_stats = None
+        self._state_stamp = None
+        self.orders_file_path = None
+        self.stock_file_path = None
+        self.orders_slot.clear()
+        self.stock_slot.clear()
+        if hasattr(self, "undo_manager"):
+            self.undo_manager.reset_for_session()
+        self._update_all_views()
+
     def load_existing_session(self, session_path: str):
         """Load data from an existing session.
 
@@ -915,6 +944,7 @@ class MainWindow(QMainWindow):
         """
 
         try:
+            self._reset_session_state()
             # Set as current session
             self.session_path = session_path
             session_name = os.path.basename(session_path)
