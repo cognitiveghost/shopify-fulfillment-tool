@@ -114,7 +114,7 @@ class TestFulfillmentHistoryMerge:
 
     def test_reanalysis_preserves_original_execution_date(self):
         from shopify_tool.fulfillment_history import (
-            merge_earliest as _merge_fulfillment_history,
+            merge_earliest,
         )
 
         history = pd.DataFrame(
@@ -131,7 +131,7 @@ class TestFulfillmentHistoryMerge:
             }
         )
 
-        merged = _merge_fulfillment_history(history, newly_fulfilled)
+        merged = merge_earliest(history, newly_fulfilled)
         dates = dict(zip(merged["Order_Number"], merged["Execution_Date"]))
 
         assert dates["#11014590"] == "2025-11-27", (
@@ -141,7 +141,7 @@ class TestFulfillmentHistoryMerge:
 
     def test_genuinely_new_order_is_added(self):
         from shopify_tool.fulfillment_history import (
-            merge_earliest as _merge_fulfillment_history,
+            merge_earliest,
         )
 
         history = pd.DataFrame(
@@ -157,7 +157,7 @@ class TestFulfillmentHistoryMerge:
             }
         )
 
-        merged = _merge_fulfillment_history(history, newly_fulfilled)
+        merged = merge_earliest(history, newly_fulfilled)
         dates = dict(zip(merged["Order_Number"], merged["Execution_Date"]))
 
         assert dates["#99999"] == "2026-08-18"
@@ -168,7 +168,7 @@ class TestFulfillmentHistoryMerge:
         keep="first" pinned it forever; the earliest PARSED date must win,
         and NaT is not earliest."""
         from shopify_tool.fulfillment_history import (
-            merge_earliest as _merge_fulfillment_history,
+            merge_earliest,
         )
 
         history = pd.DataFrame(
@@ -184,7 +184,7 @@ class TestFulfillmentHistoryMerge:
             }
         )
 
-        merged = _merge_fulfillment_history(history, newly_fulfilled)
+        merged = merge_earliest(history, newly_fulfilled)
         assert len(merged) == 1
         assert merged.iloc[0]["Execution_Date"] == "2026-08-18"
 
@@ -192,7 +192,7 @@ class TestFulfillmentHistoryMerge:
         """Legacy history files hold more than one row per order; whichever
         row came first in the file is not necessarily the earliest."""
         from shopify_tool.fulfillment_history import (
-            merge_earliest as _merge_fulfillment_history,
+            merge_earliest,
         )
 
         history = pd.DataFrame(
@@ -208,13 +208,13 @@ class TestFulfillmentHistoryMerge:
             }
         )
 
-        merged = _merge_fulfillment_history(history, newly_fulfilled)
+        merged = merge_earliest(history, newly_fulfilled)
         assert len(merged) == 1
         assert merged.iloc[0]["Execution_Date"] == "2025-11-27"
 
     def test_empty_history_accepts_all_new_orders(self):
         from shopify_tool.fulfillment_history import (
-            merge_earliest as _merge_fulfillment_history,
+            merge_earliest,
         )
 
         history = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
@@ -225,7 +225,7 @@ class TestFulfillmentHistoryMerge:
             }
         )
 
-        merged = _merge_fulfillment_history(history, newly_fulfilled)
+        merged = merge_earliest(history, newly_fulfilled)
         assert set(merged["Order_Number"]) == {"#1", "#2"}
 
 

@@ -1,8 +1,8 @@
 """Audit 02: repeat orders, inventory memory, packed-order check.
 
-Report: docs/audit/02-repeat-orders.md. Every AUDIT-02-k test fails because
-of the bug it names and is marked xfail(strict=True); the fix removes the
-marker. The unmarked tests pin what the audit verified correct.
+Report: docs/audit/02-repeat-orders.md. Every AUDIT-02-k test began as a proof
+of the bug it names; the fixes are in, so each now pins the fixed behaviour.
+The "verified correct" tests pin what the audit found already right.
 
 Runs go through core.run_full_analysis in legacy mode (no session manager),
 so the real history read, repeat detection and history write all run. The
