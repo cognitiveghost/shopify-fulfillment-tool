@@ -734,8 +734,6 @@ class MainWindow(QMainWindow):
         state persistence across session reloads. A save another PC has made
         stale is refused, and a failed one is reported (ADR 0011).
         """
-        from pathlib import Path
-
         # Check prerequisites
         if not self.session_path:
             logger.debug("No active session - skipping save_session_state")
@@ -772,7 +770,7 @@ class MainWindow(QMainWindow):
 
         # History follows the saved state, not the run (ADR 0012). A failure
         # heals on the next save, which rewrites this session's rows whole.
-        # ponytail: history write on the GUI thread; move to the threadpool with a
+        # ponytail: history write (and memory follow below) on the GUI thread; move to the threadpool with a
         # per-session coalescing queue if saves feel slow on the share
         try:
             fulfillment_history.record_session(
@@ -827,8 +825,6 @@ class MainWindow(QMainWindow):
         Returns:
             True if loaded successfully, False otherwise
         """
-        from pathlib import Path
-
         try:
             session_path = Path(session_path)
             analysis_dir = session_path / "analysis"
@@ -939,8 +935,6 @@ class MainWindow(QMainWindow):
         Order greyed out with nothing on screen saying why. Only the stock
         file is restored -- see the loop below for why the orders file is not.
         """
-        from pathlib import Path
-
         try:
             input_dir = self.session_manager.get_input_dir(session_path)
         except Exception:

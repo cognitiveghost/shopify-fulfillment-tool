@@ -110,3 +110,12 @@ def test_a_new_session_draws_from_the_memory_the_last_one_left(tmp_path, run):
     run(pm, [("#2", "A", 3)], session="S2")
     assert pm.memory["skus"] == {"A": 5.0}
     assert pm.memory["session"] == "S2"
+
+
+def test_rerunning_an_older_session_leaves_the_later_draw_alone(tmp_path, run):
+    pm = MemoryProfile(tmp_path, {"A": 10.0})
+    run(pm, [("#1", "A", 2)], session="S1")
+    run(pm, [("#2", "A", 3)], session="S2")
+    run(pm, [("#1", "A", 2)], session="S1")  # reopened from the Session Browser
+    assert pm.memory["skus"] == {"A": 5.0}
+    assert pm.memory["session"] == "S2"

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from shared.file_lock import FileLockError, locked_file
+from shared.file_lock import locked_file
 from shopify_tool import stock_ledger
 from shopify_tool.utils import get_persistent_data_path
 
@@ -47,10 +47,14 @@ def _empty() -> pd.DataFrame:
 def load(path) -> pd.DataFrame:
     try:
         df = pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
-    except FileNotFoundError:
-        return _empty()
+    except (FileNotFoundError, pd.errors.EmptyDataError):
+        return _empty()  # a 0-byte file holds nothing to lose
     except Exception as e:  # ParserError, UnicodeDecodeError, OSError on the share
         raise HistoryUnreadable(f"{path}: {e}") from e
+    if not isinstance(df.index, pd.RangeIndex):
+        # Every row has more fields than the header: pandas made the first
+        # column the index, and the data would be written back shifted.
+        raise HistoryUnreadable(f"{path}: rows have more fields than the header")
     if "Order_Number" not in df.columns:
         raise HistoryUnreadable(f"{path}: no Order_Number column")
     df = df.reindex(columns=COLUMNS, fill_value="").fillna("")
@@ -117,6 +121,6 @@ def record_session(path, session, df, today=None) -> bool:
             ships = stock_ledger.fulfillable_orders(df)
             _write_atomic(path, _replace(history, session, ships, today))
             return True
-    except (FileLockError, OSError):
+    except Exception:  # FileLockError, OSError, anything pandas raises: never fail the caller
         logger.exception(f"Could not record fulfillment history for {session!r}")
         return False

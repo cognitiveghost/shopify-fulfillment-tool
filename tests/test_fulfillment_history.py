@@ -49,6 +49,24 @@ def test_unreadable_file_raises_and_is_never_written(tmp_path):
     assert p.read_bytes() == before
 
 
+def test_every_row_with_an_extra_field_is_unreadable_not_shifted(tmp_path):
+    p = tmp_path / "h.csv"
+    p.write_text("Order_Number,Execution_Date,Session\n#1,2026-01-01,s1,x\n", encoding="utf-8")
+    before = p.read_bytes()
+    with pytest.raises(fh.HistoryUnreadable):
+        fh.load(p)
+    assert fh.record_session(p, "S1", frame({"#9": "Fulfillable"})) is False
+    assert p.read_bytes() == before
+
+
+def test_empty_file_loads_empty_and_is_written(tmp_path):
+    p = tmp_path / "h.csv"
+    p.write_bytes(b"")
+    assert fh.load(p).empty
+    assert fh.record_session(p, "S1", frame({"#9": "Fulfillable"}), today="2026-01-01")
+    assert rows(p) == [("#9", "2026-01-01", "S1")]
+
+
 def test_record_replaces_only_this_sessions_rows(tmp_path):
     p = tmp_path / "h.csv"
     fh.record_session(p, "S0", frame({"#1": "Fulfillable"}), today="2026-01-01")

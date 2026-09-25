@@ -63,6 +63,11 @@ class TestSessionSignals:
         df, live = load_session_signals(None, "ALMADERM")
         assert df.empty and live is None
 
+    def test_unreachable_sessions_folder_returns_none_live_set(self, tmp_path):
+        # A missing folder lists as no sessions, same as a share that's down.
+        df, live = load_session_signals(_FakeProfileManager(tmp_path), "NOSUCH")
+        assert df.empty and live is None
+
 
 class TestLiveSessions:
     def test_union_drops_rows_of_dead_sessions(self):

@@ -444,7 +444,6 @@ class ProfileManager:
                 "stock_csv_delimiter": "auto",
                 "orders_csv_delimiter": "auto",
                 "delimiter_auto_migrated": True,
-                "repeat_detection_days": 1,
             },
             "rules": [],
             "order_rules": [],

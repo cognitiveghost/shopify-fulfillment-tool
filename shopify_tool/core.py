@@ -544,7 +544,7 @@ def _load_and_validate_files(
     columns are present.
 
     Args:
-        stock_file_path: Path to stock CSV or None for test mode
+        stock_file_path: Path to stock CSV, or None for memory mode / test mode
         orders_file_path: Path to orders CSV or None for test mode
         stock_delimiter: Delimiter for stock file
         orders_delimiter: Delimiter for orders file
@@ -701,6 +701,7 @@ def _load_and_validate_files(
                 baseline = read_memory_baseline(session_path)
                 if baseline is not None:
                     stock_df = baseline_stock_df(baseline)
+                    config["_memory_baseline_reused"] = True
                 else:
                     skus = inv_mem.get("skus") or {}
                     names = inv_mem.get("names") or {}
@@ -1009,6 +1010,7 @@ def _save_results_and_reports(
     current_session: str | None = None,
     history_readable: bool = True,
     session_path: str | None = None,
+    memory_baseline_reused: bool = False,
 ) -> tuple[str | None, str | None]:
     """Saves all analysis results, reports, and updates history.
 
@@ -1037,6 +1039,8 @@ def _save_results_and_reports(
             the run then neither checks nor records repeats
         session_path: This run's session, where the memory baseline is written
             (working_path is the output directory in legacy mode)
+        memory_baseline_reused: The run read stock from a baseline this
+            session already had; memory is then left to the session owning it
 
     Returns:
         Tuple of (primary_output_path, secondary_output_path)
@@ -1207,7 +1211,18 @@ def _save_results_and_reports(
         try:
             full_config = profile_manager.load_shopify_config(client_id) or {}
             inv_mem = full_config.get("inventory_memory", {})
-            if inv_mem.get("enabled", False):
+            if (
+                inv_mem.get("enabled", False)
+                and memory_baseline_reused
+                and inv_mem.get("session") != current_session
+            ):
+                # Re-running an older session from its baseline would erase
+                # the later session's draw; same rule as the edit path.
+                logger.info(
+                    f"Inventory memory belongs to {inv_mem.get('session')!r}; "
+                    f"not rewriting it from {current_session}"
+                )
+            elif inv_mem.get("enabled", False):
                 final_stock_dict = build_inventory_snapshot(final_df, stock_df)
                 # Carry the display name along so the next run's memory-reconstructed
                 # stock_df doesn't show "N/A" in Warehouse_Name for every SKU.
@@ -1404,6 +1419,7 @@ def run_full_analysis(
             current_session=current_session,
             history_readable=history_readable,
             session_path=session_path,
+            memory_baseline_reused=bool(config.get("_memory_baseline_reused")),
         )
 
         # Return success

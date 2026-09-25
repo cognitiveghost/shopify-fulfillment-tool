@@ -67,8 +67,12 @@ def load_session_signals(profile_manager, client_id: str) -> tuple[pd.DataFrame,
         return _empty(), None
 
 
-def _load_session_signals(profile_manager, client_id: str) -> tuple[pd.DataFrame, set[str]]:
+def _load_session_signals(profile_manager, client_id: str) -> tuple[pd.DataFrame, set[str] | None]:
     entries = SessionManager(profile_manager).list_client_sessions(client_id)
+    if not entries:
+        # An unreachable sessions folder also lists as empty. Rows can't name
+        # sessions that never existed, so "no sessions" is "unknown".
+        return _empty(), None
     live = {
         _session_name(e)
         for e in entries
