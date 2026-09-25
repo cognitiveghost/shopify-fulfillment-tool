@@ -115,3 +115,27 @@ def test_opening_a_session_restores_its_inputs(main_window):
 
     assert main_window.stock_file_path.endswith("inventory.csv")
     assert main_window.stock_slot.is_valid is True
+
+
+def test_opening_a_session_re_derives_stock_left(main_window):
+    """A session saved by an older build can hold a Final_Stock that edits let
+    drift; opening it makes the ledger true again (spec 2026-09-25 D4)."""
+    path = _session_with_inputs(main_window)
+
+    def load_stale_analysis(_path):
+        main_window.analysis_results_df = pd.DataFrame(
+            {
+                "Order_Number": ["#1001"],
+                "SKU": ["A"],
+                "Quantity": [2],
+                "Order_Fulfillment_Status": ["Fulfillable"],
+                "Stock": [5],
+                "Final_Stock": [5.0],
+            }
+        )
+        return True
+
+    main_window._load_session_analysis = load_stale_analysis
+    main_window.load_existing_session(path)
+
+    assert main_window.analysis_results_df["Final_Stock"].tolist() == [3.0]

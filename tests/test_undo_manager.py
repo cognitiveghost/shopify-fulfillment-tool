@@ -114,11 +114,11 @@ def test_undo_bulk_add_tag_restores_every_line_of_a_multiline_order(mw_multiline
 
 # --- Stock left and row order (AUDIT-01-2, -11; spec 2026-09-25 §4.6) ---
 
-from unittest.mock import Mock  # noqa: E402
+from unittest.mock import Mock
 
-import gui.actions_handler as actions_handler_module  # noqa: E402
-from gui.actions_handler import ActionsHandler  # noqa: E402
-from gui.selection_helper import SelectionHelper  # noqa: E402
+import gui.actions_handler as actions_handler_module
+from gui.actions_handler import ActionsHandler
+from gui.selection_helper import SelectionHelper
 
 
 def _window(df):

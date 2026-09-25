@@ -266,8 +266,8 @@ def test_update_undo_button_pushes_availability_to_the_page(handler, mw):
 
 # --- Stock left: the ledger frames (AUDIT-01-3, -4; spec 2026-09-25 §4.3, §4.5) ---
 
-from shopify_tool.analysis import run_analysis  # noqa: E402
-from shopify_tool.undo_manager import UndoManager  # noqa: E402
+from shopify_tool.analysis import run_analysis
+from shopify_tool.undo_manager import UndoManager
 
 NO_HISTORY = pd.DataFrame({"Order_Number": []})
 

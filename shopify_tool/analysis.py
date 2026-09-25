@@ -7,7 +7,13 @@ import numpy as np
 import pandas as pd
 
 from shopify_tool.csv_utils import order_number_sort_key
-from shopify_tool.stock_ledger import FULFILLABLE, NOT_FULFILLABLE, is_fulfillable, shortfall, with_stock_left
+from shopify_tool.stock_ledger import (
+    FULFILLABLE,
+    NOT_FULFILLABLE,
+    is_fulfillable,
+    shortfall,
+    with_stock_left,
+)
 
 NO_ORDER_NUMBER = "(no order number)"
 
@@ -438,9 +444,6 @@ def _clean_and_prepare_data(
 
     # Clean stock DataFrame (internal names)
     required_stock_cols = ["SKU", "Stock"]
-    stock_cols_to_keep = [
-        col for col in ["SKU", "Product_Name", "Stock"] if col in stock_df.columns
-    ]
 
     # Verify required columns exist
     missing_stock_cols = [
@@ -1622,7 +1625,9 @@ def recalculate_statistics(df):
         df["Shipping_Provider"] = "Unknown"
 
     stats = {}
-    from shopify_tool.report_filters import fulfillable_only  # local: avoids an import cycle
+    from shopify_tool.report_filters import (
+        fulfillable_only,  # local: avoids an import cycle
+    )
 
     completed_orders_df = fulfillable_only(df).copy()
     not_completed_orders_df = df.drop(index=completed_orders_df.index)

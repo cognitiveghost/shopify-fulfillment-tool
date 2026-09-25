@@ -9,7 +9,11 @@ import pytest
 from shopify_tool.analysis import run_analysis
 from shopify_tool.stock_ledger import (
     FULFILLABLE as FF,
+)
+from shopify_tool.stock_ledger import (
     NOT_FULFILLABLE as NF,
+)
+from shopify_tool.stock_ledger import (
     claim,
     fulfillable_orders,
     is_fulfillable,
