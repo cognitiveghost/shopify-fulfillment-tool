@@ -51,6 +51,13 @@ OPERATOR_MAP = {
     "does not match regex": "_op_does_not_match_regex",
 }
 
+# On an order rule a negative operator means *no line* matches the positive
+# form, for a line field exactly as for has_sku (spec 2026-09-26 D2).
+NEGATIVE_OPERATORS = frozenset({
+    "does not equal", "does not contain", "not in list",
+    "not between", "does not match regex",
+})
+
 # --- Action Helpers ---
 
 
@@ -1348,10 +1355,14 @@ class RuleEngine:
                     result = bool(op_func(scalar_series, value).iloc[0])
 
             else:
-                # Regular article-level field - check if ANY row matches
+                # A line field: positive operators need one matching line,
+                # negative ones need every line to satisfy the negation.
                 op_func = globals()[OPERATOR_MAP[operator]]
                 series_result = op_func(order_df[field], value)
-                result = series_result.any()  # At least one row matches
+                result = bool(
+                    series_result.all() if operator in NEGATIVE_OPERATORS
+                    else series_result.any()
+                )
 
             results.append(result)
 
@@ -1359,7 +1370,7 @@ class RuleEngine:
             return False
 
         # Combine results based on match type
-        if match_type == "ALL":
+        if str(match_type).upper() == "ALL":
             return all(results)
         else:  # ANY
             return any(results)
@@ -1466,11 +1477,7 @@ class RuleEngine:
 
         # For negative operators, ALL SKUs must match (i.e., NONE have the unwanted value)
         # For positive operators, ANY SKU can match
-        negative_operators = [
-            "does not equal", "does not contain", "not in list",
-            "not between", "does not match regex",
-        ]
-        if operator in negative_operators:
+        if operator in NEGATIVE_OPERATORS:
             return result_series.all()
         else:
             return result_series.any()
@@ -1502,11 +1509,7 @@ class RuleEngine:
         op_func = globals()[OPERATOR_MAP[operator]]
         result_series = op_func(product_series, product_value)
 
-        negative_operators = [
-            "does not equal", "does not contain", "not in list",
-            "not between", "does not match regex",
-        ]
-        if operator in negative_operators:
+        if operator in NEGATIVE_OPERATORS:
             return result_series.all()
         else:
             return result_series.any()

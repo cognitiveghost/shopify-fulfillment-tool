@@ -149,7 +149,6 @@ def test_date_operators_read_shopify_timestamps():
     assert bool(_op_date_before(created_at, "2026-02-01").iloc[0])
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-7: negative operators on a line field mean 'some line', on has_sku 'no line'")
 def test_negative_operator_means_the_same_on_sku_and_has_sku():
     df = frame([("#1", "A", 1), ("#1", "GIFT", 1)])
     by_field = rule([cond("SKU", "does not equal", "GIFT")], [tag("NO_GIFT")])
@@ -188,7 +187,6 @@ def test_rule_test_config_keeps_add_product_quantity(qtbot):
     assert tested["steps"][0]["actions"][0].get("quantity") == 3
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-11: lowercase 'all' is ALL on article rules, ANY on order rules")
 def test_lowercase_match_all_is_all_on_order_rules():
     df = frame([("#1", "A", 1)])
     r = rule([cond("has_sku", "equals", "A"), cond("has_sku", "equals", "B")],

@@ -440,3 +440,18 @@ def test_not_contains_is_literal_too():
     from shopify_tool.rules import _op_not_contains
 
     assert _op_not_contains(pd.Series(["ABC"]), ".").tolist() == [True]
+
+
+def test_order_rule_negation_on_a_line_field_means_no_line():
+    """D2: 'SKU does not equal GIFT' on an order rule = no line is GIFT."""
+    df = pd.DataFrame({
+        "Order_Number": ["#1", "#1", "#2"],
+        "SKU": ["A", "GIFT", "A"],
+        "Internal_Tags": ["[]"] * 3,
+    })
+    rule = {"name": "r", "level": "order", "steps": [{
+        "conditions": [{"field": "SKU", "operator": "does not equal", "value": "GIFT"}],
+        "match": "ALL", "actions": [{"type": "ADD_INTERNAL_TAG", "value": "NO_GIFT"}]}]}
+    out = RuleEngine([rule]).apply(df)
+    tagged = out.loc[out["Internal_Tags"].str.contains("NO_GIFT"), "Order_Number"]
+    assert set(tagged) == {"#2"}
