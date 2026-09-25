@@ -63,7 +63,9 @@ _SHORT = re.compile(
 )
 _OUT_OF_STOCK = re.compile(r"^(?P<sku>.+): Out of stock$")
 _INVALID_QTY = re.compile(r"^(?P<sku>.+): Missing/invalid quantity$")
-_DATA_CODES = {"invalid_quantity", "no_sku", "other"}
+_RULE_HOLD = re.compile(r"^Held by rule: (?P<rule>.+)$")
+# Codes that need a person to look, not more stock.
+_DATA_CODES = {"invalid_quantity", "no_sku", "other", "rule_hold"}
 _STOCK_CODES = {"short", "out_of_stock"}
 
 ORDER_KEY = "Order_Number"
@@ -166,6 +168,8 @@ def _reason_problems(notes) -> list[dict]:
                 problems.append({"code": "out_of_stock", "sku": m["sku"]})
             elif m := _INVALID_QTY.match(part):
                 problems.append({"code": "invalid_quantity", "sku": m["sku"]})
+            elif m := _RULE_HOLD.match(part):
+                problems.append({"code": "rule_hold", "rule": m["rule"]})
             else:
                 problems.append({"code": "other", "text": part})
         return problems
@@ -183,7 +187,7 @@ def order_verdict(status, notes, line_skus, has_sku) -> dict:
     for p in _reason_problems(notes):
         if "sku" in p and p["sku"] not in skus:
             continue  # its line was removed after the run
-        key = (p["code"], p.get("sku"), p.get("text"))
+        key = (p["code"], p.get("sku"), p.get("text"), p.get("rule"))
         if key not in seen:
             seen.add(key)
             problems.append(p)

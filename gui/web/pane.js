@@ -40,6 +40,7 @@ function problemSentence(p) {
       ? "1 line has no SKU, so no stock can be matched to it."
       : NUMBER.format(p.lines) + " lines have no SKU, so no stock can be matched to them.";
   }
+  if (p.code === "rule_hold") return "Rule “" + p.rule + "” held this order.";
   const text = str(p.text).trim();
   return /[.!?]$/.test(text) ? text : text + ".";
 }
@@ -64,6 +65,10 @@ function verdictCopy(o) {
       : n > k ? " The other " + NUMBER.format(n - k) + " lines are covered." : "";
     return { role: "danger", source: "", text: sentences + rest,
       title: "Cannot ship: " + NUMBER.format(k) + " of " + plural(n, "line") + (k === 1 ? " is short" : " are short") };
+  }
+  if (!v.by_hand && (v.problems || []).some((p) => p.code === "rule_hold")) {
+    return { role: "warning", title: "Held by a rule", source: RUN_SOURCE,
+      text: sentences + " Change the rule, or mark the order fulfillable if it should ship." };
   }
   if (!v.by_hand) return { role: "warning", title: "Fix the data before this ships", text: sentences, source: RUN_SOURCE };
   if (isFulfillable(o)) {

@@ -121,3 +121,16 @@ def test_the_payload_verdict_survives_missing_columns():
     df = pd.DataFrame([{"Order_Number": "1", "SKU": "A"}])
     (entry,) = order_payload(df)
     assert entry["Verdict"] == {"state": "review", "by_hand": True, "problems": []}
+
+
+def test_a_rule_hold_is_the_runs_not_a_persons():
+    note = "Cannot fulfill: Held by rule: big, heavy"
+    v = order_verdict("Not Fulfillable", [note, note], ["A", "B"], [True, True])
+    assert v == {"state": "review", "by_hand": False,
+                 "problems": [{"code": "rule_hold", "rule": "big, heavy"}]}
+
+
+def test_two_rule_holds_are_two_problems():
+    note = "Cannot fulfill: Held by rule: X; Held by rule: Y"
+    v = order_verdict("Not Fulfillable", [note], ["A"], [True])
+    assert [p["rule"] for p in v["problems"]] == ["X", "Y"]
