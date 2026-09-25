@@ -340,13 +340,15 @@ Production check, run read-only over all 39 sessions:
 - The label's SUM counts every fulfillable line of the order, including SKUs
   a list excludes. No client excludes SKUs today.
 
-**Open questions for the owner.** These business rules are not findings:
+**Owner decisions (2026-09-25).** Two business rules came up during the
+audit, and the owner decided both:
 
-1. `Order_Min_Box` ignores items with no configured dimensions. It picks a
-   box from the items it knows, although its docstring promises
-   `UNKNOWN_DIMS`. This decides the box for 243 of 718 ALMADERM orders and
-   16 of 64 WATERDROP orders. Following the docstring would turn those into
-   `UNKNOWN_DIMS` and stop the box-tag rules from firing.
-2. Barcode label numbers follow order-number order. The packing list sorts
-   by courier first. In the 6 of 35 lists with more than one courier, label
-   #N is not the N-th order on the list.
+1. **`Order_Min_Box` keeps today's behaviour.** Items with no configured
+   dimensions are ignored, and the box is picked from the items that have
+   dimensions. This decides the box for 243 of 718 ALMADERM orders and 16
+   of 64 WATERDROP orders. The docstring that promises `UNKNOWN_DIMS` is
+   what is wrong, and it gets corrected.
+2. **Barcode label #N must be the N-th order on its packing list.** Today
+   labels follow order-number order, while the list sorts by courier first,
+   so the two differ in the 6 of 35 lists with more than one courier. This
+   is now a change to make, tracked with the fix tasks.
