@@ -91,6 +91,68 @@ def test_a_save_after_another_pc_saved_is_refused(main_window, told):
     assert told == ["Another PC changed this session"]
 
 
+def test_generate_reports_is_refused_when_stale(main_window, told, monkeypatch):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+    loaded = []
+    # Stands in for everything after the check; returning None also stops a
+    # regression from opening the modal dialog and hanging the test.
+    monkeypatch.setattr(
+        main_window.profile_manager, "load_shopify_config", lambda *a: loaded.append(a)
+    )
+
+    main_window.actions_handler.open_generate_reports_dialog()
+
+    assert told == ["Another PC changed this session"]
+    assert loaded == []
+
+
+def test_export_selection_is_refused_when_stale(main_window, told, monkeypatch):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+    asked = []
+    monkeypatch.setattr(
+        actions_module.QFileDialog,
+        "getSaveFileName",
+        lambda *a, **k: asked.append(a) or ("", ""),
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == ["Another PC changed this session"]
+    assert asked == []
+
+
+def test_an_export_that_cannot_check_is_refused(main_window, told, monkeypatch):
+    _open_with_state(main_window, _orders("Fulfillable"))
+
+    def unreachable(_path):
+        raise OSError("The network path was not found")
+
+    monkeypatch.setattr(actions_module.session_state, "state_stamp", unreachable)
+    monkeypatch.setattr(
+        actions_module.QFileDialog, "getSaveFileName", lambda *a, **k: ("", "")
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == ["The session couldn't be checked"]
+
+
+def test_a_fresh_session_exports(main_window, told, monkeypatch):
+    _open_with_state(main_window, _orders("Fulfillable"))
+    asked = []
+    monkeypatch.setattr(
+        actions_module.QFileDialog,
+        "getSaveFileName",
+        lambda *a, **k: asked.append(a) or ("", ""),
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == [] and len(asked) == 1
+
+
 def test_a_failed_new_session_keeps_the_open_one(main_window, told, monkeypatch):
     from shopify_tool.session_manager import SessionManagerError
 

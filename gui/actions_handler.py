@@ -460,6 +460,32 @@ class ActionsHandler(QObject):
         dialog.categories_updated.connect(on_categories_updated)
         dialog.exec()
 
+    def _refuse_stale_export(self) -> bool:
+        """True, after telling the operator, when this PC's copy is stale.
+
+        An export ships what is on screen, so a PC that loaded the session
+        before another PC held an order would ship it (ADR 0011). Fails safe:
+        a check that can't reach the server refuses too.
+        """
+        try:
+            stale = session_state.is_stale(self.mw.session_path, self.mw._state_stamp)
+        except OSError:
+            self.log.exception("Could not check the session state before exporting")
+            show_error(
+                self.mw,
+                "The session couldn't be checked",
+                "Check the connection to the server, then export again.",
+            )
+            return True
+        if stale:
+            show_error(
+                self.mw,
+                "Another PC changed this session",
+                "Nothing was exported. Reopen the session from Sessions to load "
+                "their changes, then export again.",
+            )
+        return stale
+
     def open_generate_reports_dialog(self):
         """Opens the multi-select dialog for generating packing lists and
         stock exports in one pass."""
@@ -485,6 +511,9 @@ class ActionsHandler(QObject):
             self.log.warning(
                 "open_generate_reports_dialog called with no active session"
             )
+            return
+
+        if self._refuse_stale_export():
             return
 
         # FIX: Reload fresh config before opening dialog
@@ -1843,6 +1872,9 @@ class ActionsHandler(QObject):
         self._set_selection(order_numbers)
         selected_df = self.mw.selection_helper.get_selected_orders_data()
         if selected_df.empty:
+            return
+
+        if self.mw.session_path and self._refuse_stale_export():
             return
 
         orders_count, _items_count = self.mw.selection_helper.get_selection_summary()
