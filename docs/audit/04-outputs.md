@@ -22,8 +22,8 @@ Proof tests are in `tests/audit/test_04_outputs.py`. The audit ran against
 ## 1. Verdict
 
 **Packing lists and stock exports: yes for today's configs. Barcode labels:
-no. Reference labels: only when every page matches by PostOne ID or tracking
-number.**
+yes on the current release, not on 1.9.9.5–1.9.10.2. Reference labels: only
+when every page matches by PostOne ID or tracking number.**
 
 For the lists and exports, every file in production matches its session's
 analysis:
@@ -35,18 +35,27 @@ Those paths fail only in edge cases today's configs don't reach: an empty
 list, an export file that is locked, `exclude_skus`, and orders whose lines
 disagree on status.
 
-The barcode label renderer is a different story. **An order with no internal
-tag ends the PDF.** Every label after it is missing, while the toast still
-reports all of them as generated (AUDIT-04-1). Replaying the current renderer
-over the saved production tags, 8 of 39 sessions would lose 144 of the 185
-labels in those sessions. That includes 5 of 6 WATERDROP sessions.
+Barcode labels had a serious gap that the current release no longer shows.
+**Under WeasyPrint 69.0, an order with no internal tag ends the label PDF.**
+Every label after it is missing, while the toast still reports all of them
+as generated (AUDIT-04-1). Release builds 1.9.9.5 to 1.9.10.2 (10–31 August)
+bundled 69.0. Builds from 1.9.10.3 onward, including the current 1.9.10.8,
+bundle 70.0, which keeps every page. With 69.0, replaying the renderer over
+the saved production tags, 8 of 39 sessions would lose 144 of the 185 labels
+in those sessions, including 5 of 6 WATERDROP sessions.
+
+The app's own share of the defect is still there. It hands the template an
+empty tag instead of "N/A". It never checks the PDF's page count against the
+labels. And it does not pin WeasyPrint, so the next build takes whatever
+version is newest.
 
 Reference labels fall back to matching a page by customer name. That fallback
 is a substring match, and the first CSV row wins, so a page can get another
 customer's REF. The result also reports only page counts: a REF stamped on
 two pages, or a REF with no page at all, goes unmentioned (AUDIT-04-7, -8).
 
-Fix AUDIT-04-1 before relying on printed barcode labels.
+Every warehouse PC should be on 1.9.10.3 or later. Pin WeasyPrint to 70.0
+or newer, and add the page-count check (AUDIT-04-1).
 
 **What "correct" means here.** The definitions come from `CONTEXT.md`
 (fulfillable order, label count, reference strip), the `report_filters`
@@ -55,15 +64,15 @@ uses: an order ships whole or not at all, and stock is never promised twice.
 Every output must carry exactly the analysis's fulfillable lines, and every
 label must encode exactly its own order or REF.
 
-Two business rules are left to the owner (section 5, "Open questions"); no
-finding depends on them. Repeat orders reaching the outputs unmarked is
+Two business rules were decided by the owner during the audit (section 5);
+no finding depends on them. Repeat orders reaching the outputs unmarked is
 already AUDIT-02-8, so it is not repeated here.
 
 ## 2. Findings
 
 | id | severity | summary | where | proof test | status |
 |---|---|---|---|---|---|
-| AUDIT-04-1 | critical | Barcode and QR PDFs lose every label after the first order with no internal tag | `barcode_processor.py:114`, `templates/barcode_label/template.html:21`, `templates/qr_label/template.html:21` | `test_barcode_pdf_has_a_page_for_every_label`, `test_qr_pdf_has_a_page_for_every_label`, `test_orders_without_internal_tags_all_get_a_label` | confirmed |
+| AUDIT-04-1 | high (critical on 1.9.9.5–1.9.10.2) | Under WeasyPrint 69.0, label PDFs lose every label after the first untagged order. The app sends an empty tag, never checks the page count, and doesn't pin WeasyPrint | `barcode_processor.py:114`, `:232`, `requirements.txt:52` | `test_orders_without_internal_tags_are_labelled_na`, `test_label_pdf_with_missing_pages_is_an_error`, `test_requirements_pin_a_weasyprint_that_keeps_every_label`; on 69.x also `test_barcode_pdf_has_a_page_for_every_label`, `test_qr_pdf_has_a_page_for_every_label` | confirmed |
 | AUDIT-04-2 | critical | A stock export that fails to write is reported as saved, and the old file stays | `stock_export.py:334` | `test_stock_export_write_failure_is_not_silent` | confirmed |
 | AUDIT-04-3 | critical (latent) | A packing list that matches no orders leaves the previous XLSX and JSON in place under "Report saved" | `packing_lists.py:140`, `gui/actions_handler.py:765` | `test_regenerating_an_empty_packing_list_replaces_the_old_files` | confirmed |
 | AUDIT-04-4 | high (latent) | `exclude_skus` matches loosely in the XLSX and exactly in the JSON, so Packing Tool gets lines the picking list left out | `gui/actions_handler.py:751` vs `packing_lists.py:127` | `test_packing_list_json_excludes_the_same_skus_as_the_xlsx` | confirmed |
@@ -84,13 +93,13 @@ already AUDIT-02-8, so it is not repeated here.
 
 ## 3. Findings in detail
 
-### AUDIT-04-1 — An untagged order ends the label PDF (critical)
+### AUDIT-04-1 — Untagged orders and WeasyPrint 69.0 lose labels (high; critical on 1.9.9.5–1.9.10.2)
 
 **What goes wrong.** For an order with no internal tags, the barcode tab
 merges the tags to `"[]"`, and `format_tags_for_barcode` turns that into an
 empty string (`barcode_processor.py:114`). The template renders it as an
-empty `<span class="field-value">`. From that label on, WeasyPrint puts no
-more pages into the document:
+empty `<span class="field-value">`. Under **WeasyPrint 69.0**, from that
+label on, no more pages go into the document:
 
 - Tags `A, "", A, A` give 2 pages, not 4.
 - Tags `"", A, A` give 1 page.
@@ -98,23 +107,43 @@ more pages into the document:
 
 The QR template has the same line and loses labels the same way. The toast
 reports `len(successful)` records, not pages, so the operator is told every
-label was generated.
+label was generated. **WeasyPrint 70.0 keeps every page.** The same inputs
+give 4, 6 and 3 pages.
 
-**Scenario.** A packing list holds #1 (tag BOX), #2 (no tags) and #3 (tag
-BOX). The barcode PDF has two pages, #1 and #2. #3 has no label, and the
-screen says 3 were generated.
+**Which builds are affected.** WeasyPrint arrives through `blabel` and is
+not pinned (`requirements.txt:52`), so each build takes the newest release.
+The release build logs show:
 
-**Root cause.** A no-tag order reaches the template as `""` rather than the
-`"N/A"` that the no-tag path of `generate_barcodes_batch` intends. The
-`if tag else "N/A"` check tests the raw `"[]"`, which is truthy, instead of
-the formatted result. How WeasyPrint then drops the remaining pages was not
-traced. The tests confirm it on WeasyPrint 69.0, which `requirements.txt`
-does not pin, so the Windows PCs may run a different version.
+| release builds | WeasyPrint | loses labels |
+|---|---|---|
+| 1.9.9.5 to 1.9.10.2 (10–31 August; the label templates landed in 1.9.9.5) | 69.0 | yes |
+| 1.9.10.3 to 1.9.10.8 (14 September onward) | 70.0 | no |
+
+CI also installs 70.0. A developer venv created earlier may still hold 69.0.
+The page-count tests are therefore expected to fail only there.
+
+**Scenario, on 1.9.10.2.** A packing list holds #1 (tag BOX), #2 (no tags)
+and #3 (tag BOX). The barcode PDF has two pages, #1 and #2. #3 has no label,
+and the screen says 3 were generated.
+
+**Root cause.** Three defects in the app let a renderer bug through
+silently:
+
+1. **An empty tag.** A no-tag order reaches the template as `""`, not the
+   `"N/A"` that `generate_barcodes_batch` intends. Its `if tag else "N/A"`
+   check tests the raw `"[]"`, which is truthy, instead of the formatted
+   value.
+2. **No page check.** `generate_code128_labels_pdf` and
+   `generate_qr_labels_pdf` never compare the page count with the number of
+   records.
+3. **No version pin.** Nothing stops a build from shipping 69.0.
+
+The mechanism inside WeasyPrint 69.0 was not traced.
 
 **Production evidence.** The saved PDFs use the old label layout and predate
-this template, so they cannot show the loss. Replaying today's code (tag
-merge, natural sort, first empty tag) over each session's saved fulfillable
-orders:
+this template, so they cannot show the loss. With WeasyPrint 69.0, replaying
+the renderer (tag merge, natural sort, first empty tag) over each session's
+saved fulfillable orders:
 
 | client | sessions affected | labels lost / labels in those sessions |
 |---|---|---|
@@ -123,6 +152,7 @@ orders:
 | WATERDROP | 5 of 6 | 32 / 50 |
 
 Across the three clients, 14 of 823 fulfillable orders have no internal tag.
+Any warehouse PC still running 1.9.9.5–1.9.10.2 loses labels at those rates.
 
 ### AUDIT-04-2 — Stock export failure reads as success (critical)
 

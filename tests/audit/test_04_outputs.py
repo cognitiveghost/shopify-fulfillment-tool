@@ -8,17 +8,22 @@ synthetic and only reproduce the shape of the production data.
 
 import csv
 import json
+import re
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pandas as pd
 import pypdf
 import pytest
+import weasyprint
+from blabel import LabelWriter
 from reportlab.pdfgen import canvas
 
 from gui.actions_handler import ActionsHandler
 from shopify_tool import pdf_processor, stock_export
 from shopify_tool.barcode_processor import (
+    BarcodeGenerationError,
     generate_barcodes_batch,
     generate_code128_labels_pdf,
     generate_qr_labels_pdf,
@@ -122,31 +127,54 @@ def mapping_csv(path, rows):
 # --- Findings ---------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: labels after an untagged order are dropped from the PDF")
+# WeasyPrint 69.0 stops paginating after a label whose tag is empty; 70.0
+# does not. Release builds 1.9.9.5-1.9.10.2 bundled 69.0, 1.9.10.3 on bundle
+# 70.0. The page-count tests fail only where the bug is present; the app's
+# own share of AUDIT-04-1 (empty tag, no page check, no pin) fails everywhere.
+WEASYPRINT_DROPS_PAGES = weasyprint.__version__.startswith("69.")
+
+
+@pytest.mark.xfail(WEASYPRINT_DROPS_PAGES, strict=True, reason="AUDIT-04-1: WeasyPrint 69 drops labels after an untagged order")
 def test_barcode_pdf_has_a_page_for_every_label(tmp_path):
     out = generate_code128_labels_pdf(
         [label("#1", "BOX"), label("#2", ""), label("#3", "BOX")], tmp_path / "b.pdf")
     assert pdf_pages(out) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: labels after an untagged order are dropped from the PDF")
+@pytest.mark.xfail(WEASYPRINT_DROPS_PAGES, strict=True, reason="AUDIT-04-1: WeasyPrint 69 drops labels after an untagged order")
 def test_qr_pdf_has_a_page_for_every_label(tmp_path):
     out = generate_qr_labels_pdf(
         [label("#1", "BOX"), label("#2", ""), label("#3", "BOX")], tmp_path / "q.pdf")
     assert pdf_pages(out) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: an order with no internal tags yields an empty tag and truncates the PDF")
-def test_orders_without_internal_tags_all_get_a_label(tmp_path):
+@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: an order with no internal tags is labelled with an empty tag, not N/A")
+def test_orders_without_internal_tags_are_labelled_na():
     # The barcode tab's own path: tags merged per order, then batched.
     orders = pd.DataFrame({
-        "Order_Number": ["#1", "#2", "#3"], "Shipping_Provider": "DHL",
+        "Order_Number": ["#1", "#2"], "Shipping_Provider": "DHL",
         "Destination_Country": "BG", "item_count": 1,
-        "Internal_Tags": [merge_tags(["[]"])] * 3,
+        "Internal_Tags": [merge_tags(["[]"])] * 2,
     })
-    records = [r for r in generate_barcodes_batch(orders) if r["success"]]
-    out = generate_code128_labels_pdf(records, tmp_path / "b.pdf")
-    assert pdf_pages(out) == 3
+    assert [r["tag"] for r in generate_barcodes_batch(orders)] == ["N/A", "N/A"]
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: a label PDF with fewer pages than labels is reported as generated")
+def test_label_pdf_with_missing_pages_is_an_error(tmp_path, monkeypatch):
+    buf = BytesIO()
+    one_page = canvas.Canvas(buf)
+    one_page.showPage()
+    one_page.save()
+    monkeypatch.setattr(LabelWriter, "write_labels", lambda *_a, **_k: buf.getvalue())
+    with pytest.raises(BarcodeGenerationError):
+        generate_code128_labels_pdf([label("#1"), label("#2")], tmp_path / "b.pdf")
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: requirements.txt lets a label-dropping WeasyPrint in")
+def test_requirements_pin_a_weasyprint_that_keeps_every_label():
+    lines = (Path(__file__).parents[2] / "requirements.txt").read_text().splitlines()
+    pins = [re.search(r"weasyprint\s*>=\s*(\d+)", ln, re.IGNORECASE) for ln in lines]
+    assert any(m and int(m.group(1)) >= 70 for m in pins)
 
 
 @pytest.mark.xfail(strict=True, reason="AUDIT-04-2: a failed stock export write is reported as success")
