@@ -268,10 +268,6 @@ def test_concurrent_runs_keep_both_sides_history(shop, monkeypatch):
     assert {"#A", "#B"} <= set(shop.history_rows())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-8: a Repeat order reaches the printed packing list with no mark",
-)
 def test_packing_list_marks_a_repeat_order(shop, tmp_path):
     shop.write_history([("#1", YESTERDAY)])
     df = shop.run([("#1", "A", 1), ("#2", "A", 1)], [("A", 5)])

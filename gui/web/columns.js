@@ -32,7 +32,7 @@ const REGISTRY = [
   { key: "shopify_tags", title: "Shopify tags", group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Tags) },
   { key: "notes", title: "Notes", group: "Tags & notes", width: 160, maxWidth: 240, text: (o) => str(o.Notes) },
   { key: "status_note", title: "Status note", group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Status_Note) },
-  { key: "repeat", title: "Repeat", group: "Tags & notes", width: 64, text: (o) => (o._repeat === true ? "Repeat" : "") },
+  { key: "repeat", title: "Repeat", group: "Tags & notes", width: 64, shown: true, text: (o) => (o._repeat === true ? "Repeat" : "") },
 ];
 const PINNED_KEYS = REGISTRY.filter((c) => c.pinned).map((c) => c.key);
 

@@ -102,7 +102,7 @@ class TestWarehouseNameFallback:
         result = _read_output(out)
         # Warehouse_Name column header is renamed to the output filename per the
         # export's metadata-embedding scheme -- assert by position instead.
-        warehouse_col_idx = 3  # Destination_Country, Order_Number, SKU, Warehouse_Name, ...
+        warehouse_col_idx = 4  # Destination_Country, Order_Number, Repeat, SKU, Warehouse_Name, ...
         assert result.iloc[0, warehouse_col_idx] == "Fallback Name"
 
 
@@ -128,6 +128,51 @@ class TestLotExpansion:
         result = _read_output(out)
         assert result.iloc[0]["Lot_Expiry"] in ("", None) or pd.isna(result.iloc[0]["Lot_Expiry"])
         assert result.iloc[0]["Lot_Batch"] in ("", None) or pd.isna(result.iloc[0]["Lot_Batch"])
+
+
+def test_repeat_column_in_lot_layout_marks_first_row_only(tmp_path):
+    lots = [
+        {"expiry": "260601", "batch": None, "qty_allocated": 3},
+        {"expiry": "270101", "batch": None, "qty_allocated": 2},
+    ]
+    df = _analysis_df([
+        {"Order_Number": "#1", "SKU": "A1", "Quantity": 5, "Lot_Details": lots, "System_note": "Repeat"},
+        {"Order_Number": "#2", "SKU": "A2", "Quantity": 1, "System_note": ""},
+    ])
+    out = tmp_path / "lots_repeat.xlsx"
+    create_packing_list(df, str(out))
+    sheet = pd.read_excel(out, dtype=str).fillna("")
+    cols = list(sheet.columns)
+    assert cols.index("Repeat") == cols.index("Order_Number") + 1
+    assert sheet["Repeat"].tolist() == ["Repeat", "", ""]
+
+
+def test_repeat_column_without_lots_marks_every_order_once(tmp_path):
+    df = _analysis_df([
+        {"Order_Number": "#1", "SKU": "A1", "System_note": "Repeat"},
+        {"Order_Number": "#1", "SKU": "A2", "System_note": ""},
+        {"Order_Number": "#2", "SKU": "A3"},
+    ])
+    out = tmp_path / "repeat.xlsx"
+    create_packing_list(df, str(out))
+    sheet = pd.read_excel(out, dtype=str).fillna("")
+    assert sheet["Repeat"].tolist() == ["Repeat", "", ""]
+
+
+def test_blocked_reason_note_is_not_a_repeat(tmp_path):
+    df = _analysis_df([{"Order_Number": "#1", "System_note": "Cannot fulfill: Repeat SKU short"}])
+    out = tmp_path / "blocked.xlsx"
+    create_packing_list(df, str(out))
+    assert pd.read_excel(out, dtype=str).fillna("")["Repeat"].tolist() == [""]
+
+
+def test_custom_column_set_prints_repeat_only_when_asked(tmp_path):
+    df = _analysis_df([{"Order_Number": "#1", "System_note": "Repeat"}])
+    plain, asked = tmp_path / "plain.xlsx", tmp_path / "asked.xlsx"
+    create_packing_list(df, str(plain), columns=["Order_Number", "SKU"])
+    create_packing_list(df, str(asked), columns=["Order_Number", "Repeat"])
+    assert "Repeat" not in pd.read_excel(plain).columns
+    assert pd.read_excel(asked, dtype=str)["Repeat"].tolist() == ["Repeat"]
 
 
 def test_not_in_filter_excludes_the_listed_skus(tmp_path):
@@ -197,9 +242,9 @@ def test_columns_none_reproduces_the_default_layout(tmp_path):
 
     written = pd.read_excel(out)
     # Shipping_Provider and Warehouse_Name are renamed to carry the timestamp
-    # and the filename; the other four keep their names and order.
-    assert list(written.columns)[:3] == ["Destination_Country", "Order_Number", "SKU"]
-    assert len(written.columns) == 6
+    # and the filename; the other five keep their names and order.
+    assert list(written.columns)[:4] == ["Destination_Country", "Order_Number", "Repeat", "SKU"]
+    assert len(written.columns) == 7
 
 
 def test_chosen_columns_appear_in_the_chosen_order(tmp_path):

@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
 from shopify_tool.report_filters import apply_report_filters, fulfillable_only
@@ -183,6 +184,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
             columns_for_print = [
                 "Destination_Country",
                 "Order_Number",
+                "Repeat",
                 "SKU",
                 "Warehouse_Name",
                 "Quantity",
@@ -198,14 +200,17 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
             default_columns = [
                 "Destination_Country",
                 "Order_Number",
+                "Repeat",
                 "SKU",
                 "Warehouse_Name",  # From stock file - actual warehouse product names (or Product_Name fallback)
                 "Quantity",
                 "Shipping_Provider",
             ]
             if columns:
-                columns_for_print = [c for c in columns if c in sorted_list.columns]
-                missing = [c for c in columns if c not in sorted_list.columns]
+                # Repeat is derived below, so it is always available.
+                available = {*sorted_list.columns, "Repeat"}
+                columns_for_print = [c for c in columns if c in available]
+                missing = [c for c in columns if c not in available]
                 if missing:
                     logger.warning(f"Configured columns not in the data, skipped: {missing}")
                 if not columns_for_print:
@@ -213,6 +218,16 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
                     columns_for_print = default_columns
             else:
                 columns_for_print = default_columns
+
+        # Repeat mark: first row of an order any of whose rows carries the
+        # note. Same rule as gui.pandas_model.is_repeat, inlined because
+        # shopify_tool must not import gui. After lot expansion, so the first
+        # row is the first printed row.
+        note = sorted_list.get("System_note", pd.Series("", index=sorted_list.index)).fillna("").astype(str)
+        is_rep = note.str.contains("Repeat", regex=False) & ~note.str.startswith("Cannot fulfill")
+        order_rep = is_rep.groupby(sorted_list["Order_Number"]).transform("any")
+        first = ~sorted_list["Order_Number"].duplicated()
+        sorted_list["Repeat"] = np.where(order_rep & first, "Repeat", "")
 
         print_list = sorted_list[columns_for_print]
 
@@ -289,7 +304,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
                     original_col_name = columns_for_print[col_num]
                     fmt_key = (
                         row_type + "_centered"
-                        if original_col_name in ["Destination_Country", "Quantity", "Lot_Expiry", "Lot_Batch"]
+                        if original_col_name in ["Destination_Country", "Quantity", "Lot_Expiry", "Lot_Batch", "Repeat"]
                         else row_type
                     )
                     worksheet.write(row_num + 1, col_num, print_list.iloc[row_num, col_num], cell_formats[fmt_key])
@@ -304,6 +319,8 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
                     max_len = min(max_len, 45)
                 elif original_col_name == "SKU":
                     max_len = min(max_len, 25)
+                elif original_col_name == "Repeat":
+                    max_len = 8
                 elif original_col_name == "Lot_Expiry":
                     max_len = 10
                 elif original_col_name == "Lot_Batch":
