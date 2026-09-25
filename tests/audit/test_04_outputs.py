@@ -236,7 +236,6 @@ def test_name_fallback_refuses_an_ambiguous_name(tmp_path):
     assert match_reference("Recipient:\nMaria Ivanova", mapping) is None
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-8: a reference stamped on two pages is not reported")
 def test_reference_run_reports_a_reference_on_two_pages(tmp_path):
     pdf = text_pdf(tmp_path / "in.pdf", ["P1234567890 A", "P1234567890 B"])
     csv_path = mapping_csv(tmp_path / "m.csv", [("P1234567890", "", "100", "Ann Lee")])
@@ -246,7 +245,6 @@ def test_reference_run_reports_a_reference_on_two_pages(tmp_path):
     assert result.get("duplicate_refs") == ["100"]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-8: a reference with no courier page is not reported")
 def test_reference_run_reports_a_reference_without_a_page(tmp_path):
     pdf = text_pdf(tmp_path / "in.pdf", ["P1234567890"])
     csv_path = mapping_csv(tmp_path / "m.csv", [
@@ -259,7 +257,6 @@ def test_reference_run_reports_a_reference_without_a_page(tmp_path):
     assert result.get("missing_refs") == ["200"]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-9: a page whose stamp failed is still counted as matched")
 def test_unstamped_page_is_not_counted_as_matched(tmp_path, monkeypatch):
     def broken(*_args, **_kwargs):
         raise RuntimeError("overlay failed")
@@ -279,7 +276,6 @@ def test_configured_columns_apply_with_lot_tracking(tmp_path):
     assert "Destination_Country" not in pd.read_excel(tmp_path / "p.xlsx").columns
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-11: tracking-shaped references sort by an embedded digit run")
 def test_tracking_shaped_reference_sorts_after_numeric_references():
     pages = [{"ref": r, "original_order": i} for i, r in enumerate(["#1002", "HW1ABC2DEF", "#1001"])]
     assert [p["ref"] for p in sort_pages_by_reference(pages)] == ["#1001", "#1002", "HW1ABC2DEF"]

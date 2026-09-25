@@ -1,6 +1,11 @@
 import csv
 
-from shopify_tool.pdf_processor import load_csv_mapping, match_reference
+from shopify_tool.pdf_processor import (
+    load_csv_mapping,
+    match_reference,
+    reference_run_warning,
+    reference_sort_key,
+)
 
 
 def mapping_for(tmp_path, rows):
@@ -42,3 +47,24 @@ def test_name_match_is_unverified(tmp_path):
 def test_mapping_lists_every_reference(tmp_path):
     m = mapping_for(tmp_path, [("100", "Maria Ivanova"), ("", "No Ref"), ("200", "B B")])
     assert m["refs"] == {"100", "200"}
+
+
+def test_numeric_refs_sort_by_value_and_others_after():
+    refs = ["HW1ABC", "#10", "9", "#100", "ABC"]
+    assert sorted(refs, key=reference_sort_key) == ["9", "#10", "#100", "ABC", "HW1ABC"]
+
+
+def test_warning_names_duplicates_and_missing():
+    result = {"duplicate_refs": ["100"], "missing_refs": ["200", "300"]}
+    assert reference_run_warning(result) == (
+        "Check before printing: REF 100 is on more than one page; no page for REF 200, 300.")
+
+
+def test_warning_caps_long_lists():
+    result = {"duplicate_refs": [], "missing_refs": [str(i) for i in range(1, 9)]}
+    assert reference_run_warning(result) == (
+        "Check before printing: no page for REF 1, 2, 3, 4, 5 (+3 more).")
+
+
+def test_no_warning_for_a_clean_run():
+    assert reference_run_warning({"duplicate_refs": [], "missing_refs": []}) is None
