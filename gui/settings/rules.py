@@ -43,6 +43,7 @@ class RulesPage(SettingsPage):
         super().__init__(parent)
         self.analysis_df = analysis_df
         self.rule_widgets = []
+        rules = RuleEngine.execution_order(rules)
         self._rules_config = rules
         # ponytail: a snapshot taken when the dialog opens. The Tag Categories
         # page can add a tag while this page is open and this list will not

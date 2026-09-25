@@ -194,7 +194,6 @@ def test_lowercase_match_all_is_all_on_order_rules():
     assert tags_by_order(RuleEngine([r]).apply(df)) == {"#1": []}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-12: Rules page shows list order, engine runs priority order")
 def test_rules_page_shows_rules_in_execution_order(qtbot):
     second = rule([cond("SKU", "equals", "A")], [tag("X")], level="article", name="runs second", priority=2)
     first = rule([cond("SKU", "equals", "A")], [tag("Y")], level="article", name="runs first", priority=1)

@@ -701,6 +701,18 @@ class RuleEngine:
             }]
         return rule
 
+    @staticmethod
+    def execution_order(rules):
+        """The rules in the order apply() runs them.
+
+        Lower priority first; a rule with no priority runs after every
+        prioritised one below 1000, in list order (1000, 1001, ...). Stable.
+        The Rules page lists rules with this, so what it shows is what runs.
+        """
+        defaults = iter(range(1000, 1000 + len(rules)))
+        keys = [r["priority"] if "priority" in r else next(defaults) for r in rules]
+        return [r for _, r in sorted(zip(keys, rules), key=lambda kr: kr[0])]
+
     def __init__(self, rules_config):
         """Initializes the RuleEngine with priority-sorted rules.
 
@@ -728,7 +740,7 @@ class RuleEngine:
             self._normalize_steps(rule)
 
         # Sort by priority (lower number = higher priority = executes first)
-        self.rules = sorted(self.rules, key=lambda r: r.get("priority", 1000))
+        self.rules = self.execution_order(self.rules)
 
         logger.info(f"[RULE ENGINE] Loaded {len(self.rules)} rules (sorted by priority)")
 

@@ -455,3 +455,9 @@ def test_order_rule_negation_on_a_line_field_means_no_line():
     out = RuleEngine([rule]).apply(df)
     tagged = out.loc[out["Internal_Tags"].str.contains("NO_GIFT"), "Order_Number"]
     assert set(tagged) == {"#2"}
+
+
+def test_execution_order_puts_unprioritised_rules_last_in_list_order():
+    a, b, c = {"name": "a"}, {"name": "b", "priority": 5}, {"name": "c"}
+    assert [r["name"] for r in RuleEngine.execution_order([a, b, c])] == ["b", "a", "c"]
+    assert "priority" not in a  # the caller's dicts are not written to
