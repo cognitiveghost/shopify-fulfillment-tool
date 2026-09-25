@@ -274,7 +274,6 @@ def test_unstamped_page_is_not_counted_as_matched(tmp_path, monkeypatch):
     assert process_reference_labels(str(pdf), str(csv_path), str(out))["matched"] == 0
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-10: configured columns are ignored when lot tracking is active")
 def test_configured_columns_apply_with_lot_tracking(tmp_path):
     df = frame([("#1", "A", 2, FF)])
     df["Lot_Details"] = [[{"qty_allocated": 2, "expiry": "2027-01", "batch": "L1"}]]

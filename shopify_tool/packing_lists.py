@@ -171,46 +171,39 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
             # Expand lot rows BEFORE destination-country deduplication so the
             # dedup correctly picks only the first row of each (now expanded) order
             sorted_list = _expand_lot_rows(sorted_list)
-            sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
-                ~sorted_list["Order_Number"].duplicated(), ""
-            )
-            columns_for_print = [
-                "Destination_Country",
-                "Order_Number",
-                "Repeat",
-                "SKU",
-                "Warehouse_Name",
-                "Quantity",
-                "Lot_Expiry",
-                "Lot_Batch",
-                "Shipping_Provider",
-            ]
-        else:
-            # Show destination country only for the first item of an order
-            sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
-                ~sorted_list["Order_Number"].duplicated(), ""
-            )
-            default_columns = [
-                "Destination_Country",
-                "Order_Number",
-                "Repeat",
-                "SKU",
-                "Warehouse_Name",  # From stock file - actual warehouse product names (or Product_Name fallback)
-                "Quantity",
-                "Shipping_Provider",
-            ]
-            if columns:
-                # Repeat is derived below, so it is always available.
-                available = {*sorted_list.columns, "Repeat"}
-                columns_for_print = [c for c in columns if c in available]
-                missing = [c for c in columns if c not in available]
-                if missing:
-                    logger.warning(f"Configured columns not in the data, skipped: {missing}")
-                if not columns_for_print:
-                    logger.warning("No configured column exists in the data; using the default layout")
-                    columns_for_print = default_columns
-            else:
+        # Show destination country only for the first item of an order
+        sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
+            ~sorted_list["Order_Number"].duplicated(), ""
+        )
+
+        default_columns = [
+            "Destination_Country",
+            "Order_Number",
+            "Repeat",
+            "SKU",
+            "Warehouse_Name",  # From stock file - actual warehouse product names (or Product_Name fallback)
+            "Quantity",
+            *(["Lot_Expiry", "Lot_Batch"] if has_lot_details else []),
+            "Shipping_Provider",
+        ]
+        if columns:
+            wanted = list(columns)
+            if has_lot_details:
+                # Lot columns travel with Quantity in a configured layout too
+                missing_lot = [c for c in ("Lot_Expiry", "Lot_Batch") if c not in wanted]
+                at = wanted.index("Quantity") + 1 if "Quantity" in wanted else len(wanted)
+                wanted[at:at] = missing_lot
+            # Repeat is derived below, so it is always available.
+            available = {*sorted_list.columns, "Repeat"}
+            columns_for_print = [c for c in wanted if c in available]
+            missing = [c for c in wanted if c not in available]
+            if missing:
+                logger.warning(f"Configured columns not in the data, skipped: {missing}")
+            if not columns_for_print:
+                logger.warning("No configured column exists in the data; using the default layout")
                 columns_for_print = default_columns
+        else:
+            columns_for_print = default_columns
 
         # Repeat mark: first row of an order any of whose rows carries the
         # note. Same rule as gui.pandas_model.is_repeat, inlined because

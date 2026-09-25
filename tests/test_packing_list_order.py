@@ -28,3 +28,11 @@ def test_label_numbers_follow_the_packing_list(tmp_path):
     orders = sort_for_packing_list(df.assign(item_count=1)).reset_index(drop=True)
     labels = generate_barcodes_batch(orders)
     assert [r["order_number"] for r in sorted(labels, key=lambda r: r["sequential_num"])] == listed
+
+
+def test_lot_columns_follow_quantity_in_a_configured_layout(tmp_path):
+    df = _frame().head(1)
+    df["Lot_Details"] = [[{"qty_allocated": 1, "expiry": "2027-01", "batch": "L1"}]]
+    create_packing_list(df, str(tmp_path / "p.xlsx"), columns=["Order_Number", "Quantity", "SKU"])
+    assert pd.read_excel(tmp_path / "p.xlsx").columns.tolist() == [
+        "Order_Number", "Quantity", "Lot_Expiry", "Lot_Batch", "SKU"]
