@@ -66,6 +66,22 @@ def _expand_lot_rows(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).reset_index(drop=True)
 
 
+_COURIER_PRIORITY = {"DHL": 0, "PostOne": 1, "DPD": 2}
+
+
+def sort_for_packing_list(df):
+    """The packing list's row order: courier (DHL, PostOne, DPD, then the
+    rest), then numeric order number ("#9" before "#10"), then SKU. The
+    barcode tab numbers its labels in this same order, so label #N is the
+    N-th order on the list."""
+    keyed = df.assign(
+        _courier=df["Shipping_Provider"].map(_COURIER_PRIORITY).fillna(3),
+        _order=df["Order_Number"].apply(order_number_sort_key),
+    )
+    by = ["_courier", "_order"] + (["SKU"] if "SKU" in df.columns else [])
+    return keyed.sort_values(by=by, kind="stable").drop(columns=["_courier", "_order"])
+
+
 def create_packing_list(analysis_df, output_file, report_name="Packing List",
                         filters=None, exclude_skus=None, columns=None):
     """Creates a versatile, formatted packing list in an Excel .xlsx file.
@@ -140,14 +156,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
                 logger.warning("Neither Warehouse_Name nor Product_Name found, using empty string")
                 filtered_orders["Warehouse_Name"] = ""
 
-        # Sort by provider priority, then numeric order number, then SKU.
-        # order_number_sort_key avoids lexicographic issues ("#9" vs "#10").
-        provider_map = {"DHL": 0, "PostOne": 1, "DPD": 2}
-        filtered_orders = filtered_orders.copy()
-        filtered_orders["sort_priority"] = filtered_orders["Shipping_Provider"].map(provider_map).fillna(3)
-        filtered_orders["_order_sort"] = filtered_orders["Order_Number"].apply(order_number_sort_key)
-        sorted_list = filtered_orders.sort_values(by=["sort_priority", "_order_sort", "SKU"])
-        sorted_list = sorted_list.drop(columns=["_order_sort"])
+        sorted_list = sort_for_packing_list(filtered_orders)
 
         # Detect whether lot tracking data is present
         has_lot_details = (

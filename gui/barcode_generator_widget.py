@@ -392,7 +392,7 @@ class BarcodeGeneratorWidget(QWidget):
     def _generate_barcodes_worker(self):
         """Worker function for barcode generation."""
         from shopify_tool.barcode_processor import generate_barcodes_batch
-        from shopify_tool.csv_utils import order_number_sort_key
+        from shopify_tool.packing_lists import sort_for_packing_list
 
         # Filter to unique orders and calculate item count (total quantity of products)
         unique_orders = (
@@ -427,19 +427,10 @@ class BarcodeGeneratorWidget(QWidget):
                 merged_tags
             )
 
-        # Sort by natural order so sequential numbering (idx+1) matches numeric order
-        unique_orders["_order_sort"] = unique_orders["Order_Number"].apply(
-            order_number_sort_key
-        )
-        unique_orders = (
-            unique_orders.sort_values("_order_sort")
-            .drop(columns=["_order_sort"])
-            .reset_index(drop=True)
-        )
+        # Label N is the N-th order on the packing list
+        unique_orders = sort_for_packing_list(unique_orders).reset_index(drop=True)
 
-        self.log.info(
-            "Using independent sequential numbering (1, 2, 3...) in natural order"
-        )
+        self.log.info("Numbering labels in packing-list order")
 
         # Prepare barcode records with independent numbering per packing list
         results = generate_barcodes_batch(
