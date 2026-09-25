@@ -103,7 +103,7 @@ class TestLoadPackedOrders:
 
         df = load_session_signals(pm, "ALMADERM")[0]
 
-        assert list(df.columns) == ["Order_Number", "Execution_Date"]
+        assert list(df.columns) == ["Order_Number", "Execution_Date", "Session"]
         assert dict(zip(df["Order_Number"], df["Execution_Date"])) == {
             "#11019512": "2026-07-26",
             "#11019513": "2026-07-26",
@@ -168,7 +168,20 @@ class TestLoadPackedOrders:
         df = load_session_signals(pm, "ALMADERM")[0]
         assert set(df["Order_Number"]) == {"#A", "#B", "#C"}
 
-    def test_same_order_packed_twice_keeps_earliest(self, tmp_path):
+    def test_same_order_packed_twice_in_a_session_keeps_earliest(self, tmp_path):
+        pm = _write_sessions(tmp_path, "ALMADERM", [
+            {"session_name": "2026-07-01_1", "packing_progress": {
+                "L2": {"updated_at": "2026-07-05T10:00:00+00:00",
+                       "completed_orders": ["#A"]},
+                "L1": {"updated_at": "2026-07-01T10:00:00+00:00",
+                       "completed_orders": ["#A"]}}},
+        ])
+
+        df = load_session_signals(pm, "ALMADERM")[0]
+        assert len(df) == 1
+        assert df.iloc[0]["Execution_Date"] == "2026-07-01"
+
+    def test_same_order_packed_in_two_sessions_keeps_a_row_each(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "2026-07-05_1", "packing_progress": {
                 "L": {"updated_at": "2026-07-05T10:00:00+00:00",
@@ -179,8 +192,8 @@ class TestLoadPackedOrders:
         ])
 
         df = load_session_signals(pm, "ALMADERM")[0]
-        assert len(df) == 1
-        assert df.iloc[0]["Execution_Date"] == "2026-07-01"
+        assert set(zip(df.Session, df.Execution_Date)) == {
+            ("2026-07-05_1", "2026-07-05"), ("2026-07-01_1", "2026-07-01")}
 
     # --- degradation: each of these must return empty, not raise ---
 
@@ -200,7 +213,7 @@ class TestLoadPackedOrders:
 
         df = load_session_signals(pm, "ALMADERM")[0]
         assert df.empty
-        assert list(df.columns) == ["Order_Number", "Execution_Date"]
+        assert list(df.columns) == ["Order_Number", "Execution_Date", "Session"]
 
     def test_entry_without_packing_progress_is_skipped(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
@@ -209,7 +222,7 @@ class TestLoadPackedOrders:
         assert load_session_signals(pm, "ALMADERM")[0].empty
 
     def test_missing_client_directory_returns_empty(self, tmp_path):
-        assert load_session_signals(_FakeProfileManager(tmp_path)[0], "NOSUCH").empty
+        assert load_session_signals(_FakeProfileManager(tmp_path), "NOSUCH")[0].empty
 
     def test_malformed_index_is_rebuilt_from_the_session_directories(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [

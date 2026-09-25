@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from shopify_tool import core
+from shopify_tool import core, fulfillment_history
 
 _ORDERS_MAPPING = {
     "Name": "Order_Number",
@@ -113,7 +113,9 @@ class TestFulfillmentHistoryMerge:
     """
 
     def test_reanalysis_preserves_original_execution_date(self):
-        from shopify_tool.core import _merge_fulfillment_history
+        from shopify_tool.fulfillment_history import (
+            merge_earliest as _merge_fulfillment_history,
+        )
 
         history = pd.DataFrame(
             {
@@ -138,7 +140,9 @@ class TestFulfillmentHistoryMerge:
         assert dates["#11014599"] == "2025-11-27"
 
     def test_genuinely_new_order_is_added(self):
-        from shopify_tool.core import _merge_fulfillment_history
+        from shopify_tool.fulfillment_history import (
+            merge_earliest as _merge_fulfillment_history,
+        )
 
         history = pd.DataFrame(
             {
@@ -163,7 +167,9 @@ class TestFulfillmentHistoryMerge:
         """A blank Execution_Date is not a date to preserve. Positional
         keep="first" pinned it forever; the earliest PARSED date must win,
         and NaT is not earliest."""
-        from shopify_tool.core import _merge_fulfillment_history
+        from shopify_tool.fulfillment_history import (
+            merge_earliest as _merge_fulfillment_history,
+        )
 
         history = pd.DataFrame(
             {
@@ -185,7 +191,9 @@ class TestFulfillmentHistoryMerge:
     def test_duplicate_history_rows_keep_the_earliest_date(self):
         """Legacy history files hold more than one row per order; whichever
         row came first in the file is not necessarily the earliest."""
-        from shopify_tool.core import _merge_fulfillment_history
+        from shopify_tool.fulfillment_history import (
+            merge_earliest as _merge_fulfillment_history,
+        )
 
         history = pd.DataFrame(
             {
@@ -205,7 +213,9 @@ class TestFulfillmentHistoryMerge:
         assert merged.iloc[0]["Execution_Date"] == "2025-11-27"
 
     def test_empty_history_accepts_all_new_orders(self):
-        from shopify_tool.core import _merge_fulfillment_history
+        from shopify_tool.fulfillment_history import (
+            merge_earliest as _merge_fulfillment_history,
+        )
 
         history = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
         newly_fulfilled = pd.DataFrame(
@@ -230,12 +240,14 @@ class TestPackedOrdersAreDetectionOnly:
     """
 
     def _run(self, tmp_path, monkeypatch, packed_df):
-        monkeypatch.setattr(core, "load_packed_orders", lambda _pm, _cid: packed_df)
+        monkeypatch.setattr(
+            core, "load_session_signals", lambda _pm, _cid: (packed_df, None)
+        )
         # Legacy mode writes history via get_persistent_data_path; keep it in
         # tmp_path so the test never touches the real app-data directory.
         history_path = tmp_path / "fulfillment_history.csv"
         monkeypatch.setattr(
-            core, "get_persistent_data_path", lambda _name: history_path
+            fulfillment_history, "get_persistent_data_path", lambda _name: history_path
         )
 
         orders_csv = tmp_path / "orders.csv"
@@ -333,8 +345,8 @@ class TestPackedOrdersAreDetectionOnly:
 
 
 def test_auto_reads_each_file_with_its_own_delimiter(tmp_path, monkeypatch):
-    monkeypatch.setattr(core, "load_packed_orders", lambda _pm, _cid: None)
-    monkeypatch.setattr(core, "get_persistent_data_path", lambda _n: tmp_path / "h.csv")
+    monkeypatch.setattr(core, "load_session_signals", lambda _pm, _cid: (pd.DataFrame(columns=["Order_Number", "Execution_Date", "Session"]), None))
+    monkeypatch.setattr(fulfillment_history, "get_persistent_data_path", lambda _n: tmp_path / "h.csv")
     orders = tmp_path / "orders.csv"
     orders.write_text(
         "Name;Lineitem sku;Lineitem quantity;Shipping Method\n#1;A1;1;Standard\n",
@@ -376,9 +388,9 @@ class TestInventoryMemoryEndToEnd:
     def test_unordered_sku_reaches_memory_under_the_default_mappings(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.setattr(core, "load_packed_orders", lambda _pm, _cid: None)
+        monkeypatch.setattr(core, "load_session_signals", lambda _pm, _cid: (pd.DataFrame(columns=["Order_Number", "Execution_Date", "Session"]), None))
         monkeypatch.setattr(
-            core,
+            fulfillment_history,
             "get_persistent_data_path",
             lambda _name: tmp_path / "fulfillment_history.csv",
         )
@@ -456,6 +468,45 @@ class TestInventoryMemoryEndToEnd:
         # ...and it carries a real name, so the next memory-mode run does not
         # render "N/A" for it.
         assert saved["names"]["Z9"] == "Untouched"
+
+
+def test_unreadable_history_warns_and_is_left_alone(tmp_path, monkeypatch):
+    hist = tmp_path / "fulfillment_history.csv"
+    # A bad row after a good one -> ParserError on read.
+    hist.write_text(
+        "Order_Number,Execution_Date\n#1,2026-01-05\n#2,2026-01-05,stray\n", encoding="utf-8"
+    )
+    before = hist.read_bytes()
+    monkeypatch.setattr(fulfillment_history, "get_persistent_data_path", lambda _n: hist)
+    monkeypatch.setattr(
+        core,
+        "load_session_signals",
+        lambda *_: (pd.DataFrame(columns=["Order_Number", "Execution_Date", "Session"]), None),
+    )
+    orders = tmp_path / "orders.csv"
+    pd.DataFrame(
+        [{"Name": "#2", "Lineitem sku": "A1", "Lineitem quantity": 1, "Shipping Method": "Standard"}]
+    ).to_csv(orders, index=False)
+    stock = tmp_path / "stock.csv"
+    pd.DataFrame([{"Артикул": "A1", "Име": "Widget", "Наличност": 5}]).to_csv(stock, index=False)
+
+    ok, _msg, _df, stats = core.run_full_analysis(
+        str(stock),
+        str(orders),
+        str(tmp_path / "out"),
+        ",",
+        ",",
+        {
+            "column_mappings": {
+                "orders": _ORDERS_MAPPING,
+                "stock": {"Артикул": "SKU", "Име": "Product_Name", "Наличност": "Stock"},
+            }
+        },
+    )
+
+    assert ok, _msg
+    assert stats["history_warning"] == core.HISTORY_WARNING
+    assert hist.read_bytes() == before
 
 
 class TestBuildInventorySnapshot:
