@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pypdf
 import pytest
-import weasyprint
 from blabel import LabelWriter
 from reportlab.pdfgen import canvas
 
@@ -127,28 +126,18 @@ def mapping_csv(path, rows):
 # --- Findings ---------------------------------------------------------------
 
 
-# WeasyPrint 69.0 stops paginating after a label whose tag is empty; 70.0
-# does not. Release builds 1.9.9.5-1.9.10.2 bundled 69.0, 1.9.10.3 on bundle
-# 70.0. The page-count tests fail only where the bug is present; the app's
-# own share of AUDIT-04-1 (empty tag, no page check, no pin) fails everywhere.
-WEASYPRINT_DROPS_PAGES = weasyprint.__version__.startswith("69.")
-
-
-@pytest.mark.xfail(WEASYPRINT_DROPS_PAGES, strict=True, reason="AUDIT-04-1: WeasyPrint 69 drops labels after an untagged order")
 def test_barcode_pdf_has_a_page_for_every_label(tmp_path):
     out = generate_code128_labels_pdf(
         [label("#1", "BOX"), label("#2", ""), label("#3", "BOX")], tmp_path / "b.pdf")
     assert pdf_pages(out) == 3
 
 
-@pytest.mark.xfail(WEASYPRINT_DROPS_PAGES, strict=True, reason="AUDIT-04-1: WeasyPrint 69 drops labels after an untagged order")
 def test_qr_pdf_has_a_page_for_every_label(tmp_path):
     out = generate_qr_labels_pdf(
         [label("#1", "BOX"), label("#2", ""), label("#3", "BOX")], tmp_path / "q.pdf")
     assert pdf_pages(out) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: an order with no internal tags is labelled with an empty tag, not N/A")
 def test_orders_without_internal_tags_are_labelled_na():
     # The barcode tab's own path: tags merged per order, then batched.
     orders = pd.DataFrame({
@@ -159,7 +148,6 @@ def test_orders_without_internal_tags_are_labelled_na():
     assert [r["tag"] for r in generate_barcodes_batch(orders)] == ["N/A", "N/A"]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: a label PDF with fewer pages than labels is reported as generated")
 def test_label_pdf_with_missing_pages_is_an_error(tmp_path, monkeypatch):
     buf = BytesIO()
     one_page = canvas.Canvas(buf)
@@ -170,7 +158,6 @@ def test_label_pdf_with_missing_pages_is_an_error(tmp_path, monkeypatch):
         generate_code128_labels_pdf([label("#1"), label("#2")], tmp_path / "b.pdf")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: requirements.txt lets a label-dropping WeasyPrint in")
 def test_requirements_pin_a_weasyprint_that_keeps_every_label():
     lines = (Path(__file__).parents[2] / "requirements.txt").read_text().splitlines()
     pins = [re.search(r"weasyprint\s*>=\s*(\d+)", ln, re.IGNORECASE) for ln in lines]

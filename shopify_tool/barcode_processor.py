@@ -236,7 +236,7 @@ def generate_barcodes_batch(
             "sequential_num": sequential_num,
             "courier": courier,
             "country": country if country else "N/A",
-            "tag": format_tags_for_barcode(tag) if tag else "N/A",
+            "tag": format_tags_for_barcode(tag) or "N/A",
             "item_count": item_count,
             "success": True,
             "error": None
@@ -249,6 +249,18 @@ def generate_barcodes_batch(
 
 
 # === PDF RENDERING ===
+
+def _check_page_count(pdf_bytes: bytes, expected: int) -> None:
+    """Raises unless the rendered PDF has one page per label. A renderer
+    that drops pages (WeasyPrint 69) must fail loudly, not print short."""
+    from io import BytesIO
+
+    import pypdf
+
+    pages = len(pypdf.PdfReader(BytesIO(pdf_bytes)).pages)
+    if pages != expected:
+        raise BarcodeGenerationError(f"Label PDF has {pages} pages for {expected} labels")
+
 
 def generate_code128_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Path:
     """
@@ -292,6 +304,7 @@ def generate_code128_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) 
             label_tools=label_tools,
         )
         pdf_bytes = writer.write_labels(records, target="@memory")
+        _check_page_count(pdf_bytes, len(records))
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
         output_pdf.write_bytes(pdf_bytes)
     except Exception as e:
@@ -344,6 +357,7 @@ def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Pa
             label_tools=label_tools,
         )
         pdf_bytes = writer.write_labels(records, target="@memory")
+        _check_page_count(pdf_bytes, len(records))
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
         output_pdf.write_bytes(pdf_bytes)
     except Exception as e:
