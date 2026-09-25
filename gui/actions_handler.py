@@ -12,7 +12,7 @@ from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
-from shopify_tool import core, packing_lists, stock_export
+from shopify_tool import core, packing_lists, stock_export, stock_ledger
 from shopify_tool.analysis import toggle_order_fulfillment
 from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
@@ -949,10 +949,8 @@ class ActionsHandler(QObject):
         if not mask.any():
             self.log.warning(f"Order {order_number} is no longer in the analysis")
             return
-        is_fulfillable = (
-            df.loc[mask, "Order_Fulfillment_Status"].iloc[0] == "Fulfillable"
-        )
-        if is_fulfillable != bool(fulfillable):
+        already = stock_ledger.is_fulfillable(df, order_number)
+        if already != bool(fulfillable):
             self.toggle_fulfillment_status_for_order(order_number)
 
     def remove_line(self, order_number, line_index: int, sku):

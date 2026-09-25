@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 
 from gui.pandas_model import REPEAT_COLUMN, is_repeat
+from shopify_tool import stock_ledger
+from shopify_tool.stock_ledger import FULFILLABLE, NOT_FULFILLABLE
 from shopify_tool.tag_manager import parse_tags
 
 # Constant across every line of an order, by construction in analysis.py's
@@ -66,7 +68,6 @@ _STOCK_CODES = {"short", "out_of_stock"}
 
 ORDER_KEY = "Order_Number"
 
-FULFILLABLE = "Fulfillable"
 NO_COURIER = "No courier"
 
 
@@ -238,6 +239,13 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
     else:
         out[REPEAT_COLUMN] = False
 
+    if "Order_Fulfillment_Status" in out.columns:
+        ready = stock_ledger.fulfillable_orders(df)
+        out["Order_Fulfillment_Status"] = [
+            FULFILLABLE if str(k).strip() in ready else NOT_FULFILLABLE
+            for k in out[ORDER_KEY]
+        ]
+
     return out
 
 
@@ -294,16 +302,16 @@ def order_payload(df: pd.DataFrame) -> list[dict]:
         return []
     _, line_level = classify_columns(df)
     lines, verdicts = {}, {}
+    ready = stock_ledger.fulfillable_orders(df)
     for key, group in df.groupby(ORDER_KEY, sort=False):
         lines[key] = [
             dict(zip(line_level, map(_json_value, row)))
             for row in group[line_level].itertuples(index=False, name=None)
         ]
-        status = (
-            group["Order_Fulfillment_Status"].iloc[0]
-            if "Order_Fulfillment_Status" in group
-            else ""
-        )
+        if "Order_Fulfillment_Status" in group:
+            status = FULFILLABLE if str(key).strip() in ready else NOT_FULFILLABLE
+        else:
+            status = ""
         verdicts[key] = order_verdict(
             status,
             group["System_note"].tolist() if "System_note" in group else [],
@@ -395,10 +403,7 @@ def results_summary(df: pd.DataFrame) -> dict:
     if df is None or df.empty or ORDER_KEY not in df.columns:
         return {}
 
-    if "Order_Fulfillment_Status" in df.columns:
-        ready_mask = df["Order_Fulfillment_Status"].eq(FULFILLABLE)
-    else:
-        ready_mask = pd.Series(False, index=df.index)
+    ready_mask = df[ORDER_KEY].astype(str).str.strip().isin(stock_ledger.fulfillable_orders(df))
     fulfillable_orders = set(df.loc[ready_mask, ORDER_KEY])
     blocked_rows = df[~df[ORDER_KEY].isin(fulfillable_orders)]
     has_sku = "SKU" in df.columns

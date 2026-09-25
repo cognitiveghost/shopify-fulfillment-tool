@@ -161,10 +161,6 @@ def test_removing_fulfillable_order_returns_its_stock(verb, confirm):
     assert final_stock(mw.analysis_results_df, "A") == 3
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-5: an order whose first line has no SKU reads as blocked; toggle double-deducts",
-)
 def test_toggle_holds_a_fulfillable_order_whose_first_line_has_no_sku():
     df, *_ = analyse(stock([("A", 5)]), orders([("#1", None, 1), ("#1", "A", 2)]))
     sku_line = df["SKU"] == "A"

@@ -15,6 +15,7 @@ from .csv_utils import normalize_sku, resolve_delimiter
 from .packed_orders import load_packed_orders, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
+from .stock_ledger import FULFILLABLE, NOT_FULFILLABLE, is_fulfillable
 from .utils import get_persistent_data_path
 
 SYSTEM_TAGS = ["Repeat", "Priority", "Error"]
@@ -113,9 +114,14 @@ def build_packing_order_data(order_number: str, group: pd.DataFrame) -> dict[str
     )
 
     shipping_provider: str = str(first_row.get("Shipping_Provider", "") or "")
-    fulfillment_status: str = str(
-        first_row.get("Order_Fulfillment_Status", "Unknown") or "Unknown"
-    )
+    if "Order_Fulfillment_Status" in group.columns and "Order_Number" in group.columns:
+        fulfillment_status: str = (
+            FULFILLABLE
+            if is_fulfillable(group, first_row["Order_Number"])
+            else NOT_FULFILLABLE
+        )
+    else:
+        fulfillment_status = "Unknown"
     destination_country: str = str(first_row.get("Destination_Country", "") or "")
 
     # Build items list with safe Quantity conversion (guards against NaN / non-numeric)
