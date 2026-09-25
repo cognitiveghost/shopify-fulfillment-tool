@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 
 import pandas as pd
 from PySide6.QtCore import QThreadPool, QTimer, Signal
@@ -25,7 +26,7 @@ from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
-from shopify_tool import session_state
+from shopify_tool import core, fulfillment_history, session_state
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
@@ -35,6 +36,30 @@ from shopify_tool.tag_manager import _normalize_tag_categories
 from shopify_tool.undo_manager import UndoManager
 
 logger = logging.getLogger(__name__)
+
+
+def follow_inventory_memory(mw):
+    """Memory follows this session's state only while this session owns it.
+
+    Module-level, not a method, so the save-path tests can call
+    MainWindow.save_session_state on a plain namespace.
+    """
+    this = Path(mw.session_path).name
+    memory = mw.profile_manager.get_inventory_memory(mw.current_client_id) or {}
+    if memory.get("session") != this:
+        logger.info(
+            f"Inventory memory belongs to {memory.get('session')!r}; not rewriting it from {this}"
+        )
+        return
+    baseline = core.read_memory_baseline(mw.session_path)
+    if baseline is None:
+        return
+    snapshot = core.build_inventory_snapshot(
+        mw.analysis_results_df, core.baseline_stock_df(baseline)
+    )
+    mw.profile_manager.save_inventory_memory(
+        mw.current_client_id, snapshot, names_dict=baseline.get("names") or None, session=this
+    )
 
 
 class MainWindow(QMainWindow):
@@ -709,8 +734,6 @@ class MainWindow(QMainWindow):
         state persistence across session reloads. A save another PC has made
         stale is refused, and a failed one is reported (ADR 0011).
         """
-        from pathlib import Path
-
         # Check prerequisites
         if not self.session_path:
             logger.debug("No active session - skipping save_session_state")
@@ -744,6 +767,29 @@ class MainWindow(QMainWindow):
                 "everything on screen. Details are in Logs.",
             )
             return
+
+        # History follows the saved state, not the run (ADR 0012). A failure
+        # heals on the next save, which rewrites this session's rows whole.
+        # ponytail: history write (and memory follow below) on the GUI thread; move to the threadpool with a
+        # per-session coalescing queue if saves feel slow on the share
+        try:
+            fulfillment_history.record_session(
+                fulfillment_history.history_path(
+                    self.profile_manager, self.current_client_id
+                ),
+                Path(self.session_path).name,
+                self.analysis_results_df,
+            )
+        except Exception:
+            logger.exception("Failed to record fulfillment history")
+
+        profile = getattr(self, "active_profile_config", None) or {}
+        inv = profile.get("inventory_memory") or {}
+        if inv.get("enabled"):
+            try:
+                follow_inventory_memory(self)
+            except Exception:
+                logger.exception("Failed to update inventory memory from the session")
 
         # current_state.pkl above is the state; these only mirror it, so a
         # failure here is logged, not shown.
@@ -779,8 +825,6 @@ class MainWindow(QMainWindow):
         Returns:
             True if loaded successfully, False otherwise
         """
-        from pathlib import Path
-
         try:
             session_path = Path(session_path)
             analysis_dir = session_path / "analysis"
@@ -891,8 +935,6 @@ class MainWindow(QMainWindow):
         Order greyed out with nothing on screen saying why. Only the stock
         file is restored -- see the loop below for why the orders file is not.
         """
-        from pathlib import Path
-
         try:
             input_dir = self.session_manager.get_input_dir(session_path)
         except Exception:

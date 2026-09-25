@@ -217,6 +217,8 @@ class ActionsHandler(QObject):
             self.mw.log_activity(
                 "Analysis", f"Analysis complete. Report saved to: {result_msg}"
             )
+            if stats and stats.get("history_warning"):
+                self._results_toast(stats["history_warning"])
 
             # Inventory memory is persisted by core.run_full_analysis using the
             # true post-fulfillment Final_Stock (groupby('SKU').last()). Do not

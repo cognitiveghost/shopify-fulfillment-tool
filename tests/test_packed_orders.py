@@ -3,11 +3,11 @@ import os
 
 import pandas as pd
 
-from shopify_tool.packed_orders import load_packed_orders, union_history_with_packed
+from shopify_tool.packed_orders import load_session_signals, union_history_with_packed
 
 
 class _FakeProfileManager:
-    """Minimal stand-in exposing only what load_packed_orders uses."""
+    """Minimal stand-in exposing only what load_session_signals uses."""
 
     def __init__(self, sessions_root):
         self._sessions_root = sessions_root
@@ -35,6 +35,54 @@ def _write_sessions(tmp_path, client_id, entries):
     return _FakeProfileManager(tmp_path)
 
 
+def _empty_packed():
+    return pd.DataFrame(columns=["Order_Number", "Execution_Date", "Session"])
+
+
+class TestSessionSignals:
+    def test_rows_carry_session_and_live_set_excludes_abandoned(self, tmp_path):
+        pm = _write_sessions(tmp_path, "ALMADERM", [
+            {"session_name": "S1", "status": "active", "packing_progress": {
+                "L": {"started_at": "2026-07-01T10:00:00+00:00", "completed_orders": ["#1"]}}},
+            {"session_name": "S2", "status": "abandoned", "packing_progress": {
+                "L": {"started_at": "2026-07-01T10:00:00+00:00", "completed_orders": ["#2"]}}},
+        ])
+        df, live = load_session_signals(pm, "ALMADERM")
+        assert set(zip(df.Order_Number, df.Session)) == {("#1", "S1"), ("#2", "S2")}
+        assert live == {"S1"}
+
+    def test_unreadable_index_returns_none_live_set(self):
+        class Broken:
+            def get_sessions_root(self):
+                raise OSError("share gone")
+
+        df, live = load_session_signals(Broken(), "ALMADERM")
+        assert df.empty and live is None
+
+    def test_no_profile_manager_returns_none_live_set(self):
+        df, live = load_session_signals(None, "ALMADERM")
+        assert df.empty and live is None
+
+    def test_unreachable_sessions_folder_returns_none_live_set(self, tmp_path):
+        # A missing folder lists as no sessions, same as a share that's down.
+        df, live = load_session_signals(_FakeProfileManager(tmp_path), "NOSUCH")
+        assert df.empty and live is None
+
+
+class TestLiveSessions:
+    def test_union_drops_rows_of_dead_sessions(self):
+        hist = pd.DataFrame({"Order_Number": ["#1", "#2", "#3"],
+                             "Execution_Date": ["2026-01-01"] * 3,
+                             "Session": ["S1", "GONE", ""]})
+        out = union_history_with_packed(hist, _empty_packed(), live_sessions={"S1"})
+        assert set(out.Order_Number) == {"#1", "#3"} and set(out.Source) == {"history"}
+
+    def test_live_sessions_none_filters_nothing(self):
+        hist = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": ["2026-01-01"],
+                             "Session": ["GONE"]})
+        assert list(union_history_with_packed(hist, _empty_packed(), None).Order_Number) == ["#1"]
+
+
 class TestLoadPackedOrders:
     def test_a_multi_day_list_dates_its_orders_by_started_at(self, tmp_path):
         """The double-ship regression.
@@ -58,9 +106,9 @@ class TestLoadPackedOrders:
             }
         ])
 
-        df = load_packed_orders(pm, "ALMADERM")
+        df = load_session_signals(pm, "ALMADERM")[0]
 
-        assert list(df.columns) == ["Order_Number", "Execution_Date"]
+        assert list(df.columns) == ["Order_Number", "Execution_Date", "Session"]
         assert dict(zip(df["Order_Number"], df["Execution_Date"])) == {
             "#11019512": "2026-07-26",
             "#11019513": "2026-07-26",
@@ -80,7 +128,7 @@ class TestLoadPackedOrders:
             }
         ])
 
-        df = load_packed_orders(pm, "ALMADERM")
+        df = load_session_signals(pm, "ALMADERM")[0]
         assert df.iloc[0]["Execution_Date"] == "2026-07-26"
 
     def test_falls_back_to_updated_at_when_started_at_is_unparseable(self, tmp_path):
@@ -99,7 +147,7 @@ class TestLoadPackedOrders:
             }
         ])
 
-        df = load_packed_orders(pm, "ALMADERM")
+        df = load_session_signals(pm, "ALMADERM")[0]
         assert df.iloc[0]["Execution_Date"] == "2026-07-26"
 
     def test_collects_across_sessions_and_packing_lists(self, tmp_path):
@@ -122,10 +170,23 @@ class TestLoadPackedOrders:
             },
         ])
 
-        df = load_packed_orders(pm, "ALMADERM")
+        df = load_session_signals(pm, "ALMADERM")[0]
         assert set(df["Order_Number"]) == {"#A", "#B", "#C"}
 
-    def test_same_order_packed_twice_keeps_earliest(self, tmp_path):
+    def test_same_order_packed_twice_in_a_session_keeps_earliest(self, tmp_path):
+        pm = _write_sessions(tmp_path, "ALMADERM", [
+            {"session_name": "2026-07-01_1", "packing_progress": {
+                "L2": {"updated_at": "2026-07-05T10:00:00+00:00",
+                       "completed_orders": ["#A"]},
+                "L1": {"updated_at": "2026-07-01T10:00:00+00:00",
+                       "completed_orders": ["#A"]}}},
+        ])
+
+        df = load_session_signals(pm, "ALMADERM")[0]
+        assert len(df) == 1
+        assert df.iloc[0]["Execution_Date"] == "2026-07-01"
+
+    def test_same_order_packed_in_two_sessions_keeps_a_row_each(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "2026-07-05_1", "packing_progress": {
                 "L": {"updated_at": "2026-07-05T10:00:00+00:00",
@@ -135,9 +196,9 @@ class TestLoadPackedOrders:
                       "completed_orders": ["#A"]}}},
         ])
 
-        df = load_packed_orders(pm, "ALMADERM")
-        assert len(df) == 1
-        assert df.iloc[0]["Execution_Date"] == "2026-07-01"
+        df = load_session_signals(pm, "ALMADERM")[0]
+        assert set(zip(df.Session, df.Execution_Date)) == {
+            ("2026-07-05_1", "2026-07-05"), ("2026-07-01_1", "2026-07-01")}
 
     # --- degradation: each of these must return empty, not raise ---
 
@@ -155,18 +216,18 @@ class TestLoadPackedOrders:
             }
         ])
 
-        df = load_packed_orders(pm, "ALMADERM")
+        df = load_session_signals(pm, "ALMADERM")[0]
         assert df.empty
-        assert list(df.columns) == ["Order_Number", "Execution_Date"]
+        assert list(df.columns) == ["Order_Number", "Execution_Date", "Session"]
 
     def test_entry_without_packing_progress_is_skipped(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "2026-07-26_1", "status": "active"}
         ])
-        assert load_packed_orders(pm, "ALMADERM").empty
+        assert load_session_signals(pm, "ALMADERM")[0].empty
 
     def test_missing_client_directory_returns_empty(self, tmp_path):
-        assert load_packed_orders(_FakeProfileManager(tmp_path), "NOSUCH").empty
+        assert load_session_signals(_FakeProfileManager(tmp_path), "NOSUCH")[0].empty
 
     def test_malformed_index_is_rebuilt_from_the_session_directories(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
@@ -178,14 +239,14 @@ class TestLoadPackedOrders:
             "{not json", encoding="utf-8"
         )
 
-        assert set(load_packed_orders(pm, "ALMADERM")["Order_Number"]) == {"#A"}
+        assert set(load_session_signals(pm, "ALMADERM")[0]["Order_Number"]) == {"#A"}
 
     def test_unparseable_timestamp_is_skipped_without_raising(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "s", "packing_progress": {
                 "L": {"updated_at": "not-a-date", "completed_orders": ["#A"]}}},
         ])
-        assert load_packed_orders(pm, "ALMADERM").empty
+        assert load_session_signals(pm, "ALMADERM")[0].empty
 
     def test_client_id_is_case_insensitive(self, tmp_path):
         pm = _write_sessions(tmp_path, "ALMADERM", [
@@ -193,7 +254,7 @@ class TestLoadPackedOrders:
                 "L": {"updated_at": "2026-07-01T10:00:00+00:00",
                       "completed_orders": ["#A"]}}},
         ])
-        assert not load_packed_orders(pm, "almaderm").empty
+        assert not load_session_signals(pm, "almaderm")[0].empty
 
 
 class TestStaleIndexIsRefreshed:
@@ -222,23 +283,24 @@ class TestStaleIndexIsRefreshed:
         session_mtime = (client_dir / "2026-07-01_1").stat().st_mtime
         os.utime(index_path, (session_mtime - 10, session_mtime - 10))
 
-        assert set(load_packed_orders(pm, "ALMADERM")["Order_Number"]) == {"#A"}
+        assert set(load_session_signals(pm, "ALMADERM")[0]["Order_Number"]) == {"#A"}
 
 
 class TestUnionHistoryWithPacked:
-    def test_order_in_both_sources_keeps_earlier_date(self):
+    def test_order_in_both_sources_keeps_a_row_per_source(self):
+        """The sources follow different rules (ADR 0012), so neither may
+        swallow the other."""
         history = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["2026-07-10"]})
         packed = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["2026-07-01"]})
 
         out = union_history_with_packed(history, packed)
-        assert len(out) == 1
-        assert out.iloc[0]["Execution_Date"] == "2026-07-01"
+        assert sorted(out["Source"]) == ["history", "packed"]
 
-    def test_order_in_both_sources_keeps_earlier_date_when_history_is_earlier(self):
-        history = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["2026-07-01"]})
-        packed = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["2026-07-10"]})
+    def test_same_source_and_session_keeps_the_earliest_date(self):
+        history = pd.DataFrame({"Order_Number": ["#A", "#A"],
+                                "Execution_Date": ["2026-07-10", "2026-07-01"]})
 
-        out = union_history_with_packed(history, packed)
+        out = union_history_with_packed(history, _empty_packed())
         assert len(out) == 1
         assert out.iloc[0]["Execution_Date"] == "2026-07-01"
 
@@ -262,7 +324,7 @@ class TestUnionHistoryWithPacked:
         empty = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
         out = union_history_with_packed(empty, empty)
         assert out.empty
-        assert list(out.columns) == ["Order_Number", "Execution_Date"]
+        assert list(out.columns) == ["Order_Number", "Execution_Date", "Session", "Source"]
 
 
 class TestMalformedCrossToolDataNeverAborts:
@@ -274,7 +336,7 @@ class TestMalformedCrossToolDataNeverAborts:
         pm = _write_sessions(tmp_path, "ALMADERM", [
             {"session_name": "s", "packing_progress": {"ALL": block}}
         ])
-        return load_packed_orders(pm, "ALMADERM")
+        return load_session_signals(pm, "ALMADERM")[0]
 
     def test_completed_orders_not_a_list(self, tmp_path):
         out = self._load(tmp_path, {"updated_at": "2026-07-01T10:00:00+03:00",
@@ -317,10 +379,10 @@ class TestUnionToleratesLegacyHistory:
     def test_legacy_date_format_does_not_win_earliest_by_string_sort(self):
         """'27/11/2025' sorts after '2026-07-01' lexicographically but is
         the earlier date."""
-        history = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["27/11/2025"]})
-        packed = pd.DataFrame({"Order_Number": ["#A"], "Execution_Date": ["2026-07-01"]})
+        history = pd.DataFrame({"Order_Number": ["#A", "#A"],
+                                "Execution_Date": ["2026-07-01", "27/11/2025"]})
 
-        out = union_history_with_packed(history, packed)
+        out = union_history_with_packed(history, _empty_packed())
         assert out.iloc[0]["Execution_Date"] == "27/11/2025"
 
 
@@ -334,5 +396,5 @@ class TestPackedDateUsesWarehouseLocalDate:
                 "completed_orders": ["#A"],
             }}}
         ])
-        out = load_packed_orders(pm, "ALMADERM")
+        out = load_session_signals(pm, "ALMADERM")[0]
         assert out.iloc[0]["Execution_Date"] == "2026-07-02"

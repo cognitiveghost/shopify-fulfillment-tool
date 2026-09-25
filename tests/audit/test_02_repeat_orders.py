@@ -1,12 +1,12 @@
 """Audit 02: repeat orders, inventory memory, packed-order check.
 
-Report: docs/audit/02-repeat-orders.md. Every AUDIT-02-k test fails because
-of the bug it names and is marked xfail(strict=True); the fix removes the
-marker. The unmarked tests pin what the audit verified correct.
+Report: docs/audit/02-repeat-orders.md. Every AUDIT-02-k test began as a proof
+of the bug it names; the fixes are in, so each now pins the fixed behaviour.
+The "verified correct" tests pin what the audit found already right.
 
 Runs go through core.run_full_analysis in legacy mode (no session manager),
 so the real history read, repeat detection and history write all run. The
-Packing Tool signal is injected by replacing core.load_packed_orders, whose
+Packing Tool signal is injected by replacing core.load_session_signals, whose
 own reader is covered by tests/test_packed_orders.py. Fixtures are synthetic.
 """
 
@@ -19,7 +19,7 @@ import pytest
 
 from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
-from shopify_tool import core
+from shopify_tool import core, fulfillment_history
 from shopify_tool.packing_lists import create_packing_list
 from shopify_tool.sku_writeoff import calculate_writeoff_quantities
 from shopify_tool.stock_export import create_stock_export
@@ -40,10 +40,14 @@ TODAY = datetime.datetime.now().astimezone().date()
 YESTERDAY = (TODAY - datetime.timedelta(days=1)).isoformat()
 
 
-def packed(*orders, day=YESTERDAY):
-    """What load_packed_orders returns: orders Packing Tool completed."""
+def packed(*orders, day=YESTERDAY, session="2026-01-01_1"):
+    """The packed frame load_session_signals returns: orders Packing Tool completed."""
     return pd.DataFrame(
-        {"Order_Number": list(orders), "Execution_Date": [day] * len(orders)}
+        {
+            "Order_Number": list(orders),
+            "Execution_Date": [day] * len(orders),
+            "Session": [session] * len(orders),
+        }
     )
 
 
@@ -54,25 +58,31 @@ class Shop:
         self.dir = tmp_path
         self.history = tmp_path / "fulfillment_history.csv"
         self.packed = packed()
-        monkeypatch.setattr(core, "get_persistent_data_path", lambda _n: self.history)
-        monkeypatch.setattr(core, "load_packed_orders", lambda _pm, _cid: self.packed)
+        monkeypatch.setattr(
+            fulfillment_history, "get_persistent_data_path", lambda _n: self.history
+        )
+        monkeypatch.setattr(
+            core, "load_session_signals", lambda _pm, _cid: (self.packed, None)
+        )
         self._n = 0
 
     def write_history(self, rows):
-        pd.DataFrame(rows, columns=["Order_Number", "Execution_Date"]).to_csv(
+        """rows: (order, date) legacy rows, or (order, date, session)."""
+        rows = [(*r, "") if len(r) == 2 else r for r in rows]
+        pd.DataFrame(rows, columns=fulfillment_history.COLUMNS).to_csv(
             self.history, index=False
         )
 
     def history_rows(self):
-        return dict(pd.read_csv(self.history, dtype=str).values.tolist())
-
-    def age_history(self, days=1):
-        """Move every history date back, as if the next working day has come."""
-        h = pd.read_csv(self.history, dtype=str)
-        h["Execution_Date"] = (
-            pd.to_datetime(h["Execution_Date"]) - pd.Timedelta(days=days)
-        ).dt.strftime("%Y-%m-%d")
-        h.to_csv(self.history, index=False)
+        """{order: earliest date} over every row, whatever its session."""
+        h = pd.read_csv(self.history, dtype=str, keep_default_na=False).sort_values(
+            "Execution_Date"
+        )
+        return dict(
+            h.drop_duplicates("Order_Number")[
+                ["Order_Number", "Execution_Date"]
+            ].values.tolist()
+        )
 
     def run(self, order_rows, stock_rows, window=1, **kw):
         """order_rows: (name, sku, qty); stock_rows: (sku, qty) or None for memory mode."""
@@ -156,7 +166,9 @@ class MemoryProfile:
     def get_client_directory(self, _cid):
         return self.client_dir
 
-    def save_inventory_memory(self, _cid, stock_dict, config=None, names_dict=None):
+    def save_inventory_memory(
+        self, _cid, stock_dict, config=None, names_dict=None, session=None
+    ):
         self.memory["skus"] = dict(stock_dict)
         return True
 
@@ -171,10 +183,6 @@ def shop(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-1: an order packed earlier today in another session is not flagged Repeat",
-)
 def test_order_packed_earlier_today_in_another_session_is_flagged(shop):
     # Morning session packed #1. The afternoon export still lists it, because
     # Shopify has not been marked fulfilled yet.
@@ -183,24 +191,16 @@ def test_order_packed_earlier_today_in_another_session_is_flagged(shop):
     assert repeat(df, "#1")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-2: raising the repeat window hides recent repeats instead of widening detection",
-)
 def test_raising_the_repeat_window_still_flags_yesterdays_order(shop):
     shop.write_history([("#1", YESTERDAY)])
     df = shop.run([("#1", "A", 1)], [("A", 5)], window=7)
     assert repeat(df, "#1")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-3: an order a person marks fulfillable never reaches fulfillment history",
-)
 def test_order_marked_fulfillable_by_a_person_is_flagged_next_day(shop):
     # Stock covers one of the two. A person swaps them: hold #1, ship #2.
     lines = [("#1", "A", 3), ("#2", "A", 3)]
-    df = shop.run(lines, [("A", 3)])
+    df = shop.run(lines, [("A", 3)], session_path=str(shop.dir / "2026-09-25_1"))
     handler = ActionsHandler(mw := window(df))
     handler.toggle_fulfillment_status_for_order("#1")
     handler.toggle_fulfillment_status_for_order("#2")
@@ -208,34 +208,33 @@ def test_order_marked_fulfillable_by_a_person_is_flagged_next_day(shop):
         "Order_Fulfillment_Status"
     ].first()
     assert after.to_dict() == {"#1": "Not Fulfillable", "#2": "Fulfillable"}
-    # If the fix writes history from save_session_state (a Mock here), call
-    # the real writer at this point.
-    shop.age_history()
+    # save_session_state is a Mock here; this is the writer it calls.
+    fulfillment_history.record_session(
+        shop.history, "2026-09-25_1", mw.analysis_results_df
+    )
     # #2 shipped without Packing Tool, so the packed signal stays empty.
-    df2 = shop.run(lines, [("A", 3)])
+    df2 = shop.run(lines, [("A", 3)], session_path=str(shop.dir / "2026-09-25_2"))
     assert repeat(df2, "#2")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-4: an order analysed fulfillable but held and never shipped is flagged Repeat",
-)
 def test_order_held_after_analysis_is_not_a_repeat_next_day(shop):
-    df = shop.run([("#1", "A", 1)], [("A", 5)])
+    df = shop.run(
+        [("#1", "A", 1)], [("A", 5)], session_path=str(shop.dir / "2026-09-25_1")
+    )
     mw = window(df)
     ActionsHandler(mw).toggle_fulfillment_status_for_order("#1")
     assert set(mw.analysis_results_df["Order_Fulfillment_Status"]) == {
         "Not Fulfillable"
     }
-    shop.age_history()
-    df2 = shop.run([("#1", "A", 1)], [("A", 5)])
+    fulfillment_history.record_session(
+        shop.history, "2026-09-25_1", mw.analysis_results_df
+    )
+    df2 = shop.run(
+        [("#1", "A", 1)], [("A", 5)], session_path=str(shop.dir / "2026-09-25_2")
+    )
     assert not repeat(df2, "#1")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-5: numeric order numbers never match the Packing Tool signal (int vs str)",
-)
 def test_numeric_order_number_packed_yesterday_is_flagged(shop):
     # Packing Tool records str(order_number) from the packing-list JSON.
     shop.packed = packed("12345")
@@ -243,10 +242,6 @@ def test_numeric_order_number_packed_yesterday_is_flagged(shop):
     assert repeat(df, 12345)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-6: an unreadable history file is replaced by this run's orders alone",
-)
 def test_unreadable_history_is_not_overwritten(shop):
     shop.history.write_text(
         "Order_Number,Execution_Date\n"
@@ -259,10 +254,6 @@ def test_unreadable_history_is_not_overwritten(shop):
     assert "#OLD1" in text and "#OLD2" in text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-7: two PCs analysing one client at once lose one side's history rows",
-)
 def test_concurrent_runs_keep_both_sides_history(shop, monkeypatch):
     original = core._run_analysis_and_rules
 
@@ -277,10 +268,6 @@ def test_concurrent_runs_keep_both_sides_history(shop, monkeypatch):
     assert {"#A", "#B"} <= set(shop.history_rows())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-8: a Repeat order reaches the printed packing list with no mark",
-)
 def test_packing_list_marks_a_repeat_order(shop, tmp_path):
     shop.write_history([("#1", YESTERDAY)])
     df = shop.run([("#1", "A", 1), ("#2", "A", 1)], [("A", 5)])
@@ -294,10 +281,6 @@ def test_packing_list_marks_a_repeat_order(shop, tmp_path):
     assert rows_for_1.apply(lambda r: r.str.contains("Repeat").any(), axis=1).any()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-9: a run without a stock file (inventory memory) ignores fulfillment history",
-)
 def test_memory_mode_run_reads_history(shop):
     shop.write_history([("#1", YESTERDAY)])
     pm = MemoryProfile(shop.dir, {"A": 10.0})
@@ -306,10 +289,6 @@ def test_memory_mode_run_reads_history(shop):
     assert repeat(df, "#1")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-9: a run without a stock file never saves memory or history",
-)
 def test_memory_mode_run_writes_memory_and_history(shop):
     pm = MemoryProfile(shop.dir, {"A": 10.0})
     df = shop.run([("#1", "A", 2)], None, client_id="AUDIT", profile_manager=pm)
@@ -318,10 +297,6 @@ def test_memory_mode_run_writes_memory_and_history(shop):
     assert "#1" in shop.history_rows()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-10: memory keeps one row's stock for a SKU listed on several rows",
-)
 def test_memory_seed_sums_a_sku_listed_on_several_rows():
     stock_df = pd.DataFrame({"SKU": ["A", "A", "B"], "Stock": [3, 4, 1]})
     final_df = pd.DataFrame({"SKU": ["B"], "Final_Stock": [0]})

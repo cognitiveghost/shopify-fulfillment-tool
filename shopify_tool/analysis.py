@@ -1,7 +1,7 @@
 import copy
 import logging
 import math
-from datetime import date
+from datetime import date, datetime
 
 import numpy as np
 import pandas as pd
@@ -819,106 +819,52 @@ def _calculate_final_stock(
 
 
 def _detect_repeated_orders(
-    final_df: pd.DataFrame, history_df: pd.DataFrame, repeat_window_days: int = 1
+    final_df: pd.DataFrame, history_df: pd.DataFrame, current_session: str | None = None
 ) -> pd.Series:
-    """
-    Detect orders that appear in historical fulfillment data AFTER specified time window.
+    """Mark orders already shipped by another session as "Repeat" (ADR 0012).
 
-    Business Logic:
-    An order is "repeated" if the same Order_Number appears in historical
-    fulfillment data that is OLDER than N days (executed >= N days ago).
+    Sessions are compared, not dates. `history_df` is the detection frame from
+    `packed_orders.union_history_with_packed`: [Order_Number, Execution_Date,
+    Session, Source]. A row makes its order Repeat when:
 
-    Example with repeat_window_days=1:
-    - Today: 2026-01-16
-    - Order analyzed on 2026-01-15 → NOT marked as Repeat (only 1 day ago)
-    - Order analyzed on 2026-01-14 → NOT marked as Repeat (only 2 days ago, but need >1)
+    | source                           | counts when                                  |
+    |----------------------------------|----------------------------------------------|
+    | history, Session set             | Session != current_session                   |
+    | history, Session empty (legacy)  | its date is before today, or unparseable     |
+    | packed (Packer signal)           | always (any live session, this one included) |
 
-    Wait, correction based on user requirement:
-    - repeat_window_days=1 means "mark as Repeat if executed >= 1 day ago"
-    - Today: 2026-01-16
-    - Order analyzed on 2026-01-15 → Marked as Repeat (1 day passed)
-    - Order analyzed on 2026-01-16 → NOT marked as Repeat (same day, 0 days passed)
-
-    Args:
-        final_df: Current orders DataFrame with Order_Number column
-        history_df: Historical orders DataFrame with Order_Number, Execution_Date columns
-        repeat_window_days: Minimum number of days that must pass (default: 1)
+    A frame without a Session column is all legacy rows; one without Source is
+    all history; one without Execution_Date counts every row. With
+    `current_session=None` every sessioned history row counts. Order numbers
+    compare as `str(x).strip()` on both sides, so numeric and text forms match.
 
     Returns:
         pd.Series (string) with "Repeat" for repeated orders, "" otherwise
-
-    Example:
-        >>> repeated = _detect_repeated_orders(final_df, history_df, repeat_window_days=1)
-        >>> final_df['System_note'] = repeated
     """
-    logger.debug(
-        f"Phase 5/7: Detecting repeated orders (window: {repeat_window_days} days)..."
-    )
+    logger.debug("Phase 5/7: Detecting repeated orders...")
 
-    # Handle empty history or missing date column (backward compatibility)
-    if history_df.empty or "Execution_Date" not in history_df.columns:
-        logger.warning("History has no Execution_Date column, using full history")
-        repeated_orders = (
-            history_df["Order_Number"].unique() if not history_df.empty else []
-        )
+    if history_df is None or history_df.empty:
+        return pd.Series("", index=final_df.index)
+    h = history_df
+    keys = h["Order_Number"].astype(str).str.strip()
+    session = h["Session"].fillna("").astype(str) if "Session" in h.columns else pd.Series("", index=h.index)
+    source = h["Source"] if "Source" in h.columns else pd.Series("history", index=h.index)
+    if "Execution_Date" in h.columns:
+        # Deliberately naive: pd.to_datetime yields tz-naive dates.
+        today = pd.Timestamp(datetime.now().date())  # noqa: DTZ005
+        dates = pd.to_datetime(h["Execution_Date"], errors="coerce", format="mixed").dt.normalize()
+        before_today = dates.isna() | (dates < today)
     else:
-        # FILTER history by date window
-        from datetime import datetime, timedelta
-
-        try:
-            # Parse dates (handle errors gracefully)
-            history_df_copy = history_df.copy()
-            history_df_copy["Execution_Date_Parsed"] = pd.to_datetime(
-                history_df_copy["Execution_Date"], errors="coerce"
-            )
-
-            # Check if all dates are invalid (NaT)
-            if history_df_copy["Execution_Date_Parsed"].isna().all():
-                logger.warning("All dates in history are invalid, using full history")
-                repeated_orders = history_df["Order_Number"].unique()
-            else:
-                # Normalize to date-only (remove time component) for consistent comparison
-                history_df_copy["Execution_Date_Parsed"] = history_df_copy[
-                    "Execution_Date_Parsed"
-                ].dt.normalize()
-
-                # Calculate cutoff: today minus N days
-                # We want orders that are STRICTLY older than (today - N days)
-                # Example: if repeat_window_days=1 and today=2026-01-16:
-                #   - cutoff = 2026-01-16 (today)
-                #   - We want: Execution_Date < 2026-01-16 (i.e., 2026-01-15 and earlier)
-                # Deliberately naive: must compare against Execution_Date_Parsed,
-                # which pd.to_datetime() above produces as tz-naive.
-                today = datetime.now().replace(  # noqa: DTZ005
-                    hour=0, minute=0, second=0, microsecond=0
-                )
-                cutoff_date = today - timedelta(days=repeat_window_days - 1)
-
-                # Filter history: only orders executed BEFORE cutoff (>= N days ago)
-                old_history = history_df_copy[
-                    history_df_copy["Execution_Date_Parsed"] < cutoff_date
-                ]
-
-                repeated_orders = old_history["Order_Number"].unique()
-
-                logger.info(
-                    f"Using {len(old_history)} old history records (>= {repeat_window_days} days ago) "
-                    f"(total: {len(history_df)}, cutoff: < {cutoff_date.strftime('%Y-%m-%d')})"
-                )
-        except Exception:
-            logger.exception("Failed to parse history dates")
-            # Fallback to full history
-            repeated_orders = history_df["Order_Number"].unique()
-            logger.warning("Falling back to full history due to date parsing error")
-
-    # VECTORIZED: Check if Order_Number exists in filtered history
-    repeated = np.where(final_df["Order_Number"].isin(repeated_orders), "Repeat", "")
-
-    repeated_count = (repeated == "Repeat").sum()
-    logger.debug(
-        f"Found {repeated_count} repeated orders within {repeat_window_days} days"
+        before_today = pd.Series(True, index=h.index)
+    counts = (
+        (source == "packed")
+        | ((session != "") & (session != (current_session or "")))
+        | ((session == "") & before_today)
     )
+    repeated_orders = set(keys[counts])
+    repeated = np.where(final_df["Order_Number"].astype(str).str.strip().isin(repeated_orders), "Repeat", "")
 
+    logger.debug(f"Found {(repeated == 'Repeat').sum()} repeated orders")
     return pd.Series(repeated, index=final_df.index)
 
 
@@ -966,7 +912,7 @@ def _merge_results_to_dataframe(
     fulfillment_results: dict[str, str],
     history_df: pd.DataFrame,
     courier_mappings: dict | None = None,
-    repeat_window_days: int = 1,
+    current_session: str | None = None,
     additional_columns_config: list | None = None,
     lot_allocations: dict[str, dict[str, list[dict]]] | None = None,
 ) -> pd.DataFrame:
@@ -1097,7 +1043,7 @@ def _merge_results_to_dataframe(
 
     # Detect repeated orders - VECTORIZED
     final_df["System_note"] = _detect_repeated_orders(
-        final_df, history_df, repeat_window_days
+        final_df, history_df, current_session
     )
 
     # Add unfulfillable reasons to System_note
@@ -1393,7 +1339,7 @@ def run_analysis(
     history_df,
     column_mappings=None,
     courier_mappings=None,
-    repeat_window_days=1,
+    current_session=None,
     mode: str = "multi_first",
 ):
     """
@@ -1434,9 +1380,9 @@ def run_analysis(
             1. New: {"DHL": {"patterns": ["dhl", "dhl express"]}}
             2. Legacy: {"dhl": "DHL"}
             If None or empty, uses hardcoded fallback rules for backward compatibility.
-        repeat_window_days (int, optional): Number of days to look back for repeat
-            detection. Orders fulfilled within this window are marked as "Repeat".
-            Default: 1 (only yesterday's fulfillments).
+        current_session (str, optional): Name of the session this run belongs
+            to. History rows from this session never mark a repeat; rows from
+            other sessions do. See `_detect_repeated_orders`.
         mode (str, optional): Order prioritization strategy.
             ``"multi_first"`` (default): multi-item orders processed first —
             maximizes the number of complete orders fulfilled.
@@ -1541,7 +1487,7 @@ def run_analysis(
             fulfillment_results,
             history_df,
             courier_mappings,
-            repeat_window_days,
+            current_session,
             additional_columns_config,
             lot_allocations,
         )

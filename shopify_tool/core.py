@@ -10,15 +10,21 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from . import analysis, packing_lists, stock_export
-from .csv_utils import normalize_sku, resolve_delimiter
-from .packed_orders import load_packed_orders, union_history_with_packed
+from shared.atomic_write import atomic_write_json
+
+from . import analysis, fulfillment_history, packing_lists, stock_export
+from .csv_utils import resolve_delimiter
+from .packed_orders import load_session_signals, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
 from .stock_ledger import FULFILLABLE, NOT_FULFILLABLE, is_fulfillable
-from .utils import get_persistent_data_path
 
 SYSTEM_TAGS = ["Repeat", "Priority", "Error"]
+
+HISTORY_WARNING = (
+    "Fulfillment history couldn't be read, so this run didn't check or record repeats. "
+    "Fix or restore fulfillment_history.csv in the client folder. Details are in Logs."
+)
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -429,7 +435,7 @@ def _validate_and_prepare_inputs(
     to session if needed.
 
     Args:
-        stock_file_path: Path to stock CSV file or None for test mode
+        stock_file_path: Path to stock CSV file, or None in memory mode
         orders_file_path: Path to orders CSV file or None for test mode
         output_dir_path: Legacy output directory path
         client_id: Client identifier for session mode
@@ -476,25 +482,30 @@ def _validate_and_prepare_inputs(
         logger.debug("Using legacy workflow mode")
 
     # Copy input files to session if in session mode
-    if use_session_mode and stock_file_path and orders_file_path:
+    if use_session_mode and orders_file_path:
         try:
             # Copy input files to session/input/
             input_dir = session_manager.get_input_dir(working_path)
 
             # Copy with standardized names
             orders_dest = Path(input_dir) / "orders_export.csv"
-            stock_dest = Path(input_dir) / "inventory.csv"
 
             logger.info(f"Copying orders file to: {orders_dest}")
             shutil.copy2(orders_file_path, orders_dest)
 
-            logger.info(f"Copying stock file to: {stock_dest}")
-            shutil.copy2(stock_file_path, stock_dest)
+            # Memory mode has no stock file
+            if stock_file_path:
+                stock_dest = Path(input_dir) / "inventory.csv"
+                logger.info(f"Copying stock file to: {stock_dest}")
+                shutil.copy2(stock_file_path, stock_dest)
 
             # Update session info with input file names
             session_manager.update_session_info(
                 working_path,
-                {"orders_file": "orders_export.csv", "stock_file": "inventory.csv"},
+                {
+                    "orders_file": "orders_export.csv",
+                    "stock_file": "inventory.csv" if stock_file_path else None,
+                },
             )
 
             logger.info("Input files copied to session directory")
@@ -524,6 +535,7 @@ def _load_and_validate_files(
     stock_delimiter: str,
     orders_delimiter: str,
     config: dict,
+    session_path: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Loads and validates CSV files.
 
@@ -532,11 +544,12 @@ def _load_and_validate_files(
     columns are present.
 
     Args:
-        stock_file_path: Path to stock CSV or None for test mode
+        stock_file_path: Path to stock CSV, or None for memory mode / test mode
         orders_file_path: Path to orders CSV or None for test mode
         stock_delimiter: Delimiter for stock file
         orders_delimiter: Delimiter for orders file
         config: Configuration dict containing column_mappings and test data
+        session_path: This run's session, where the memory baseline lives
 
     Returns:
         Tuple of (orders_df, stock_df)
@@ -683,15 +696,18 @@ def _load_and_validate_files(
         if stock_df is None:
             inv_mem = config.get("_inventory_memory", {})
             if inv_mem.get("enabled"):
-                skus = inv_mem.get("skus") or {}
-                names = inv_mem.get("names") or {}
-                stock_df = pd.DataFrame(
-                    [
-                        {"SKU": sku, "Product_Name": names.get(sku), "Stock": qty}
-                        for sku, qty in skus.items()
-                    ],
-                    columns=["SKU", "Product_Name", "Stock"],
-                )
+                # The session's own baseline, so a re-run never draws the
+                # session's orders from memory twice (ADR 0012).
+                baseline = read_memory_baseline(session_path)
+                if baseline is not None:
+                    stock_df = baseline_stock_df(baseline)
+                    config["_memory_baseline_reused"] = True
+                else:
+                    skus = inv_mem.get("skus") or {}
+                    names = inv_mem.get("names") or {}
+                    baseline = {"skus": skus, "names": names}
+                    stock_df = baseline_stock_df(baseline)
+                    write_memory_baseline(session_path, skus, names)
                 config["_stock_from_memory"] = True
                 logger.info(f"Loaded {len(stock_df)} SKUs from inventory memory")
 
@@ -707,88 +723,77 @@ def _load_and_validate_files(
     return orders_df, stock_df
 
 
+BASELINE_FILE = "memory_baseline.json"
+
+
+def _baseline_path(session_path) -> Path:
+    return Path(session_path) / "analysis" / BASELINE_FILE
+
+
+def read_memory_baseline(session_path) -> dict | None:
+    """The session's opening stock, {"skus": {...}, "names": {...}}, or None."""
+    if not session_path:
+        return None
+    try:
+        with open(_baseline_path(session_path), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data.get("skus"), dict) else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def baseline_stock_df(baseline: dict) -> pd.DataFrame:
+    names = baseline.get("names") or {}
+    return pd.DataFrame(
+        [
+            {"SKU": s, "Product_Name": names.get(s), "Stock": q}
+            for s, q in baseline["skus"].items()
+        ],
+        columns=["SKU", "Product_Name", "Stock"],
+    )
+
+
+def write_memory_baseline(session_path, skus: dict, names: dict | None) -> None:
+    if session_path:
+        atomic_write_json(
+            _baseline_path(session_path), {"skus": skus, "names": names or {}}
+        )
+
+
 def _load_history_data(
-    stock_file_path: str | None,
     orders_file_path: str | None,
     client_id: str | None,
     profile_manager: Any | None,
     config: dict,
-) -> pd.DataFrame:
-    """Loads fulfillment history from appropriate storage location.
-
-    Determines the correct history file path based on whether profile_manager
-    is available (server-based storage) or fallback to local storage.
-    Handles various error conditions gracefully.
+) -> tuple[pd.DataFrame, bool]:
+    """Loads fulfillment history for repeat detection.
 
     Args:
-        stock_file_path: Path to stock file (None indicates test mode)
         orders_file_path: Path to orders file (None indicates test mode)
         client_id: Client identifier for server-based storage
         profile_manager: ProfileManager instance for server-based storage
         config: Configuration dict (may contain test_history_df)
 
     Returns:
-        DataFrame with history data (may be empty if no history exists)
-
-    Raises:
-        Does not raise - returns empty DataFrame on errors
+        (history_df, readable). readable is False when the file exists but
+        can't be read; history_df is then empty, and the run must neither
+        check nor write repeats (AUDIT-02-6). Never raises.
     """
     logger.info("Loading fulfillment history...")
 
-    # Determine history file location
-    if profile_manager and client_id:
-        # Server-based storage in client directory
-        client_dir = profile_manager.get_client_directory(client_id)
-        history_path = client_dir / "fulfillment_history.csv"
-        logger.info(f"Using server-based history: {history_path}")
-    else:
-        # Fallback to local storage for tests/compatibility
-        history_path = get_persistent_data_path("fulfillment_history.csv")
-        logger.warning("Using local history fallback (no profile manager)")
+    if orders_file_path is None:  # test mode
+        return config.get("test_history_df", pd.DataFrame({"Order_Number": []})), True
 
-    # Load history
-    if stock_file_path is not None and orders_file_path is not None:
-        try:
-            if isinstance(history_path, Path):
-                history_path_str = str(history_path)
-            else:
-                history_path_str = history_path
-
-            # Force SKU column to string to prevent dtype issues
-            history_dtype = (
-                {"SKU": str}
-                if "SKU"
-                in pd.read_csv(history_path_str, nrows=0, encoding="utf-8-sig").columns
-                else {}
-            )
-            history_df = pd.read_csv(
-                history_path_str, encoding="utf-8-sig", dtype=history_dtype
-            )
-            logger.info(
-                f"Loaded {len(history_df)} records from fulfillment history: {history_path}"
-            )
-
-            # Apply SKU normalization if SKU column exists
-            if not history_df.empty and "SKU" in history_df.columns:
-                history_df["SKU"] = history_df["SKU"].apply(normalize_sku)
-                logger.debug("Applied SKU normalization to history data")
-        except FileNotFoundError:
-            history_df = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
-            logger.info("No history file found. Starting with empty history.")
-        except pd.errors.ParserError as e:
-            logger.warning(f"Failed to parse history file: {e}")
-            history_df = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
-        except UnicodeDecodeError as e:
-            logger.warning(f"Encoding error in history file: {e}")
-            history_df = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
-        except Exception as e:
-            logger.warning(f"Could not load history file: {e}")
-            history_df = pd.DataFrame(columns=["Order_Number", "Execution_Date"])
-    else:
-        # Test mode
-        history_df = config.get("test_history_df", pd.DataFrame({"Order_Number": []}))
-
-    return history_df
+    path = fulfillment_history.history_path(profile_manager, client_id)
+    try:
+        df = fulfillment_history.load(path)
+    except fulfillment_history.HistoryUnreadable:
+        logger.warning(
+            "Fulfillment history unreadable; repeats not checked this run", exc_info=True
+        )
+        return pd.DataFrame(columns=fulfillment_history.COLUMNS), False
+    logger.info(f"Loaded {len(df)} history rows from {path}")
+    return df, True
 
 
 def effective_additional_columns(column_mappings, client_config) -> list:
@@ -810,6 +815,7 @@ def _run_analysis_and_rules(
     stock_df: pd.DataFrame,
     history_df: pd.DataFrame,
     config: dict,
+    current_session: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
     """Runs analysis simulation and applies business rules.
 
@@ -819,8 +825,9 @@ def _run_analysis_and_rules(
     Args:
         orders_df: Orders DataFrame
         stock_df: Stock DataFrame
-        history_df: History DataFrame
+        history_df: Detection frame (see packed_orders.union_history_with_packed)
         config: Configuration dict with column_mappings, courier_mappings, rules, settings
+        current_session: Name of this run's session, for repeat detection
 
     Returns:
         Tuple of (final_df, summary_present_df, summary_missing_df, stats)
@@ -849,9 +856,6 @@ def _run_analysis_and_rules(
     courier_mappings = config.get("courier_mappings", {})
     logger.debug(f"Using courier mappings: {courier_mappings}")
 
-    # Get repeat detection window from config
-    repeat_window_days = config.get("settings", {}).get("repeat_detection_days", 1)
-
     # Get analysis mode from config
     analysis_mode = config.get("analysis_mode", "multi_first")
 
@@ -862,7 +866,7 @@ def _run_analysis_and_rules(
         history_df,
         column_mappings,
         courier_mappings,
-        repeat_window_days=repeat_window_days,
+        current_session=current_session,
         mode=analysis_mode,
     )
     logger.info("Analysis computation complete.")
@@ -906,39 +910,11 @@ def _run_analysis_and_rules(
     return final_df, summary_present_df, summary_missing_df, stats
 
 
-def _merge_fulfillment_history(
-    history_df: pd.DataFrame, newly_fulfilled: pd.DataFrame
-) -> pd.DataFrame:
-    """Merge newly fulfilled orders into history, keeping the EARLIEST date.
-
-    `newly_fulfilled` carries today's date, so a plain keep="last" would
-    overwrite each order's original Execution_Date on every re-analysis --
-    destroying the only record of when it was first fulfilled, and silently
-    clearing its "Repeat" flag.
-
-    Sort on the parsed date before deduping rather than relying on
-    concatenation order: a legacy history file can hold duplicate
-    Order_Numbers, or a row with a blank/unparseable Execution_Date, and
-    positional keep="first" would preserve that unusable row forever (the
-    old keep="last" at least healed it on the next fulfilment). NaT sorts
-    last, so today's date wins over a date nothing can read.
-    """
-    combined = pd.concat([history_df, newly_fulfilled])
-    sort_key = pd.to_datetime(
-        combined["Execution_Date"], errors="coerce", format="mixed"
-    )
-    combined = combined.assign(_sort_key=sort_key).sort_values(
-        "_sort_key", na_position="last"
-    )
-    return combined.drop_duplicates(subset=["Order_Number"], keep="first").drop(
-        columns="_sort_key"
-    )
-
-
 def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:
     """Post-fulfilment stock per SKU, seeded from the whole stock file.
 
-    Every SKU in the stock file is remembered. SKUs the run actually touched
+    Every SKU in the stock file is remembered, summed across the rows it is
+    listed on (Audit 01 §6). SKUs the run actually touched
     get their post-fulfilment Final_Stock; the rest keep their opening level.
     A SKU absent from the stock file drops out -- the stock file is the truth
     for what still exists (spec 2026-09-15 section 7 Q2).
@@ -950,9 +926,10 @@ def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> 
     snapshot = {}
 
     if stock_df is not None and {"SKU", "Stock"} <= set(stock_df.columns):
+        # A SKU on several rows (lots, locations) is their sum (Audit 01 §6).
+        stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
         snapshot = (
-            stock_df.groupby("SKU")["Stock"]
-            .last()
+            stock.groupby(stock_df["SKU"]).sum(min_count=1)
             .dropna()
             .apply(lambda x: max(0.0, float(x)))
             .to_dict()
@@ -973,18 +950,15 @@ def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> 
 def inventory_total_units(stock_df: pd.DataFrame) -> float:
     """Total units in a stock frame, counted the way inventory memory counts.
 
-    One row per SKU -- a stock file lists a SKU once per warehouse location --
-    and negatives clamped to zero. Those are exactly the two rules
-    build_inventory_snapshot and save_inventory_memory apply between them, so
-    a freshly loaded file and a saved snapshot are only comparable when both
-    sides use this. Summing raw rows instead made a SKU listed twice read as a
-    100% jump on every single load.
+    A SKU listed on several rows (a stock file lists it once per warehouse
+    location) is the sum of its rows, and negatives clamp to zero per SKU.
+    build_inventory_snapshot sums rows the same way, which is why a freshly
+    loaded file and a saved snapshot compare.
     """
     if stock_df is None or not {"SKU", "Stock"} <= set(stock_df.columns):
         return 0.0
-    per_sku = pd.to_numeric(
-        stock_df.groupby("SKU")["Stock"].last(), errors="coerce"
-    ).dropna()
+    stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
+    per_sku = stock.groupby(stock_df["SKU"]).sum(min_count=1).dropna()
     return float(per_sku.clip(lower=0).sum())
 
 
@@ -1025,7 +999,6 @@ def _save_results_and_reports(
     summary_present_df: pd.DataFrame,
     summary_missing_df: pd.DataFrame,
     stats: dict,
-    history_df: pd.DataFrame,
     stock_file_path: str | None,
     orders_file_path: str | None,
     use_session_mode: bool,
@@ -1034,6 +1007,10 @@ def _save_results_and_reports(
     session_manager: Any | None,
     client_id: str | None,
     profile_manager: Any | None,
+    current_session: str | None = None,
+    history_readable: bool = True,
+    session_path: str | None = None,
+    memory_baseline_reused: bool = False,
 ) -> tuple[str | None, str | None]:
     """Saves all analysis results, reports, and updates history.
 
@@ -1047,9 +1024,9 @@ def _save_results_and_reports(
             inventory-memory snapshot with SKUs the run itself never touched
         summary_present_df: Summary of fulfillable items
         summary_missing_df: Summary of missing items
-        stats: Statistics dictionary
-        history_df: Current history DataFrame
-        stock_file_path: Path to stock file (None for test mode)
+        stats: Statistics dictionary; gains "history_warning" when the
+            fulfillment history couldn't be read or written
+        stock_file_path: Path to stock file (None in memory mode)
         orders_file_path: Path to orders file (None for test mode)
         use_session_mode: Whether using session-based workflow
         working_path: Working directory (session or output path)
@@ -1057,6 +1034,13 @@ def _save_results_and_reports(
         session_manager: SessionManager instance
         client_id: Client identifier
         profile_manager: ProfileManager instance
+        current_session: Name of this run's session (None without a session path)
+        history_readable: False when the history file couldn't be read at load;
+            the run then neither checks nor records repeats
+        session_path: This run's session, where the memory baseline is written
+            (working_path is the output directory in legacy mode)
+        memory_baseline_reused: The run read stock from a baseline this
+            session already had; memory is then left to the session owning it
 
     Returns:
         Tuple of (primary_output_path, secondary_output_path)
@@ -1067,8 +1051,8 @@ def _save_results_and_reports(
     Raises:
         Exception: Propagated from file I/O operations
     """
-    # Skip file operations in test mode
-    if stock_file_path is None or orders_file_path is None:
+    # Skip file operations in test mode (no orders file, and only that)
+    if orders_file_path is None:
         logger.debug("Test mode: skipping file save operations")
         return None, None
 
@@ -1121,6 +1105,15 @@ def _save_results_and_reports(
             if status == "Not Fulfillable":
                 worksheet.set_row(row_num + 1, None, highlight_format)
     logger.info(f"Excel report saved to '{output_file_path}'")
+
+    # Record this session's orders in fulfillment history. Before the stats
+    # file is written, so it carries any warning.
+    if history_readable:
+        history_file = fulfillment_history.history_path(profile_manager, client_id)
+        if not fulfillment_history.record_session(history_file, current_session, final_df):
+            stats["history_warning"] = HISTORY_WARNING
+    else:
+        stats["history_warning"] = HISTORY_WARNING
 
     # Save initial state files (current_state.pkl, current_state.xlsx, analysis_stats.json)
     if use_session_mode:
@@ -1208,45 +1201,6 @@ def _save_results_and_reports(
             logger.exception("Unexpected error exporting analysis data")
             # Continue with the workflow even if export fails
 
-    # Update fulfillment history
-    logger.info("Updating fulfillment history...")
-    newly_fulfilled = final_df[final_df["Order_Fulfillment_Status"] == "Fulfillable"][
-        ["Order_Number"]
-    ].drop_duplicates()
-
-    if not newly_fulfilled.empty:
-        newly_fulfilled["Execution_Date"] = (
-            datetime.now().astimezone().strftime("%Y-%m-%d")
-        )
-        updated_history = _merge_fulfillment_history(history_df, newly_fulfilled)
-
-        # Determine history path (same logic as load)
-        if profile_manager and client_id:
-            client_dir = profile_manager.get_client_directory(client_id)
-            history_path = client_dir / "fulfillment_history.csv"
-        else:
-            history_path = get_persistent_data_path("fulfillment_history.csv")
-
-        # Save updated history
-        try:
-            # Ensure parent directory exists
-            if isinstance(history_path, Path):
-                history_path.parent.mkdir(parents=True, exist_ok=True)
-                history_path_str = str(history_path)
-            else:
-                history_path_str = history_path
-                parent_dir = os.path.dirname(history_path_str)
-                if parent_dir:
-                    os.makedirs(parent_dir, exist_ok=True)
-
-            updated_history.to_csv(history_path_str, index=False)
-            logger.info(
-                f"History updated and saved to: {history_path} ({len(newly_fulfilled)} new records)"
-            )
-        except Exception:
-            logger.exception("Failed to save history")
-            # Don't fail the entire analysis if history save fails
-
     # Persist inventory memory if enabled (or unconditionally update the SKU snapshot)
     if (
         profile_manager
@@ -1257,16 +1211,35 @@ def _save_results_and_reports(
         try:
             full_config = profile_manager.load_shopify_config(client_id) or {}
             inv_mem = full_config.get("inventory_memory", {})
-            if inv_mem.get("enabled", False):
+            if (
+                inv_mem.get("enabled", False)
+                and memory_baseline_reused
+                and inv_mem.get("session") != current_session
+            ):
+                # Re-running an older session from its baseline would erase
+                # the later session's draw; same rule as the edit path.
+                logger.info(
+                    f"Inventory memory belongs to {inv_mem.get('session')!r}; "
+                    f"not rewriting it from {current_session}"
+                )
+            elif inv_mem.get("enabled", False):
                 final_stock_dict = build_inventory_snapshot(final_df, stock_df)
                 # Carry the display name along so the next run's memory-reconstructed
                 # stock_df doesn't show "N/A" in Warehouse_Name for every SKU.
                 names_dict = build_inventory_names(final_df, stock_df)
+                if stock_file_path is not None:
+                    # A stock file is the truth: it becomes this session's
+                    # baseline, summed per SKU (Task 1). Memory-mode runs
+                    # already read or wrote theirs on load.
+                    write_memory_baseline(
+                        session_path, build_inventory_snapshot(None, stock_df), names_dict
+                    )
                 profile_manager.save_inventory_memory(
                     client_id,
                     final_stock_dict,
                     config=full_config,
                     names_dict=names_dict,
+                    session=current_session,
                 )
                 logger.info(f"Inventory memory updated: {len(final_stock_dict)} SKUs")
         except Exception as e:
@@ -1368,20 +1341,27 @@ def run_full_analysis(
                 client_id
             )
         orders_df, stock_df = _load_and_validate_files(
-            stock_file_path, orders_file_path, stock_delimiter, orders_delimiter, config
+            stock_file_path,
+            orders_file_path,
+            stock_delimiter,
+            orders_delimiter,
+            config,
+            session_path,
         )
 
         # Step 3: Load history data
         logger.info("Step 3: Loading fulfillment history...")
-        history_df = _load_history_data(
-            stock_file_path, orders_file_path, client_id, profile_manager, config
+        history_df, history_readable = _load_history_data(
+            orders_file_path, client_id, profile_manager, config
         )
 
         # Repeat detection also counts orders Packing Tool has already packed.
-        # Detection only -- history_df below is what gets written back to
-        # fulfillment_history.csv, and must stay this repo's own record.
-        packed_df = load_packed_orders(profile_manager, client_id)
-        detection_history_df = union_history_with_packed(history_df, packed_df)
+        # Detection only: the history file is written by fulfillment_history.
+        current_session = Path(session_path).name if session_path else None
+        packed_df, live_sessions = load_session_signals(profile_manager, client_id)
+        detection_history_df = union_history_with_packed(
+            history_df, packed_df, live_sessions
+        )
 
         # Step 4: Run analysis and apply rules
         logger.info("Step 4: Running analysis and applying rules...")
@@ -1411,7 +1391,9 @@ def run_full_analysis(
             )
 
         final_df, summary_present_df, summary_missing_df, stats = (
-            _run_analysis_and_rules(orders_df, stock_df, detection_history_df, config)
+            _run_analysis_and_rules(
+                orders_df, stock_df, detection_history_df, config, current_session
+            )
         )
 
         # Step 5: Save results and reports
@@ -1426,7 +1408,6 @@ def run_full_analysis(
             summary_present_df,
             summary_missing_df,
             stats,
-            history_df,
             stock_file_path,
             orders_file_path,
             use_session_mode,
@@ -1435,6 +1416,10 @@ def run_full_analysis(
             session_manager,
             client_id,
             profile_manager,
+            current_session=current_session,
+            history_readable=history_readable,
+            session_path=session_path,
+            memory_baseline_reused=bool(config.get("_memory_baseline_reused")),
         )
 
         # Return success

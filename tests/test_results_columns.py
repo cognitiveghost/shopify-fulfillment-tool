@@ -64,7 +64,7 @@ def test_the_columns_button_counts_shown_of_total(qtbot, doc):
     view, _ = doc
     assert (
         _eval(qtbot, view, "document.getElementById('columns-button').textContent")
-        == "Columns 8/18"
+        == "Columns 9/18"
     )
 
 
@@ -130,7 +130,7 @@ def test_the_manager_keeps_the_table_width_and_counts_shown_and_hidden(qtbot, do
     assert _width(qtbot, view, ".table-wrap") == 866
     assert (
         _eval(qtbot, view, "document.getElementById('columns-count').textContent")
-        == "8 shown · 10 hidden"
+        == "9 shown · 9 hidden"
     )
 
 

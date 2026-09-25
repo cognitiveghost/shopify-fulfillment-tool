@@ -126,6 +126,10 @@ class ReportEditor(QGroupBox):
             # static fallback until an analysis has been run. Warehouse_Name
             # is a default packing-list column that is not in it.
             offered = report_filter_fields(analysis_df)
+            # Repeat is derived at print time from System_note, so it is
+            # never a column of the analysis frame.
+            if "Repeat" not in offered:
+                offered.append("Repeat")
             offered += [name for name in chosen if name not in offered]
             for name in offered:
                 item = QListWidgetItem(name)

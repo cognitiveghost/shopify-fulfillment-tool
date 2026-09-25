@@ -162,7 +162,7 @@ def test_only_a_window_of_rows_exists(qtbot, doc):
 # --- 9.13: the document -------------------------------------------------------
 
 
-def test_the_nine_columns_in_order(qtbot, doc):
+def test_the_default_columns_in_order(qtbot, doc):
     # JSON-encoded and decoded on the Python side: runJavaScript's automatic
     # QVariantList marshalling of a JS array is unreliable under this box's
     # software-rendered QtWebEngine, though the page and the DOM it produces
@@ -187,6 +187,7 @@ def test_the_nine_columns_in_order(qtbot, doc):
         "Value",
         "Courier",
         "Age",
+        "Repeat",
     ]
 
 

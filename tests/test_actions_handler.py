@@ -133,6 +133,29 @@ def test_bulk_remove_tag_removes_from_every_row_of_a_multi_line_order(mw_with_ta
     assert tags.loc["B1"] == '["URGENT"]'  # different order, untouched
 
 
+@pytest.mark.parametrize(
+    "stats, toasts", [({"history_warning": "History trouble."}, 1), ({}, 0)]
+)
+def test_on_analysis_complete_toasts_a_history_warning(monkeypatch, tmp_path, stats, toasts):
+    monkeypatch.setattr("gui.actions_handler.toast", Mock())
+    monkeypatch.setattr("shared.stats_manager.StatsManager.record_analysis", Mock())
+    df = pd.DataFrame([{"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"}])
+    mw = SimpleNamespace(
+        session_path=None,
+        current_client_id="M",
+        profile_manager=SimpleNamespace(base_path=tmp_path),
+        threadpool=QThreadPool(),
+        log_activity=Mock(),
+        update_ui_state=Mock(),
+        results_bridge=Mock(),
+    )
+    ActionsHandler(mw).on_analysis_complete((True, "report.csv", df, stats))
+
+    shown = [c.args[0] for c in mw.results_bridge.raise_toast.call_args_list]
+    assert shown.count("History trouble.") == toasts
+    mw.threadpool.waitForDone(2000)
+
+
 def test_on_analysis_complete_does_not_block_ui_thread_on_stats_recording(
     monkeypatch, tmp_path
 ):

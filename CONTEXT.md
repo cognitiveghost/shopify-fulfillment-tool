@@ -275,6 +275,11 @@ next, so a run can proceed without a fresh stock export. It covers **every SKU
 in the stock file**, not only the SKUs an order touched: a SKU the run left
 alone keeps its opening level. Each run's stock file is the truth, so a SKU
 that leaves the file leaves memory — memory accumulates levels, never SKUs.
+A SKU listed on several stock rows is remembered at their sum.
+
+**Memory baseline** — the opening stock a session's first run started from,
+kept in the session. A re-run of that session starts from its baseline, not
+from memory it has already drawn down.
 
 ## Sessions
 
@@ -295,6 +300,17 @@ Not **stored status**, which lives in `session_info.json`.
 **Stale** — this PC's copy of the session state is older than the one on the
 server, because another PC saved it after this PC loaded or last saved it. A
 stale PC's saves and exports are refused until it reopens the session.
+
+**Repeat order** — an order another live session has already handled: it is
+in another session's fulfillment history, or the Packer packed it in any
+session. Marked, never held: a repeat order stays fulfillable. A **live
+session** is one that exists and is not stored as abandoned. ADR 0012.
+
+**Fulfillment history** — per client, the orders each session currently
+ships: one row per order per session, dated when that session first recorded
+it. It follows the session state, not the run. Distinguished from the
+**Packer signal**, the orders Packing Tool has actually packed, which each
+session's `session_info.json` records.
 
 ## Printing
 

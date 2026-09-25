@@ -193,12 +193,13 @@ def _memory(skus: dict, total: int) -> dict:
 
 
 def test_a_sku_listed_once_per_location_is_not_a_hundred_percent_jump(main_window):
-    """The stock file lists each SKU once per warehouse location. Memory counts
-    one row per SKU, so summing raw rows read as a doubling on every load."""
+    """The stock file lists each SKU once per warehouse location. Memory sums a
+    SKU's rows (AUDIT-02-10), so the saved snapshot and a freshly loaded file
+    compare equal instead of reading as a doubling on every load."""
     handler = main_window.file_handler
     new_stock = pd.DataFrame({"SKU": ["A", "A", "B", "B"], "Stock": [10, 10, 5, 5]})
     is_anomaly, msg = handler._check_inventory_anomaly(
-        new_stock, _memory({"A": 10.0, "B": 5.0}, 15)
+        new_stock, _memory({"A": 20.0, "B": 10.0}, 30)
     )
     assert is_anomaly is False, msg
 

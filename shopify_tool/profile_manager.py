@@ -444,7 +444,6 @@ class ProfileManager:
                 "stock_csv_delimiter": "auto",
                 "orders_csv_delimiter": "auto",
                 "delimiter_auto_migrated": True,
-                "repeat_detection_days": 1,
             },
             "rules": [],
             "order_rules": [],
@@ -680,10 +679,13 @@ class ProfileManager:
         stock_dict: dict,
         config: dict | None = None,
         names_dict: dict | None = None,
+        session: str | None = None,
     ) -> bool:
         """Persist final stock snapshot to shopify_config inventory_memory section.
 
         Args:
+            session: Name of the session whose state this snapshot is. Only
+                that session may later rewrite memory from its edits.
             names_dict: Optional {sku: warehouse_display_name}. When omitted,
                 the previously-saved names are left untouched (so a caller
                 that only has quantities on hand doesn't wipe out names saved
@@ -711,6 +713,7 @@ class ProfileManager:
             "skus": {normalize_sku(k): float(v) for k, v in stock_dict.items()},
             "last_updated": datetime.now().astimezone().isoformat(timespec="seconds"),
             "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
+            "session": session,
         }
         if names_dict is not None:
             updates["names"] = {str(k): str(v) for k, v in names_dict.items()}

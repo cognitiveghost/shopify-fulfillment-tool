@@ -3,6 +3,7 @@
 Uses the REAL default Shopify/Bulgarian-ERP column names (column_mappings=None)
 so these tests exercise exactly the code path production traffic takes.
 """
+import datetime
 import io
 from datetime import date
 
@@ -198,7 +199,7 @@ class TestRepeatDetection:
         orders = _orders([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 1}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         history = _history([{"Order_Number": "#1", "Execution_Date": yesterday}])
-        final_df, *_ = _run(orders, stock, history, repeat_window_days=1)
+        final_df, *_ = _run(orders, stock, history)
         assert final_df.iloc[0]["System_note"] == "Repeat"
 
     def test_order_executed_today_is_not_marked_repeat_with_default_window(self):
@@ -207,7 +208,7 @@ class TestRepeatDetection:
         orders = _orders([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 1}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         history = _history([{"Order_Number": "#1", "Execution_Date": today}])
-        final_df, *_ = _run(orders, stock, history, repeat_window_days=1)
+        final_df, *_ = _run(orders, stock, history)
         assert final_df.iloc[0]["System_note"] != "Repeat"
 
     def test_unrelated_order_number_not_flagged(self):
@@ -216,7 +217,7 @@ class TestRepeatDetection:
         orders = _orders([{"Name": "#2", "Lineitem sku": "A1", "Lineitem quantity": 1}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         history = _history([{"Order_Number": "#1", "Execution_Date": yesterday}])
-        final_df, *_ = _run(orders, stock, history, repeat_window_days=1)
+        final_df, *_ = _run(orders, stock, history)
         assert final_df.iloc[0]["System_note"] != "Repeat"
 
 
@@ -531,3 +532,47 @@ def test_every_order_line_in_is_one_line_out():
     stock = _f_stock("SKU;Stock\n501 ;5\n501.0;3\n777;9\n")
     final = analysis.run_analysis(stock, _f_orders(), _history(), _F_MAPS)[0]
     assert final.groupby("Order_Number").size().to_dict() == {"#4148": 2, "#4149": 1}
+
+
+# ---------------------------------------------------------------------------
+# Repeat rule (ADR 0012): sessions are compared, not dates
+# ---------------------------------------------------------------------------
+
+_NOW = datetime.datetime.now().astimezone()
+_TODAY = _NOW.strftime("%Y-%m-%d")
+_YESTERDAY = (_NOW - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def _flags(orders, rows, current=None):
+    final = pd.DataFrame({"Order_Number": orders})
+    hist = pd.DataFrame(rows, columns=["Order_Number", "Execution_Date", "Session", "Source"])
+    return list(analysis._detect_repeated_orders(final, hist, current_session=current) == "Repeat")
+
+
+class TestRepeatRule:
+    def test_history_from_another_session_today_counts(self):
+        assert _flags(["#1"], [("#1", _TODAY, "S0", "history")], current="S1") == [True]
+
+    def test_history_from_this_session_never_counts(self):
+        assert _flags(["#1"], [("#1", "2026-01-01", "S1", "history")], current="S1") == [False]
+
+    def test_legacy_history_counts_before_today_only(self):
+        rows = [("#1", _YESTERDAY, "", "history"), ("#2", _TODAY, "", "history")]
+        assert _flags(["#1", "#2"], rows) == [True, False]
+
+    def test_legacy_row_with_garbage_date_counts(self):
+        assert _flags(["#1"], [("#1", "garbage", "", "history")]) == [True]
+
+    def test_packed_in_this_session_counts(self):
+        assert _flags(["#1"], [("#1", _TODAY, "S1", "packed")], current="S1") == [True]
+
+    def test_numeric_and_text_order_numbers_match(self):
+        final = pd.DataFrame({"Order_Number": [12345]})
+        hist = pd.DataFrame({"Order_Number": ["12345 "], "Execution_Date": [_YESTERDAY],
+                             "Session": ["S0"], "Source": ["packed"]})
+        assert list(analysis._detect_repeated_orders(final, hist) == "Repeat") == [True]
+
+    def test_plain_two_column_history_is_legacy(self):
+        final = pd.DataFrame({"Order_Number": ["#1"]})
+        hist = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": [_YESTERDAY]})
+        assert list(analysis._detect_repeated_orders(final, hist) == "Repeat") == [True]
