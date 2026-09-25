@@ -102,10 +102,10 @@ one order or many were selected.
 **Scenario.** Stock A = 5. #1 wants 2 and #2 wants 1, so Stock left is 2.
 Holding #1 on its own gives 4. Holding it through the selection bar leaves 2.
 
-**Open question for the fix.** Whether bulk Mark fulfillable should *refuse*
-orders that Stock left can't cover, as the single path does, is a business
-rule. It is listed in §6 and is not assumed here. The proof test only checks
-Hold, where both paths should obviously agree.
+**Rule for the fix (owner, §6).** Bulk Mark fulfillable draws on Stock left
+as the single path does, marks only the orders it covers, and says in the
+toast how many it skipped. The proof test checks Hold, where both paths
+should obviously agree.
 
 **Production evidence.** ALMADERM 2026-07-01_2 (see AUDIT-01-2). HERBAR
 2026-07-22_1 and 2026-07-23_1 also used bulk status changes.
@@ -189,7 +189,7 @@ warehouse file therefore gives 3 or 7 units depending on whether the ERP
 exported lot columns. Inventory memory takes yet another row (`.last()`,
 `core.py:949`). **Production: 0 exposure.** WATERDROP lists 22 SKUs on several
 rows (52 rows), but all of its files take the lot path, which sums them
-correctly. Which rule is right for lot-less files is asked in §6.
+correctly. The owner chose summing (§6).
 
 ### AUDIT-01-9 — Lines before the first order number vanish (low)
 
@@ -267,18 +267,19 @@ came from an older build. Bulk verbs now select every line of each order (see
 | Undo of bulk tag / bulk exclude | Row content is restored exactly (order aside, AUDIT-01-11). | `test_undo_of_bulk_tag_and_bulk_delete_restores_content` |
 | Stats after edits | `_update_all_views` recomputes statistics after every edit and every undo. | read: `gui/main_window_pyside.py:973` |
 
-## 6. Open questions (business rules, not assumed)
+## 6. Business rules (answered by the owner, 2026-09-25)
 
 1. **Stocked set SKUs.** HERBAR stocks 7 of its 10 set SKUs as items in their
-   own right, about 6,800 units. The run always expands a set into its
-   components and never touches the set SKU's own stock. On HERBAR
-   2026-07-21_1 that leaves 1 of 38 orders fulfillable. Drawing the set's own
-   stock first would make it 15. WATERDROP stocks 3 of its 211 set SKUs. Is a
-   stocked set a pre-built kit that should ship from its own stock?
-2. **Duplicate stock rows without lot columns** (AUDIT-01-8): sum them, as the
-   lot path does, or treat them as duplicates?
-3. **Bulk Mark fulfillable** (AUDIT-01-3): should it refuse orders that Stock
-   left can't cover, like the single-order path, or force them through?
+   own right, about 6,800 units, and WATERDROP stocks 3 of its 211. The run
+   always breaks a set into its components and never uses the set SKU's own
+   stock. On HERBAR 2026-07-21_1 that leaves 1 of 38 orders fulfillable.
+   **Answer: always split into components.** Today's behaviour is intended,
+   so this is not a finding.
+2. **Duplicate stock rows without lot columns** (AUDIT-01-8). **Answer: sum
+   them**, as the lot path does. Inventory memory should follow the same rule.
+3. **Bulk Mark fulfillable** (AUDIT-01-3). **Answer: mark only what Stock left
+   covers**, drawing on it as the single-order path does. Skip the orders it
+   can't cover, and say in the toast how many were skipped.
 
 ## 7. Not covered
 
