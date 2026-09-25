@@ -95,7 +95,6 @@ def _run_with_bonus(tmp_path, bonus_stock):
     return final_df, stock_df
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-2: ADD_PRODUCT lines skip the stock simulation")
 def test_add_product_cannot_promise_more_stock_than_exists(tmp_path):
     final_df, _ = _run_with_bonus(tmp_path, bonus_stock=1)
 
@@ -103,7 +102,6 @@ def test_add_product_cannot_promise_more_stock_than_exists(tmp_path):
     assert shipped.loc[shipped["SKU"] == "GIFT", "Quantity"].sum() <= 1
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-2: ADD_PRODUCT lines neither read nor reduce the stock file")
 def test_add_product_is_counted_in_final_stock(tmp_path):
     # 5 in stock, 2 given away. Today both lines say Final_Stock 0: GIFT is on
     # no order, so the engine never finds it and falls back to 0.

@@ -905,9 +905,70 @@ def _run_analysis_and_rules(
         logger.info("Applying rule engine...")
         engine = RuleEngine(rules)
         final_df = engine.apply(final_df)
+        final_df = _settle_rule_changes(final_df, stock_df, config)
         logger.info("Rule engine application complete.")
 
     return final_df, summary_present_df, summary_missing_df, stats
+
+
+def _settle_rule_changes(final_df, stock_df, config):
+    """Correct stock after the rules ran on a simulated frame (ADR 0013).
+
+    1. Bonus lines (ADD_PRODUCT, tagged rule_added_product) take their SKU's
+       opening stock from the stock file; an unlisted SKU has 0 (D7).
+    2. Every fulfillable order with a bonus line gives up its draw and claims
+       it again, whole, in the simulation's priority order (D6). One the
+       stock can't cover is held with the run's own reason (D1, D8).
+    3. Stock left is re-derived, which also returns the stock of every order
+       a SET_STATUS rule held (D4). No other order is promoted.
+    """
+    from .stock_ledger import append_blocker, claim_detail, fulfillable_orders, with_stock_left
+    from .tag_manager import parse_tags
+
+    if final_df is None or final_df.empty or "Order_Number" not in final_df.columns:
+        return final_df
+
+    bonus = (
+        final_df["Internal_Tags"].apply(lambda t: "rule_added_product" in parse_tags(t))
+        if "Internal_Tags" in final_df.columns
+        else pd.Series(False, index=final_df.index)
+    )
+    if bonus.any() and {"SKU", "Stock", "Final_Stock"} <= set(final_df.columns):
+        stock = analysis.stock_with_internal_columns(stock_df, config.get("column_mappings", {}))
+        opening = pd.to_numeric(stock["Stock"], errors="coerce").groupby(stock["SKU"]).sum()
+        skus = final_df.loc[bonus, "SKU"]
+        final_df.loc[bonus, "Stock"] = skus.map(opening).fillna(0).to_numpy()
+        final_df.loc[bonus, "Final_Stock"] = final_df.loc[bonus, "Stock"]
+        if "Has_SKU" in final_df.columns:
+            final_df.loc[bonus, "Has_SKU"] = True
+        if "Product_Name" in stock.columns and "Warehouse_Name" in final_df.columns:
+            names = stock.drop_duplicates("SKU").set_index("SKU")["Product_Name"]
+            listed = skus.map(names)
+            final_df.loc[bonus, "Warehouse_Name"] = listed.where(
+                listed.notna(), final_df.loc[bonus, "Warehouse_Name"])
+
+        keys = final_df["Order_Number"].astype(str).str.strip()
+        bonus_orders = set(keys[bonus]) & fulfillable_orders(final_df)
+        if bonus_orders:
+            priority = analysis._prioritize_orders(
+                final_df[~bonus], mode=config.get("analysis_mode", "multi_first"))
+            ordered = [o for o in priority["Order_Number"] if str(o).strip() in bonus_orders]
+            in_play = keys.isin(bonus_orders)
+            before = final_df.loc[in_play, "Order_Fulfillment_Status"].copy()
+            final_df.loc[in_play, "Order_Fulfillment_Status"] = NOT_FULFILLABLE
+            covered, lacking = claim_detail(final_df, ordered)
+            back = in_play & keys.isin({str(o).strip() for o in covered})
+            final_df.loc[back, "Order_Fulfillment_Status"] = before[back[in_play]]
+            for order, parts in lacking.items():
+                rows = keys == str(order).strip()
+                for sku, need, have in parts:
+                    part = (f"{sku}: Out of stock" if have <= 0 else
+                            f"{sku}: Insufficient stock (need {int(need)}, have {int(have)})")
+                    if "System_note" in final_df.columns:
+                        final_df.loc[rows, "System_note"] = final_df.loc[rows, "System_note"].apply(
+                            lambda n, part=part: append_blocker(n, part))
+
+    return with_stock_left(final_df)
 
 
 def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:
