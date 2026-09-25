@@ -47,7 +47,13 @@ replaced.
 
 **Fulfillable order** — an order the session can ship complete. This is the
 display word everywhere; the v2 canvas's "Ready" and "Ship complete" are not
-used. Its complement is a **blocked order**.
+used. Its complement is a **blocked order**. An order is fulfillable when
+every one of its **SKU lines** is; one blocked SKU line blocks the whole order.
+Status is stored per line but is only ever read per order.
+
+**SKU line** — an order line that names a SKU, so it takes stock. A line
+without one (a fee, a custom item) is not a SKU line: it never blocks an
+order, never draws stock and never ships on an output.
 
 **Label count** — one courier label per fulfillable order, split by courier.
 What the Labels card counts.
@@ -76,8 +82,9 @@ was either marked fulfillable although the run blocked it, or held although
 nothing was short. Drawn with a solid mark. Its opposite is **detected by the
 run**.
 
-**Stock left** — a SKU's stock after the whole run has allocated
-(`Final_Stock`). It is what Mark fulfillable draws on. Not the stock an order
+**Stock left** — a SKU's opening stock minus the SKU lines of every
+fulfillable order (`Final_Stock`). It is what Mark fulfillable draws on, and
+it stays true through every edit and undo (ADR 0010). Not the stock an order
 saw at its own turn, which is what its reason code quotes.
 
 **Column manager** — the slot's other occupant. It chooses and orders the
