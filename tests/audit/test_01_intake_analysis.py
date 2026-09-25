@@ -88,10 +88,6 @@ def confirm(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-1: adding a product re-checks and re-deducts the order's existing lines",
-)
 def test_add_product_to_fulfillable_order_keeps_it_fulfillable():
     df, *_ = analyse(stock([("A", 2), ("B", 10)]), orders([("#1", "A", 2)]))
     assert status(df, "#1") == {"Fulfillable"} and final_stock(df, "A") == 0
@@ -127,10 +123,6 @@ def test_undo_of_toggle_restores_stock_left():
     assert final_stock(out, "A") == 3  # back to what the run left
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-3: bulk status change never moves Stock left; the single-order path does",
-)
 def test_bulk_hold_moves_stock_left_like_single_hold():
     df, *_ = analyse(stock([("A", 5)]), orders([("#1", "A", 2), ("#2", "A", 1)]))
     single = window(df.copy())
@@ -143,10 +135,6 @@ def test_bulk_hold_moves_stock_left_like_single_hold():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-4: removing a fulfillable order does not return its stock to Stock left",
-)
 @pytest.mark.parametrize("verb", ["remove_entire_order", "bulk_delete_orders"])
 def test_removing_fulfillable_order_returns_its_stock(verb, confirm):
     df, *_ = analyse(stock([("A", 3)]), orders([("#1", "A", 2), ("#2", "A", 2)]))
