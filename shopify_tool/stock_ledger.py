@@ -122,6 +122,33 @@ def shortfall(df, order_number) -> list:
     return _short(needs, stock_left(df, excluding=order_number))
 
 
+def claim_detail(df, order_numbers) -> tuple:
+    """claim(), plus what each skipped order lacked at its turn.
+
+    Returns (covered, lacking): lacking maps an order number, as passed, to
+    [(sku, need, have)], have being Stock left when its turn came (>= 0).
+    """
+    already = fulfillable_orders(df)
+    left = stock_left(df)
+    by_order = _needs_by_order(df) if _has_ledger(df) else {}
+    covered, lacking = [], {}
+    for number in order_numbers:
+        if _key(number) in already:
+            continue
+        needs = by_order.get(_key(number), {})
+        short = _short(needs, left)
+        if short:
+            lacking[number] = [
+                (sku, float(needs[sku]), max(0.0, float(left[sku]))) for sku in short
+            ]
+            continue
+        for sku, need in needs.items():
+            if sku in left:
+                left[sku] -= need
+        covered.append(number)
+    return covered, lacking
+
+
 def claim(df, order_numbers) -> tuple:
     """Which of these orders Stock left covers, taken in the order given.
 
@@ -129,22 +156,8 @@ def claim(df, order_numbers) -> tuple:
     already fulfillable are in neither list. Returns (covered, skipped) with
     the order numbers as the caller passed them.
     """
-    already = fulfillable_orders(df)
-    left = stock_left(df)
-    by_order = _needs_by_order(df) if _has_ledger(df) else {}
-    covered, skipped = [], []
-    for number in order_numbers:
-        if _key(number) in already:
-            continue
-        needs = by_order.get(_key(number), {})
-        if _short(needs, left):
-            skipped.append(number)
-            continue
-        for sku, need in needs.items():
-            if sku in left:
-                left[sku] -= need
-        covered.append(number)
-    return covered, skipped
+    covered, lacking = claim_detail(df, order_numbers)
+    return covered, list(lacking)
 
 
 def with_stock_left(df):

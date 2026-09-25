@@ -16,6 +16,7 @@ from shopify_tool.stock_ledger import (
 from shopify_tool.stock_ledger import (
     append_blocker,
     claim,
+    claim_detail,
     fulfillable_orders,
     is_fulfillable,
     shortfall,
@@ -144,3 +145,13 @@ def test_derived_stock_left_equals_the_runs_final_stock(lots):
 ])
 def test_append_blocker(note, expected):
     assert append_blocker(note, "Held by rule: R") == expected
+
+
+def test_claim_detail_reports_stock_at_each_orders_turn():
+    df = frame([
+        ("#1", "GIFT", 1, NF, 3, 3), ("#2", "GIFT", 2, NF, 3, 3), ("#3", "GIFT", 1, NF, 3, 3),
+    ])
+    covered, lacking = claim_detail(df, ["#1", "#2", "#3"])
+    assert covered == ["#1", "#2"]
+    assert lacking == {"#3": [("GIFT", 1.0, 0.0)]}
+    assert claim(df, ["#1", "#2", "#3"]) == (["#1", "#2"], ["#3"])
