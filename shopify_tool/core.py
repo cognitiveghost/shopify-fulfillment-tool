@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from shared.atomic_write import atomic_write_json
+
 from . import analysis, fulfillment_history, packing_lists, stock_export
 from .csv_utils import resolve_delimiter
 from .packed_orders import load_session_signals, union_history_with_packed
@@ -533,6 +535,7 @@ def _load_and_validate_files(
     stock_delimiter: str,
     orders_delimiter: str,
     config: dict,
+    session_path: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Loads and validates CSV files.
 
@@ -546,6 +549,7 @@ def _load_and_validate_files(
         stock_delimiter: Delimiter for stock file
         orders_delimiter: Delimiter for orders file
         config: Configuration dict containing column_mappings and test data
+        session_path: This run's session, where the memory baseline lives
 
     Returns:
         Tuple of (orders_df, stock_df)
@@ -692,15 +696,17 @@ def _load_and_validate_files(
         if stock_df is None:
             inv_mem = config.get("_inventory_memory", {})
             if inv_mem.get("enabled"):
-                skus = inv_mem.get("skus") or {}
-                names = inv_mem.get("names") or {}
-                stock_df = pd.DataFrame(
-                    [
-                        {"SKU": sku, "Product_Name": names.get(sku), "Stock": qty}
-                        for sku, qty in skus.items()
-                    ],
-                    columns=["SKU", "Product_Name", "Stock"],
-                )
+                # The session's own baseline, so a re-run never draws the
+                # session's orders from memory twice (ADR 0012).
+                baseline = read_memory_baseline(session_path)
+                if baseline is not None:
+                    stock_df = baseline_stock_df(baseline)
+                else:
+                    skus = inv_mem.get("skus") or {}
+                    names = inv_mem.get("names") or {}
+                    baseline = {"skus": skus, "names": names}
+                    stock_df = baseline_stock_df(baseline)
+                    write_memory_baseline(session_path, skus, names)
                 config["_stock_from_memory"] = True
                 logger.info(f"Loaded {len(stock_df)} SKUs from inventory memory")
 
@@ -714,6 +720,43 @@ def _load_and_validate_files(
         raise ValueError(error_message)
 
     return orders_df, stock_df
+
+
+BASELINE_FILE = "memory_baseline.json"
+
+
+def _baseline_path(session_path) -> Path:
+    return Path(session_path) / "analysis" / BASELINE_FILE
+
+
+def read_memory_baseline(session_path) -> dict | None:
+    """The session's opening stock, {"skus": {...}, "names": {...}}, or None."""
+    if not session_path:
+        return None
+    try:
+        with open(_baseline_path(session_path), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data.get("skus"), dict) else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def baseline_stock_df(baseline: dict) -> pd.DataFrame:
+    names = baseline.get("names") or {}
+    return pd.DataFrame(
+        [
+            {"SKU": s, "Product_Name": names.get(s), "Stock": q}
+            for s, q in baseline["skus"].items()
+        ],
+        columns=["SKU", "Product_Name", "Stock"],
+    )
+
+
+def write_memory_baseline(session_path, skus: dict, names: dict | None) -> None:
+    if session_path:
+        atomic_write_json(
+            _baseline_path(session_path), {"skus": skus, "names": names or {}}
+        )
 
 
 def _load_history_data(
@@ -965,6 +1008,7 @@ def _save_results_and_reports(
     profile_manager: Any | None,
     current_session: str | None = None,
     history_readable: bool = True,
+    session_path: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Saves all analysis results, reports, and updates history.
 
@@ -991,6 +1035,8 @@ def _save_results_and_reports(
         current_session: Name of this run's session (None without a session path)
         history_readable: False when the history file couldn't be read at load;
             the run then neither checks nor records repeats
+        session_path: This run's session, where the memory baseline is written
+            (working_path is the output directory in legacy mode)
 
     Returns:
         Tuple of (primary_output_path, secondary_output_path)
@@ -1166,11 +1212,19 @@ def _save_results_and_reports(
                 # Carry the display name along so the next run's memory-reconstructed
                 # stock_df doesn't show "N/A" in Warehouse_Name for every SKU.
                 names_dict = build_inventory_names(final_df, stock_df)
+                if stock_file_path is not None:
+                    # A stock file is the truth: it becomes this session's
+                    # baseline, summed per SKU (Task 1). Memory-mode runs
+                    # already read or wrote theirs on load.
+                    write_memory_baseline(
+                        session_path, build_inventory_snapshot(None, stock_df), names_dict
+                    )
                 profile_manager.save_inventory_memory(
                     client_id,
                     final_stock_dict,
                     config=full_config,
                     names_dict=names_dict,
+                    session=current_session,
                 )
                 logger.info(f"Inventory memory updated: {len(final_stock_dict)} SKUs")
         except Exception as e:
@@ -1272,7 +1326,12 @@ def run_full_analysis(
                 client_id
             )
         orders_df, stock_df = _load_and_validate_files(
-            stock_file_path, orders_file_path, stock_delimiter, orders_delimiter, config
+            stock_file_path,
+            orders_file_path,
+            stock_delimiter,
+            orders_delimiter,
+            config,
+            session_path,
         )
 
         # Step 3: Load history data
@@ -1344,6 +1403,7 @@ def run_full_analysis(
             profile_manager,
             current_session=current_session,
             history_readable=history_readable,
+            session_path=session_path,
         )
 
         # Return success

@@ -434,7 +434,7 @@ class TestInventoryMemoryEndToEnd:
                 return client_dir
 
             def save_inventory_memory(
-                self, _client_id, stock_dict, config=None, names_dict=None
+                self, _client_id, stock_dict, config=None, names_dict=None, session=None
             ):
                 saved["stock"] = stock_dict
                 saved["names"] = names_dict
