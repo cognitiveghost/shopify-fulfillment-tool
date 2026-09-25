@@ -26,6 +26,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from shopify_tool.report_filters import fulfillable_only
+
 logger = logging.getLogger(__name__)
 
 # Sequential order map version
@@ -80,9 +82,7 @@ def generate_sequential_order_map(
     json_path = session_path / "analysis" / "sequential_order.json"
 
     # Filter to Fulfillable orders only
-    fulfillable_df = analysis_results_df[
-        analysis_results_df['Order_Fulfillment_Status'] == 'Fulfillable'
-    ].copy()
+    fulfillable_df = fulfillable_only(analysis_results_df).copy()
 
     # Get unique order numbers (drop NaN to avoid JSON serialization failure)
     unique_orders = fulfillable_df['Order_Number'].dropna().unique()

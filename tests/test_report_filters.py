@@ -228,6 +228,17 @@ def test_fulfillable_only_matches_nothing_without_the_status_column():
     assert fulfillable_only(df).empty
 
 
+def test_fulfillable_only_drops_an_order_with_a_blocked_sku_line_but_not_for_a_fee_line():
+    df = pd.DataFrame({
+        "Order_Number": ["#1", "#1", "#2", "#2"],
+        "SKU": ["A", "GIFT", "C", "NO_SKU"],
+        "Has_SKU": [True, True, True, False],
+        "Order_Fulfillment_Status": ["Fulfillable", "Not Fulfillable", "Fulfillable", "Not Fulfillable"],
+    })
+    out = fulfillable_only(df)
+    assert out[["Order_Number", "SKU"]].values.tolist() == [["#2", "C"]]
+
+
 def test_count_matches_is_none_without_an_analysis():
     assert count_matches(None, []) is None
     assert count_matches(pd.DataFrame(), []) is None

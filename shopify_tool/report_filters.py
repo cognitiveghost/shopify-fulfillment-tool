@@ -22,6 +22,7 @@ import logging
 import pandas as pd
 
 from shopify_tool import rules
+from shopify_tool.stock_ledger import FULFILLABLE, fulfillable_orders
 from shopify_tool.tag_manager import has_tag
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,9 @@ def fulfillable_only(df):
     filter on a missing column does: it is not an analysis frame, and a
     report that quietly contains rows no one vouched for is worse than one
     that is visibly empty.
+
+    An order ships whole or not at all: one blocked SKU line holds back the
+    lines beside it (AUDIT-04-6).
     """
     if df is None or df.empty:
         return df
@@ -75,7 +79,11 @@ def fulfillable_only(df):
             "[REPORT FILTERS] No Order_Fulfillment_Status column, matches nothing"
         )
         return df.iloc[0:0].copy()
-    return df[df["Order_Fulfillment_Status"] == "Fulfillable"]
+    ready = df["Order_Fulfillment_Status"].eq(FULFILLABLE)
+    if "Order_Number" not in df.columns:
+        return df[ready]
+    ships = df["Order_Number"].astype(str).str.strip().isin(fulfillable_orders(df))
+    return df[ready & ships]
 
 
 def _tag_mask(series, operator, value):

@@ -223,7 +223,6 @@ def test_distinct_orders_never_share_a_barcode_value():
     assert len(encoded) == len(set(encoded))
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-6: outputs take an order's fulfillable lines even when another SKU line is blocked")
 def test_packing_list_never_lists_part_of_an_order(tmp_path):
     df = frame([("#1", "A", 1, FF), ("#1", "GIFT", 1, NF), ("#2", "C", 1, FF)])
     create_packing_list(df, str(tmp_path / "p.xlsx"))
@@ -231,7 +230,6 @@ def test_packing_list_never_lists_part_of_an_order(tmp_path):
     assert "#1" not in listed or ("#1", "GIFT") in xlsx_lines(tmp_path / "p.xlsx")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-6: outputs take an order's fulfillable lines even when another SKU line is blocked")
 def test_stock_export_never_writes_off_part_of_an_order(tmp_path):
     df = frame([("#1", "A", 1, FF), ("#1", "GIFT", 1, NF), ("#2", "C", 1, FF)])
     create_stock_export(df, str(tmp_path / "e.xls"))

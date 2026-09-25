@@ -388,7 +388,7 @@ def merge_session_stock_exports(
             )
             continue
 
-        fulfillable = df[df["Order_Fulfillment_Status"] == "Fulfillable"].copy()
+        fulfillable = fulfillable_only(df).copy()
         all_dfs.append(fulfillable)
         logger.info(
             f"[merge_stock client={client_id}] {len(fulfillable)} fulfillable rows from {session_path.name}"

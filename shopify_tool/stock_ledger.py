@@ -25,7 +25,9 @@ def _key(value) -> str:
 
 
 def _keys(df: pd.DataFrame) -> pd.Series:
-    return df["Order_Number"].astype(str).str.strip()
+    # A null order number stays null under astype(str) in current pandas, and
+    # groupby drops null keys: give those rows a key of their own.
+    return df["Order_Number"].astype(str).str.strip().fillna("")
 
 
 def _sku_lines(df: pd.DataFrame) -> pd.Series:
