@@ -818,7 +818,7 @@ def test_blocked_reason_note_is_not_a_repeat(tmp_path):
 ### Task 8: Packer Repeat chip (packing-tool, AUDIT-02-8)
 
 **Files (packing-tool repo):**
-- Create a worktree: `git -C /home/gloopy/Desktop/Projects/packing-tool worktree add .claude/worktrees/worktree-phase14-bundle3-repeat-chip -b phase14-bundle3-repeat-chip origin/main`. Use one git command per call. Run packing-tool's own `scripts/setup_venv.sh` there if `.venv` is missing, and read packing-tool's CLAUDE.md for its test command.
+- Worktree (created at Stage A, `.venv` linked): `/home/gloopy/Desktop/Projects/packing-tool/.claude/worktrees/worktree-phase14-bundle3-repeat-chip`, branch `phase14-bundle3-repeat-chip`. Drive git with `git -C <that path>`, one command per call. Read packing-tool's CLAUDE.md for its test command.
 - Modify: `gui/packer_bridge.py` `banner()` (~l.129-147)
 - Modify: `gui/web/packer.js` `renderBanner()` (~l.112-121)
 - Test: packing-tool's `tests/test_packer_bridge*.py` (`grep -l "def test.*banner\|banner(" tests`)
