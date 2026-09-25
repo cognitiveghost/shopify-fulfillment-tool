@@ -219,7 +219,6 @@ def test_stock_export_never_writes_off_part_of_an_order(tmp_path):
     assert export_totals(tmp_path / "e.xls") == {"C": 1}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-7: name fallback is a substring match, first CSV row wins")
 def test_name_fallback_picks_the_exact_customer(tmp_path):
     mapping = load_csv_mapping(mapping_csv(tmp_path / "m.csv", [
         ("", "", "100", "Ivan Petrov"),
@@ -229,7 +228,6 @@ def test_name_fallback_picks_the_exact_customer(tmp_path):
     assert match_reference(page, mapping)["ref"] == "200"
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-7: two customers with one name share whichever reference was read last")
 def test_name_fallback_refuses_an_ambiguous_name(tmp_path):
     mapping = load_csv_mapping(mapping_csv(tmp_path / "m.csv", [
         ("", "", "100", "Maria Ivanova"),

@@ -302,23 +302,18 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
         csv_path: Path to CSV file
 
     Returns:
-        Dict with three mappings:
+        Dict with four mappings:
         {
             'by_postone': {postone_id: {ref, name}},
             'by_tracking': {tracking: {ref, name}},
-            'by_name': {normalized_name: {ref, name}}
+            'by_name': {normalized_name: [{ref, name}, ...]},  # distinct packs
+            'refs': {every non-empty REF in the CSV}
         }
 
     Raises:
         InvalidCSVError: If CSV cannot be read or is invalid
     """
     logger.debug(f"Loading CSV mapping: {csv_path}")
-
-    mappings = {
-        'by_postone': {},
-        'by_tracking': {},
-        'by_name': {}
-    }
 
     # Read raw bytes once to avoid repeated network/disk I/O per encoding attempt
     try:
@@ -329,6 +324,13 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
     encodings = ['utf-8-sig', 'utf-8', 'cp1251', 'latin-1']
 
     for encoding in encodings:
+        # Fresh per attempt: a failed encoding can leave partial rows behind
+        mappings = {
+            'by_postone': {},
+            'by_tracking': {},
+            'by_name': {},
+            'refs': set(),
+        }
         try:
             text = raw_bytes.decode(encoding)
             reader = csv.reader(text.splitlines())
@@ -353,9 +355,12 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
                     mappings['by_postone'][p_number] = data_pack
                 if tracking:
                     mappings['by_tracking'][tracking] = data_pack
+                if ref_num:
+                    mappings['refs'].add(ref_num)
                 if client_name:
-                    normalized_name = normalize_text(client_name)
-                    mappings['by_name'][normalized_name] = data_pack
+                    packs = mappings['by_name'].setdefault(normalize_text(client_name), [])
+                    if all(p['ref'] != ref_num for p in packs):
+                        packs.append(data_pack)
 
                 row_count += 1
 
@@ -436,24 +441,22 @@ def match_reference(page_text: str, mapping: dict) -> dict | None:
                 'method': 'tracking'
             }
 
-    # Step 3: Try Name Matching (fallback)
+    # Step 3: Name fallback. Only whole-word matches count, a name inside a
+    # longer matching name gives way to it, and the page matches only if one
+    # name is left and it carries one REF. Anything else would guess
+    # between customers (AUDIT-04-7).
     page_text_norm = normalize_text(page_text)
-
-    for name_key, data in mapping['by_name'].items():
-        if len(name_key) > 5 and name_key in page_text_norm:
-            is_verified = check_name_presence(data['name'], page_text)
-
-            logger.debug(
-                f"Matched by Name: {name_key} → {data['ref']} "
-                f"(verified: {is_verified})"
-            )
-
-            return {
-                'ref': data['ref'],
-                'verified': is_verified,
-                'method': 'name'
-            }
-
+    found = [
+        name for name in mapping['by_name']
+        if len(name) > 5 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", page_text_norm)
+    ]
+    found = [n for n in found if not any(n != o and n in o for o in found)]
+    if len(found) == 1 and len(mapping['by_name'][found[0]]) == 1:
+        data = mapping['by_name'][found[0]][0]
+        logger.debug(f"Matched by Name: {found[0]} → {data['ref']} (unverified)")
+        return {'ref': data['ref'], 'verified': False, 'method': 'name'}
+    if found:
+        logger.info(f"Name fallback refused, ambiguous: {found}")
     return None
 
 
