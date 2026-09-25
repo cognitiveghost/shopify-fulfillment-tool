@@ -1,6 +1,6 @@
 """General settings: CSV delimiters and analysis thresholds."""
 
-from PySide6.QtWidgets import QComboBox, QLineEdit, QSpinBox, QVBoxLayout
+from PySide6.QtWidgets import QComboBox, QLineEdit, QVBoxLayout
 
 from gui.components.form_section import FormSection
 from gui.settings.base import SettingsPage
@@ -72,21 +72,6 @@ class GeneralPage(SettingsPage):
             ),
         )
 
-        self.repeat_days_input = QSpinBox()
-        self.repeat_days_input.setMinimum(1)
-        self.repeat_days_input.setMaximum(365)
-        self.repeat_days_input.setValue(settings.get("repeat_detection_days", 1))
-        self.repeat_days_input.setMaximumWidth(100)
-        section.add_row(
-            "Repeat Detection Window (days):",
-            self.repeat_days_input,
-            tooltip=(
-                "Orders fulfilled within this many days are marked as 'Repeat'.\n"
-                "Default: 1 day (only yesterday's fulfillments)\n"
-                "Increase for longer detection window (e.g., 7 days, 30 days)"
-            ),
-        )
-
         main_layout.addWidget(section)
         main_layout.addStretch()
 
@@ -96,7 +81,6 @@ class GeneralPage(SettingsPage):
                 "stock_csv_delimiter": self.stock_delimiter_combo.currentData(),
                 "orders_csv_delimiter": self.orders_delimiter_combo.currentData(),
                 "low_stock_threshold": int(self.low_stock_edit.text()),
-                "repeat_detection_days": self.repeat_days_input.value(),
             }
         )
         return {"settings": self._settings}

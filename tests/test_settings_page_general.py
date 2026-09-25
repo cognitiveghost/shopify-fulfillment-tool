@@ -39,7 +39,6 @@ def test_general_page_writes_every_key_it_owns(qapp):
         "stock_csv_delimiter",
         "orders_csv_delimiter",
         "low_stock_threshold",
-        "repeat_detection_days",
     }
 
 
@@ -49,13 +48,15 @@ def test_general_page_falls_back_to_defaults(qapp):
         "stock_csv_delimiter": "auto",
         "orders_csv_delimiter": "auto",
         "low_stock_threshold": 5,
-        "repeat_detection_days": 1,
     }
 
 
-def test_repeat_window_spinbox_is_not_full_bleed(qapp):
-    page = GeneralPage({})
-    assert page.repeat_days_input.maximumWidth() <= 120
+def test_repeat_window_setting_is_gone_but_a_saved_value_survives(qapp):
+    """Repeat compares sessions now (ADR 0012). The page no longer offers the
+    window, and an old saved value is left in the config untouched."""
+    page = GeneralPage(sample_settings())
+    assert not hasattr(page, "repeat_days_input")
+    assert page.collect()["settings"]["repeat_detection_days"] == 30
 
 
 def test_auto_and_tab_round_trip(qapp):

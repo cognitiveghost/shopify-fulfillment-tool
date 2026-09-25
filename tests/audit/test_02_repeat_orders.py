@@ -84,14 +84,6 @@ class Shop:
             ].values.tolist()
         )
 
-    def age_history(self, days=1):
-        """Move every history date back, as if the next working day has come."""
-        h = pd.read_csv(self.history, dtype=str)
-        h["Execution_Date"] = (
-            pd.to_datetime(h["Execution_Date"]) - pd.Timedelta(days=days)
-        ).dt.strftime("%Y-%m-%d")
-        h.to_csv(self.history, index=False)
-
     def run(self, order_rows, stock_rows, window=1, **kw):
         """order_rows: (name, sku, qty); stock_rows: (sku, qty) or None for memory mode."""
         self._n += 1
@@ -205,14 +197,10 @@ def test_raising_the_repeat_window_still_flags_yesterdays_order(shop):
     assert repeat(df, "#1")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-3: an order a person marks fulfillable never reaches fulfillment history",
-)
 def test_order_marked_fulfillable_by_a_person_is_flagged_next_day(shop):
     # Stock covers one of the two. A person swaps them: hold #1, ship #2.
     lines = [("#1", "A", 3), ("#2", "A", 3)]
-    df = shop.run(lines, [("A", 3)])
+    df = shop.run(lines, [("A", 3)], session_path=str(shop.dir / "2026-09-25_1"))
     handler = ActionsHandler(mw := window(df))
     handler.toggle_fulfillment_status_for_order("#1")
     handler.toggle_fulfillment_status_for_order("#2")
@@ -220,27 +208,30 @@ def test_order_marked_fulfillable_by_a_person_is_flagged_next_day(shop):
         "Order_Fulfillment_Status"
     ].first()
     assert after.to_dict() == {"#1": "Not Fulfillable", "#2": "Fulfillable"}
-    # If the fix writes history from save_session_state (a Mock here), call
-    # the real writer at this point.
-    shop.age_history()
+    # save_session_state is a Mock here; this is the writer it calls.
+    fulfillment_history.record_session(
+        shop.history, "2026-09-25_1", mw.analysis_results_df
+    )
     # #2 shipped without Packing Tool, so the packed signal stays empty.
-    df2 = shop.run(lines, [("A", 3)])
+    df2 = shop.run(lines, [("A", 3)], session_path=str(shop.dir / "2026-09-25_2"))
     assert repeat(df2, "#2")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-4: an order analysed fulfillable but held and never shipped is flagged Repeat",
-)
 def test_order_held_after_analysis_is_not_a_repeat_next_day(shop):
-    df = shop.run([("#1", "A", 1)], [("A", 5)])
+    df = shop.run(
+        [("#1", "A", 1)], [("A", 5)], session_path=str(shop.dir / "2026-09-25_1")
+    )
     mw = window(df)
     ActionsHandler(mw).toggle_fulfillment_status_for_order("#1")
     assert set(mw.analysis_results_df["Order_Fulfillment_Status"]) == {
         "Not Fulfillable"
     }
-    shop.age_history()
-    df2 = shop.run([("#1", "A", 1)], [("A", 5)])
+    fulfillment_history.record_session(
+        shop.history, "2026-09-25_1", mw.analysis_results_df
+    )
+    df2 = shop.run(
+        [("#1", "A", 1)], [("A", 5)], session_path=str(shop.dir / "2026-09-25_2")
+    )
     assert not repeat(df2, "#1")
 
 

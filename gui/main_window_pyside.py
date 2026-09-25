@@ -25,7 +25,7 @@ from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
-from shopify_tool import session_state
+from shopify_tool import fulfillment_history, session_state
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
@@ -744,6 +744,21 @@ class MainWindow(QMainWindow):
                 "everything on screen. Details are in Logs.",
             )
             return
+
+        # History follows the saved state, not the run (ADR 0012). A failure
+        # heals on the next save, which rewrites this session's rows whole.
+        # ponytail: history write on the GUI thread; move to the threadpool with a
+        # per-session coalescing queue if saves feel slow on the share
+        try:
+            fulfillment_history.record_session(
+                fulfillment_history.history_path(
+                    self.profile_manager, self.current_client_id
+                ),
+                Path(self.session_path).name,
+                self.analysis_results_df,
+            )
+        except Exception:
+            logger.exception("Failed to record fulfillment history")
 
         # current_state.pkl above is the state; these only mirror it, so a
         # failure here is logged, not shown.
