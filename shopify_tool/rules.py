@@ -112,14 +112,13 @@ def _as_str_series(series_val):
 
 
 def _op_contains(series_val, rule_val):
-    """Returns True where the series string contains the rule string (case-insensitive)."""
-    # Case-insensitive containment check for strings
-    return _as_str_series(series_val).str.contains(rule_val, case=False, na=False)
+    """Returns True where the series string contains the rule string (case-insensitive, literal)."""
+    return _as_str_series(series_val).str.contains(rule_val, case=False, na=False, regex=False)
 
 
 def _op_not_contains(series_val, rule_val):
-    """Returns True where the series string does not contain the rule string (case-insensitive)."""
-    return ~_as_str_series(series_val).str.contains(rule_val, case=False, na=False)
+    """Returns True where the series string does not contain the rule string (case-insensitive, literal)."""
+    return ~_op_contains(series_val, rule_val)
 
 
 def _safe_float(value):
@@ -188,10 +187,12 @@ def _op_is_not_empty(series_val, rule_val):
 def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
     """Safely parse date string with multiple format support.
 
-    Tries 3 common date formats in sequence:
+    Tries these formats in sequence:
     1. YYYY-MM-DD (ISO format)
     2. DD/MM/YYYY (European format)
     3. DD.MM.YYYY (European format with dots)
+    4. Shopify "Created at" (YYYY-MM-DD HH:MM:SS +0200) and its ISO form,
+       with or without an offset
 
     Args:
         date_str: Date string to parse
@@ -215,14 +216,19 @@ def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
 
     date_str = str(date_str).strip()
 
-    # Try multiple formats
-    formats = ["%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y"]
+    # A timestamp is compared by the date as written -- the shop's local
+    # date -- so the offset is dropped, not converted (spec 2026-09-26 D9).
+    formats = [
+        "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y",
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z",
+    ]
 
     for fmt in formats:
         try:
-            return pd.to_datetime(date_str, format=fmt)
+            parsed = pd.to_datetime(date_str, format=fmt)
         except (ValueError, TypeError):
             continue
+        return parsed.tz_localize(None) if parsed.tzinfo is not None else parsed
 
     logger.warning(f"[RULE ENGINE] Invalid rule date format: '{date_str}'")
     return None
@@ -624,8 +630,11 @@ def _op_does_not_match_regex(series_val, rule_val):
         rule_val: Regex pattern string
 
     Returns:
-        pd.Series[bool]: True where value does NOT match pattern
+        pd.Series[bool]: True where value does NOT match pattern. An invalid
+        pattern matches nothing, as in `matches regex` (AUDIT-03-4).
     """
+    if _compile_regex_safe(rule_val) is None:
+        return pd.Series(False, index=series_val.index)
     return ~_op_matches_regex(series_val, rule_val)
 
 

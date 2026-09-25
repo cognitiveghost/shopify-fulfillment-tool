@@ -114,7 +114,6 @@ def test_add_product_is_counted_in_final_stock(tmp_path):
     assert (gift["Final_Stock"] == 3).all()
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-3: 'contains' reads its value as a regex")
 @pytest.mark.parametrize("value, cell, expected", [
     ("Mask + Box", "Mask + Box Set", True),   # '+' is a quantifier
     (".", "ABC", False),                      # '.' matches any character
@@ -124,14 +123,12 @@ def test_contains_is_literal(value, cell, expected):
     assert bool(_op_contains(pd.Series([cell]), value).iloc[0]) is expected
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-3: an unbalanced '(' in 'contains' aborts the analysis")
 def test_contains_with_a_bracket_does_not_crash_the_run():
     df = frame([("#1", "A", 1)])
     r = rule([cond("Product_Name", "contains", "(")], [tag("X")], level="article")
     RuleEngine([r]).apply(df)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-4: an invalid pattern in 'does not match regex' matches every row")
 def test_invalid_negative_regex_matches_nothing():
     result = _op_does_not_match_regex(pd.Series(["A", "B"]), "(")
     assert not result.any()
@@ -147,7 +144,6 @@ def test_rules_page_refuses_to_save_an_invalid_rule(qtbot):
     assert not ok
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-6: date operators cannot parse Shopify's Created at timestamps")
 def test_date_operators_read_shopify_timestamps():
     created_at = pd.Series(["2026-01-14 18:56:50 +0200"])
     assert bool(_op_date_before(created_at, "2026-02-01").iloc[0])

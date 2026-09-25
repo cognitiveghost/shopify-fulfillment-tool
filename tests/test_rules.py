@@ -425,3 +425,18 @@ class TestRuleCreatedColumnSeeding:
 
         assert pd.isna(out.loc[0, "Total"]), "unmatched row must be blank, not 0.0"
         assert out.loc[1, "Total"] == 40
+
+
+def test_shopify_timestamp_compares_by_its_own_date():
+    """D9: the offset is ignored; the date as written is the shop's date."""
+    from shopify_tool.rules import _op_date_equals, _parse_date_safe
+
+    late = pd.Series(["2026-01-14 23:30:00 +0200", "2026-01-14T23:30:00+02:00"])
+    assert _op_date_equals(late, "2026-01-14").tolist() == [True, True]
+    assert _parse_date_safe("2026-01-14 23:30:00 +0200").tzinfo is None
+
+
+def test_not_contains_is_literal_too():
+    from shopify_tool.rules import _op_not_contains
+
+    assert _op_not_contains(pd.Series(["ABC"]), ".").tolist() == [True]
