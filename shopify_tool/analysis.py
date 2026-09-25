@@ -1622,12 +1622,14 @@ def recalculate_statistics(df):
         df["Shipping_Provider"] = "Unknown"
 
     stats = {}
-    completed_orders_df = df[df["Order_Fulfillment_Status"] == "Fulfillable"].copy()
-    not_completed_orders_df = df[df["Order_Fulfillment_Status"] == "Not Fulfillable"]
+    from shopify_tool.report_filters import fulfillable_only  # local: avoids an import cycle
+
+    completed_orders_df = fulfillable_only(df).copy()
+    not_completed_orders_df = df.drop(index=completed_orders_df.index)
 
     stats["total_orders_completed"] = int(completed_orders_df["Order_Number"].nunique())
-    stats["total_orders_not_completed"] = int(
-        not_completed_orders_df["Order_Number"].nunique()
+    stats["total_orders_not_completed"] = (
+        int(df["Order_Number"].nunique()) - stats["total_orders_completed"]
     )
     stats["total_items_to_write_off"] = int(completed_orders_df["Quantity"].sum())
     stats["total_items_not_to_write_off"] = int(
@@ -1686,8 +1688,8 @@ def recalculate_statistics(df):
                 counts = exploded.drop_duplicates()["tag"].value_counts()
                 return dict(counts.items())
 
-            fulfillable_df = df[df["Order_Fulfillment_Status"] == "Fulfillable"]
-            not_fulfillable_df = df[df["Order_Fulfillment_Status"] != "Fulfillable"]
+            fulfillable_df = completed_orders_df
+            not_fulfillable_df = not_completed_orders_df
 
             tags_breakdown_fulfillable = _build_order_tag_counts(fulfillable_df)
             tags_breakdown_not_fulfillable = _build_order_tag_counts(not_fulfillable_df)
@@ -1707,13 +1709,8 @@ def recalculate_statistics(df):
     try:
         # Create a helper column for fulfillable quantity
         df_temp = df.copy()
-        df_temp["Fulfillable_Qty"] = df_temp.apply(
-            lambda row: (
-                row["Quantity"]
-                if row["Order_Fulfillment_Status"] == "Fulfillable"
-                else 0
-            ),
-            axis=1,
+        df_temp["Fulfillable_Qty"] = df_temp["Quantity"].where(
+            df_temp.index.isin(completed_orders_df.index), 0
         )
 
         # Group by SKU and aggregate

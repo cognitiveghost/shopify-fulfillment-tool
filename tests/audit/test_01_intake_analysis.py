@@ -174,10 +174,6 @@ def test_toggle_holds_a_fulfillable_order_whose_first_line_has_no_sku():
     assert final_stock(out, "A") == 5
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-6: a fulfillable order with a no-SKU line is counted completed AND not completed",
-)
 def test_stats_count_each_order_once():
     df, *_ = analyse(stock([("A", 5)]), orders([("#1", "A", 1), ("#1", None, 1)]))
     stats = recalculate_statistics(df)
