@@ -16,6 +16,7 @@ from typing import Any
 
 import pandas as pd
 
+from shared.atomic_write import atomic_write_json
 from shopify_tool.stock_ledger import with_stock_left
 
 
@@ -451,8 +452,7 @@ class UndoManager:
                 "max_history": self.max_history
             }
 
-            with open(history_path, 'w', encoding='utf-8') as f:
-                json.dump(history_data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(history_path, history_data, indent=2)
 
             self.log.debug(f"Saved history to {history_path}")
 

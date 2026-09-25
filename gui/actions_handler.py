@@ -12,6 +12,7 @@ from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
+from shared.atomic_write import atomic_write_json
 from shopify_tool import core, packing_lists, session_state, stock_export, stock_ledger
 from shopify_tool.analysis import toggle_order_fulfillment
 from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
@@ -1442,8 +1443,7 @@ class ActionsHandler(QObject):
 
         # Save back
         try:
-            with open(additions_file, "w", encoding="utf-8") as f:
-                json.dump(additions, f, indent=2, ensure_ascii=False)
+            atomic_write_json(additions_file, additions, indent=2)
             self.log.info(f"Saved manual addition to {additions_file}")
         except Exception:
             self.log.exception("Failed to save manual additions")

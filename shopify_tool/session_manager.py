@@ -157,8 +157,7 @@ class SessionManager:
             }
 
             session_info_path = session_path / "session_info.json"
-            with open(session_info_path, 'w', encoding='utf-8') as f:
-                json.dump(session_info, f, indent=2)
+            atomic_write_json(session_info_path, session_info, indent=2)
 
             try:
                 self._upsert_index_entry(session_path, session_info)
@@ -490,8 +489,7 @@ class SessionManager:
                 # Remove computed fields
                 session_info.pop("session_path", None)
 
-                with open(session_info_path, 'w', encoding='utf-8') as f:
-                    json.dump(session_info, f, indent=2)
+                atomic_write_json(session_info_path, session_info, indent=2)
 
                 try:
                     self._upsert_index_entry(session_path_obj, session_info)
@@ -611,8 +609,7 @@ class SessionManager:
                 # Remove computed fields
                 session_info.pop("session_path", None)
 
-                with open(session_info_path, 'w', encoding='utf-8') as f:
-                    json.dump(session_info, f, indent=2)
+                atomic_write_json(session_info_path, session_info, indent=2)
 
                 try:
                     self._upsert_index_entry(session_path_obj, session_info)
@@ -658,8 +655,7 @@ class SessionManager:
             try:
                 session_info.pop("session_path", None)
 
-                with open(session_info_path, 'w', encoding='utf-8') as f:
-                    json.dump(session_info, f, indent=2)
+                atomic_write_json(session_info_path, session_info, indent=2)
 
                 try:
                     self._upsert_index_entry(session_path_obj, session_info)

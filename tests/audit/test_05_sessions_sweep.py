@@ -219,10 +219,6 @@ def test_one_pc_reopening_its_session_gets_its_last_save(sessions):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-4: a failed session_info.json write leaves it torn and the session unreadable",
-)
 def test_a_failed_session_info_write_keeps_the_old_file(sessions):
     path = sessions.create_session("M")
     # object() stands in for any failure after the first byte is written: a

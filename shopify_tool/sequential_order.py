@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from shared.atomic_write import atomic_write_json
 from shopify_tool.report_filters import fulfillable_only
 
 logger = logging.getLogger(__name__)
@@ -48,8 +49,7 @@ def _write_sequential_order_map(json_path: Path, order_map: dict[str, int]) -> N
         "total_orders": len(order_map),
         "order_sequence": order_map,
     }
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    atomic_write_json(json_path, data, indent=2)
 
 
 def generate_sequential_order_map(

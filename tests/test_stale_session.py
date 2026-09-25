@@ -28,7 +28,7 @@ def main_window(tmp_path, monkeypatch, qapp):
 @pytest.fixture
 def told(monkeypatch):
     got = []
-    record = lambda *a, **k: got.append(a[1])  # noqa: E731 -- headline only
+    record = lambda *a, **k: got.append(a[1])  # headline only
     monkeypatch.setattr(main_window_module, "show_error", record)
     monkeypatch.setattr(actions_module, "show_error", record)
     return got
