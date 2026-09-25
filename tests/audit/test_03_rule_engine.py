@@ -134,7 +134,6 @@ def test_invalid_negative_regex_matches_nothing():
     assert not result.any()
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-5: Save accepts a rule the validator marks as an error")
 def test_rules_page_refuses_to_save_an_invalid_rule(qtbot):
     bad = rule([cond("SKU", "matches regex", "(")], [tag("X")], level="article")
     page = RulesPage([bad], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
@@ -170,13 +169,11 @@ def test_rule_test_dialog_reports_rows_the_saved_rule_already_tagged(qtbot, no_m
     assert dialog.matched_count == 1
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-9: validator accepts a reversed range the engine refuses")
 @pytest.mark.parametrize("value", ["100-10", "-10-0"])
 def test_range_validator_agrees_with_engine(value):
     assert validate_range(value)[0] is (_parse_range(value) is not None)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-10: rule test drops ADD_PRODUCT's quantity")
 def test_rule_test_config_keeps_add_product_quantity(qtbot):
     r = rule([cond("SKU", "equals", "A")],
              [{"type": "ADD_PRODUCT", "sku": "GIFT", "quantity": 3}], level="article")

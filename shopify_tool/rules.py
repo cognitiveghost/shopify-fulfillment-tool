@@ -271,6 +271,10 @@ def _compile_regex_safe(pattern: str) -> re.Pattern | None:
         return None
 
 
+# start-end, each side optionally negative: "10-100", "-10-0", "-10--5".
+RANGE_PATTERN = re.compile(r"^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$")
+
+
 def _parse_range(range_str: str) -> tuple[float, float] | None:
     """Parse range string in format 'start-end'.
 
@@ -296,7 +300,7 @@ def _parse_range(range_str: str) -> tuple[float, float] | None:
 
     # Use regex to support negative numbers: e.g. "-10-0", "-10--5"
     # Pattern: optional minus + digits (+ optional decimal) DASH optional minus + digits
-    match = re.match(r'^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$', range_str)
+    match = RANGE_PATTERN.match(range_str)
     if not match:
         logger.warning(f"[RULE ENGINE] Invalid range format: '{range_str}' (expected 'start-end')")
         return None

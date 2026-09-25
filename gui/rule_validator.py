@@ -83,47 +83,30 @@ def validate_date(date_str: str) -> tuple[bool, str | None]:
 
 
 def validate_range(range_str: str) -> tuple[bool, str | None, str | None]:
-    """
-    Validate range string using rule engine's parser.
+    """Validate a 'start-end' range exactly as the rule engine will read it.
 
-    Format: "start-end" (e.g., "10-100")
-
-    Args:
-        range_str: Range string to validate
-
-    Returns:
-        Tuple of (is_valid, error_message, warning_message)
-        - is_valid: True if range format is valid, False otherwise
-        - error_message: None if valid, error description if invalid
-        - warning_message: Warning if start > end (valid format but suspicious)
+    Valid means rules._parse_range accepts it, so the page and the engine
+    can't disagree (AUDIT-03-9). A reversed range is an error, not a warning:
+    the engine refuses it. The third slot is kept for callers and is None.
 
     Examples:
         >>> validate_range("10-100")
         (True, None, None)
-        >>> validate_range("100-10")
-        (True, None, "Warning: Start (100.0) > End (10.0)")
-        >>> validate_range("invalid")
-        (False, "Invalid format. Use: start-end (e.g., 10-100)", None)
+        >>> validate_range("-10-0")
+        (True, None, None)
+        >>> validate_range("100-10")[0]
+        False
     """
-    if not range_str or not str(range_str).strip():
+    from shopify_tool.rules import RANGE_PATTERN, _parse_range
+
+    text = str(range_str or "").strip()
+    if not text:
         return (False, "Range cannot be empty", None)
-
-    # Manual parsing to detect reversed ranges
-    try:
-        parts = str(range_str).strip().split("-")
-        if len(parts) != 2:
-            return (False, "Invalid format. Use: start-end (e.g., 10-100)", None)
-
-        start = float(parts[0].strip())
-        end = float(parts[1].strip())
-
-        if start > end:
-            return (True, None, f"Warning: Start ({start}) > End ({end})")
-
-        return (True, None, None)
-
-    except ValueError:
+    if not RANGE_PATTERN.match(text):
         return (False, "Invalid format. Use: start-end (e.g., 10-100)", None)
+    if _parse_range(text) is None:
+        return (False, "Start is greater than end. Write the smaller number first, for example 10-100.", None)
+    return (True, None, None)
 
 
 def validate_list(list_str: str) -> tuple[bool, int, str | None]:
@@ -194,3 +177,30 @@ def validate_numeric(value_str: str) -> tuple[bool, str | None]:
         return (True, None)
     except ValueError:
         return (False, "Value must be a number")
+
+
+_NUMERIC_OPERATORS = {
+    "is greater than", "is less than",
+    "is greater than or equal", "is less than or equal",
+}
+
+
+def condition_error(operator: str, value: str) -> str | None:
+    """The error the Rules page shows in red for this condition, or None.
+
+    The same checks as the live feedback (RulesPage._perform_validation),
+    so Save refuses exactly what the page marks red (AUDIT-03-5).
+    """
+    if operator in ("matches regex", "does not match regex"):
+        ok, msg = validate_regex(value)
+        return None if ok else msg
+    if operator in ("between", "not between"):
+        ok, msg, _ = validate_range(value)
+        return None if ok else msg
+    if operator in ("in list", "not in list"):
+        ok, _count, msg = validate_list(value)
+        return None if ok else msg
+    if operator in _NUMERIC_OPERATORS:
+        ok, msg = validate_numeric(value)
+        return None if ok else msg
+    return None
