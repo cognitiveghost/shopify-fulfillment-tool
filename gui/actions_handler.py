@@ -710,9 +710,7 @@ class ActionsHandler(QObject):
                 if report_type == "packing_lists":
                     base_filename = f"{report_name}.xlsx"
                 else:
-                    # Add timestamp for stock exports and writeoff reports
-                    datestamp = datetime.now().astimezone().strftime("%Y-%m-%d")
-                    base_filename = f"{report_name}_{datestamp}.xls"
+                    base_filename = f"{report_name}.xls"
 
             # Ensure correct extension
             if report_type == "packing_lists":
@@ -723,6 +721,9 @@ class ActionsHandler(QObject):
                     base_filename = base_filename + ".xls"
 
             output_file = str(output_dir / base_filename)
+            if report_type == "stock_exports":
+                # Stamps the name, moving earlier versions to old/
+                output_file = stock_export.prepare_export_path(output_file)
 
             # ========================================
             # GENERATE REPORT USING PROPER MODULES

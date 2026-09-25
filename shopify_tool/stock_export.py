@@ -1,7 +1,9 @@
 import io
 import logging
 import os
+import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -175,6 +177,34 @@ def _write_xls(export_df, output_file) -> None:
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
+
+
+_DATESTAMP_SUFFIX = re.compile(r"_\d{4}-\d{2}-\d{2}$")
+
+
+def prepare_export_path(base_path, now=None):
+    """The file a new export of this report goes to: <stem>_YYYY-MM-DD_HHMM.xls
+    beside the configured name. Every earlier version of the same report,
+    and its packaging file, is moved to old/ first, so the folder only ever
+    holds one current export and importing it can't write stock off twice.
+    A move that fails (the ERP holds the file) raises, and nothing new is
+    written."""
+    base = Path(base_path)
+    stem = _DATESTAMP_SUFFIX.sub("", base.stem)
+    stamp = (now or datetime.now().astimezone()).strftime("%Y-%m-%d_%H%M")
+    earlier = re.compile(
+        rf"^{re.escape(stem)}(_\d{{4}}-\d{{2}}-\d{{2}}(_\d{{4}})?)?(_packaging)?\.xls$",
+        re.IGNORECASE,
+    )
+    if base.parent.is_dir():
+        versions = [p for p in base.parent.iterdir() if p.is_file() and earlier.match(p.name)]
+        if versions:
+            old = base.parent / "old"
+            old.mkdir(exist_ok=True)
+            for p in versions:
+                os.replace(p, old / p.name)
+                logger.info(f"Moved earlier export {p.name} to old/")
+    return str(base.with_name(f"{stem}_{stamp}.xls"))
 
 
 def _packaging_path(output_file):

@@ -1607,6 +1607,9 @@ def create_stock_export_report(
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
 
+        # Stamps the name, moving earlier versions to old/
+        output_filename = stock_export.prepare_export_path(output_filename)
+
         filters = report_config.get("filters")
         writeoff_mode = report_config.get("writeoff_mode", "off")
 
@@ -1629,10 +1632,10 @@ def create_stock_export_report(
         if session_manager and session_path:
             try:
                 if session_manager.append_to_session_list(
-                    session_path, "stock_exports_generated", original_filename
+                    session_path, "stock_exports_generated", os.path.basename(output_filename)
                 ):
                     logger.info(
-                        f"Session info updated: added stock export {original_filename}"
+                        f"Session info updated: added stock export {os.path.basename(output_filename)}"
                     )
             except Exception as e:
                 logger.warning(f"Failed to update session info: {e}")
