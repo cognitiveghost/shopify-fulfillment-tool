@@ -12,7 +12,7 @@ from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
-from shopify_tool import core, packing_lists, stock_export
+from shopify_tool import core, packing_lists, stock_export, stock_ledger
 from shopify_tool.analysis import toggle_order_fulfillment
 from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
@@ -949,10 +949,8 @@ class ActionsHandler(QObject):
         if not mask.any():
             self.log.warning(f"Order {order_number} is no longer in the analysis")
             return
-        is_fulfillable = (
-            df.loc[mask, "Order_Fulfillment_Status"].iloc[0] == "Fulfillable"
-        )
-        if is_fulfillable != bool(fulfillable):
+        already = stock_ledger.is_fulfillable(df, order_number)
+        if already != bool(fulfillable):
             self.toggle_fulfillment_status_for_order(order_number)
 
     def remove_line(self, order_number, line_index: int, sku):
@@ -1073,7 +1071,9 @@ class ActionsHandler(QObject):
         # Get affected rows BEFORE operation
         affected_rows = df[mask].copy()
 
-        self.mw.analysis_results_df = df[~mask].reset_index(drop=True)
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(
+            df[~mask].reset_index(drop=True)
+        )
 
         # A no-SKU line matches on NaN by design, but "Removed item nan" is
         # not a sentence. The undo payload keeps the raw value either way.
@@ -1111,9 +1111,9 @@ class ActionsHandler(QObject):
 
         order_mask = ~this_order
 
-        self.mw.analysis_results_df = self.mw.analysis_results_df[
-            order_mask
-        ].reset_index(drop=True)
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(
+            self.mw.analysis_results_df[order_mask].reset_index(drop=True)
+        )
 
         # Record for undo
         self.mw.undo_manager.record_operation(
@@ -1264,7 +1264,8 @@ class ActionsHandler(QObject):
         Add manually added product to order.
 
         CRITICAL: Does NOT re-run full analysis!
-        Instead: Recalculates fulfillment ONLY for this order.
+        The order keeps its status; Stock left is re-derived from the ledger,
+        so `live_stock` is no longer read.
 
         Args:
             product_data: dict {
@@ -1317,113 +1318,59 @@ class ActionsHandler(QObject):
         else:
             new_row["Warehouse_Name"] = product_data["product_name"]
 
-        # Step 3: Lookup stock value
-        if not stock_row.empty and "Stock" in stock_row.columns:
-            initial_stock = stock_row.iloc[0]["Stock"]
-            new_row["Stock"] = initial_stock
+        # Step 3: opening Stock for the SKU, from what the run already knows
+        frame = self.mw.analysis_results_df
+        in_frame = frame["SKU"].astype(str) == str(sku)
+        known = frame.loc[in_frame, "Stock"].dropna()
+        if not known.empty:
+            new_row["Stock"] = known.iloc[0]
+        elif not stock_row.empty and "Stock" in stock_row.columns:
+            new_row["Stock"] = pd.to_numeric(stock_row["Stock"], errors="coerce").fillna(0).sum()
         else:
             new_row["Stock"] = 0
-            initial_stock = 0
+        # Any non-null value marks the SKU as listed; the ledger rewrites it.
+        # A SKU the run already left unlisted stays unlisted (spec §2).
+        unlisted = in_frame.any() and frame.loc[in_frame, "Final_Stock"].isna().all()
+        new_row["Final_Stock"] = float("nan") if unlisted else new_row["Stock"]
+        if "Has_SKU" in new_row.index:
+            new_row["Has_SKU"] = True
 
-        # Step 4: Get current live stock
-        current_live_stock = live_stock.get(sku, initial_stock)
-        new_row["Final_Stock"] = current_live_stock
-
-        # Step 5: Append to DataFrame
-        self.mw.analysis_results_df = pd.concat(
-            [self.mw.analysis_results_df, pd.DataFrame([new_row])], ignore_index=True
+        # Step 4: the order keeps its status unless the new line outruns Stock left
+        was_fulfillable = stock_ledger.is_fulfillable(frame, order_num)
+        new_row["Order_Fulfillment_Status"] = (
+            stock_ledger.FULFILLABLE if was_fulfillable else stock_ledger.NOT_FULFILLABLE
         )
+        frame = pd.concat([frame, pd.DataFrame([new_row])], ignore_index=True)
+        short = stock_ledger.shortfall(frame, order_num) if was_fulfillable else []
+        now_blocked = bool(short)
+        if now_blocked:
+            frame.loc[
+                self._order_mask(order_num, frame), "Order_Fulfillment_Status"
+            ] = stock_ledger.NOT_FULFILLABLE
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(frame)
 
         self.log.info("Row added to analysis_results_df")
 
-        # Step 6: Recalculate fulfillment for THIS ORDER ONLY
-        self._recalculate_order_fulfillment(order_num)
-
-        # Step 7: Save to session
+        # Step 5: Save to session
         self._save_manual_addition(product_data)
 
-        # Step 8: Emit data changed signal
+        # Step 6: Emit data changed signal
         self.data_changed.emit()
 
-        # Step 9: Auto-save session state after modification
+        # Step 7: Auto-save session state after modification
         self.mw.save_session_state()
 
-        # Step 10: Show success message. This verb hangs off the Results
+        # Step 8: Show success message. This verb hangs off the Results
         # screen's overflow menu, so its toast belongs in the document too
         # (ADR 0007).
-        self._results_toast(f"Added {quantity}x {sku} to order {order_num}.")
+        text = f"Added {quantity}x {sku} to order {order_num}."
+        if now_blocked:
+            text += f" It is now blocked: not enough {', '.join(short)}."
+        self._results_toast(text)
 
         self.mw.log_activity(
             "Manual Addition", f"Added {quantity}x {sku} to order {order_num}"
         )
-
-    def _recalculate_order_fulfillment(self, order_number):
-        """
-        Recalculate fulfillment status for ONE specific order.
-
-        CRITICAL: Does NOT touch other orders or re-run analysis!
-        This preserves repeated order detection logic.
-
-        Args:
-            order_number: Order to recalculate
-        """
-        self.log.info(f"Recalculating fulfillment for order {order_number}")
-
-        # Get all items for this order
-        # Convert Order_Number to string for comparison (might be int/float)
-        order_items = self.mw.analysis_results_df[
-            self.mw.analysis_results_df["Order_Number"].astype(str) == str(order_number)
-        ]
-
-        # Rebuild live stock tracking from Final_Stock
-        live_stock = {}
-        for _, row in self.mw.analysis_results_df.iterrows():
-            sku = row["SKU"]
-            final_stock = row["Final_Stock"]
-            if pd.notna(sku) and pd.notna(final_stock):
-                live_stock[sku] = final_stock
-
-        # Check if all items can be fulfilled with current live stock
-        can_fulfill = True
-
-        for _, item in order_items.iterrows():
-            sku = item["SKU"]
-            required_qty = item["Quantity"]
-            available = live_stock.get(sku, 0)
-
-            if required_qty > available:
-                can_fulfill = False
-                self.log.debug(
-                    f"  {sku}: need {required_qty}, have {available} - NOT OK"
-                )
-                break
-            else:
-                self.log.debug(f"  {sku}: need {required_qty}, have {available} - OK")
-
-        # Update fulfillment status for ALL items in this order
-        new_status = "Fulfillable" if can_fulfill else "Not Fulfillable"
-
-        # Convert Order_Number to string for comparison (might be int/float)
-        self.mw.analysis_results_df.loc[
-            self.mw.analysis_results_df["Order_Number"].astype(str)
-            == str(order_number),
-            "Order_Fulfillment_Status",
-        ] = new_status
-
-        # If fulfillable, update Final_Stock (simulate allocation)
-        if can_fulfill:
-            for _, item in order_items.iterrows():
-                sku = item["SKU"]
-                qty = item["Quantity"]
-                new_stock = live_stock.get(sku, 0) - qty
-                # Update Final_Stock for ALL rows with this SKU
-                self.mw.analysis_results_df.loc[
-                    self.mw.analysis_results_df["SKU"] == sku, "Final_Stock"
-                ] = new_stock
-
-            self.log.info(f"Order {order_number} marked as Fulfillable, stock updated")
-        else:
-            self.log.info(f"Order {order_number} marked as Not Fulfillable")
 
     def _save_manual_addition(self, product_data):
         """Save manual addition to session file."""
@@ -1497,22 +1444,38 @@ class ActionsHandler(QObject):
         if not selected_indexes:
             return
 
-        orders_count, items_count = self.mw.selection_helper.get_selection_summary()
-        status_text = "Fulfillable" if is_fulfillable else "Not Fulfillable"
+        df = self.mw.analysis_results_df
+        in_frame_order = list(dict.fromkeys(df.loc[selected_indexes, "Order_Number"]))
+        if is_fulfillable:
+            covered, skipped = stock_ledger.claim(df, in_frame_order)
+        else:
+            covered, skipped = in_frame_order, []
+        if not covered:
+            if skipped:
+                self._results_toast(
+                    f"No orders marked fulfillable: not enough stock for {_plural(len(skipped), 'order')}",
+                    undoable=False,
+                )
+            return
+
+        changed_indexes = df.index[order_number_mask(df, covered)].tolist()
+        items_count = len(changed_indexes)
+        status_text = (
+            stock_ledger.FULFILLABLE if is_fulfillable else stock_ledger.NOT_FULFILLABLE
+        )
 
         # Get affected rows BEFORE modification
-        affected_rows_before = self.mw.analysis_results_df.loc[selected_indexes].copy()
+        affected_rows_before = df.loc[changed_indexes].copy()
 
-        self.mw.analysis_results_df.loc[
-            selected_indexes, "Order_Fulfillment_Status"
-        ] = status_text
+        df.loc[changed_indexes, "Order_Fulfillment_Status"] = status_text
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(df)
 
         self.mw.undo_manager.record_operation(
             operation_type="bulk_change_status",
-            description=f"Bulk Change Status: {orders_count} orders to {status_text}",
+            description=f"Bulk Change Status: {len(covered)} orders to {status_text}",
             params={
                 "is_fulfillable": is_fulfillable,
-                "affected_indexes": selected_indexes,
+                "affected_indexes": changed_indexes,
             },
             affected_rows_before=affected_rows_before,
         )
@@ -1521,11 +1484,17 @@ class ActionsHandler(QObject):
         self.mw._update_all_views()
         self.mw.log_activity(
             "Bulk Operation",
-            f"Changed status to {status_text} for {orders_count} orders ({items_count} items)",
+            f"Changed status to {status_text} for {len(covered)} orders ({items_count} items)",
         )
         self._update_undo_button()
-        verb = "marked fulfillable" if is_fulfillable else "held"
-        self._results_toast(f"{_plural(orders_count, 'order')} {verb}", undoable=True)
+        count = _plural(len(covered), "order")
+        if not is_fulfillable:
+            text = f"{count} held"
+        elif skipped:
+            text = f"{count} marked fulfillable · {len(skipped)} skipped: not enough stock"
+        else:
+            text = f"{count} marked fulfillable"
+        self._results_toast(text, undoable=True)
 
     def bulk_add_tag(self, order_numbers, tag):
         """Add an internal tag to the given orders, skipping ones that already carry it."""
@@ -1653,10 +1622,9 @@ class ActionsHandler(QObject):
             return
 
         affected_rows_before = rows_to_remove.copy()
-        self.mw.analysis_results_df = self.mw.analysis_results_df.drop(
-            rows_to_remove.index
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(
+            self.mw.analysis_results_df.drop(rows_to_remove.index).reset_index(drop=True)
         )
-        self.mw.analysis_results_df = self.mw.analysis_results_df.reset_index(drop=True)
 
         self.mw.undo_manager.record_operation(
             operation_type="bulk_remove_sku",
@@ -1711,10 +1679,9 @@ class ActionsHandler(QObject):
             return
 
         affected_rows_before = rows_to_remove.copy()
-        self.mw.analysis_results_df = self.mw.analysis_results_df.drop(
-            rows_to_remove.index
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(
+            self.mw.analysis_results_df.drop(rows_to_remove.index).reset_index(drop=True)
         )
-        self.mw.analysis_results_df = self.mw.analysis_results_df.reset_index(drop=True)
 
         self.mw.undo_manager.record_operation(
             operation_type="bulk_remove_orders_with_sku",
@@ -1761,8 +1728,9 @@ class ActionsHandler(QObject):
 
         affected_rows_before = self.mw.analysis_results_df.loc[selected_indexes].copy()
 
-        self.mw.analysis_results_df = self.mw.analysis_results_df.drop(selected_indexes)
-        self.mw.analysis_results_df = self.mw.analysis_results_df.reset_index(drop=True)
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(
+            self.mw.analysis_results_df.drop(selected_indexes).reset_index(drop=True)
+        )
 
         self.mw.undo_manager.record_operation(
             operation_type="bulk_delete_orders",

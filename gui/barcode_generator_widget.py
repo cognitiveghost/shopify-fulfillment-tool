@@ -41,6 +41,7 @@ from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 from shared.theme import on_theme_changed
+from shopify_tool.report_filters import fulfillable_only
 
 IDLE_STATUS = "Select a packing list to begin"
 
@@ -312,13 +313,8 @@ class BarcodeGeneratorWidget(QWidget):
 
             # Filter analysis results to only orders in this packing list
             # AND that are Fulfillable
-            filtered_df = self.mw.analysis_results_df[
-                (self.mw.analysis_results_df["Order_Number"].isin(packing_list_orders))
-                & (
-                    self.mw.analysis_results_df["Order_Fulfillment_Status"]
-                    == "Fulfillable"
-                )
-            ].copy()
+            base = fulfillable_only(self.mw.analysis_results_df)
+            filtered_df = base[base["Order_Number"].isin(packing_list_orders)].copy()
 
             self.filtered_orders_df = filtered_df
 

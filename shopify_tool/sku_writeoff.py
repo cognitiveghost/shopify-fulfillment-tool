@@ -43,6 +43,7 @@ import logging
 
 import pandas as pd
 
+from shopify_tool.report_filters import fulfillable_only
 from shopify_tool.tag_manager import _normalize_tag_categories, parse_tags
 
 logger = logging.getLogger("ShopifyToolLogger")
@@ -155,7 +156,7 @@ def calculate_writeoff_quantities(
     # Pre-filter to Fulfillable rows only when the status column is present
     has_status_col = "Order_Fulfillment_Status" in analysis_df.columns
     if has_status_col:
-        rows_df = analysis_df[analysis_df["Order_Fulfillment_Status"] == "Fulfillable"]
+        rows_df = fulfillable_only(analysis_df)
     else:
         rows_df = analysis_df
 

@@ -91,3 +91,18 @@ def test_nothing_to_send_is_an_empty_list():
     assert order_payload(None) == []
     assert order_payload(pd.DataFrame()) == []
     assert order_payload(pd.DataFrame({"SKU": ["A"]})) == []
+
+
+def test_order_status_ignores_a_no_sku_first_line():
+    from gui.orders_view import orders_frame
+
+    df = pd.DataFrame({
+        "Order_Number": ["#1", "#1"],
+        "SKU": ["NO_SKU", "A"],
+        "Has_SKU": [False, True],
+        "Quantity": [1, 2],
+        "Order_Fulfillment_Status": ["Not Fulfillable", "Fulfillable"],
+        "System_note": ["[NO_SKU]", ""],
+    })
+    assert orders_frame(df)["Order_Fulfillment_Status"].tolist() == ["Fulfillable"]
+    assert order_payload(df)[0]["Order_Fulfillment_Status"] == "Fulfillable"

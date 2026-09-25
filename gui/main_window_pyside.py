@@ -28,6 +28,7 @@ from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
 from shopify_tool.session_manager import SessionManager
+from shopify_tool.stock_ledger import with_stock_left
 from shopify_tool.tag_manager import _normalize_tag_categories
 from shopify_tool.undo_manager import UndoManager
 
@@ -940,7 +941,9 @@ class MainWindow(QMainWindow):
 
                 # Try to load analysis data if it exists
                 if self._load_session_analysis(session_path):
-                    # Analysis loaded successfully
+                    # Analysis loaded successfully; a session saved by an older
+                    # build may hold a drifted Final_Stock (ADR 0010).
+                    self.analysis_results_df = with_stock_left(self.analysis_results_df)
                     self._update_all_views()
 
                     # Auto-switch to Analysis Results tab (Tab 2)

@@ -60,7 +60,6 @@ def tags_by_order(df):
 # --- Findings ---------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-1: order-level SET_STATUS writes only the order's first line")
 def test_order_level_set_status_holds_the_whole_order():
     df = frame([("#1", "A", 4), ("#1", "B", 3), ("#2", "A", 1)])
     hold = rule([cond("total_quantity", "is greater than or equal", "7")],

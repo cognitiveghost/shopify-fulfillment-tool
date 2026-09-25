@@ -317,8 +317,8 @@ class TestToggleOrderFulfillment:
         final_df, *_ = _run(orders, stock)
         assert final_df.iloc[0]["Order_Fulfillment_Status"] == "Not Fulfillable"
 
-        # Top up final stock manually (simulating another order freeing stock) then force-fulfill.
-        final_df.loc[final_df["SKU"] == "A1", "Final_Stock"] = 25
+        # Top up opening stock (Stock left is derived from Stock, ADR 0010) then force-fulfill.
+        final_df.loc[final_df["SKU"] == "A1", "Stock"] = 25
         ok, _err, updated = analysis.toggle_order_fulfillment(final_df, "#1")
         assert ok is True
         assert updated.iloc[0]["Order_Fulfillment_Status"] == "Fulfillable"

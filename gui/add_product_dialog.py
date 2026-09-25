@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from gui.components import InlineMessage
 from gui.theme_manager import apply_dialog_button_roles, get_theme_manager
+from shopify_tool.stock_ledger import FULFILLABLE, NOT_FULFILLABLE, is_fulfillable
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +203,7 @@ class AddProductDialog(QDialog):
                 self.analysis_df["Order_Number"].astype(str) == text_str
             ]
             item_count = len(order_rows)
-            status = order_rows.iloc[0]["Order_Fulfillment_Status"]
+            status = FULFILLABLE if is_fulfillable(order_rows, text_str) else NOT_FULFILLABLE
 
             self.order_status_label.setText(
                 f"Order found: {item_count} items, Status: {status}"
