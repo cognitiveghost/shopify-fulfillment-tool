@@ -922,7 +922,12 @@ def _settle_rule_changes(final_df, stock_df, config):
     3. Stock left is re-derived, which also returns the stock of every order
        a SET_STATUS rule held (D4). No other order is promoted.
     """
-    from .stock_ledger import append_blocker, claim_detail, fulfillable_orders, with_stock_left
+    from .stock_ledger import (
+        append_blocker,
+        claim_detail,
+        fulfillable_orders,
+        with_stock_left,
+    )
     from .tag_manager import parse_tags
 
     if final_df is None or final_df.empty or "Order_Number" not in final_df.columns:

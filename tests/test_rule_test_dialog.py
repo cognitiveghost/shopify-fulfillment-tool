@@ -281,6 +281,7 @@ class TestMissingValuesRenderBlank:
 
 def test_sample_never_splits_an_order():
     import pandas as pd
+
     from gui.rule_test_dialog import _whole_order_sample
 
     df = pd.DataFrame({"Order_Number": [f"#{i // 3}" for i in range(150)]})

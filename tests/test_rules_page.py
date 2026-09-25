@@ -558,6 +558,7 @@ class TestValuelessOperators:
 
 def test_set_status_offers_only_a_hold(qtbot):
     import pandas as pd
+
     from gui.settings.rules import RulesPage
 
     rule = {"name": "hold big", "level": "order", "steps": [{
@@ -572,6 +573,7 @@ def test_set_status_offers_only_a_hold(qtbot):
 
 def test_validate_names_the_rule_step_and_condition(qtbot):
     import pandas as pd
+
     from gui.settings.rules import RulesPage
 
     rule = {"name": "sizes", "level": "article", "steps": [{
@@ -583,5 +585,7 @@ def test_validate_names_the_rule_step_and_condition(qtbot):
 
     ok, errors = page.validate()
     assert not ok
-    assert errors == ["Rule “sizes”, step 1, condition 2: Start is greater than end. "
-                      "Write the smaller number first, for example 10-100."]
+    assert errors == [(
+        "Rule “sizes”, step 1, condition 2: Start is greater than end. "
+        "Write the smaller number first, for example 10-100."
+    )]
