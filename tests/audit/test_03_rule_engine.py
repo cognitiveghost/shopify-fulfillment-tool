@@ -158,7 +158,6 @@ def test_negative_operator_means_the_same_on_sku_and_has_sku():
     assert a == b
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-8: rule test dialog previews the already-ruled frame")
 def test_rule_test_dialog_reports_rows_the_saved_rule_already_tagged(qtbot, no_modals):
     r = rule([cond("SKU", "equals", "A")], [tag("T")], level="article")
     # What the dialog is given: the results of a run that already applied r.

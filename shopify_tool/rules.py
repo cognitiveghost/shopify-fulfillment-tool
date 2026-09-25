@@ -797,6 +797,10 @@ class RuleEngine:
 
         logger.info(f"[RULE ENGINE] Starting rule application with {len(self.rules) if self.rules else 0} rules")
 
+        # Rows some step's actions ran on, on the input's index. The rule
+        # test reads it: a diff can't see a write that changed nothing.
+        self.matched_rows = pd.Series(False, index=df.index)
+
         if not self.rules or not isinstance(self.rules, list):
             logger.warning("[RULE ENGINE] No rules to apply")
             return df
@@ -844,6 +848,7 @@ class RuleEngine:
 
                 # Execute step actions on narrowed rows
                 if current_matches.any():
+                    self.matched_rows |= current_matches
                     actions = step.get("actions", [])
                     logger.info(f"[RULE ENGINE] Step {step_idx+1}: Executing {len(actions)} actions")
                     new_rows = self._execute_actions(df, current_matches, actions, rule_name)
@@ -892,6 +897,7 @@ class RuleEngine:
                             )
                             break
 
+                        self.matched_rows.iloc[positions] = True
                         actions = step.get("actions", [])
                         apply_to_all = [
                             a for a in actions

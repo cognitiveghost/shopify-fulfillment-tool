@@ -123,7 +123,7 @@ class TestAddedRowsAreReported:
             {"type": "ADD_TAG", "value": "bonus"},
         ), analysis_df)
         assert no_modals == []
-        assert dialog.matched_count == 4
+        assert dialog.matched_count == 2  # matched rows only; the 2 added rows are reported beside it
         assert dialog.changed_count == 2
         assert "2 of 3 existing rows, 66.7%" in dialog.match_summary_label.text()
 
@@ -277,3 +277,13 @@ class TestMissingValuesRenderBlank:
         item = dialog.after_table.item(0, col)
         theme = get_theme_manager().get_current_theme()
         assert item.background().color().name().lower() != theme.status_warning_bg.lower()
+
+
+def test_sample_never_splits_an_order():
+    import pandas as pd
+    from gui.rule_test_dialog import _whole_order_sample
+
+    df = pd.DataFrame({"Order_Number": [f"#{i // 3}" for i in range(150)]})
+    sample = _whole_order_sample(df, min_rows=100)
+    assert len(sample) == 102  # 34 whole orders of 3
+    assert sample["Order_Number"].value_counts().eq(3).all()

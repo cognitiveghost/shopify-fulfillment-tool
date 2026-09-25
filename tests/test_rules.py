@@ -495,3 +495,12 @@ def test_set_status_never_makes_an_order_fulfillable(caplog):
     assert (out["Order_Fulfillment_Status"] == "Not Fulfillable").all()
     assert (out["System_note"] == "").all()
     assert "SET_STATUS can only hold" in caplog.text
+
+
+def test_matched_rows_covers_an_order_rules_whole_order():
+    df = _status_frame()
+    engine = RuleEngine([{"name": "t", "level": "order", "steps": [{
+        "conditions": [{"field": "total_quantity", "operator": "is greater than or equal", "value": "7"}],
+        "match": "ALL", "actions": [{"type": "ADD_INTERNAL_TAG", "value": "BIG"}]}]}])
+    engine.apply(df)
+    assert engine.matched_rows.tolist() == [True, True, False]
