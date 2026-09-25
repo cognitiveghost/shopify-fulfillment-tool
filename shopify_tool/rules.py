@@ -51,6 +51,13 @@ OPERATOR_MAP = {
     "does not match regex": "_op_does_not_match_regex",
 }
 
+# On an order rule a negative operator means *no line* matches the positive
+# form, for a line field exactly as for has_sku (spec 2026-09-26 D2).
+NEGATIVE_OPERATORS = frozenset({
+    "does not equal", "does not contain", "not in list",
+    "not between", "does not match regex",
+})
+
 # --- Action Helpers ---
 
 
@@ -112,14 +119,13 @@ def _as_str_series(series_val):
 
 
 def _op_contains(series_val, rule_val):
-    """Returns True where the series string contains the rule string (case-insensitive)."""
-    # Case-insensitive containment check for strings
-    return _as_str_series(series_val).str.contains(rule_val, case=False, na=False)
+    """Returns True where the series string contains the rule string (case-insensitive, literal)."""
+    return _as_str_series(series_val).str.contains(rule_val, case=False, na=False, regex=False)
 
 
 def _op_not_contains(series_val, rule_val):
-    """Returns True where the series string does not contain the rule string (case-insensitive)."""
-    return ~_as_str_series(series_val).str.contains(rule_val, case=False, na=False)
+    """Returns True where the series string does not contain the rule string (case-insensitive, literal)."""
+    return ~_op_contains(series_val, rule_val)
 
 
 def _safe_float(value):
@@ -188,10 +194,12 @@ def _op_is_not_empty(series_val, rule_val):
 def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
     """Safely parse date string with multiple format support.
 
-    Tries 3 common date formats in sequence:
+    Tries these formats in sequence:
     1. YYYY-MM-DD (ISO format)
     2. DD/MM/YYYY (European format)
     3. DD.MM.YYYY (European format with dots)
+    4. Shopify "Created at" (YYYY-MM-DD HH:MM:SS +0200) and its ISO form,
+       with or without an offset
 
     Args:
         date_str: Date string to parse
@@ -215,14 +223,19 @@ def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
 
     date_str = str(date_str).strip()
 
-    # Try multiple formats
-    formats = ["%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y"]
+    # A timestamp is compared by the date as written -- the shop's local
+    # date -- so the offset is dropped, not converted (spec 2026-09-26 D9).
+    formats = [
+        "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y",
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z",
+    ]
 
     for fmt in formats:
         try:
-            return pd.to_datetime(date_str, format=fmt)
+            parsed = pd.to_datetime(date_str, format=fmt)
         except (ValueError, TypeError):
             continue
+        return parsed.tz_localize(None) if parsed.tzinfo is not None else parsed
 
     logger.warning(f"[RULE ENGINE] Invalid rule date format: '{date_str}'")
     return None
@@ -258,6 +271,10 @@ def _compile_regex_safe(pattern: str) -> re.Pattern | None:
         return None
 
 
+# start-end, each side optionally negative: "10-100", "-10-0", "-10--5".
+RANGE_PATTERN = re.compile(r"^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$")
+
+
 def _parse_range(range_str: str) -> tuple[float, float] | None:
     """Parse range string in format 'start-end'.
 
@@ -283,7 +300,7 @@ def _parse_range(range_str: str) -> tuple[float, float] | None:
 
     # Use regex to support negative numbers: e.g. "-10-0", "-10--5"
     # Pattern: optional minus + digits (+ optional decimal) DASH optional minus + digits
-    match = re.match(r'^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$', range_str)
+    match = RANGE_PATTERN.match(range_str)
     if not match:
         logger.warning(f"[RULE ENGINE] Invalid range format: '{range_str}' (expected 'start-end')")
         return None
@@ -624,8 +641,11 @@ def _op_does_not_match_regex(series_val, rule_val):
         rule_val: Regex pattern string
 
     Returns:
-        pd.Series[bool]: True where value does NOT match pattern
+        pd.Series[bool]: True where value does NOT match pattern. An invalid
+        pattern matches nothing, as in `matches regex` (AUDIT-03-4).
     """
+    if _compile_regex_safe(rule_val) is None:
+        return pd.Series(False, index=series_val.index)
     return ~_op_matches_regex(series_val, rule_val)
 
 
@@ -685,6 +705,22 @@ class RuleEngine:
             }]
         return rule
 
+    @staticmethod
+    def execution_order(rules):
+        """The rules in the order apply() runs them.
+
+        Every article rule before every order rule. Within a level, lower
+        priority first; a rule with no priority runs after every prioritised
+        one below 1000, in list order (1000, 1001, ...). Stable. The Rules
+        page lists rules with this, so what it shows is what runs.
+        """
+        defaults = iter(range(1000, 1000 + len(rules)))
+        keys = [
+            (r.get("level") == "order", r["priority"] if "priority" in r else next(defaults))
+            for r in rules
+        ]
+        return [r for _, r in sorted(zip(keys, rules), key=lambda kr: kr[0])]
+
     def __init__(self, rules_config):
         """Initializes the RuleEngine with priority-sorted rules.
 
@@ -712,7 +748,7 @@ class RuleEngine:
             self._normalize_steps(rule)
 
         # Sort by priority (lower number = higher priority = executes first)
-        self.rules = sorted(self.rules, key=lambda r: r.get("priority", 1000))
+        self.rules = self.execution_order(self.rules)
 
         logger.info(f"[RULE ENGINE] Loaded {len(self.rules)} rules (sorted by priority)")
 
@@ -765,6 +801,10 @@ class RuleEngine:
 
         logger.info(f"[RULE ENGINE] Starting rule application with {len(self.rules) if self.rules else 0} rules")
 
+        # Rows some step's actions ran on, on the input's index. The rule
+        # test reads it: a diff can't see a write that changed nothing.
+        self.matched_rows = pd.Series(False, index=df.index)
+
         if not self.rules or not isinstance(self.rules, list):
             logger.warning("[RULE ENGINE] No rules to apply")
             return df
@@ -812,9 +852,10 @@ class RuleEngine:
 
                 # Execute step actions on narrowed rows
                 if current_matches.any():
+                    self.matched_rows |= current_matches
                     actions = step.get("actions", [])
                     logger.info(f"[RULE ENGINE] Step {step_idx+1}: Executing {len(actions)} actions")
-                    new_rows = self._execute_actions(df, current_matches, actions)
+                    new_rows = self._execute_actions(df, current_matches, actions, rule_name)
                     all_new_rows.extend(new_rows)
                 else:
                     logger.info(f"[RULE ENGINE] Step {step_idx+1}: No matches, stopping")
@@ -860,6 +901,7 @@ class RuleEngine:
                             )
                             break
 
+                        self.matched_rows.iloc[positions] = True
                         actions = step.get("actions", [])
                         apply_to_all = [
                             a for a in actions
@@ -877,14 +919,14 @@ class RuleEngine:
                             mask = pd.Series(False, index=df.index)
                             mask.iloc[positions] = True
                             all_new_rows.extend(
-                                self._execute_actions(df, mask, apply_to_all)
+                                self._execute_actions(df, mask, apply_to_all, rule_name)
                             )
 
                         if apply_to_first:
                             mask = pd.Series(False, index=df.index)
                             mask.iloc[positions[0]] = True
                             all_new_rows.extend(
-                                self._execute_actions(df, mask, apply_to_first)
+                                self._execute_actions(df, mask, apply_to_first, rule_name)
                             )
 
         # Append the rows ADD_PRODUCT actions created.
@@ -1026,7 +1068,7 @@ class RuleEngine:
             # ANY (OR logic)
             return pd.concat(condition_results, axis=1).any(axis=1)
 
-    def _execute_actions(self, df, matches, actions):
+    def _execute_actions(self, df, matches, actions, rule_name=None):
         """Executes actions, modifying DataFrame in-place.
 
         Applies the specified actions (e.g., adding a tag, setting a status)
@@ -1038,6 +1080,8 @@ class RuleEngine:
             matches (pd.Series[bool]): A boolean Series indicating which rows
                 to apply the actions to.
             actions (list[dict]): A list of action dictionaries to execute.
+            rule_name (str | None): The rule these actions belong to, recorded
+                as the reason when SET_STATUS holds an order.
 
         Returns:
             list[dict]: List of new rows to add (from ADD_PRODUCT actions).
@@ -1095,7 +1139,28 @@ class RuleEngine:
                 df.loc[order_mask, "Internal_Tags"] = new_tags
 
             elif action_type == "SET_STATUS":
-                df.loc[matches, "Order_Fulfillment_Status"] = value
+                # A rule can only hold (spec 2026-09-26 D3), and an order
+                # ships whole, so the hold covers every line (D5). The reason
+                # makes the pane read it as the run's, not a person's (D8).
+                from shopify_tool.stock_ledger import NOT_FULFILLABLE, append_blocker
+                from shopify_tool.tag_manager import expand_to_order_rows
+
+                if value != NOT_FULFILLABLE:
+                    logger.warning(
+                        f"[RULE ENGINE] SET_STATUS can only hold an order; "
+                        f"ignoring value {value!r} in rule {rule_name!r}"
+                    )
+                    continue
+                order_mask = (
+                    expand_to_order_rows(df, matches)
+                    if "Order_Number" in df.columns else matches
+                )
+                df.loc[order_mask, "Order_Fulfillment_Status"] = NOT_FULFILLABLE
+                if "System_note" in df.columns:
+                    part = "Held by rule: " + str(rule_name or "unnamed").replace("; ", ", ")
+                    df.loc[order_mask, "System_note"] = df.loc[order_mask, "System_note"].apply(
+                        lambda n, part=part: append_blocker(n, part)
+                    )
 
             elif action_type == "COPY_FIELD":
                 source = action.get("source")
@@ -1339,10 +1404,14 @@ class RuleEngine:
                     result = bool(op_func(scalar_series, value).iloc[0])
 
             else:
-                # Regular article-level field - check if ANY row matches
+                # A line field: positive operators need one matching line,
+                # negative ones need every line to satisfy the negation.
                 op_func = globals()[OPERATOR_MAP[operator]]
                 series_result = op_func(order_df[field], value)
-                result = series_result.any()  # At least one row matches
+                result = bool(
+                    series_result.all() if operator in NEGATIVE_OPERATORS
+                    else series_result.any()
+                )
 
             results.append(result)
 
@@ -1350,7 +1419,7 @@ class RuleEngine:
             return False
 
         # Combine results based on match type
-        if match_type == "ALL":
+        if str(match_type).upper() == "ALL":
             return all(results)
         else:  # ANY
             return any(results)
@@ -1457,11 +1526,7 @@ class RuleEngine:
 
         # For negative operators, ALL SKUs must match (i.e., NONE have the unwanted value)
         # For positive operators, ANY SKU can match
-        negative_operators = [
-            "does not equal", "does not contain", "not in list",
-            "not between", "does not match regex",
-        ]
-        if operator in negative_operators:
+        if operator in NEGATIVE_OPERATORS:
             return result_series.all()
         else:
             return result_series.any()
@@ -1493,11 +1558,7 @@ class RuleEngine:
         op_func = globals()[OPERATOR_MAP[operator]]
         result_series = op_func(product_series, product_value)
 
-        negative_operators = [
-            "does not equal", "does not contain", "not in list",
-            "not between", "does not match regex",
-        ]
-        if operator in negative_operators:
+        if operator in NEGATIVE_OPERATORS:
             return result_series.all()
         else:
             return result_series.any()

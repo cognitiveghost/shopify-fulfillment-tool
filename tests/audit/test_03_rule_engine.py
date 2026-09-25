@@ -95,7 +95,6 @@ def _run_with_bonus(tmp_path, bonus_stock):
     return final_df, stock_df
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-2: ADD_PRODUCT lines skip the stock simulation")
 def test_add_product_cannot_promise_more_stock_than_exists(tmp_path):
     final_df, _ = _run_with_bonus(tmp_path, bonus_stock=1)
 
@@ -103,7 +102,6 @@ def test_add_product_cannot_promise_more_stock_than_exists(tmp_path):
     assert shipped.loc[shipped["SKU"] == "GIFT", "Quantity"].sum() <= 1
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-2: ADD_PRODUCT lines neither read nor reduce the stock file")
 def test_add_product_is_counted_in_final_stock(tmp_path):
     # 5 in stock, 2 given away. Today both lines say Final_Stock 0: GIFT is on
     # no order, so the engine never finds it and falls back to 0.
@@ -114,7 +112,6 @@ def test_add_product_is_counted_in_final_stock(tmp_path):
     assert (gift["Final_Stock"] == 3).all()
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-3: 'contains' reads its value as a regex")
 @pytest.mark.parametrize("value, cell, expected", [
     ("Mask + Box", "Mask + Box Set", True),   # '+' is a quantifier
     (".", "ABC", False),                      # '.' matches any character
@@ -124,20 +121,17 @@ def test_contains_is_literal(value, cell, expected):
     assert bool(_op_contains(pd.Series([cell]), value).iloc[0]) is expected
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-3: an unbalanced '(' in 'contains' aborts the analysis")
 def test_contains_with_a_bracket_does_not_crash_the_run():
     df = frame([("#1", "A", 1)])
     r = rule([cond("Product_Name", "contains", "(")], [tag("X")], level="article")
     RuleEngine([r]).apply(df)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-4: an invalid pattern in 'does not match regex' matches every row")
 def test_invalid_negative_regex_matches_nothing():
     result = _op_does_not_match_regex(pd.Series(["A", "B"]), "(")
     assert not result.any()
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-5: Save accepts a rule the validator marks as an error")
 def test_rules_page_refuses_to_save_an_invalid_rule(qtbot):
     bad = rule([cond("SKU", "matches regex", "(")], [tag("X")], level="article")
     page = RulesPage([bad], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
@@ -147,13 +141,11 @@ def test_rules_page_refuses_to_save_an_invalid_rule(qtbot):
     assert not ok
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-6: date operators cannot parse Shopify's Created at timestamps")
 def test_date_operators_read_shopify_timestamps():
     created_at = pd.Series(["2026-01-14 18:56:50 +0200"])
     assert bool(_op_date_before(created_at, "2026-02-01").iloc[0])
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-7: negative operators on a line field mean 'some line', on has_sku 'no line'")
 def test_negative_operator_means_the_same_on_sku_and_has_sku():
     df = frame([("#1", "A", 1), ("#1", "GIFT", 1)])
     by_field = rule([cond("SKU", "does not equal", "GIFT")], [tag("NO_GIFT")])
@@ -164,7 +156,6 @@ def test_negative_operator_means_the_same_on_sku_and_has_sku():
     assert a == b
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-8: rule test dialog previews the already-ruled frame")
 def test_rule_test_dialog_reports_rows_the_saved_rule_already_tagged(qtbot, no_modals):
     r = rule([cond("SKU", "equals", "A")], [tag("T")], level="article")
     # What the dialog is given: the results of a run that already applied r.
@@ -175,13 +166,11 @@ def test_rule_test_dialog_reports_rows_the_saved_rule_already_tagged(qtbot, no_m
     assert dialog.matched_count == 1
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-9: validator accepts a reversed range the engine refuses")
 @pytest.mark.parametrize("value", ["100-10", "-10-0"])
 def test_range_validator_agrees_with_engine(value):
     assert validate_range(value)[0] is (_parse_range(value) is not None)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-10: rule test drops ADD_PRODUCT's quantity")
 def test_rule_test_config_keeps_add_product_quantity(qtbot):
     r = rule([cond("SKU", "equals", "A")],
              [{"type": "ADD_PRODUCT", "sku": "GIFT", "quantity": 3}], level="article")
@@ -192,7 +181,6 @@ def test_rule_test_config_keeps_add_product_quantity(qtbot):
     assert tested["steps"][0]["actions"][0].get("quantity") == 3
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-11: lowercase 'all' is ALL on article rules, ANY on order rules")
 def test_lowercase_match_all_is_all_on_order_rules():
     df = frame([("#1", "A", 1)])
     r = rule([cond("has_sku", "equals", "A"), cond("has_sku", "equals", "B")],
@@ -200,7 +188,6 @@ def test_lowercase_match_all_is_all_on_order_rules():
     assert tags_by_order(RuleEngine([r]).apply(df)) == {"#1": []}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-03-12: Rules page shows list order, engine runs priority order")
 def test_rules_page_shows_rules_in_execution_order(qtbot):
     second = rule([cond("SKU", "equals", "A")], [tag("X")], level="article", name="runs second", priority=2)
     first = rule([cond("SKU", "equals", "A")], [tag("Y")], level="article", name="runs first", priority=1)

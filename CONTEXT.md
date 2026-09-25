@@ -373,6 +373,24 @@ from the orders' internal tags. A stock export either carries them among its
 product rows, writes them to a file of their own beside it, or leaves them out.
 Supersedes "SKU writeoff", which names the config key rather than the thing.
 
+## Rules
+
+**Article rule** / **Order rule** — a rule whose conditions test one order
+line at a time, or the whole order. Article rules run before order rules.
+
+**Negative operator** — `does not equal`, `does not contain`, `not in list`,
+`not between`, `does not match regex`. On an order rule it means *no line*
+matches the positive form, whatever the field.
+
+**Rule hold** — a rule setting an order Not Fulfillable after the run has
+allocated stock. It holds every line of the order, returns the order's stock
+to Stock left, and records itself as a reason code, so the order reads as
+detected by the run, not set by a person. A rule can hold an order; it can
+never make one fulfillable.
+
+**Bonus line** — a line an `ADD_PRODUCT` rule adds to an order. It takes stock
+like any SKU line. An order whose bonus the stock can't cover is held whole.
+
 ## Repos
 
 **Canonical source** — `packing-tool`. Every `shared/` change is authored

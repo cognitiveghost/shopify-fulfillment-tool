@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 from datetime import datetime
+from functools import reduce
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +14,21 @@ import pandas as pd
 from shared.atomic_write import atomic_write_json
 
 from . import analysis, fulfillment_history, packing_lists, stock_export
-from .csv_utils import resolve_delimiter
+from .csv_utils import normalize_sku, resolve_delimiter
 from .packed_orders import load_session_signals, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
-from .stock_ledger import FULFILLABLE, NOT_FULFILLABLE, is_fulfillable
+from .stock_ledger import (
+    FULFILLABLE,
+    NO_SKU_SUFFIX,
+    NOT_FULFILLABLE,
+    append_blocker,
+    claim_detail,
+    fulfillable_orders,
+    is_fulfillable,
+    with_stock_left,
+)
+from .tag_manager import parse_tags
 
 SYSTEM_TAGS = ["Repeat", "Priority", "Error"]
 
@@ -884,13 +895,7 @@ def _run_analysis_and_rules(
             "CRITICAL: Order_Fulfillment_Status column is missing from analysis result!"
         )
 
-    # Add stock alerts based on config
-    low_stock_threshold = config.get("settings", {}).get("low_stock_threshold")
-    if low_stock_threshold is not None and "Final_Stock" in final_df.columns:
-        logger.info(f"Applying low stock threshold: < {low_stock_threshold}")
-        final_df["Stock_Alert"] = np.where(
-            final_df["Final_Stock"] < low_stock_threshold, "Low Stock", ""
-        )
+    _add_stock_alert(final_df, config)
 
     # Enrich DataFrame with volumetric weights before Rule Engine
     weight_config = config.get("weight_config", {})
@@ -905,9 +910,96 @@ def _run_analysis_and_rules(
         logger.info("Applying rule engine...")
         engine = RuleEngine(rules)
         final_df = engine.apply(final_df)
+        final_df = _settle_rule_changes(final_df, stock_df, config)
         logger.info("Rule engine application complete.")
 
     return final_df, summary_present_df, summary_missing_df, stats
+
+
+def _add_stock_alert(final_df, config):
+    """Stock_Alert from Final_Stock and the config's low stock threshold."""
+    low_stock_threshold = config.get("settings", {}).get("low_stock_threshold")
+    if low_stock_threshold is not None and "Final_Stock" in final_df.columns:
+        logger.info(f"Applying low stock threshold: < {low_stock_threshold}")
+        final_df["Stock_Alert"] = np.where(
+            final_df["Final_Stock"] < low_stock_threshold, "Low Stock", ""
+        )
+
+
+def _settle_rule_changes(final_df, stock_df, config):
+    """Correct stock after the rules ran on a simulated frame (ADR 0013).
+
+    1. Bonus lines (ADD_PRODUCT, tagged rule_added_product) take their SKU's
+       opening stock from the stock file; an unlisted SKU has 0 (D7). A bonus
+       line in an order the run or a later rule held is held with it (D5):
+       the engine appends bonus rows only after every rule has run.
+    2. Every fulfillable order with a bonus line gives up its draw and claims
+       it again, whole, in the simulation's priority order (D6). One the
+       stock can't cover is held with the run's own reason (D1, D8).
+    3. Stock left is re-derived, which also returns the stock of every order
+       a SET_STATUS rule held (D4). No other order is promoted.
+    """
+    if final_df is None or final_df.empty or "Order_Number" not in final_df.columns:
+        return final_df
+
+    bonus = (
+        final_df["Internal_Tags"].apply(lambda t: "rule_added_product" in parse_tags(t))
+        if "Internal_Tags" in final_df.columns
+        else pd.Series(False, index=final_df.index)
+    )
+    if bonus.any() and {"SKU", "Stock", "Final_Stock"} <= set(final_df.columns):
+        # The simulation's SKU normalisation (analysis.py, F4): "GIFT " is GIFT.
+        stock = analysis.stock_with_internal_columns(stock_df, config.get("column_mappings", {}))
+        stock = stock[stock["SKU"].notna()].assign(SKU=lambda f: f["SKU"].map(normalize_sku))
+        final_df.loc[bonus, "SKU"] = final_df.loc[bonus, "SKU"].map(normalize_sku)
+        opening = pd.to_numeric(stock["Stock"], errors="coerce").groupby(stock["SKU"]).sum()
+        skus = final_df.loc[bonus, "SKU"]
+        final_df.loc[bonus, "Stock"] = skus.map(opening).fillna(0).to_numpy()
+        final_df.loc[bonus, "Final_Stock"] = final_df.loc[bonus, "Stock"]
+        if "Has_SKU" in final_df.columns:
+            final_df.loc[bonus, "Has_SKU"] = True
+        if "Product_Name" in stock.columns and "Warehouse_Name" in final_df.columns:
+            names = stock.drop_duplicates("SKU").set_index("SKU")["Product_Name"]
+            listed = skus.map(names)
+            final_df.loc[bonus, "Warehouse_Name"] = listed.where(
+                listed.notna(), final_df.loc[bonus, "Warehouse_Name"])
+
+        keys = final_df["Order_Number"].astype(str).str.strip()
+        held = bonus & ~keys.isin(fulfillable_orders(final_df[~bonus]))
+        if held.any():
+            final_df.loc[held, "Order_Fulfillment_Status"] = NOT_FULFILLABLE
+            if "System_note" in final_df.columns:
+                source = ~bonus & final_df["Order_Fulfillment_Status"].ne(FULFILLABLE)
+                notes = final_df.loc[source, "System_note"].groupby(keys[source]).first()
+                copied = keys[held].map(notes).str.removesuffix(NO_SKU_SUFFIX)
+                final_df.loc[held, "System_note"] = copied.where(
+                    copied.notna(), final_df.loc[held, "System_note"])
+
+        bonus_orders = set(keys[bonus]) & fulfillable_orders(final_df)
+        if bonus_orders:
+            priority = analysis._prioritize_orders(
+                final_df[~bonus], mode=config.get("analysis_mode", "multi_first"))
+            ordered = [o for o in priority["Order_Number"] if str(o).strip() in bonus_orders]
+            in_play = keys.isin(bonus_orders)
+            before = final_df.loc[in_play, "Order_Fulfillment_Status"].copy()
+            final_df.loc[in_play, "Order_Fulfillment_Status"] = NOT_FULFILLABLE
+            covered, lacking = claim_detail(final_df, ordered)
+            back = in_play & keys.isin({str(o).strip() for o in covered})
+            final_df.loc[back, "Order_Fulfillment_Status"] = before[back[in_play]]
+            reasons = {
+                str(order).strip(): [analysis.stock_reason(*p) for p in parts]
+                for order, parts in lacking.items()
+            }
+            rows = keys.isin(reasons)
+            if rows.any() and "System_note" in final_df.columns:
+                final_df.loc[rows, "System_note"] = [
+                    reduce(append_blocker, reasons[key], note)
+                    for note, key in zip(final_df.loc[rows, "System_note"], keys[rows])
+                ]
+
+    final_df = with_stock_left(final_df)
+    _add_stock_alert(final_df, config)
+    return final_df
 
 
 def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:

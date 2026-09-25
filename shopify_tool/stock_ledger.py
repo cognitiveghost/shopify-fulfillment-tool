@@ -17,6 +17,30 @@ import pandas as pd
 FULFILLABLE = "Fulfillable"
 NOT_FULFILLABLE = "Not Fulfillable"
 
+# analysis.py writes both into System_note; gui/orders_view.py parses them.
+BLOCKER_PREFIX = "Cannot fulfill: "
+NO_SKU_SUFFIX = " [NO_SKU]"
+
+
+def append_blocker(note, part: str) -> str:
+    """Add one reason to a System_note, in the run's own format.
+
+    `Cannot fulfill: <part>; <part>` (analysis.add_fulfillment_reason), after
+    any other note, before a trailing ` [NO_SKU]`. A part already there is
+    not repeated, so re-applying rules changes nothing.
+    """
+    text = "" if note is None or pd.isna(note) else str(note)
+    # The run writes a bare "[NO_SKU]" when the note was empty.
+    suffix = NO_SKU_SUFFIX if text.endswith(NO_SKU_SUFFIX.lstrip()) else ""
+    text = text.removesuffix(NO_SKU_SUFFIX.lstrip()).rstrip()
+    _, sep, tail = text.partition(BLOCKER_PREFIX)
+    if sep:
+        if part in tail.split("; "):
+            return text + suffix
+        return f"{text}; {part}{suffix}"
+    joined = f"{text}; " if text else ""
+    return f"{joined}{BLOCKER_PREFIX}{part}{suffix}"
+
 _LEDGER_COLUMNS = {"SKU", "Stock", "Final_Stock"}
 
 
@@ -100,6 +124,33 @@ def shortfall(df, order_number) -> list:
     return _short(needs, stock_left(df, excluding=order_number))
 
 
+def claim_detail(df, order_numbers) -> tuple:
+    """claim(), plus what each skipped order lacked at its turn.
+
+    Returns (covered, lacking): lacking maps an order number, as passed, to
+    [(sku, need, have)], have being Stock left when its turn came (>= 0).
+    """
+    already = fulfillable_orders(df)
+    left = stock_left(df)
+    by_order = _needs_by_order(df) if _has_ledger(df) else {}
+    covered, lacking = [], {}
+    for number in order_numbers:
+        if _key(number) in already:
+            continue
+        needs = by_order.get(_key(number), {})
+        short = _short(needs, left)
+        if short:
+            lacking[number] = [
+                (sku, float(needs[sku]), max(0.0, float(left[sku]))) for sku in short
+            ]
+            continue
+        for sku, need in needs.items():
+            if sku in left:
+                left[sku] -= need
+        covered.append(number)
+    return covered, lacking
+
+
 def claim(df, order_numbers) -> tuple:
     """Which of these orders Stock left covers, taken in the order given.
 
@@ -107,22 +158,8 @@ def claim(df, order_numbers) -> tuple:
     already fulfillable are in neither list. Returns (covered, skipped) with
     the order numbers as the caller passed them.
     """
-    already = fulfillable_orders(df)
-    left = stock_left(df)
-    by_order = _needs_by_order(df) if _has_ledger(df) else {}
-    covered, skipped = [], []
-    for number in order_numbers:
-        if _key(number) in already:
-            continue
-        needs = by_order.get(_key(number), {})
-        if _short(needs, left):
-            skipped.append(number)
-            continue
-        for sku, need in needs.items():
-            if sku in left:
-                left[sku] -= need
-        covered.append(number)
-    return covered, skipped
+    covered, lacking = claim_detail(df, order_numbers)
+    return covered, list(lacking)
 
 
 def with_stock_left(df):

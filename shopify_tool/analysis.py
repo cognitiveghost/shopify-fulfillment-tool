@@ -45,6 +45,13 @@ def _resolve_stock_mappings(stock_mappings: dict[str, str]) -> dict[str, str]:
     return {**stock_mappings, **missing} if missing else stock_mappings
 
 
+def stock_reason(sku, need, have) -> str:
+    """The run's reason for one SKU the stock can't cover (orders_view parses it)."""
+    if have == 0:
+        return f"{sku}: Out of stock"
+    return f"{sku}: Insufficient stock (need {int(need)}, have {int(have)})"
+
+
 def stock_with_internal_columns(
     stock_df: pd.DataFrame, column_mappings: dict | None
 ) -> pd.DataFrame:
@@ -667,13 +674,8 @@ def _simulate_stock_allocation(
 
             for sku, required_qty in required_quantities.items():
                 available = live_stock.get(sku, 0)
-                if available == 0:
-                    unfulfillable_reasons.append(f"{sku}: Out of stock")
-                    can_fulfill_order = False
-                elif required_qty > available:
-                    unfulfillable_reasons.append(
-                        f"{sku}: Insufficient stock (need {int(required_qty)}, have {int(available)})"
-                    )
+                if available == 0 or required_qty > available:
+                    unfulfillable_reasons.append(stock_reason(sku, required_qty, available))
                     can_fulfill_order = False
 
             if can_fulfill_order:
@@ -714,13 +716,8 @@ def _simulate_stock_allocation(
             # CHECK PHASE (read-only — don't mutate lots yet)
             for sku, needed in required_quantities.items():
                 available = sum(lot["qty"] for lot in live_lots.get(sku, []))
-                if available == 0:
-                    unfulfillable_reasons.append(f"{sku}: Out of stock")
-                    can_fulfill_order = False
-                elif needed > available:
-                    unfulfillable_reasons.append(
-                        f"{sku}: Insufficient stock (need {int(needed)}, have {int(available)})"
-                    )
+                if available == 0 or needed > available:
+                    unfulfillable_reasons.append(stock_reason(sku, needed, available))
                     can_fulfill_order = False
 
             # COMMIT PHASE (mutate live_lots only if order is fulfillable)

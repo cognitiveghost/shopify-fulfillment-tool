@@ -29,6 +29,24 @@ from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_man
 logger = logging.getLogger(__name__)
 
 
+def _whole_order_sample(df, min_rows=100):
+    """The first orders, in frame order, until at least min_rows rows.
+
+    A cut through an order would show an order rule half an order.
+    """
+    if "Order_Number" not in df.columns or len(df) <= min_rows:
+        return df.head(min_rows).copy()
+    keys = df["Order_Number"]
+    sizes = keys.value_counts(dropna=False)
+    taken, rows = [], 0
+    for order in keys.drop_duplicates():
+        if rows >= min_rows:
+            break
+        taken.append(order)
+        rows += int(sizes.get(order, 0))
+    return df[keys.isin(taken)].copy()
+
+
 class RuleTestDialog(QDialog):
     """
     Dialog for testing a rule against current analysis DataFrame.
@@ -200,8 +218,8 @@ class RuleTestDialog(QDialog):
                     f"[RULE TEST] Large dataset ({len(self.analysis_df)} rows), limiting to 100 for performance"
                 )
 
-            # Limit to 100 rows for performance
-            self.test_df = self.analysis_df.head(100).copy()
+            # Limit to about 100 rows for performance, cut at an order boundary
+            self.test_df = _whole_order_sample(self.analysis_df)
             logger.info(
                 f"[RULE TEST] Testing rule '{self.rule_config.get('name')}' with {len(self.test_df)} rows"
             )
@@ -222,7 +240,9 @@ class RuleTestDialog(QDialog):
             # Detect matched rows by comparing before/after (works for all rule types)
             self.matches = self._detect_changed_rows()
             self.changed_count = int(self.matches.sum())
-            self.matched_count = self.changed_count + len(self.added_rows)
+            # What the engine says it matched -- a diff can't see a write that
+            # changed nothing, and would count an ADD_PRODUCT's new rows.
+            self.matched_count = int(engine.matched_rows.sum())
             logger.info(f"[RULE TEST] Rule affected {self.matched_count} rows")
 
             # Populate UI sections
@@ -336,16 +356,19 @@ class RuleTestDialog(QDialog):
         total_rows = len(self.test_df)
         # Percentage is of existing rows only -- added rows have no denominator
         # to belong to, and counting them made this read 133.3%.
-        percentage = (self.changed_count / total_rows * 100) if total_rows > 0 else 0
+        percentage = (self.matched_count / total_rows * 100) if total_rows > 0 else 0
         step_info = f"{len(steps)} step(s)" if len(steps) > 1 else "1 step"
 
         summary = f"Final Result ({step_info}, narrowing): "
         summary += f"<span style='color: {theme.status_success}; {font_css('heading')}'>{self.matched_count}</span> rows affected "
         summary += (
-            f"({self.changed_count} of {total_rows} existing rows, {percentage:.1f}%)"
+            f"({self.matched_count} of {total_rows} existing rows, {percentage:.1f}%)"
         )
         if len(self.added_rows):
             summary += f" — {len(self.added_rows)} added by rule"
+        summary += (
+            "<br>Tested on the last analysis, which already has your saved rules applied."
+        )
 
         self.match_summary_label.setText(summary)
 

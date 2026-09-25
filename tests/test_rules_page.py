@@ -197,16 +197,27 @@ class TestFilterAndReorder:
         assert page.rule_widgets[1]["group_box"].isVisibleTo(page) is True
 
     def test_move_up_skips_over_other_level(self, qtbot, analysis_df):
+        # The page loads rules grouped by level (execution order); switching a
+        # rule's level in place is how levels come to interleave.
         page = RulesPage(
             [self._rule("a1", "article"),
-             self._rule("o1", "order"),
+             self._rule("o1", "article"),
              self._rule("a2", "article")],
             analysis_df,
         )
         qtbot.addWidget(page)
+        page.rule_widgets[1]["level_combo"].setCurrentText("order")
         page._move_rule_up(page.rule_widgets[2])
         names = [r["name_edit"].text() for r in page.rule_widgets]
         assert names == ["a2", "o1", "a1"]
+
+    def test_rules_load_grouped_by_level(self, qtbot, analysis_df):
+        page = RulesPage(
+            [self._rule("o1", "order"), self._rule("a1", "article")],
+            analysis_df,
+        )
+        qtbot.addWidget(page)
+        assert [r["name_edit"].text() for r in page.rule_widgets] == ["a1", "o1"]
 
     def test_first_of_its_level_cannot_move_up(self, qtbot, analysis_df):
         page = RulesPage(
@@ -479,14 +490,14 @@ class TestInternalTagValueCombo:
         action = page.collect()["rules"][0]["steps"][0]["actions"][0]
         assert action == {"type": "ADD_INTERNAL_TAG", "value": ""}
 
-    def test_set_status_keeps_its_plain_line_edit(self, qtbot, analysis_df):
-        from PySide6.QtWidgets import QLineEdit
-
+    def test_set_status_is_a_fixed_hold_picker(self, qtbot, analysis_df):
+        """A rule can only hold (spec 2026-09-26 D3): a stale value loads as the hold."""
         page, refs = self._refs(
             qtbot, analysis_df, {"type": "SET_STATUS", "value": "Ready"})
-        assert isinstance(refs["param_widgets"]["value"], QLineEdit)
+        combo = refs["param_widgets"]["value"]
+        assert [combo.itemText(i) for i in range(combo.count())] == ["Not Fulfillable"]
         action = page.collect()["rules"][0]["steps"][0]["actions"][0]
-        assert action["value"] == "Ready"
+        assert action["value"] == "Not Fulfillable"
 
 
 class TestValuelessOperators:
@@ -554,3 +565,38 @@ class TestValuelessOperators:
         # The tail of _perform_validation must run even with no value widget.
         page._perform_validation(cond_refs)
         assert page._check_field_resolvable(cond_refs) is False
+
+
+def test_set_status_offers_only_a_hold(qtbot):
+    import pandas as pd
+
+    from gui.settings.rules import RulesPage
+
+    rule = {"name": "hold big", "level": "order", "steps": [{
+        "conditions": [{"field": "total_quantity", "operator": "is greater than", "value": "6"}],
+        "match": "ALL", "actions": [{"type": "SET_STATUS", "value": "Fulfillable"}]}]}
+    page = RulesPage([rule], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
+    qtbot.addWidget(page)
+
+    saved = page.collect()["rules"][0]["steps"][0]["actions"][0]
+    assert saved == {"type": "SET_STATUS", "value": "Not Fulfillable"}
+
+
+def test_validate_names_the_rule_step_and_condition(qtbot):
+    import pandas as pd
+
+    from gui.settings.rules import RulesPage
+
+    rule = {"name": "sizes", "level": "article", "steps": [{
+        "conditions": [{"field": "SKU", "operator": "equals", "value": "A"},
+                       {"field": "Quantity", "operator": "between", "value": "100-10"}],
+        "match": "ALL", "actions": [{"type": "ADD_INTERNAL_TAG", "value": "X"}]}]}
+    page = RulesPage([rule], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [1]}))
+    qtbot.addWidget(page)
+
+    ok, errors = page.validate()
+    assert not ok
+    assert errors == [(
+        "Rule “sizes”, step 1, condition 2: Start is greater than end. "
+        "Write the smaller number first, for example 10-100."
+    )]

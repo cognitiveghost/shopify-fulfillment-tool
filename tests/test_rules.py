@@ -4,6 +4,7 @@ Column fixtures use internal (post-analysis) column names since RuleEngine
 operates on the final_df produced by shopify_tool.analysis.run_analysis.
 """
 import pandas as pd
+import pytest
 
 from shopify_tool.rules import RuleEngine
 from shopify_tool.tag_manager import parse_tags
@@ -93,17 +94,6 @@ class TestRulePriorityAndAccumulation:
         ]
         out = RuleEngine(rules).apply(df.copy())
         assert out.loc[0, "Status_Note"] == "FIRST, SECOND"
-
-    def test_later_rule_set_status_overwrites_earlier_one(self):
-        df = _df({"Quantity": [5], "Order_Fulfillment_Status": ["Fulfillable"]})
-        rules = [
-            _rule([{"field": "Quantity", "operator": "equals", "value": 5}],
-                  [{"type": "SET_STATUS", "value": "A"}], priority=1),
-            _rule([{"field": "Quantity", "operator": "equals", "value": 5}],
-                  [{"type": "SET_STATUS", "value": "B"}], priority=2),
-        ]
-        out = RuleEngine(rules).apply(df.copy())
-        assert out.loc[0, "Order_Fulfillment_Status"] == "B"
 
     def test_add_internal_tag_deduplicates_via_tag_manager(self):
         df = _df({"Order_Number": ["X"], "Quantity": [1], "Internal_Tags": ["[]"]})
@@ -425,3 +415,98 @@ class TestRuleCreatedColumnSeeding:
 
         assert pd.isna(out.loc[0, "Total"]), "unmatched row must be blank, not 0.0"
         assert out.loc[1, "Total"] == 40
+
+
+def test_shopify_timestamp_compares_by_its_own_date():
+    """D9: the offset is ignored; the date as written is the shop's date."""
+    from shopify_tool.rules import _op_date_equals, _parse_date_safe
+
+    late = pd.Series(["2026-01-14 23:30:00 +0200", "2026-01-14T23:30:00+02:00"])
+    assert _op_date_equals(late, "2026-01-14").tolist() == [True, True]
+    assert _parse_date_safe("2026-01-14 23:30:00 +0200").tzinfo is None
+
+
+def test_not_contains_is_literal_too():
+    from shopify_tool.rules import _op_not_contains
+
+    assert _op_not_contains(pd.Series(["ABC"]), ".").tolist() == [True]
+
+
+def test_order_rule_negation_on_a_line_field_means_no_line():
+    """D2: 'SKU does not equal GIFT' on an order rule = no line is GIFT."""
+    df = pd.DataFrame({
+        "Order_Number": ["#1", "#1", "#2"],
+        "SKU": ["A", "GIFT", "A"],
+        "Internal_Tags": ["[]"] * 3,
+    })
+    rule = {"name": "r", "level": "order", "steps": [{
+        "conditions": [{"field": "SKU", "operator": "does not equal", "value": "GIFT"}],
+        "match": "ALL", "actions": [{"type": "ADD_INTERNAL_TAG", "value": "NO_GIFT"}]}]}
+    out = RuleEngine([rule]).apply(df)
+    tagged = out.loc[out["Internal_Tags"].str.contains("NO_GIFT"), "Order_Number"]
+    assert set(tagged) == {"#2"}
+
+
+def test_execution_order_puts_unprioritised_rules_last_in_list_order():
+    a, b, c = {"name": "a"}, {"name": "b", "priority": 5}, {"name": "c"}
+    assert [r["name"] for r in RuleEngine.execution_order([a, b, c])] == ["b", "a", "c"]
+    assert "priority" not in a  # the caller's dicts are not written to
+
+
+def test_execution_order_runs_article_rules_before_order_rules():
+    o = {"name": "o", "level": "order", "priority": 1}
+    a = {"name": "a", "priority": 2}
+    assert [r["name"] for r in RuleEngine.execution_order([o, a])] == ["a", "o"]
+
+
+def _status_frame():
+    return pd.DataFrame({
+        "Order_Number": ["#1", "#1", "#2"],
+        "SKU": ["A", "B", "A"],
+        "Quantity": [4, 3, 1],
+        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
+        "System_note": ["", "", ""],
+        "Internal_Tags": ["[]"] * 3,
+    })
+
+
+def _hold(level, value="Not Fulfillable", name="big; heavy"):
+    field = "total_quantity" if level == "order" else "SKU"
+    op, val = ("is greater than or equal", "7") if level == "order" else ("equals", "B")
+    return {"name": name, "level": level, "steps": [{
+        "conditions": [{"field": field, "operator": op, "value": val}],
+        "match": "ALL", "actions": [{"type": "SET_STATUS", "value": value}]}]}
+
+
+@pytest.mark.parametrize("level", ["order", "article"])
+def test_set_status_holds_every_line_and_records_the_rule(level):
+    out = RuleEngine([_hold(level)]).apply(_status_frame())
+    one = out[out["Order_Number"] == "#1"]
+    assert (one["Order_Fulfillment_Status"] == "Not Fulfillable").all()
+    assert (one["System_note"] == "Cannot fulfill: Held by rule: big, heavy").all()
+    assert out.loc[out["Order_Number"] == "#2", "Order_Fulfillment_Status"].tolist() == ["Fulfillable"]
+
+
+def test_set_status_twice_records_the_rule_once():
+    engine = RuleEngine([_hold("order")])
+    out = engine.apply(engine.apply(_status_frame()))
+    assert (out.loc[out["Order_Number"] == "#1", "System_note"]
+            == "Cannot fulfill: Held by rule: big, heavy").all()
+
+
+def test_set_status_never_makes_an_order_fulfillable(caplog):
+    df = _status_frame()
+    df["Order_Fulfillment_Status"] = "Not Fulfillable"
+    out = RuleEngine([_hold("order", value="Fulfillable")]).apply(df)
+    assert (out["Order_Fulfillment_Status"] == "Not Fulfillable").all()
+    assert (out["System_note"] == "").all()
+    assert "SET_STATUS can only hold" in caplog.text
+
+
+def test_matched_rows_covers_an_order_rules_whole_order():
+    df = _status_frame()
+    engine = RuleEngine([{"name": "t", "level": "order", "steps": [{
+        "conditions": [{"field": "total_quantity", "operator": "is greater than or equal", "value": "7"}],
+        "match": "ALL", "actions": [{"type": "ADD_INTERNAL_TAG", "value": "BIG"}]}]}])
+    engine.apply(df)
+    assert engine.matched_rows.tolist() == [True, True, False]

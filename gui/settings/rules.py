@@ -25,6 +25,7 @@ from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from shared.theme import on_theme_changed
 from shopify_tool.core import get_unique_column_values
 from shopify_tool.rules import RuleEngine
+from shopify_tool.stock_ledger import NOT_FULFILLABLE
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class RulesPage(SettingsPage):
         super().__init__(parent)
         self.analysis_df = analysis_df
         self.rule_widgets = []
+        rules = RuleEngine.execution_order(rules)
         self._rules_config = rules
         # ponytail: a snapshot taken when the dialog opens. The Tag Categories
         # page can add a tag while this page is open and this list will not
@@ -961,12 +963,7 @@ class RulesPage(SettingsPage):
         Args:
             condition_refs (dict): Condition widget references
         """
-        from gui.rule_validator import (
-            validate_list,
-            validate_numeric,
-            validate_range,
-            validate_regex,
-        )
+        from gui.rule_validator import condition_error, validate_list, validate_range
 
         op = condition_refs["op"].currentText()
         value_widget = condition_refs.get("value_widget")
@@ -975,61 +972,22 @@ class RulesPage(SettingsPage):
         # unrecognised widget type has no text. Neither can be value-validated,
         # but both still need the field-resolvability mark at the tail -- an
         # early return here drops PR #278's "never matches" flag.
-        if isinstance(value_widget, QComboBox):
-            value = value_widget.currentText()
-        elif isinstance(value_widget, QDateEdit):
-            value = value_widget.date().toString("yyyy-MM-dd")
-        elif isinstance(value_widget, QLineEdit):
-            value = value_widget.text()
-        else:
+        if not isinstance(value_widget, (QComboBox, QDateEdit, QLineEdit)):
             self._show_validation_feedback(condition_refs, "clear", "")
             self._check_field_resolvable(condition_refs)
             return
+        value = self._condition_value(value_widget)
 
-        # Validate based on operator
-        if op in ["matches regex", "does not match regex"]:
-            is_valid, error_msg = validate_regex(value)
-            if is_valid:
-                self._show_validation_feedback(condition_refs, "clear", "")
-            else:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-
-        elif op in ["date before", "date after", "date equals"]:
-            # QDateEdit always provides valid dates, skip validation
-            self._show_validation_feedback(condition_refs, "clear", "")
-
-        elif op in ["between", "not between"]:
-            is_valid, error_msg, warning_msg = validate_range(value)
-            if not is_valid:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-            elif warning_msg:
-                self._show_validation_feedback(condition_refs, "warning", warning_msg)
-            else:
-                self._show_validation_feedback(condition_refs, "clear", "")
-
-        elif op in ["in list", "not in list"]:
-            is_valid, item_count, error_msg = validate_list(value)
-            if not is_valid:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-            else:
-                self._show_validation_feedback(
-                    condition_refs, "success", f"{item_count} items"
-                )
-
-        elif op in [
-            "is greater than",
-            "is less than",
-            "is greater than or equal",
-            "is less than or equal",
-        ]:
-            is_valid, error_msg = validate_numeric(value)
-            if not is_valid:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-            else:
-                self._show_validation_feedback(condition_refs, "clear", "")
-
+        # The error is condition_error's alone, so Save refuses exactly what
+        # is marked red here; ranges and lists add a warning or a count.
+        if error_msg := condition_error(op, value):
+            self._show_validation_feedback(condition_refs, "error", error_msg)
+        elif op in ("between", "not between") and (warning_msg := validate_range(value)[2]):
+            self._show_validation_feedback(condition_refs, "warning", warning_msg)
+        elif op in ("in list", "not in list"):
+            _, item_count, _ = validate_list(value)
+            self._show_validation_feedback(condition_refs, "success", f"{item_count} items")
         else:
-            # No validation needed for other operators
             self._show_validation_feedback(condition_refs, "clear", "")
 
         self._check_field_resolvable(condition_refs)
@@ -1182,58 +1140,53 @@ class RulesPage(SettingsPage):
         dialog = RuleTestDialog(rule_config, self.analysis_df, parent=self)
         dialog.exec()
 
-    def _build_rule_config_from_widgets(self, rule_widget_refs):
-        """
-        Extract current rule configuration from widget state.
+    @staticmethod
+    def _condition_value(value_widget) -> str:
+        if isinstance(value_widget, QComboBox):
+            return value_widget.currentText()
+        if isinstance(value_widget, QDateEdit):
+            return value_widget.date().toString("yyyy-MM-dd")
+        if isinstance(value_widget, QLineEdit):
+            return value_widget.text()
+        return ""
 
-        Builds a config dict compatible with RuleEngine from the current
-        UI state of all condition and action widgets. Supports multi-step rules.
-
-        Args:
-            rule_widget_refs (dict): Rule widget references
-
-        Returns:
-            dict: Rule configuration compatible with RuleEngine
-        """
+    def _rule_config(self, rule_w, priority=None) -> dict:
+        """One rule from its widgets. Save and Test both build through here,
+        so a test runs exactly what Save would store (AUDIT-03-10)."""
         steps = []
-        for step_refs in rule_widget_refs.get("steps", []):
-            # Extract conditions
-            conditions = []
-            for condition_refs in step_refs["conditions"]:
-                value_widget = condition_refs.get("value_widget")
-                val = ""
-
-                if value_widget:
-                    if isinstance(value_widget, QComboBox):
-                        val = value_widget.currentText()
-                    elif isinstance(value_widget, QDateEdit):
-                        val = value_widget.date().toString("yyyy-MM-dd")
-                    elif isinstance(value_widget, QLineEdit):
-                        val = value_widget.text()
-
-                conditions.append(
-                    {
-                        "field": condition_refs["field"].currentText(),
-                        "operator": condition_refs["op"].currentText(),
-                        "value": val,
-                    }
-                )
-
-            # Extract actions
+        for step_refs in rule_w.get("steps", []):
+            conditions = [
+                {
+                    "field": c["field"].currentText(),
+                    "operator": c["op"].currentText(),
+                    "value": self._condition_value(c.get("value_widget")),
+                }
+                for c in step_refs["conditions"]
+            ]
             actions = []
-            for action_refs in step_refs["actions"]:
-                action_type = action_refs["type"].currentText()
-                action_dict = {"type": action_type}
-
-                param_widgets = action_refs.get("param_widgets", {})
-                for param_name, widget in param_widgets.items():
-                    if isinstance(widget, QComboBox):
-                        action_dict[param_name] = widget.currentText()
-                    elif isinstance(widget, QLineEdit):
-                        action_dict[param_name] = widget.text()
-
-                actions.append(action_dict)
-
+            for act_refs in step_refs["actions"]:
+                action_type = act_refs["type"].currentText()
+                params = act_refs["param_widgets"]
+                act = {"type": action_type}
+                if action_type in ["ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG", "SET_STATUS"]:
+                    act["value"] = params["value"].currentText()
+                elif action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_MULTI_TAGS"]:
+                    act["value"] = params["value"].text()
+                elif action_type == "COPY_FIELD":
+                    act["source"] = params["source"].currentText()
+                    act["target"] = params["target"].text()
+                elif action_type == "CALCULATE":
+                    act["operation"] = params["operation"].currentText()
+                    act["field1"] = params["field1"].currentText()
+                    act["field2"] = params["field2"].currentText()
+                    act["target"] = params["target"].text()
+                elif action_type == "ALERT_NOTIFICATION":
+                    act["message"] = params["message"].text()
+                    act["severity"] = params["severity"].currentText()
+                elif action_type == "ADD_PRODUCT":
+                    act["sku"] = params["sku"].text()
+                    act["quantity"] = params["quantity"].value()
+                actions.append(act)
             steps.append(
                 {
                     "conditions": conditions,
@@ -1242,11 +1195,16 @@ class RulesPage(SettingsPage):
                 }
             )
 
-        return {
-            "name": rule_widget_refs["name_edit"].text(),
-            "level": rule_widget_refs["level_combo"].currentText(),
-            "steps": steps,
-        }
+        rule = {"name": rule_w["name_edit"].text()}
+        if priority is not None:
+            rule["priority"] = priority
+        rule["level"] = rule_w["level_combo"].currentText()
+        rule["steps"] = steps
+        return rule
+
+    def _build_rule_config_from_widgets(self, rule_widget_refs):
+        """The rule as Test runs it: Save's config, without a priority."""
+        return self._rule_config(rule_widget_refs)
 
     def _update_test_button_state(self, rule_widget_refs):
         """
@@ -1415,7 +1373,16 @@ class RulesPage(SettingsPage):
             layout.insertWidget(insert_pos, value_combo, 1)
             action_refs["param_widgets"]["value"] = value_combo
 
-        elif action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_STATUS"]:
+        elif action_type == "SET_STATUS":
+            # A rule can only hold an order; it can never make one
+            # fulfillable (spec 2026-09-26 D3). A saved config with any
+            # other value loads as the hold.
+            status_combo = WheelIgnoreComboBox()
+            status_combo.addItems([NOT_FULFILLABLE])
+            layout.insertWidget(insert_pos, status_combo, 1)
+            action_refs["param_widgets"]["value"] = status_combo
+
+        elif action_type in ["ADD_TAG", "ADD_ORDER_TAG"]:
             # Простий value field
             value_edit = QLineEdit()
             value_edit.setPlaceholderText("Value")
@@ -1542,88 +1509,22 @@ class RulesPage(SettingsPage):
             action_refs["param_widgets"]["quantity"] = qty_spin
 
     def collect(self) -> dict:
-        new_rules = []
-        for idx, rule_w in enumerate(self.rule_widgets):
-            steps = []
-            for step_refs in rule_w.get("steps", []):
-                conditions = []
-                for c in step_refs["conditions"]:
-                    value_widget = c.get("value_widget")
-                    val = ""
-                    if value_widget:
-                        if isinstance(value_widget, QComboBox):
-                            val = value_widget.currentText()
-                        else:
-                            val = value_widget.text()
+        return {
+            "rules": [
+                self._rule_config(rule_w, priority=idx + 1)
+                for idx, rule_w in enumerate(self.rule_widgets)
+            ]
+        }
 
-                    conditions.append(
-                        {
-                            "field": c["field"].currentText(),
-                            "operator": c["op"].currentText(),
-                            "value": val,
-                        }
-                    )
+    def validate(self) -> tuple[bool, list[str]]:
+        """Refuse to save a rule the page marks red (AUDIT-03-5)."""
+        from gui.rule_validator import condition_error
 
-                actions = []
-                for act_refs in step_refs["actions"]:
-                    action_type = act_refs["type"].currentText()
-                    act = {"type": action_type}
-
-                    # Serialize parameters based on type
-                    if action_type in ["ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG"]:
-                        act["value"] = act_refs["param_widgets"]["value"].currentText()
-
-                    elif action_type in ["ADD_TAG", "ADD_ORDER_TAG", "SET_STATUS"]:
-                        act["value"] = act_refs["param_widgets"]["value"].text()
-
-                    elif action_type == "COPY_FIELD":
-                        act["source"] = act_refs["param_widgets"][
-                            "source"
-                        ].currentText()
-                        act["target"] = act_refs["param_widgets"]["target"].text()
-
-                    elif action_type == "CALCULATE":
-                        act["operation"] = act_refs["param_widgets"][
-                            "operation"
-                        ].currentText()
-                        act["field1"] = act_refs["param_widgets"][
-                            "field1"
-                        ].currentText()
-                        act["field2"] = act_refs["param_widgets"][
-                            "field2"
-                        ].currentText()
-                        act["target"] = act_refs["param_widgets"]["target"].text()
-
-                    elif action_type == "SET_MULTI_TAGS":
-                        act["value"] = act_refs["param_widgets"]["value"].text()
-
-                    elif action_type == "ALERT_NOTIFICATION":
-                        act["message"] = act_refs["param_widgets"]["message"].text()
-                        act["severity"] = act_refs["param_widgets"][
-                            "severity"
-                        ].currentText()
-
-                    elif action_type == "ADD_PRODUCT":
-                        act["sku"] = act_refs["param_widgets"]["sku"].text()
-                        act["quantity"] = act_refs["param_widgets"]["quantity"].value()
-
-                    actions.append(act)
-
-                steps.append(
-                    {
-                        "conditions": conditions,
-                        "match": step_refs["match_combo"].currentText(),
-                        "actions": actions,
-                    }
-                )
-
-            new_rules.append(
-                {
-                    "name": rule_w["name_edit"].text(),
-                    "priority": idx + 1,
-                    "level": rule_w["level_combo"].currentText(),
-                    "steps": steps,
-                }
-            )
-
-        return {"rules": new_rules}
+        errors = []
+        for rule in self.collect()["rules"]:
+            for s, step in enumerate(rule["steps"], 1):
+                for c, cond in enumerate(step["conditions"], 1):
+                    msg = condition_error(cond["operator"], cond["value"])
+                    if msg:
+                        errors.append(f"Rule “{rule['name']}”, step {s}, condition {c}: {msg}")
+        return not errors, errors

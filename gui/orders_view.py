@@ -15,7 +15,12 @@ import pandas as pd
 
 from gui.pandas_model import REPEAT_COLUMN, is_repeat
 from shopify_tool import stock_ledger
-from shopify_tool.stock_ledger import FULFILLABLE, NOT_FULFILLABLE
+from shopify_tool.stock_ledger import (
+    BLOCKER_PREFIX,
+    FULFILLABLE,
+    NO_SKU_SUFFIX,
+    NOT_FULFILLABLE,
+)
 from shopify_tool.tag_manager import parse_tags
 
 # Constant across every line of an order, by construction in analysis.py's
@@ -52,18 +57,15 @@ LINE_LEVEL_COLUMNS = (
     "Lot_Details",
 )
 
-# analysis.py:1072 writes exactly this prefix into System_note, for every line
-# of the order. The reason is the analysis's to compute; this module only reads.
-BLOCKER_PREFIX = "Cannot fulfill: "
-
-NO_SKU_SUFFIX = " [NO_SKU]"
 # The allocation's own reason strings (analysis.py, legacy and FIFO paths).
 _SHORT = re.compile(
     r"^(?P<sku>.+): Insufficient stock \(need (?P<need>\d+), have (?P<have>\d+)\)$"
 )
 _OUT_OF_STOCK = re.compile(r"^(?P<sku>.+): Out of stock$")
 _INVALID_QTY = re.compile(r"^(?P<sku>.+): Missing/invalid quantity$")
-_DATA_CODES = {"invalid_quantity", "no_sku", "other"}
+_RULE_HOLD = re.compile(r"^Held by rule: (?P<rule>.+)$")
+# Codes that need a person to look, not more stock.
+_DATA_CODES = {"invalid_quantity", "no_sku", "other", "rule_hold"}
 _STOCK_CODES = {"short", "out_of_stock"}
 
 ORDER_KEY = "Order_Number"
@@ -153,7 +155,10 @@ def _reason_problems(notes) -> list[dict]:
         for part in (p.strip() for p in tail.split("; ")):
             if not part:
                 continue
-            if m := _SHORT.match(part):
+            # A rule's name is free text: read the rule hold first.
+            if m := _RULE_HOLD.match(part):
+                problems.append({"code": "rule_hold", "rule": m["rule"]})
+            elif m := _SHORT.match(part):
                 problems.append(
                     {
                         "code": "short",
@@ -183,7 +188,7 @@ def order_verdict(status, notes, line_skus, has_sku) -> dict:
     for p in _reason_problems(notes):
         if "sku" in p and p["sku"] not in skus:
             continue  # its line was removed after the run
-        key = (p["code"], p.get("sku"), p.get("text"))
+        key = (p["code"], p.get("sku"), p.get("text"), p.get("rule"))
         if key not in seen:
             seen.add(key)
             problems.append(p)
