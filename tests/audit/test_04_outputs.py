@@ -198,7 +198,6 @@ def test_packing_list_json_excludes_the_same_skus_as_the_xlsx(tmp_path):
     assert json_lines(out / "ALL.json") == xlsx_lines(out / "ALL.xlsx")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-5: distinct order numbers sanitise to the same barcode value")
 def test_distinct_orders_never_share_a_barcode_value():
     orders = pd.DataFrame({
         "Order_Number": ["#1001/2", "#1001 2", "#10012"], "Shipping_Provider": "DHL",

@@ -84,6 +84,11 @@ def sanitize_order_number(order_number: str) -> str:
     if not order_number:
         raise InvalidOrderNumberError("Order number cannot be empty")
 
+    if not order_number.isascii():
+        raise InvalidOrderNumberError(
+            f"Order number '{order_number}' has characters a Code-128 barcode can't carry"
+        )
+
     clean = ''.join(c for c in order_number if c.isalnum() or c in ['-', '_', '#'])
 
     if not clean:
@@ -241,6 +246,22 @@ def generate_barcodes_batch(
             "success": True,
             "error": None
         })
+
+    # Distinct order numbers that encode to one value would scan as each
+    # other, here and in Packing Tool, which normalises harder still.
+    # Refuse all of them rather than let a scan pick one (AUDIT-04-5).
+    by_value: dict[str, list[dict]] = {}
+    for r in results:
+        if r["success"]:
+            by_value.setdefault(r["safe_order_number"], []).append(r)
+    for value, group in by_value.items():
+        if len(group) < 2:
+            continue
+        for r in group:
+            others = ", ".join(o["order_number"] for o in group if o is not r)
+            r.update(success=False, safe_order_number=None,
+                     error=f"Barcode value {value} would also scan as {others}")
+            logger.error(f"Order {r['order_number']}: {r['error']}")
 
     logger.info(
         f"Batch preparation complete: {sum(r['success'] for r in results)}/{total_orders} successful"
