@@ -8,6 +8,8 @@ import pandas as pd
 
 from shopify_tool.csv_utils import order_number_sort_key
 
+NO_ORDER_NUMBER = "(no order number)"
+
 logger = logging.getLogger(__name__)
 
 # Bulgarian ERP CSV column names for lot tracking (Expiry_Date, Batch)
@@ -297,6 +299,12 @@ def _clean_and_prepare_data(
     # Forward-fill order-level columns
     if "Order_Number" in orders_df.columns:
         orders_df["Order_Number"] = orders_df["Order_Number"].ffill()
+        orphans = orders_df["Order_Number"].isna()
+        if orphans.any():
+            # Lines above the first order number stay visible as one blocked
+            # order instead of vanishing in a groupby (AUDIT-01-9).
+            logger.warning(f"{int(orphans.sum())} order lines have no order number")
+            orders_df.loc[orphans, "Order_Number"] = NO_ORDER_NUMBER
 
     # Shopify writes order-level fields on an order's first line only. Fill
     # within the order, never from the one above it: an order with no tags or
@@ -451,23 +459,33 @@ def _clean_and_prepare_data(
     has_sku = stock_df["SKU"].notna()
     stock_df.loc[has_sku, "SKU"] = stock_df.loc[has_sku, "SKU"].map(normalize_sku)
 
+    # A blank or non-numeric stock cell is no stock, never unlimited stock:
+    # NaN fails both "== 0" and "required > available" (AUDIT-01-7).
+    stock_numeric = pd.to_numeric(stock_df["Stock"], errors="coerce")
+    bad = stock_numeric.isna() & has_sku
+    if bad.any():
+        logger.warning(
+            f"{int(bad.sum())} stock rows have a blank or non-numeric stock cell, "
+            f"read as 0: {stock_df.loc[bad, 'SKU'].tolist()[:10]}"
+        )
+    stock_df["Stock"] = stock_numeric.fillna(0)
+
     # Detect whether lot columns (Expiry_Date / Batch) are present after mapping
     stock_lot_cols = [c for c in ["Expiry_Date", "Batch"] if c in stock_df.columns]
     lot_columns_present = bool(stock_lot_cols)
 
+    # One total per SKU, summed with or without lots (AUDIT-01-8, owner rule).
+    agg_dict: dict = {"Stock": ("Stock", "sum")}
+    if "Product_Name" in stock_df.columns:
+        agg_dict["Product_Name"] = ("Product_Name", "first")
+
     if not lot_columns_present:
-        # EXISTING PATH — single-row-per-SKU, keep first occurrence
-        stock_clean_df = stock_df[stock_cols_to_keep].copy()
-        stock_clean_df = stock_clean_df.dropna(subset=["SKU"])
-        stock_clean_df = stock_clean_df.drop_duplicates(subset=["SKU"], keep="first")
         fifo_lots = None
+        stock_clean_df = stock_df.dropna(subset=["SKU"]).groupby("SKU", as_index=False).agg(**agg_dict)
     else:
-        # NEW PATH — build FIFO lot structure before aggregation, then aggregate
+        # Build the FIFO lot structure before aggregation, then aggregate
         # totals per SKU so downstream merge/display shows correct total stock
         fifo_lots = _build_fifo_lots(stock_df)
-        agg_dict: dict = {"Stock": ("Stock", "sum")}
-        if "Product_Name" in stock_df.columns:
-            agg_dict["Product_Name"] = ("Product_Name", "first")
         stock_agg = stock_df.groupby("SKU", as_index=False).agg(**agg_dict)
         stock_clean_df = stock_agg.dropna(subset=["SKU"]).copy()
 
@@ -1480,6 +1498,9 @@ def run_analysis(
         # Phase 2: Prioritize orders
         logger.info(f"Phase 2/7: Order prioritization (mode={mode})")
         prioritized_orders = _prioritize_orders(orders_clean, mode=mode)
+        prioritized_orders = prioritized_orders[
+            prioritized_orders["Order_Number"] != NO_ORDER_NUMBER
+        ]
 
         # Phase 3: Simulate stock allocation
         logger.info("Phase 3/7: Stock allocation simulation")
@@ -1488,6 +1509,11 @@ def run_analysis(
                 orders_clean, stock_clean, prioritized_orders, fifo_lots
             )
         )
+        if (orders_clean["Order_Number"] == NO_ORDER_NUMBER).any():
+            fulfillment_results[NO_ORDER_NUMBER] = {
+                "fulfillable": False,
+                "reason": "No order number",
+            }
 
         # Phase 4: Convert live stock dict to DataFrame (no replay needed — simulation already tracked it)
         logger.info("Phase 4/7: Final stock calculations")

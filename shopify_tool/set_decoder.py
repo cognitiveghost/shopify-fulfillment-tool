@@ -177,7 +177,7 @@ def import_sets_from_csv(csv_path: str) -> dict[str, list[dict[str, Any]]]:
         FileNotFoundError: If CSV file doesn't exist
     """
     try:
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path, dtype=str)
     except FileNotFoundError:
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
     except Exception as e:

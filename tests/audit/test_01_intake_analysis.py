@@ -188,20 +188,12 @@ def test_stats_count_each_order_once():
     assert stats["total_orders_completed"] + stats["total_orders_not_completed"] == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-7: a blank stock cell reads as unlimited stock when the file has no lot columns",
-)
 def test_blank_stock_cell_is_not_unlimited_stock():
     # A blank cell in a numeric CSV column loads as NaN in a float column.
     df, *_ = analyse(stock([("A", float("nan")), ("B", 1)]), orders([("#1", "A", 3)]))
     assert status(df, "#1") == {"Not Fulfillable"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-8: a SKU on two stock rows counts only the first row without lot columns",
-)
 def test_duplicate_stock_rows_count_the_same_with_or_without_lot_columns():
     plain, *_ = analyse(stock([("A", 3), ("A", 4)]), orders([("#1", "A", 1)]))
     lots, *_ = analyse(
@@ -212,20 +204,12 @@ def test_duplicate_stock_rows_count_the_same_with_or_without_lot_columns():
     assert plain["Stock"].iloc[0] == lots["Stock"].iloc[0]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-9: lines above the first order number vanish without a warning in the result",
-)
 def test_no_order_line_silently_disappears():
     raw = orders([(None, "A", 1), ("#1", "B", 1)])
     df, *_ = analyse(stock([("A", 5), ("B", 5)]), raw)
     assert len(df) == len(raw)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-10: set CSV import reads SKUs as numbers and drops leading zeros",
-)
 def test_set_import_keeps_sku_text(tmp_path):
     p = tmp_path / "sets.csv"
     p.write_text("Set_SKU,Component_SKU,Component_Quantity\n0100,0042,2\n", encoding="utf-8")
