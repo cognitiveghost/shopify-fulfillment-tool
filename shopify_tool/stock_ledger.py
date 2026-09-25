@@ -17,8 +17,9 @@ import pandas as pd
 FULFILLABLE = "Fulfillable"
 NOT_FULFILLABLE = "Not Fulfillable"
 
+# analysis.py writes both into System_note; gui/orders_view.py parses them.
 BLOCKER_PREFIX = "Cannot fulfill: "
-_NO_SKU_SUFFIX = " [NO_SKU]"
+NO_SKU_SUFFIX = " [NO_SKU]"
 
 
 def append_blocker(note, part: str) -> str:
@@ -29,8 +30,9 @@ def append_blocker(note, part: str) -> str:
     not repeated, so re-applying rules changes nothing.
     """
     text = "" if note is None or pd.isna(note) else str(note)
-    suffix = _NO_SKU_SUFFIX if text.endswith(_NO_SKU_SUFFIX) else ""
-    text = text.removesuffix(suffix)
+    # The run writes a bare "[NO_SKU]" when the note was empty.
+    suffix = NO_SKU_SUFFIX if text.endswith(NO_SKU_SUFFIX.lstrip()) else ""
+    text = text.removesuffix(NO_SKU_SUFFIX.lstrip()).rstrip()
     _, sep, tail = text.partition(BLOCKER_PREFIX)
     if sep:
         if part in tail.split("; "):

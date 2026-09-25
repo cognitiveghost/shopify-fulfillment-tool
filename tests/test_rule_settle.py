@@ -85,3 +85,37 @@ def test_settle_keeps_a_no_sku_line_held_and_matches_numeric_orders():
     out = core._settle_rule_changes(_frame([1001, 1001, 1001]), stock, CONFIG)
     assert out["Order_Fulfillment_Status"].tolist() == ["Fulfillable", "Not Fulfillable", "Fulfillable"]
     assert out["Final_Stock"].tolist()[2] == 1
+
+
+GIFT_FOR_A = {"name": "gift", "level": "article", "priority": 1, "steps": [{
+    "conditions": [{"field": "SKU", "operator": "equals", "value": "A"}],
+    "match": "ALL", "actions": [{"type": "ADD_PRODUCT", "sku": "GIFT", "quantity": 1}]}]}
+
+
+def test_a_later_rule_hold_covers_the_bonus_line(tmp_path):
+    hold = {"name": "big", "level": "order", "priority": 2, "steps": [{
+        "conditions": [{"field": "total_quantity", "operator": "is greater than or equal", "value": "7"}],
+        "match": "ALL", "actions": [{"type": "SET_STATUS", "value": "Not Fulfillable"}]}]}
+    out = _run(tmp_path,
+               "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A,7,DHL\n#2,A,1,DHL\n",
+               "Артикул,Име,Наличност\nA,Alpha,10\nGIFT,Gift box,5\n", [GIFT_FOR_A, hold])
+    one = out[out["Order_Number"] == "#1"]
+    assert (one["Order_Fulfillment_Status"] == "Not Fulfillable").all()
+    assert one["System_note"].str.contains("Held by rule: big", regex=False).all()
+    assert (out.loc[out["SKU"] == "GIFT", "Final_Stock"] == 4).all()   # only #2's gift
+
+
+def test_a_bonus_reads_a_padded_stock_sku_as_listed(tmp_path):
+    out = _run(tmp_path,
+               "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A,1,DHL\n",
+               "Артикул,Име,Наличност\nA,Alpha,5\nGIFT ,Gift box,5\n", [GIFT_FOR_A])
+    assert (out["Order_Fulfillment_Status"] == "Fulfillable").all()
+    assert (out.loc[out["SKU"] == "GIFT", "Final_Stock"] == 4).all()
+
+
+def test_stock_alert_follows_the_settled_stock():
+    stock = pd.DataFrame({"SKU": ["A", "GIFT"], "Stock": [5, 2], "Product_Name": ["Alpha", "Gift"]})
+    config = {**CONFIG, "settings": {"low_stock_threshold": 2}}
+    out = core._settle_rule_changes(_frame(["#1"] * 3), stock, config)
+    assert out.loc[2, "Stock_Alert"] == "Low Stock"   # GIFT 2 -> 1 after the bonus
+    assert out.loc[0, "Stock_Alert"] == ""

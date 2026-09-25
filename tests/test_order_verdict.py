@@ -134,3 +134,9 @@ def test_two_rule_holds_are_two_problems():
     note = "Cannot fulfill: Held by rule: X; Held by rule: Y"
     v = order_verdict("Not Fulfillable", [note], ["A"], [True])
     assert [p["rule"] for p in v["problems"]] == ["X", "Y"]
+
+
+def test_a_rule_named_like_a_stock_reason_is_still_a_rule_hold():
+    note = "Cannot fulfill: Held by rule: Out of stock"
+    v = order_verdict("Not Fulfillable", [note], ["A"], [True])
+    assert v["problems"] == [{"code": "rule_hold", "rule": "Out of stock"}]

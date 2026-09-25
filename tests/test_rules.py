@@ -453,6 +453,12 @@ def test_execution_order_puts_unprioritised_rules_last_in_list_order():
     assert "priority" not in a  # the caller's dicts are not written to
 
 
+def test_execution_order_runs_article_rules_before_order_rules():
+    o = {"name": "o", "level": "order", "priority": 1}
+    a = {"name": "a", "priority": 2}
+    assert [r["name"] for r in RuleEngine.execution_order([o, a])] == ["a", "o"]
+
+
 def _status_frame():
     return pd.DataFrame({
         "Order_Number": ["#1", "#1", "#2"],

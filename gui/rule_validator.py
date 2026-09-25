@@ -188,8 +188,8 @@ _NUMERIC_OPERATORS = {
 def condition_error(operator: str, value: str) -> str | None:
     """The error the Rules page shows in red for this condition, or None.
 
-    The same checks as the live feedback (RulesPage._perform_validation),
-    so Save refuses exactly what the page marks red (AUDIT-03-5).
+    RulesPage._perform_validation marks red exactly this, and Save refuses
+    it, so the two can't disagree (AUDIT-03-5).
     """
     if operator in ("matches regex", "does not match regex"):
         ok, msg = validate_regex(value)

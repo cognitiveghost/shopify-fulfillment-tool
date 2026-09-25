@@ -197,16 +197,27 @@ class TestFilterAndReorder:
         assert page.rule_widgets[1]["group_box"].isVisibleTo(page) is True
 
     def test_move_up_skips_over_other_level(self, qtbot, analysis_df):
+        # The page loads rules grouped by level (execution order); switching a
+        # rule's level in place is how levels come to interleave.
         page = RulesPage(
             [self._rule("a1", "article"),
-             self._rule("o1", "order"),
+             self._rule("o1", "article"),
              self._rule("a2", "article")],
             analysis_df,
         )
         qtbot.addWidget(page)
+        page.rule_widgets[1]["level_combo"].setCurrentText("order")
         page._move_rule_up(page.rule_widgets[2])
         names = [r["name_edit"].text() for r in page.rule_widgets]
         assert names == ["a2", "o1", "a1"]
+
+    def test_rules_load_grouped_by_level(self, qtbot, analysis_df):
+        page = RulesPage(
+            [self._rule("o1", "order"), self._rule("a1", "article")],
+            analysis_df,
+        )
+        qtbot.addWidget(page)
+        assert [r["name_edit"].text() for r in page.rule_widgets] == ["a1", "o1"]
 
     def test_first_of_its_level_cannot_move_up(self, qtbot, analysis_df):
         page = RulesPage(

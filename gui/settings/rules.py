@@ -963,12 +963,7 @@ class RulesPage(SettingsPage):
         Args:
             condition_refs (dict): Condition widget references
         """
-        from gui.rule_validator import (
-            validate_list,
-            validate_numeric,
-            validate_range,
-            validate_regex,
-        )
+        from gui.rule_validator import condition_error, validate_list, validate_range
 
         op = condition_refs["op"].currentText()
         value_widget = condition_refs.get("value_widget")
@@ -977,61 +972,22 @@ class RulesPage(SettingsPage):
         # unrecognised widget type has no text. Neither can be value-validated,
         # but both still need the field-resolvability mark at the tail -- an
         # early return here drops PR #278's "never matches" flag.
-        if isinstance(value_widget, QComboBox):
-            value = value_widget.currentText()
-        elif isinstance(value_widget, QDateEdit):
-            value = value_widget.date().toString("yyyy-MM-dd")
-        elif isinstance(value_widget, QLineEdit):
-            value = value_widget.text()
-        else:
+        if not isinstance(value_widget, (QComboBox, QDateEdit, QLineEdit)):
             self._show_validation_feedback(condition_refs, "clear", "")
             self._check_field_resolvable(condition_refs)
             return
+        value = self._condition_value(value_widget)
 
-        # Validate based on operator
-        if op in ["matches regex", "does not match regex"]:
-            is_valid, error_msg = validate_regex(value)
-            if is_valid:
-                self._show_validation_feedback(condition_refs, "clear", "")
-            else:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-
-        elif op in ["date before", "date after", "date equals"]:
-            # QDateEdit always provides valid dates, skip validation
-            self._show_validation_feedback(condition_refs, "clear", "")
-
-        elif op in ["between", "not between"]:
-            is_valid, error_msg, warning_msg = validate_range(value)
-            if not is_valid:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-            elif warning_msg:
-                self._show_validation_feedback(condition_refs, "warning", warning_msg)
-            else:
-                self._show_validation_feedback(condition_refs, "clear", "")
-
-        elif op in ["in list", "not in list"]:
-            is_valid, item_count, error_msg = validate_list(value)
-            if not is_valid:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-            else:
-                self._show_validation_feedback(
-                    condition_refs, "success", f"{item_count} items"
-                )
-
-        elif op in [
-            "is greater than",
-            "is less than",
-            "is greater than or equal",
-            "is less than or equal",
-        ]:
-            is_valid, error_msg = validate_numeric(value)
-            if not is_valid:
-                self._show_validation_feedback(condition_refs, "error", error_msg)
-            else:
-                self._show_validation_feedback(condition_refs, "clear", "")
-
+        # The error is condition_error's alone, so Save refuses exactly what
+        # is marked red here; ranges and lists add a warning or a count.
+        if error_msg := condition_error(op, value):
+            self._show_validation_feedback(condition_refs, "error", error_msg)
+        elif op in ("between", "not between") and (warning_msg := validate_range(value)[2]):
+            self._show_validation_feedback(condition_refs, "warning", warning_msg)
+        elif op in ("in list", "not in list"):
+            _, item_count, _ = validate_list(value)
+            self._show_validation_feedback(condition_refs, "success", f"{item_count} items")
         else:
-            # No validation needed for other operators
             self._show_validation_feedback(condition_refs, "clear", "")
 
         self._check_field_resolvable(condition_refs)

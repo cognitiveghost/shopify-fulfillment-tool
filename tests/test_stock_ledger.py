@@ -142,6 +142,7 @@ def test_derived_stock_left_equals_the_runs_final_stock(lots):
     ("Cannot fulfill: Held by rule: R", "Cannot fulfill: Held by rule: R"),
     ("Cannot fulfill: A: Out of stock [NO_SKU]",
      "Cannot fulfill: A: Out of stock; Held by rule: R [NO_SKU]"),
+    ("[NO_SKU]", "Cannot fulfill: Held by rule: R [NO_SKU]"),
 ])
 def test_append_blocker(note, expected):
     assert append_blocker(note, "Held by rule: R") == expected

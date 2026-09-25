@@ -29,7 +29,6 @@ from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_man
 logger = logging.getLogger(__name__)
 
 
-
 def _whole_order_sample(df, min_rows=100):
     """The first orders, in frame order, until at least min_rows rows.
 
@@ -46,6 +45,7 @@ def _whole_order_sample(df, min_rows=100):
         taken.append(order)
         rows += int(sizes.get(order, 0))
     return df[keys.isin(taken)].copy()
+
 
 class RuleTestDialog(QDialog):
     """
