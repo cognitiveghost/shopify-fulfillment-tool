@@ -938,7 +938,8 @@ def _merge_fulfillment_history(
 def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:
     """Post-fulfilment stock per SKU, seeded from the whole stock file.
 
-    Every SKU in the stock file is remembered. SKUs the run actually touched
+    Every SKU in the stock file is remembered, summed across the rows it is
+    listed on (Audit 01 §6). SKUs the run actually touched
     get their post-fulfilment Final_Stock; the rest keep their opening level.
     A SKU absent from the stock file drops out -- the stock file is the truth
     for what still exists (spec 2026-09-15 section 7 Q2).
@@ -950,9 +951,10 @@ def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> 
     snapshot = {}
 
     if stock_df is not None and {"SKU", "Stock"} <= set(stock_df.columns):
+        # A SKU on several rows (lots, locations) is their sum (Audit 01 §6).
+        stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
         snapshot = (
-            stock_df.groupby("SKU")["Stock"]
-            .last()
+            stock.groupby(stock_df["SKU"]).sum(min_count=1)
             .dropna()
             .apply(lambda x: max(0.0, float(x)))
             .to_dict()
@@ -973,18 +975,15 @@ def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> 
 def inventory_total_units(stock_df: pd.DataFrame) -> float:
     """Total units in a stock frame, counted the way inventory memory counts.
 
-    One row per SKU -- a stock file lists a SKU once per warehouse location --
-    and negatives clamped to zero. Those are exactly the two rules
-    build_inventory_snapshot and save_inventory_memory apply between them, so
-    a freshly loaded file and a saved snapshot are only comparable when both
-    sides use this. Summing raw rows instead made a SKU listed twice read as a
-    100% jump on every single load.
+    A SKU listed on several rows (a stock file lists it once per warehouse
+    location) is the sum of its rows, and negatives clamp to zero per SKU.
+    build_inventory_snapshot sums rows the same way, which is why a freshly
+    loaded file and a saved snapshot compare.
     """
     if stock_df is None or not {"SKU", "Stock"} <= set(stock_df.columns):
         return 0.0
-    per_sku = pd.to_numeric(
-        stock_df.groupby("SKU")["Stock"].last(), errors="coerce"
-    ).dropna()
+    stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
+    per_sku = stock.groupby(stock_df["SKU"]).sum(min_count=1).dropna()
     return float(per_sku.clip(lower=0).sum())
 
 

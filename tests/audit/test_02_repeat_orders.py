@@ -318,10 +318,6 @@ def test_memory_mode_run_writes_memory_and_history(shop):
     assert "#1" in shop.history_rows()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-02-10: memory keeps one row's stock for a SKU listed on several rows",
-)
 def test_memory_seed_sums_a_sku_listed_on_several_rows():
     stock_df = pd.DataFrame({"SKU": ["A", "A", "B"], "Stock": [3, 4, 1]})
     final_df = pd.DataFrame({"SKU": ["B"], "Final_Stock": [0]})
