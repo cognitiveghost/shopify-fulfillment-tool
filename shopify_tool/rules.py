@@ -846,7 +846,7 @@ class RuleEngine:
                 if current_matches.any():
                     actions = step.get("actions", [])
                     logger.info(f"[RULE ENGINE] Step {step_idx+1}: Executing {len(actions)} actions")
-                    new_rows = self._execute_actions(df, current_matches, actions)
+                    new_rows = self._execute_actions(df, current_matches, actions, rule_name)
                     all_new_rows.extend(new_rows)
                 else:
                     logger.info(f"[RULE ENGINE] Step {step_idx+1}: No matches, stopping")
@@ -909,14 +909,14 @@ class RuleEngine:
                             mask = pd.Series(False, index=df.index)
                             mask.iloc[positions] = True
                             all_new_rows.extend(
-                                self._execute_actions(df, mask, apply_to_all)
+                                self._execute_actions(df, mask, apply_to_all, rule_name)
                             )
 
                         if apply_to_first:
                             mask = pd.Series(False, index=df.index)
                             mask.iloc[positions[0]] = True
                             all_new_rows.extend(
-                                self._execute_actions(df, mask, apply_to_first)
+                                self._execute_actions(df, mask, apply_to_first, rule_name)
                             )
 
         # Append the rows ADD_PRODUCT actions created.
@@ -1058,7 +1058,7 @@ class RuleEngine:
             # ANY (OR logic)
             return pd.concat(condition_results, axis=1).any(axis=1)
 
-    def _execute_actions(self, df, matches, actions):
+    def _execute_actions(self, df, matches, actions, rule_name=None):
         """Executes actions, modifying DataFrame in-place.
 
         Applies the specified actions (e.g., adding a tag, setting a status)
@@ -1070,6 +1070,8 @@ class RuleEngine:
             matches (pd.Series[bool]): A boolean Series indicating which rows
                 to apply the actions to.
             actions (list[dict]): A list of action dictionaries to execute.
+            rule_name (str | None): The rule these actions belong to, recorded
+                as the reason when SET_STATUS holds an order.
 
         Returns:
             list[dict]: List of new rows to add (from ADD_PRODUCT actions).
@@ -1127,7 +1129,28 @@ class RuleEngine:
                 df.loc[order_mask, "Internal_Tags"] = new_tags
 
             elif action_type == "SET_STATUS":
-                df.loc[matches, "Order_Fulfillment_Status"] = value
+                # A rule can only hold (spec 2026-09-26 D3), and an order
+                # ships whole, so the hold covers every line (D5). The reason
+                # makes the pane read it as the run's, not a person's (D8).
+                from shopify_tool.stock_ledger import NOT_FULFILLABLE, append_blocker
+                from shopify_tool.tag_manager import expand_to_order_rows
+
+                if value != NOT_FULFILLABLE:
+                    logger.warning(
+                        f"[RULE ENGINE] SET_STATUS can only hold an order; "
+                        f"ignoring value {value!r} in rule {rule_name!r}"
+                    )
+                    continue
+                order_mask = (
+                    expand_to_order_rows(df, matches)
+                    if "Order_Number" in df.columns else matches
+                )
+                df.loc[order_mask, "Order_Fulfillment_Status"] = NOT_FULFILLABLE
+                if "System_note" in df.columns:
+                    part = "Held by rule: " + str(rule_name or "unnamed").replace("; ", ", ")
+                    df.loc[order_mask, "System_note"] = df.loc[order_mask, "System_note"].apply(
+                        lambda n, part=part: append_blocker(n, part)
+                    )
 
             elif action_type == "COPY_FIELD":
                 source = action.get("source")

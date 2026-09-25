@@ -14,6 +14,7 @@ from shopify_tool.stock_ledger import (
     NOT_FULFILLABLE as NF,
 )
 from shopify_tool.stock_ledger import (
+    append_blocker,
     claim,
     fulfillable_orders,
     is_fulfillable,
@@ -130,3 +131,16 @@ def test_derived_stock_left_equals_the_runs_final_stock(lots):
     before = df["Final_Stock"].copy()
     after = with_stock_left(df.copy())["Final_Stock"]
     pd.testing.assert_series_equal(before.astype(float), after.astype(float), check_names=False)
+
+
+@pytest.mark.parametrize("note, expected", [
+    ("", "Cannot fulfill: Held by rule: R"),
+    (None, "Cannot fulfill: Held by rule: R"),
+    ("Repeat order", "Repeat order; Cannot fulfill: Held by rule: R"),
+    ("Cannot fulfill: A: Out of stock", "Cannot fulfill: A: Out of stock; Held by rule: R"),
+    ("Cannot fulfill: Held by rule: R", "Cannot fulfill: Held by rule: R"),
+    ("Cannot fulfill: A: Out of stock [NO_SKU]",
+     "Cannot fulfill: A: Out of stock; Held by rule: R [NO_SKU]"),
+])
+def test_append_blocker(note, expected):
+    assert append_blocker(note, "Held by rule: R") == expected

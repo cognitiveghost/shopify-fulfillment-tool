@@ -17,6 +17,28 @@ import pandas as pd
 FULFILLABLE = "Fulfillable"
 NOT_FULFILLABLE = "Not Fulfillable"
 
+BLOCKER_PREFIX = "Cannot fulfill: "
+_NO_SKU_SUFFIX = " [NO_SKU]"
+
+
+def append_blocker(note, part: str) -> str:
+    """Add one reason to a System_note, in the run's own format.
+
+    `Cannot fulfill: <part>; <part>` (analysis.add_fulfillment_reason), after
+    any other note, before a trailing ` [NO_SKU]`. A part already there is
+    not repeated, so re-applying rules changes nothing.
+    """
+    text = "" if note is None or pd.isna(note) else str(note)
+    suffix = _NO_SKU_SUFFIX if text.endswith(_NO_SKU_SUFFIX) else ""
+    text = text.removesuffix(suffix)
+    _, sep, tail = text.partition(BLOCKER_PREFIX)
+    if sep:
+        if part in tail.split("; "):
+            return text + suffix
+        return f"{text}; {part}{suffix}"
+    joined = f"{text}; " if text else ""
+    return f"{joined}{BLOCKER_PREFIX}{part}{suffix}"
+
 _LEDGER_COLUMNS = {"SKU", "Stock", "Final_Stock"}
 
 

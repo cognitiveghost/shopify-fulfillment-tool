@@ -248,7 +248,7 @@ class TestMissingValuesRenderBlank:
 
     def test_a_changed_cell_is_still_highlighted(self, qtbot, analysis_df, no_modals):
         """Baseline for the rewritten diff test: a real change must still tint."""
-        rule = _rule({"type": "SET_STATUS", "value": "Shipped"})
+        rule = _rule({"type": "SET_STATUS", "value": "Not Fulfillable"})
         dialog = _open(qtbot, rule, analysis_df)
 
         assert no_modals == []
@@ -257,7 +257,7 @@ class TestMissingValuesRenderBlank:
             for c in range(dialog.after_table.columnCount())
         ].index("Order_Fulfillment_Status")
         item = dialog.after_table.item(0, col)
-        assert item.text() == "Shipped"
+        assert item.text() == "Not Fulfillable"
         theme = get_theme_manager().get_current_theme()
         assert item.background().color().name().lower() == theme.status_warning_bg.lower()
 
@@ -266,7 +266,7 @@ class TestMissingValuesRenderBlank:
     ):
         """NaN != NaN, so a naive object diff tints every missing cell."""
         analysis_df.loc[0, "Product_Name"] = float("nan")
-        rule = _rule({"type": "SET_STATUS", "value": "Shipped"})
+        rule = _rule({"type": "SET_STATUS", "value": "Not Fulfillable"})
         dialog = _open(qtbot, rule, analysis_df)
 
         assert no_modals == []
