@@ -120,6 +120,7 @@ def test_one_failing_report_does_not_cost_the_user_the_others(monkeypatch):
         log=logging.getLogger(__name__),
         mw=None,
         _generate_single_report=fake_single,
+        _refuse_stale_export=lambda: False,
     )
 
     batch = [

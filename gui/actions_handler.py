@@ -207,7 +207,12 @@ class ActionsHandler(QObject):
             # run_full_analysis just rewrote current_state.pkl; without this
             # the first edit after every analysis is refused as stale.
             if self.mw.session_path:
-                self.mw._state_stamp = session_state.state_stamp(self.mw.session_path)
+                try:
+                    self.mw._state_stamp = session_state.state_stamp(self.mw.session_path)
+                except OSError:
+                    # No stamp makes the next save refuse: the safe direction.
+                    self.log.exception("Could not stamp the session state")
+                    self.mw._state_stamp = None
             self.data_changed.emit()
             self.mw.log_activity(
                 "Analysis", f"Analysis complete. Report saved to: {result_msg}"
@@ -571,6 +576,9 @@ class ActionsHandler(QObject):
         One report failing must not cost the user the others -- that is the
         whole point of generating them in one pass.
         """
+        # Again here: another PC may have held an order while the dialog was open.
+        if self._refuse_stale_export():
+            return
         failures = []
         for report_config in batch:
             report_type = report_config.get("report_type")
@@ -1897,6 +1905,9 @@ class ActionsHandler(QObject):
             self.mw, "Export Selected Orders", default_path, file_filter
         )
         if not file_path:
+            return
+        # Again here: another PC may have held an order while the dialog was open.
+        if self.mw.session_path and self._refuse_stale_export():
             return
 
         try:

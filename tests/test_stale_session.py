@@ -166,3 +166,41 @@ def test_a_failed_new_session_keeps_the_open_one(main_window, told, monkeypatch)
 
     assert main_window.session_path == path
     assert main_window.analysis_results_df is not None
+
+
+def test_a_hold_made_while_the_save_dialog_is_open_is_refused(
+    main_window, told, monkeypatch, tmp_path
+):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    out = tmp_path / "selection.csv"
+
+    def operator_is_choosing_a_file(*_a, **_k):
+        _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+        return str(out), ""
+
+    monkeypatch.setattr(
+        actions_module.QFileDialog, "getSaveFileName", operator_is_choosing_a_file
+    )
+
+    main_window.actions_handler.bulk_export_selection(["#1001"], "csv")
+
+    assert told == ["Another PC changed this session"]
+    assert not out.exists()
+
+
+def test_a_hold_made_while_the_reports_dialog_is_open_is_refused(
+    main_window, told, monkeypatch
+):
+    path = _open_with_state(main_window, _orders("Fulfillable", "Fulfillable"))
+    _another_pc_saves(path, _orders("Not Fulfillable", "Fulfillable"))
+    generated = []
+    monkeypatch.setattr(
+        main_window.actions_handler,
+        "_generate_single_report",
+        lambda *a: generated.append(a),
+    )
+
+    main_window.actions_handler._generate_reports([{"report_type": "packing"}], path)
+
+    assert told == ["Another PC changed this session"]
+    assert generated == []

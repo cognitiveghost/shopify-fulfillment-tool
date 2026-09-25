@@ -76,3 +76,22 @@ def test_order_counts_count_orders_not_lines(tmp_path):
         "fulfillable_orders": 1,
         "not_fulfillable_orders": 1,
     }
+
+
+def test_a_replace_blocked_by_a_reader_is_retried(tmp_path, monkeypatch):
+    # Windows refuses the replace while another PC has the file open to read.
+    real_replace = session_state.os.replace
+    calls = []
+
+    def reader_has_it_open_once(src, dst):
+        calls.append(dst)
+        if len(calls) == 1:
+            raise PermissionError("The process cannot access the file")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(session_state.os, "replace", reader_has_it_open_once)
+    monkeypatch.setattr(session_state.time, "sleep", lambda _s: None)
+
+    stamp = session_state.save_state(tmp_path, _df("Fulfillable"), None)
+
+    assert len(calls) == 2 and stamp == session_state.state_stamp(tmp_path)

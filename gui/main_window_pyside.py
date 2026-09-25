@@ -610,16 +610,9 @@ class MainWindow(QMainWindow):
             self.load_client_config(client_id)
             self.results_bridge.set_column_settings(column_settings)
 
-            # Clear currently loaded files (they're for different client)
-            self.orders_file_path = None
-            self.stock_file_path = None
-            self.orders_slot.clear()
-            self.stock_slot.clear()
-
-            # Clear session
+            # load_client_config resets too, but only when the config loads.
+            self._reset_session_state()
             self.session_path = None
-            if hasattr(self, "undo_manager"):
-                self.undo_manager.reset_for_session()
             self.update_session_info_label()
 
             # Update session browser to show this client's sessions
