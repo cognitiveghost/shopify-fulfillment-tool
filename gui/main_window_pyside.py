@@ -215,18 +215,13 @@ class MainWindow(QMainWindow):
                 )
 
                 # Reset analysis data when switching clients
-                self.analysis_results_df = None
-                self.analysis_stats = None
+                self._reset_session_state()
                 self.session_path = None
                 self.command_bar.set_state(BarState.NO_SESSION)
                 self.ui_manager._refresh_setup_panel()
                 self.setup_stack.setCurrentIndex(
                     1 if self.is_connected() and self.current_client_id else 0
                 )
-                # Clear undo history when switching clients
-                if hasattr(self, "undo_manager"):
-                    self.undo_manager.reset_for_session()
-                self._update_all_views()
 
                 # Restore inventory memory checkbox state from config
                 if hasattr(self, "inventory_memory_checkbox"):
@@ -929,6 +924,25 @@ class MainWindow(QMainWindow):
             self.file_handler.validate_file(kind)
         self.file_handler.check_files_ready()
 
+    def _reset_session_state(self):
+        """Forget the open session's orders, inputs, undo history and stamp.
+
+        Every way into a session calls this first (AUDIT-05-2); without it the
+        previous session's orders stayed loaded and exportable, and the next
+        edit saved them into the new session. Leaves session_path to the
+        caller.
+        """
+        self.analysis_results_df = None
+        self.analysis_stats = None
+        self._state_stamp = None
+        self.orders_file_path = None
+        self.stock_file_path = None
+        self.orders_slot.clear()
+        self.stock_slot.clear()
+        if hasattr(self, "undo_manager"):
+            self.undo_manager.reset_for_session()
+        self._update_all_views()
+
     def load_existing_session(self, session_path: str):
         """Load data from an existing session.
 
@@ -937,6 +951,7 @@ class MainWindow(QMainWindow):
         """
 
         try:
+            self._reset_session_state()
             # Set as current session
             self.session_path = session_path
             session_name = os.path.basename(session_path)

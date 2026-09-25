@@ -86,6 +86,8 @@ class ActionsHandler(QObject):
             finally:
                 progress.close()
 
+            # Only now: a failed create keeps the open session as it was.
+            self.mw._reset_session_state()
             self.mw.session_path = session_path
             self.mw.command_bar.set_state(BarState.SESSION)
             self.mw.ui_manager.update_session_chips()

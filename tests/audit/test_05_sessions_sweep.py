@@ -143,10 +143,6 @@ def _session_with_analysis(win, df):
     return path
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-2: opening a session with no analysis keeps the previous session's orders",
-)
 def test_opening_a_session_without_analysis_drops_the_previous_orders(main_window):
     first = _session_with_analysis(main_window, _orders("Fulfillable", "Fulfillable"))
     main_window.load_existing_session(first)
@@ -161,10 +157,6 @@ def test_opening_a_session_without_analysis_drops_the_previous_orders(main_windo
     assert main_window.analysis_results_df is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-2: New session keeps the previous session's orders loaded and exportable",
-)
 def test_a_new_session_starts_without_the_previous_orders(main_window):
     first = _session_with_analysis(main_window, _orders("Fulfillable"))
     main_window.load_existing_session(first)

@@ -89,3 +89,18 @@ def test_a_save_after_another_pc_saved_is_refused(main_window, told):
     main_window.save_session_state()
 
     assert told == ["Another PC changed this session"]
+
+
+def test_a_failed_new_session_keeps_the_open_one(main_window, told, monkeypatch):
+    from shopify_tool.session_manager import SessionManagerError
+
+    path = _open_with_state(main_window, _orders("Fulfillable"))
+
+    def refuse(_client):
+        raise SessionManagerError("share is read-only")
+
+    monkeypatch.setattr(main_window.session_manager, "create_session", refuse)
+    main_window.actions_handler.create_new_session()
+
+    assert main_window.session_path == path
+    assert main_window.analysis_results_df is not None
