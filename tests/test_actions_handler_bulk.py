@@ -347,3 +347,20 @@ def test_add_product_to_a_held_order_keeps_it_held_and_draws_nothing():
     out = mw.analysis_results_df
     assert _status(out, "#1") == {"Not Fulfillable"}
     assert _final_stock(out, "A") == 5 and _final_stock(out, "B") == 10
+
+
+def test_add_unlisted_sku_keeps_it_unlisted_and_the_order_fulfillable():
+    # X is in the orders but not the stock file: unlisted, so it never blocks.
+    df, *_ = run_analysis(_stock([("A", 5)]), _orders([("#1", "A", 1), ("#1", "X", 1)]), NO_HISTORY)
+    mw = _ledger_window(df)
+    handler = ActionsHandler(mw)
+    handler.bulk_change_status(["#1"], True)
+    assert _status(mw.analysis_results_df, "#1") == {"Fulfillable"}
+    stock_df = pd.DataFrame({"SKU": ["A"], "Stock": [5], "Product_Name": ["a"]})
+    handler._add_product_to_order(
+        {"order_number": "#1", "sku": "X", "product_name": "x", "quantity": 1}, stock_df, {}
+    )
+    out = mw.analysis_results_df
+    assert _status(out, "#1") == {"Fulfillable"}
+    assert out.loc[out["SKU"] == "X", "Final_Stock"].isna().all()
+    assert _final_stock(out, "A") == 4

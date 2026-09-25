@@ -1320,7 +1320,8 @@ class ActionsHandler(QObject):
 
         # Step 3: opening Stock for the SKU, from what the run already knows
         frame = self.mw.analysis_results_df
-        known = frame.loc[frame["SKU"].astype(str) == str(sku), "Stock"].dropna()
+        in_frame = frame["SKU"].astype(str) == str(sku)
+        known = frame.loc[in_frame, "Stock"].dropna()
         if not known.empty:
             new_row["Stock"] = known.iloc[0]
         elif not stock_row.empty and "Stock" in stock_row.columns:
@@ -1328,7 +1329,9 @@ class ActionsHandler(QObject):
         else:
             new_row["Stock"] = 0
         # Any non-null value marks the SKU as listed; the ledger rewrites it.
-        new_row["Final_Stock"] = new_row["Stock"]
+        # A SKU the run already left unlisted stays unlisted (spec §2).
+        unlisted = in_frame.any() and frame.loc[in_frame, "Final_Stock"].isna().all()
+        new_row["Final_Stock"] = float("nan") if unlisted else new_row["Stock"]
         if "Has_SKU" in new_row.index:
             new_row["Has_SKU"] = True
 
@@ -1338,7 +1341,8 @@ class ActionsHandler(QObject):
             stock_ledger.FULFILLABLE if was_fulfillable else stock_ledger.NOT_FULFILLABLE
         )
         frame = pd.concat([frame, pd.DataFrame([new_row])], ignore_index=True)
-        now_blocked = was_fulfillable and bool(stock_ledger.shortfall(frame, order_num))
+        short = stock_ledger.shortfall(frame, order_num) if was_fulfillable else []
+        now_blocked = bool(short)
         if now_blocked:
             frame.loc[
                 self._order_mask(order_num, frame), "Order_Fulfillment_Status"
@@ -1361,7 +1365,7 @@ class ActionsHandler(QObject):
         # (ADR 0007).
         text = f"Added {quantity}x {sku} to order {order_num}."
         if now_blocked:
-            text += f" It is now blocked: not enough {sku}."
+            text += f" It is now blocked: not enough {', '.join(short)}."
         self._results_toast(text)
 
         self.mw.log_activity(

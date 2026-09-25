@@ -53,7 +53,7 @@ Status is stored per line but is only ever read per order.
 
 **SKU line** — an order line that names a SKU, so it takes stock. A line
 without one (a fee, a custom item) is not a SKU line: it never blocks an
-order, never draws stock and never ships on an output.
+order and never draws stock.
 
 **Label count** — one courier label per fulfillable order, split by courier.
 What the Labels card counts.

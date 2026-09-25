@@ -403,7 +403,7 @@ def results_summary(df: pd.DataFrame) -> dict:
     if df is None or df.empty or ORDER_KEY not in df.columns:
         return {}
 
-    ready_mask = df[ORDER_KEY].astype(str).str.strip().isin(stock_ledger.fulfillable_orders(df))
+    ready_mask = stock_ledger.in_fulfillable_order(df)
     fulfillable_orders = set(df.loc[ready_mask, ORDER_KEY])
     blocked_rows = df[~df[ORDER_KEY].isin(fulfillable_orders)]
     has_sku = "SKU" in df.columns

@@ -53,6 +53,11 @@ def fulfillable_orders(df) -> set:
     return set(blocked.index[~blocked])
 
 
+def in_fulfillable_order(df) -> pd.Series:
+    """Row mask: the rows whose order is fulfillable under R1."""
+    return _keys(df).isin(fulfillable_orders(df))
+
+
 def is_fulfillable(df, order_number) -> bool:
     return _key(order_number) in fulfillable_orders(df)
 
@@ -73,21 +78,26 @@ def stock_left(df, excluding=None) -> dict:
     return {sku: float(v) for sku, v in left.items()}
 
 
-def _needs(df, order_number) -> dict:
-    rows = df[(_keys(df) == _key(order_number)) & _sku_lines(df)]
+def _needs_by_order(df) -> dict:
+    """{order key: {SKU: quantity}} for the SKU lines, in one pass."""
+    rows = df[_sku_lines(df)]
     qty = pd.to_numeric(rows["Quantity"], errors="coerce").fillna(0)
-    return qty.groupby(rows["SKU"], sort=False).sum().to_dict()
+    needs = {}
+    for (order, sku), q in qty.groupby([_keys(rows), rows["SKU"]], sort=False).sum().items():
+        needs.setdefault(order, {})[sku] = q
+    return needs
 
 
 def _short(needs: dict, left: dict) -> list:
-    return [sku for sku, need in needs.items() if sku in left and need > left[sku]]
+    return [sku for sku, need in needs.items() if sku in left and need > 0 and need > left[sku]]
 
 
 def shortfall(df, order_number) -> list:
     """SKUs Stock left can't cover for this order, its own draw released."""
     if not _has_ledger(df):
         return []
-    return _short(_needs(df, order_number), stock_left(df, excluding=order_number))
+    needs = _needs_by_order(df).get(_key(order_number), {})
+    return _short(needs, stock_left(df, excluding=order_number))
 
 
 def claim(df, order_numbers) -> tuple:
@@ -99,11 +109,12 @@ def claim(df, order_numbers) -> tuple:
     """
     already = fulfillable_orders(df)
     left = stock_left(df)
+    by_order = _needs_by_order(df) if _has_ledger(df) else {}
     covered, skipped = [], []
     for number in order_numbers:
         if _key(number) in already:
             continue
-        needs = _needs(df, number) if _has_ledger(df) else {}
+        needs = by_order.get(_key(number), {})
         if _short(needs, left):
             skipped.append(number)
             continue

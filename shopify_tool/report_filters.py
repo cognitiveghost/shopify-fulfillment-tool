@@ -22,7 +22,7 @@ import logging
 import pandas as pd
 
 from shopify_tool import rules
-from shopify_tool.stock_ledger import FULFILLABLE, fulfillable_orders
+from shopify_tool.stock_ledger import FULFILLABLE, in_fulfillable_order
 from shopify_tool.tag_manager import has_tag
 
 logger = logging.getLogger(__name__)
@@ -82,8 +82,7 @@ def fulfillable_only(df):
     ready = df["Order_Fulfillment_Status"].eq(FULFILLABLE)
     if "Order_Number" not in df.columns:
         return df[ready]
-    ships = df["Order_Number"].astype(str).str.strip().isin(fulfillable_orders(df))
-    return df[ready & ships]
+    return df[ready & in_fulfillable_order(df)]
 
 
 def _tag_mask(series, operator, value):
