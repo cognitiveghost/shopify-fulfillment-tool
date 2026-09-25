@@ -12,7 +12,7 @@ from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
-from shopify_tool import core, packing_lists, stock_export, stock_ledger
+from shopify_tool import core, packing_lists, session_state, stock_export, stock_ledger
 from shopify_tool.analysis import toggle_order_fulfillment
 from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
@@ -201,6 +201,10 @@ class ActionsHandler(QObject):
         if success:
             self.mw.analysis_results_df = df
             self.mw.analysis_stats = stats
+            # run_full_analysis just rewrote current_state.pkl; without this
+            # the first edit after every analysis is refused as stale.
+            if self.mw.session_path:
+                self.mw._state_stamp = session_state.state_stamp(self.mw.session_path)
             self.data_changed.emit()
             self.mw.log_activity(
                 "Analysis", f"Analysis complete. Report saved to: {result_msg}"

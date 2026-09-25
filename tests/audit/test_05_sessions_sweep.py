@@ -71,10 +71,15 @@ def _pc(session_path, df, session_manager=None):
     )
 
 
-def _reopen(session_path):
+def _open_on_a_pc(session_path):
+    """One PC opening the session: the loaded namespace, stamp included."""
     pc = _pc(session_path, None)
     assert MainWindow._load_session_analysis(pc, session_path)
-    return pc.analysis_results_df
+    return pc
+
+
+def _reopen(session_path):
+    return _open_on_a_pc(session_path).analysis_results_df
 
 
 # --------------------------------------------------------------------------
@@ -189,16 +194,14 @@ def test_opening_a_session_writes_nothing_into_it(main_window):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-3: a second PC's save overwrites the first PC's edits in the same session",
-)
-def test_a_hold_made_on_one_pc_survives_a_save_from_another(sessions):
+def test_a_hold_made_on_one_pc_survives_a_save_from_another(sessions, monkeypatch):
+    told = []
+    monkeypatch.setattr(main_window_module, "show_error", lambda *a, **k: told.append(a))
     path = sessions.create_session("M")
     MainWindow.save_session_state(_pc(path, _orders("Fulfillable", "Fulfillable")))
 
-    pc_a = _pc(path, _reopen(path))
-    pc_b = _pc(path, _reopen(path))
+    pc_a = _open_on_a_pc(path)
+    pc_b = _open_on_a_pc(path)
 
     pc_a.analysis_results_df.loc[0, "Order_Fulfillment_Status"] = "Not Fulfillable"
     MainWindow.save_session_state(pc_a)  # PC A holds #1001
@@ -207,6 +210,7 @@ def test_a_hold_made_on_one_pc_survives_a_save_from_another(sessions):
 
     saved = _reopen(path).set_index("Order_Number")["Order_Fulfillment_Status"]
     assert saved["#1001"] == "Not Fulfillable"
+    assert told and told[-1][1] == "Another PC changed this session"
 
 
 def test_one_pc_reopening_its_session_gets_its_last_save(sessions):
@@ -275,10 +279,6 @@ def test_packing_tools_lock_excludes_our_session_info_writes(sessions):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-5: save_session_state swallows a failed save; nobody is told the edit is lost",
-)
 def test_a_failed_save_of_an_edit_reaches_the_person(sessions, monkeypatch):
     path = sessions.create_session("M")
     told = []
@@ -303,10 +303,6 @@ def test_a_failed_save_of_an_edit_reaches_the_person(sessions, monkeypatch):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-6: Blocked column keeps the analysis-time count after statuses are edited",
-)
 def test_blocked_count_follows_edits(sessions):
     path = sessions.create_session("M")
     sessions.update_session_info(
