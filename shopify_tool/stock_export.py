@@ -1,4 +1,7 @@
+import io
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -159,7 +162,19 @@ def _write_xls(export_df, output_file) -> None:
     for row_num, (_, row) in enumerate(export_df.iterrows()):
         for col_num, value in enumerate(row):
             sheet.write(row_num + 1, col_num, value)
-    workbook.save(output_file)
+    buf = io.BytesIO()
+    workbook.save(buf)
+    # Temp file + replace: a write that fails part-way (the share drops, the
+    # ERP holds the file) never leaves a half-written export to import.
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(output_file)), suffix=".xls.tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(buf.getvalue())
+        os.replace(tmp, output_file)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def _packaging_path(output_file):
@@ -213,8 +228,11 @@ def create_stock_export(
     Returns:
         str | None: the packaging file's path when "separate" mode actually
         wrote one, so the caller can name it alongside `output_file` — it is
-        the only path the caller does not already hold. None otherwise,
-        including on failure.
+        the only path the caller does not already hold. None otherwise.
+
+    Raises:
+        Exception: any failure (a locked or unreachable file, bad data)
+        propagates, so the caller reports it instead of "Report saved".
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -333,7 +351,7 @@ def create_stock_export(
 
     except Exception:
         logger.exception(f"Error while creating stock export '{report_name}'")
-        return None
+        raise
 
 
 def merge_session_stock_exports(

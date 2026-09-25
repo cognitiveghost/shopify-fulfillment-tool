@@ -164,7 +164,6 @@ def test_requirements_pin_a_weasyprint_that_keeps_every_label():
     assert any(m and int(m.group(1)) >= 70 for m in pins)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-2: a failed stock export write is reported as success")
 def test_stock_export_write_failure_is_not_silent(tmp_path, monkeypatch):
     def locked(*_args, **_kwargs):
         raise PermissionError("file is open in the ERP")
