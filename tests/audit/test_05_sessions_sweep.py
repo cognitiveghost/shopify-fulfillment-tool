@@ -87,10 +87,6 @@ def _reopen(session_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-1: create_session rmtree()s a same-named session another PC just created",
-)
 def test_a_session_name_another_pc_just_took_is_never_deleted(sessions, monkeypatch):
     # PC A created today's session a moment ago and copied its inputs in.
     other = sessions.create_session("M")

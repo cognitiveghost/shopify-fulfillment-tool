@@ -105,14 +105,30 @@ class SessionManager:
         client_sessions_dir = self.sessions_root / f"CLIENT_{client_id}"
         client_sessions_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate unique session name
-        session_name = self._generate_unique_session_name(client_sessions_dir)
-        session_path = client_sessions_dir / session_name
+        # mkdir without exist_ok is the claim. Two PCs can derive one name
+        # from a stale listing (SMB caches it ~10 s) and only one mkdir wins;
+        # the loser takes the next number rather than touching that folder
+        # (AUDIT-05-1). Counting on from the name, not re-listing, because
+        # the listing is what was stale.
+        date, _, number = self._generate_unique_session_name(
+            client_sessions_dir
+        ).rpartition("_")
+        for n in range(int(number), int(number) + 10):
+            session_path = client_sessions_dir / f"{date}_{n}"
+            try:
+                session_path.mkdir()
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise SessionManagerError(
+                f"No free session name for CLIENT_{client_id} on {date}"
+            )
+        session_name = session_path.name
 
+        # Past this point the folder is ours, so the cleanup below can only
+        # ever remove what this call created.
         try:
-            # Create session directory
-            session_path.mkdir(parents=True)
-
             # Create subdirectories
             for subdir in self.SESSION_SUBDIRS:
                 (session_path / subdir).mkdir()

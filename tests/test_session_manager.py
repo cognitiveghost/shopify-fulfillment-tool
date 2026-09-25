@@ -36,6 +36,31 @@ class TestSessionCreation:
         n2 = int(second.name.rsplit("_", 1)[1])
         assert n2 == n1 + 1
 
+    def test_a_name_taken_since_the_listing_moves_to_the_next_number(
+        self, session_manager, monkeypatch
+    ):
+        first = session_manager.create_session("M")
+        monkeypatch.setattr(
+            session_manager, "_generate_unique_session_name", lambda _d: Path(first).name
+        )
+        second = session_manager.create_session("M")
+        assert Path(second).name.endswith("_2")
+        assert session_manager.get_session_info(first) is not None
+
+    def test_create_session_gives_up_without_deleting_anything(
+        self, session_manager, monkeypatch
+    ):
+        first = Path(session_manager.create_session("M"))
+        date = first.name.rpartition("_")[0]
+        for n in range(2, 12):
+            (first.parent / f"{date}_{n}").mkdir()
+        monkeypatch.setattr(
+            session_manager, "_generate_unique_session_name", lambda _d: first.name
+        )
+        with pytest.raises(SessionManagerError):
+            session_manager.create_session("M")
+        assert all((first.parent / f"{date}_{n}").is_dir() for n in range(1, 12))
+
     def test_session_info_initial_status_is_active(self, session_manager):
         session_path = session_manager.create_session("M")
         info = session_manager.get_session_info(session_path)
