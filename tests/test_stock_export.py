@@ -615,3 +615,21 @@ def test_failed_xls_write_leaves_the_previous_file_intact(tmp_path, monkeypatch)
         stock_export._write_xls(df, str(target))
     assert target.read_bytes() == b"previous"
     assert [p.name for p in tmp_path.iterdir()] == ["e.xls"]  # temp file cleaned up
+
+
+def test_a_locked_export_names_the_export_not_the_temp_file(tmp_path, monkeypatch):
+    import os
+
+    from shopify_tool import stock_export
+
+    target = tmp_path / "e.xls"
+
+    def locked(src, dst):
+        raise PermissionError(13, "in use", src)
+
+    monkeypatch.setattr(os, "replace", locked)
+    df = pd.DataFrame({"Артикул": ["A"], stock_export.QTY_COL: [1]})
+    with pytest.raises(PermissionError) as err:
+        stock_export._write_xls(df, str(target))
+    assert err.value.filename == str(target)
+    assert list(tmp_path.iterdir()) == []

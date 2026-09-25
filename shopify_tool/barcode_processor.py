@@ -49,13 +49,18 @@ def qr_pdf_path(barcodes_dir: Path, list_stem: str) -> Path:
     return Path(barcodes_dir) / f"{list_stem}_qr_labels.pdf"
 
 
+def barcodes_dir(session_path, list_stem: str) -> Path:
+    """The folder holding a packing list's label PDFs."""
+    return Path(session_path) / "barcodes" / list_stem
+
+
 def invalidate_label_pdfs(session_path, list_stem: str) -> list[Path]:
     """Deletes a packing list's barcode and QR label PDFs. Called whenever
     the list is regenerated: a PDF left from before could label orders the
     new list no longer holds (AUDIT-04-12)."""
-    barcodes_dir = Path(session_path) / "barcodes" / list_stem
+    folder = barcodes_dir(session_path, list_stem)
     removed = []
-    for path in (barcode_pdf_path(barcodes_dir, list_stem), qr_pdf_path(barcodes_dir, list_stem)):
+    for path in (barcode_pdf_path(folder, list_stem), qr_pdf_path(folder, list_stem)):
         if path.exists():
             path.unlink()
             removed.append(path)
@@ -260,7 +265,7 @@ def generate_barcodes_batch(
         for r in group:
             others = ", ".join(o["order_number"] for o in group if o is not r)
             r.update(success=False, safe_order_number=None,
-                     error=f"Barcode value {value} would also scan as {others}")
+                     error=f"Barcode value {value} would also scan as order(s) {others}")
             logger.error(f"Order {r['order_number']}: {r['error']}")
 
     logger.info(

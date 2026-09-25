@@ -77,3 +77,28 @@ def test_empty_list_with_its_file_open_reports_the_lock(tmp_path, monkeypatch):
     monkeypatch.setattr(ah, "show_error", shown)
     h._generate_single_report("packing_lists", _config(), tmp_path)
     assert "ALL.xlsx is open in another program" in shown.call_args[0][2]
+
+
+def test_a_locked_label_pdf_stops_the_run_before_the_list_changes(tmp_path, monkeypatch):
+    # A PDF held open in a viewer must not leave a new XLSX beside the old JSON.
+    h = _handler(_df())
+    h._generate_single_report("packing_lists", _config(), tmp_path)
+    xlsx = tmp_path / "packing_lists" / "ALL.xlsx"
+    json_file = tmp_path / "packing_lists" / "ALL.json"
+    before = (xlsx.read_bytes(), json_file.read_bytes())
+    (tmp_path / "barcodes" / "ALL").mkdir(parents=True)
+    (tmp_path / "barcodes" / "ALL" / "ALL_barcodes.pdf").write_bytes(b"old")
+    real_unlink = Path.unlink
+
+    def locked(self, *a, **k):
+        if self.suffix == ".pdf":
+            raise PermissionError(13, "in use", str(self))
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", locked)
+    shown = MagicMock()
+    monkeypatch.setattr(ah, "show_error", shown)
+    h.mw.analysis_results_df = pd.concat([_df(), _df().assign(Order_Number="#2")])
+    h._generate_single_report("packing_lists", _config(), tmp_path)
+    assert "ALL_barcodes.pdf is open in another program" in shown.call_args[0][2]
+    assert (xlsx.read_bytes(), json_file.read_bytes()) == before

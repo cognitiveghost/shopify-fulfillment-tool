@@ -168,14 +168,22 @@ def _write_xls(export_df, output_file) -> None:
     workbook.save(buf)
     # Temp file + replace: a write that fails part-way (the share drops, the
     # ERP holds the file) never leaves a half-written export to import.
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(output_file)), suffix=".xls.tmp")
+    try:
+        fd, tmp = tempfile.mkstemp(
+            dir=os.path.dirname(os.path.abspath(output_file)), prefix=".", suffix=".xls.tmp"
+        )
+    except PermissionError as e:
+        raise PermissionError(e.errno, e.strerror, output_file) from e
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(buf.getvalue())
         os.replace(tmp, output_file)
-    except BaseException:
+    except BaseException as e:
         if os.path.exists(tmp):
             os.unlink(tmp)
+        if isinstance(e, PermissionError):
+            # Name the export, not the temp file, in the "close it" message
+            raise PermissionError(e.errno, e.strerror, output_file) from e
         raise
 
 
@@ -368,10 +376,10 @@ def create_stock_export(
         # a permission on the share) must not cost them the product export too.
         packaging_file = _packaging_path(output_file)
         if packaging_rows is None:
-            # An earlier run in "separate" mode may have left one beside this
-            # export -- filenames are deterministic within a day -- and an
-            # operator importing the folder would write that packaging off a
-            # second time.
+            # A packaging file from an earlier "separate" run must not sit
+            # beside this export: importing the folder would write that
+            # packaging off a second time. prepare_export_path already moves
+            # stamped ones to old/; this covers callers passing a fixed name.
             Path(packaging_file).unlink(missing_ok=True)
             return None
 

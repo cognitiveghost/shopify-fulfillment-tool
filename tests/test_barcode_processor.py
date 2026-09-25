@@ -255,5 +255,5 @@ def test_colliding_orders_all_fail_and_name_each_other():
     by_order = {r["order_number"]: r for r in generate_barcodes_batch(orders)}
     assert by_order["#7"]["success"]
     assert not by_order["#1001/2"]["success"] and not by_order["#10012"]["success"]
-    assert "#10012" in by_order["#1001/2"]["error"]
+    assert "would also scan as order(s) #10012" in by_order["#1001/2"]["error"]
     assert by_order["#1001/2"]["safe_order_number"] is None

@@ -41,7 +41,7 @@ from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 from shared.theme import on_theme_changed
-from shopify_tool.barcode_processor import barcode_pdf_path, qr_pdf_path
+from shopify_tool.barcode_processor import barcode_pdf_path, barcodes_dir, qr_pdf_path
 from shopify_tool.report_filters import fulfillable_only
 
 IDLE_STATUS = "Select a packing list to begin"
@@ -333,7 +333,7 @@ class BarcodeGeneratorWidget(QWidget):
 
         # Setup output directory
         session_path = Path(self.mw.session_path)
-        self.barcodes_dir = session_path / "barcodes" / packing_list_name
+        self.barcodes_dir = barcodes_dir(session_path, packing_list_name)
         self.barcodes_dir.mkdir(parents=True, exist_ok=True)
 
         self.output_dir_label.setText(str(self.barcodes_dir))

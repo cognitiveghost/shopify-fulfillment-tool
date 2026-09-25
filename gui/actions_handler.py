@@ -736,6 +736,13 @@ class ActionsHandler(QObject):
             if report_type == "packing_lists":
                 self.log.info("Creating packing list using packing_lists module")
 
+                # Label PDFs from before could label orders this list no
+                # longer holds (AUDIT-04-12). First, so a PDF held open in a
+                # viewer stops the run before the XLSX and JSON can diverge.
+                barcode_processor.invalidate_label_pdfs(
+                    session_path, Path(base_filename).stem
+                )
+
                 # Use the proper packing_lists module
                 # Pass UNFILTERED DataFrame - the module will apply filters itself
                 written = packing_lists.create_packing_list(
@@ -745,11 +752,6 @@ class ActionsHandler(QObject):
                     filters=filters,
                     exclude_skus=report_config.get("exclude_skus"),
                     columns=report_config.get("columns"),
-                )
-                # Label PDFs from before could label orders this list no
-                # longer holds (AUDIT-04-12)
-                barcode_processor.invalidate_label_pdfs(
-                    session_path, Path(base_filename).stem
                 )
 
                 # ========================================
