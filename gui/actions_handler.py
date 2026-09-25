@@ -13,7 +13,14 @@ from gui.settings import SettingsWindow
 from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
-from shopify_tool import core, packing_lists, session_state, stock_export, stock_ledger
+from shopify_tool import (
+    core,
+    packing_lists,
+    report_filters,
+    session_state,
+    stock_export,
+    stock_ledger,
+)
 from shopify_tool.analysis import toggle_order_fulfillment
 from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
@@ -726,27 +733,6 @@ class ActionsHandler(QObject):
             if report_type == "packing_lists":
                 self.log.info("Creating packing list using packing_lists module")
 
-                # Get exclude_skus from config
-                exclude_skus = report_config.get("exclude_skus", [])
-                self.log.info(
-                    f"[EXCLUDE_SKUS] Raw from config: {exclude_skus} (type: {type(exclude_skus)})"
-                )
-
-                if isinstance(exclude_skus, str):
-                    exclude_skus = [
-                        s.strip() for s in exclude_skus.split(",") if s.strip()
-                    ]
-                    self.log.info(f"[EXCLUDE_SKUS] After string split: {exclude_skus}")
-                elif not isinstance(exclude_skus, list):
-                    exclude_skus = []
-                    self.log.warning(
-                        "[EXCLUDE_SKUS] Unexpected type, reset to empty list"
-                    )
-
-                self.log.info(
-                    f"[EXCLUDE_SKUS] Final value passed to packing_lists: {exclude_skus}"
-                )
-
                 # Use the proper packing_lists module
                 # Pass UNFILTERED DataFrame - the module will apply filters itself
                 packing_lists.create_packing_list(
@@ -754,7 +740,7 @@ class ActionsHandler(QObject):
                     output_file=output_file,
                     report_name=report_name,
                     filters=filters,
-                    exclude_skus=exclude_skus,
+                    exclude_skus=report_config.get("exclude_skus"),
                     columns=report_config.get("columns"),
                 )
 
@@ -772,30 +758,10 @@ class ActionsHandler(QObject):
                         self.mw.analysis_results_df, filters
                     )
 
-                    # ========================================
-                    # Apply exclude_skus to DataFrame for JSON (same as XLSX)
-                    # ========================================
-                    if isinstance(exclude_skus, str):
-                        exclude_skus_list = [
-                            s.strip() for s in exclude_skus.split(",") if s.strip()
-                        ]
-                    elif isinstance(exclude_skus, list):
-                        exclude_skus_list = exclude_skus
-                    else:
-                        exclude_skus_list = []
-
-                    # Create DataFrame without excluded SKUs (same as XLSX)
-                    json_df = filtered_df.copy()
-                    if (
-                        exclude_skus_list
-                        and not json_df.empty
-                        and "SKU" in json_df.columns
-                    ):
-                        self.log.info(
-                            f"[JSON] Excluding SKUs from JSON: {exclude_skus_list}"
-                        )
-                        json_df = json_df[~json_df["SKU"].isin(exclude_skus_list)]
-                        self.log.info(f"[JSON] Rows after exclude_skus: {len(json_df)}")
+                    # Same exclusion as the XLSX (AUDIT-04-4)
+                    json_df = report_filters.exclude_skus(
+                        filtered_df, report_config.get("exclude_skus")
+                    )
 
                     if not json_df.empty:
                         analysis_json = self._create_analysis_json(json_df)

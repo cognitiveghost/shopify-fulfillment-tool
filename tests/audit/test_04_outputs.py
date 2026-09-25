@@ -204,7 +204,6 @@ def test_regenerating_an_empty_packing_list_replaces_the_old_files(tmp_path):
     assert not (out / "ALL.xlsx").exists() or xlsx_lines(out / "ALL.xlsx") == {}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-4: exclude_skus matches differently in the XLSX and the JSON")
 def test_packing_list_json_excludes_the_same_skus_as_the_xlsx(tmp_path):
     df = frame([("#1", "7", 1, FF), ("#1", "B", 1, FF)])
     handler_for(df)._generate_single_report(

@@ -173,3 +173,29 @@ def count_matches(df, filters):
     if df is None or df.empty:
         return None
     return match_counts(apply_report_filters(fulfillable_only(df), filters))
+
+
+def parse_sku_list(skus):
+    """exclude_skus from a report config: a list, or comma-separated text
+    typed into settings. Values are stripped; blanks dropped."""
+    if isinstance(skus, str):
+        skus = skus.split(",")
+    elif not isinstance(skus, list):
+        return []
+    return [str(s).strip() for s in skus if s is not None and str(s).strip()]
+
+
+def exclude_skus(df, skus):
+    """Drops the rows whose SKU is excluded. The packing list XLSX and the
+    JSON for Packing Tool both call this, so they can't disagree
+    (AUDIT-04-4). SKUs compare through normalize_sku_for_matching, so "07"
+    also excludes 7 and "7.0". A row with no SKU is never excluded."""
+    wanted = parse_sku_list(skus)
+    if not wanted or df is None or df.empty or "SKU" not in df.columns:
+        return df
+    from shopify_tool.csv_utils import normalize_sku_for_matching
+
+    targets = {normalize_sku_for_matching(s) for s in wanted}
+    has_sku = df["SKU"].notna()
+    normalized = df["SKU"].where(has_sku, "").astype(str).map(normalize_sku_for_matching)
+    return df[~(has_sku & normalized.isin(targets))]

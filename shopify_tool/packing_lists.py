@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 
 from shopify_tool.report_filters import apply_report_filters, fulfillable_only
+from shopify_tool.report_filters import exclude_skus as exclude_skus_from
 
-from .csv_utils import normalize_sku_for_matching, order_number_sort_key
+from .csv_utils import order_number_sort_key
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -113,30 +114,10 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
         # the XLSX, the JSON and the dialog preview cannot disagree.
         filtered_orders = apply_report_filters(fulfillable_only(analysis_df), filters)
 
-        # Exclude specified SKUs if any are provided
-        if exclude_skus and not filtered_orders.empty:
-            logger.info(f"[EXCLUDE_SKUS] Received exclude list: {exclude_skus}")
-            logger.info(f"[EXCLUDE_SKUS] Total items before exclusion: {len(filtered_orders)}")
-
-            # Show unique SKUs in DataFrame for debugging
-            unique_skus = filtered_orders["SKU"].unique().tolist()
-            logger.info(f"[EXCLUDE_SKUS] Unique SKUs in DataFrame: {unique_skus[:20]}...")  # Show first 20
-
-            # Normalize both DataFrame SKU column and exclude_skus for fuzzy matching
-            # Use normalize_sku_for_matching to allow "07" to match with 7, "7", or "07"
-            # This is different from normalize_sku which preserves leading zeros for main data
-            sku_column_normalized = filtered_orders["SKU"].apply(normalize_sku_for_matching)
-            exclude_skus_normalized = [normalize_sku_for_matching(s) for s in exclude_skus]
-
-            logger.info(f"[EXCLUDE_SKUS] Normalized exclude list: {exclude_skus_normalized}")
-            logger.info(f"[EXCLUDE_SKUS] Sample normalized DataFrame SKUs: {sku_column_normalized.unique().tolist()[:20]}...")
-
-            # Create mask for items to keep (NOT in exclude list)
-            mask = ~sku_column_normalized.isin(exclude_skus_normalized)
-            filtered_orders = filtered_orders[mask]
-
-            excluded_count = (~mask).sum()
-            logger.info(f"[EXCLUDE_SKUS] Excluded {excluded_count} items. Remaining: {len(filtered_orders)}")
+        before = len(filtered_orders)
+        filtered_orders = exclude_skus_from(filtered_orders, exclude_skus)
+        if len(filtered_orders) != before:
+            logger.info(f"exclude_skus removed {before - len(filtered_orders)} rows")
 
         if filtered_orders.empty:
             logger.warning(f"Report '{report_name}': No orders found matching the criteria.")
