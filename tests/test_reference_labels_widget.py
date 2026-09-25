@@ -50,3 +50,18 @@ def test_processing_complete_sets_last_output_pdf_and_enables_print(monkeypatch)
 
     assert widget.last_output_pdf == Path("/fake/out.pdf")
     widget.print_btn.setEnabled.assert_called_with(True)
+
+
+def test_duplicate_or_missing_refs_show_a_warning_instead_of_complete(monkeypatch):
+    toast = Mock()
+    monkeypatch.setattr("gui.reference_labels_widget.toast", toast)
+
+    widget = _FakeWidget()
+    ReferenceLabelsWidget._on_processing_complete(
+        widget, _result(duplicate_refs=["100"], missing_refs=["200"])
+    )
+
+    widget.status_label.setText.assert_called_with(
+        "Check before printing: REF 100 is on more than one page; no page for REF 200."
+    )
+    toast.assert_not_called()

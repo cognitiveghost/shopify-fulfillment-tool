@@ -41,6 +41,7 @@ from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
 from shared.theme import on_theme_changed
+from shopify_tool.barcode_processor import barcode_pdf_path, barcodes_dir, qr_pdf_path
 from shopify_tool.report_filters import fulfillable_only
 
 IDLE_STATUS = "Select a packing list to begin"
@@ -332,7 +333,7 @@ class BarcodeGeneratorWidget(QWidget):
 
         # Setup output directory
         session_path = Path(self.mw.session_path)
-        self.barcodes_dir = session_path / "barcodes" / packing_list_name
+        self.barcodes_dir = barcodes_dir(session_path, packing_list_name)
         self.barcodes_dir.mkdir(parents=True, exist_ok=True)
 
         self.output_dir_label.setText(str(self.barcodes_dir))
@@ -356,7 +357,7 @@ class BarcodeGeneratorWidget(QWidget):
         # Confirm generation
         order_count = self.filtered_orders_df["Order_Number"].nunique()
 
-        output_path = self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf"
+        output_path = barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
         if output_path.exists() and not ConfirmDialog.ask(
             self,
             title=f"Replace barcodes for {self.current_packing_list}?",
@@ -392,7 +393,7 @@ class BarcodeGeneratorWidget(QWidget):
     def _generate_barcodes_worker(self):
         """Worker function for barcode generation."""
         from shopify_tool.barcode_processor import generate_barcodes_batch
-        from shopify_tool.csv_utils import order_number_sort_key
+        from shopify_tool.packing_lists import sort_for_packing_list
 
         # Filter to unique orders and calculate item count (total quantity of products)
         unique_orders = (
@@ -427,19 +428,10 @@ class BarcodeGeneratorWidget(QWidget):
                 merged_tags
             )
 
-        # Sort by natural order so sequential numbering (idx+1) matches numeric order
-        unique_orders["_order_sort"] = unique_orders["Order_Number"].apply(
-            order_number_sort_key
-        )
-        unique_orders = (
-            unique_orders.sort_values("_order_sort")
-            .drop(columns=["_order_sort"])
-            .reset_index(drop=True)
-        )
+        # Label N is the N-th order on the packing list
+        unique_orders = sort_for_packing_list(unique_orders).reset_index(drop=True)
 
-        self.log.info(
-            "Using independent sequential numbering (1, 2, 3...) in natural order"
-        )
+        self.log.info("Numbering labels in packing-list order")
 
         # Prepare barcode records with independent numbering per packing list
         results = generate_barcodes_batch(
@@ -476,7 +468,7 @@ class BarcodeGeneratorWidget(QWidget):
         )
 
         self.last_barcode_pdf = (
-            self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf"
+            barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
             if pdf_generated
             else None
         )
@@ -488,7 +480,7 @@ class BarcodeGeneratorWidget(QWidget):
         )
 
         self.last_qr_pdf = (
-            self.barcodes_dir / f"{self.current_packing_list}_qr_labels.pdf"
+            qr_pdf_path(self.barcodes_dir, self.current_packing_list)
             if qr_pdf_generated
             else None
         )
@@ -517,11 +509,11 @@ class BarcodeGeneratorWidget(QWidget):
         if self.auto_open_pdf_checkbox.isChecked():
             if pdf_generated:
                 self._open_pdf(
-                    self.barcodes_dir / f"{self.current_packing_list}_barcodes.pdf"
+                    barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
                 )
             if qr_pdf_generated:
                 self._open_pdf(
-                    self.barcodes_dir / f"{self.current_packing_list}_qr_labels.pdf"
+                    qr_pdf_path(self.barcodes_dir, self.current_packing_list)
                 )
 
         # Emit signal
@@ -561,8 +553,7 @@ class BarcodeGeneratorWidget(QWidget):
         try:
             from shopify_tool.barcode_processor import generate_code128_labels_pdf
 
-            pdf_filename = f"{self.current_packing_list}_barcodes.pdf"
-            pdf_path = self.barcodes_dir / pdf_filename
+            pdf_path = barcode_pdf_path(self.barcodes_dir, self.current_packing_list)
 
             generate_code128_labels_pdf(results, pdf_path)
 
@@ -581,8 +572,7 @@ class BarcodeGeneratorWidget(QWidget):
         try:
             from shopify_tool.barcode_processor import generate_qr_labels_pdf
 
-            pdf_filename = f"{self.current_packing_list}_qr_labels.pdf"
-            pdf_path = self.barcodes_dir / pdf_filename
+            pdf_path = qr_pdf_path(self.barcodes_dir, self.current_packing_list)
 
             generate_qr_labels_pdf(results, pdf_path)
 

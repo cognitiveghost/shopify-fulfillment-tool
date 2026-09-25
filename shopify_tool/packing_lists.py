@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 
 from shopify_tool.report_filters import apply_report_filters, fulfillable_only
+from shopify_tool.report_filters import exclude_skus as exclude_skus_from
 
-from .csv_utils import normalize_sku_for_matching, order_number_sort_key
+from .csv_utils import order_number_sort_key
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -65,6 +66,22 @@ def _expand_lot_rows(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).reset_index(drop=True)
 
 
+_COURIER_PRIORITY = {"DHL": 0, "PostOne": 1, "DPD": 2}
+
+
+def sort_for_packing_list(df):
+    """The packing list's row order: courier (DHL, PostOne, DPD, then the
+    rest), then numeric order number ("#9" before "#10"), then SKU. The
+    barcode tab numbers its labels in this same order, so label #N is the
+    N-th order on the list."""
+    keyed = df.assign(
+        _courier=df["Shipping_Provider"].map(_COURIER_PRIORITY).fillna(3),
+        _order=df["Order_Number"].apply(order_number_sort_key),
+    )
+    by = ["_courier", "_order"] + (["SKU"] if "SKU" in df.columns else [])
+    return keyed.sort_values(by=by, kind="stable").drop(columns=["_courier", "_order"])
+
+
 def create_packing_list(analysis_df, output_file, report_name="Packing List",
                         filters=None, exclude_skus=None, columns=None):
     """Creates a versatile, formatted packing list in an Excel .xlsx file.
@@ -104,6 +121,9 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
         columns (list[str], optional): The columns to print, in order. None
             keeps the default layout. Columns not present in the data are
             dropped with a warning rather than raising.
+
+    Returns:
+        int: orders written; 0 means nothing matched and no file was written.
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -113,34 +133,14 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
         # the XLSX, the JSON and the dialog preview cannot disagree.
         filtered_orders = apply_report_filters(fulfillable_only(analysis_df), filters)
 
-        # Exclude specified SKUs if any are provided
-        if exclude_skus and not filtered_orders.empty:
-            logger.info(f"[EXCLUDE_SKUS] Received exclude list: {exclude_skus}")
-            logger.info(f"[EXCLUDE_SKUS] Total items before exclusion: {len(filtered_orders)}")
-
-            # Show unique SKUs in DataFrame for debugging
-            unique_skus = filtered_orders["SKU"].unique().tolist()
-            logger.info(f"[EXCLUDE_SKUS] Unique SKUs in DataFrame: {unique_skus[:20]}...")  # Show first 20
-
-            # Normalize both DataFrame SKU column and exclude_skus for fuzzy matching
-            # Use normalize_sku_for_matching to allow "07" to match with 7, "7", or "07"
-            # This is different from normalize_sku which preserves leading zeros for main data
-            sku_column_normalized = filtered_orders["SKU"].apply(normalize_sku_for_matching)
-            exclude_skus_normalized = [normalize_sku_for_matching(s) for s in exclude_skus]
-
-            logger.info(f"[EXCLUDE_SKUS] Normalized exclude list: {exclude_skus_normalized}")
-            logger.info(f"[EXCLUDE_SKUS] Sample normalized DataFrame SKUs: {sku_column_normalized.unique().tolist()[:20]}...")
-
-            # Create mask for items to keep (NOT in exclude list)
-            mask = ~sku_column_normalized.isin(exclude_skus_normalized)
-            filtered_orders = filtered_orders[mask]
-
-            excluded_count = (~mask).sum()
-            logger.info(f"[EXCLUDE_SKUS] Excluded {excluded_count} items. Remaining: {len(filtered_orders)}")
+        before = len(filtered_orders)
+        filtered_orders = exclude_skus_from(filtered_orders, exclude_skus)
+        if len(filtered_orders) != before:
+            logger.info(f"exclude_skus removed {before - len(filtered_orders)} rows")
 
         if filtered_orders.empty:
             logger.warning(f"Report '{report_name}': No orders found matching the criteria.")
-            return
+            return 0
 
         logger.info(f"Found {filtered_orders['Order_Number'].nunique()} orders for the report.")
 
@@ -159,14 +159,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
                 logger.warning("Neither Warehouse_Name nor Product_Name found, using empty string")
                 filtered_orders["Warehouse_Name"] = ""
 
-        # Sort by provider priority, then numeric order number, then SKU.
-        # order_number_sort_key avoids lexicographic issues ("#9" vs "#10").
-        provider_map = {"DHL": 0, "PostOne": 1, "DPD": 2}
-        filtered_orders = filtered_orders.copy()
-        filtered_orders["sort_priority"] = filtered_orders["Shipping_Provider"].map(provider_map).fillna(3)
-        filtered_orders["_order_sort"] = filtered_orders["Order_Number"].apply(order_number_sort_key)
-        sorted_list = filtered_orders.sort_values(by=["sort_priority", "_order_sort", "SKU"])
-        sorted_list = sorted_list.drop(columns=["_order_sort"])
+        sorted_list = sort_for_packing_list(filtered_orders)
 
         # Detect whether lot tracking data is present
         has_lot_details = (
@@ -178,46 +171,39 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
             # Expand lot rows BEFORE destination-country deduplication so the
             # dedup correctly picks only the first row of each (now expanded) order
             sorted_list = _expand_lot_rows(sorted_list)
-            sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
-                ~sorted_list["Order_Number"].duplicated(), ""
-            )
-            columns_for_print = [
-                "Destination_Country",
-                "Order_Number",
-                "Repeat",
-                "SKU",
-                "Warehouse_Name",
-                "Quantity",
-                "Lot_Expiry",
-                "Lot_Batch",
-                "Shipping_Provider",
-            ]
-        else:
-            # Show destination country only for the first item of an order
-            sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
-                ~sorted_list["Order_Number"].duplicated(), ""
-            )
-            default_columns = [
-                "Destination_Country",
-                "Order_Number",
-                "Repeat",
-                "SKU",
-                "Warehouse_Name",  # From stock file - actual warehouse product names (or Product_Name fallback)
-                "Quantity",
-                "Shipping_Provider",
-            ]
-            if columns:
-                # Repeat is derived below, so it is always available.
-                available = {*sorted_list.columns, "Repeat"}
-                columns_for_print = [c for c in columns if c in available]
-                missing = [c for c in columns if c not in available]
-                if missing:
-                    logger.warning(f"Configured columns not in the data, skipped: {missing}")
-                if not columns_for_print:
-                    logger.warning("No configured column exists in the data; using the default layout")
-                    columns_for_print = default_columns
-            else:
+        # Show destination country only for the first item of an order
+        sorted_list["Destination_Country"] = sorted_list["Destination_Country"].where(
+            ~sorted_list["Order_Number"].duplicated(), ""
+        )
+
+        default_columns = [
+            "Destination_Country",
+            "Order_Number",
+            "Repeat",
+            "SKU",
+            "Warehouse_Name",  # From stock file - actual warehouse product names (or Product_Name fallback)
+            "Quantity",
+            *(["Lot_Expiry", "Lot_Batch"] if has_lot_details else []),
+            "Shipping_Provider",
+        ]
+        if columns:
+            wanted = list(columns)
+            if has_lot_details:
+                # Lot columns travel with Quantity in a configured layout too
+                missing_lot = [c for c in ("Lot_Expiry", "Lot_Batch") if c not in wanted]
+                at = wanted.index("Quantity") + 1 if "Quantity" in wanted else len(wanted)
+                wanted[at:at] = missing_lot
+            # Repeat is derived below, so it is always available.
+            available = {*sorted_list.columns, "Repeat"}
+            columns_for_print = [c for c in wanted if c in available]
+            missing = [c for c in wanted if c not in available]
+            if missing:
+                logger.warning(f"Configured columns not in the data, skipped: {missing}")
+            if not columns_for_print:
+                logger.warning("No configured column exists in the data; using the default layout")
                 columns_for_print = default_columns
+        else:
+            columns_for_print = default_columns
 
         # Repeat mark: first row of an order any of whose rows carries the
         # note. Same rule as gui.pandas_model.is_repeat, inlined because
@@ -335,6 +321,7 @@ def create_packing_list(analysis_df, output_file, report_name="Packing List",
             worksheet.fit_to_pages(1, 0)  # Fit to 1 page wide
 
         logger.info(f"Report '{report_name}' created successfully.")
+        return int(sorted_list["Order_Number"].nunique())
 
     except Exception:
         logger.exception("ERROR while creating packing list")

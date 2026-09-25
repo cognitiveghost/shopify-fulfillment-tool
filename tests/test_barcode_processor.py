@@ -229,3 +229,31 @@ class TestGenerateQrLabelsPdfIntegration:
         assert result == output_pdf
         reader = pypdf.PdfReader(str(output_pdf))
         assert len(reader.pages) == 1
+
+
+def test_non_ascii_order_number_is_refused():
+    import pytest
+
+    from shopify_tool.barcode_processor import (
+        InvalidOrderNumberError,
+        sanitize_order_number,
+    )
+
+    with pytest.raises(InvalidOrderNumberError):
+        sanitize_order_number("#Поръчка1")
+
+
+def test_colliding_orders_all_fail_and_name_each_other():
+    import pandas as pd
+
+    from shopify_tool.barcode_processor import generate_barcodes_batch
+
+    orders = pd.DataFrame({
+        "Order_Number": ["#1001/2", "#10012", "#7"], "Shipping_Provider": "DHL",
+        "Destination_Country": "BG", "Internal_Tags": "[]", "item_count": 1,
+    })
+    by_order = {r["order_number"]: r for r in generate_barcodes_batch(orders)}
+    assert by_order["#7"]["success"]
+    assert not by_order["#1001/2"]["success"] and not by_order["#10012"]["success"]
+    assert "would also scan as order(s) #10012" in by_order["#1001/2"]["error"]
+    assert by_order["#1001/2"]["safe_order_number"] is None

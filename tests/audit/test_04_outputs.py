@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pypdf
 import pytest
-import weasyprint
 from blabel import LabelWriter
 from reportlab.pdfgen import canvas
 
@@ -127,28 +126,18 @@ def mapping_csv(path, rows):
 # --- Findings ---------------------------------------------------------------
 
 
-# WeasyPrint 69.0 stops paginating after a label whose tag is empty; 70.0
-# does not. Release builds 1.9.9.5-1.9.10.2 bundled 69.0, 1.9.10.3 on bundle
-# 70.0. The page-count tests fail only where the bug is present; the app's
-# own share of AUDIT-04-1 (empty tag, no page check, no pin) fails everywhere.
-WEASYPRINT_DROPS_PAGES = weasyprint.__version__.startswith("69.")
-
-
-@pytest.mark.xfail(WEASYPRINT_DROPS_PAGES, strict=True, reason="AUDIT-04-1: WeasyPrint 69 drops labels after an untagged order")
 def test_barcode_pdf_has_a_page_for_every_label(tmp_path):
     out = generate_code128_labels_pdf(
         [label("#1", "BOX"), label("#2", ""), label("#3", "BOX")], tmp_path / "b.pdf")
     assert pdf_pages(out) == 3
 
 
-@pytest.mark.xfail(WEASYPRINT_DROPS_PAGES, strict=True, reason="AUDIT-04-1: WeasyPrint 69 drops labels after an untagged order")
 def test_qr_pdf_has_a_page_for_every_label(tmp_path):
     out = generate_qr_labels_pdf(
         [label("#1", "BOX"), label("#2", ""), label("#3", "BOX")], tmp_path / "q.pdf")
     assert pdf_pages(out) == 3
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: an order with no internal tags is labelled with an empty tag, not N/A")
 def test_orders_without_internal_tags_are_labelled_na():
     # The barcode tab's own path: tags merged per order, then batched.
     orders = pd.DataFrame({
@@ -159,7 +148,6 @@ def test_orders_without_internal_tags_are_labelled_na():
     assert [r["tag"] for r in generate_barcodes_batch(orders)] == ["N/A", "N/A"]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: a label PDF with fewer pages than labels is reported as generated")
 def test_label_pdf_with_missing_pages_is_an_error(tmp_path, monkeypatch):
     buf = BytesIO()
     one_page = canvas.Canvas(buf)
@@ -170,14 +158,12 @@ def test_label_pdf_with_missing_pages_is_an_error(tmp_path, monkeypatch):
         generate_code128_labels_pdf([label("#1"), label("#2")], tmp_path / "b.pdf")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-1: requirements.txt lets a label-dropping WeasyPrint in")
 def test_requirements_pin_a_weasyprint_that_keeps_every_label():
     lines = (Path(__file__).parents[2] / "requirements.txt").read_text().splitlines()
     pins = [re.search(r"weasyprint\s*>=\s*(\d+)", ln, re.IGNORECASE) for ln in lines]
     assert any(m and int(m.group(1)) >= 70 for m in pins)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-2: a failed stock export write is reported as success")
 def test_stock_export_write_failure_is_not_silent(tmp_path, monkeypatch):
     def locked(*_args, **_kwargs):
         raise PermissionError("file is open in the ERP")
@@ -187,7 +173,6 @@ def test_stock_export_write_failure_is_not_silent(tmp_path, monkeypatch):
         create_stock_export(frame([("#1", "A", 1, FF)]), str(tmp_path / "e.xls"))
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-3: an empty packing list leaves the previous XLSX/JSON in place")
 def test_regenerating_an_empty_packing_list_replaces_the_old_files(tmp_path):
     df = frame([("#1", "A", 1, FF), ("#2", "B", 2, FF)])
     handler = handler_for(df)
@@ -204,7 +189,6 @@ def test_regenerating_an_empty_packing_list_replaces_the_old_files(tmp_path):
     assert not (out / "ALL.xlsx").exists() or xlsx_lines(out / "ALL.xlsx") == {}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-4: exclude_skus matches differently in the XLSX and the JSON")
 def test_packing_list_json_excludes_the_same_skus_as_the_xlsx(tmp_path):
     df = frame([("#1", "7", 1, FF), ("#1", "B", 1, FF)])
     handler_for(df)._generate_single_report(
@@ -213,7 +197,6 @@ def test_packing_list_json_excludes_the_same_skus_as_the_xlsx(tmp_path):
     assert json_lines(out / "ALL.json") == xlsx_lines(out / "ALL.xlsx")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-5: distinct order numbers sanitise to the same barcode value")
 def test_distinct_orders_never_share_a_barcode_value():
     orders = pd.DataFrame({
         "Order_Number": ["#1001/2", "#1001 2", "#10012"], "Shipping_Provider": "DHL",
@@ -236,7 +219,6 @@ def test_stock_export_never_writes_off_part_of_an_order(tmp_path):
     assert export_totals(tmp_path / "e.xls") == {"C": 1}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-7: name fallback is a substring match, first CSV row wins")
 def test_name_fallback_picks_the_exact_customer(tmp_path):
     mapping = load_csv_mapping(mapping_csv(tmp_path / "m.csv", [
         ("", "", "100", "Ivan Petrov"),
@@ -246,7 +228,6 @@ def test_name_fallback_picks_the_exact_customer(tmp_path):
     assert match_reference(page, mapping)["ref"] == "200"
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-7: two customers with one name share whichever reference was read last")
 def test_name_fallback_refuses_an_ambiguous_name(tmp_path):
     mapping = load_csv_mapping(mapping_csv(tmp_path / "m.csv", [
         ("", "", "100", "Maria Ivanova"),
@@ -255,7 +236,6 @@ def test_name_fallback_refuses_an_ambiguous_name(tmp_path):
     assert match_reference("Recipient:\nMaria Ivanova", mapping) is None
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-8: a reference stamped on two pages is not reported")
 def test_reference_run_reports_a_reference_on_two_pages(tmp_path):
     pdf = text_pdf(tmp_path / "in.pdf", ["P1234567890 A", "P1234567890 B"])
     csv_path = mapping_csv(tmp_path / "m.csv", [("P1234567890", "", "100", "Ann Lee")])
@@ -265,7 +245,6 @@ def test_reference_run_reports_a_reference_on_two_pages(tmp_path):
     assert result.get("duplicate_refs") == ["100"]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-8: a reference with no courier page is not reported")
 def test_reference_run_reports_a_reference_without_a_page(tmp_path):
     pdf = text_pdf(tmp_path / "in.pdf", ["P1234567890"])
     csv_path = mapping_csv(tmp_path / "m.csv", [
@@ -278,7 +257,6 @@ def test_reference_run_reports_a_reference_without_a_page(tmp_path):
     assert result.get("missing_refs") == ["200"]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-9: a page whose stamp failed is still counted as matched")
 def test_unstamped_page_is_not_counted_as_matched(tmp_path, monkeypatch):
     def broken(*_args, **_kwargs):
         raise RuntimeError("overlay failed")
@@ -291,7 +269,6 @@ def test_unstamped_page_is_not_counted_as_matched(tmp_path, monkeypatch):
     assert process_reference_labels(str(pdf), str(csv_path), str(out))["matched"] == 0
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-10: configured columns are ignored when lot tracking is active")
 def test_configured_columns_apply_with_lot_tracking(tmp_path):
     df = frame([("#1", "A", 2, FF)])
     df["Lot_Details"] = [[{"qty_allocated": 2, "expiry": "2027-01", "batch": "L1"}]]
@@ -299,7 +276,6 @@ def test_configured_columns_apply_with_lot_tracking(tmp_path):
     assert "Destination_Country" not in pd.read_excel(tmp_path / "p.xlsx").columns
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-04-11: tracking-shaped references sort by an embedded digit run")
 def test_tracking_shaped_reference_sorts_after_numeric_references():
     pages = [{"ref": r, "original_order": i} for i, r in enumerate(["#1002", "HW1ABC2DEF", "#1001"])]
     assert [p["ref"] for p in sort_pages_by_reference(pages)] == ["#1001", "#1002", "HW1ABC2DEF"]

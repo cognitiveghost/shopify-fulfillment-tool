@@ -330,6 +330,20 @@ matched courier page, carrying the REF number and its barcode. The courier
 content is shrunk to make room for it, so a stamped label is smaller than the
 courier's original on purpose.
 
+**Label number** — the #N on a barcode or QR label: its order's position on
+the packing list the labels were generated from, courier first, as the list
+is printed. Not the order number's rank.
+
+**Name fallback** — matching a courier page to a REF by the recipient's name,
+used only when no PostOne ID or tracking number matches. It counts only when
+exactly one CSV name appears on the page as whole words and that name carries
+exactly one REF. A name-fallback match is always **unverified**.
+
+**Archived export** — an earlier stock export of the same report, moved to
+`stock_exports/old/` when the report is exported again. Only the newest
+export stays in `stock_exports/`, so importing the folder never writes stock
+off twice.
+
 **Fold** — a closed row that states the current values of the controls it
 hides. It is opened to change a value, never to check one. Distinguished from
 an **overflow**, which holds actions rather than values.

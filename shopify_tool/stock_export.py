@@ -1,4 +1,9 @@
+import io
 import logging
+import os
+import re
+import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -159,7 +164,55 @@ def _write_xls(export_df, output_file) -> None:
     for row_num, (_, row) in enumerate(export_df.iterrows()):
         for col_num, value in enumerate(row):
             sheet.write(row_num + 1, col_num, value)
-    workbook.save(output_file)
+    buf = io.BytesIO()
+    workbook.save(buf)
+    # Temp file + replace: a write that fails part-way (the share drops, the
+    # ERP holds the file) never leaves a half-written export to import.
+    try:
+        fd, tmp = tempfile.mkstemp(
+            dir=os.path.dirname(os.path.abspath(output_file)), prefix=".", suffix=".xls.tmp"
+        )
+    except PermissionError as e:
+        raise PermissionError(e.errno, e.strerror, output_file) from e
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(buf.getvalue())
+        os.replace(tmp, output_file)
+    except BaseException as e:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        if isinstance(e, PermissionError):
+            # Name the export, not the temp file, in the "close it" message
+            raise PermissionError(e.errno, e.strerror, output_file) from e
+        raise
+
+
+_DATESTAMP_SUFFIX = re.compile(r"_\d{4}-\d{2}-\d{2}$")
+
+
+def prepare_export_path(base_path, now=None):
+    """The file a new export of this report goes to: <stem>_YYYY-MM-DD_HHMM.xls
+    beside the configured name. Every earlier version of the same report,
+    and its packaging file, is moved to old/ first, so the folder only ever
+    holds one current export and importing it can't write stock off twice.
+    A move that fails (the ERP holds the file) raises, and nothing new is
+    written."""
+    base = Path(base_path)
+    stem = _DATESTAMP_SUFFIX.sub("", base.stem)
+    stamp = (now or datetime.now().astimezone()).strftime("%Y-%m-%d_%H%M")
+    earlier = re.compile(
+        rf"^{re.escape(stem)}(_\d{{4}}-\d{{2}}-\d{{2}}(_\d{{4}})?)?(_packaging)?\.xls$",
+        re.IGNORECASE,
+    )
+    if base.parent.is_dir():
+        versions = [p for p in base.parent.iterdir() if p.is_file() and earlier.match(p.name)]
+        if versions:
+            old = base.parent / "old"
+            old.mkdir(exist_ok=True)
+            for p in versions:
+                os.replace(p, old / p.name)
+                logger.info(f"Moved earlier export {p.name} to old/")
+    return str(base.with_name(f"{stem}_{stamp}.xls"))
 
 
 def _packaging_path(output_file):
@@ -213,8 +266,11 @@ def create_stock_export(
     Returns:
         str | None: the packaging file's path when "separate" mode actually
         wrote one, so the caller can name it alongside `output_file` — it is
-        the only path the caller does not already hold. None otherwise,
-        including on failure.
+        the only path the caller does not already hold. None otherwise.
+
+    Raises:
+        Exception: any failure (a locked or unreachable file, bad data)
+        propagates, so the caller reports it instead of "Report saved".
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -320,10 +376,10 @@ def create_stock_export(
         # a permission on the share) must not cost them the product export too.
         packaging_file = _packaging_path(output_file)
         if packaging_rows is None:
-            # An earlier run in "separate" mode may have left one beside this
-            # export -- filenames are deterministic within a day -- and an
-            # operator importing the folder would write that packaging off a
-            # second time.
+            # A packaging file from an earlier "separate" run must not sit
+            # beside this export: importing the folder would write that
+            # packaging off a second time. prepare_export_path already moves
+            # stamped ones to old/; this covers callers passing a fixed name.
             Path(packaging_file).unlink(missing_ok=True)
             return None
 
@@ -333,7 +389,7 @@ def create_stock_export(
 
     except Exception:
         logger.exception(f"Error while creating stock export '{report_name}'")
-        return None
+        raise
 
 
 def merge_session_stock_exports(

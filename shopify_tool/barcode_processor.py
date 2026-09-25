@@ -41,6 +41,32 @@ class BarcodeGenerationError(BarcodeProcessorError):
     """Error during barcode generation."""
 
 
+def barcode_pdf_path(barcodes_dir: Path, list_stem: str) -> Path:
+    return Path(barcodes_dir) / f"{list_stem}_barcodes.pdf"
+
+
+def qr_pdf_path(barcodes_dir: Path, list_stem: str) -> Path:
+    return Path(barcodes_dir) / f"{list_stem}_qr_labels.pdf"
+
+
+def barcodes_dir(session_path, list_stem: str) -> Path:
+    """The folder holding a packing list's label PDFs."""
+    return Path(session_path) / "barcodes" / list_stem
+
+
+def invalidate_label_pdfs(session_path, list_stem: str) -> list[Path]:
+    """Deletes a packing list's barcode and QR label PDFs. Called whenever
+    the list is regenerated: a PDF left from before could label orders the
+    new list no longer holds (AUDIT-04-12)."""
+    folder = barcodes_dir(session_path, list_stem)
+    removed = []
+    for path in (barcode_pdf_path(folder, list_stem), qr_pdf_path(folder, list_stem)):
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    return removed
+
+
 # === UTILITY FUNCTIONS ===
 
 def sanitize_order_number(order_number: str) -> str:
@@ -62,6 +88,11 @@ def sanitize_order_number(order_number: str) -> str:
     """
     if not order_number:
         raise InvalidOrderNumberError("Order number cannot be empty")
+
+    if not order_number.isascii():
+        raise InvalidOrderNumberError(
+            f"Order number '{order_number}' has characters a Code-128 barcode can't carry"
+        )
 
     clean = ''.join(c for c in order_number if c.isalnum() or c in ['-', '_', '#'])
 
@@ -215,11 +246,27 @@ def generate_barcodes_batch(
             "sequential_num": sequential_num,
             "courier": courier,
             "country": country if country else "N/A",
-            "tag": format_tags_for_barcode(tag) if tag else "N/A",
+            "tag": format_tags_for_barcode(tag) or "N/A",
             "item_count": item_count,
             "success": True,
             "error": None
         })
+
+    # Distinct order numbers that encode to one value would scan as each
+    # other, here and in Packing Tool, which normalises harder still.
+    # Refuse all of them rather than let a scan pick one (AUDIT-04-5).
+    by_value: dict[str, list[dict]] = {}
+    for r in results:
+        if r["success"]:
+            by_value.setdefault(r["safe_order_number"], []).append(r)
+    for value, group in by_value.items():
+        if len(group) < 2:
+            continue
+        for r in group:
+            others = ", ".join(o["order_number"] for o in group if o is not r)
+            r.update(success=False, safe_order_number=None,
+                     error=f"Barcode value {value} would also scan as order(s) {others}")
+            logger.error(f"Order {r['order_number']}: {r['error']}")
 
     logger.info(
         f"Batch preparation complete: {sum(r['success'] for r in results)}/{total_orders} successful"
@@ -228,6 +275,18 @@ def generate_barcodes_batch(
 
 
 # === PDF RENDERING ===
+
+def _check_page_count(pdf_bytes: bytes, expected: int) -> None:
+    """Raises unless the rendered PDF has one page per label. A renderer
+    that drops pages (WeasyPrint 69) must fail loudly, not print short."""
+    from io import BytesIO
+
+    import pypdf
+
+    pages = len(pypdf.PdfReader(BytesIO(pdf_bytes)).pages)
+    if pages != expected:
+        raise BarcodeGenerationError(f"Label PDF has {pages} pages for {expected} labels")
+
 
 def generate_code128_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Path:
     """
@@ -271,6 +330,7 @@ def generate_code128_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) 
             label_tools=label_tools,
         )
         pdf_bytes = writer.write_labels(records, target="@memory")
+        _check_page_count(pdf_bytes, len(records))
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
         output_pdf.write_bytes(pdf_bytes)
     except Exception as e:
@@ -323,6 +383,7 @@ def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Pa
             label_tools=label_tools,
         )
         pdf_bytes = writer.write_labels(records, target="@memory")
+        _check_page_count(pdf_bytes, len(records))
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
         output_pdf.write_bytes(pdf_bytes)
     except Exception as e:

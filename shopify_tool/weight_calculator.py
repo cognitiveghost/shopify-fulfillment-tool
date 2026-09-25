@@ -10,6 +10,8 @@ Physical fit check:
       - Box L×W must fit the maximum footprint of any single item
       - Box H must fit the sum of all items' thinnest dimensions (stacked height)
     For SKUs with no_packaging=True: they are excluded from box selection.
+    Items with no configured dimensions are ignored for box selection;
+    UNKNOWN_DIMS only when none have dimensions.
 """
 
 import logging
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Sentinel values used in Order_Min_Box column
 NO_BOX_NEEDED = "NO_BOX_NEEDED"  # all items have no_packaging=True
 NO_BOX_FITS = "NO_BOX_FITS"      # items have dimensions but no box is large enough
-UNKNOWN_DIMS = "UNKNOWN_DIMS"     # some SKUs have no dimensions configured
+UNKNOWN_DIMS = "UNKNOWN_DIMS"     # no item in the order has dimensions configured (or there are no products)
 
 
 def calc_sku_volumetric_weight(sku: str, weight_config: dict) -> float:
@@ -175,7 +177,9 @@ def find_min_box_for_order(order_df: pd.DataFrame, weight_config: dict) -> str:
     Returns:
     - Box name (str) if a fitting box is found
     - NO_BOX_NEEDED if all items have no_packaging=True
-    - UNKNOWN_DIMS if some items have no dimensions configured
+    - UNKNOWN_DIMS if no item has dimensions configured. Items without
+      dimensions are otherwise ignored, and the box is chosen from the items
+      that have them (owner decision, audit 04 section 5).
     - NO_BOX_FITS if no configured box fits all items
     """
     products = weight_config.get("products", {})
@@ -263,7 +267,8 @@ def enrich_dataframe_with_weights(df: pd.DataFrame, weight_config: dict) -> pd.D
     - Order_Volumetric_Weight: total vol weight for the entire order (sum of qty*vol_weight)
     - All_No_Packaging: True if all items in the order have no_packaging flag
     - Order_Min_Box: name of the smallest box that physically fits all order items
-                     (or NO_BOX_NEEDED / NO_BOX_FITS / UNKNOWN_DIMS)
+                     (or NO_BOX_NEEDED / NO_BOX_FITS / UNKNOWN_DIMS);
+                     items without dimensions are ignored
 
     Rule Engine triggers available:
     - order_volumetric_weight  (numeric)

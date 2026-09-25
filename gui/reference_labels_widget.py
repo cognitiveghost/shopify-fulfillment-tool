@@ -36,6 +36,7 @@ from gui.components.print_options import LABEL_WIDTH
 from gui.pdf_printing import load_print_settings, print_pdf
 from gui.theme_manager import get_theme_manager
 from gui.worker import Worker
+from shopify_tool.pdf_processor import reference_run_warning
 
 
 class ReferenceLabelsWidget(QWidget):
@@ -429,11 +430,7 @@ class ReferenceLabelsWidget(QWidget):
             result: Processing result dict
         """
         self.progress_bar.setValue(100)
-        self.status_label.setText("Processing complete!")
         theme = get_theme_manager().get_current_theme()
-        self.status_label.setStyleSheet(
-            f"color: {theme.status_success}; font-weight: bold;"
-        )
 
         self.last_output_pdf = Path(result["output_file"])
         self.print_btn.setEnabled(True)
@@ -443,12 +440,26 @@ class ReferenceLabelsWidget(QWidget):
             f"{result['unmatched']} unmatched"
         )
 
-        # Show success message
-        toast(
-            self,
-            f"Processed {Path(result['output_file']).name} "
-            f"({result['matched']} matched, {result['unmatched']} unmatched).",
-        )
+        warning = reference_run_warning(result)
+        if warning:
+            # Duplicate or missing REFs: keep it on screen, not in a toast
+            self.status_label.setText(warning)
+            self.status_label.setStyleSheet(
+                f"color: {theme.status_warning}; font-weight: bold;"
+            )
+        else:
+            self.status_label.setText("Processing complete!")
+            self.status_label.setStyleSheet(
+                f"color: {theme.status_success}; font-weight: bold;"
+            )
+            by_name = result.get("name_matched", 0)
+            toast(
+                self,
+                f"Processed {Path(result['output_file']).name} "
+                f"({result['matched']} matched, {result['unmatched']} unmatched"
+                + (f", {by_name} matched by name only" if by_name else "")
+                + ").",
+            )
 
         # Auto-open if checkbox enabled
         if self.auto_open_checkbox.isChecked():

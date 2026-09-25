@@ -59,3 +59,25 @@ class TestOrderMinBoxWithNoBoxesConfigured:
         result = enrich_dataframe_with_weights(df, _weight_config())
 
         assert result.loc[0, "Order_Min_Box"] == NO_BOX_FITS
+
+
+class TestItemsWithoutDimensionsAreIgnoredForBoxSelection:
+    """Owner decision (audit 04 section 5): the box is chosen from the items
+    that have dimensions; UNKNOWN_DIMS only when none do."""
+
+    def _config(self):
+        return {
+            "volumetric_divisor": 6000,
+            "products": {"SIZED": {"length_cm": 5, "width_cm": 5, "height_cm": 5}},
+            "boxes": [{"name": "S", "length_cm": 10, "width_cm": 10, "height_cm": 10}],
+        }
+
+    def test_box_is_chosen_from_the_sized_items(self):
+        order = pd.DataFrame([{"SKU": "SIZED", "Quantity": 1}, {"SKU": "UNSIZED", "Quantity": 1}])
+        assert find_min_box_for_order(order, self._config()) == "S"
+
+    def test_order_of_only_unsized_items_is_unknown_dims(self):
+        from shopify_tool.weight_calculator import UNKNOWN_DIMS
+
+        order = pd.DataFrame([{"SKU": "UNSIZED", "Quantity": 1}])
+        assert find_min_box_for_order(order, self._config()) == UNKNOWN_DIMS

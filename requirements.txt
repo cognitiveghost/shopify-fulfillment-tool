@@ -50,6 +50,7 @@ Pillow>=10.0.0         # Image processing for barcode label composition
 # Label Rendering (blabel HTML/Jinja2 templates - barcode + QR labels)
 # -----------------------------------------------------------------
 blabel>=0.1.7           # HTML/Jinja2 template-based label rendering (WeasyPrint backend)
+weasyprint>=70           # 69.x drops every label after one with an empty field (AUDIT-04-1)
 qrcode>=7.4              # QR code generation (SVG vector output via blabel templates)
 
 # Direct Label Printing (raw ZPL for Citizen CL-E300, matches barcode_tool)

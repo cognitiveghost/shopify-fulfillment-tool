@@ -13,6 +13,7 @@ import csv
 import logging
 import re
 import time
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from io import BytesIO
@@ -129,8 +130,6 @@ def process_reference_labels(
             progress_callback(10, 100, "Processing pages...")
 
         page_data_list = []
-        matched = 0
-        unmatched = 0
 
         page_texts = _page_texts(pdf_path, total_pages)
 
@@ -148,10 +147,8 @@ def process_reference_labels(
             ref_data = match_reference(page_texts[i], mapping)
 
             if ref_data:
-                matched += 1
                 logger.debug(f"Page {i+1} matched: {ref_data['ref']}")
             else:
-                unmatched += 1
                 logger.debug(f"Page {i+1} not matched")
 
             # Store page data
@@ -159,10 +156,9 @@ def process_reference_labels(
                 'page': page,
                 'ref': ref_data['ref'] if ref_data else None,
                 'original_order': i,
-                'verified': ref_data['verified'] if ref_data else False
+                'verified': ref_data['verified'] if ref_data else False,
+                'method': ref_data['method'] if ref_data else None,
             })
-
-        logger.info(f"Matching complete: {matched} matched, {unmatched} unmatched")
 
         # Step 4: Sort pages by reference number
         if progress_callback:
@@ -176,18 +172,27 @@ def process_reference_labels(
 
         out = pikepdf.new()
 
+        stamped_refs = []
+        name_matched = 0
         for page_data in sorted_pages:
-            page = page_data['page']
-            ref = page_data['ref']
-
+            page, ref = page_data['page'], page_data['ref']
             if ref:
                 try:
                     _stamp_reference(out, page, ref)
+                    stamped_refs.append(ref)
+                    name_matched += page_data['method'] == 'name'
                     continue
                 except Exception:
-                    logger.exception(f"Failed to add overlay for ref {ref}")
-
+                    logger.exception(f"Failed to add overlay for ref {ref}; page kept unstamped")
             out.pages.append(page)
+
+        # "matched" is pages actually stamped, not pages a REF was found for
+        matched = len(stamped_refs)
+        unmatched = total_pages - matched
+        counts = Counter(stamped_refs)
+        duplicate_refs = sorted((r for r, n in counts.items() if n > 1), key=reference_sort_key)
+        missing_refs = sorted(mapping['refs'] - set(counts), key=reference_sort_key)
+        logger.info(f"Matching complete: {matched} matched, {unmatched} unmatched")
 
         # Step 6: Save output PDF
         if progress_callback:
@@ -212,6 +217,9 @@ def process_reference_labels(
             'pages_processed': total_pages,
             'matched': matched,
             'unmatched': unmatched,
+            'duplicate_refs': duplicate_refs,
+            'missing_refs': missing_refs,
+            'name_matched': name_matched,
             'processing_time': processing_time
         }
 
@@ -302,23 +310,18 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
         csv_path: Path to CSV file
 
     Returns:
-        Dict with three mappings:
+        Dict with four mappings:
         {
             'by_postone': {postone_id: {ref, name}},
             'by_tracking': {tracking: {ref, name}},
-            'by_name': {normalized_name: {ref, name}}
+            'by_name': {normalized_name: [{ref, name}, ...]},  # distinct packs
+            'refs': {every non-empty REF in the CSV}
         }
 
     Raises:
         InvalidCSVError: If CSV cannot be read or is invalid
     """
     logger.debug(f"Loading CSV mapping: {csv_path}")
-
-    mappings = {
-        'by_postone': {},
-        'by_tracking': {},
-        'by_name': {}
-    }
 
     # Read raw bytes once to avoid repeated network/disk I/O per encoding attempt
     try:
@@ -329,6 +332,13 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
     encodings = ['utf-8-sig', 'utf-8', 'cp1251', 'latin-1']
 
     for encoding in encodings:
+        # Fresh per attempt: a failed encoding can leave partial rows behind
+        mappings = {
+            'by_postone': {},
+            'by_tracking': {},
+            'by_name': {},
+            'refs': set(),
+        }
         try:
             text = raw_bytes.decode(encoding)
             reader = csv.reader(text.splitlines())
@@ -353,9 +363,12 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
                     mappings['by_postone'][p_number] = data_pack
                 if tracking:
                     mappings['by_tracking'][tracking] = data_pack
+                if ref_num:
+                    mappings['refs'].add(ref_num)
                 if client_name:
-                    normalized_name = normalize_text(client_name)
-                    mappings['by_name'][normalized_name] = data_pack
+                    packs = mappings['by_name'].setdefault(normalize_text(client_name), [])
+                    if all(p['ref'] != ref_num for p in packs):
+                        packs.append(data_pack)
 
                 row_count += 1
 
@@ -436,24 +449,22 @@ def match_reference(page_text: str, mapping: dict) -> dict | None:
                 'method': 'tracking'
             }
 
-    # Step 3: Try Name Matching (fallback)
+    # Step 3: Name fallback. Only whole-word matches count, a name inside a
+    # longer matching name gives way to it, and the page matches only if one
+    # name is left and it carries one REF. Anything else would guess
+    # between customers (AUDIT-04-7).
     page_text_norm = normalize_text(page_text)
-
-    for name_key, data in mapping['by_name'].items():
-        if len(name_key) > 5 and name_key in page_text_norm:
-            is_verified = check_name_presence(data['name'], page_text)
-
-            logger.debug(
-                f"Matched by Name: {name_key} → {data['ref']} "
-                f"(verified: {is_verified})"
-            )
-
-            return {
-                'ref': data['ref'],
-                'verified': is_verified,
-                'method': 'name'
-            }
-
+    found = [
+        name for name in mapping['by_name']
+        if len(name) > 5 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", page_text_norm)
+    ]
+    found = [n for n in found if not any(n != o and n in o for o in found)]
+    if len(found) == 1 and len(mapping['by_name'][found[0]]) == 1:
+        data = mapping['by_name'][found[0]][0]
+        logger.debug(f"Matched by Name: {found[0]} → {data['ref']} (unverified)")
+        return {'ref': data['ref'], 'verified': False, 'method': 'name'}
+    if found:
+        logger.info(f"Name fallback refused, ambiguous: {found}")
     return None
 
 
@@ -525,6 +536,32 @@ def check_name_presence(name: str, page_text: str) -> bool:
     return matches >= (len(parts) / 2)
 
 
+def reference_sort_key(ref) -> tuple:
+    """Numeric-shaped REFs ("#107", "42") by value, then every other REF
+    alphabetically. A tracking-shaped REF has digits inside it, but they
+    are not its number (AUDIT-04-11)."""
+    ref = str(ref)
+    m = re.fullmatch(r"#?(\d+)", ref)
+    return (0, int(m.group(1)), ref) if m else (1, 0, ref)
+
+
+def _ref_list(refs, cap=5):
+    shown = ", ".join(refs[:cap])
+    return shown + (f" (+{len(refs) - cap} more)" if len(refs) > cap else "")
+
+
+def reference_run_warning(result) -> str | None:
+    """The inline warning for a run that needs checking before printing,
+    or None. Duplicate and missing REFs both mean a parcel may get the
+    wrong label or none (AUDIT-04-8)."""
+    parts = []
+    if result.get("duplicate_refs"):
+        parts.append(f"REF {_ref_list(result['duplicate_refs'])} is on more than one page")
+    if result.get("missing_refs"):
+        parts.append(f"no page for REF {_ref_list(result['missing_refs'])}")
+    return f"Check before printing: {'; '.join(parts)}." if parts else None
+
+
 def sort_pages_by_reference(page_data_list: list) -> list:
     """
     Sort pages by reference number (numerical order).
@@ -540,20 +577,7 @@ def sort_pages_by_reference(page_data_list: list) -> list:
     unmatched_pages = [p for p in page_data_list if p['ref'] is None]
 
     # Sort matched pages by reference number
-    def get_sort_key(page_data):
-        try:
-            ref_str = str(page_data['ref'])
-            # Extract all digits
-            numbers = re.findall(r'\d+', ref_str)
-            if numbers:
-                return (int(numbers[0]), ref_str, page_data['original_order'])
-            else:
-                # If no numbers, sort alphabetically
-                return (float('inf'), ref_str, page_data['original_order'])
-        except Exception:
-            return (float('inf'), str(page_data['ref']), page_data['original_order'])
-
-    matched_pages.sort(key=get_sort_key)
+    matched_pages.sort(key=lambda p: (*reference_sort_key(p['ref']), p['original_order']))
 
     logger.debug(
         f"Sorted {len(matched_pages)} matched pages, "
