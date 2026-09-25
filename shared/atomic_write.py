@@ -26,12 +26,11 @@ def atomic_write_json(path, data, *, indent=2, ensure_ascii=False, retries=3, re
                 dir=path.parent, prefix=f".{path.stem}_tmp_", suffix=path.suffix
             )
             tmp_path = Path(tmp_str)
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=indent, ensure_ascii=ensure_ascii)
-            except Exception:
-                os.close(fd)
-                raise
+            # fdopen owns fd from here: its `with` closes it on success and on
+            # failure, so a second os.close() would raise EBADF over the real
+            # error, or close another thread's newly opened file.
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=indent, ensure_ascii=ensure_ascii)
             tmp_path.replace(path)
             return
         except Exception as e:

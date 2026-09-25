@@ -384,10 +384,6 @@ def test_a_comment_that_fails_to_save_is_reported(qapp, monkeypatch):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-05-8: a failed atomic_write_json re-closes a closed fd and reports EBADF instead",
-)
 def test_atomic_write_reports_the_real_error(tmp_path):
     with pytest.raises(TypeError):
         atomic_write_json(tmp_path / "x.json", {"a": object()}, retries=1)
