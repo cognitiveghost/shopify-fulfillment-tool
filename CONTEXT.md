@@ -87,6 +87,12 @@ fulfillable order (`Final_Stock`). It is what Mark fulfillable draws on, and
 it stays true through every edit and undo (ADR 0010). Not the stock an order
 saw at its own turn, which is what its reason code quotes.
 
+**Lot allocation** — which lots (expiry, batch) each SKU line of a fulfillable
+order ships from. Derived, never stored: `analysis.with_lots` re-allocates FIFO
+from the session's opening lots (its `input/inventory.csv`) after every change,
+and every line owns its own list (ADR 0014). Not **Stock left**, which is the
+per-SKU total after the draws.
+
 **Column manager** — the slot's other occupant. It chooses and orders the
 table's columns and is saved per client. The pane comes back when it closes.
 
