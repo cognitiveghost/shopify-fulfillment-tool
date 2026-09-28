@@ -642,6 +642,9 @@ class UIManager:
         bridge.lineRemovalRequested.connect(
             lambda n, i, s: actions().remove_line(n, i, s)
         )
+        bridge.lineQuantityChangeRequested.connect(
+            lambda n, i, s, q: actions().change_line_quantity(n, i, s, q)
+        )
         bridge.tagAddRequested.connect(lambda n, t: actions().add_internal_tag(n, t))
         bridge.tagRemovalRequested.connect(
             lambda n, t: actions().remove_internal_tag(n, t)

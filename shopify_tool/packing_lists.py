@@ -7,6 +7,7 @@ import pandas as pd
 
 from shopify_tool.report_filters import apply_report_filters, fulfillable_only
 from shopify_tool.report_filters import exclude_skus as exclude_skus_from
+from shopify_tool.stock_ledger import lot_parts
 
 from .csv_utils import order_number_sort_key
 
@@ -14,50 +15,23 @@ logger = logging.getLogger("ShopifyToolLogger")
 
 
 def _expand_lot_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Expand packing list rows that span multiple lots into one row per lot.
+    """One packing-list row per lot part (stock_ledger.lot_parts, R3).
 
-    For rows where Lot_Details is None or empty the row is kept as-is with
-    Lot_Expiry="" and Lot_Batch="".
-
-    For rows where Lot_Details is a list of lot dicts the row is duplicated
-    once per lot entry, with Quantity replaced by qty_allocated and
-    Lot_Expiry / Lot_Batch populated from the dict.
+    A line whose order and SKU carry lots becomes one row per lot, Quantity
+    fitted to the line's own (a stale or copied allocation cannot change it),
+    plus a blank-lot row for units the run never allocated. Lines without lots
+    are kept as they are, one row each, with blank Lot_Expiry / Lot_Batch.
 
     Destination_Country de-duplication must be re-applied by the caller
     AFTER calling this function (expansion changes row count per order).
-
-    Args:
-        df: Sorted packing list DataFrame with optional Lot_Details column.
-
-    Returns:
-        New DataFrame with Lot_Expiry and Lot_Batch columns added.
     """
     rows = []
-    # The simulation allocates at the (order, SKU) level — all DataFrame rows for the
-    # same (order, SKU) pair carry an identical Lot_Details object representing the full
-    # allocation for that pair.  Without this guard we would emit duplicate lot rows
-    # once per duplicate row instead of once per (order, SKU).
-    seen_order_sku: set = set()
-    for _, row in df.iterrows():
-        lot_details = row.get("Lot_Details")
-        if lot_details and isinstance(lot_details, list) and len(lot_details) > 0:
-            order_key = (row.get("Order_Number", ""), row.get("SKU", ""))
-            if order_key in seen_order_sku:
-                continue
-            seen_order_sku.add(order_key)
-            for entry in lot_details:
-                new_row = row.copy()
-                new_row["Quantity"] = entry.get("qty_allocated", new_row["Quantity"])
-                expiry = entry.get("expiry") or ""
-                new_row["Lot_Expiry"] = "" if expiry == "1" else expiry
-                batch = entry.get("batch") or ""
-                new_row["Lot_Batch"] = "" if batch == "1" else batch
-                rows.append(new_row)
-        else:
-            new_row = row.copy()
-            new_row["Lot_Expiry"] = ""
-            new_row["Lot_Batch"] = ""
-            rows.append(new_row)
+    for label, qty, expiry, batch in lot_parts(df):
+        row = df.loc[label].copy()
+        row["Quantity"] = qty
+        row["Lot_Expiry"] = expiry
+        row["Lot_Batch"] = batch
+        rows.append(row)
     if not rows:
         result = df.copy()
         result["Lot_Expiry"] = ""

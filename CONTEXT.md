@@ -87,6 +87,11 @@ fulfillable order (`Final_Stock`). It is what Mark fulfillable draws on, and
 it stays true through every edit and undo (ADR 0010). Not the stock an order
 saw at its own turn, which is what its reason code quotes.
 
+**Lot label** — the expiry and batch a report names for some of a line's
+units. It comes from the run's FIFO allocation, fitted to the line's current
+quantity (ADR 0014). Units the run never allocated — added by hand, raised
+later, or in an order marked fulfillable after the run — have no lot label.
+
 **Column manager** — the slot's other occupant. It chooses and orders the
 table's columns and is saved per client. The pane comes back when it closes.
 

@@ -364,3 +364,83 @@ def test_add_unlisted_sku_keeps_it_unlisted_and_the_order_fulfillable():
     assert _status(out, "#1") == {"Fulfillable"}
     assert out.loc[out["SKU"] == "X", "Final_Stock"].isna().all()
     assert _final_stock(out, "A") == 4
+
+
+# --- Change quantity (spec 2026-09-28 §4.5) ---------------------------------
+
+
+def _qty(df, order, sku):
+    return df.loc[(df["Order_Number"] == order) & (df["SKU"] == sku), "Quantity"].tolist()
+
+
+def test_lowering_a_quantity_returns_stock_and_undo_takes_it_back():
+    df, *_ = run_analysis(_stock([("A", 5)]), _orders([("#1", "A", 2)]), NO_HISTORY)
+    mw = _ledger_window(df)
+    ActionsHandler(mw).change_line_quantity("#1", 0, "A", 1)
+    out = mw.analysis_results_df
+    assert _qty(out, "#1", "A") == [1]
+    assert _status(out, "#1") == {"Fulfillable"} and _final_stock(out, "A") == 4
+    mw.results_bridge.raise_toast.assert_called_with("Changed A in order #1 to 1.", undoable=True)
+    ok, _ = mw.undo_manager.undo()
+    assert ok
+    out = mw.analysis_results_df
+    assert _qty(out, "#1", "A") == [2] and _final_stock(out, "A") == 3
+
+
+def test_raising_within_stock_left_keeps_the_order_fulfillable():
+    df, *_ = run_analysis(_stock([("A", 5)]), _orders([("#1", "A", 2)]), NO_HISTORY)
+    mw = _ledger_window(df)
+    ActionsHandler(mw).change_line_quantity("#1", 0, "A", 5)
+    out = mw.analysis_results_df
+    assert _status(out, "#1") == {"Fulfillable"} and _final_stock(out, "A") == 0
+
+
+def test_raising_past_stock_left_blocks_the_order_and_undo_restores_it():
+    df, *_ = run_analysis(_stock([("A", 5), ("B", 9)]), _orders([("#1", "A", 2), ("#1", "B", 1)]), NO_HISTORY)
+    mw = _ledger_window(df)
+    own = df[df["Order_Number"] == "#1"].reset_index(drop=True)
+    ActionsHandler(mw).change_line_quantity("#1", int(own.index[own["SKU"] == "A"][0]), "A", 6)
+    out = mw.analysis_results_df
+    assert _status(out, "#1") == {"Not Fulfillable"}
+    assert _final_stock(out, "A") == 5 and _final_stock(out, "B") == 9
+    mw.results_bridge.raise_toast.assert_called_with(
+        "Changed A in order #1 to 6. It is now blocked: not enough A.", undoable=True
+    )
+    ok, _ = mw.undo_manager.undo()
+    assert ok
+    out = mw.analysis_results_df
+    assert _status(out, "#1") == {"Fulfillable"} and _qty(out, "#1", "A") == [2]
+    assert _final_stock(out, "A") == 3 and _final_stock(out, "B") == 8
+
+
+def test_changing_a_held_orders_quantity_keeps_it_held():
+    df, *_ = run_analysis(_stock([("A", 5)]), _orders([("#1", "A", 2)]), NO_HISTORY)
+    mw = _ledger_window(df)
+    handler = ActionsHandler(mw)
+    handler.toggle_fulfillment_status_for_order("#1")  # hold
+    handler.change_line_quantity("#1", 0, "A", 1)
+    out = mw.analysis_results_df
+    assert _status(out, "#1") == {"Not Fulfillable"} and _final_stock(out, "A") == 5
+    mw.results_bridge.raise_toast.assert_called_with("Changed A in order #1 to 1.", undoable=True)
+
+
+@pytest.mark.parametrize(
+    ("index", "sku", "quantity"),
+    [
+        (0, "A", 2),     # unchanged
+        (0, "B", 3),     # the line at that index no longer carries B
+        (5, "A", 3),     # the line is gone
+        (0, "A", 0),     # not a quantity
+        (0, "A", -1),
+        (0, "A", True),  # bool is an int subclass; refuse it
+    ],
+)
+def test_a_change_that_cannot_apply_changes_nothing(index, sku, quantity):
+    df, *_ = run_analysis(_stock([("A", 5)]), _orders([("#1", "A", 2)]), NO_HISTORY)
+    mw = _ledger_window(df)
+    before = len(mw.undo_manager.operations)
+    ActionsHandler(mw).change_line_quantity("#1", index, sku, quantity)
+    out = mw.analysis_results_df
+    assert _qty(out, "#1", "A") == [2] and _final_stock(out, "A") == 3
+    assert len(mw.undo_manager.operations) == before
+    mw.results_bridge.raise_toast.assert_not_called()

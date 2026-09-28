@@ -187,6 +187,8 @@ class UndoManager:
                 success = self._undo_remove_item(params, affected_rows_before)
             elif operation_type == "remove_order":
                 success = self._undo_remove_order(params, affected_rows_before)
+            elif operation_type == "change_quantity":
+                success = self._undo_change_quantity(params, affected_rows_before)
             # Bulk operations
             elif operation_type == "bulk_change_status":
                 success = self._undo_bulk_change_status(params, affected_rows_before)
@@ -249,8 +251,8 @@ class UndoManager:
             pd.concat([current, rows]).sort_index().reset_index(drop=True)
         )
 
-    def _restore_statuses_by_position(self, rows: pd.DataFrame) -> bool:
-        """Put each line's own status back. False when positions can't be trusted."""
+    def _restore_columns_by_position(self, rows: pd.DataFrame, columns) -> bool:
+        """Put each line's own values back. False when positions can't be trusted."""
         df = self.main_window.analysis_results_df
         positions = rows.attrs.get("row_positions")
         if not positions or len(positions) != len(rows) or max(positions) >= len(df):
@@ -259,8 +261,12 @@ class UndoManager:
         saved = rows["Order_Number"].astype(str).str.strip().tolist()
         if here != saved:
             return False
-        df.loc[df.index[positions], "Order_Fulfillment_Status"] = rows["Order_Fulfillment_Status"].values
+        for column in columns:
+            df.loc[df.index[positions], column] = rows[column].values
         return True
+
+    def _restore_statuses_by_position(self, rows: pd.DataFrame) -> bool:
+        return self._restore_columns_by_position(rows, ["Order_Fulfillment_Status"])
 
     def _undo_toggle_status(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
         """Undo toggle status operation.
@@ -421,6 +427,12 @@ class UndoManager:
         except Exception:
             self.log.exception("Failed to undo remove order")
             return False
+
+    def _undo_change_quantity(self, params: dict, affected_rows_before: pd.DataFrame) -> bool:
+        """Put the order's quantities and statuses back; undo() re-derives Stock left."""
+        return self._restore_columns_by_position(
+            affected_rows_before, ["Quantity", "Order_Fulfillment_Status"]
+        )
 
     def _get_history_path(self) -> Path | None:
         """Get path to operations_history.json.
