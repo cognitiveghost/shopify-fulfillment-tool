@@ -80,9 +80,9 @@ def _parse_expiry_date(raw) -> date | None:
     Tries candidate formats in priority order, keeping the first
     calendar-valid one:
     - "1" or None or NaN or "" -> None  (sentinel for "no expiry info")
-    - 6-digit: YYMMDD, then DDMMYY
+    - 6-digit: YYMM with day 00 -> the 1st; else YYMMDD, then DDMMYY
     - 8-digit: YYYYMMDD
-    - 4-digit: MMYY (day defaults to 1)
+    - 4-digit: MMYY, then YYMM (day defaults to 1)
     - No valid candidate -> None (logged as a warning)
 
     If more than one candidate format is calendar-valid for the same raw
@@ -105,7 +105,11 @@ def _parse_expiry_date(raw) -> date | None:
     if not s or s == "1":
         return None
 
-    if len(s) == 6:
+    if len(s) == 6 and s[4:6] == "00":
+        # Day "00" means the month itself (WATERDROP "261200"); DDMMYY would
+        # read it as 2000-12-26 and FIFO would draw it first (AUDIT-06-7).
+        candidate_specs = [("YYMM00", s[0:2], s[2:4], "01")]
+    elif len(s) == 6:
         candidate_specs = [
             ("YYMMDD", s[0:2], s[2:4], s[4:6]),
             ("DDMMYY", s[4:6], s[2:4], s[0:2]),
@@ -113,7 +117,10 @@ def _parse_expiry_date(raw) -> date | None:
     elif len(s) == 8:
         candidate_specs = [("YYYYMMDD", s[0:4], s[4:6], s[6:8])]
     elif len(s) == 4:
-        candidate_specs = [("MMYY", s[2:4], s[0:2], "01")]
+        candidate_specs = [
+            ("MMYY", s[2:4], s[0:2], "01"),
+            ("YYMM", s[0:2], s[2:4], "01"),  # ALMADERM "2805" (AUDIT-06-7)
+        ]
     else:
         candidate_specs = []
 

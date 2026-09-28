@@ -407,6 +407,12 @@ class TestParseExpiryDate:
     def test_mmyy_4_digit_defaults_to_day_1(self):
         assert analysis._parse_expiry_date("0528") == date(2028, 5, 1)
 
+    def test_yymm_4_digit_when_mmyy_is_invalid(self):
+        assert analysis._parse_expiry_date("2805") == date(2028, 5, 1)
+
+    def test_day_zero_6_digit_is_the_month(self):
+        assert analysis._parse_expiry_date("261200") == date(2026, 12, 1)
+
     def test_ambiguous_6_digit_prefers_yymmdd(self, caplog):
         # Valid as both YYMMDD (2026-12-30) and DDMMYY (2030-12-26) -- priority picks YYMMDD.
         with caplog.at_level("WARNING", logger="shopify_tool.analysis"):
@@ -416,7 +422,7 @@ class TestParseExpiryDate:
 
     def test_unparseable_value_returns_none_and_logs_warning(self, caplog):
         with caplog.at_level("WARNING", logger="shopify_tool.analysis"):
-            result = analysis._parse_expiry_date("2805")  # month 28 invalid under MMYY too
+            result = analysis._parse_expiry_date("2899")  # month 28 (MMYY) and 99 (YYMM) both invalid
         assert result is None
         assert any("Could not parse expiry date" in r.message for r in caplog.records)
 

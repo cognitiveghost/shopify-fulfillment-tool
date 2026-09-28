@@ -307,7 +307,6 @@ def test_summary_present_and_stats_follow_rule_holds(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-7: YYMM and day-00 expiries misread")
 def test_yymm_and_day_zero_expiries_sort_by_their_real_month():
     assert analysis._parse_expiry_date("2805") == date(2028, 5, 1)  # YYMM
     assert analysis._parse_expiry_date("261200") == date(2026, 12, 1)  # day 00
