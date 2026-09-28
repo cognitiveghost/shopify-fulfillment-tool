@@ -5,7 +5,7 @@ from datetime import date
 
 import pandas as pd
 
-from shopify_tool import analysis, stock_ledger
+from shopify_tool import analysis, core, stock_ledger
 
 FF, NF = "Fulfillable", "Not Fulfillable"
 LOTS = {
@@ -84,3 +84,26 @@ def test_lot_table_normalises_skus_and_stock():
     )
     assert set(lots) == {"A", "5170"}
     assert lots["A"][0]["qty"] == 3.0
+
+
+CONFIG = {"column_mappings": {"stock": {"Артикул": "SKU", "Наличност": "Stock", "Име": "Product_Name"}}}
+
+
+def test_session_lot_table_reads_the_sessions_stock_file(tmp_path):
+    (tmp_path / "input").mkdir()
+    (tmp_path / "input" / "inventory.csv").write_text(
+        "Артикул,Име,Годност,Партида,Наличност\nA,Alpha,270101,LATE,2\nA,Alpha,261230,EARLY,3\n",
+        encoding="utf-8",
+    )
+    lots = core.session_lot_table(str(tmp_path), CONFIG)
+    assert [(lot["batch"], lot["qty"]) for lot in lots["A"]] == [("EARLY", 3.0), ("LATE", 2.0)]
+    assert core.session_lot_table(str(tmp_path / "missing"), CONFIG) is None
+    assert core.session_lot_table(None, CONFIG) is None
+    (tmp_path / "input" / "inventory.csv").write_text("not,a\nstock,file\n", encoding="utf-8")
+    assert core.session_lot_table(str(tmp_path), CONFIG) is None  # unreadable: logged, not raised
+
+
+def test_with_order_fields_leaves_a_minimal_frame_alone():
+    df = pd.DataFrame({"Order_Number": ["1"], "System_note": [""]})
+    assert core.with_order_fields(df, {}, None).columns.tolist() == ["Order_Number", "System_note"]
+    assert core.with_order_fields(None, {}, None) is None

@@ -106,7 +106,6 @@ def export_rows(df, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-1: an added line shares another line's lots")
 def test_an_added_line_exports_its_own_sku_and_quantity(tmp_path):
     st = stock([("A", 5, "261230", "LA"), ("B", 5, "270101", "LB")])
     df, *_ = run_analysis(st, orders([("#1", "A", 2)]), NO_HISTORY)
@@ -116,7 +115,6 @@ def test_an_added_line_exports_its_own_sku_and_quantity(tmp_path):
     assert export_rows(out, tmp_path) == [("A", "261230", "LA", 2), ("B", "270101", "LB", 1)]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-1: a removed duplicate line leaves its lots")
 def test_removing_one_of_two_same_sku_lines_exports_the_other_only(tmp_path):
     st = stock([("A", 5, "261230", "LA")])
     df, *_ = run_analysis(st, orders([("#1", "A", 2), ("#1", "A", 1)]), NO_HISTORY)
@@ -127,7 +125,6 @@ def test_removing_one_of_two_same_sku_lines_exports_the_other_only(tmp_path):
     assert export_rows(out, tmp_path) == [("A", "261230", "LA", 2)]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-1: a force-fulfilled order has no lots")
 def test_an_order_made_fulfillable_after_the_run_exports_with_its_lots(tmp_path):
     st = stock([("A", 3, "261230", "LA")])
     df, *_ = run_analysis(st, orders([("#1", "A", 3), ("#2", "A", 3)]), NO_HISTORY)
@@ -139,7 +136,6 @@ def test_an_order_made_fulfillable_after_the_run_exports_with_its_lots(tmp_path)
     assert export_rows(out, tmp_path) == [("A", "261230", "LA", 3)]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-1: REVE #1221, packing list prints 3 + 3")
 def test_packing_list_prints_each_lines_own_quantity(tmp_path):
     st = stock([("L", 5, "1", "1"), ("S", 5, "1", "1")])
     df, *_ = run_analysis(st, orders([("#1", "L", 3)]), NO_HISTORY)
@@ -159,7 +155,6 @@ def test_packing_list_prints_each_lines_own_quantity(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-2: Order_Type frozen at run time")
 def test_order_type_follows_added_and_removed_lines():
     st = stock([("A", 5, "1", "1"), ("B", 5, "1", "1")])
     df, *_ = run_analysis(st, orders([("#1", "A", 1), ("#2", "A", 1), ("#2", "B", 1)]), NO_HISTORY)
@@ -184,7 +179,6 @@ WEIGHTS = {
 }
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-2: box and weights frozen at run time")
 def test_box_and_weight_follow_an_added_line():
     st = stock([("A", 5, "1", "1"), ("B", 5, "1", "1")])
     df, *_ = run_analysis(st, orders([("#1", "A", 1)]), NO_HISTORY)
@@ -198,7 +192,6 @@ def test_box_and_weight_follow_an_added_line():
     assert out["Order_Volumetric_Weight"].tolist() == [pytest.approx(1.1)] * 2
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-2: Stock_Alert frozen at run time")
 def test_stock_alert_follows_a_hold():
     config = {**CONFIG, "settings": {"low_stock_threshold": 2}}
     st = stock([("A", 3, "1", "1")])

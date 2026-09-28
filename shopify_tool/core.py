@@ -14,7 +14,7 @@ import pandas as pd
 from shared.atomic_write import atomic_write_json
 
 from . import analysis, fulfillment_history, packing_lists, stock_export
-from .csv_utils import normalize_sku, resolve_delimiter
+from .csv_utils import AUTO_DELIMITER, normalize_sku, resolve_delimiter
 from .packed_orders import load_session_signals, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
@@ -913,6 +913,13 @@ def _run_analysis_and_rules(
         final_df = _settle_rule_changes(final_df, stock_df, config)
         logger.info("Rule engine application complete.")
 
+    # Order-level columns and lots follow the frame as the rules left it:
+    # bonus lines get their own lots and the right Order_Type (ADR 0014).
+    lots = analysis.lot_table(
+        analysis.stock_with_internal_columns(stock_df, config.get("column_mappings", {}))
+    )
+    final_df = with_order_fields(final_df, config, lots)
+
     return final_df, summary_present_df, summary_missing_df, stats
 
 
@@ -924,6 +931,60 @@ def _add_stock_alert(final_df, config):
         final_df["Stock_Alert"] = np.where(
             final_df["Final_Stock"] < low_stock_threshold, "Low Stock", ""
         )
+
+
+def session_lot_table(session_path, config) -> dict | None:
+    """The session's opening lots (R3, ADR 0014), from its own input/inventory.csv.
+
+    None when the session has no stock file (memory mode, or none copied),
+    the file has no lot columns, or it can't be read: lines then export
+    without lots, with the right quantities.
+    """
+    if not session_path:
+        return None
+    path = Path(session_path) / "input" / "inventory.csv"
+    if not path.exists():
+        return None
+    config = config or {}
+    mappings = config.get("column_mappings") or {}
+    try:
+        setting = (config.get("settings") or {}).get("stock_csv_delimiter", AUTO_DELIMITER)
+        raw = pd.read_csv(
+            path,
+            delimiter=resolve_delimiter(str(path), setting, "stock"),
+            encoding="utf-8-sig",
+            dtype=_get_sku_dtype_dict(mappings, "stock"),
+        )
+        return analysis.lot_table(analysis.stock_with_internal_columns(raw, mappings))
+    except Exception:
+        logger.exception(f"Could not read this session's lots from {path}")
+        return None
+
+
+def with_order_fields(df, config, lots):
+    """Recompute every order-level column a run derives, from the frame as it is now.
+
+    Order_Type, the weight and box columns, Stock_Alert and Lot_Details were
+    computed once at run time, and add product, remove item, holds, rule bonus
+    lines and undo left them stale (AUDIT-06-1, -2). Runs at the end of the
+    run and on every MainWindow refresh (spec 2026-09-28 §3).
+    """
+    if df is None or df.empty or "Order_Number" not in df.columns:
+        return df
+    config = config or {}
+    if "Order_Type" in df.columns:
+        keys = df["Order_Number"].astype(str).str.strip()
+        lines = df.groupby(keys)["Order_Number"].transform("size")
+        df["Order_Type"] = np.where(lines > 1, "Multi", "Single")
+    weight_config = config.get("weight_config") or {}
+    if weight_config.get("products") and "SKU" in df.columns:
+        from .weight_calculator import enrich_dataframe_with_weights
+
+        df = enrich_dataframe_with_weights(df, weight_config)
+    _add_stock_alert(df, config)
+    if {"SKU", "Quantity", "Order_Fulfillment_Status"} <= set(df.columns):
+        df = analysis.with_lots(df, lots, config.get("analysis_mode", "multi_first"))
+    return df
 
 
 def _settle_rule_changes(final_df, stock_df, config):
