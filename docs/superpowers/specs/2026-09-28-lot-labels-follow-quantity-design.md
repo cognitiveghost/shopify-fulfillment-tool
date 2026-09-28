@@ -71,7 +71,8 @@ Lives in `shopify_tool/stock_ledger.py` beside R1/R2, and is the only reader of
 > `Lot_Details` list among its lines. Walk those lots in list order (the run
 > wrote them FIFO), taking `min(qty_allocated, still needed)` from each; any
 > quantity still needed after the last lot is one unlabelled part
-> (blank expiry and batch). A pair whose quantity is ≤ 0 yields nothing.
+> (blank expiry and batch). A pair with lots whose quantity is ≤ 0 yields
+> nothing.
 
 Details:
 
@@ -93,8 +94,9 @@ Details:
   - a pair **with** lots → one tuple per lot part, all carrying the pair's
     first row label, lots in list order, the unlabelled remainder last;
   - a pair **without** lots → one tuple per row of the pair
-    `(that row's label, that row's Quantity, "", "")`, rows with Quantity ≤ 0
-    skipped. Two unlotted lines of one SKU stay two lines (CONTEXT.md "Order
+    `(that row's label, that row's raw Quantity, "", "")`, every row kept, as
+    the packing list does today; the stock export drops non-positive totals
+    itself. Two unlotted lines of one SKU stay two lines (CONTEXT.md "Order
     line": never collapse two lines).
 
   The row label lets the packing list copy that row's other columns.
@@ -217,7 +219,7 @@ existing ones they mirror.
    two lines of one pair sharing one object → counted once; the same pair with
    two *equal but distinct* list objects → counted once; blank order numbers
    → separate pairs; `"1"` sentinels → blank; NaN/str/empty cells → no lots;
-   zero-quantity pair → nothing.
+   zero-quantity pair with lots → nothing; unlotted rows kept as-is.
 2. **Incident regression** (`tests/test_lot_integrity.py`): build a
    lot-tracked run with `run_analysis` (stock with Годност/Партида, as in
    `tests/audit/test_01_intake_analysis.py::stock(lots=True)`) for #1221
