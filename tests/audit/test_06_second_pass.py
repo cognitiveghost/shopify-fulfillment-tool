@@ -237,7 +237,6 @@ def decoded(sku, qty):
     return sorted(zip(out["SKU"], out["Quantity"], out["Original_SKU"]))
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-4: nested sets expand one level only")
 def test_a_nested_set_expands_to_its_inner_components():
     assert decoded("OUTER", 3) == [("BOTTLE", 3, "OUTER"), ("CAP", 6, "OUTER")]
 
@@ -248,7 +247,6 @@ def test_a_set_that_lists_itself_is_not_expanded_again():
     assert decoded("NECTAR", 1) == [("DROPPER", 1, "NECTAR"), ("NECTAR", 1, "NECTAR")]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-4: nested sets expand one level only")
 def test_a_set_cycle_stops_instead_of_recursing():
     assert decoded("LOOP_A", 1) == [("LOOP_A", 1, "LOOP_A")]
 

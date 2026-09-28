@@ -15,6 +15,42 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def _lists_itself(sku, set_decoders) -> bool:
+    return any(c.get("sku") == sku for c in set_decoders.get(sku) or [])
+
+
+def _components(sku, quantity, set_decoders, path) -> list[tuple[str, Any]]:
+    """(component SKU, quantity) pairs for `quantity` of set `sku`, nested sets expanded.
+
+    A component that is itself a set is expanded, unless it lists itself
+    (a product sold with extras, HERBAR NECTAR-30: its parent sets list the
+    extras themselves) or it is already on `path` (a cycle). AUDIT-06-4.
+    """
+    out = []
+    for component in set_decoders[sku]:
+        component_sku = component.get("sku")
+        component_qty = component.get("quantity")
+        if not component_sku:
+            logger.warning(f"Component in set '{sku}' has no SKU, skipping component")
+            continue
+        if not component_qty or component_qty <= 0:
+            logger.warning(
+                f"Component '{component_sku}' in set '{sku}' has invalid quantity: {component_qty}, skipping"
+            )
+            continue
+        total = quantity * component_qty
+        if component_sku in path and component_sku != sku:
+            logger.warning(f"Set '{sku}' reaches '{component_sku}' again (a cycle); not expanding it")
+        nested = (
+            component_sku in set_decoders
+            and component_sku not in path
+            and not _lists_itself(component_sku, set_decoders)
+        )
+        inner = _components(component_sku, total, set_decoders, path | {component_sku}) if nested else []
+        out.extend(inner or [(component_sku, total)])
+    return out
+
+
 def decode_sets_in_orders(
     orders_df: pd.DataFrame,
     set_decoders: dict[str, list[dict[str, Any]]]
@@ -32,6 +68,9 @@ def decode_sets_in_orders(
         - Original_SKU: The original set SKU (or same as SKU if not a set)
         - Original_Quantity: The original order quantity
         - Is_Set_Component: True if this row is from set expansion
+
+    A component that is itself a set is expanded too, unless it lists
+    itself or would loop (AUDIT-06-4).
 
     Example:
         Input row: Order_Number=1001, SKU=SET-WINTER-KIT, Quantity=2
@@ -84,29 +123,13 @@ def decode_sets_in_orders(
 
             # Expand into components
             valid_components_added = 0
-            for component in components:
-                component_sku = component.get("sku")
-                component_qty = component.get("quantity")
-
-                # Validate component
-                if not component_sku:
-                    logger.warning(f"Component in set '{sku}' has no SKU, skipping component")
-                    continue
-
-                if not component_qty or component_qty <= 0:
-                    logger.warning(
-                        f"Component '{component_sku}' in set '{sku}' has invalid quantity: {component_qty}, skipping"
-                    )
-                    continue
-
-                # Create expanded row
+            for component_sku, component_total in _components(sku, quantity, set_decoders, {sku}):
                 new_row = row.copy()
                 new_row["SKU"] = component_sku
-                new_row["Quantity"] = quantity * component_qty  # Multiply quantities
+                new_row["Quantity"] = component_total
                 new_row["Original_SKU"] = sku
                 new_row["Original_Quantity"] = quantity
                 new_row["Is_Set_Component"] = True
-
                 expanded_rows.append(new_row)
                 valid_components_added += 1
 
