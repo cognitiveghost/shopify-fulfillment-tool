@@ -1239,7 +1239,9 @@ def summary_present(final_df: pd.DataFrame) -> pd.DataFrame:
 
     Columns: Name, SKU, Total Quantity. Computed after rules (AUDIT-06-5).
     """
-    from shopify_tool.report_filters import fulfillable_only  # local: avoids an import cycle
+    from shopify_tool.report_filters import (
+        fulfillable_only,  # local: avoids an import cycle
+    )
 
     present_df = fulfillable_only(final_df)
     if "Product_Name" in present_df.columns:
