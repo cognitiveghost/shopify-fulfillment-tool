@@ -25,6 +25,7 @@ depend on. Everything else is a bounded fix inside an existing function.
 | D8 | `expiry_dt` is stored as an ISO string (`"2026-12-30"`) or `None`. The lots tooltip prints `f"exp {expiry_dt}"`, which reads the same for a `date` from an old pickle. This fixes AUDIT-06-6 (AUDIT-01-12). | agent |
 | D9 | `Order_Type` keeps the run's definition: `Multi` when the order has more than one line of any kind, NO_SKU lines included. | agent |
 | D10 | Packing Tool `avg_time_per_item` = sum of the timed orders' `duration_seconds` / sum of those orders' `items_count`. | agent |
+| D12 | **Expiry parsing (AUDIT-06-7):** a 4-digit value tries MMYY, then YYMM. A 6-digit value with day `00` is read as YYMM, day 1, before DDMMYY. Every other value parses as before. | agent |
 | D11 | A resumed list's elapsed time in its session summary is left as is (packing audit §4). | agent |
 
 ## 2. Lot allocation (AUDIT-06-1, D1, D6, D7, D8)
@@ -217,14 +218,22 @@ Update the docstring example in `generate_session_summary` and the one-line
 contract in the function docstring. No other caller changes. The session detail
 page's partial summary uses the same function.
 
+## 8b. Expiry parsing (AUDIT-06-7, D12)
+
+In `analysis._parse_expiry_date`:
+- 4 digits: `candidate_specs = [("MMYY", s[2:4], s[0:2], "01"), ("YYMM", s[0:2], s[2:4], "01")]`.
+- 6 digits: when `s[4:6] == "00"`, `candidate_specs = [("YYMM00", s[0:2], s[2:4], "01")]`.
+  Otherwise the list stays as today.
+- Update the docstring's format list. The ambiguity warning is unchanged: `"0101"`
+  is valid as both 4-digit formats and logs as ambiguous, keeping MMYY.
+
 ## 9. Testing
 
-**Proof tests first, red.** Create `tests/audit/test_06_second_pass.py` with one
-test per name in audit 06 §2. Create `packing-tool/tests/audit/test_03_second_pass.py`
-with `test_avg_time_per_item_is_order_time_over_units`. Each test must fail on
-`main` for the reason its finding names, not for an import error alone. Write
-the test against the public seam and let it fail on the missing symbol only
-where the seam is new (`with_lots`, `with_order_fields`, `session_lot_table`).
+**Proof tests are committed with the audit** as `xfail(strict=True)`:
+`tests/audit/test_06_second_pass.py` (13 tests plus one pin) and
+`packing-tool/tests/audit/test_03_second_pass.py`. Each fails on `main` for the
+reason its finding names, or on the missing new seam (`lot_table`,
+`with_order_fields`). The fix for a finding removes its markers.
 
 Seams to test at:
 - `analysis.run_analysis` + `core.with_order_fields(df, config, lots)` +

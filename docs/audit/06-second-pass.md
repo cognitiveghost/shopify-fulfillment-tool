@@ -39,6 +39,7 @@ also frozen at run time. The maths inside each function checks out.
 | AUDIT-06-4 | medium | A set whose component is itself a set is expanded one level only, so the order asks for the inner set's SKU, which is not in stock | `set_decoder.py:83-111` | `test_a_nested_set_expands_to_its_inner_components`, `test_a_set_that_lists_itself_is_not_expanded_again` | open |
 | AUDIT-06-5 | low | `Summary_Missing` compares each line with opening stock, not demand per SKU with Stock left. `Summary_Present` and the run's saved stats are computed before rules run | `analysis.py:1219-1227`, `:1494`, `core.py:874` | `test_run_report_has_no_summary_missing_sheet`, `test_summary_present_and_stats_follow_rule_holds` | open |
 | AUDIT-06-6 | low | AUDIT-01-12 is not fixed. Undo history still can't be saved once `Lot_Details` holds `datetime.date` values; the strict xfail test still fails | `analysis.py:737`, `undo_manager.py:455` | `tests/audit/test_01_intake_analysis.py::test_undo_history_survives_reopen_for_lot_tracked_stock` (xfail marker comes off) | open |
+| AUDIT-06-7 | medium | Expiry parsing orders lots wrongly: a 4-digit YYMM expiry (`2805`) fails as MMYY and sorts as "no expiry" (last); a 6-digit expiry with day `00` (`261200`) fails as YYMMDD and falls through to DDMMYY, reading as 2000-12-26 (first) | `analysis.py:76-134` | `test_yymm_and_day_zero_expiries_sort_by_their_real_month` | open |
 
 ## 3. Findings in detail
 
@@ -128,6 +129,26 @@ touch the cause: `expiry_dt` is a `datetime.date`, which `json` can't encode, so
 `_save_history` logs and saves nothing. The audit-01 proof test is still
 `xfail(strict=True)` and still fails (`--runxfail`:
 `TypeError: Object of type date is not JSON serializable`).
+
+### AUDIT-06-7 — Expiry formats (medium)
+
+`_parse_expiry_date` tries YYMMDD then DDMMYY for 6 digits, and only MMYY for 4
+digits. The latest stock files contain formats it gets wrong:
+- **ALMADERM** has 2 lots with 4-digit YYMM expiries (`2805`, `2706`). MMYY
+  rejects month 28, so they get no date and FIFO consumes them last, whatever
+  their month.
+- **WATERDROP** has 3 lots with 6-digit expiries whose day is `00` (`261200`,
+  December 2026). YYMMDD rejects day 0 and DDMMYY accepts it as 2000-12-26, so
+  FIFO consumes these first.
+- **WATERDROP** also has 17 two-digit, 1 three-digit, 2 five-digit and a few
+  other unparsable values. Those are data errors and are left as they are.
+
+The replay shows the effect. WATERDROP 2026-07-22_1 now gives the `261200` lot
+of AI-WA-MX01-00041 to #BG7496 before the `2701` lot.
+
+**Fix (agent decision, reversible).** For 4 digits, try MMYY, then YYMM. For 6
+digits with day `00`, read YYMM and day 1 before trying DDMMYY. Every other
+value parses as before.
 
 ## 4. Verified correct
 
