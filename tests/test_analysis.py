@@ -38,7 +38,7 @@ class TestBasicFulfillment:
     def test_sufficient_stock_is_fulfillable_and_deducts_exactly(self):
         orders = _orders([{"Name": "#1001", "Lineitem sku": "A1", "Lineitem quantity": 3}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
-        final_df, _present, _missing, _stats = _run(orders, stock)
+        final_df, _stats = _run(orders, stock)
         row = final_df.iloc[0]
         assert row["Order_Fulfillment_Status"] == "Fulfillable"
         assert row["Stock"] == 10

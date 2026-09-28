@@ -265,7 +265,6 @@ def _write_inputs(tmp_path, orders_csv, stock_csv):
     return {"orders": ORDER_MAPS, "stock": {"Артикул": "SKU", "Име": "Product_Name", "Наличност": "Stock"}}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-5: Summary_Missing is still written")
 def test_run_report_has_no_summary_missing_sheet(tmp_path, monkeypatch):
     monkeypatch.setattr(
         core,
@@ -288,7 +287,6 @@ def test_run_report_has_no_summary_missing_sheet(tmp_path, monkeypatch):
     assert "Summary_Missing" not in sheets
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-5: summary and stats predate rules")
 def test_summary_present_and_stats_follow_rule_holds(tmp_path):
     maps = _write_inputs(
         tmp_path,

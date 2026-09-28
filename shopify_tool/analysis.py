@@ -1227,90 +1227,22 @@ def _merge_results_to_dataframe(
     return final_df
 
 
-def _generate_summary_reports(
-    final_df: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def summary_present(final_df: pd.DataFrame) -> pd.DataFrame:
+    """Units per SKU that the fulfillable orders ship: the Summary_Present sheet.
+
+    Columns: Name, SKU, Total Quantity. Computed after rules (AUDIT-06-5).
     """
-    Generate summary reports for fulfilled and missing items.
+    from shopify_tool.report_filters import fulfillable_only  # local: avoids an import cycle
 
-    Creates two summary DataFrames:
-    1. Summary of items that will be fulfilled (from fulfillable orders)
-    2. Summary of items that are truly missing (required > initial stock)
-
-    Args:
-        final_df: Complete analyzed DataFrame
-
-    Returns:
-        Tuple of (summary_present_df, summary_missing_df)
-
-    Format:
-        Both DataFrames have columns: ["Name", "SKU", "Total Quantity"]
-    """
-    logger.debug("Phase 7/7: Generating summary reports...")
-
-    # --- Summary Reports Generation ---
-    present_df = final_df[final_df["Order_Fulfillment_Status"] == "Fulfillable"].copy()
-
-    # Group by SKU and Product_Name if available, otherwise just SKU
+    present_df = fulfillable_only(final_df)
     if "Product_Name" in present_df.columns:
-        summary_present_df = present_df.groupby(
-            ["SKU", "Product_Name"], as_index=False
-        )["Quantity"].sum()
-        summary_present_df = summary_present_df.rename(
-            columns={"Product_Name": "Name", "Quantity": "Total Quantity"}
-        )
-        summary_present_df = summary_present_df[["Name", "SKU", "Total Quantity"]]
+        summary = present_df.groupby(["SKU", "Product_Name"], as_index=False)["Quantity"].sum()
+        summary = summary.rename(columns={"Product_Name": "Name", "Quantity": "Total Quantity"})
     else:
-        summary_present_df = present_df.groupby(["SKU"], as_index=False)[
-            "Quantity"
-        ].sum()
-        summary_present_df["Name"] = "N/A"
-        summary_present_df = summary_present_df.rename(
-            columns={"Quantity": "Total Quantity"}
-        )
-        summary_present_df = summary_present_df[["Name", "SKU", "Total Quantity"]]
-
-    # --- New logic for Summary_Missing ---
-    # 1. Get all items from orders that could not be fulfilled.
-    not_fulfilled_df = final_df[
-        final_df["Order_Fulfillment_Status"] == "Not Fulfillable"
-    ].copy()
-
-    # 2. Identify items that are "truly missing" by comparing required quantity vs initial stock.
-    truly_missing_df = not_fulfilled_df[
-        not_fulfilled_df["Quantity"] > not_fulfilled_df["Stock"]
-    ].copy()
-
-    # 3. Create the summary report from this filtered data.
-    if not truly_missing_df.empty:
-        # Handle Product_Name if available, otherwise use N/A
-        if "Product_Name" in truly_missing_df.columns:
-            truly_missing_df["Product_Name"] = truly_missing_df["Product_Name"].fillna(
-                "N/A"
-            )
-            summary_missing_df = truly_missing_df.groupby(
-                ["SKU", "Product_Name"], as_index=False
-            )["Quantity"].sum()
-            summary_missing_df = summary_missing_df.rename(
-                columns={"Product_Name": "Name", "Quantity": "Total Quantity"}
-            )
-            summary_missing_df = summary_missing_df[["Name", "SKU", "Total Quantity"]]
-        else:
-            summary_missing_df = truly_missing_df.groupby(["SKU"], as_index=False)[
-                "Quantity"
-            ].sum()
-            summary_missing_df["Name"] = "N/A"
-            summary_missing_df = summary_missing_df.rename(
-                columns={"Quantity": "Total Quantity"}
-            )
-            summary_missing_df = summary_missing_df[["Name", "SKU", "Total Quantity"]]
-    else:
-        summary_missing_df = pd.DataFrame(columns=["Name", "SKU", "Total Quantity"])
-
-    logger.debug(f"Summary present: {len(summary_present_df)} SKUs")
-    logger.debug(f"Summary missing: {len(summary_missing_df)} SKUs")
-
-    return summary_present_df, summary_missing_df
+        summary = present_df.groupby(["SKU"], as_index=False)["Quantity"].sum()
+        summary["Name"] = "N/A"
+        summary = summary.rename(columns={"Quantity": "Total Quantity"})
+    return summary[["Name", "SKU", "Total Quantity"]]
 
 
 def _generalize_shipping_method(method, courier_mappings=None):
@@ -1441,24 +1373,23 @@ def run_analysis(
             ``"fifo"``: strictly oldest order first regardless of item count.
 
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
-            A tuple containing four elements:
+        tuple[pd.DataFrame, dict]:
+            A tuple containing two elements:
             - final_df (pd.DataFrame): The main DataFrame with detailed results
               for every line item, including the calculated
               'Order_Fulfillment_Status'.
-            - summary_present_df (pd.DataFrame): A summary of all SKUs that
-              will be fulfilled, aggregated by quantity.
-            - summary_missing_df (pd.DataFrame): A summary of SKUs in
-              unfulfillable orders that were out of stock.
             - stats (dict): A dictionary containing key statistics about the
               fulfillment analysis (e.g., total orders completed).
+
+            Summary_Present is computed separately, after rules, via
+            `summary_present(final_df)` (AUDIT-06-5).
 
     Raises:
         ValueError: If data validation fails
         KeyError: If required columns missing
 
     Example:
-        >>> final_df, present, missing, stats = run_analysis(
+        >>> final_df, stats = run_analysis(
         ...     stock_df=stock,
         ...     orders_df=orders,
         ...     history_df=history
@@ -1544,11 +1475,7 @@ def run_analysis(
         )
         final_df = with_lots(final_df, fifo_lots, mode)
 
-        # Phase 7: Generate summary reports
-        logger.info("Phase 6/7: Generating summary reports")
-        summary_present_df, summary_missing_df = _generate_summary_reports(final_df)
-
-        # Phase 8: Calculate statistics
+        # Phase 7: Calculate statistics
         logger.info("Phase 7/7: Calculating statistics")
         stats = recalculate_statistics(final_df)
 
@@ -1564,7 +1491,7 @@ def run_analysis(
         logger.info(f"Columns: {list(final_df.columns)}")
         logger.info("=" * 60)
 
-        return final_df, summary_present_df, summary_missing_df, stats
+        return final_df, stats
 
     except ValueError:
         logger.exception("Validation error during analysis")

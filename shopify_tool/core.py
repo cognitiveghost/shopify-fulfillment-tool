@@ -827,7 +827,7 @@ def _run_analysis_and_rules(
     history_df: pd.DataFrame,
     config: dict,
     current_session: str | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Runs analysis simulation and applies business rules.
 
     Executes the core fulfillment analysis, applies low stock alerts,
@@ -841,7 +841,7 @@ def _run_analysis_and_rules(
         current_session: Name of this run's session, for repeat detection
 
     Returns:
-        Tuple of (final_df, summary_present_df, summary_missing_df, stats)
+        Tuple of (final_df, summary_present_df, stats)
 
     Raises:
         Exception: Propagated from analysis.run_analysis()
@@ -871,7 +871,7 @@ def _run_analysis_and_rules(
     analysis_mode = config.get("analysis_mode", "multi_first")
 
     # Run core analysis
-    final_df, summary_present_df, summary_missing_df, stats = analysis.run_analysis(
+    final_df, stats = analysis.run_analysis(
         stock_df,
         orders_df,
         history_df,
@@ -920,7 +920,12 @@ def _run_analysis_and_rules(
     )
     final_df = with_order_fields(final_df, config, lots)
 
-    return final_df, summary_present_df, summary_missing_df, stats
+    # Summary and stats follow the frame as the rules and lots left it
+    # (AUDIT-06-5): a rule hold or bonus line changes which SKUs ship.
+    summary_present_df = analysis.summary_present(final_df)
+    stats = analysis.recalculate_statistics(final_df)
+
+    return final_df, summary_present_df, stats
 
 
 def _add_stock_alert(final_df, config):
@@ -1150,7 +1155,6 @@ def _save_results_and_reports(
     final_df: pd.DataFrame,
     stock_df: pd.DataFrame,
     summary_present_df: pd.DataFrame,
-    summary_missing_df: pd.DataFrame,
     stats: dict,
     stock_file_path: str | None,
     orders_file_path: str | None,
@@ -1176,7 +1180,6 @@ def _save_results_and_reports(
         stock_df: Loaded stock DataFrame (SKU + Stock), used to seed the
             inventory-memory snapshot with SKUs the run itself never touched
         summary_present_df: Summary of fulfillable items
-        summary_missing_df: Summary of missing items
         stats: Statistics dictionary; gains "history_warning" when the
             fulfillment history couldn't be read or written
         stock_file_path: Path to stock file (None in memory mode)
@@ -1227,7 +1230,6 @@ def _save_results_and_reports(
     with pd.ExcelWriter(output_file_path, engine="xlsxwriter") as writer:
         final_df.to_excel(writer, sheet_name="fulfillment_analysis", index=False)
         summary_present_df.to_excel(writer, sheet_name="Summary_Present", index=False)
-        summary_missing_df.to_excel(writer, sheet_name="Summary_Missing", index=False)
 
         workbook = writer.book
         report_info_sheet = workbook.add_worksheet("Report Info")
@@ -1543,7 +1545,7 @@ def run_full_analysis(
                 f"Cannot load client config: profile_manager={profile_manager is not None}, client_id={client_id}"
             )
 
-        final_df, summary_present_df, summary_missing_df, stats = (
+        final_df, summary_present_df, stats = (
             _run_analysis_and_rules(
                 orders_df, stock_df, detection_history_df, config, current_session
             )
@@ -1559,7 +1561,6 @@ def run_full_analysis(
                 stock_df, config.get("column_mappings", {})
             ),
             summary_present_df,
-            summary_missing_df,
             stats,
             stock_file_path,
             orders_file_path,
