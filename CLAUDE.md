@@ -177,3 +177,34 @@ Issues live in GitHub Issues on `cognitiveghost/shopify-fulfillment-tool` (uses 
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+---
+
+## Working on this repo as an agent
+
+**UI work: the mockup is the brief.** When a task names an approved mockup (a path under `docs/design/` or a Claude
+Design artifact URL), read it first and follow it exactly. `frontend-design` decides only what the mockup leaves free:
+copy, empty and error states, focus and keyboard affordances, spacing rhythm, small window sizes. This is a PySide6
+desktop app:
+- a new colour, spacing or type token goes in `shared/theme.py` (via packing-tool, see below), and both themes must
+  work;
+- reuse `gui/components/` before adding a widget, and say which component you reused;
+- web framing (hero sections, scroll reveals) does not apply.
+
+Verify visuals by rendering: `QT_QPA_PLATFORM=offscreen` plus `widget.render(QImage)` saved to a PNG, then look at it.
+A spec states which mockup it followed and every departure from it.
+
+Gate: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q`, plus `ruff check . --exclude shared`.
+
+**Tooling on the dev VM:**
+- Edits to `shared/` are blocked here: edit packing-tool, then run `sync_shared.py <path>`.
+- Use `/usr/bin/git`, one plain git command per Bash call. The worktree guard refuses compound commands, `$VAR`
+  paths, xargs/find -exec, and any git command chained with `;` or `&&`. `rtk git` is refused.
+- Commit with `git commit -F <absolute path to a message file>`.
+- Local `main` is stale: branch from, and review against, `origin/main`.
+- `gh pr edit` fails (Projects classic). Use `gh api -X PATCH repos/<owner>/<repo>/pulls/N -F body=@file`.
+- A worktree's `.venv` may be missing: `ln -s <main checkout>/.venv .venv`.
+- The pytest-guard hook blocks Bash text containing "pytest" other than the plain run form, so write test files with
+  Write/Edit.
+- Production data in `~/Desktop/production info/` is read-only and never committed or quoted. Copy what you need to a
+  temp dir first.
+
