@@ -1336,6 +1336,11 @@ class ActionsHandler(QObject):
 
         # Step 2: Create new row
         new_row = template_row.copy()
+        # The template is another line: its lot allocation belongs to that
+        # SKU and quantity. A copied one exported 3 for a line of 1 and hid a
+        # SKU (#1221, spec 2026-09-28). The new line has no lot label (R3).
+        if "Lot_Details" in new_row.index:
+            new_row["Lot_Details"] = None
         new_row["SKU"] = sku
         new_row["Product_Name"] = product_data["product_name"]
         new_row["Quantity"] = quantity
