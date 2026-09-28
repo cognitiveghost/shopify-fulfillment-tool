@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -309,3 +310,17 @@ def test_the_qt_column_manager_is_gone():
         if GONE_COLUMN_MANAGER.search(line)
     ]
     assert hits == []
+
+
+def test_update_all_views_derives_lots_from_the_session_table(main_window):
+    main_window.analysis_results_df = pd.DataFrame([{
+        "Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable", "Shipping_Provider": "DHL",
+        "SKU": "AAA", "Quantity": 2, "System_note": "", "Internal_Tags": "[]", "Lot_Details": None,
+    }])
+    main_window.lot_table = {
+        "AAA": [{"expiry": "261230", "expiry_dt": date(2026, 12, 30), "batch": "B1", "qty": 5.0}]
+    }
+    main_window._update_all_views()
+    assert main_window.analysis_results_df["Lot_Details"].iloc[0] == [
+        {"expiry": "261230", "expiry_dt": "2026-12-30", "batch": "B1", "qty_allocated": 2.0}
+    ]

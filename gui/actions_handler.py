@@ -212,6 +212,11 @@ class ActionsHandler(QObject):
         success, result_msg, df, stats = result
         if success:
             self.mw.analysis_results_df = df
+            # The run's own stock file is now the session's; later refreshes
+            # derive lots from it (ADR 0014).
+            self.mw.lot_table = core.session_lot_table(
+                self.mw.session_path, self.mw.active_profile_config
+            )
             self.mw.analysis_stats = stats
             # run_full_analysis just rewrote current_state.pkl; without this
             # the first edit after every analysis is refused as stale.
