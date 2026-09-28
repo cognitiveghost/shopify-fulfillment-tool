@@ -86,6 +86,13 @@ def is_fulfillable(df, order_number) -> bool:
     return _key(order_number) in fulfillable_orders(df)
 
 
+def drawing_rows(df) -> pd.Series:
+    """Row mask: the SKU lines of fulfillable orders, the rows R2 draws from."""
+    if df is None or df.empty or "Order_Fulfillment_Status" not in df.columns:
+        return pd.Series(False, index=getattr(df, "index", None), dtype=bool)
+    return _sku_lines(df) & in_fulfillable_order(df)
+
+
 def stock_left(df, excluding=None) -> dict:
     """R2 per listed SKU. `excluding`: an order whose own draw is released."""
     if not _has_ledger(df):

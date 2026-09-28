@@ -15,7 +15,7 @@ def _format_lot(lot: dict) -> str:
     qty_str = f"{qty:g}" if isinstance(qty, float) else str(qty)
     expiry_dt = lot.get("expiry_dt")
     expiry_str = (
-        f"exp {expiry_dt.isoformat()}"
+        f"exp {expiry_dt}"
         if expiry_dt is not None
         else f"exp unparsed ({lot.get('expiry')!r})"
     )

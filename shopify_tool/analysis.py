@@ -6,10 +6,11 @@ from datetime import date, datetime
 import numpy as np
 import pandas as pd
 
-from shopify_tool.csv_utils import order_number_sort_key
+from shopify_tool.csv_utils import normalize_sku, order_number_sort_key
 from shopify_tool.stock_ledger import (
     FULFILLABLE,
     NOT_FULFILLABLE,
+    drawing_rows,
     is_fulfillable,
     shortfall,
     with_stock_left,
@@ -132,6 +133,38 @@ def _parse_expiry_date(raw) -> date | None:
             f"Ambiguous expiry {s!r}: valid as {[v[0] for v in valid]}, using {valid[0][0]}"
         )
     return valid[0][1]
+
+
+def _normalized_stock(stock_df: pd.DataFrame) -> pd.DataFrame:
+    """Stock rows with normalised SKUs and numeric stock, blank or text read as 0.
+
+    Normalize before any dedupe or aggregation: "501 " and "501.0" are one
+    SKU, and deduping first let both through to double every order line
+    the merge matched against them (F4). Blank SKUs stay blank so dropna
+    still drops them -- normalize_sku(NaN) would return "".
+    """
+    stock_df = stock_df.copy()
+    stock_df["SKU"] = stock_df["SKU"].astype(object)  # float SKUs take strings
+    has_sku = stock_df["SKU"].notna()
+    stock_df.loc[has_sku, "SKU"] = stock_df.loc[has_sku, "SKU"].map(normalize_sku)
+
+    # A blank or non-numeric stock cell is no stock, never unlimited stock:
+    # NaN fails both "== 0" and "required > available" (AUDIT-01-7).
+    stock_numeric = pd.to_numeric(stock_df["Stock"], errors="coerce")
+    bad = stock_numeric.isna() & has_sku
+    if bad.any():
+        logger.warning(
+            f"{int(bad.sum())} stock rows have a blank or non-numeric stock cell, "
+            f"read as 0: {stock_df.loc[bad, 'SKU'].tolist()[:10]}"
+        )
+    stock_df["Stock"] = stock_numeric.fillna(0)
+    return stock_df
+
+
+def lot_table(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
+    """The opening lots per SKU, FIFO-sorted, from a stock frame with internal
+    column names. None without lot columns (R3, ADR 0014)."""
+    return _build_fifo_lots(_normalized_stock(stock_df))
 
 
 def _build_fifo_lots(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
@@ -435,7 +468,6 @@ def _clean_and_prepare_data(
     # CRITICAL: Normalize SKU to standard format for consistent merging
     # This handles float artifacts (5170.0 → "5170"), whitespace, and leading zeros
     # Skip normalization for NO_SKU placeholder
-    from .csv_utils import normalize_sku
 
     # First, ensure SKU column is string type to avoid dtype errors (pandas 2.x uses 'str')
     dtype_str = str(orders_clean_df["SKU"].dtype)
@@ -461,25 +493,7 @@ def _clean_and_prepare_data(
             f"Missing required columns in stock DataFrame after mapping: {missing_stock_cols}"
         )
 
-    # Normalize before any dedupe or aggregation: "501 " and "501.0" are one
-    # SKU, and deduping first let both through to double every order line
-    # the merge matched against them (F4). Blank SKUs stay blank so dropna
-    # still drops them -- normalize_sku(NaN) would return "".
-    stock_df = stock_df.copy()
-    stock_df["SKU"] = stock_df["SKU"].astype(object)  # float SKUs take strings
-    has_sku = stock_df["SKU"].notna()
-    stock_df.loc[has_sku, "SKU"] = stock_df.loc[has_sku, "SKU"].map(normalize_sku)
-
-    # A blank or non-numeric stock cell is no stock, never unlimited stock:
-    # NaN fails both "== 0" and "required > available" (AUDIT-01-7).
-    stock_numeric = pd.to_numeric(stock_df["Stock"], errors="coerce")
-    bad = stock_numeric.isna() & has_sku
-    if bad.any():
-        logger.warning(
-            f"{int(bad.sum())} stock rows have a blank or non-numeric stock cell, "
-            f"read as 0: {stock_df.loc[bad, 'SKU'].tolist()[:10]}"
-        )
-    stock_df["Stock"] = stock_numeric.fillna(0)
+    stock_df = _normalized_stock(stock_df)
 
     # Detect whether lot columns (Expiry_Date / Batch) are present after mapping
     stock_lot_cols = [c for c in ["Expiry_Date", "Batch"] if c in stock_df.columns]
@@ -768,6 +782,56 @@ def _simulate_stock_allocation(
     return fulfillment_results, lot_allocations, final_stock_dict
 
 
+def _iso(value) -> str | None:
+    return value.isoformat() if isinstance(value, date) else None
+
+
+def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") -> pd.DataFrame:
+    """R3 (ADR 0014): each SKU line of a fulfillable order owns its lots.
+
+    `lots` is lot_table's FIFO list per SKU, or None. Orders draw in the run's
+    priority sequence (_prioritize_orders, `mode`), an order's lines in row
+    order. Units the lots can't cover get one "no lot" entry (expiry "1"), so
+    a line's entries always sum to its Quantity. Held orders, no-SKU lines and
+    SKUs without lots get None. Mutates and returns df, like with_stock_left.
+    """
+    df["Lot_Details"] = pd.Series([None] * len(df), index=df.index, dtype=object)
+    if not lots or df.empty:
+        return df
+    left = {sku: [dict(lot) for lot in lot_list] for sku, lot_list in lots.items()}
+    drawing = drawing_rows(df)
+    keys = df["Order_Number"].astype(str).str.strip()
+    rows_of = keys[drawing].groupby(keys[drawing]).groups
+    quantity = pd.to_numeric(df["Quantity"], errors="coerce").fillna(0)
+    sequence = _prioritize_orders(df[["Order_Number"]], mode)["Order_Number"]
+    for order in (str(o).strip() for o in sequence):
+        for idx in rows_of.get(order, []):
+            sku_lots = left.get(df.at[idx, "SKU"])
+            if sku_lots is None:
+                continue
+            need = float(quantity[idx])
+            entries = []
+            for lot in sku_lots:
+                if need <= 0:
+                    break
+                take = min(lot["qty"], need)
+                if take > 0:
+                    entries.append(
+                        {
+                            "expiry": lot["expiry"],
+                            "expiry_dt": _iso(lot["expiry_dt"]),
+                            "batch": lot["batch"],
+                            "qty_allocated": take,
+                        }
+                    )
+                    lot["qty"] -= take
+                    need -= take
+            if need > 0:
+                entries.append({"expiry": "1", "expiry_dt": None, "batch": None, "qty_allocated": need})
+            df.at[idx, "Lot_Details"] = entries
+    return df
+
+
 def _calculate_final_stock(
     stock_df: pd.DataFrame, fulfillment_results: dict[str, str], orders_df: pd.DataFrame
 ) -> pd.DataFrame:
@@ -911,7 +975,6 @@ def _merge_results_to_dataframe(
     courier_mappings: dict | None = None,
     current_session: str | None = None,
     additional_columns_config: list | None = None,
-    lot_allocations: dict[str, dict[str, list[dict]]] | None = None,
 ) -> pd.DataFrame:
     """
     Merge all analysis results into final output DataFrame.
@@ -1090,15 +1153,7 @@ def _merge_results_to_dataframe(
     # Migrate Packaging_Tags to Internal_Tags if it exists
     final_df = _migrate_packaging_tags(final_df)
 
-    # Attach lot allocation details per order/SKU row
-    if lot_allocations:
-
-        def _get_lot_details(row):
-            return lot_allocations.get(row["Order_Number"], {}).get(row["SKU"])
-
-        final_df["Lot_Details"] = final_df.apply(_get_lot_details, axis=1)
-    else:
-        final_df["Lot_Details"] = None
+    final_df["Lot_Details"] = None
 
     # Select and order output columns
     output_columns = [
@@ -1451,7 +1506,7 @@ def run_analysis(
 
         # Phase 3: Simulate stock allocation
         logger.info("Phase 3/7: Stock allocation simulation")
-        fulfillment_results, lot_allocations, final_stock_dict = (
+        fulfillment_results, _lot_allocations, final_stock_dict = (
             _simulate_stock_allocation(
                 orders_clean, stock_clean, prioritized_orders, fifo_lots
             )
@@ -1486,8 +1541,8 @@ def run_analysis(
             courier_mappings,
             current_session,
             additional_columns_config,
-            lot_allocations,
         )
+        final_df = with_lots(final_df, fifo_lots, mode)
 
         # Phase 7: Generate summary reports
         logger.info("Phase 6/7: Generating summary reports")

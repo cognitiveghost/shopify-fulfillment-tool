@@ -203,10 +203,6 @@ def test_undo_of_removed_order_restores_row_order():
     assert mw.analysis_results_df["Order_Number"].tolist() == before
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUDIT-01-12: undo history cannot be saved once rows carry lot details",
-)
 def test_undo_history_survives_reopen_for_lot_tracked_stock(tmp_path):
     df, *_ = analyse(
         stock([("A", 5, "261230", "B1")], lots=True), orders([("#1", "A", 1)])
