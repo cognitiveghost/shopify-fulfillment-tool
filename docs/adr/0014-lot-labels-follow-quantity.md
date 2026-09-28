@@ -19,7 +19,8 @@ line's allocation onto two new lines; the stock export wrote 3 for a line of
 one order's lines of one SKU — the pair's quantity is walked through its lots,
 clipping each. Units the lots don't cover have no lot label (blank
 Годност/Партида). Edit verbs never rewrite `Lot_Details`; Add product gives a
-new line none. The stock export also refuses to write when its per-SKU totals
+new line none, and R3 ignores any list on a Manual line, since sessions saved
+before this fix carry one copied from another SKU. The stock export also refuses to write when its per-SKU totals
 differ from the fulfillable lines.
 
 Rejected: allocating real lots at edit time from the session's stock file.

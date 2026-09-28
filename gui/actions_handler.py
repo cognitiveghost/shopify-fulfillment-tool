@@ -993,18 +993,26 @@ class ActionsHandler(QObject):
         df = self.mw.analysis_results_df
         if df is None or df.empty:
             return
+        label = self._line_label(df, order_number, line_index, sku, "line removal")
+        if label is None:
+            return
+        # The frame's own SKU value, so a no-SKU line (NaN) still matches.
+        self.remove_item_from_order(order_number, df.loc[label, "SKU"], df.index.get_loc(label))
+
+    def _line_label(self, df, order_number, line_index: int, sku, verb):
+        """The frame label of the order's `line_index`-th line, in frame order,
+        or None (logged) when it is gone or no longer carries `sku`."""
         labels = df.index[self._order_mask(order_number)]
         if not 0 <= line_index < len(labels):
-            self.log.warning("Aborted line removal: the line is gone")
-            return
+            self.log.warning(f"Aborted {verb}: the line is gone")
+            return None
         label = labels[line_index]
         own_sku = df.loc[label, "SKU"]
         own = "" if pd.isna(own_sku) else str(own_sku).strip()
         if own != str(sku).strip():
-            self.log.warning("Aborted line removal: the line moved")
-            return
-        # The frame's own SKU value, so a no-SKU line (NaN) still matches.
-        self.remove_item_from_order(order_number, own_sku, df.index.get_loc(label))
+            self.log.warning(f"Aborted {verb}: the line moved")
+            return None
+        return label
 
     def change_line_quantity(self, order_number, line_index: int, sku, quantity):
         """The pane's Change quantity (spec 2026-09-28 §4.5): the order's
@@ -1018,17 +1026,12 @@ class ActionsHandler(QObject):
         if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
             self.log.warning(f"Aborted quantity change: {quantity!r} is not a whole number from 1")
             return
-        mask = self._order_mask(order_number)
-        labels = df.index[mask]
-        if not 0 <= line_index < len(labels):
-            self.log.warning("Aborted quantity change: the line is gone")
+        label = self._line_label(df, order_number, line_index, sku, "quantity change")
+        if label is None:
             return
-        label = labels[line_index]
+        mask = self._order_mask(order_number)
         own_sku = df.loc[label, "SKU"]
         own = "" if pd.isna(own_sku) else str(own_sku).strip()
-        if own != str(sku).strip():
-            self.log.warning("Aborted quantity change: the line moved")
-            return
         old = pd.to_numeric(df.loc[label, "Quantity"], errors="coerce")
         if old == quantity:
             return
@@ -1045,7 +1048,10 @@ class ActionsHandler(QObject):
         self.mw.analysis_results_df = stock_ledger.with_stock_left(frame)
 
         before = None if pd.isna(old) else (int(old) if float(old).is_integer() else float(old))
-        description = f"Changed {own} in order {order_number} from {before} to {quantity}"
+        description = (
+            f"Changed {own} in order {order_number} "
+            f"from {'blank' if before is None else before} to {quantity}"
+        )
         self.mw.undo_manager.record_operation(
             "change_quantity",
             description,

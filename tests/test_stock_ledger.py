@@ -228,3 +228,12 @@ def test_pairs_come_out_in_row_order():
 def test_no_lot_details_column_at_all():
     df = pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [2]})
     assert lot_parts(df) == [(0, 2, "", "")]
+
+
+def test_a_manual_lines_lots_are_ignored():
+    # A session saved before #1221's fix: Add product copied the first line's
+    # Lot_Details onto a line of another SKU.
+    lots = [L1]
+    df = lines([("#1", "A", 1, lots), ("#1", "B", 1, lots)])
+    df["Source"] = ["Order", "Manual"]
+    assert lot_parts(df) == [(0, 1, "260601", "B1"), (1, 1, "", "")]

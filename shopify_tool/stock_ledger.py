@@ -192,6 +192,7 @@ def lot_parts(rows) -> list:
     never pair. A pair with lots gives one part per lot it still needs,
     labelled with its first line, then one unlabelled part for any quantity
     the lots don't cover. A pair without lots gives each line as it is.
+    A Manual line's own Lot_Details is never read.
     Pairs come out in the order their first line appears in `rows`.
     """
     if rows is None or rows.empty:
@@ -207,15 +208,19 @@ def lot_parts(rows) -> list:
         pairs.setdefault(key, []).append(label)
 
     lotted = "Lot_Details" in rows.columns
+    # The run never allocates to Manual lines; one saved before #1221's fix
+    # may still carry a list copied from a line of another SKU.
+    manual = rows["Source"].eq("Manual") if "Source" in rows.columns else None
     parts = []
     for labels in pairs.values():
-        lots = next(
-            (_lot_list(rows.at[l, "Lot_Details"]) for l in labels
-             if lotted and _lot_list(rows.at[l, "Lot_Details"])),
-            [],
-        )
+        lots = []
+        for label in labels:
+            if lotted and not (manual is not None and manual[label]):
+                lots = _lot_list(rows.at[label, "Lot_Details"])
+                if lots:
+                    break
         if not lots:
-            parts.extend((l, rows.at[l, "Quantity"], "", "") for l in labels)
+            parts.extend((label, rows.at[label, "Quantity"], "", "") for label in labels)
             continue
         need = qty[labels].sum()
         for lot in lots:
