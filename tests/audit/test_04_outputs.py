@@ -306,10 +306,12 @@ def test_packing_list_is_in_numeric_order_number_order(tmp_path):
 
 
 def test_packing_list_lot_rows_keep_the_order_quantity(tmp_path):
-    lots = [{"qty_allocated": 3, "expiry": "2027-01", "batch": "L1"},
-            {"qty_allocated": 1, "expiry": "2027-06", "batch": "L2"}]
     df = frame([("#1", "A", 2, FF), ("#1", "A", 2, FF)])
-    df["Lot_Details"] = [lots, lots]  # one allocation object per (order, SKU)
+    df["Lot_Details"] = [  # one list per line (ADR 0014)
+        [{"qty_allocated": 2, "expiry": "2027-01", "batch": "L1"}],
+        [{"qty_allocated": 1, "expiry": "2027-01", "batch": "L1"},
+         {"qty_allocated": 1, "expiry": "2027-06", "batch": "L2"}],
+    ]
     create_packing_list(df, str(tmp_path / "p.xlsx"))
     assert xlsx_lines(tmp_path / "p.xlsx") == {("#1", "A"): 4}
 
@@ -321,10 +323,12 @@ def test_stock_export_totals_equal_fulfillable_quantities(tmp_path):
 
 
 def test_stock_export_lot_rows_sum_to_the_allocation(tmp_path):
-    lots = [{"qty_allocated": 3, "expiry": "2027-01", "batch": "L1"},
-            {"qty_allocated": 1, "expiry": "2027-06", "batch": "L2"}]
     df = frame([("#1", "A", 2, FF), ("#1", "A", 2, FF)])
-    df["Lot_Details"] = [lots, lots]
+    df["Lot_Details"] = [
+        [{"qty_allocated": 2, "expiry": "2027-01", "batch": "L1"}],
+        [{"qty_allocated": 1, "expiry": "2027-01", "batch": "L1"},
+         {"qty_allocated": 1, "expiry": "2027-06", "batch": "L2"}],
+    ]
     create_stock_export(df, str(tmp_path / "e.xls"))
     e = pd.read_excel(tmp_path / "e.xls", dtype={"Артикул": str})
     assert e["Брой"].tolist() == [3, 1]

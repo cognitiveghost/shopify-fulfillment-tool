@@ -93,21 +93,12 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
     """
     lot_rows_data: dict = {}  # (sku, expiry, batch) → total qty
     no_lot_skus: dict = {}  # sku → total qty
-    # The simulation allocates at the (order, SKU) level and stores one Lot_Details
-    # list object per pair (see analysis.py's order_alloc[sku] = sku_alloc); every
-    # DataFrame row for that pair gets the SAME object by reference. Dedupe on
-    # object identity rather than (Order_Number, SKU) -- the latter collapses
-    # distinct allocations whenever Order_Number is blank on more than one row.
-    seen_allocations: set = set()
+    # Each line owns its lots (ADR 0014): sum every row, never dedupe.
 
     for _, row in filtered_items.iterrows():
         sku = row["SKU"]
         lot_details = row.get("Lot_Details")
         if lot_details and isinstance(lot_details, list) and len(lot_details) > 0:
-            alloc_id = id(lot_details)
-            if alloc_id in seen_allocations:
-                continue
-            seen_allocations.add(alloc_id)
             for entry in lot_details:
                 expiry = entry.get("expiry") or ""
                 if expiry == "1":
