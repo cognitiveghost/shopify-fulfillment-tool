@@ -7,6 +7,10 @@ R1  An order is fulfillable when every one of its SKU lines is Fulfillable.
 R2  Stock left = opening Stock - the SKU lines of fulfillable orders, per
     listed SKU. A SKU whose Final_Stock is null on every row is unlisted
     (missing from the stock file): it stays null and never blocks.
+R3  Lot labels follow Quantity (ADR 0014). Lot_Details is the run's FIFO
+    allocation and only labels a line's units. Per pair (one order's lines of
+    one SKU) the pair's Quantity is walked through its lots, clipping each;
+    what is left over has no lot label. lot_parts() is the only reader.
 
 Edit verbs write rows and statuses, then call with_stock_left. They never
 adjust Final_Stock themselves.
@@ -169,3 +173,60 @@ def with_stock_left(df):
         derived = df["SKU"].map(left)
         df["Final_Stock"] = derived.where(derived.notna(), df["Final_Stock"])
     return df
+
+
+def _lot_list(cell) -> list:
+    return cell if isinstance(cell, list) and cell else []
+
+
+def _lot_label(value) -> str:
+    # The run writes "1" (and None for batch) when the stock file has no lot.
+    text = value or ""
+    return "" if text == "1" else text
+
+
+def lot_parts(rows) -> list:
+    """R3: [(row label, quantity, expiry, batch)] for writing these rows out.
+
+    A pair is one order's lines of one SKU; lines with a blank order number
+    never pair. A pair with lots gives one part per lot it still needs,
+    labelled with its first line, then one unlabelled part for any quantity
+    the lots don't cover. A pair without lots gives each line as it is.
+    Pairs come out in the order their first line appears in `rows`.
+    """
+    if rows is None or rows.empty:
+        return []
+    qty = pd.to_numeric(rows["Quantity"], errors="coerce").fillna(0)
+    has_orders = "Order_Number" in rows.columns
+    pairs: dict = {}
+    for label, sku in zip(rows.index, rows["SKU"]):
+        order = rows.at[label, "Order_Number"] if has_orders else None
+        order = "" if order is None or pd.isna(order) else str(order).strip()
+        sku = "" if sku is None or pd.isna(sku) else str(sku).strip()
+        key = (order, sku) if order else ("", label)
+        pairs.setdefault(key, []).append(label)
+
+    lotted = "Lot_Details" in rows.columns
+    parts = []
+    for labels in pairs.values():
+        lots = next(
+            (_lot_list(rows.at[l, "Lot_Details"]) for l in labels
+             if lotted and _lot_list(rows.at[l, "Lot_Details"])),
+            [],
+        )
+        if not lots:
+            parts.extend((l, rows.at[l, "Quantity"], "", "") for l in labels)
+            continue
+        need = qty[labels].sum()
+        for lot in lots:
+            if need <= 0:
+                break
+            take = min(lot.get("qty_allocated", 0) or 0, need)
+            if take > 0:
+                parts.append(
+                    (labels[0], take, _lot_label(lot.get("expiry")), _lot_label(lot.get("batch")))
+                )
+                need -= take
+        if need > 0:
+            parts.append((labels[0], need, "", ""))
+    return parts
