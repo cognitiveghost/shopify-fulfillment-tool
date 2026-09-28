@@ -239,8 +239,8 @@ def _open_qty_entry(qtbot, view):
 
 def _enter_qty(value):
     return (
-        "(i => { i.value = %r; i.dispatchEvent(new KeyboardEvent('keydown', "
-        "{key: 'Enter', bubbles: true})); })(document.getElementById('line-qty'))" % value
+        f"(i => {{ i.value = {value!r}; i.dispatchEvent(new KeyboardEvent('keydown', "
+        "{key: 'Enter', bubbles: true})); })(document.getElementById('line-qty'))"
     )
 
 

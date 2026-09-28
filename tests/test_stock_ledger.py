@@ -160,7 +160,7 @@ def test_claim_detail_reports_stock_at_each_orders_turn():
 
 # --- R3: lot labels follow Quantity (spec 2026-09-28 §3) --------------------
 
-from shopify_tool.stock_ledger import lot_parts  # noqa: E402
+from shopify_tool.stock_ledger import lot_parts
 
 L1 = {"expiry": "260601", "expiry_dt": None, "batch": "B1", "qty_allocated": 3}
 L2 = {"expiry": "270101", "expiry_dt": None, "batch": "B2", "qty_allocated": 2}
