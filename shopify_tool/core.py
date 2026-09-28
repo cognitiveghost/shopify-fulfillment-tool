@@ -895,6 +895,8 @@ def _run_analysis_and_rules(
             "CRITICAL: Order_Fulfillment_Status column is missing from analysis result!"
         )
 
+    # Stock_Alert and weights now because rules read them; with_order_fields
+    # recomputes both after the rules changed the frame.
     _add_stock_alert(final_df, config)
 
     # Enrich DataFrame with volumetric weights before Rule Engine
@@ -972,10 +974,12 @@ def with_order_fields(df, config, lots):
     Order_Type, the weight and box columns, Stock_Alert and Lot_Details were
     computed once at run time, and add product, remove item, holds, rule bonus
     lines and undo left them stale (AUDIT-06-1, -2). Runs at the end of the
-    run and on every MainWindow refresh (spec 2026-09-28 §3).
+    run and on every MainWindow refresh (spec 2026-09-28 §3). Returns a new
+    frame; the caller's is left as it was.
     """
     if df is None or df.empty or "Order_Number" not in df.columns:
         return df
+    df = df.copy()
     config = config or {}
     if "Order_Type" in df.columns:
         keys = df["Order_Number"].astype(str).str.strip()

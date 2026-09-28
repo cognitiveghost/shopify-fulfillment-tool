@@ -107,3 +107,11 @@ def test_with_order_fields_leaves_a_minimal_frame_alone():
     df = pd.DataFrame({"Order_Number": ["1"], "System_note": [""]})
     assert core.with_order_fields(df, {}, None).columns.tolist() == ["Order_Number", "System_note"]
     assert core.with_order_fields(None, {}, None) is None
+
+
+def test_an_order_under_two_raw_keys_draws_once():
+    # 1001 and "1001 " share a key; drawing it twice starved #1002 (review, C1).
+    lots = {"A": [{"expiry": "261230", "expiry_dt": date(2026, 12, 30), "batch": "E", "qty": 3.0}]}
+    df = frame([(1001, "A", 1, FF), ("1001 ", "A", 1, FF), ("1002", "A", 1, FF)])
+    out = analysis.with_lots(df, lots)
+    assert [shares(d) for d in out["Lot_Details"]] == [[("E", 1.0)]] * 3

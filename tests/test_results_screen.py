@@ -324,3 +324,25 @@ def test_update_all_views_derives_lots_from_the_session_table(main_window):
     assert main_window.analysis_results_df["Lot_Details"].iloc[0] == [
         {"expiry": "261230", "expiry_dt": "2026-12-30", "batch": "B1", "qty_allocated": 2.0}
     ]
+
+
+def test_opening_a_session_reads_its_lots(main_window, tmp_path, monkeypatch):
+    lots = {"AAA": [{"expiry": "261230", "expiry_dt": date(2026, 12, 30), "batch": "B1", "qty": 5.0}]}
+    asked = []
+    monkeypatch.setattr(
+        "gui.main_window_pyside.core.session_lot_table", lambda path, _config: asked.append(path) or lots
+    )
+    monkeypatch.setattr(main_window.session_manager, "get_session_info", lambda _path: {"x": 1})
+    monkeypatch.setattr(main_window, "_restore_session_inputs", lambda _path: None)
+
+    def load(_path):
+        main_window.analysis_results_df = pd.DataFrame([{
+            "Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable", "Shipping_Provider": "DHL",
+            "SKU": "AAA", "Quantity": 2, "System_note": "", "Internal_Tags": "[]", "Lot_Details": None,
+        }])
+        return True
+
+    monkeypatch.setattr(main_window, "_load_session_analysis", load)
+    main_window.load_existing_session(str(tmp_path))
+    assert asked == [str(tmp_path)]
+    assert main_window.analysis_results_df["Lot_Details"].iloc[0][0]["batch"] == "B1"

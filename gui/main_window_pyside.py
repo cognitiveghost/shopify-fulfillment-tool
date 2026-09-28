@@ -1015,9 +1015,9 @@ class MainWindow(QMainWindow):
 
                 # Try to load analysis data if it exists
                 if self._load_session_analysis(session_path):
+                    self.lot_table = core.session_lot_table(session_path, self.active_profile_config)
                     # Analysis loaded successfully; a session saved by an older
                     # build may hold a drifted Final_Stock (ADR 0010).
-                    self.lot_table = core.session_lot_table(session_path, self.active_profile_config)
                     self.analysis_results_df = with_stock_left(self.analysis_results_df)
                     self._update_all_views()
 

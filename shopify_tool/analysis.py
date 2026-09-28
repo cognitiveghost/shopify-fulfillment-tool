@@ -811,7 +811,8 @@ def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") ->
     rows_of = keys[drawing].groupby(keys[drawing]).groups
     quantity = pd.to_numeric(df["Quantity"], errors="coerce").fillna(0)
     sequence = _prioritize_orders(df[["Order_Number"]], mode)["Order_Number"]
-    for order in (str(o).strip() for o in sequence):
+    # One pass per key: _prioritize_orders groups raw values, so 1001 and "1001 " come twice.
+    for order in dict.fromkeys(str(o).strip() for o in sequence):
         for idx in rows_of.get(order, []):
             sku_lots = left.get(df.at[idx, "SKU"])
             if sku_lots is None:

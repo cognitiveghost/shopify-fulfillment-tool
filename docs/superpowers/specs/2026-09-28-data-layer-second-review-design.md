@@ -266,7 +266,11 @@ rebuilds lots with `core.session_lot_table(<session dir>, <client config>)` and
 applies `with_order_fields`, then checks:
 1. the lot export total equals the fulfillable quantity total in every session;
 2. in sessions with no manual rows and no removals, the per-(order, SKU)
-   `qty_allocated` per (expiry, batch) equals the saved `Lot_Details`;
+   `qty_allocated` per (expiry, batch) equals the saved `Lot_Details`
+   (superseded at review: saved pickles predate AUDIT-06-7's parser, so 12 of
+   40 differ by expiry order. The check run instead re-runs each session from
+   its `input/` files and compares `with_lots` with the run's own
+   `lot_allocations`: 39/39 identical);
 3. REVE 2026-09-28_1 exports `01PJ0001L 1, 01PJ0001S 1`.
 Put the counts in the PR body. The client configs are
 `~/Desktop/production info/CLIENT_*/shopify_config.json`. REVE has none there,
