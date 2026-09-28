@@ -143,6 +143,7 @@ def test_on_analysis_complete_toasts_a_history_warning(monkeypatch, tmp_path, st
     mw = SimpleNamespace(
         session_path=None,
         current_client_id="M",
+        active_profile_config={},
         profile_manager=SimpleNamespace(base_path=tmp_path),
         threadpool=QThreadPool(),
         log_activity=Mock(),
@@ -191,6 +192,7 @@ def test_on_analysis_complete_does_not_block_ui_thread_on_stats_recording(
     mw = SimpleNamespace(
         session_path=str(tmp_path / "session_1"),
         current_client_id="M",
+        active_profile_config={},
         profile_manager=SimpleNamespace(base_path=tmp_path),
         threadpool=QThreadPool(),
         log_activity=Mock(),
