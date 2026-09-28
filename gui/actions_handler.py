@@ -1006,6 +1006,67 @@ class ActionsHandler(QObject):
         # The frame's own SKU value, so a no-SKU line (NaN) still matches.
         self.remove_item_from_order(order_number, own_sku, df.index.get_loc(label))
 
+    def change_line_quantity(self, order_number, line_index: int, sku, quantity):
+        """The pane's Change quantity (spec 2026-09-28 §4.5): the order's
+        `line_index`-th line, in frame order, only while it still carries
+        `sku`. The order keeps its status unless the new quantity outruns
+        Stock left, as Add product does; a lower one never releases a hold.
+        Lot_Details is left alone: R3 fits it to the new quantity on output."""
+        df = self.mw.analysis_results_df
+        if df is None or df.empty:
+            return
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+            self.log.warning(f"Aborted quantity change: {quantity!r} is not a whole number from 1")
+            return
+        mask = self._order_mask(order_number)
+        labels = df.index[mask]
+        if not 0 <= line_index < len(labels):
+            self.log.warning("Aborted quantity change: the line is gone")
+            return
+        label = labels[line_index]
+        own_sku = df.loc[label, "SKU"]
+        own = "" if pd.isna(own_sku) else str(own_sku).strip()
+        if own != str(sku).strip():
+            self.log.warning("Aborted quantity change: the line moved")
+            return
+        old = pd.to_numeric(df.loc[label, "Quantity"], errors="coerce")
+        if old == quantity:
+            return
+
+        affected_rows = df[mask].copy()
+        was_fulfillable = stock_ledger.is_fulfillable(df, order_number)
+        frame = df.copy()
+        frame.loc[label, "Quantity"] = quantity
+        short = stock_ledger.shortfall(frame, order_number) if was_fulfillable else []
+        if short:
+            frame.loc[
+                self._order_mask(order_number, frame), "Order_Fulfillment_Status"
+            ] = stock_ledger.NOT_FULFILLABLE
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(frame)
+
+        before = None if pd.isna(old) else (int(old) if float(old).is_integer() else float(old))
+        description = f"Changed {own} in order {order_number} from {before} to {quantity}"
+        self.mw.undo_manager.record_operation(
+            "change_quantity",
+            description,
+            {
+                "order_number": order_number,
+                "sku": own,
+                "quantity_before": before,
+                "quantity_after": quantity,
+            },
+            affected_rows,
+        )
+
+        self.data_changed.emit()
+        self.mw.save_session_state()
+        self._update_undo_button()
+        self.mw.log_activity("Data Edit", f"{description}.")
+        text = f"Changed {own} in order {order_number} to {quantity}."
+        if short:
+            text += f" It is now blocked: not enough {', '.join(short)}."
+        self._results_toast(text, undoable=True)
+
     def add_internal_tag(self, order_number, tag):
         self._change_internal_tag(order_number, tag, adding=True)
 

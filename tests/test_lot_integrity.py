@@ -121,3 +121,10 @@ def test_adding_a_sku_the_order_already_has_labels_only_the_run_part(tmp_path):
     e = pd.read_excel(tmp_path / "e.xls", dtype={"Артикул": str, "Годност": str}).fillna("")
     l_rows = sorted(zip(e.loc[e["Артикул"] == "L", "Годност"], e.loc[e["Артикул"] == "L", "Брой"]))
     assert l_rows == [("", 1), ("20270101", 3)]
+
+
+def test_a_lowered_lot_line_exports_its_new_quantity(tmp_path):
+    mw = window(incident_run())
+    ActionsHandler(mw).change_line_quantity("#1221", line_of(mw, "#1221", "S"), "S", 1)
+    create_stock_export(mw.analysis_results_df, str(tmp_path / "e.xls"))
+    assert export_totals(tmp_path / "e.xls")["S"] == 1
