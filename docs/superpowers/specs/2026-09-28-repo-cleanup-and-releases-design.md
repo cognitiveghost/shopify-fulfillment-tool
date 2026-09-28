@@ -151,8 +151,9 @@ Shopify:
   `six` still arrives transitively. Keep `xlrd`, `xlsxwriter`, `pytz`, `python-dateutil` and `tzdata`, which pandas
   uses by engine name or at runtime.
 - **Shopify `requirements-dev.txt`:** drop the transitive `iniconfig`, `packaging`, `pluggy` and `altgraph`.
-- **packing `requirements.txt`:** keeps `PySide6`, `pandas` and `openpyxl`. `pyinstaller`, `pytest`, `pytest-qt`
-  and `ruff~=0.16.0` move to `requirements-dev.txt`. The build job installs both files.
+- **packing `requirements.txt`:** keeps `PySide6`, `pandas` and `openpyxl`. `pyinstaller` moves to
+  `requirements-dev.txt`, which already holds `pytest`, `pytest-qt` and `ruff~=0.16.0`. The build job installs
+  both files.
 
 **Files that should not be tracked (packing):** untrack `.claude/settings.local.json` and add
 `.claude/settings.local.json` to `.gitignore`. `config.ini` stays tracked, because the app reads it as its
