@@ -263,6 +263,12 @@ def test_the_column_layout_round_trips_through_the_client_config(
         ("fulfillRequested", ("1001",), "set_order_fulfillable", ("1001", True)),
         ("excludeRequested", ("1001",), "remove_entire_order", ("1001",)),
         ("lineRemovalRequested", ("1001", 0, "A"), "remove_line", ("1001", 0, "A")),
+        (
+            "lineQuantityChangeRequested",
+            ("1001", 0, "A", 3),
+            "change_line_quantity",
+            ("1001", 0, "A", 3),
+        ),
         ("tagAddRequested", ("1001", "vip"), "add_internal_tag", ("1001", "vip")),
         (
             "tagRemovalRequested",

@@ -163,6 +163,7 @@ function paneLines(o) {
     const more = paneButton("ghost icon line-menu-button", "⋯", "Actions for this line");
     more.addEventListener("click", () => openPaneMenu(more, "line-menu", [
       ["Remove this line", () => state.bridge.removeLine(order, index, sku)],
+      ["Change quantity…", () => openQtyMenu(more, order, index, sku, line.Quantity)],
       ["Copy SKU", () => state.bridge.copyText(sku)],
     ]));
     const actions = el("span", "line-cell");
@@ -288,6 +289,31 @@ function openTagMenu(anchor, o) {
     if (e.key !== "Enter" || !tag) return;
     closePaneMenus();
     if (state.bridge) state.bridge.addOrderTag(order, tag);
+  });
+  menu.append(input);
+  placeMenu(menu, anchor);
+}
+
+// Change quantity (spec 2026-09-28 §4.5): the page's own number entry, as the
+// tag menu's "New tag" -- actions_handler holds no Qt input dialog. Only a
+// whole number from 1 that differs from the line's own is sent.
+function openQtyMenu(anchor, order, index, sku, current) {
+  const own = num(current);
+  const menu = newMenu("qty-menu");
+  const input = el("input", "new-tag");
+  input.id = "line-qty";
+  input.type = "number";
+  input.min = "1";
+  input.step = "1";
+  input.value = own === null ? "" : String(own);
+  input.setAttribute("aria-label", "Quantity");
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const n = input.value.trim() === "" ? NaN : Number(input.value);
+    closePaneMenus();
+    if (Number.isInteger(n) && n >= 1 && n !== own && state.bridge) {
+      state.bridge.changeLineQuantity(order, index, sku, n);
+    }
   });
   menu.append(input);
   placeMenu(menu, anchor);
