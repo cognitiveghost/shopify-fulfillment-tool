@@ -1068,6 +1068,13 @@ def _settle_rule_changes(final_df, stock_df, config):
     return final_df
 
 
+def _stock_per_sku(stock_df: pd.DataFrame) -> pd.Series:
+    """Stock summed per normalised SKU ("X " and "X" are one SKU, AUDIT-06-3)."""
+    listed = stock_df[stock_df["SKU"].notna()]
+    stock = pd.to_numeric(listed["Stock"], errors="coerce")
+    return stock.groupby(listed["SKU"].map(normalize_sku)).sum(min_count=1).dropna()
+
+
 def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:
     """Post-fulfilment stock per SKU, seeded from the whole stock file.
 
@@ -1085,10 +1092,8 @@ def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> 
 
     if stock_df is not None and {"SKU", "Stock"} <= set(stock_df.columns):
         # A SKU on several rows (lots, locations) is their sum (Audit 01 §6).
-        stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
         snapshot = (
-            stock.groupby(stock_df["SKU"]).sum(min_count=1)
-            .dropna()
+            _stock_per_sku(stock_df)
             .apply(lambda x: max(0.0, float(x)))
             .to_dict()
         )
@@ -1115,8 +1120,7 @@ def inventory_total_units(stock_df: pd.DataFrame) -> float:
     """
     if stock_df is None or not {"SKU", "Stock"} <= set(stock_df.columns):
         return 0.0
-    stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
-    per_sku = stock.groupby(stock_df["SKU"]).sum(min_count=1).dropna()
+    per_sku = _stock_per_sku(stock_df)
     return float(per_sku.clip(lower=0).sum())
 
 

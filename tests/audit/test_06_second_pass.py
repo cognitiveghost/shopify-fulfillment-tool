@@ -209,7 +209,6 @@ def test_stock_alert_follows_a_hold():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-06-3: raw and normalised SKU both remembered")
 def test_inventory_snapshot_keys_are_normalised_skus():
     final = pd.DataFrame({"Order_Number": ["#1"], "SKU": ["S-EX06-2MD"], "Final_Stock": [3.0]})
     raw = pd.DataFrame({"SKU": ["S-EX06-2MD ", "OTHER"], "Stock": [5, 4]})
