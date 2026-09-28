@@ -307,7 +307,7 @@ def test_packing_list_is_in_numeric_order_number_order(tmp_path):
 
 def test_packing_list_lot_rows_keep_the_order_quantity(tmp_path):
     df = frame([("#1", "A", 2, FF), ("#1", "A", 2, FF)])
-    df["Lot_Details"] = [  # one list per line (ADR 0014)
+    df["Lot_Details"] = [  # one list per line (ADR 0015)
         [{"qty_allocated": 2, "expiry": "2027-01", "batch": "L1"}],
         [{"qty_allocated": 1, "expiry": "2027-01", "batch": "L1"},
          {"qty_allocated": 1, "expiry": "2027-06", "batch": "L2"}],

@@ -1,9 +1,14 @@
-# 0014 — Lot allocation is derived from the frame, like Stock left
+# 0015 — Lot allocation is derived from the frame, like Stock left
 
 **Status:** Accepted, 2026-09-28
 **Context:** `docs/audit/06-second-pass.md` AUDIT-06-1,
 `docs/superpowers/specs/2026-09-28-data-layer-second-review-design.md` §2.
-Extends ADR 0010.
+Extends ADR 0010. Supersedes the rejected alternative of ADR 0014 (owner,
+2026-09-28, when merging the two): ADR 0014's blank labels applied to units
+the run never allocated, and with derived lots every unit the opening lots
+cover has one. ADR 0014's output side stands: `stock_ledger.lot_parts` fits
+each line's own lots to its `Quantity`, and the stock export refuses totals
+that differ from the lines.
 
 ## Context
 
@@ -33,7 +38,8 @@ Lots are derived:
 - on every view refresh (`MainWindow._update_all_views`), which every edit,
   undo and session open goes through.
 
-Consumers read each row's own list and never dedupe.
+Consumers read each row's own list through `stock_ledger.lot_parts` and
+never dedupe. A Manual line's lots are derived like any other line's.
 
 ## Consequences
 

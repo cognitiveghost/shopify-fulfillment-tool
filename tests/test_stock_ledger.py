@@ -156,3 +156,63 @@ def test_claim_detail_reports_stock_at_each_orders_turn():
     assert covered == ["#1", "#2"]
     assert lacking == {"#3": [("GIFT", 1.0, 0.0)]}
     assert claim(df, ["#1", "#2", "#3"]) == (["#1", "#2"], ["#3"])
+
+
+# --- R3: lot labels follow Quantity (spec 2026-09-28 §3) --------------------
+
+from shopify_tool.stock_ledger import lot_parts
+
+L1 = {"expiry": "260601", "expiry_dt": None, "batch": "B1", "qty_allocated": 3}
+L2 = {"expiry": "270101", "expiry_dt": None, "batch": "B2", "qty_allocated": 2}
+
+
+def lines(rows):
+    """(order, sku, qty, lot_details)"""
+    return pd.DataFrame(rows, columns=["Order_Number", "SKU", "Quantity", "Lot_Details"])
+
+
+def test_lots_are_clipped_to_a_lower_quantity():
+    df = lines([("#1", "A", 4, [L1, L2])])
+    assert lot_parts(df) == [(0, 3, "260601", "B1"), (0, 1, "270101", "B2")]
+
+
+def test_quantity_above_the_lots_is_one_unlabelled_part():
+    df = lines([("#1", "A", 7, [L1, L2])])
+    assert lot_parts(df) == [(0, 3, "260601", "B1"), (0, 2, "270101", "B2"), (0, 2, "", "")]
+
+
+def test_each_line_of_a_pair_reads_its_own_lots():
+    # with_lots gives every line its own list (ADR 0015); none is shared.
+    df = lines([("#1", "A", 2, [{**L1, "qty_allocated": 2}]), ("#1", "A", 3, [{**L1, "qty_allocated": 1}, L2])])
+    assert lot_parts(df) == [(0, 2, "260601", "B1"), (1, 1, "260601", "B1"), (1, 2, "270101", "B2")]
+
+
+def test_a_line_without_lots_stays_unlabelled_beside_one_with_lots():
+    df = lines([("#1", "A", 3, [L1]), ("#1", "A", 1, None)])
+    assert lot_parts(df) == [(0, 3, "260601", "B1"), (1, 1, "", "")]
+
+
+def test_sentinel_one_is_blank():
+    df = lines([("#1", "A", 4, [{"expiry": "1", "batch": "1", "qty_allocated": 4}])])
+    assert lot_parts(df) == [(0, 4, "", "")]
+
+
+@pytest.mark.parametrize("cell", [None, float("nan"), [], "[{'expiry': '1'}]"])
+def test_a_cell_that_is_not_a_lot_list_means_no_lots(cell):
+    df = lines([("#1", "A", 2, cell), ("#1", "A", 1, cell)])
+    assert lot_parts(df) == [(0, 2, "", ""), (1, 1, "", "")]
+
+
+def test_a_line_with_lots_and_no_quantity_yields_nothing():
+    df = lines([("#1", "A", 0, [L1])])
+    assert lot_parts(df) == []
+
+
+def test_lines_come_out_in_row_order():
+    df = lines([("#2", "B", 1, None), ("#1", "A", 1, [L1]), ("#2", "C", 1, None)])
+    assert [p[0] for p in lot_parts(df)] == [0, 1, 2]
+
+
+def test_no_lot_details_column_at_all():
+    df = pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [2]})
+    assert lot_parts(df) == [(0, 2, "", "")]

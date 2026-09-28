@@ -213,7 +213,7 @@ class ActionsHandler(QObject):
         if success:
             self.mw.analysis_results_df = df
             # The run's own stock file is now the session's; later refreshes
-            # derive lots from it (ADR 0014).
+            # derive lots from it (ADR 0015).
             self.mw.lot_table = core.session_lot_table(
                 self.mw.session_path, self.mw.active_profile_config
             )
@@ -998,18 +998,85 @@ class ActionsHandler(QObject):
         df = self.mw.analysis_results_df
         if df is None or df.empty:
             return
+        label = self._line_label(df, order_number, line_index, sku, "line removal")
+        if label is None:
+            return
+        # The frame's own SKU value, so a no-SKU line (NaN) still matches.
+        self.remove_item_from_order(order_number, df.loc[label, "SKU"], df.index.get_loc(label))
+
+    def _line_label(self, df, order_number, line_index: int, sku, verb):
+        """The frame label of the order's `line_index`-th line, in frame order,
+        or None (logged) when it is gone or no longer carries `sku`."""
         labels = df.index[self._order_mask(order_number)]
         if not 0 <= line_index < len(labels):
-            self.log.warning("Aborted line removal: the line is gone")
-            return
+            self.log.warning(f"Aborted {verb}: the line is gone")
+            return None
         label = labels[line_index]
         own_sku = df.loc[label, "SKU"]
         own = "" if pd.isna(own_sku) else str(own_sku).strip()
         if own != str(sku).strip():
-            self.log.warning("Aborted line removal: the line moved")
+            self.log.warning(f"Aborted {verb}: the line moved")
+            return None
+        return label
+
+    def change_line_quantity(self, order_number, line_index: int, sku, quantity):
+        """The pane's Change quantity (spec 2026-09-28 §4.5): the order's
+        `line_index`-th line, in frame order, only while it still carries
+        `sku`. The order keeps its status unless the new quantity outruns
+        Stock left, as Add product does; a lower one never releases a hold.
+        Lot_Details is left alone: the refresh re-derives it (R3, ADR 0015)."""
+        df = self.mw.analysis_results_df
+        if df is None or df.empty:
             return
-        # The frame's own SKU value, so a no-SKU line (NaN) still matches.
-        self.remove_item_from_order(order_number, own_sku, df.index.get_loc(label))
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+            self.log.warning(f"Aborted quantity change: {quantity!r} is not a whole number from 1")
+            return
+        label = self._line_label(df, order_number, line_index, sku, "quantity change")
+        if label is None:
+            return
+        mask = self._order_mask(order_number)
+        own_sku = df.loc[label, "SKU"]
+        own = "" if pd.isna(own_sku) else str(own_sku).strip()
+        old = pd.to_numeric(df.loc[label, "Quantity"], errors="coerce")
+        if old == quantity:
+            return
+
+        affected_rows = df[mask].copy()
+        was_fulfillable = stock_ledger.is_fulfillable(df, order_number)
+        frame = df.copy()
+        frame.loc[label, "Quantity"] = quantity
+        short = stock_ledger.shortfall(frame, order_number) if was_fulfillable else []
+        if short:
+            frame.loc[
+                self._order_mask(order_number, frame), "Order_Fulfillment_Status"
+            ] = stock_ledger.NOT_FULFILLABLE
+        self.mw.analysis_results_df = stock_ledger.with_stock_left(frame)
+
+        before = None if pd.isna(old) else (int(old) if float(old).is_integer() else float(old))
+        description = (
+            f"Changed {own} in order {order_number} "
+            f"from {'blank' if before is None else before} to {quantity}"
+        )
+        self.mw.undo_manager.record_operation(
+            "change_quantity",
+            description,
+            {
+                "order_number": order_number,
+                "sku": own,
+                "quantity_before": before,
+                "quantity_after": quantity,
+            },
+            affected_rows,
+        )
+
+        self.data_changed.emit()
+        self.mw.save_session_state()
+        self._update_undo_button()
+        self.mw.log_activity("Data Edit", f"{description}.")
+        text = f"Changed {own} in order {order_number} to {quantity}."
+        if short:
+            text += f" It is now blocked: not enough {', '.join(short)}."
+        self._results_toast(text, undoable=True)
 
     def add_internal_tag(self, order_number, tag):
         self._change_internal_tag(order_number, tag, adding=True)
@@ -1341,6 +1408,11 @@ class ActionsHandler(QObject):
 
         # Step 2: Create new row
         new_row = template_row.copy()
+        # The template is another line: its lot allocation belongs to that
+        # SKU and quantity. A copied one exported 3 for a line of 1 and hid a
+        # SKU (#1221, spec 2026-09-28). The refresh derives its own (R3, ADR 0015).
+        if "Lot_Details" in new_row.index:
+            new_row["Lot_Details"] = None
         new_row["SKU"] = sku
         new_row["Product_Name"] = product_data["product_name"]
         new_row["Quantity"] = quantity

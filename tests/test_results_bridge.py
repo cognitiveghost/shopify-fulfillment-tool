@@ -227,6 +227,7 @@ def test_normalize_column_settings_cleans_junk():
         ("fulfillOrder", ("#1",), "fulfillRequested"),
         ("excludeOrder", ("#1",), "excludeRequested"),
         ("removeLine", ("#1", 2, "SKU-A"), "lineRemovalRequested"),
+        ("changeLineQuantity", ("#1", 2, "SKU-A", 5), "lineQuantityChangeRequested"),
         ("addOrderTag", ("#1", "vip"), "tagAddRequested"),
         ("removeOrderTag", ("#1", "vip"), "tagRemovalRequested"),
     ],

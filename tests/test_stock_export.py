@@ -633,3 +633,90 @@ def test_a_locked_export_names_the_export_not_the_temp_file(tmp_path, monkeypatc
         stock_export._write_xls(df, str(target))
     assert err.value.filename == str(target)
     assert list(tmp_path.iterdir()) == []
+
+
+class TestLotLabelsFollowQuantity:
+    """Spec 2026-09-28: a lot allocation never outvotes Quantity."""
+
+    def test_a_stale_allocation_is_clipped_to_the_line(self, tmp_path):
+        lots = [{"expiry": "260601", "batch": "B1", "qty_allocated": 3}]
+        df = _analysis_df([{"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Lot_Details": lots}])
+        out = tmp_path / "e.xls"
+        create_stock_export(df, str(out))
+        result = _read(out)
+        assert result.iloc[:, COL_QTY].tolist() == [1]
+
+    def test_two_skus_sharing_one_list_object_both_export(self, tmp_path):
+        # The incident: two manual lines carried one copied allocation object.
+        lots = [{"expiry": "1", "batch": None, "qty_allocated": 3}]
+        df = _analysis_df([
+            {"Order_Number": "#1221", "SKU": "L", "Quantity": 1, "Lot_Details": lots},
+            {"Order_Number": "#1221", "SKU": "S", "Quantity": 1, "Lot_Details": lots},
+        ])
+        out = tmp_path / "e.xls"
+        create_stock_export(df, str(out))
+        result = _read(out)
+        totals = dict(zip(result.iloc[:, COL_SKU].astype(str), result.iloc[:, COL_QTY]))
+        assert totals == {"L": 1, "S": 1}
+
+
+class TestTotalsGuard:
+    def test_a_wrong_lot_summary_is_refused_and_nothing_is_written(self, tmp_path, monkeypatch):
+        import shopify_tool.stock_export as se
+
+        lots = [{"expiry": "260601", "batch": "B1", "qty_allocated": 2}]
+        df = _analysis_df([{"Order_Number": "#1", "SKU": "A1", "Quantity": 2, "Lot_Details": lots}])
+        monkeypatch.setattr(
+            se, "_expand_lot_summary",
+            lambda items: se._finalize_export_df(pd.DataFrame({"Артикул": ["A1"], se.QTY_COL: [3]})),
+        )
+        out = tmp_path / "e.xls"
+        with pytest.raises(ValueError, match=r"A1 export 3, lines 2"):
+            create_stock_export(df, str(out))
+        assert not out.exists()
+
+    def test_a_dropped_sku_is_refused(self, tmp_path, monkeypatch):
+        import shopify_tool.stock_export as se
+
+        lots = [{"expiry": "260601", "batch": "B1", "qty_allocated": 1}]
+        df = _analysis_df([
+            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Lot_Details": lots},
+            {"Order_Number": "#1", "SKU": "A2", "Quantity": 1, "Lot_Details": None},
+        ])
+        monkeypatch.setattr(
+            se, "_expand_lot_summary",
+            lambda items: se._finalize_export_df(pd.DataFrame({"Артикул": ["A1"], se.QTY_COL: [1]})),
+        )
+        with pytest.raises(ValueError, match=r"A2 export 0, lines 1"):
+            create_stock_export(df, str(tmp_path / "e.xls"))
+
+    def test_guard_accepts_numeric_skus(self, tmp_path):
+        df = _analysis_df([
+            {"Order_Number": "#1", "SKU": 10001, "Quantity": 2},
+            {"Order_Number": "#2", "SKU": "10001", "Quantity": 1,
+             "Lot_Details": [{"expiry": "1", "batch": None, "qty_allocated": 1}]},
+        ])
+        out = tmp_path / "e.xls"
+        create_stock_export(df, str(out))  # must not raise
+        assert _read(out).iloc[:, COL_QTY].sum() == 3
+
+    def test_guard_ignores_merged_packaging_rows(self, tmp_path):
+        tag_categories = {
+            "version": 2,
+            "categories": {
+                "packaging": {
+                    "tags": ["BOX"],
+                    "sku_writeoff": {
+                        "enabled": True,
+                        "mappings": {"BOX": [{"sku": "PKG-1", "quantity": 1.0}]},
+                    },
+                }
+            },
+        }
+        df = _analysis_df([
+            {"Order_Number": "#1", "SKU": "A1", "Quantity": 2, "Internal_Tags": '["BOX"]'},
+        ])
+        out = tmp_path / "e.xls"
+        create_stock_export(df, str(out), writeoff_mode="merged", tag_categories=tag_categories)
+        skus = set(_read(out).iloc[:, COL_SKU].astype(str))
+        assert {"A1", "PKG-1"} <= skus

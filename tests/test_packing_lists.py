@@ -129,6 +129,36 @@ class TestLotExpansion:
         assert result.iloc[0]["Lot_Expiry"] in ("", None) or pd.isna(result.iloc[0]["Lot_Expiry"])
         assert result.iloc[0]["Lot_Batch"] in ("", None) or pd.isna(result.iloc[0]["Lot_Batch"])
 
+    def test_a_stale_allocation_prints_the_line_quantity(self, tmp_path):
+        lots = [{"expiry": "260601", "batch": None, "qty_allocated": 3}]
+        df = _analysis_df([{"Order_Number": "#1", "SKU": "A1", "Quantity": 1, "Lot_Details": lots}])
+        out = tmp_path / "stale.xlsx"
+        create_packing_list(df, str(out))
+        assert _read_output(out)["Quantity"].tolist() == [1]
+
+    def test_two_skus_sharing_one_list_object_print_their_own_quantity(self, tmp_path):
+        lots = [{"expiry": "1", "batch": None, "qty_allocated": 3}]
+        df = _analysis_df([
+            {"Order_Number": "#1221", "SKU": "L", "Quantity": 1, "Lot_Details": lots},
+            {"Order_Number": "#1221", "SKU": "S", "Quantity": 1, "Lot_Details": lots},
+        ])
+        out = tmp_path / "shared.xlsx"
+        create_packing_list(df, str(out))
+        result = _read_output(out)
+        assert dict(zip(result["SKU"], result["Quantity"])) == {"L": 1, "S": 1}
+
+    def test_unlotted_duplicate_lines_stay_two_lines(self, tmp_path):
+        df = _analysis_df([
+            {"Order_Number": "#1", "SKU": "A1", "Quantity": 1},
+            {"Order_Number": "#1", "SKU": "A1", "Quantity": 2},
+            {"Order_Number": "#2", "SKU": "A2", "Quantity": 1,
+             "Lot_Details": [{"expiry": "260601", "batch": None, "qty_allocated": 1}]},
+        ])
+        out = tmp_path / "dups.xlsx"
+        create_packing_list(df, str(out))
+        result = _read_output(out)
+        assert result.loc[result["SKU"] == "A1", "Quantity"].tolist() == [1, 2]
+
 
 def test_repeat_column_in_lot_layout_marks_first_row_only(tmp_path):
     lots = [

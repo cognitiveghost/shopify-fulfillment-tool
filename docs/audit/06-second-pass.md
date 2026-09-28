@@ -180,7 +180,7 @@ value parses as before.
 
 ## 6. Owner decisions (2026-09-28)
 
-- **Lots → derived like Stock left** (ADR 0014).
+- **Lots → derived like Stock left** (ADR 0015).
 - **Summary_Missing → removed.**
 - **Nested sets → expanded**, except a set that lists itself (HERBAR
   `NECTAR-30`), which stays one level so its parents don't double the dropper.

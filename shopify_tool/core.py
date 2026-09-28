@@ -916,7 +916,7 @@ def _run_analysis_and_rules(
         logger.info("Rule engine application complete.")
 
     # Order-level columns and lots follow the frame as the rules left it:
-    # bonus lines get their own lots and the right Order_Type (ADR 0014).
+    # bonus lines get their own lots and the right Order_Type (ADR 0015).
     lots = analysis.lot_table(
         analysis.stock_with_internal_columns(stock_df, config.get("column_mappings", {}))
     )
@@ -941,7 +941,7 @@ def _add_stock_alert(final_df, config):
 
 
 def session_lot_table(session_path, config) -> dict | None:
-    """The session's opening lots (R3, ADR 0014), from its own input/inventory.csv.
+    """The session's opening lots (R3, ADR 0015), from its own input/inventory.csv.
 
     None when the session has no stock file (memory mode, or none copied),
     the file has no lot columns, or it can't be read: lines then export

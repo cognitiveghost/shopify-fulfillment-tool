@@ -227,6 +227,48 @@ def test_remove_this_line_sends_the_index_and_its_sku(qtbot, doc):
     assert list(blocker.args) == ["#10445", 1, "TS-9002-C"]
 
 
+def _open_qty_entry(qtbot, view):
+    _select(qtbot, view, "#10445")
+    _js(
+        qtbot,
+        view,
+        "document.querySelector('#pane .line[data-index=\"1\"] .line-menu-button').click()",
+    )
+    _js(qtbot, view, _menu_item("line-menu", "Change quantity…"))
+
+
+def _enter_qty(value):
+    return (
+        f"(i => {{ i.value = {value!r}; i.dispatchEvent(new KeyboardEvent('keydown', "
+        "{key: 'Enter', bubbles: true})); })(document.getElementById('line-qty'))"
+    )
+
+
+def test_change_quantity_offers_the_lines_own_number(qtbot, doc):
+    view, _ = doc
+    _open_qty_entry(qtbot, view)
+    assert _eval(qtbot, view, "document.getElementById('line-qty').value") == "2"
+    assert _eval(qtbot, view, "document.activeElement.id") == "line-qty"
+
+
+def test_change_quantity_sends_the_new_number(qtbot, doc):
+    view, bridge = doc
+    _open_qty_entry(qtbot, view)
+    with qtbot.waitSignal(bridge.lineQuantityChangeRequested, timeout=3000) as blocker:
+        _js(qtbot, view, _enter_qty("7"))
+    assert list(blocker.args) == ["#10445", 1, "TS-9002-C", 7]
+    assert _eval(qtbot, view, "document.querySelectorAll('.pane-menu').length") == 0
+
+
+@pytest.mark.parametrize("value", ["2", "0", "-3", "2.5", ""])
+def test_change_quantity_sends_nothing_for_a_non_change(qtbot, doc, value):
+    view, bridge = doc
+    _open_qty_entry(qtbot, view)
+    with qtbot.assertNotEmitted(bridge.lineQuantityChangeRequested, wait=300):
+        _js(qtbot, view, _enter_qty(value))
+    assert _eval(qtbot, view, "document.querySelectorAll('.pane-menu').length") == 0
+
+
 def test_the_tag_menu_offers_only_tags_the_order_lacks(qtbot, doc):
     view, bridge = doc
     _select(qtbot, view, "#10449")

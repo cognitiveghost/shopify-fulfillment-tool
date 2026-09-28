@@ -1,4 +1,4 @@
-"""R3 (ADR 0014): lot allocation derived from the frame and the session's opening lots."""
+"""R3 (ADR 0015): lot allocation derived from the frame and the session's opening lots."""
 
 import json
 from datetime import date

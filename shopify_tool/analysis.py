@@ -170,7 +170,7 @@ def _normalized_stock(stock_df: pd.DataFrame) -> pd.DataFrame:
 
 def lot_table(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
     """The opening lots per SKU, FIFO-sorted, from a stock frame with internal
-    column names. None without lot columns (R3, ADR 0014)."""
+    column names. None without lot columns (R3, ADR 0015)."""
     return _build_fifo_lots(_normalized_stock(stock_df))
 
 
@@ -794,7 +794,7 @@ def _iso(value) -> str | None:
 
 
 def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") -> pd.DataFrame:
-    """R3 (ADR 0014): each SKU line of a fulfillable order owns its lots.
+    """R3 (ADR 0015): each SKU line of a fulfillable order owns its lots.
 
     `lots` is lot_table's FIFO list per SKU, or None. Orders draw in the run's
     priority sequence (_prioritize_orders, `mode`), an order's lines in row

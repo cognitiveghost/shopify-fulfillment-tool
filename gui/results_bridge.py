@@ -77,6 +77,7 @@ class ResultsBridge(QObject):
     fulfillRequested = Signal(str)
     excludeRequested = Signal(str)
     lineRemovalRequested = Signal(str, int, str)
+    lineQuantityChangeRequested = Signal(str, int, str, int)
     tagAddRequested = Signal(str, str)
     tagRemovalRequested = Signal(str, str)
     columnSettingsChanged = Signal(dict)
@@ -178,6 +179,12 @@ class ResultsBridge(QObject):
     @Slot(str, int, str)
     def removeLine(self, order_number, line_index, sku) -> None:
         self.lineRemovalRequested.emit(str(order_number), int(line_index), str(sku))
+
+    @Slot(str, int, str, int)
+    def changeLineQuantity(self, order_number, line_index, sku, quantity) -> None:
+        self.lineQuantityChangeRequested.emit(
+            str(order_number), int(line_index), str(sku), int(quantity)
+        )
 
     @Slot(str, str)
     def addOrderTag(self, order_number, tag) -> None:

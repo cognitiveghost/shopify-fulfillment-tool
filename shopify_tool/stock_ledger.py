@@ -7,6 +7,11 @@ R1  An order is fulfillable when every one of its SKU lines is Fulfillable.
 R2  Stock left = opening Stock - the SKU lines of fulfillable orders, per
     listed SKU. A SKU whose Final_Stock is null on every row is unlisted
     (missing from the stock file): it stays null and never blocks.
+R3  Every SKU line of a fulfillable order owns its lots (ADR 0015), derived
+    by analysis.with_lots from the session's opening lots after every change.
+    On output, Quantity is the truth and Lot_Details only labels it (ADR 0014):
+    each line's own lots are walked with its Quantity, clipping each; what is
+    left over has no lot label. lot_parts() is the only reader.
 
 Edit verbs write rows and statuses, then call with_stock_left. They never
 adjust Final_Stock themselves.
@@ -176,3 +181,43 @@ def with_stock_left(df):
         derived = df["SKU"].map(left)
         df["Final_Stock"] = derived.where(derived.notna(), df["Final_Stock"])
     return df
+
+
+def _lot_list(cell) -> list:
+    return cell if isinstance(cell, list) and cell else []
+
+
+def _lot_label(value) -> str:
+    # The run writes "1" (and None for batch) when the stock file has no lot.
+    text = value or ""
+    return "" if text == "1" else text
+
+
+def lot_parts(rows) -> list:
+    """R3: [(row label, quantity, expiry, batch)] for writing these rows out.
+
+    A line with lots gives one part per lot it still needs, then one unlabelled
+    part for any quantity its lots don't cover. A line without lots gives
+    itself as it is. Parts come out in row order.
+    """
+    if rows is None or rows.empty:
+        return []
+    qty = pd.to_numeric(rows["Quantity"], errors="coerce").fillna(0)
+    lotted = "Lot_Details" in rows.columns
+    parts = []
+    for label in rows.index:
+        lots = _lot_list(rows.at[label, "Lot_Details"]) if lotted else []
+        if not lots:
+            parts.append((label, rows.at[label, "Quantity"], "", ""))
+            continue
+        need = qty[label]
+        for lot in lots:
+            if need <= 0:
+                break
+            take = min(lot.get("qty_allocated", 0) or 0, need)
+            if take > 0:
+                parts.append((label, take, _lot_label(lot.get("expiry")), _lot_label(lot.get("batch"))))
+                need -= take
+        if need > 0:
+            parts.append((label, need, "", ""))
+    return parts

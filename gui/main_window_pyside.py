@@ -1054,11 +1054,11 @@ class MainWindow(QMainWindow):
         Statistics are recalculated here; the results document folds the line
         frame to orders and KPI numbers itself (gui/orders_view.py), so one
         push is the whole refresh. Lots and order-level columns are re-derived
-        first (core.with_order_fields, ADR 0014).
+        first (core.with_order_fields, ADR 0015).
         """
         if self.analysis_results_df is not None and not self.analysis_results_df.empty:
             # Lots and order-level columns follow every edit, undo and open
-            # (ADR 0014). A failure must not stop the refresh.
+            # (ADR 0015). A failure must not stop the refresh.
             try:
                 self.analysis_results_df = core.with_order_fields(
                     self.analysis_results_df,
