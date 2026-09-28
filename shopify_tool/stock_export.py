@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from shopify_tool.report_filters import apply_report_filters, fulfillable_only
+from shopify_tool.stock_ledger import lot_parts
 
 logger = logging.getLogger("ShopifyToolLogger")
 
@@ -79,74 +80,53 @@ def _finalize_export_df(df: pd.DataFrame) -> pd.DataFrame:
 def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
     """Aggregate fulfilled quantities per (SKU, expiry, batch) lot for write-off requests.
 
-    When Lot_Details is present in the analysis DataFrame this function replaces
-    the simple SKU-level groupby, producing one row per unique (SKU, Годност, Партида)
-    combination across all fulfillable orders.  Items with no lot info fall back to
-    SKU-only aggregation with empty Годност/Партида values.
-
-    Args:
-        filtered_items: Fulfillable order rows from the analysis DataFrame.
-                        Must have a 'Lot_Details' column.
+    The parts come from stock_ledger.lot_parts (R3, ADR 0014): Quantity is the
+    truth and Lot_Details only labels it, so a stale or copied allocation can
+    neither inflate a SKU nor hide one. Units without a lot label aggregate
+    under a blank Годност/Партида.
 
     Returns:
         DataFrame with the canonical layout (:data:`STOCK_EXPORT_COLUMNS`).
     """
-    lot_rows_data: dict = {}  # (sku, expiry, batch) → total qty
-    no_lot_skus: dict = {}  # sku → total qty
-    # The simulation allocates at the (order, SKU) level and stores one Lot_Details
-    # list object per pair (see analysis.py's order_alloc[sku] = sku_alloc); every
-    # DataFrame row for that pair gets the SAME object by reference. Dedupe on
-    # object identity rather than (Order_Number, SKU) -- the latter collapses
-    # distinct allocations whenever Order_Number is blank on more than one row.
-    seen_allocations: set = set()
+    totals: dict = {}
+    for label, qty, expiry, batch in lot_parts(filtered_items):
+        qty = pd.to_numeric(qty, errors="coerce")
+        if pd.isna(qty):
+            continue
+        key = (filtered_items.at[label, "SKU"], expiry, batch)
+        totals[key] = totals.get(key, 0) + qty
 
-    for _, row in filtered_items.iterrows():
-        sku = row["SKU"]
-        lot_details = row.get("Lot_Details")
-        if lot_details and isinstance(lot_details, list) and len(lot_details) > 0:
-            alloc_id = id(lot_details)
-            if alloc_id in seen_allocations:
-                continue
-            seen_allocations.add(alloc_id)
-            for entry in lot_details:
-                expiry = entry.get("expiry") or ""
-                if expiry == "1":
-                    expiry = ""
-                batch = entry.get("batch") or ""
-                if batch == "1":
-                    batch = ""
-                qty = entry.get("qty_allocated", 0)
-                key = (sku, expiry, batch)
-                lot_rows_data[key] = lot_rows_data.get(key, 0) + qty
-        else:
-            qty = row.get("Quantity", 0)
-            no_lot_skus[sku] = no_lot_skus.get(sku, 0) + qty
-
-    records = []
-    for (sku, expiry, batch), qty in lot_rows_data.items():
-        if qty > 0:
-            records.append(
-                {
-                    "Артикул": sku,
-                    QTY_COL: qty,
-                    "Годност": expiry,
-                    "Партида": batch,
-                }
-            )
-    for sku, qty in no_lot_skus.items():
-        if qty > 0:
-            records.append(
-                {
-                    "Артикул": sku,
-                    QTY_COL: qty,
-                    "Годност": "",
-                    "Партида": "",
-                }
-            )
-
+    records = [
+        {"Артикул": sku, QTY_COL: qty, "Годност": expiry, "Партида": batch}
+        for (sku, expiry, batch), qty in totals.items()
+        if qty > 0
+    ]
     if not records:
         return _empty_export_df()
     return _finalize_export_df(pd.DataFrame(records))
+
+
+def _check_totals(filtered_items: pd.DataFrame, export_df: pd.DataFrame) -> None:
+    """Refuse an export whose per-SKU Брой differs from the lines it came from.
+
+    The #1221 incident (spec 2026-09-28) wrote 3 for a line of 1 and dropped a
+    SKU; this is the net under every path that builds the product rows.
+    ponytail: compares after half-up rounding, so fractional quantities split
+    across several lots could round differently per part than in total; product
+    quantities are whole, so that never happens in practice.
+    """
+    skus = filtered_items["SKU"].astype(str).str.strip()
+    lines = pd.to_numeric(filtered_items["Quantity"], errors="coerce").fillna(0)
+    expected = _to_erp_quantity(lines.groupby(skus).sum())
+    expected = expected[expected > 0]
+    actual = export_df.groupby(export_df["Артикул"].astype(str).str.strip())[QTY_COL].sum()
+    wrong = [
+        f"{sku} export {int(actual.get(sku, 0))}, lines {int(expected.get(sku, 0))}"
+        for sku in sorted(set(expected.index) | set(actual.index))
+        if int(actual.get(sku, 0)) != int(expected.get(sku, 0))
+    ]
+    if wrong:
+        raise ValueError("Stock export does not match the order lines: " + "; ".join(wrong))
 
 
 def _write_xls(export_df, output_file) -> None:
@@ -271,6 +251,8 @@ def create_stock_export(
     Raises:
         Exception: any failure (a locked or unreachable file, bad data)
         propagates, so the caller reports it instead of "Report saved".
+        ValueError: the product rows don't add up to the fulfillable lines
+            (nothing is written).
     """
     try:
         logger.info(f"--- Creating report: '{report_name}' ---")
@@ -330,6 +312,9 @@ def create_stock_export(
                         }
                     )
                 )
+
+        # Product rows only: packaging SKUs are not order lines.
+        _check_totals(filtered_items, export_df)
 
         # Packaging write-off: either among the product rows or beside them.
         # "separate" only stages the rows here -- the file is written after the
