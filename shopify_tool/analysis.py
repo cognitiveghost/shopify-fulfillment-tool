@@ -6,10 +6,11 @@ from datetime import date, datetime
 import numpy as np
 import pandas as pd
 
-from shopify_tool.csv_utils import order_number_sort_key
+from shopify_tool.csv_utils import normalize_sku, order_number_sort_key
 from shopify_tool.stock_ledger import (
     FULFILLABLE,
     NOT_FULFILLABLE,
+    drawing_rows,
     is_fulfillable,
     shortfall,
     with_stock_left,
@@ -79,9 +80,9 @@ def _parse_expiry_date(raw) -> date | None:
     Tries candidate formats in priority order, keeping the first
     calendar-valid one:
     - "1" or None or NaN or "" -> None  (sentinel for "no expiry info")
-    - 6-digit: YYMMDD, then DDMMYY
+    - 6-digit: YYMM with day 00 -> the 1st; else YYMMDD, then DDMMYY
     - 8-digit: YYYYMMDD
-    - 4-digit: MMYY (day defaults to 1)
+    - 4-digit: MMYY, then YYMM (day defaults to 1)
     - No valid candidate -> None (logged as a warning)
 
     If more than one candidate format is calendar-valid for the same raw
@@ -104,7 +105,11 @@ def _parse_expiry_date(raw) -> date | None:
     if not s or s == "1":
         return None
 
-    if len(s) == 6:
+    if len(s) == 6 and s[4:6] == "00":
+        # Day "00" means the month itself (WATERDROP "261200"); DDMMYY would
+        # read it as 2000-12-26 and FIFO would draw it first (AUDIT-06-7).
+        candidate_specs = [("YYMM00", s[0:2], s[2:4], "01")]
+    elif len(s) == 6:
         candidate_specs = [
             ("YYMMDD", s[0:2], s[2:4], s[4:6]),
             ("DDMMYY", s[4:6], s[2:4], s[0:2]),
@@ -112,7 +117,10 @@ def _parse_expiry_date(raw) -> date | None:
     elif len(s) == 8:
         candidate_specs = [("YYYYMMDD", s[0:4], s[4:6], s[6:8])]
     elif len(s) == 4:
-        candidate_specs = [("MMYY", s[2:4], s[0:2], "01")]
+        candidate_specs = [
+            ("MMYY", s[2:4], s[0:2], "01"),
+            ("YYMM", s[0:2], s[2:4], "01"),  # ALMADERM "2805" (AUDIT-06-7)
+        ]
     else:
         candidate_specs = []
 
@@ -132,6 +140,38 @@ def _parse_expiry_date(raw) -> date | None:
             f"Ambiguous expiry {s!r}: valid as {[v[0] for v in valid]}, using {valid[0][0]}"
         )
     return valid[0][1]
+
+
+def _normalized_stock(stock_df: pd.DataFrame) -> pd.DataFrame:
+    """Stock rows with normalised SKUs and numeric stock, blank or text read as 0.
+
+    Normalize before any dedupe or aggregation: "501 " and "501.0" are one
+    SKU, and deduping first let both through to double every order line
+    the merge matched against them (F4). Blank SKUs stay blank so dropna
+    still drops them -- normalize_sku(NaN) would return "".
+    """
+    stock_df = stock_df.copy()
+    stock_df["SKU"] = stock_df["SKU"].astype(object)  # float SKUs take strings
+    has_sku = stock_df["SKU"].notna()
+    stock_df.loc[has_sku, "SKU"] = stock_df.loc[has_sku, "SKU"].map(normalize_sku)
+
+    # A blank or non-numeric stock cell is no stock, never unlimited stock:
+    # NaN fails both "== 0" and "required > available" (AUDIT-01-7).
+    stock_numeric = pd.to_numeric(stock_df["Stock"], errors="coerce")
+    bad = stock_numeric.isna() & has_sku
+    if bad.any():
+        logger.warning(
+            f"{int(bad.sum())} stock rows have a blank or non-numeric stock cell, "
+            f"read as 0: {stock_df.loc[bad, 'SKU'].tolist()[:10]}"
+        )
+    stock_df["Stock"] = stock_numeric.fillna(0)
+    return stock_df
+
+
+def lot_table(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
+    """The opening lots per SKU, FIFO-sorted, from a stock frame with internal
+    column names. None without lot columns (R3, ADR 0015)."""
+    return _build_fifo_lots(_normalized_stock(stock_df))
 
 
 def _build_fifo_lots(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
@@ -435,7 +475,6 @@ def _clean_and_prepare_data(
     # CRITICAL: Normalize SKU to standard format for consistent merging
     # This handles float artifacts (5170.0 → "5170"), whitespace, and leading zeros
     # Skip normalization for NO_SKU placeholder
-    from .csv_utils import normalize_sku
 
     # First, ensure SKU column is string type to avoid dtype errors (pandas 2.x uses 'str')
     dtype_str = str(orders_clean_df["SKU"].dtype)
@@ -461,25 +500,7 @@ def _clean_and_prepare_data(
             f"Missing required columns in stock DataFrame after mapping: {missing_stock_cols}"
         )
 
-    # Normalize before any dedupe or aggregation: "501 " and "501.0" are one
-    # SKU, and deduping first let both through to double every order line
-    # the merge matched against them (F4). Blank SKUs stay blank so dropna
-    # still drops them -- normalize_sku(NaN) would return "".
-    stock_df = stock_df.copy()
-    stock_df["SKU"] = stock_df["SKU"].astype(object)  # float SKUs take strings
-    has_sku = stock_df["SKU"].notna()
-    stock_df.loc[has_sku, "SKU"] = stock_df.loc[has_sku, "SKU"].map(normalize_sku)
-
-    # A blank or non-numeric stock cell is no stock, never unlimited stock:
-    # NaN fails both "== 0" and "required > available" (AUDIT-01-7).
-    stock_numeric = pd.to_numeric(stock_df["Stock"], errors="coerce")
-    bad = stock_numeric.isna() & has_sku
-    if bad.any():
-        logger.warning(
-            f"{int(bad.sum())} stock rows have a blank or non-numeric stock cell, "
-            f"read as 0: {stock_df.loc[bad, 'SKU'].tolist()[:10]}"
-        )
-    stock_df["Stock"] = stock_numeric.fillna(0)
+    stock_df = _normalized_stock(stock_df)
 
     # Detect whether lot columns (Expiry_Date / Batch) are present after mapping
     stock_lot_cols = [c for c in ["Expiry_Date", "Batch"] if c in stock_df.columns]
@@ -768,6 +789,57 @@ def _simulate_stock_allocation(
     return fulfillment_results, lot_allocations, final_stock_dict
 
 
+def _iso(value) -> str | None:
+    return value.isoformat() if isinstance(value, date) else None
+
+
+def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") -> pd.DataFrame:
+    """R3 (ADR 0015): each SKU line of a fulfillable order owns its lots.
+
+    `lots` is lot_table's FIFO list per SKU, or None. Orders draw in the run's
+    priority sequence (_prioritize_orders, `mode`), an order's lines in row
+    order. Units the lots can't cover get one "no lot" entry (expiry "1"), so
+    a line's entries always sum to its Quantity. Held orders, no-SKU lines and
+    SKUs without lots get None. Mutates and returns df, like with_stock_left.
+    """
+    df["Lot_Details"] = pd.Series([None] * len(df), index=df.index, dtype=object)
+    if not lots or df.empty:
+        return df
+    left = {sku: [dict(lot) for lot in lot_list] for sku, lot_list in lots.items()}
+    drawing = drawing_rows(df)
+    keys = df["Order_Number"].astype(str).str.strip()
+    rows_of = keys[drawing].groupby(keys[drawing]).groups
+    quantity = pd.to_numeric(df["Quantity"], errors="coerce").fillna(0)
+    sequence = _prioritize_orders(df[["Order_Number"]], mode)["Order_Number"]
+    # One pass per key: _prioritize_orders groups raw values, so 1001 and "1001 " come twice.
+    for order in dict.fromkeys(str(o).strip() for o in sequence):
+        for idx in rows_of.get(order, []):
+            sku_lots = left.get(df.at[idx, "SKU"])
+            if sku_lots is None:
+                continue
+            need = float(quantity[idx])
+            entries = []
+            for lot in sku_lots:
+                if need <= 0:
+                    break
+                take = min(lot["qty"], need)
+                if take > 0:
+                    entries.append(
+                        {
+                            "expiry": lot["expiry"],
+                            "expiry_dt": _iso(lot["expiry_dt"]),
+                            "batch": lot["batch"],
+                            "qty_allocated": take,
+                        }
+                    )
+                    lot["qty"] -= take
+                    need -= take
+            if need > 0:
+                entries.append({"expiry": "1", "expiry_dt": None, "batch": None, "qty_allocated": need})
+            df.at[idx, "Lot_Details"] = entries
+    return df
+
+
 def _calculate_final_stock(
     stock_df: pd.DataFrame, fulfillment_results: dict[str, str], orders_df: pd.DataFrame
 ) -> pd.DataFrame:
@@ -911,7 +983,6 @@ def _merge_results_to_dataframe(
     courier_mappings: dict | None = None,
     current_session: str | None = None,
     additional_columns_config: list | None = None,
-    lot_allocations: dict[str, dict[str, list[dict]]] | None = None,
 ) -> pd.DataFrame:
     """
     Merge all analysis results into final output DataFrame.
@@ -1090,15 +1161,7 @@ def _merge_results_to_dataframe(
     # Migrate Packaging_Tags to Internal_Tags if it exists
     final_df = _migrate_packaging_tags(final_df)
 
-    # Attach lot allocation details per order/SKU row
-    if lot_allocations:
-
-        def _get_lot_details(row):
-            return lot_allocations.get(row["Order_Number"], {}).get(row["SKU"])
-
-        final_df["Lot_Details"] = final_df.apply(_get_lot_details, axis=1)
-    else:
-        final_df["Lot_Details"] = None
+    final_df["Lot_Details"] = None
 
     # Select and order output columns
     output_columns = [
@@ -1172,90 +1235,24 @@ def _merge_results_to_dataframe(
     return final_df
 
 
-def _generate_summary_reports(
-    final_df: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def summary_present(final_df: pd.DataFrame) -> pd.DataFrame:
+    """Units per SKU that the fulfillable orders ship: the Summary_Present sheet.
+
+    Columns: Name, SKU, Total Quantity. Computed after rules (AUDIT-06-5).
     """
-    Generate summary reports for fulfilled and missing items.
+    from shopify_tool.report_filters import (
+        fulfillable_only,  # local: avoids an import cycle
+    )
 
-    Creates two summary DataFrames:
-    1. Summary of items that will be fulfilled (from fulfillable orders)
-    2. Summary of items that are truly missing (required > initial stock)
-
-    Args:
-        final_df: Complete analyzed DataFrame
-
-    Returns:
-        Tuple of (summary_present_df, summary_missing_df)
-
-    Format:
-        Both DataFrames have columns: ["Name", "SKU", "Total Quantity"]
-    """
-    logger.debug("Phase 7/7: Generating summary reports...")
-
-    # --- Summary Reports Generation ---
-    present_df = final_df[final_df["Order_Fulfillment_Status"] == "Fulfillable"].copy()
-
-    # Group by SKU and Product_Name if available, otherwise just SKU
+    present_df = fulfillable_only(final_df)
     if "Product_Name" in present_df.columns:
-        summary_present_df = present_df.groupby(
-            ["SKU", "Product_Name"], as_index=False
-        )["Quantity"].sum()
-        summary_present_df = summary_present_df.rename(
-            columns={"Product_Name": "Name", "Quantity": "Total Quantity"}
-        )
-        summary_present_df = summary_present_df[["Name", "SKU", "Total Quantity"]]
+        summary = present_df.groupby(["SKU", "Product_Name"], as_index=False)["Quantity"].sum()
+        summary = summary.rename(columns={"Product_Name": "Name", "Quantity": "Total Quantity"})
     else:
-        summary_present_df = present_df.groupby(["SKU"], as_index=False)[
-            "Quantity"
-        ].sum()
-        summary_present_df["Name"] = "N/A"
-        summary_present_df = summary_present_df.rename(
-            columns={"Quantity": "Total Quantity"}
-        )
-        summary_present_df = summary_present_df[["Name", "SKU", "Total Quantity"]]
-
-    # --- New logic for Summary_Missing ---
-    # 1. Get all items from orders that could not be fulfilled.
-    not_fulfilled_df = final_df[
-        final_df["Order_Fulfillment_Status"] == "Not Fulfillable"
-    ].copy()
-
-    # 2. Identify items that are "truly missing" by comparing required quantity vs initial stock.
-    truly_missing_df = not_fulfilled_df[
-        not_fulfilled_df["Quantity"] > not_fulfilled_df["Stock"]
-    ].copy()
-
-    # 3. Create the summary report from this filtered data.
-    if not truly_missing_df.empty:
-        # Handle Product_Name if available, otherwise use N/A
-        if "Product_Name" in truly_missing_df.columns:
-            truly_missing_df["Product_Name"] = truly_missing_df["Product_Name"].fillna(
-                "N/A"
-            )
-            summary_missing_df = truly_missing_df.groupby(
-                ["SKU", "Product_Name"], as_index=False
-            )["Quantity"].sum()
-            summary_missing_df = summary_missing_df.rename(
-                columns={"Product_Name": "Name", "Quantity": "Total Quantity"}
-            )
-            summary_missing_df = summary_missing_df[["Name", "SKU", "Total Quantity"]]
-        else:
-            summary_missing_df = truly_missing_df.groupby(["SKU"], as_index=False)[
-                "Quantity"
-            ].sum()
-            summary_missing_df["Name"] = "N/A"
-            summary_missing_df = summary_missing_df.rename(
-                columns={"Quantity": "Total Quantity"}
-            )
-            summary_missing_df = summary_missing_df[["Name", "SKU", "Total Quantity"]]
-    else:
-        summary_missing_df = pd.DataFrame(columns=["Name", "SKU", "Total Quantity"])
-
-    logger.debug(f"Summary present: {len(summary_present_df)} SKUs")
-    logger.debug(f"Summary missing: {len(summary_missing_df)} SKUs")
-
-    return summary_present_df, summary_missing_df
+        summary = present_df.groupby(["SKU"], as_index=False)["Quantity"].sum()
+        summary["Name"] = "N/A"
+        summary = summary.rename(columns={"Quantity": "Total Quantity"})
+    return summary[["Name", "SKU", "Total Quantity"]]
 
 
 def _generalize_shipping_method(method, courier_mappings=None):
@@ -1386,24 +1383,23 @@ def run_analysis(
             ``"fifo"``: strictly oldest order first regardless of item count.
 
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
-            A tuple containing four elements:
+        tuple[pd.DataFrame, dict]:
+            A tuple containing two elements:
             - final_df (pd.DataFrame): The main DataFrame with detailed results
               for every line item, including the calculated
               'Order_Fulfillment_Status'.
-            - summary_present_df (pd.DataFrame): A summary of all SKUs that
-              will be fulfilled, aggregated by quantity.
-            - summary_missing_df (pd.DataFrame): A summary of SKUs in
-              unfulfillable orders that were out of stock.
             - stats (dict): A dictionary containing key statistics about the
               fulfillment analysis (e.g., total orders completed).
+
+            Summary_Present is computed separately, after rules, via
+            `summary_present(final_df)` (AUDIT-06-5).
 
     Raises:
         ValueError: If data validation fails
         KeyError: If required columns missing
 
     Example:
-        >>> final_df, present, missing, stats = run_analysis(
+        >>> final_df, stats = run_analysis(
         ...     stock_df=stock,
         ...     orders_df=orders,
         ...     history_df=history
@@ -1451,7 +1447,7 @@ def run_analysis(
 
         # Phase 3: Simulate stock allocation
         logger.info("Phase 3/7: Stock allocation simulation")
-        fulfillment_results, lot_allocations, final_stock_dict = (
+        fulfillment_results, _lot_allocations, final_stock_dict = (
             _simulate_stock_allocation(
                 orders_clean, stock_clean, prioritized_orders, fifo_lots
             )
@@ -1486,14 +1482,10 @@ def run_analysis(
             courier_mappings,
             current_session,
             additional_columns_config,
-            lot_allocations,
         )
+        final_df = with_lots(final_df, fifo_lots, mode)
 
-        # Phase 7: Generate summary reports
-        logger.info("Phase 6/7: Generating summary reports")
-        summary_present_df, summary_missing_df = _generate_summary_reports(final_df)
-
-        # Phase 8: Calculate statistics
+        # Phase 7: Calculate statistics
         logger.info("Phase 7/7: Calculating statistics")
         stats = recalculate_statistics(final_df)
 
@@ -1509,7 +1501,7 @@ def run_analysis(
         logger.info(f"Columns: {list(final_df.columns)}")
         logger.info("=" * 60)
 
-        return final_df, summary_present_df, summary_missing_df, stats
+        return final_df, stats
 
     except ValueError:
         logger.exception("Validation error during analysis")

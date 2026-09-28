@@ -115,6 +115,7 @@ class MainWindow(QMainWindow):
         self.stock_file_path = None
         self.analysis_results_df = None
         self.analysis_stats = None
+        self.lot_table = None
         # current_state.pkl as this PC last loaded or saved it (ADR 0011).
         self._state_stamp = None
         self.threadpool = QThreadPool()
@@ -969,6 +970,7 @@ class MainWindow(QMainWindow):
         """
         self.analysis_results_df = None
         self.analysis_stats = None
+        self.lot_table = None
         self._state_stamp = None
         self.orders_file_path = None
         self.stock_file_path = None
@@ -1013,6 +1015,7 @@ class MainWindow(QMainWindow):
 
                 # Try to load analysis data if it exists
                 if self._load_session_analysis(session_path):
+                    self.lot_table = core.session_lot_table(session_path, self.active_profile_config)
                     # Analysis loaded successfully; a session saved by an older
                     # build may hold a drifted Final_Stock (ADR 0010).
                     self.analysis_results_df = with_stock_left(self.analysis_results_df)
@@ -1050,9 +1053,20 @@ class MainWindow(QMainWindow):
 
         Statistics are recalculated here; the results document folds the line
         frame to orders and KPI numbers itself (gui/orders_view.py), so one
-        push is the whole refresh.
+        push is the whole refresh. Lots and order-level columns are re-derived
+        first (core.with_order_fields, ADR 0015).
         """
         if self.analysis_results_df is not None and not self.analysis_results_df.empty:
+            # Lots and order-level columns follow every edit, undo and open
+            # (ADR 0015). A failure must not stop the refresh.
+            try:
+                self.analysis_results_df = core.with_order_fields(
+                    self.analysis_results_df,
+                    self.active_profile_config,
+                    getattr(self, "lot_table", None),
+                )
+            except Exception:
+                logger.exception("Failed to re-derive order fields")
             try:
                 self.analysis_stats = recalculate_statistics(self.analysis_results_df)
             except Exception:

@@ -14,7 +14,7 @@ import pandas as pd
 from shared.atomic_write import atomic_write_json
 
 from . import analysis, fulfillment_history, packing_lists, stock_export
-from .csv_utils import normalize_sku, resolve_delimiter
+from .csv_utils import AUTO_DELIMITER, normalize_sku, resolve_delimiter
 from .packed_orders import load_session_signals, union_history_with_packed
 from .rules import RuleEngine
 from .session_manager import SessionManagerError
@@ -827,7 +827,7 @@ def _run_analysis_and_rules(
     history_df: pd.DataFrame,
     config: dict,
     current_session: str | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Runs analysis simulation and applies business rules.
 
     Executes the core fulfillment analysis, applies low stock alerts,
@@ -841,7 +841,7 @@ def _run_analysis_and_rules(
         current_session: Name of this run's session, for repeat detection
 
     Returns:
-        Tuple of (final_df, summary_present_df, summary_missing_df, stats)
+        Tuple of (final_df, summary_present_df, stats)
 
     Raises:
         Exception: Propagated from analysis.run_analysis()
@@ -871,7 +871,7 @@ def _run_analysis_and_rules(
     analysis_mode = config.get("analysis_mode", "multi_first")
 
     # Run core analysis
-    final_df, summary_present_df, summary_missing_df, stats = analysis.run_analysis(
+    final_df, stats = analysis.run_analysis(
         stock_df,
         orders_df,
         history_df,
@@ -895,6 +895,8 @@ def _run_analysis_and_rules(
             "CRITICAL: Order_Fulfillment_Status column is missing from analysis result!"
         )
 
+    # Stock_Alert and weights now because rules read them; with_order_fields
+    # recomputes both after the rules changed the frame.
     _add_stock_alert(final_df, config)
 
     # Enrich DataFrame with volumetric weights before Rule Engine
@@ -913,7 +915,19 @@ def _run_analysis_and_rules(
         final_df = _settle_rule_changes(final_df, stock_df, config)
         logger.info("Rule engine application complete.")
 
-    return final_df, summary_present_df, summary_missing_df, stats
+    # Order-level columns and lots follow the frame as the rules left it:
+    # bonus lines get their own lots and the right Order_Type (ADR 0015).
+    lots = analysis.lot_table(
+        analysis.stock_with_internal_columns(stock_df, config.get("column_mappings", {}))
+    )
+    final_df = with_order_fields(final_df, config, lots)
+
+    # Summary and stats follow the frame as the rules and lots left it
+    # (AUDIT-06-5): a rule hold or bonus line changes which SKUs ship.
+    summary_present_df = analysis.summary_present(final_df)
+    stats = analysis.recalculate_statistics(final_df)
+
+    return final_df, summary_present_df, stats
 
 
 def _add_stock_alert(final_df, config):
@@ -924,6 +938,62 @@ def _add_stock_alert(final_df, config):
         final_df["Stock_Alert"] = np.where(
             final_df["Final_Stock"] < low_stock_threshold, "Low Stock", ""
         )
+
+
+def session_lot_table(session_path, config) -> dict | None:
+    """The session's opening lots (R3, ADR 0015), from its own input/inventory.csv.
+
+    None when the session has no stock file (memory mode, or none copied),
+    the file has no lot columns, or it can't be read: lines then export
+    without lots, with the right quantities.
+    """
+    if not session_path:
+        return None
+    path = Path(session_path) / "input" / "inventory.csv"
+    if not path.exists():
+        return None
+    config = config or {}
+    mappings = config.get("column_mappings") or {}
+    try:
+        setting = (config.get("settings") or {}).get("stock_csv_delimiter", AUTO_DELIMITER)
+        raw = pd.read_csv(
+            path,
+            delimiter=resolve_delimiter(str(path), setting, "stock"),
+            encoding="utf-8-sig",
+            dtype=_get_sku_dtype_dict(mappings, "stock"),
+        )
+        return analysis.lot_table(analysis.stock_with_internal_columns(raw, mappings))
+    except Exception:
+        logger.exception(f"Could not read this session's lots from {path}")
+        return None
+
+
+def with_order_fields(df, config, lots):
+    """Recompute every order-level column a run derives, from the frame as it is now.
+
+    Order_Type, the weight and box columns, Stock_Alert and Lot_Details were
+    computed once at run time, and add product, remove item, holds, rule bonus
+    lines and undo left them stale (AUDIT-06-1, -2). Runs at the end of the
+    run and on every MainWindow refresh (spec 2026-09-28 §3). Returns a new
+    frame; the caller's is left as it was.
+    """
+    if df is None or df.empty or "Order_Number" not in df.columns:
+        return df
+    df = df.copy()
+    config = config or {}
+    if "Order_Type" in df.columns:
+        keys = df["Order_Number"].astype(str).str.strip()
+        lines = df.groupby(keys)["Order_Number"].transform("size")
+        df["Order_Type"] = np.where(lines > 1, "Multi", "Single")
+    weight_config = config.get("weight_config") or {}
+    if weight_config.get("products") and "SKU" in df.columns:
+        from .weight_calculator import enrich_dataframe_with_weights
+
+        df = enrich_dataframe_with_weights(df, weight_config)
+    _add_stock_alert(df, config)
+    if {"SKU", "Quantity", "Order_Fulfillment_Status"} <= set(df.columns):
+        df = analysis.with_lots(df, lots, config.get("analysis_mode", "multi_first"))
+    return df
 
 
 def _settle_rule_changes(final_df, stock_df, config):
@@ -1002,6 +1072,13 @@ def _settle_rule_changes(final_df, stock_df, config):
     return final_df
 
 
+def _stock_per_sku(stock_df: pd.DataFrame) -> pd.Series:
+    """Stock summed per normalised SKU ("X " and "X" are one SKU, AUDIT-06-3)."""
+    listed = stock_df[stock_df["SKU"].notna()]
+    stock = pd.to_numeric(listed["Stock"], errors="coerce")
+    return stock.groupby(listed["SKU"].map(normalize_sku)).sum(min_count=1).dropna()
+
+
 def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> dict:
     """Post-fulfilment stock per SKU, seeded from the whole stock file.
 
@@ -1019,10 +1096,8 @@ def build_inventory_snapshot(final_df: pd.DataFrame, stock_df: pd.DataFrame) -> 
 
     if stock_df is not None and {"SKU", "Stock"} <= set(stock_df.columns):
         # A SKU on several rows (lots, locations) is their sum (Audit 01 §6).
-        stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
         snapshot = (
-            stock.groupby(stock_df["SKU"]).sum(min_count=1)
-            .dropna()
+            _stock_per_sku(stock_df)
             .apply(lambda x: max(0.0, float(x)))
             .to_dict()
         )
@@ -1049,8 +1124,7 @@ def inventory_total_units(stock_df: pd.DataFrame) -> float:
     """
     if stock_df is None or not {"SKU", "Stock"} <= set(stock_df.columns):
         return 0.0
-    stock = pd.to_numeric(stock_df["Stock"], errors="coerce")
-    per_sku = stock.groupby(stock_df["SKU"]).sum(min_count=1).dropna()
+    per_sku = _stock_per_sku(stock_df)
     return float(per_sku.clip(lower=0).sum())
 
 
@@ -1089,7 +1163,6 @@ def _save_results_and_reports(
     final_df: pd.DataFrame,
     stock_df: pd.DataFrame,
     summary_present_df: pd.DataFrame,
-    summary_missing_df: pd.DataFrame,
     stats: dict,
     stock_file_path: str | None,
     orders_file_path: str | None,
@@ -1115,7 +1188,6 @@ def _save_results_and_reports(
         stock_df: Loaded stock DataFrame (SKU + Stock), used to seed the
             inventory-memory snapshot with SKUs the run itself never touched
         summary_present_df: Summary of fulfillable items
-        summary_missing_df: Summary of missing items
         stats: Statistics dictionary; gains "history_warning" when the
             fulfillment history couldn't be read or written
         stock_file_path: Path to stock file (None in memory mode)
@@ -1166,7 +1238,6 @@ def _save_results_and_reports(
     with pd.ExcelWriter(output_file_path, engine="xlsxwriter") as writer:
         final_df.to_excel(writer, sheet_name="fulfillment_analysis", index=False)
         summary_present_df.to_excel(writer, sheet_name="Summary_Present", index=False)
-        summary_missing_df.to_excel(writer, sheet_name="Summary_Missing", index=False)
 
         workbook = writer.book
         report_info_sheet = workbook.add_worksheet("Report Info")
@@ -1482,7 +1553,7 @@ def run_full_analysis(
                 f"Cannot load client config: profile_manager={profile_manager is not None}, client_id={client_id}"
             )
 
-        final_df, summary_present_df, summary_missing_df, stats = (
+        final_df, summary_present_df, stats = (
             _run_analysis_and_rules(
                 orders_df, stock_df, detection_history_df, config, current_session
             )
@@ -1498,7 +1569,6 @@ def run_full_analysis(
                 stock_df, config.get("column_mappings", {})
             ),
             summary_present_df,
-            summary_missing_df,
             stats,
             stock_file_path,
             orders_file_path,

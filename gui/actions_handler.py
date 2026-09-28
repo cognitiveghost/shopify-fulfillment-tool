@@ -212,6 +212,11 @@ class ActionsHandler(QObject):
         success, result_msg, df, stats = result
         if success:
             self.mw.analysis_results_df = df
+            # The run's own stock file is now the session's; later refreshes
+            # derive lots from it (ADR 0015).
+            self.mw.lot_table = core.session_lot_table(
+                self.mw.session_path, self.mw.active_profile_config
+            )
             self.mw.analysis_stats = stats
             # run_full_analysis just rewrote current_state.pkl; without this
             # the first edit after every analysis is refused as stale.
@@ -1019,7 +1024,7 @@ class ActionsHandler(QObject):
         `line_index`-th line, in frame order, only while it still carries
         `sku`. The order keeps its status unless the new quantity outruns
         Stock left, as Add product does; a lower one never releases a hold.
-        Lot_Details is left alone: R3 fits it to the new quantity on output."""
+        Lot_Details is left alone: the refresh re-derives it (R3, ADR 0015)."""
         df = self.mw.analysis_results_df
         if df is None or df.empty:
             return
@@ -1405,7 +1410,7 @@ class ActionsHandler(QObject):
         new_row = template_row.copy()
         # The template is another line: its lot allocation belongs to that
         # SKU and quantity. A copied one exported 3 for a line of 1 and hid a
-        # SKU (#1221, spec 2026-09-28). The new line has no lot label (R3).
+        # SKU (#1221, spec 2026-09-28). The refresh derives its own (R3, ADR 0015).
         if "Lot_Details" in new_row.index:
             new_row["Lot_Details"] = None
         new_row["SKU"] = sku

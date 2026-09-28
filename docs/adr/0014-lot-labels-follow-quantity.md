@@ -1,6 +1,8 @@
 # 0014 — Lot labels follow Quantity
 
-**Status:** Accepted, 2026-09-28
+**Status:** Accepted, 2026-09-28. Partly superseded by ADR 0015: lots are
+now derived per line after every edit, so hand-added and raised units get real
+lots. The output fitting (`lot_parts`) and the export's totals check stand.
 **Context:** `docs/superpowers/specs/2026-09-28-lot-labels-follow-quantity-design.md`
 
 ## Context

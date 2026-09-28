@@ -143,6 +143,7 @@ def test_on_analysis_complete_toasts_a_history_warning(monkeypatch, tmp_path, st
     mw = SimpleNamespace(
         session_path=None,
         current_client_id="M",
+        active_profile_config={},
         profile_manager=SimpleNamespace(base_path=tmp_path),
         threadpool=QThreadPool(),
         log_activity=Mock(),
@@ -153,6 +154,27 @@ def test_on_analysis_complete_toasts_a_history_warning(monkeypatch, tmp_path, st
 
     shown = [c.args[0] for c in mw.results_bridge.raise_toast.call_args_list]
     assert shown.count("History trouble.") == toasts
+    mw.threadpool.waitForDone(2000)
+
+
+def test_on_analysis_complete_reads_the_sessions_lots(monkeypatch, tmp_path):
+    monkeypatch.setattr("gui.actions_handler.toast", Mock())
+    monkeypatch.setattr("shared.stats_manager.StatsManager.record_analysis", Mock())
+    lots = {"A": []}
+    monkeypatch.setattr("gui.actions_handler.core.session_lot_table", lambda path, _config: lots)
+    df = pd.DataFrame([{"Order_Number": "1001", "Order_Fulfillment_Status": "Fulfillable"}])
+    mw = SimpleNamespace(
+        session_path=None,
+        current_client_id="M",
+        active_profile_config={},
+        profile_manager=SimpleNamespace(base_path=tmp_path),
+        threadpool=QThreadPool(),
+        log_activity=Mock(),
+        update_ui_state=Mock(),
+        results_bridge=Mock(),
+    )
+    ActionsHandler(mw).on_analysis_complete((True, "report.csv", df, {}))
+    assert mw.lot_table is lots
     mw.threadpool.waitForDone(2000)
 
 
@@ -191,6 +213,7 @@ def test_on_analysis_complete_does_not_block_ui_thread_on_stats_recording(
     mw = SimpleNamespace(
         session_path=str(tmp_path / "session_1"),
         current_client_id="M",
+        active_profile_config={},
         profile_manager=SimpleNamespace(base_path=tmp_path),
         threadpool=QThreadPool(),
         log_activity=Mock(),

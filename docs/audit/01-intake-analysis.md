@@ -41,7 +41,7 @@ at run time, before any edit.
 | AUDIT-01-9 | low | Lines above the first order number drop out of the result with no warning | `shopify_tool/analysis.py:1031` | `test_no_order_line_silently_disappears` | confirmed |
 | AUDIT-01-10 | low | Set CSV import reads SKUs as numbers: `0042` becomes `42` | `shopify_tool/set_decoder.py:180` | `test_set_import_keeps_sku_text` | confirmed |
 | AUDIT-01-11 | low | Undoing a removal appends the rows at the end, so the order moves in the table | `shopify_tool/undo_manager.py:371` | `test_undo_of_removed_order_restores_row_order` | confirmed |
-| AUDIT-01-12 | low | Undo history can't be saved once rows carry lot details, so reopening a session loses it | `shopify_tool/undo_manager.py:415` | `test_undo_history_survives_reopen_for_lot_tracked_stock` | confirmed |
+| AUDIT-01-12 | low | Undo history can't be saved once rows carry lot details, so reopening a session loses it | `shopify_tool/undo_manager.py:415` | `test_undo_history_survives_reopen_for_lot_tracked_stock` | fixed (AUDIT-06-6) |
 
 "Latent" means the defect is real but no production client's files trigger it
 today (see each finding).

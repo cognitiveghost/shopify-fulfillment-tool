@@ -78,17 +78,15 @@ class TestDecodeSetsInOrders:
         assert "Original_SKU" in result.columns
         assert "Is_Set_Component" in result.columns
 
-    def test_nested_sets_are_not_recursively_expanded(self):
-        """Characterizes current behavior: a component that is itself a set SKU
-        is NOT further expanded -- decode_sets_in_orders makes a single pass.
-        If nested-set support is ever added intentionally, update this test."""
+    def test_nested_sets_are_recursively_expanded(self):
+        """A component that is itself a set SKU is expanded too (AUDIT-06-4, D3)."""
         df = _orders([{"Order_Number": "#1", "SKU": "OUTER", "Quantity": 1}])
         set_decoders = {
             "OUTER": [{"sku": "INNER-SET", "quantity": 1}],
             "INNER-SET": [{"sku": "LEAF", "quantity": 1}],
         }
         result = decode_sets_in_orders(df, set_decoders)
-        assert list(result["SKU"]) == ["INNER-SET"]  # NOT expanded to LEAF
+        assert list(result["SKU"]) == ["LEAF"]
 
     def test_set_with_all_invalid_components_does_not_drop_the_order_line(self):
         df = _orders([{"Order_Number": "#1", "SKU": "SET-BROKEN", "Quantity": 1}])
