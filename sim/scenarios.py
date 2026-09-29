@@ -81,7 +81,46 @@ def killed_mid_analysis(world: World) -> None:
     d.call("open_session", session_path=session)  # exceptions surface as findings through the events
 
 
+def packer_pc(world: World, name: str):
+    return world.spawn(name, "packer")
+
+
+def list_args(session: str, list_name: str) -> dict:
+    return {"client_id": CLIENT, "session_path": session, "list_name": list_name}
+
+
+def pack_all(pc) -> list[str]:
+    """Pack every order of the open list that is not packed yet; returns the completed orders."""
+    state = pc.call("state").result
+    for order in state["all"]:
+        if order not in state["completed"]:
+            pc.call("pack_order", order=order)
+    return pc.call("state").result["completed"]
+
+
+def pipeline(world: World) -> None:
+    """PC-A analyses and makes lists; PC-B packs all of DHL; PC-A's next session on the same orders
+    flags every order the first session found fulfillable as a repeat (ADR 0012), and nothing else."""
+    a, session = analysed_session(world)
+    fulfillable = {o["order"] for o in a.call("orders").result if o["status"] == "Fulfillable"}
+    b = packer_pc(world, "PC-B")
+    started = b.call("start_list", **list_args(session, "DHL_Orders")).result["started"]
+    world.expect(started, "PC-B could not start DHL_Orders")
+    if not started:
+        return
+    packed = pack_all(b)
+    b.call("end_session")
+    b.quit()
+    a.call("new_session")
+    a.call("set_inputs", orders=str(world.inputs.orders), stock=str(world.inputs.stock))
+    a.call("run_analysis", timeout=150)
+    repeats = {o["order"] for o in a.call("orders").result if o["repeat"]}
+    world.expect(set(packed) <= repeats, f"packed on PC-B but not flagged repeat: {sorted(set(packed) - repeats)}")
+    world.expect(repeats == fulfillable, f"repeats differ from session 1's fulfillable orders: {sorted(repeats ^ fulfillable)}")
+
+
 ALL = {
+    "pipeline": pipeline,
     "same_day_sessions": same_day_sessions,
     "stale_save": stale_save,
     "config_race": config_race,
