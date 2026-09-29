@@ -8,7 +8,7 @@ import warnings
 import pandas as pd
 import pytest
 
-from shopify_tool.rules import RuleEngine
+from shopify_tool.rules import RuleEngine, _op_matches_regex
 from shopify_tool.tag_manager import parse_tags
 
 
@@ -517,7 +517,6 @@ def test_matched_rows_covers_an_order_rules_whole_order():
 def test_regex_with_groups_matches_without_warning():
     # Operators write alternations like ^(01|05); pandas warns that the group
     # is not extracted, which is irrelevant to a boolean match.
-    from shopify_tool.rules import _op_matches_regex
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
