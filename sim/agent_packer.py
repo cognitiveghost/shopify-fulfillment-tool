@@ -30,6 +30,16 @@ def main() -> None:
 
         MainWindow._start_heartbeat_timer = fast_heartbeat
 
+    from gui.packer_mode_widget import PackerModeWidget
+
+    original_unsaved = PackerModeWidget.set_unsaved
+
+    def recording_unsaved(self, unsaved):  # the band a packer sees when state is not reaching the server
+        ac.record("unsaved_banner", text=f"unsaved={bool(unsaved)}")
+        return original_unsaved(self, unsaved)
+
+    PackerModeWidget.set_unsaved = recording_unsaved
+
     mw = MainWindow(skip_worker_selection=True, config_path=config)
     pc_name = os.environ["COMPUTERNAME"]
     worker = next((w for w in mw.worker_manager.get_all_workers() if w.name == pc_name), None)

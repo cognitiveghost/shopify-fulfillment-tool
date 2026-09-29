@@ -52,8 +52,8 @@ class Reply:
         )
 
     def told_operator(self) -> bool:
-        """A dialog, toast or error banner: something a person at the PC would see."""
-        return any(e["kind"] in ("dialog", "toast", "error_banner") for e in self.events)
+        """A dialog, toast, error banner or unsaved-changes band: something a person at the PC would see."""
+        return any(e["kind"] in ("dialog", "toast", "error_banner", "unsaved_banner") for e in self.events)
 
 
 class PC:
