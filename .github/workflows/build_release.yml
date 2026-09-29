@@ -111,10 +111,10 @@ jobs:
     # A release (version succeeded), or a PR carrying the windows-build label:
     # Windows-only questions (frozen bundles, RDP) cannot be answered from the
     # Ubuntu dev machine, and the repo is public so the minutes are free.
-    # always() because version is skipped on PRs, and a skipped need would
+    # !cancelled() because version is skipped on PRs, and a skipped need would
     # otherwise skip this job too.
     if: >-
-      always() && needs.verify.result == 'success' && (
+      !cancelled() && needs.verify.result == 'success' && (
         needs.version.result == 'success' ||
         (github.event_name == 'pull_request' &&
          contains(github.event.pull_request.labels.*.name, 'windows-build')))
@@ -230,9 +230,9 @@ jobs:
         # Last, so a failed build or attestation leaves no tag behind.
         env:
           GH_TOKEN: ${{ github.token }}
-          PRERELEASE: ${{ inputs.prerelease && '--prerelease' || '' }}
+          RELEASE_KIND: ${{ inputs.prerelease && '--prerelease' || '--latest' }}
         run: >
           gh release create "$VERSION"
           "FulfilmentTool-$VERSION.zip" "FulfilmentTool-$VERSION.zip.sha256"
           --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
-          --title "$VERSION" --generate-notes $PRERELEASE
+          --title "$VERSION" --generate-notes $RELEASE_KIND

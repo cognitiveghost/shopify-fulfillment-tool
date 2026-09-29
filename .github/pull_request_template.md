@@ -6,7 +6,7 @@
 
 - [ ] `QT_QPA_PLATFORM=offscreen python -m pytest`
 - [ ] `ruff check . --exclude shared`
-- [ ] `windows-build` label run passed (only if the bundle, its assets or `main.spec` changed)
+- [ ] `windows-build` label run passed (only if the bundle, its assets or the PyInstaller step changed)
 
 ## Release note
 

@@ -16,13 +16,19 @@ PACKAGE_INIT = ROOT / "shopify_tool" / "__init__.py"
         (["1.9.11.0", "1.9.10.8"], "patch", "1.9.12"),
         (["1.3.10.2", "1.3.2.0.2"], "minor", "1.4.0"),
         (["2.0.0", "1.9.11.0"], "patch", "2.0.1"),
-        (["1.10.0", "1.9.0"], "patch", "1.10.1"),  # numeric, not string, order
+        (["1.9.11.0", "12.1.9", "8.0.0"], "major", "2.0.0"),  # newest, not highest (2025's tags)
+        (["1.3.10.2", "5.0.0"], "major", "2.0.0"),
         ([], "patch", "0.0.1"),
         (["v3", "nightly", "1.2"], "minor", "0.1.0"),  # non-version tags ignored
     ],
 )
 def test_next_version(tags, bump, expected):
     assert next_version(tags, bump) == expected
+
+
+def test_a_version_that_is_already_a_tag_is_refused():
+    with pytest.raises(ValueError):
+        next_version(["7.9.9", "8.0.0"], "major")
 
 
 def test_an_unknown_bump_is_refused():

@@ -57,8 +57,9 @@ exchange, not the app version. The same goes for `shared/__init__.py`'s `__versi
 **`scripts/release_version.py`** is one small file, identical in both repos. It is not in `shared/`, because
 `shared/` is bundled into the app. It has two functions:
 
-- `next_version(tags, bump) -> str`: reads every tag of the form `\d+(\.\d+){2,}` by its first three numbers,
-  takes the highest, and bumps it. With no matching tag it starts from `0.0.0`. It raises if the result is
+- `next_version(tags, bump) -> str`: takes the newest tag (by date) of the form `\d+(\.\d+){2,}`, reads its
+  first three numbers, and bumps it. Newest, not highest: 2025's tags go up to `12.1.9` (Shopify) and `5.0.0`
+  (packing), older than the 1.x line. With no matching tag it starts from `0.0.0`. It raises if the result is
   already a tag. `major` on `1.9.11.0` gives `2.0.0`; `patch` gives `1.9.12`. `1.3.2.0.2` reads as `(1,3,2)`.
 - `stamp(path, version)`: replaces the single `__version__ = "…"` line, and raises unless exactly one line matched.
   A missed stamp would otherwise ship a "dev" build silently.

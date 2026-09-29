@@ -19,15 +19,24 @@ _VERSION_LINE = re.compile(r'^__version__ = ".*"$', re.MULTILINE)
 
 
 def next_version(tags, bump):
-    versions = [tuple(int(part) for part in tag.split(".")[:3]) for tag in tags if _TAG.fullmatch(tag)]
-    major, minor, patch = max(versions, default=(0, 0, 0))
+    """Bump the newest version tag. `tags` is newest first.
+
+    Newest, not highest: 2025's releases were numbered up to 5.0.0 (packing)
+    and 12.1.9 (Shopify), before the 1.x line that 2.0.0 continues.
+    """
+    base = next((tag for tag in tags if _TAG.fullmatch(tag)), "0.0.0")
+    major, minor, patch = (int(part) for part in base.split(".")[:3])
     if bump == "major":
-        return f"{major + 1}.0.0"
-    if bump == "minor":
-        return f"{major}.{minor + 1}.0"
-    if bump == "patch":
-        return f"{major}.{minor}.{patch + 1}"
-    raise ValueError(f"bump must be major, minor or patch, not {bump!r}")
+        version = f"{major + 1}.0.0"
+    elif bump == "minor":
+        version = f"{major}.{minor + 1}.0"
+    elif bump == "patch":
+        version = f"{major}.{minor}.{patch + 1}"
+    else:
+        raise ValueError(f"bump must be major, minor or patch, not {bump!r}")
+    if version in tags:
+        raise ValueError(f"{version} is already a tag")
+    return version
 
 
 def stamp(path, version):
@@ -42,7 +51,7 @@ if __name__ == "__main__":
     command, *args = sys.argv[1:]
     if command == "next":
         tags = subprocess.run(
-            ["git", "tag", "--list"], capture_output=True, text=True, check=True
+            ["git", "tag", "--list", "--sort=-creatordate"], capture_output=True, text=True, check=True
         ).stdout.split()
         print(next_version(tags, args[0]))
     elif command == "stamp":
