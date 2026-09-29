@@ -1,5 +1,6 @@
 """The scenarios. Each takes a fresh World and records what it finds through world.expect."""
 
+import json
 import time
 from pathlib import Path
 
@@ -119,10 +120,80 @@ def pipeline(world: World) -> None:
     world.expect(repeats == fulfillable, f"repeats differ from session 1's fulfillable orders: {sorted(repeats ^ fulfillable)}")
 
 
+def lock_race(world: World) -> None:
+    """PC-B and PC-C open the same list at the same moment: exactly one gets it, the other is told
+    it is open on another PC."""
+    a, session = analysed_session(world)
+    a.quit()
+    b, c = packer_pc(world, "PC-B"), packer_pc(world, "PC-C")
+    b.send("start_list", **list_args(session, "DHL_Orders"))
+    c.send("start_list", **list_args(session, "DHL_Orders"))
+    rb, rc = b.receive(60), c.receive(60)
+    got = (rb.result["started"], rc.result["started"])
+    world.expect(sorted(got) == [False, True], f"started: PC-B={got[0]} PC-C={got[1]}")
+    loser = rc if got[0] else rb
+    # Every sim PC shares one hostname, so match the wording, not a PC name (Review Focus 5).
+    world.expect(loser.saw("dialog", "another PC"), "the PC that lost the race was not told the list is open elsewhere")
+    for pc, started in ((b, got[0]), (c, got[1])):
+        if started:
+            pc.call("end_session", timeout=60)
+
+
+def crash_takeover(world: World) -> None:
+    """PC-B packs 5 orders and is killed; after the lock goes stale PC-C takes the list over, keeps
+    those 5 and finishes it, every order completed exactly once."""
+    a, session = analysed_session(world)
+    a.quit()
+    b = packer_pc(world, "PC-B")
+    b.call("start_list", **list_args(session, "DHL_Orders"))
+    orders = b.call("state").result["all"]
+    for order in orders[:5]:
+        b.call("pack_order", order=order)
+    time.sleep(2)  # let the async state writer land: a crash inside that window is a separate question
+    b.kill()
+    time.sleep(5)  # STALE_TIMEOUT (4 s under SIM_FAST_CLOCK) + 1
+    c = packer_pc(world, "PC-C")
+    r = c.call("start_list", answers={"stale": "yes"}, **list_args(session, "DHL_Orders"))
+    world.expect(r.result["started"], "PC-C could not take over the stale list")
+    if not r.result["started"]:
+        return
+    resumed = c.call("state").result["completed"]
+    world.expect(set(orders[:5]) <= set(resumed), f"orders lost in the crash: {sorted(set(orders[:5]) - set(resumed))}")
+    done = pack_all(c)
+    world.expect(sorted(done) == sorted(orders), f"after takeover completed {len(done)} of {len(orders)}")
+    c.call("end_session", timeout=60)
+
+
+def parallel_lists(world: World) -> None:
+    """PC-B packs DHL while PC-C packs DPD, one order each in turn: both lists' orders reach the packed signal."""
+    a, session = analysed_session(world)
+    a.quit()
+    b, c = packer_pc(world, "PC-B"), packer_pc(world, "PC-C")
+    b.call("start_list", **list_args(session, "DHL_Orders"))
+    c.call("start_list", **list_args(session, "DPD_Orders"))
+    ob, oc = b.call("state").result["all"], c.call("state").result["all"]
+    for i in range(max(len(ob), len(oc))):
+        if i < len(ob):
+            b.call("pack_order", order=ob[i])
+        if i < len(oc):
+            c.call("pack_order", order=oc[i])
+    b.call("end_session", timeout=60)
+    c.call("end_session", timeout=60)
+    b.quit()
+    c.quit()
+    progress = json.loads((Path(session) / "session_info.json").read_text(encoding="utf-8")).get("packing_progress", {})
+    for name, orders in (("DHL_Orders", ob), ("DPD_Orders", oc)):
+        signal = set((progress.get(name) or {}).get("completed_orders", []))
+        world.expect(signal == set(orders), f"{name}: packed signal holds {len(signal)} of {len(orders)} orders")
+
+
 ALL = {
     "pipeline": pipeline,
     "same_day_sessions": same_day_sessions,
     "stale_save": stale_save,
     "config_race": config_race,
     "killed_mid_analysis": killed_mid_analysis,
+    "lock_race": lock_race,
+    "crash_takeover": crash_takeover,
+    "parallel_lists": parallel_lists,
 }
