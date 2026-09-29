@@ -1,7 +1,7 @@
 name: Test, Build and Release
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   push:
@@ -13,8 +13,18 @@ on:
     # 'labeled' so applying the windows-build label triggers a build on an
     # already-open PR. The default types do not include it.
     types: [opened, synchronize, reopened, labeled]
-  release:
-    types: [created]
+  # The Release button: Actions -> this workflow -> Run workflow, on main.
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      prerelease:
+        description: Mark the release as a pre-release
+        type: boolean
+        default: false
 
 jobs:
   verify:
@@ -67,17 +77,49 @@ jobs:
             exit 1
           fi
 
+  version:
+    name: Next Version
+    needs: [verify, shared-sync-check]
+    # Releases come from main only. On any other branch this job skips, and
+    # so do build and release below.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - name: Check out code with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Pick the next version from the tags
+        id: next
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          version=$(python scripts/release_version.py next "$BUMP")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build Executable
-    needs: [verify]
+    needs: [verify, version]
     runs-on: windows-latest
-    # Releases always. PRs only when explicitly asked with the windows-build
-    # label -- Windows-only questions (frozen bundles, RDP) cannot be answered
-    # from the Ubuntu dev machine, and the repo is public so the minutes are free.
-    if: >
-      github.event_name == 'release' ||
-      contains(github.event.pull_request.labels.*.name, 'windows-build')
-
+    # A release (version succeeded), or a PR carrying the windows-build label:
+    # Windows-only questions (frozen bundles, RDP) cannot be answered from the
+    # Ubuntu dev machine, and the repo is public so the minutes are free.
+    # !cancelled() because version is skipped on PRs, and a skipped need would
+    # otherwise skip this job too.
+    if: >-
+      !cancelled() && needs.verify.result == 'success' && (
+        needs.version.result == 'success' ||
+        (github.event_name == 'pull_request' &&
+         contains(github.event.pull_request.labels.*.name, 'windows-build')))
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -91,6 +133,10 @@ jobs:
           pip install -r requirements.txt
           # PyInstaller is in dev requirements
           pip install -r requirements-dev.txt
+      - name: Stamp the release version
+        # PR gate builds skip this and say "dev" in the title.
+        if: env.VERSION != ''
+        run: python scripts/release_version.py stamp shopify_tool/__init__.py $env:VERSION
       - name: Install Pango/GTK runtime (MSYS2)
         shell: cmd
         run: |
@@ -101,7 +147,8 @@ jobs:
         # static analysis -- omitting this crashes any frozen build on first
         # barcode import with "ModuleNotFoundError: reportlab.graphics.barcode.code93".
         run: >
-          pyinstaller --name ShopifyFulfillmentTool --onedir --windowed --noconfirm
+          pyinstaller --name FulfilmentTool --onedir --windowed --noconfirm
+          --icon shared/assets/brand/fulfilment-tool.ico
           --add-data "shopify_tool/templates;shopify_tool/templates"
           --add-data "shared/assets;shared/assets"
           --add-data "gui/web;gui/web"
@@ -119,51 +166,73 @@ jobs:
         # helper process, and if it silently does not, the only symptom is a
         # dead view discovered over RDP after a 15-minute build and a several-
         # hundred-MB download. Fail here, in the step named for it, instead.
+        #
+        # qico.dll is Qt's .ico reader: without it brand_icon() loads nothing
+        # and the window and taskbar show a blank icon.
         shell: pwsh
         run: |
-          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html", "pikepdf") {
-            if (-not (Get-ChildItem -Path "dist\ShopifyFulfillmentTool" -Recurse -Filter $name)) {
+          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html", "pikepdf", "fulfilment-tool.ico", "qico.dll") {
+            if (-not (Get-ChildItem -Path "dist\FulfilmentTool" -Recurse -Filter $name)) {
               throw "PyInstaller did not bundle $name."
             }
           }
       - name: Bundle GTK DLLs
         shell: pwsh
         run: |
-          Copy-Item -Recurse -Path "C:\msys64\mingw64\bin" -Destination "dist\ShopifyFulfillmentTool\gtk-dlls"
-          Copy-Item -Recurse -Path "C:\msys64\mingw64\etc" -Destination "dist\ShopifyFulfillmentTool\gtk-dlls\etc"
+          Copy-Item -Recurse -Path "C:\msys64\mingw64\bin" -Destination "dist\FulfilmentTool\gtk-dlls"
+          Copy-Item -Recurse -Path "C:\msys64\mingw64\etc" -Destination "dist\FulfilmentTool\gtk-dlls\etc"
       - name: Report bundle size
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path "dist\ShopifyFulfillmentTool" -Recurse -File
+          $files = Get-ChildItem -Path "dist\FulfilmentTool" -Recurse -File
           $mb = ($files | Measure-Object -Property Length -Sum).Sum / 1MB
           $line = "Frozen bundle: {0:N0} MB across {1:N0} files" -f $mb, $files.Count
           Write-Output $line
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
-      - name: Zip artifact (release)
-        if: github.event_name == 'release'
+      - name: Zip the bundle
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist\ShopifyFulfillmentTool\*" -DestinationPath "ShopifyFulfillmentTool-v${{ github.ref_name }}.zip"
-
-      - name: Zip artifact (PR gate build)
-        if: github.event_name == 'pull_request'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "dist\ShopifyFulfillmentTool\*" -DestinationPath "ShopifyFulfillmentTool-gate.zip"
-
-      - name: Upload gate build
-        if: github.event_name == 'pull_request'
+          $name = if ($env:VERSION) { "FulfilmentTool-$env:VERSION" } else { "FulfilmentTool-gate" }
+          Compress-Archive -Path "dist\FulfilmentTool\*" -DestinationPath "$name.zip"
+      - name: Upload the bundle
         uses: actions/upload-artifact@v4
         with:
-          name: ShopifyFulfillmentTool-gate
-          path: ShopifyFulfillmentTool-gate.zip
+          name: bundle
+          path: FulfilmentTool-*.zip
           # Already a zip; re-compressing several hundred MB buys nothing.
           compression-level: 0
 
-      - name: Upload Release Asset
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+  release:
+    name: Publish Release
+    # Runs only when version and build both succeeded, i.e. on the Release
+    # button. A release made with GITHUB_TOKEN would not trigger another
+    # workflow, which is why the build lives in this one.
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Download the bundle
+        uses: actions/download-artifact@v4
         with:
-          files: ShopifyFulfillmentTool-v${{ github.ref_name }}.zip
+          name: bundle
+      - name: Checksum
+        run: sha256sum "FulfilmentTool-$VERSION.zip" > "FulfilmentTool-$VERSION.zip.sha256"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: FulfilmentTool-${{ needs.version.outputs.version }}.zip
+      - name: Create the release
+        # Last, so a failed build or attestation leaves no tag behind.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_KIND: ${{ inputs.prerelease && '--prerelease' || '--latest' }}
+        run: >
+          gh release create "$VERSION"
+          "FulfilmentTool-$VERSION.zip" "FulfilmentTool-$VERSION.zip.sha256"
+          --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
+          --title "$VERSION" --generate-notes $RELEASE_KIND

@@ -1,7 +1,7 @@
-"""
-Shopify Fulfillment Tool
+"""Fulfilment Tool backend: analysis, rules, sessions and outputs."""
 
-Version: 1.9.9.1
-"""
+APP_NAME = "Fulfilment Tool"
 
-__version__ = "1.9.9.1"
+# The release build stamps the git tag over "dev" (scripts/release_version.py).
+# Never hand-edit it.
+__version__ = "dev"

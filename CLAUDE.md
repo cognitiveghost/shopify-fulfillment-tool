@@ -1,9 +1,8 @@
-# CLAUDE.md — Shopify Fulfillment Tool
+# CLAUDE.md — Fulfilment Tool
 
 ## Project Overview
 Desktop PySide6 app for warehouse order fulfillment processing against Shopify CSV exports.
 Windows 10/11 only. Multi-PC warehouse use via centralized Windows file server (UNC paths). Development happens on Ubuntu Linux; production stays Windows-only.
-Current version: **1.9.9.1** (pre-release).
 
 ---
 
@@ -73,7 +72,7 @@ mid-flight.
 ## Shared Module (`shared/`)
 
 `shared/` (theme, logger, stats, file locking, atomic writes, session IDs) is **not owned by this repo**.
-It's one-way synced from `../packing-tool/shared/`, the canonical source (see `packing-tool/docs/superpowers/specs/2026-07-25-shared-unification-design.md`).
+It's one-way synced from `../packing-tool/shared/`, the canonical source.
 
 - **Never hand-edit files under `shared/`** — the next sync silently overwrites them.
 - To change shared behavior: edit it in `packing-tool`, then run `python scripts/sync_shared.py` from this repo's root.
@@ -132,12 +131,12 @@ if not condition:
 
 ---
 
-## Version Management
+## Releases
 
-Version string must be updated in **3 places simultaneously**:
-1. `gui_main.py:11` — `__version__ = "X.Y.Z.W"`
-2. `shopify_tool/__init__.py:7` — `__version__ = "X.Y.Z.W"`
-3. `README.md:3` — `Version: X.Y.Z.W`
+The git tag is the version. In the repo `shopify_tool/__init__.py` holds `__version__ = "dev"`; the release build
+stamps the tag into it (`scripts/release_version.py`). Never hand-edit `__version__` or write a version into docs.
+To release: Actions → Test, Build and Release → Run workflow on `main` → pick the bump. Never create a release in
+the GitHub UI — nothing builds for it.
 
 ## DO NOT
 
@@ -176,6 +175,9 @@ Issues live in GitHub Issues on `cognitiveghost/shopify-fulfillment-tool` (uses 
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+Doc paths cited in code comments that no longer exist (shipped specs, plans, audits) are in git history:
+`git log --all -- <path>`.
 
 ---
 

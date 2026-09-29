@@ -24,3 +24,12 @@ Source: https://github.com/rsms/inter/releases/tag/v4.1, from `extras/ttf/`.
 Regular and Bold only: `TYPE_SCALE` in `shared/theme.py` expresses no other
 weight, and no italic. The variable `InterVariable.ttf` is deliberately not
 used.
+
+## brand/ — app logos
+
+`fulfilment-tool` (Lucide `package` on `#006FBA`) and `packer-assistant`
+(Lucide `scan-barcode` on `#2C6630`): white Lucide 1.31.0 glyphs (ISC, see
+`icons/LICENSE`) on a rounded tile. The `.svg` is the source; the `.ico`
+(16/24/32/48/256 px) is rendered from it once with QSvgRenderer + Pillow and is
+what both the exe (PyInstaller `--icon`) and `shared.icons.brand_icon()` load.
+Re-render the `.ico` whenever the `.svg` changes.
