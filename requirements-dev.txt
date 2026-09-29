@@ -20,10 +20,3 @@ ruff>=0.1.0            # Fast Python linter and formatter (replaces black + flak
 # ----------------------
 pyinstaller>=6.0.0     # Package application into standalone executables
 pyinstaller-hooks-contrib>=2025.0  # Additional hooks for PyInstaller
-
-# Testing Dependencies (auto-installed by pytest)
-# ------------------------------------------------
-iniconfig>=2.0.0       # pytest configuration file parser
-packaging>=24.0        # Core utilities for Python packages
-pluggy>=1.0.0          # pytest plugin system
-altgraph>=0.17.0       # PyInstaller dependency for dependency graph
