@@ -22,12 +22,14 @@ class LogFilterProxy(QSortFilterProxyModel):
         self._search = ""
 
     def set_level_floor(self, level: int) -> None:
+        self.beginFilterChange()
         self._floor = level
-        self.invalidateFilter()
+        self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
 
     def set_search(self, text: str) -> None:
+        self.beginFilterChange()
         self._search = text.strip().lower()
-        self.invalidateFilter()
+        self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
 
     def filterAcceptsRow(self, row, parent) -> bool:
         model = self.sourceModel()

@@ -1,5 +1,6 @@
 import copy
 import re
+import warnings
 from functools import lru_cache
 from typing import ClassVar
 
@@ -629,8 +630,13 @@ def _op_matches_regex(series_val, rule_val):
     if compiled_pattern is None:
         return pd.Series([False] * len(series_val), index=series_val.index)
 
-    # Use pandas vectorized string contains with regex
-    return series_val.astype(str).str.contains(rule_val, na=False, regex=True)
+    # pandas warns when the pattern has capture groups (e.g. ^(01|05)); a
+    # boolean contains ignores them, so the warning is noise.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", "This pattern is interpreted as a regular expression", UserWarning
+        )
+        return series_val.astype(str).str.contains(rule_val, na=False, regex=True)
 
 
 def _op_does_not_match_regex(series_val, rule_val):
