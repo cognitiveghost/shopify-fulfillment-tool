@@ -187,6 +187,58 @@ def parallel_lists(world: World) -> None:
         world.expect(signal == set(orders), f"{name}: packed signal holds {len(signal)} of {len(orders)} orders")
 
 
+def server_vanishes_mid_pack(world: World) -> None:
+    """The server goes away while PC-B packs: PC-B is told, nothing crashes, and once the server is back
+    packing continues with the pre-outage order kept."""
+    a, session = analysed_session(world)
+    a.quit()
+    b = packer_pc(world, "PC-B")
+    b.call("start_list", **list_args(session, "DHL_Orders"))
+    orders = b.call("state").result["all"]
+    b.call("pack_order", order=orders[0])
+    time.sleep(2)
+    world.server_offline()
+    try:
+        r1 = b.call("pack_order", order=orders[1])
+        time.sleep(3)  # heartbeat (1 s) and async writes hit the missing server; their events ride on the next reply
+        r2 = b.call("state")
+        world.expect(r1.told_operator() or r2.told_operator(),
+                     "PC-B kept packing with the server gone and was not told")
+    finally:
+        world.server_online()
+    if not b.call("state").result["active"]:  # a lost lock tears the list down by design (spec B3)
+        b.call("start_list", answers={"stale": "yes"}, **list_args(session, "DHL_Orders"))
+    st = b.call("state").result
+    world.expect(orders[0] in st["completed"], f"{orders[0]}, packed before the outage, was lost")
+    if st["active"]:
+        b.call("pack_order", order=next(o for o in orders if o not in st["completed"]))
+        b.call("end_session", timeout=60)
+
+
+def readonly_end(world: World) -> None:
+    """The session folder turns read-only before PC-B ends its list: PC-B is told, nothing crashes, no
+    partial files; once writable again the list ends cleanly with its packed orders kept."""
+    a, session = analysed_session(world)
+    a.quit()
+    b = packer_pc(world, "PC-B")
+    b.call("start_list", **list_args(session, "DHL_Orders"))
+    orders = b.call("state").result["all"]
+    for order in orders[:2]:
+        b.call("pack_order", order=order)
+    time.sleep(2)
+    world.readonly(Path(session))
+    try:
+        r = b.call("end_session", timeout=60)
+        world.expect(r.told_operator(), "ending a list on a read-only share told the operator nothing")
+    finally:
+        world.writable(Path(session))
+    if b.call("state").result["active"]:
+        world.expect(b.call("end_session", timeout=60).result["ended"], "the list would not end once writable")
+    state_file = Path(session) / "packing" / "DHL_Orders" / "packing_state.json"
+    kept = [c["order_number"] for c in json.loads(state_file.read_text(encoding="utf-8")).get("completed", [])]
+    world.expect(set(orders[:2]) <= set(kept), f"packed orders lost: {sorted(set(orders[:2]) - set(kept))}")
+
+
 ALL = {
     "pipeline": pipeline,
     "same_day_sessions": same_day_sessions,
@@ -196,4 +248,6 @@ ALL = {
     "lock_race": lock_race,
     "crash_takeover": crash_takeover,
     "parallel_lists": parallel_lists,
+    "server_vanishes_mid_pack": server_vanishes_mid_pack,
+    "readonly_end": readonly_end,
 }

@@ -173,10 +173,12 @@ class World:
         self._events.close()
 
     def server_offline(self) -> None:
-        self.server.rename(self.server.with_name("server.offline"))
+        """Nothing under the server can be read, listed or created, and the folder stays in place so an
+        app that mkdirs its way back in cannot resurrect a phantom server (as a vanished UNC share can't)."""
+        self.server.chmod(0o000)
 
     def server_online(self) -> None:
-        self.server.with_name("server.offline").rename(self.server)
+        self.server.chmod(0o755)
 
     @staticmethod
     def readonly(path: Path) -> None:
