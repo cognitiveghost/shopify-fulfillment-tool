@@ -19,8 +19,10 @@ Reference Labels, which use the same raw-ZPL encoder, are not reported. barcode_
 - Polarity is correct on this machine. A real Code-128 label and a real QR label from
   `barcode_processor.generate_*_labels_pdf` are 15.9% and 10.3% black in the raster, and the same share of
   `^GFA` bits are set (a set bit prints a dot). This holds with and without rotate and with `target_size_mm`.
-- The bump did not change this: zebrafy 1.2.0 → 1.2.2 only adds `string_line_break`, and Pillow 11.3 and 12.3
-  produce identical `^GFA` data.
+- Root cause (found in stage D from the failing CI run): zebrafy 2.0.0 flipped the meaning of `invert`. 1.2.x needed
+  `invert=True` for correct polarity; 2.0.0 needs `invert=False`. `zebrafy>=1.2.2` let CI and the Windows build
+  resolve 2.0.0 while the dev venv kept 1.2.2, so the code was correct only on the dev VM. The floor is now
+  `zebrafy>=2.0.0` and `image_to_zpl` passes `invert=invert`.
 - The existing tests never check polarity. `tests/test_label_printing.py` checks only `^XA`/`^XZ`/`^PW`/`^LL`.
 
 So the inversion cannot be reproduced from source on Linux. It happens on the owner's Windows build, or in the
@@ -49,8 +51,7 @@ a log line that will tell us next time.
 ### Seams and signatures
 
 - `label_printing.image_to_zpl(image, rotate=False, invert=False) -> str`. `invert=True` flips the output
-  polarity. It passes `invert=not invert` to `ZebrafyImage`, so the existing default stays `invert=True` inside
-  zebrafy. Output is `^XA\n^LRN\n^PW{w}\n^LL{h}\n{field}\n^XZ\n`.
+  polarity. It passes `invert=invert` straight to `ZebrafyImage` (zebrafy >= 2.0). Output is `^XA\n^LRN\n^PW{w}\n^LL{h}\n{field}\n^XZ\n`.
 - `label_printing.print_pdf_raw_zpl(pdf_path, target, rotate=False, target_size_mm=None, invert=False)` passes
   `invert` to `image_to_zpl` and logs the line from item 3. The module gets `logger = logging.getLogger(__name__)`.
 - `gui/pdf_printing.py`: `load_print_settings` / `save_print_settings` gain `raw_zpl_invert`.

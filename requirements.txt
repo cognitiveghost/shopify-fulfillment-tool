@@ -50,5 +50,5 @@ qrcode>=8.2              # QR code generation (SVG vector output via blabel temp
 # Direct Label Printing (raw ZPL for Citizen CL-E300, matches barcode_tool)
 # ---------------------------------------------------------------------
 pypdfium2>=5.13.0          # PDF rasterization for raw ZPL printing
-zebrafy>=1.2.2             # PIL Image -> ZPL conversion for raw ZPL printing
+zebrafy>=2.0.0             # PIL Image -> ZPL conversion for raw ZPL printing
 pywin32>=312; sys_platform == "win32"  # win32print RAW spooling (Windows only)

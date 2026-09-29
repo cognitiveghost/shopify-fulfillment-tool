@@ -110,11 +110,11 @@ class TestImageToZpl:
         # ZPL ^GFA: a set bit is a printed (black) dot. Left half black ->
         # first byte ff, second byte 00. Nothing checked this before.
         zpl = label_printing.image_to_zpl(_half_black())
-        assert ",ff00^FS" in zpl
+        assert ",ff00^fs" in zpl.lower()
 
     def test_invert_flips_the_polarity(self):
         zpl = label_printing.image_to_zpl(_half_black(), invert=True)
-        assert ",00ff^FS" in zpl
+        assert ",00ff^fs" in zpl.lower()
 
     def test_label_reverse_is_reset_right_after_xa(self):
         zpl = label_printing.image_to_zpl(Image.new("1", (100, 50)))
@@ -129,7 +129,7 @@ class TestImageToZpl:
         image = grey.convert("1", dither=Image.Dither.NONE)
         zpl = label_printing.image_to_zpl(image, rotate=True, invert=True)
         assert "^PW16\n^LL8\n" in zpl
-        assert "," + "00ff" * 8 + "^FS" in zpl
+        assert "," + "00ff" * 8 + "^fs" in zpl.lower()
 
 
 class TestSendRawLinux:

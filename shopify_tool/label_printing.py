@@ -67,12 +67,12 @@ def image_to_zpl(image: Image.Image, rotate: bool = False, invert: bool = False)
     # fact about their specific printer's media, not derivable from the PDF.
     if rotate:
         image = image.transpose(Image.Transpose.ROTATE_90)
-    # zebrafy invert=True is the *normal* case: PIL's mode "1" packs a set
-    # bit as white, but ZPL's ^GFA graphic field treats a set bit as printed
-    # (black). Our own invert is the operator's "Invert colors" switch for a
-    # setup that still prints white on black (see
+    # zebrafy >= 2.0 packs a set bit as a printed (black) dot when invert is
+    # False. 1.2.x needed invert=True for the same output, so older zebrafy
+    # prints inverted - hence the requirements floor. Our own invert is the
+    # operator's "Invert colors" switch (see
     # docs/superpowers/specs/2026-09-29-minor-fixes-2-0-0-design.md).
-    field = ZebrafyImage(image, invert=not invert, complete_zpl=False).to_zpl()
+    field = ZebrafyImage(image, invert=invert, complete_zpl=False).to_zpl()
     # ^LRN: label-reverse persists on the printer between jobs (and can be
     # saved to its memory), so reset it - each job's polarity is its own data.
     return f"^XA\n^LRN\n^PW{image.width}\n^LL{image.height}\n{field}\n^XZ\n"
