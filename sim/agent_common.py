@@ -40,8 +40,9 @@ def _scripted(title: str, text: str) -> str | None:
 def _static_box(level: str):
     def box(parent, title, text, *args, **kwargs):
         answer = _scripted(str(title), str(text))
+        # A routine "done" notice is not a finding; an unscripted question, warning or error is.
         record("dialog", level=level, title=str(title), text=str(text), answer=answer,
-               unexpected=level == "question" and answer is None)
+               unexpected=level != "information" and answer is None)
         if level == "question":
             return QMessageBox.StandardButton.Yes if answer == "yes" else QMessageBox.StandardButton.No
         return QMessageBox.StandardButton.Ok
@@ -108,8 +109,8 @@ def pump_until(cond, timeout: float, what: str) -> None:
 
 
 def _reply(req_id, ok: bool, result, error) -> None:
-    events = _EVENTS[:]
-    _EVENTS.clear()
+    # pop, not copy-then-clear: the packer's heartbeat thread appends concurrently
+    events = [_EVENTS.pop(0) for _ in range(len(_EVENTS))]
     _PROTO.write(json.dumps(
         {"id": req_id, "ok": ok, "result": result, "error": error, "events": events}, default=str
     ) + "\n")
@@ -147,6 +148,4 @@ def serve(ops: dict) -> None:
 
     threading.Thread(target=read_stdin, daemon=True).start()
     ops.setdefault("ping", lambda: {"pid": os.getpid()})
-    ops.setdefault("print_probe", lambda: print("stray app output") or {"printed": True})
-    ops.setdefault("dialog_probe", lambda: {"answer": str(QMessageBox.question(None, "Probe", "unscripted?"))})
     app.exec()

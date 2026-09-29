@@ -35,14 +35,14 @@ python run_dev.py
 QT_QPA_PLATFORM=offscreen python -m pytest
 ```
 
+CI runs lint + this suite + a headless smoke test (see `.github/workflows/build_release.yml`).
+
 ```bash
 # Two-PC simulation: real Fulfilment + Packer windows as separate simulated PCs on one temp server
 .venv/bin/python -m sim.run --packing-tool ../packing-tool     # all scenarios; --list to list them
 ```
 Findings land in `sim-out/<timestamp>/report.md` (gitignored). A local folder is not an SMB share, so SMB-only
 bugs (ADR 0008) are out of its reach. See `docs/superpowers/specs/2026-09-29-two-pc-simulation-harness-design.md`.
-
-CI runs lint + this suite + a headless smoke test (see `.github/workflows/build_release.yml`).
 
 
 ---

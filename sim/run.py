@@ -43,6 +43,10 @@ def main(argv=None) -> int:
         print(f"{verdict} {name}", flush=True)
         report.append(f"## {verdict} {name}\n\n{(scenarios.ALL[name].__doc__ or '').strip()}\n")
         report += [f"- {f}".replace("\n", "\n  ") for f in world.findings]
+        if world.findings:
+            for log in sorted((out / name / "pcs").glob("*/stderr.log")):
+                tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-15:]
+                report.append(f"\n{log.parent.name} stderr tail:\n\n```\n" + "\n".join(tail) + "\n```")
         report.append(f"\nLogs: `{(out / name / 'pcs').relative_to(REPO)}/*/stderr.log`, events: `events.jsonl`\n")
     (out / "report.md").write_text("\n".join(report), encoding="utf-8")
     print(f"report: {out / 'report.md'}")

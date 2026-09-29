@@ -64,8 +64,8 @@ def config_race(world: World) -> None:
     for i in range(20):
         a.send("save_client_setting", key="low_stock_threshold", value=100 + i)
         d.send("save_client_setting", key="low_stock_threshold", value=200 + i)
-        a.receive()
-        d.receive()
+        for pc, r in (("PC-A", a.receive()), ("PC-D", d.receive())):
+            world.expect(r.result["saved"], f"{pc}'s save {i} of the client config failed")
     final = a.call("client_setting", key="low_stock_threshold").result["value"]
     world.expect(final in (119, 219), f"final low_stock_threshold {final} is neither writer's last value")
 
@@ -101,7 +101,10 @@ def pack_all(pc) -> list[str]:
 
 def pipeline(world: World) -> None:
     """PC-A analyses and makes lists; PC-B packs all of DHL; PC-A's next session on the same orders
-    flags every order the first session found fulfillable as a repeat (ADR 0012), and nothing else."""
+    flags every order the first session found fulfillable as a repeat (ADR 0012), and nothing else.
+
+    Session 1's own history already flags every packed order, so this cannot show Fulfilment reading
+    the Packer's signal; invariant 6 checks that the signal is written."""
     a, session = analysed_session(world)
     fulfillable = {o["order"] for o in a.call("orders").result if o["status"] == "Fulfillable"}
     b = packer_pc(world, "PC-B")
@@ -126,13 +129,13 @@ def lock_race(world: World) -> None:
     a, session = analysed_session(world)
     a.quit()
     b, c = packer_pc(world, "PC-B"), packer_pc(world, "PC-C")
-    b.send("start_list", **list_args(session, "DHL_Orders"))
-    c.send("start_list", **list_args(session, "DHL_Orders"))
+    b.send("start_list", answers={"another PC": "ok"}, **list_args(session, "DHL_Orders"))
+    c.send("start_list", answers={"another PC": "ok"}, **list_args(session, "DHL_Orders"))
     rb, rc = b.receive(60), c.receive(60)
     got = (rb.result["started"], rc.result["started"])
     world.expect(sorted(got) == [False, True], f"started: PC-B={got[0]} PC-C={got[1]}")
     loser = rc if got[0] else rb
-    # Every sim PC shares one hostname, so match the wording, not a PC name (Review Focus 5).
+    # Every sim PC shares one hostname, so the dialog cannot name the owning PC: match the wording.
     world.expect(loser.saw("dialog", "another PC"), "the PC that lost the race was not told the list is open elsewhere")
     for pc, started in ((b, got[0]), (c, got[1])):
         if started:
@@ -169,8 +172,11 @@ def parallel_lists(world: World) -> None:
     a, session = analysed_session(world)
     a.quit()
     b, c = packer_pc(world, "PC-B"), packer_pc(world, "PC-C")
-    b.call("start_list", **list_args(session, "DHL_Orders"))
-    c.call("start_list", **list_args(session, "DPD_Orders"))
+    for pc, name in ((b, "DHL_Orders"), (c, "DPD_Orders")):
+        started = pc.call("start_list", **list_args(session, name)).result["started"]
+        world.expect(started, f"{pc.name} could not start {name}")
+        if not started:
+            return
     ob, oc = b.call("state").result["all"], c.call("state").result["all"]
     for i in range(max(len(ob), len(oc))):
         if i < len(ob):
@@ -206,7 +212,7 @@ def server_vanishes_mid_pack(world: World) -> None:
                      "PC-B kept packing with the server gone and was not told")
     finally:
         world.server_online()
-    if not b.call("state").result["active"]:  # a lost lock tears the list down by design (spec B3)
+    if not b.call("state").result["active"]:  # a lost lock tears the list down by design
         b.call("start_list", answers={"stale": "yes"}, **list_args(session, "DHL_Orders"))
     st = b.call("state").result
     world.expect(orders[0] in st["completed"], f"{orders[0]}, packed before the outage, was lost")
@@ -228,7 +234,7 @@ def readonly_end(world: World) -> None:
     time.sleep(2)
     world.readonly(Path(session))
     try:
-        r = b.call("end_session", timeout=60)
+        r = b.call("end_session", timeout=60, answers={"end failed": "ok"})
         world.expect(r.told_operator(), "ending a list on a read-only share told the operator nothing")
     finally:
         world.writable(Path(session))

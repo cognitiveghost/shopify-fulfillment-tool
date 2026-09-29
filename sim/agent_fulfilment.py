@@ -73,7 +73,11 @@ def main() -> None:
             {
                 "order": str(number),
                 "status": str(group["Order_Fulfillment_Status"].iloc[0]),
-                "repeat": "Repeat" in str(group["System_note"].iloc[0]),
+                # the app's rule (shopify_tool/packing_lists.py): any row notes a repeat it can fulfil
+                "repeat": any(
+                    "Repeat" in note and not note.startswith("Cannot fulfill")
+                    for note in group["System_note"].fillna("").astype(str)
+                ),
             }
             for number, group in df.groupby("Order_Number")
         ]

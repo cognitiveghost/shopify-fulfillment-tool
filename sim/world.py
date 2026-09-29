@@ -88,6 +88,7 @@ class PC:
         threading.Thread(target=self._read, daemon=True).start()
         self._next_id = 0
         self._pending: list[str] = []
+        self._closed = False
 
     def _read(self) -> None:
         for line in self.proc.stdout:
@@ -108,7 +109,7 @@ class PC:
         try:
             line = self._lines.get(timeout=timeout)
         except queue.Empty:
-            self.kill()
+            self._terminate()
             raise AgentDied(f"{self.name} did not answer {op} within {timeout}s") from None
         if line is None:
             raise AgentDied(f"{self.name} exited during {op} (code {self.proc.poll()})")
@@ -123,20 +124,33 @@ class PC:
         self.send(op, **args)
         return self.receive(timeout)
 
-    def kill(self) -> None:
+    def _terminate(self) -> None:
         if self.proc.poll() is None:
             self.proc.kill()
             self.proc.wait()
+
+    def kill(self) -> None:
+        """A deliberate crash: the scenario's, so a lock it leaves behind is excused."""
+        if self.proc.poll() is None:
+            self._terminate()
             self.world.killed_pids.add(self.pid)
 
     def quit(self) -> None:
-        """A clean exit: says yes to any close-time question."""
+        """A clean exit: says yes to any close-time question. A PC that cannot exit cleanly, or had
+        already died without being killed, is a finding."""
+        if self._closed:
+            return
+        self._closed = True
         if self.proc.poll() is None:
             try:
                 self.call("quit", timeout=30, answers={"": "yes"})
                 self.proc.wait(timeout=15)
-            except (AgentDied, OpFailed, subprocess.TimeoutExpired):
-                self.kill()
+            except (AgentDied, OpFailed, subprocess.TimeoutExpired) as exc:
+                self.world.findings.append(f"{self.name} did not quit cleanly: {exc}")
+                self._terminate()
+        elif self.proc.returncode != 0 and self.pid not in self.world.killed_pids:
+            self.world.findings.append(f"{self.name} had died (exit code {self.proc.returncode})")
+        self._stderr.close()
 
 
 class World:

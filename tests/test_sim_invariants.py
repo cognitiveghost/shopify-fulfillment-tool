@@ -31,25 +31,31 @@ def _tree(root, completed=("#1001",), signal=("#1001",), registry_count=1, lock_
     return root
 
 
+def _caught_only_by(found, server) -> None:
+    """The fault is caught, and by that invariant alone."""
+    assert found
+    assert invariants.check_all(server) == found
+
+
 def test_a_sound_tree_passes(tmp_path):
     assert invariants.check_all(_tree(tmp_path)) == []
 
 
 def test_a_torn_json_file_is_caught(tmp_path):
     server = _tree(tmp_path)
-    (server / "Sessions" / "CLIENT_SIM" / "registry_index.json").write_text('{"sessions": {', encoding="utf-8")
-    assert invariants.check_json_parses(server)
+    (server / "Sessions" / "CLIENT_SIM" / "client_config.json").write_text('{"settings": {', encoding="utf-8")
+    _caught_only_by(invariants.check_json_parses(server), server)
 
 
 def test_a_temp_file_is_caught_and_not_parsed_as_json(tmp_path):
     server = _tree(tmp_path)
     (server / "Sessions" / ".session_info_tmp_ab12.json").write_text("{", encoding="utf-8")
-    assert invariants.check_no_temp_files(server)
-    assert invariants.check_json_parses(server) == []
+    _caught_only_by(invariants.check_no_temp_files(server), server)
 
 
 def test_a_lock_left_by_a_live_pc_is_caught(tmp_path):
-    assert invariants.check_no_locks(_tree(tmp_path, lock_pid=4242))
+    server = _tree(tmp_path, lock_pid=4242)
+    _caught_only_by(invariants.check_no_locks(server), server)
 
 
 def test_a_lock_left_by_a_killed_pc_is_allowed(tmp_path):
@@ -58,17 +64,19 @@ def test_a_lock_left_by_a_killed_pc_is_allowed(tmp_path):
 
 def test_a_completed_order_not_on_the_list_is_caught(tmp_path):
     server = _tree(tmp_path, completed=("#1001", "#9999"), signal=("#1001", "#9999"), registry_count=2)
-    assert invariants.check_packing_state(server)
+    _caught_only_by(invariants.check_packing_state(server), server)
 
 
 def test_an_order_completed_twice_is_caught(tmp_path):
     server = _tree(tmp_path, completed=("#1001", "#1001"), registry_count=2)
-    assert invariants.check_packing_state(server)
+    _caught_only_by(invariants.check_packing_state(server), server)
 
 
 def test_a_registry_count_that_disagrees_is_caught(tmp_path):
-    assert invariants.check_registry_counts(_tree(tmp_path, registry_count=2))
+    server = _tree(tmp_path, registry_count=2)
+    _caught_only_by(invariants.check_registry_counts(server), server)
 
 
 def test_a_packed_signal_that_disagrees_is_caught(tmp_path):
-    assert invariants.check_packed_signal(_tree(tmp_path, signal=()))
+    server = _tree(tmp_path, signal=())
+    _caught_only_by(invariants.check_packed_signal(server), server)
