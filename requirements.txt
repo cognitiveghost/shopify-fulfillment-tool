@@ -5,23 +5,23 @@
 
 # Core Data Processing
 # --------------------
-pandas>=2.3.0          # Data manipulation, analysis, and DataFrame operations
-numpy>=2.3.0           # Numerical computing and array operations (pandas dependency)
-python-dateutil>=2.8.0 # Date/time parsing, manipulation, and timezone handling
-pytz>=2025.1           # Timezone definitions and conversions
-tzdata>=2025.1         # IANA timezone database
+pandas>=3.0.6          # Data manipulation, analysis, and DataFrame operations
+numpy>=2.5.3           # Numerical computing and array operations (pandas dependency)
+python-dateutil>=2.9.0.post0 # Date/time parsing, manipulation, and timezone handling
+pytz>=2026.4           # Timezone definitions and conversions
+tzdata>=2026.4         # IANA timezone database
 
 # Excel File Support
 # ------------------
 # Multiple engines are used for comprehensive Excel format support
-openpyxl>=3.0.0        # Read/write Excel 2010+ files (XLSX/XLSM) - primary engine
-xlsxwriter>=3.0.0      # Enhanced XLSX writing with formatting (used in core.py, packing_lists.py)
-xlrd>=2.0.0            # Read legacy Excel 97-2003 files (XLS) - pandas optional dependency
+openpyxl>=3.1.5        # Read/write Excel 2010+ files (XLSX/XLSM) - primary engine
+xlsxwriter>=3.2.9      # Enhanced XLSX writing with formatting (used in core.py, packing_lists.py)
+xlrd>=2.0.2            # Read legacy Excel 97-2003 files (XLS) - pandas optional dependency
 xlwt>=1.3.0            # Write legacy Excel 97-2003 files (XLS) for stock exports
 
 # GUI Framework
 # -------------
-PySide6>=6.7.0         # Qt6 for Python - cross-platform GUI framework
+PySide6>=6.11.2         # Qt6 for Python - cross-platform GUI framework
                        # 6.7 is the floor for QFont.setFeature(), which is the
                        # only working route to tabular numerals (Qt QSS has no
                        # font-variant-numeric property).
@@ -32,23 +32,23 @@ PySide6>=6.7.0         # Qt6 for Python - cross-platform GUI framework
 
 # PDF Processing (Feature #4 - Reference Labels)
 # -----------------------------------------------
-pypdf>=4.0.0           # page text for Reference Labels matching
-pikepdf>=9.0           # Reference Labels page handling (rotation, overlay, merge)
-reportlab>=4.0.0       # PDF generation and text overlay
+pypdf>=6.19.0           # page text for Reference Labels matching
+pikepdf>=10.13.0.post1           # Reference Labels page handling (rotation, overlay, merge)
+reportlab>=5.0.1       # PDF generation and text overlay
 
 # Barcode Generation (Feature #5 - Barcode Generator)
 # ----------------------------------------------------
-python-barcode>=0.15.1 # Code-128 barcode generation for warehouse labels
-Pillow>=10.0.0         # Image processing for barcode label composition
+python-barcode>=0.16.1 # Code-128 barcode generation for warehouse labels
+Pillow>=12.3.0         # Image processing for barcode label composition
 
 # Label Rendering (blabel HTML/Jinja2 templates - barcode + QR labels)
 # -----------------------------------------------------------------
 blabel>=0.1.7           # HTML/Jinja2 template-based label rendering (WeasyPrint backend)
 weasyprint>=70           # 69.x drops every label after one with an empty field (AUDIT-04-1)
-qrcode>=7.4              # QR code generation (SVG vector output via blabel templates)
+qrcode>=8.2              # QR code generation (SVG vector output via blabel templates)
 
 # Direct Label Printing (raw ZPL for Citizen CL-E300, matches barcode_tool)
 # ---------------------------------------------------------------------
-pypdfium2>=4.0          # PDF rasterization for raw ZPL printing
-zebrafy>=1.2             # PIL Image -> ZPL conversion for raw ZPL printing
-pywin32>=306; sys_platform == "win32"  # win32print RAW spooling (Windows only)
+pypdfium2>=5.13.0          # PDF rasterization for raw ZPL printing
+zebrafy>=1.2.2             # PIL Image -> ZPL conversion for raw ZPL printing
+pywin32>=312; sys_platform == "win32"  # win32print RAW spooling (Windows only)
