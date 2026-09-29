@@ -41,6 +41,7 @@ class TestPrintSettingsRoundTrip:
             "print_mode": "driver",
             "raw_zpl_target": "",
             "raw_zpl_rotate": False,
+            "raw_zpl_invert": False,
             "raw_zpl_label_width_mm": 0.0,
             "raw_zpl_label_height_mm": 0.0,
             "driver_printer_name": "",
@@ -53,6 +54,7 @@ class TestPrintSettingsRoundTrip:
                 "print_mode": "raw_zpl",
                 "raw_zpl_target": "ZPL-RAW-Printer",
                 "raw_zpl_rotate": True,
+                "raw_zpl_invert": True,
                 "raw_zpl_label_width_mm": 152.4,
                 "raw_zpl_label_height_mm": 101.6,
                 "driver_printer_name": "Labels 6x4",
@@ -62,6 +64,7 @@ class TestPrintSettingsRoundTrip:
             "print_mode": "raw_zpl",
             "raw_zpl_target": "ZPL-RAW-Printer",
             "raw_zpl_rotate": True,
+            "raw_zpl_invert": True,
             "raw_zpl_label_width_mm": 152.4,
             "raw_zpl_label_height_mm": 101.6,
             "driver_printer_name": "Labels 6x4",
@@ -74,6 +77,7 @@ class TestPrintSettingsRoundTrip:
                 "print_mode": "raw_zpl",
                 "raw_zpl_target": "Labels 6x4",
                 "raw_zpl_rotate": False,
+                "raw_zpl_invert": False,
                 "raw_zpl_label_width_mm": 152.4,
                 "raw_zpl_label_height_mm": 101.6,
                 "driver_printer_name": "Labels 6x4",
@@ -85,6 +89,7 @@ class TestPrintSettingsRoundTrip:
                 "print_mode": "driver",
                 "raw_zpl_target": "Barcodes",
                 "raw_zpl_rotate": True,
+                "raw_zpl_invert": False,
                 "raw_zpl_label_width_mm": 68.0,
                 "raw_zpl_label_height_mm": 38.0,
                 "driver_printer_name": "Barcodes",
@@ -136,8 +141,39 @@ class TestPrintPdfRawZplMode:
 
         assert result is True
         called.assert_called_once_with(
-            pdf_path, "ZPL-RAW-Printer", rotate=True, target_size_mm=None
+            pdf_path, "ZPL-RAW-Printer", rotate=True, target_size_mm=None, invert=False
         )
+
+    def test_forwards_invert(self, monkeypatch, tmp_path):
+        called = Mock()
+        monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
+        pdf_path = tmp_path / "x.pdf"
+
+        result = pdf_printing.print_pdf(
+            None,
+            pdf_path,
+            {
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW-Printer",
+                "raw_zpl_invert": True,
+            },
+        )
+
+        assert result is True
+        called.assert_called_once_with(
+            pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=None, invert=True
+        )
+
+    def test_driver_mode_does_not_call_raw_zpl(self, monkeypatch, tmp_path):
+        called = Mock()
+        monkeypatch.setattr(pdf_printing.label_printing, "print_pdf_raw_zpl", called)
+        monkeypatch.setattr(pdf_printing, "_print_pdf_driver_mode", Mock(return_value=True))
+
+        pdf_printing.print_pdf(
+            None, tmp_path / "x.pdf", {"print_mode": "driver", "raw_zpl_invert": True}
+        )
+
+        assert not called.called
 
     def test_omits_target_size_when_width_or_height_is_zero(
         self, monkeypatch, tmp_path
@@ -159,7 +195,7 @@ class TestPrintPdfRawZplMode:
         )
 
         called.assert_called_once_with(
-            pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=None
+            pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=None, invert=False
         )
 
     def test_passes_target_size_when_both_dimensions_configured(
@@ -182,7 +218,7 @@ class TestPrintPdfRawZplMode:
         )
 
         called.assert_called_once_with(
-            pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=(152.4, 101.6)
+            pdf_path, "ZPL-RAW-Printer", rotate=False, target_size_mm=(152.4, 101.6), invert=False
         )
 
     def test_exception_shows_critical_and_returns_false(self, monkeypatch, tmp_path):

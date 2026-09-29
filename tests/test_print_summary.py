@@ -10,6 +10,7 @@ def _settings(**overrides):
         "print_mode": "driver",
         "raw_zpl_target": "",
         "raw_zpl_rotate": False,
+        "raw_zpl_invert": False,
         "raw_zpl_label_width_mm": 0.0,
         "raw_zpl_label_height_mm": 0.0,
         "driver_printer_name": "",
@@ -74,6 +75,25 @@ def _settings(**overrides):
             },
             "Prints raw ZPL to ZPL-RAW at the PDF's page size, rotated 90°",
         ),
+        (
+            {
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW",
+                "raw_zpl_invert": True,
+            },
+            "Prints raw ZPL to ZPL-RAW at the PDF's page size, colors inverted",
+        ),
+        (
+            {
+                "print_mode": "raw_zpl",
+                "raw_zpl_target": "ZPL-RAW",
+                "raw_zpl_label_width_mm": 68.0,
+                "raw_zpl_label_height_mm": 38.0,
+                "raw_zpl_rotate": True,
+                "raw_zpl_invert": True,
+            },
+            "Prints raw ZPL to ZPL-RAW at 68 × 38 mm, rotated 90°, colors inverted",
+        ),
     ],
 )
 def test_print_summary(overrides, expected):
@@ -81,7 +101,7 @@ def test_print_summary(overrides, expected):
 
 
 def test_driver_mode_ignores_raw_zpl_values():
-    settings = _settings(raw_zpl_target="ZPL-RAW", raw_zpl_rotate=True)
+    settings = _settings(raw_zpl_target="ZPL-RAW", raw_zpl_rotate=True, raw_zpl_invert=True)
     assert print_summary(settings) == (
         "Prints through the print dialog to the Windows default printer"
     )

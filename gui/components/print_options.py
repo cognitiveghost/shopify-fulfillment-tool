@@ -45,6 +45,8 @@ def print_summary(settings: dict) -> str:
         text = f"Prints raw ZPL to {target} at {size}"
         if settings.get("raw_zpl_rotate"):
             text += ", rotated 90°"
+        if settings.get("raw_zpl_invert"):
+            text += ", colors inverted"
         return text
     printer = settings.get("driver_printer_name") or "the Windows default printer"
     return f"Prints through the print dialog to {printer}"
@@ -121,6 +123,10 @@ class PrintOptions(QWidget):
         self.raw_zpl_rotate_check = QCheckBox("Rotate 90°")
         self.raw_zpl_rotate_check.setChecked(settings["raw_zpl_rotate"])
         self.body.add_row("", self.raw_zpl_rotate_check)
+        self.raw_zpl_invert_check = QCheckBox("Invert colors")
+        self.raw_zpl_invert_check.setToolTip("Tick if labels print white on black.")
+        self.raw_zpl_invert_check.setChecked(settings["raw_zpl_invert"])
+        self.body.add_row("", self.raw_zpl_invert_check)
 
         # Connected after the values are loaded, so construction saves nothing.
         self.print_mode_combo.currentIndexChanged.connect(
@@ -129,6 +135,7 @@ class PrintOptions(QWidget):
         self.print_mode_combo.currentIndexChanged.connect(self._on_edited)
         self.raw_zpl_target_edit.editingFinished.connect(self._on_edited)
         self.raw_zpl_rotate_check.toggled.connect(self._on_edited)
+        self.raw_zpl_invert_check.toggled.connect(self._on_edited)
         self.raw_zpl_label_width_spin.editingFinished.connect(self._on_edited)
         self.raw_zpl_label_height_spin.editingFinished.connect(self._on_edited)
         self.driver_printer_combo.currentIndexChanged.connect(self._on_edited)
@@ -154,6 +161,7 @@ class PrintOptions(QWidget):
             "print_mode": self.print_mode_combo.currentData(),
             "raw_zpl_target": self.raw_zpl_target_edit.text(),
             "raw_zpl_rotate": self.raw_zpl_rotate_check.isChecked(),
+            "raw_zpl_invert": self.raw_zpl_invert_check.isChecked(),
             "raw_zpl_label_width_mm": self.raw_zpl_label_width_spin.value(),
             "raw_zpl_label_height_mm": self.raw_zpl_label_height_spin.value(),
             "driver_printer_name": self.driver_printer_combo.currentData(),
@@ -176,6 +184,7 @@ class PrintOptions(QWidget):
         form.setRowVisible(self.raw_zpl_target_edit, is_zpl)
         form.setRowVisible(self._label_size_row, is_zpl)
         form.setRowVisible(self.raw_zpl_rotate_check, is_zpl)
+        form.setRowVisible(self.raw_zpl_invert_check, is_zpl)
 
     def _on_edited(self, *_args) -> None:
         save_print_settings(self._scope, self.current_settings())
