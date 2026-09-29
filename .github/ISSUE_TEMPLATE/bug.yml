@@ -1,0 +1,31 @@
+name: Bug report
+description: Something in the app does not work as it should
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: The number in the window title, e.g. 2.0.0
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: PC and client
+      description: Which warehouse PC, and which client were you working on?
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ..."
