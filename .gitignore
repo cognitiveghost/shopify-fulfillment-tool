@@ -103,3 +103,5 @@ nul
 
 # superpowers brainstorming visual companion
 /.superpowers/
+# Two-PC simulation runs (python -m sim.run)
+sim-out/
