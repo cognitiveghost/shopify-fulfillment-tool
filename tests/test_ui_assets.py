@@ -37,6 +37,12 @@ def test_both_inter_faces_are_vendored(filename):
     assert path.stat().st_size > 100_000, "truncated download?"
 
 
+@pytest.mark.parametrize("name", ["fulfilment-tool", "packer-assistant"])
+@pytest.mark.parametrize("suffix", [".svg", ".ico"])
+def test_both_app_logos_are_vendored(name, suffix):
+    assert (ASSETS_DIR / "brand" / f"{name}{suffix}").is_file()
+
+
 def test_licenses_travel_with_the_assets():
     """Both ISC and SIL OFL require the notice ship alongside the files."""
     assert (ASSETS_DIR / "icons" / "LICENSE").is_file()

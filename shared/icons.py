@@ -18,6 +18,7 @@ from PySide6.QtSvg import QSvgRenderer
 from shared.theme import current_tokens
 
 ICONS_DIR = Path(__file__).resolve().parent / "assets" / "icons"
+BRAND_DIR = Path(__file__).resolve().parent / "assets" / "brand"
 
 # Qt picks the closest of these for the widget size and the screen's device
 # pixel ratio. Querying devicePixelRatio ourselves would be wrong on a
@@ -127,3 +128,21 @@ def glyph_url(name: str, color: str | None = None, size: int = 18, height: int |
         if not _pixmap(source, size, height).save(str(path), "PNG"):
             raise OSError(f"Could not write glyph cache entry {path}")
     return f'url("{path.as_posix()}")'
+
+
+def brand_icon(name: str) -> QIcon:
+    """An app's logo, e.g. brand_icon("packer-assistant"), for the window and
+    taskbar.
+
+    Loaded straight from the multi-size .ico the exe also carries (PyInstaller
+    --icon), so window, taskbar and Explorer show one image. Not themed: it sits
+    on the OS shell's own surface. This is the one QIcon built from a file, so
+    the frozen build needs Qt's qico imageformat plugin; the CI bundle check
+    looks for qico.dll.
+
+    Raises KeyError on an unknown name, like icon().
+    """
+    path = BRAND_DIR / f"{name}.ico"
+    if not path.is_file():
+        raise KeyError(f"No bundled logo named {name!r} (looked in {BRAND_DIR})")
+    return QIcon(str(path))
