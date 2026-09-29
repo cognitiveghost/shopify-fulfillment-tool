@@ -1,8 +1,9 @@
 """The scenarios. Each takes a fresh World and records what it finds through world.expect."""
 
+import time
 from pathlib import Path
 
-from sim.data import CLIENT
+from sim.data import CLIENT, COURIERS
 from sim.world import World
 
 
@@ -27,6 +28,62 @@ def same_day_sessions(world: World) -> None:
             world.expect((Path(path) / "session_info.json").exists(), f"{path} has no session_info.json")
 
 
+def analysed_session(world: World):
+    """PC-A creates the client and a session, analyses the synthetic inputs and makes the DHL and DPD lists."""
+    a = fulfilment_pc(world, "PC-A", create=True)
+    session = a.call("new_session").result["session_path"]
+    a.call("set_inputs", orders=str(world.inputs.orders), stock=str(world.inputs.stock))
+    a.call("run_analysis", timeout=150)
+    lists = a.call("generate_packing_lists", couriers=list(COURIERS)).result["lists"]
+    world.expect(lists == ["DHL_Orders", "DPD_Orders"], f"packing lists generated: {lists}")
+    return a, session
+
+
+def stale_save(world: World) -> None:
+    """Two PCs edit one session: the second PC's stale save is refused visibly, the first PC's edit survives."""
+    a, session = analysed_session(world)
+    d = fulfilment_pc(world, "PC-D")
+    d.call("open_session", session_path=session)
+    fulfillable = [o["order"] for o in a.call("orders").result if o["status"] == "Fulfillable"]
+    x, y = fulfillable[0], fulfillable[1]
+    a.call("set_fulfillable", order=x, value=False)
+    r = d.call("set_fulfillable", order=y, value=False)
+    world.expect(r.told_operator(), "PC-D's edit to a session PC-A had changed was not refused visibly")
+    e = fulfilment_pc(world, "PC-E")
+    e.call("open_session", session_path=session)
+    status = {o["order"]: o["status"] for o in e.call("orders").result}
+    world.expect(status.get(x) != "Fulfillable", f"PC-A's hold on {x} was lost (status {status.get(x)})")
+    world.expect(status.get(y) == "Fulfillable", f"PC-D's stale edit to {y} was saved (status {status.get(y)})")
+
+
+def config_race(world: World) -> None:
+    """Two PCs save the client config 20 times each, interleaved: it always parses and ends as one writer's value."""
+    a = fulfilment_pc(world, "PC-A", create=True)
+    d = fulfilment_pc(world, "PC-D")
+    for i in range(20):
+        a.send("save_client_setting", key="low_stock_threshold", value=100 + i)
+        d.send("save_client_setting", key="low_stock_threshold", value=200 + i)
+        a.receive()
+        d.receive()
+    final = a.call("client_setting", key="low_stock_threshold").result["value"]
+    world.expect(final in (119, 219), f"final low_stock_threshold {final} is neither writer's last value")
+
+
+def killed_mid_analysis(world: World) -> None:
+    """PC-A dies 0.2 s into an analysis; PC-D can still open the session without an exception."""
+    a = fulfilment_pc(world, "PC-A", create=True)
+    session = a.call("new_session").result["session_path"]
+    a.call("set_inputs", orders=str(world.inputs.orders), stock=str(world.inputs.stock))
+    a.send("run_analysis")
+    time.sleep(0.2)
+    a.kill()
+    d = fulfilment_pc(world, "PC-D")
+    d.call("open_session", session_path=session)  # exceptions surface as findings through the events
+
+
 ALL = {
     "same_day_sessions": same_day_sessions,
+    "stale_save": stale_save,
+    "config_race": config_race,
+    "killed_mid_analysis": killed_mid_analysis,
 }
