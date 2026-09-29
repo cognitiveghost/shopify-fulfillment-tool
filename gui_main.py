@@ -12,8 +12,6 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-__version__ = "1.9.9.1"
-
 # Wall clock starts as early as the module loads -- everything below this,
 # including the MainWindow import, is part of what the operator experiences
 # as startup.
@@ -62,25 +60,14 @@ configure_windows_fontconfig_env()
 
 from gui.main_window_pyside import MainWindow
 from gui.theme_manager import get_theme_manager
-from shared.icons import icon
+from shared.icons import brand_icon
+from shopify_tool import APP_NAME, __version__
 
 
 def build_app_icon():
-    """The window/taskbar icon. The app has never had one.
-
-    Coloured with accent_blue rather than the theme's text colour, and never
-    re-themed: this icon is drawn on the OS shell's own surface, whose
-    background has nothing to do with which theme the app is running.
-
-    Carries 256px, which no in-app widget needs: Windows asks for it in
-    Alt+Tab and Explorer's "Extra large icons", and upscaling a 48px pixmap
-    is worst exactly where the icon is seen biggest.
-    """
-    return icon(
-        "package",
-        color=get_theme_manager().get_current_theme().accent_fill,
-        sizes=(16, 32, 48, 256),
-    )
+    """The window/taskbar icon: the Fulfilment Tool logo, the same multi-size
+    .ico PyInstaller puts on the exe (--icon), so every surface shows one image."""
+    return brand_icon("fulfilment-tool")
 
 
 def main():
@@ -118,7 +105,10 @@ def main():
         window.raise_()
         window.activateWindow()
         logging.getLogger(__name__).info(
-            "Startup complete in %.2fs", time.perf_counter() - _PROCESS_START
+            "%s %s: startup complete in %.2fs",
+            APP_NAME,
+            __version__,
+            time.perf_counter() - _PROCESS_START,
         )
         sys.exit(app.exec())
     else:
