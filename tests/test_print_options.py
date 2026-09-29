@@ -21,6 +21,7 @@ def _zpl_fields(options):
         options.raw_zpl_target_edit,
         options.raw_zpl_label_width_spin.parentWidget(),  # the label-size row
         options.raw_zpl_rotate_check,
+        options.raw_zpl_invert_check,
     )
 
 
@@ -100,6 +101,7 @@ def test_construction_loads_the_saved_settings(qapp, print_settings_store):
         "print_mode": "raw_zpl",
         "raw_zpl_target": "ZPL-RAW",
         "raw_zpl_rotate": True,
+        "raw_zpl_invert": True,
         "raw_zpl_label_width_mm": 68.0,
         "raw_zpl_label_height_mm": 38.0,
         "driver_printer_name": "",
@@ -108,9 +110,20 @@ def test_construction_loads_the_saved_settings(qapp, print_settings_store):
     assert options.print_mode_combo.currentData() == "raw_zpl"
     assert (
         options.fold_button.text()
-        == "Prints raw ZPL to ZPL-RAW at 68 × 38 mm, rotated 90°"
+        == "Prints raw ZPL to ZPL-RAW at 68 × 38 mm, rotated 90°, colors inverted"
     )
     assert options.current_settings() == print_settings_store["barcode_generator"]
+
+
+def test_invert_saves_only_under_its_own_scope(options, print_settings_store):
+    options.raw_zpl_invert_check.setChecked(True)
+    assert print_settings_store["reference_labels"]["raw_zpl_invert"] is True
+    assert "barcode_generator" not in print_settings_store
+
+
+def test_invert_checkbox_copy(options):
+    assert options.raw_zpl_invert_check.text() == "Invert colors"
+    assert options.raw_zpl_invert_check.toolTip() == "Tick if labels print white on black."
 
 
 def test_the_label_size_tooltip_reaches_both_spins(options):

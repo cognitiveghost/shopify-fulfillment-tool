@@ -3,10 +3,12 @@
 Column fixtures use internal (post-analysis) column names since RuleEngine
 operates on the final_df produced by shopify_tool.analysis.run_analysis.
 """
+import warnings
+
 import pandas as pd
 import pytest
 
-from shopify_tool.rules import RuleEngine
+from shopify_tool.rules import RuleEngine, _op_matches_regex
 from shopify_tool.tag_manager import parse_tags
 
 
@@ -510,3 +512,14 @@ def test_matched_rows_covers_an_order_rules_whole_order():
         "match": "ALL", "actions": [{"type": "ADD_INTERNAL_TAG", "value": "BIG"}]}]}])
     engine.apply(df)
     assert engine.matched_rows.tolist() == [True, True, False]
+
+
+def test_regex_with_groups_matches_without_warning():
+    # Operators write alternations like ^(01|05); pandas warns that the group
+    # is not extracted, which is irrelevant to a boolean match.
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = _op_matches_regex(pd.Series(["01-A", "03-B", "05-C"]), "^(01|05)")
+    assert result.tolist() == [True, False, True]
+    assert not [w for w in caught if issubclass(w.category, UserWarning)]

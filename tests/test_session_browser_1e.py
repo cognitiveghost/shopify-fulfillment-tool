@@ -46,7 +46,7 @@ class TestPackingProgressDelegate:
 
 from unittest.mock import Mock
 
-from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 
 from gui.session_browser_widget import SessionBrowserWidget
@@ -131,7 +131,8 @@ def test_hovering_does_not_move_the_selection(browser):
         viewport,
         QMouseEvent(
             QEvent.Type.MouseMove,
-            QPoint(target_rect.center()),
+            QPointF(target_rect.center()),
+            QPointF(viewport.mapToGlobal(target_rect.center())),
             Qt.NoButton,
             Qt.NoButton,
             Qt.NoModifier,

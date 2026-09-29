@@ -33,6 +33,7 @@ def load_print_settings(scope: str) -> dict:
         "print_mode": qs.value(f"{scope}/print_mode", "driver"),
         "raw_zpl_target": qs.value(f"{scope}/raw_zpl_target", ""),
         "raw_zpl_rotate": qs.value(f"{scope}/raw_zpl_rotate", False, type=bool),
+        "raw_zpl_invert": qs.value(f"{scope}/raw_zpl_invert", False, type=bool),
         "raw_zpl_label_width_mm": qs.value(
             f"{scope}/raw_zpl_label_width_mm", 0.0, type=float
         ),
@@ -48,6 +49,7 @@ def save_print_settings(scope: str, settings: dict) -> None:
     qs.setValue(f"{scope}/print_mode", settings["print_mode"])
     qs.setValue(f"{scope}/raw_zpl_target", settings["raw_zpl_target"])
     qs.setValue(f"{scope}/raw_zpl_rotate", settings["raw_zpl_rotate"])
+    qs.setValue(f"{scope}/raw_zpl_invert", settings["raw_zpl_invert"])
     qs.setValue(f"{scope}/raw_zpl_label_width_mm", settings["raw_zpl_label_width_mm"])
     qs.setValue(f"{scope}/raw_zpl_label_height_mm", settings["raw_zpl_label_height_mm"])
     qs.setValue(f"{scope}/driver_printer_name", settings["driver_printer_name"])
@@ -86,6 +88,7 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
             target,
             rotate=settings.get("raw_zpl_rotate", False),
             target_size_mm=target_size_mm,
+            invert=settings.get("raw_zpl_invert", False),
         )
         return True
     except (OSError, *label_printing.windows_print_errors()):

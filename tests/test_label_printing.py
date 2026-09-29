@@ -1,6 +1,8 @@
 """Tests for shopify_tool.label_printing -- raw ZPL printing for the Citizen
 CL-E300, ported from barcode_tool's proven template_renderer.py /
 zpl_print_service.py (see docs/superpowers/specs/2026-08-10-direct-label-printing-design.md)."""
+import logging
+import re
 import sys
 import types
 
@@ -22,6 +24,14 @@ def _make_pdf(tmp_path, pages=2):
         c.showPage()
     c.save()
     return pdf_path
+
+
+def _half_black(width=16, height=1):
+    """Mode-"1" image, left half black, built the way rasterize_pdf builds
+    one (greyscale -> convert("1")), so its pixels are 0/255."""
+    grey = Image.new("L", (width, height), 255)
+    grey.paste(0, (0, 0, width // 2, height))
+    return grey.convert("1", dither=Image.Dither.NONE)
 
 
 class TestRasterizePdf:
@@ -96,6 +106,31 @@ class TestImageToZpl:
         assert "^PW50\n" in zpl
         assert "^LL100\n" in zpl
 
+    def test_black_pixels_become_set_bits(self):
+        # ZPL ^GFA: a set bit is a printed (black) dot. Left half black ->
+        # first byte ff, second byte 00. Nothing checked this before.
+        zpl = label_printing.image_to_zpl(_half_black())
+        assert ",ff00^fs" in zpl.lower()
+
+    def test_invert_flips_the_polarity(self):
+        zpl = label_printing.image_to_zpl(_half_black(), invert=True)
+        assert ",00ff^fs" in zpl.lower()
+
+    def test_label_reverse_is_reset_right_after_xa(self):
+        zpl = label_printing.image_to_zpl(Image.new("1", (100, 50)))
+        assert zpl.startswith("^XA\n^LRN\n^PW100\n^LL50\n")
+
+    def test_rotate_and_invert_compose(self):
+        # 8 wide x 16 tall, top half black. ROTATE_90 (counter-clockwise)
+        # makes it 16 wide x 8 tall with the black half on the left, so
+        # each row is ff00; inverted, each row is 00ff.
+        grey = Image.new("L", (8, 16), 255)
+        grey.paste(0, (0, 0, 8, 8))
+        image = grey.convert("1", dither=Image.Dither.NONE)
+        zpl = label_printing.image_to_zpl(image, rotate=True, invert=True)
+        assert "^PW16\n^LL8\n" in zpl
+        assert "," + "00ff" * 8 + "^fs" in zpl.lower()
+
 
 class TestSendRawLinux:
     def test_writes_bytes_to_device_path(self, tmp_path):
@@ -154,6 +189,36 @@ class TestPrintPdfRawZpl:
         label_printing.print_pdf_raw_zpl(pdf_path, "/dev/usb/lp0", target_size_mm=(152.4, 101.6))
 
         assert seen == [(152.4, 101.6)]
+
+    def test_invert_passed_through_to_image_to_zpl(self, tmp_path, monkeypatch):
+        pdf_path = _make_pdf(tmp_path, pages=1)
+        seen = []
+        monkeypatch.setattr(
+            label_printing,
+            "image_to_zpl",
+            lambda image, rotate=False, invert=False: seen.append(invert) or "^XA^XZ",
+        )
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(label_printing, "send_raw_linux", lambda target, data: None)
+
+        label_printing.print_pdf_raw_zpl(pdf_path, "/dev/usb/lp0", invert=True)
+
+        assert seen == [True]
+
+    def test_logs_label_count_and_first_label_ink(self, tmp_path, monkeypatch, caplog):
+        pdf_path = _make_pdf(tmp_path, pages=2)
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(label_printing, "send_raw_linux", lambda target, data: None)
+
+        with caplog.at_level(logging.INFO, logger="shopify_tool.label_printing"):
+            label_printing.print_pdf_raw_zpl(pdf_path, "/dev/usb/lp0")
+
+        match = re.search(
+            r"Raw ZPL: 2 label\(s\) to /dev/usb/lp0, first label (\d+)% black", caplog.text
+        )
+        assert match
+        # A mostly-white label ("TEST" on white) is nowhere near inverted.
+        assert int(match.group(1)) < 50
 
 
 class TestWindowsPrintErrors:

@@ -121,6 +121,7 @@ def print_settings_store(monkeypatch):
         "print_mode": "driver",
         "raw_zpl_target": "",
         "raw_zpl_rotate": False,
+        "raw_zpl_invert": False,
         "raw_zpl_label_width_mm": 0.0,
         "raw_zpl_label_height_mm": 0.0,
         "driver_printer_name": "",

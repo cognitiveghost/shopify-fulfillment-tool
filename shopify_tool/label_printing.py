@@ -9,12 +9,15 @@ docs/superpowers/specs/2026-08-10-direct-label-printing-design.md.
 """
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
 import pypdfium2 as pdfium
 from PIL import Image
 from zebrafy import ZebrafyImage
+
+logger = logging.getLogger(__name__)
 
 # The Citizen CL-E300 print head is 203 dpi, so rasterizing at 203 maps one
 # image pixel to one dot -- no resampling between here and the head. Thermal
@@ -57,18 +60,22 @@ def rasterize_pdf(
     return images
 
 
-def image_to_zpl(image: Image.Image, rotate: bool = False) -> str:
+def image_to_zpl(image: Image.Image, rotate: bool = False, invert: bool = False) -> str:
     # Raw ZPL talks straight to the print head - there's no driver in the
     # loop to reconcile a landscape-designed template against a
     # portrait-mounted label roll (or vice versa). rotate is an operator-set
     # fact about their specific printer's media, not derivable from the PDF.
     if rotate:
         image = image.transpose(Image.Transpose.ROTATE_90)
-    # invert=True: PIL's mode "1" packs a set bit as white, but ZPL's ^GFA
-    # graphic field treats a set bit as printed (black) - without this every
-    # raw ZPL print comes out with barcode and background swapped.
-    field = ZebrafyImage(image, invert=True, complete_zpl=False).to_zpl()
-    return f"^XA\n^PW{image.width}\n^LL{image.height}\n{field}\n^XZ\n"
+    # zebrafy >= 2.0 packs a set bit as a printed (black) dot when invert is
+    # False. 1.2.x needed invert=True for the same output, so older zebrafy
+    # prints inverted - hence the requirements floor. Our own invert is the
+    # operator's "Invert colors" switch (see
+    # docs/superpowers/specs/2026-09-29-minor-fixes-2-0-0-design.md).
+    field = ZebrafyImage(image, invert=invert, complete_zpl=False).to_zpl()
+    # ^LRN: label-reverse persists on the printer between jobs (and can be
+    # saved to its memory), so reset it - each job's polarity is its own data.
+    return f"^XA\n^LRN\n^PW{image.width}\n^LL{image.height}\n{field}\n^XZ\n"
 
 
 def send_raw_windows(printer_name: str, data: bytes) -> None:
@@ -96,13 +103,24 @@ def print_pdf_raw_zpl(
     target: str,
     rotate: bool = False,
     target_size_mm: tuple[float, float] | None = None,
+    invert: bool = False,
 ) -> None:
     """Rasterize pdf_path and send each page as its own raw ZPL job to target
     (a Windows print-queue name, or a device path on Linux dev machines).
     target_size_mm, if given, fits every page to that physical label size
-    (see rasterize_pdf) before rotate is applied."""
-    for image in rasterize_pdf(pdf_path, target_size_mm=target_size_mm):
-        data = image_to_zpl(image, rotate=rotate).encode("ascii")
+    (see rasterize_pdf) before rotate is applied. invert flips black/white."""
+    images = rasterize_pdf(pdf_path, target_size_mm=target_size_mm)
+    if images:
+        first = images[0]
+        # A normal label is ~10-20% black; ~80-90% means the raster itself
+        # came out inverted (render side), not the printer.
+        black_pct = 100 * first.histogram()[0] / (first.width * first.height)
+        logger.info(
+            "Raw ZPL: %d label(s) to %s, first label %.0f%% black",
+            len(images), target, black_pct,
+        )
+    for image in images:
+        data = image_to_zpl(image, rotate=rotate, invert=invert).encode("ascii")
         if sys.platform == "win32":
             send_raw_windows(target, data)
         else:

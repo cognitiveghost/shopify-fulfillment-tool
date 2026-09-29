@@ -1,4 +1,5 @@
 import logging
+import warnings
 from datetime import datetime
 
 from PySide6.QtCore import Qt
@@ -97,3 +98,15 @@ def test_a_level_with_no_registered_name_still_obeys_the_floor(qapp):
     proxy.setSourceModel(model)
     proxy.set_level_floor(logging.ERROR)
     assert _messages(proxy) == []
+
+
+def test_filter_changes_raise_no_deprecation_warning(qapp):
+    # invalidateFilter() is deprecated since Qt 6.10; begin/endFilterChange
+    # replaces it.
+    proxy = LogFilterProxy()
+    proxy.setSourceModel(_model_with(_entry("a")))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        proxy.set_level_floor(logging.WARNING)
+        proxy.set_search("a")
+    assert not [w for w in caught if issubclass(w.category, DeprecationWarning)]
