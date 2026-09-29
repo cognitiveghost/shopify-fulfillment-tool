@@ -20,7 +20,7 @@ or compare it against the `.sha256` file attached to the same release.
 
 ## Run from source
 
-Python 3.14 on the dev machine; CI and release builds use 3.11.
+Python 3.14 on the dev machine, in CI and in release builds.
 
 ```bash
 git clone https://github.com/cognitiveghost/shopify-fulfillment-tool.git
