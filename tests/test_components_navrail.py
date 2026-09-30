@@ -9,6 +9,17 @@ def test_rail_is_the_spec_width(qapp):
     assert rail.width() == RAIL_WIDTH == 56
 
 
+def test_the_width_is_a_constructor_argument(qapp):
+    """packing-tool passes 76: every one of its labels elides at 56."""
+    wide = NavRail(width=76)
+    try:
+        assert wide.width() == 76
+        index = wide.add_item(icon("package"), "Statistics")
+        assert wide.button(index).width() == 76
+    finally:
+        wide.deleteLater()
+
+
 def test_add_item_returns_sequential_indices(qapp):
     rail = NavRail()
     assert rail.add_item(icon("package"), "Orders") == 0

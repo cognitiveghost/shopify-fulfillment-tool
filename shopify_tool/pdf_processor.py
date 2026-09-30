@@ -254,7 +254,7 @@ def _page_texts(pdf_path: str, total_pages: int) -> list[str]:
     return texts
 
 
-def _stamp_reference(out: "pikepdf.Pdf", page: "pikepdf.Page", ref: str) -> None:
+def _stamp_reference(out: pikepdf.Pdf, page: pikepdf.Page, ref: str) -> None:
     """Append page to out, its content shrunk into the top of a same-size
     page with the reference strip below.
 

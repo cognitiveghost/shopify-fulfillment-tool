@@ -6,7 +6,6 @@ token definitions and stylesheet/palette builders.
 """
 
 import logging
-from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QFont
@@ -43,7 +42,7 @@ class ThemeManager(QObject):
     """Manages application themes (singleton). See shared.theme for tokens."""
 
     theme_changed = Signal()
-    _instance: Optional["ThemeManager"] = None
+    _instance: ThemeManager | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -222,11 +221,10 @@ def apply_font(
 def role_stylesheet(theme: ThemeTokens) -> str:
     """QSS this app layers on after shared.theme's sheet.
 
-    The button hierarchy used to live here because shared/theme.py is
-    sync-owned by packing-tool and could not be edited from this repo. 8.5
-    moved it into shared/theme.py's build_stylesheet -- authored in
-    packing-tool, pulled here by scripts/sync_shared.py -- so both apps read
-    one definition. What is left is genuinely shopify-only chrome.
+    The button hierarchy used to live here, back when shared/theme.py was
+    owned by packing-tool and could not be edited from this repo. 8.5 moved
+    it into shared/theme.py's build_stylesheet so both apps read one
+    definition. What is left is genuinely shopify-only chrome.
     """
     return f"""
         QListWidget#settingsNav {{
@@ -281,8 +279,8 @@ def density_stylesheet() -> str:
 
     Appended after shared.theme's sheet, so it outranks the equal-specificity
     `padding: 6px 12px; font-size: 10pt` that shared/theme.py sets on
-    QPushButton. shared/theme.py is sync-owned by packing-tool -- change it
-    there and re-run scripts/sync_shared.py, never here.
+    QPushButton. A change to that base size belongs in shared/theme.py, not
+    here, so both apps get it.
 
     Emits size but never weight: build_stylesheet's QPushButton[role="primary"]
     rule is an attribute selector and outranks this one anyway, but emitting a

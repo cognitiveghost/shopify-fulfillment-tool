@@ -1,8 +1,7 @@
 """The primary/secondary button hierarchy Track 3 said had to be built.
 
-8.5 moved the button-role QSS into shared.theme.build_stylesheet (authored in
-packing-tool, pulled in by scripts/sync_shared.py) so both apps read one
-definition; gui.theme_manager re-exports set_button_role for existing callers.
+8.5 moved the button-role QSS into shared.theme.build_stylesheet so both apps
+read one definition; gui.theme_manager re-exports set_button_role for existing callers.
 """
 import re
 

@@ -1,10 +1,9 @@
 """
 Unified logging for Shopify Tool and Packing Tool.
 
-Canonical version. This module lives in packing-tool/shared/ and is copied
-into shopify-fulfillment-tool/shared/ by
-shopify-fulfillment-tool/scripts/sync_shared.py - the two copies must stay
-byte-identical. See shared/README.md.
+Canonical version. This module lives in shopify-fulfillment-tool/shared/ and
+is mirrored into packing-tool/shared/ by packing-tool/scripts/sync_shared.py.
+Never hand-edit the packing-tool copy. See shared/README.md.
 
 Each process writes its own log file (Logs/<tool_name>/<tool_name>_
 <hostname>_<pid>.log), so multiple PCs/processes sharing one network file

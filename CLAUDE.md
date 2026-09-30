@@ -71,14 +71,18 @@ mid-flight.
 
 ## Shared Module (`shared/`)
 
-`shared/` (theme, logger, stats, file locking, atomic writes, session IDs) is **not owned by this repo**.
-It's one-way synced from `../packing-tool/shared/`, the canonical source.
+`shared/` (theme, components, icons, fonts, navrail, logger, stats, file locking, atomic writes,
+session IDs) is used identically by this repo and `../packing-tool`. **This copy is the canonical
+source** (ADR 0017).
 
-- **Never hand-edit files under `shared/`** — the next sync silently overwrites them.
-- To change shared behavior: edit it in `packing-tool`, then run `python scripts/sync_shared.py` from this repo's root.
-- `packing-tool` must exist as a sibling directory (`../packing-tool`) for the sync script to find it,
-  or pass its path: `python scripts/sync_shared.py /path/to/packing-tool` (needed from a worktree,
-  where the sibling default resolves to `.claude/worktrees/packing-tool` and does not exist).
+- Edit shared behavior **here**, directly, and test it here: `tests/` holds the `shared/` unit tests.
+- packing-tool adopts changes when it is ready. From packing-tool it runs
+  `python scripts/sync_shared.py [/path/to/shopify-fulfillment-tool]`, which mirrors this `shared/` and
+  records the commit in `scripts/shared_synced_from.txt`. Its CI fails if its copy differs from
+  `shared/` at that commit.
+- A `shared/` change reaches Packing Tool at its next sync. When a change will need packing-tool work
+  (a renamed token, a removed component), say so in the PR.
+- Never hand-edit `packing-tool/shared/`. The next sync overwrites it, and a hook blocks it.
 
 ---
 
@@ -155,7 +159,7 @@ the GitHub UI — nothing builds for it.
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
-- **Always run `graphify update .` right after modifying code, not just "eventually"** — a stale graph returns wrong answers about `shared/` ownership and theme delegation silently, with no error. This matters even more here than in a single-repo project because `shared/` changes land via `scripts/sync_shared.py` from `packing-tool`, which graphify has no way to see unless you re-run it.
+- **Always run `graphify update .` right after modifying code, not just "eventually"** — a stale graph returns wrong answers about `shared/` ownership and theme delegation silently, with no error. This repo is the canonical source for `shared/`, so a stale graph here also feeds wrong assumptions into packing-tool work.
 
 ---
 
@@ -187,7 +191,7 @@ Doc paths cited in code comments that no longer exist (shipped specs, plans, aud
 Design artifact URL), read it first and follow it exactly. `frontend-design` decides only what the mockup leaves free:
 copy, empty and error states, focus and keyboard affordances, spacing rhythm, small window sizes. This is a PySide6
 desktop app:
-- a new colour, spacing or type token goes in `shared/theme.py` (via packing-tool, see below), and both themes must
+- a new colour, spacing or type token goes in `shared/theme.py` (here; packing-tool picks it up at its next sync), and both themes must
   work;
 - reuse `gui/components/` before adding a widget, and say which component you reused;
 - web framing (hero sections, scroll reveals) does not apply.
@@ -195,10 +199,10 @@ desktop app:
 Verify visuals by rendering: `QT_QPA_PLATFORM=offscreen` plus `widget.render(QImage)` saved to a PNG, then look at it.
 A spec states which mockup it followed and every departure from it.
 
-Gate: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q`, plus `ruff check . --exclude shared`.
+Gate: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q`, plus `ruff check .`.
 
 **Tooling on the dev VM:**
-- Edits to `shared/` are blocked here: edit packing-tool, then run `sync_shared.py <path>`.
+- Edits to `packing-tool/shared/` are blocked by a hook: edit `shared/` here; packing-tool syncs it.
 - Use `/usr/bin/git`, one plain git command per Bash call. The worktree guard refuses compound commands, `$VAR`
   paths, xargs/find -exec, and any git command chained with `;` or `&&`. `rtk git` is refused.
 - Commit with `git commit -F <absolute path to a message file>`.

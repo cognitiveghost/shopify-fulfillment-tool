@@ -51,7 +51,7 @@ Do not create releases by hand in the GitHub UI: nothing builds for them.
 
 - `gui/`: Qt UI; `gui/web/` is the results document (QtWebEngine)
 - `shopify_tool/`: analysis, rules, sessions, outputs, labels
-- `shared/`: synced from packing-tool; never edit it here (see `CLAUDE.md`)
+- `shared/`: canonical here; packing-tool mirrors it (see `CLAUDE.md`, ADR 0017)
 - `docs/adr/`: decisions; `CONTEXT.md`: the domain glossary
 
 ## License

@@ -2,9 +2,8 @@
 Shared modules for Shopify Fulfillment Tool and Packing Tool.
 
 This package contains unified components that work identically in both
-tools. Canonical copy lives in packing-tool/shared/; synced into
-shopify-fulfillment-tool/shared/ by
-shopify-fulfillment-tool/scripts/sync_shared.py.
+tools. Canonical copy lives in shopify-fulfillment-tool/shared/; mirrored
+into packing-tool/shared/ by packing-tool/scripts/sync_shared.py.
 """
 
 from .file_lock import FileLockError

@@ -24,7 +24,7 @@ class LogEntry:
         return logging.getLevelName(self.level)
 
     @classmethod
-    def activity(cls, op_type: str, desc: str) -> "LogEntry":
+    def activity(cls, op_type: str, desc: str) -> LogEntry:
         """An operator action. Always INFO -- the stream has no severity."""
         return cls(
             timestamp=datetime.now().astimezone(),

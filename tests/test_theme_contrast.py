@@ -1,8 +1,7 @@
-"""shared/theme.py is synced from packing-tool and can change without warning.
+"""Proof that shared/theme.py still satisfies the design-system contract.
 
-Its unit tests live there. What this repo needs is proof that whatever
-arrived still satisfies the design-system contract, because a broken sync
-would otherwise surface as unreadable badges on a warehouse screen rather
+A token change that breaks it would otherwise surface as unreadable badges
+on a warehouse screen, here and in packing-tool after its next sync, rather
 than as a red test. Same guard role as
 test_type_scale.py::test_body_role_matches_shared_button_size.
 """
