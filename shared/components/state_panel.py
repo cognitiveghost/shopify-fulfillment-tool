@@ -17,7 +17,7 @@ Spec: shopify-fulfillment-tool docs/superpowers/specs/2026-09-04-phase9-bundle3-
 """
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from shared.components.card import Card
 from shared.theme import font_css, on_theme_changed, set_button_role
@@ -71,10 +71,16 @@ class StatePanel(QWidget):
             self.card.layout().addWidget(self.button, 0, Qt.AlignCenter)
 
         # Centring is stretches, not margins -- a margin has to be recomputed
-        # for every page size the card lands on.
+        # for every page size the card lands on. Not Qt.AlignCenter either: an
+        # aligned layout item is sized from sizeHint(), so a cause that wraps
+        # never gets its heightForWidth() and is clipped (audit 2026-09-30 S1).
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(self.card)
+        row.addStretch(1)
         outer = QVBoxLayout(self)
         outer.addStretch(1)
-        outer.addWidget(self.card, 0, Qt.AlignCenter)
+        outer.addLayout(row)
         outer.addStretch(1)
 
     @classmethod

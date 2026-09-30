@@ -296,12 +296,12 @@ def on_theme_changed(widget, apply) -> None:
 
 
 @lru_cache(maxsize=2)
-def _tokens_with_font(theme_name: str, family: str) -> "ThemeTokens":
+def _tokens_with_font(theme_name: str, family: str) -> ThemeTokens:
     theme = get_theme(theme_name)
     return replace(theme, font_family=f"'{family}', {theme.font_family}")
 
 
-def themed_tokens(theme_name: str, family: str | None) -> "ThemeTokens":
+def themed_tokens(theme_name: str, family: str | None) -> ThemeTokens:
     """Tokens with an app's bundled family layered on, when there is one.
 
     Memoised because its callers -- gui/theme.py's current_tokens() here and
