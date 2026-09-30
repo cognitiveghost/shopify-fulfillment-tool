@@ -814,23 +814,16 @@ class ActionsHandler(QObject):
 
                 self.log.info(f"Stock export created: {output_file}")
 
-            # ========================================
-            # SUCCESS MESSAGE - Status bar instead of blocking dialog
-            # ========================================
-            # Show brief status message instead of blocking dialog
+            # Reports are generated from Results, where the toast lives (ADR 0007).
             if removed_empty:
-                self.mw.statusBar().showMessage(
-                    f"No orders matched {report_name}; its old files were removed",
-                    5000,
+                self._results_toast(
+                    f"No orders matched {report_name}; its old files were removed"
                 )
             else:
                 saved = os.path.basename(output_file)
                 if packaging_file:
                     saved += f" + {os.path.basename(packaging_file)}"
-                self.mw.statusBar().showMessage(
-                    f"Report saved: {saved}",
-                    5000,  # 5 seconds
-                )
+                self._results_toast(f"Report saved: {saved}")
             self.log.info(f"Report generated: {output_file}")
 
             self.mw.log_activity("Report", f"Generated: {report_name}")

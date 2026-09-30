@@ -56,7 +56,7 @@ def test_empty_list_says_so_instead_of_report_saved(tmp_path):
     h._generate_single_report("packing_lists", _config(), tmp_path)
     h.mw.analysis_results_df = _df("Not Fulfillable")
     h._generate_single_report("packing_lists", _config(), tmp_path)
-    msg = h.mw.statusBar.return_value.showMessage.call_args[0][0]
+    msg = h.mw.results_bridge.raise_toast.call_args[0][0]
     assert msg == "No orders matched ALL; its old files were removed"
 
 
