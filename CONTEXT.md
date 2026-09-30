@@ -219,17 +219,22 @@ what to do rather than what the exception was, and points to Logs for the cause.
 
 ## Shell
 
-**Shell** — the chrome around every screen: the rail, the command bar, the
-page, and the status bar. Not a screen itself, and it never scrolls.
+**Shell** — the chrome around every screen: the sidebar, the command bar and
+the page. Not a screen itself, and it never scrolls.
 
-**Destination** — a place the rail navigates to and stays on. The rail holds
-destinations and nothing else. Anything that *configures* an object is not a
-destination, which is why the rail has no footer.
+**Sidebar** — the shell's left column: the destinations, and a footer holding
+what configures the client and this PC (Client settings, the theme, the server
+connection). It collapses to a 56px **rail**, and that choice is saved per PC.
+
+**Destination** — a place the sidebar navigates to and stays on. The sidebar
+holds destinations in its list and configuration only in its footer, never
+mixed.
 
 **Overflow** — the menu beside an object holding what configures it.
-Qualified when the scope matters: the **command-bar overflow** holds what
-configures the client and this PC; the **screen overflow** holds actions
-scoped to the screen you are on. Two menus, two scopes, two bands of chrome.
+Qualified when the scope matters: the **command-bar overflow** holds what the
+sidebar footer does not (New session, the server connection, the keyboard
+shortcuts); the **screen overflow** holds actions scoped to the screen you are
+on.
 
 **Logs** — the destination holding the log viewer, renamed from **Info** when
 Statistics was deleted and one page was left. Supersedes "Info", which named a
