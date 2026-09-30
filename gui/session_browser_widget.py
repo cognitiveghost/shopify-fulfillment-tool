@@ -687,7 +687,7 @@ class SessionBrowserWidget(QWidget):
         ]
 
     def _empty_reason(self):
-        """None, "nothing" or "filtered" -- why the tree has no rows.
+        """None, "no_client", "nothing" or "filtered" -- why the tree has no rows.
 
         "filtered" is not "nothing": one is a filter the user can widen, the
         other is a client with no sessions on the server. A panel that cannot
@@ -696,7 +696,10 @@ class SessionBrowserWidget(QWidget):
         """
         if any(g.childCount() for g in self._groups()):
             return None
-        return "filtered" if self.sessions_data else "nothing"
+        if self.sessions_data:
+            return "filtered"
+        # No client means there is nothing to list yet, not an empty server.
+        return "nothing" if self.current_client_id else "no_client"
 
     def _update_empty_state(self):
         reason = self._empty_reason()
@@ -707,7 +710,15 @@ class SessionBrowserWidget(QWidget):
         if reason is None:
             return
 
-        if reason == "nothing":
+        if reason == "no_client":
+            # No button: a new session needs a client, and the selector is
+            # the command bar's, one line above.
+            panel = StatePanel.nothing_loaded(
+                "Choose a client",
+                "Pick a client in the bar above to see its sessions.",
+                "",
+            )
+        elif reason == "nothing":
             panel = StatePanel(
                 "No sessions yet",
                 f"CLIENT_{self.current_client_id} has no sessions on the file server.",

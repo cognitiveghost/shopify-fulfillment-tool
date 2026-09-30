@@ -253,6 +253,35 @@ def test_display_status_is_reachable_from_the_module(calm_sessions):
 
 
 class TestEmptyStates:
+    # Audit 2026-09-30 B1: with no client the panel said "CLIENT_None has no
+    # sessions" and offered New session, which needs a client.
+    def test_no_client_asks_for_one_and_offers_nothing(self, browser):
+        browser.current_client_id = None
+        browser.sessions_data = []
+        browser._populate_tree()
+        assert browser._empty_reason() == "no_client"
+        assert browser.empty_panel.button is None
+        texts = [label.text() for label in browser.empty_panel.findChildren(QLabel)]
+        assert "Choose a client" in texts
+        assert "Pick a client in the bar above to see its sessions." in texts
+        assert not any("None" in text for text in texts)
+
+    def test_choosing_a_client_brings_back_new_session(self, browser):
+        browser.current_client_id = None
+        browser.sessions_data = []
+        browser._populate_tree()
+        browser.current_client_id = "M"
+        browser._populate_tree()
+        assert browser._empty_reason() == "nothing"
+        assert browser.empty_panel.button.text() == "New session"
+
+    def test_a_filter_with_no_client_is_still_a_filter(self, browser, calm_sessions):
+        browser.current_client_id = None
+        browser.sessions_data = calm_sessions
+        browser.filter_bar.search_field.setText("tuesday")
+        browser._populate_tree()
+        assert browser._empty_reason() == "filtered"
+
     def test_no_sessions_at_all_offers_a_new_session(self, browser):
         browser.current_client_id = "M"
         browser.sessions_data = []
