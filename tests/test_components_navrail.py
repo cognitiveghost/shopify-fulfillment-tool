@@ -120,3 +120,64 @@ def test_the_manager_seeds_shared_theme_at_construction(qapp):
     finally:
         tm.ThemeManager._instance = saved_instance
         shared_theme._current = saved_current
+
+
+def test_the_default_rail_is_untouched_by_sidebar_mode(qapp):
+    """Packing Tool builds NavRail(width=76) and must see no change."""
+    from PySide6.QtCore import Qt
+
+    rail = NavRail()
+    index = rail.add_item(icon("package"), "Orders")
+    assert rail.button(index).toolButtonStyle() == Qt.ToolButtonTextUnderIcon
+    assert rail.width() == 56
+    with pytest.raises(RuntimeError):
+        rail.set_expanded(False)
+
+
+def test_sidebar_mode_starts_expanded_with_labels_beside_icons(qapp):
+    from PySide6.QtCore import Qt
+
+    rail = NavRail(expanded_width=200)
+    index = rail.add_item(icon("package"), "Setup")
+    assert rail.is_expanded()
+    assert rail.width() == 200
+    assert rail.button(index).toolButtonStyle() == Qt.ToolButtonTextBesideIcon
+    assert rail.button(index).width() == 184
+    assert rail.button(index).height() == 32
+
+
+def test_collapsing_the_sidebar_leaves_a_56px_icon_rail(qapp):
+    from PySide6.QtCore import Qt
+
+    rail = NavRail(expanded_width=200)
+    index = rail.add_item(icon("package"), "Setup")
+    rail.set_expanded(False)
+    assert not rail.is_expanded()
+    assert rail.width() == 56
+    assert rail.button(index).toolButtonStyle() == Qt.ToolButtonIconOnly
+    assert rail.button(index).width() == 40
+    # The label survives the collapse: expanding again must not lose it.
+    assert rail.button(index).text() == "Setup"
+    rail.set_expanded(True)
+    assert rail.button(index).width() == 184
+
+
+def test_an_item_added_while_collapsed_takes_the_collapsed_shape(qapp):
+    from PySide6.QtCore import Qt
+
+    rail = NavRail(expanded_width=200)
+    rail.set_expanded(False)
+    index = rail.add_item(icon("package"), "Setup")
+    assert rail.button(index).toolButtonStyle() == Qt.ToolButtonIconOnly
+
+
+def test_the_checked_sidebar_item_is_bold_on_the_surface_plane(qapp):
+    from shared.theme import current_tokens
+
+    rail = NavRail(expanded_width=200)
+    sheet = rail.styleSheet()
+    checked = sheet.split("NavRail QToolButton:checked {", 1)[1].split("}", 1)[0]
+    tokens = current_tokens()
+    assert f"background-color: {tokens.surface};" in checked
+    assert f"border: 1px solid {tokens.border_subtle};" in checked
+    assert "font-weight: bold;" in checked
