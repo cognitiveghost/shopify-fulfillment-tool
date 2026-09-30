@@ -92,10 +92,10 @@ python scripts/sync_shared.py [/path/to/shopify-fulfillment-tool]
 
 ### 4. Tests move to this repo
 
-Move these packing-tool test files to this repo's `tests/` unchanged (`git rm` there, add here). They
+Move these 18 packing-tool test files to this repo's `tests/` unchanged (`git rm` there, add here). They
 import only `shared.*`, PySide6 and the stdlib:
 
-`test_assets.py`, `test_atomic_write.py`, `test_brand_icon.py`, `test_components_card.py`,
+`test_assets.py`, `test_brand_icon.py`, `test_components_card.py`,
 `test_components_confirm_dialog.py`, `test_components_filterbar.py`, `test_components_overflow.py`,
 `test_components_toast.py`, `test_excepthook.py`, `test_logger.py`, `test_navrail.py`,
 `test_shared_theme_buttons.py`, `test_shared_theme_widgets.py`, `test_state_panel.py`,
@@ -116,7 +116,8 @@ These stay in packing-tool, because they exercise packing-tool code as well as `
 `test_theme.py` and `test_theme_notifier.py` (use `gui.theme`), `test_type_scale.py` (has
 `test_packing_tool_ships_at_the_desk_default`), `test_metadata_utils.py` (imports
 `packing_tool.session_manager`), `test_style_literals_guard.py` (scans packing-tool's source),
-`test_session_registry.py`, `test_json_cache.py`.
+`test_session_registry.py`, `test_json_cache.py`, `test_atomic_write.py` (uses the `loaded_logic`
+PackerLogic fixture).
 
 Before moving, check whether any fixture a moved test uses by name (not by import) is defined in
 packing-tool's `conftest.py` and missing here. `qapp` exists in both.
