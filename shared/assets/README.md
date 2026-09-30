@@ -11,7 +11,8 @@ Source: https://github.com/lucide-icons/lucide/tree/1.31.0/icons
 
 Only the glyphs the app actually uses are vendored. To add one, download it from
 the pinned tag above into this directory, then add its name to `EXPECTED_ICONS`
-in **each** repo's `tests/test_ui_assets.py` — that list is a hardcoded literal,
+in `tests/test_ui_assets.py` of this repo (shopify-fulfillment-tool; packing-tool
+receives the glyph through its next sync) — that list is a hardcoded literal,
 so nothing picks a new glyph up on its own.
 
 Pin the tag. Lucide renames glyphs between releases — `filter` became `funnel`
