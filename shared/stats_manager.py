@@ -1,10 +1,9 @@
 """
 Unified Statistics Manager for Shopify Tool and Packing Tool
 
-Canonical version. This module lives in packing-tool/shared/ and is copied
-into shopify-fulfillment-tool/shared/ by
-shopify-fulfillment-tool/scripts/sync_shared.py — the two copies must stay
-byte-identical. See shared/README.md.
+Canonical version. This module lives in shopify-fulfillment-tool/shared/ and
+is mirrored into packing-tool/shared/ by packing-tool/scripts/sync_shared.py.
+Never hand-edit the packing-tool copy. See shared/README.md.
 
 Manages centralized statistics stored on the file server in
 Stats/global_stats.json:

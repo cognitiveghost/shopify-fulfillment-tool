@@ -1,6 +1,6 @@
 """Qt components both apps import.
 
-Canonical here; shopify-fulfillment-tool receives them via scripts/sync_shared.py.
+Canonical in shopify-fulfillment-tool; packing-tool receives them via its scripts/sync_shared.py.
 Phase 10 spec D6 / Bundle 3 spec E1.
 """
 

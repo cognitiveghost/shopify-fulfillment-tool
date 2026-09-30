@@ -2,8 +2,8 @@
 
 Canonical source — see
 docs/superpowers/specs/2026-07-26-unified-ui-design-system-design.md.
-Never hand-edit shopify-fulfillment-tool/shared/theme.py; run
-shopify-fulfillment-tool/scripts/sync_shared.py after changing this file.
+Edit it here in shopify-fulfillment-tool/shared/; packing-tool/shared/theme.py
+is a synced copy (packing-tool/scripts/sync_shared.py) and is never hand-edited.
 """
 
 import re
@@ -1389,10 +1389,8 @@ def build_stylesheet(theme: ThemeTokens) -> str:
 
         QDialog {{ background-color: {theme.surface}; color: {theme.text}; }}
 
-        /* Card is a shopify-only widget, styled here because build_stylesheet
-           is shared and shopify's copy of shared/ is overwritten by the next
-           sync. Not dead code there. QSS type selectors match className()
-           exactly, so a future subclass needs its own selector. */
+        /* Card is shared/components/card.py. QSS type selectors match
+           className() exactly, so a future subclass needs its own selector. */
         Card {{
             background-color: {theme.surface_raised};
             border: none;

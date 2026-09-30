@@ -1,7 +1,7 @@
 """A guard, not a unit test. Without it the next dialog someone adds reaches
 for a hex string and the palette escapes the theme one widget at a time.
 
-The checker's own behaviour is tested in packing-tool's tests/test_style_lint.py;
+The checker's own behaviour is tested in tests/test_style_lint.py;
 this file only asserts the repo is clean.
 """
 
@@ -38,11 +38,10 @@ def test_the_guard_can_actually_see_a_literal(tmp_path):
     assert find_style_literals([offender])
 
 
-def test_every_detection_path_survived_the_shared_sync(tmp_path):
-    """style_lint.py arrives here via scripts/sync_shared.py, and its unit
-    tests stay in packing-tool. A truncated or half-synced copy would still
-    catch the hex above while silently losing the other three rules, and the
-    guard would keep passing. One offender per rule closes that."""
+def test_every_detection_path_reaches_the_guard(tmp_path):
+    """style_lint.py's own unit tests are tests/test_style_lint.py. This is
+    one offender per rule seen through this repo's guard, so a rule that stops
+    firing fails here too, not only in the unit tests."""
     offender = tmp_path / "offender.py"
     offender.write_text(
         'S = "color: red; font-size: 13px; background: rgb(1,2,3)"\n'

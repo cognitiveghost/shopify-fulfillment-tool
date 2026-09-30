@@ -5,13 +5,15 @@ Code that must behave identically in both **Shopify Fulfillment Tool** and
 
 ## The sync rule
 
-**`packing-tool/shared/` is canonical.** `shopify-fulfillment-tool/shared/`
-is a one-way copy, refreshed by running `python scripts/sync_shared.py
-/path/to/packing-tool` from that repo's root (see its own `CLAUDE.md`; the
-bare sibling default resolves wrongly from a worktree, so pass the path). A
-`shared/` file hand-edited in
-the Shopify repo is silently overwritten by the next sync — author every
-change here, in `packing-tool`, and sync it across afterward.
+**`shopify-fulfillment-tool/shared/` is canonical** (ADR 0017 there).
+`packing-tool/shared/` is a one-way copy, refreshed by running
+`python scripts/sync_shared.py /path/to/shopify-fulfillment-tool` from
+packing-tool's root (the bare sibling default resolves wrongly from a
+worktree, so pass the path). The script mirrors this folder and records the
+source commit in `packing-tool/scripts/shared_synced_from.txt`; packing-tool's
+CI fails if its copy differs from this folder at that commit. A `shared/` file
+hand-edited in packing-tool is silently overwritten by the next sync — author
+every change here.
 
 ## What's in here
 
@@ -33,7 +35,6 @@ change here, in `packing-tool`, and sync it across afterward.
 
 ## Tests
 
-Each module's own tests live in `packing-tool/tests/`. The Shopify repo
-keeps a handful of guard tests (e.g. `tests/test_theme_contrast.py`) that
-assert on what a sync actually delivered, so a bad sync fails loudly there
-too — those are not a second copy of the real test suite.
+Each module's own tests live in `shopify-fulfillment-tool/tests/`. packing-tool
+keeps the tests that exercise its own use of `shared/` (its `gui.theme`
+wiring, its type-scale default, session metadata, the atomic state write).

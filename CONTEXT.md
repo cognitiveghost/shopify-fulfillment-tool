@@ -404,6 +404,7 @@ like any SKU line. An order whose bonus the stock can't cover is held whole.
 
 ## Repos
 
-**Canonical source** — `packing-tool`. Every `shared/` change is authored
-there and arrives here through `scripts/sync_shared.py`, one-way. A `shared/`
-file edited in this repo is overwritten by the next sync.
+**Canonical source** — `shopify-fulfillment-tool`. Every `shared/` change is
+authored here; packing-tool receives it through its own `scripts/sync_shared.py`,
+one-way, pinned to a commit. A `shared/` file edited in packing-tool is
+overwritten by its next sync.

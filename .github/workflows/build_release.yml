@@ -57,30 +57,9 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest
 
-  shared-sync-check:
-    name: Check shared/ matches packing-tool (canonical source)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out this repo
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Check out packing-tool (canonical shared/ source)
-        uses: actions/checkout@v7
-        with:
-          repository: cognitiveghost/packing-tool
-          path: packing-tool-ref
-          persist-credentials: false
-      - name: Diff shared/ against packing-tool/shared/
-        run: |
-          if ! diff -r shared packing-tool-ref/shared; then
-            echo "::error::shared/ has drifted from packing-tool/shared/ (the canonical source). Run scripts/sync_shared.py and commit the result."
-            exit 1
-          fi
-
   version:
     name: Next Version
-    needs: [verify, shared-sync-check]
+    needs: [verify]
     # Releases come from main only. On any other branch this job skips, and
     # so do build and release below.
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'

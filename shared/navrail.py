@@ -7,8 +7,8 @@ never change in the same release.
 
 Canonical source -- see
 docs/superpowers/specs/2026-07-26-unified-ui-design-system-design.md.
-Never hand-edit shopify-fulfillment-tool/shared/navrail.py; run
-shopify-fulfillment-tool/scripts/sync_shared.py after changing this file.
+Edit it here in shopify-fulfillment-tool/shared/; packing-tool/shared/navrail.py
+is a synced copy (packing-tool/scripts/sync_shared.py) and is never hand-edited.
 """
 
 from PySide6.QtCore import Qt, Signal

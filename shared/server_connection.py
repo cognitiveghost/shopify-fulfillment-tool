@@ -1,8 +1,7 @@
 """File-server connection path: resolution, persistence, and UI.
 
-Canonical copy lives in packing-tool/shared/; synced into
-shopify-fulfillment-tool/shared/ by
-shopify-fulfillment-tool/scripts/sync_shared.py.
+Canonical copy lives in shopify-fulfillment-tool/shared/; mirrored into
+packing-tool/shared/ by packing-tool/scripts/sync_shared.py.
 
 Effective path priority (highest first):
     1. Env var (e.g. FULFILLMENT_SERVER_PATH)

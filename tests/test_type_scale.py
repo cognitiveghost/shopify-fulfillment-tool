@@ -1,8 +1,8 @@
 """The type scale is the single source of truth for font sizing in gui/*.py.
 
 Two of these tests are guards rather than unit tests:
-test_body_role_matches_shared_button_size catches shared/theme.py drifting
-under us (it is sync-owned by packing-tool), and
+test_body_role_matches_shared_button_size catches shared/theme.py and this app's scale drifting
+apart, and
 test_no_hardcoded_font_sizes_outside_theme_manager stops future call sites
 from bypassing the scale.
 """
@@ -113,9 +113,9 @@ def test_apply_font_works_on_a_list_item_and_a_painter():
 
 
 def test_body_role_matches_shared_button_size():
-    """shared/theme.py is synced from packing-tool and can change without
-    warning. If its QPushButton size stops matching the body role, buttons
-    silently fall off the scale -- fail loudly instead."""
+    """shared/theme.py is shared with packing-tool and can change. If its
+    QPushButton size stops matching the body role, buttons silently fall off
+    the scale -- fail loudly instead."""
     sheet = build_stylesheet(get_theme("light"))
     match = re.search(r"QPushButton\s*\{[^}]*font-size:\s*(\d+)pt", sheet)
     assert match, "shared/theme.py no longer sets a pt font-size on QPushButton"
@@ -160,9 +160,9 @@ def test_profile_metrics_match_the_spec_table(name, control, row, pad_v, pad_h):
 
 
 def test_profile_padding_is_the_shared_spacing_scale():
-    """Spec C3 names spacing tokens, not raw pixels. shared/theme.py is
-    sync-owned by packing-tool, so if its spacing scale moves under us these
-    profiles silently stop meaning what the spec says."""
+    """Spec C3 names spacing tokens, not raw pixels. If shared/theme.py's
+    spacing scale moves, these profiles silently stop meaning what the spec
+    says."""
     theme = get_theme("light")
     assert DENSITY_PROFILES["desk"].padding_v == theme.spacing_xs
     assert DENSITY_PROFILES["desk"].padding_h == theme.spacing_sm
