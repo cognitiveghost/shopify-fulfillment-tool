@@ -14,6 +14,7 @@ EXPECTED_ICONS = [
     "refresh-cw", "settings", "table", "tag", "tags", "trash-2", "wrench",
     "plus", "ellipsis-vertical", "check", "chevron-up", "chevron-down",
     "toggle-off", "toggle-on",
+    "panel-left-close", "panel-left-open", "sun", "moon", "server",
 ]
 
 
