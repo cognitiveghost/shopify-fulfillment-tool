@@ -113,3 +113,8 @@ different screen.
 The line saying Packing Tool stays entirely Qt is superseded: Packing Tool's
 Packer Mode order document moves to the web tier too. See packing-tool
 `docs/adr/0001-packer-mode-on-the-web-tier.md`.
+
+## Note (2026-09-30)
+
+The one-screen cap and the web tier's `box-shadow` ban are superseded by ADR 0016: more screens may
+move to the web tier, one approved mockup at a time, in a Polaris look built from our own tokens.
