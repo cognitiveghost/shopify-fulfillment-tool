@@ -195,7 +195,7 @@ desktop app:
 Verify visuals by rendering: `QT_QPA_PLATFORM=offscreen` plus `widget.render(QImage)` saved to a PNG, then look at it.
 A spec states which mockup it followed and every departure from it.
 
-Gate: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q`, plus `ruff check . --exclude shared`.
+Gate: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q`, plus `ruff check .`.
 
 **Tooling on the dev VM:**
 - Edits to `shared/` are blocked here: edit packing-tool, then run `sync_shared.py <path>`.

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
@@ -709,7 +709,7 @@ class UIManager:
             Path(self.mw.session_manager.get_input_dir(session_path)) / "inventory.csv"
         )
         try:
-            copied = datetime.fromtimestamp(stock.stat().st_mtime, tz=timezone.utc)
+            copied = datetime.fromtimestamp(stock.stat().st_mtime, tz=UTC)
         except OSError:
             bar.set_stock_age("")
             return

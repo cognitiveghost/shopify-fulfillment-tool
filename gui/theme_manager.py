@@ -6,7 +6,6 @@ token definitions and stylesheet/palette builders.
 """
 
 import logging
-from typing import Optional
 
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QFont
@@ -43,7 +42,7 @@ class ThemeManager(QObject):
     """Manages application themes (singleton). See shared.theme for tokens."""
 
     theme_changed = Signal()
-    _instance: Optional["ThemeManager"] = None
+    _instance: ThemeManager | None = None
 
     def __new__(cls):
         if cls._instance is None:

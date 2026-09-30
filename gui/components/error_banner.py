@@ -67,7 +67,7 @@ class ErrorBanner(QFrame):
         on_theme_changed(self, self._restyle)
 
     @classmethod
-    def for_window(cls, window: QWidget) -> "ErrorBanner | None":
+    def for_window(cls, window: QWidget) -> ErrorBanner | None:
         banner = getattr(window, "error_banner", None)
         return banner if isinstance(banner, cls) else None
 

@@ -1,3 +1,6 @@
+# Matches CI and release builds (Python 3.14).
+target-version = "py314"
+
 # Project-wide rule decisions, on top of ruff's defaults.
 [lint]
 ignore = [
