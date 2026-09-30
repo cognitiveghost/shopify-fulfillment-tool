@@ -177,26 +177,49 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
 
 
 def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
-    """1366x768 minus rail 56, command bar 48 and status bar 28."""
+    """1366x768 minus the 200px sidebar and the 48px command bar; no status bar.
+
+    main_tabs keeps the 5px inset every Qt page was laid out against (phase 1
+    spec section 5.1), so the page is 1366 - 200 - 10 wide.
+    """
+    from PySide6.QtWidgets import QStatusBar
+
     main_window.resize(1366, 768)
     QApplication.processEvents()
 
-    assert main_window.nav_rail.width() == 56
+    assert main_window.sidebar.width() == 200
+    assert main_window.nav_rail is main_window.sidebar.rail
     assert main_window.command_bar.height() == 48
-    assert main_window.statusBar().height() == 28
+    assert main_window.findChild(QStatusBar) is None
+    assert main_window.main_tabs.width() == 1156
 
-    # The real page widget, not width() minus a constant already asserted
-    # above -- the point is that the chrome leaves this much for a screen.
-    #
-    # 1300, not the spec's 1310: right_layout carries a 5px margin either
-    # side that predates this bundle, and the spec's number is rail
-    # subtracted from window with no allowance for it. This assertion is the
-    # measurement, so later screens design to 1300 until someone removes
-    # that margin -- which is a layout change, not a test change.
-    # Width only: the page's height is already pinned by the two fixed
-    # heights above, and an offscreen resize does not settle reliably enough
-    # to assert the remainder.
-    assert main_window.main_tabs.width() == 1300
+
+def test_the_sidebar_footer_names_the_server(main_window, tmp_path):
+    assert main_window.sidebar.connection_label.text() == "Server connected"
+    assert main_window.sidebar.path_label.toolTip() == str(tmp_path)
+
+
+def test_retry_rechecks_the_connection(main_window):
+    """Retry is the Server Connection dialog's own recheck: it re-emits."""
+    seen = []
+    main_window.connectionChanged.connect(seen.append)
+    main_window.sidebar.retryRequested.emit()
+    assert seen == [True]
+
+
+def test_the_sidebar_asks_for_client_settings(main_window):
+    calls = []
+    main_window.actions_handler.open_settings_window = lambda: calls.append(1)
+    main_window.sidebar.settings_button.setEnabled(True)
+    main_window.sidebar.settings_button.click()
+    assert calls == [1]
+
+
+def test_the_command_bar_sits_on_the_sunken_plane(main_window):
+    from shared.theme import current_tokens
+
+    assert current_tokens().surface_sunken in main_window.command_bar.styleSheet()
+    assert main_window.command_bar.client_selector.placeholderText() == "Choose a client"
 
 
 def test_resuming_a_past_session_reaches_the_session_state(main_window, tmp_path):

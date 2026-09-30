@@ -92,10 +92,10 @@ def test_the_one_accent_pixel_is_the_way_out(offline_window):
     assert button.property("role") == "primary"
 
 
-def test_the_status_bar_says_so_too(offline_window):
-    chip = offline_window.connection_chip
-    assert chip.isVisible()
-    assert "unreachable" in chip.text().lower()
+def test_the_sidebar_says_so_too(offline_window):
+    sidebar = offline_window.sidebar
+    assert sidebar.connection_label.text() == "Server unreachable"
+    assert sidebar.retry_button.isVisible()
 
 
 def test_the_rail_has_five_items_and_no_footer(offline_window):

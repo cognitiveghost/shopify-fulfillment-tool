@@ -142,6 +142,7 @@ class CommandBar(QWidget):
 
         self.client_selector = _ClientCombo(self)
         self.client_selector.setModel(QStandardItemModel(self.client_selector))
+        self.client_selector.setPlaceholderText("Choose a client")
         self.client_selector.currentTextChanged.connect(self._on_client_changed)
         self.client_selector.activated.connect(self._on_row_activated)
         view = self.client_selector.view()
@@ -234,7 +235,7 @@ class CommandBar(QWidget):
         # would repaint every child -- flattening the button roles the app
         # stylesheet sets. Same reason for the scoping in the other containers.
         self.setStyleSheet(
-            f"CommandBar {{ background-color: {theme.surface_raised};"
+            f"CommandBar {{ background-color: {theme.surface_sunken};"
             f" border-bottom: 1px solid {theme.border_subtle}; }}"
         )
 

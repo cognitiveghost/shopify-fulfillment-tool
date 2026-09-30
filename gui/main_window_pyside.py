@@ -463,7 +463,6 @@ class MainWindow(QMainWindow):
 
         Called after state changes (client selected, files loaded, analysis run).
         """
-        has_client = bool(self.current_client_id)
         has_session = bool(self.session_path)
         has_orders = bool(getattr(self, "orders_file_path", None))
         has_stock = bool(getattr(self, "stock_file_path", None))
@@ -507,18 +506,6 @@ class MainWindow(QMainWindow):
             self.ui_manager.set_export_enabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
             self.add_product_button_tab2.setEnabled(has_analysis and has_stock)
-
-        # Update status bar
-        if has_analysis:
-            self.statusBar().showMessage("Analysis complete - ready for export", 5000)
-        elif has_session:
-            self.statusBar().showMessage("Session active - load files to begin", 5000)
-        elif has_client:
-            self.statusBar().showMessage(
-                "Client selected - create or open a session", 5000
-            )
-        else:
-            self.statusBar().showMessage("Ready - select a client to begin", 5000)
 
     def _on_inventory_memory_toggled(self, state: int):
         """Persist the inventory memory enabled flag when the checkbox is toggled."""
@@ -571,9 +558,6 @@ class MainWindow(QMainWindow):
             client_id: Newly selected client ID
         """
         logger.info(f"Client changed to: {client_id}")
-
-        if hasattr(self, "statusBar"):
-            self.statusBar().showMessage(f"Loading CLIENT_{client_id}...", 5000)
 
         if hasattr(self, "command_bar") and (
             self.command_bar.current_client() != client_id
@@ -650,9 +634,6 @@ class MainWindow(QMainWindow):
             self.update_ui_state()
 
             logger.info(f"Client {client_id} loaded successfully")
-
-            if hasattr(self, "statusBar"):
-                self.statusBar().showMessage(f"CLIENT_{client_id} loaded", 2000)
 
         except Exception:
             logger.exception("Error applying loaded client data")

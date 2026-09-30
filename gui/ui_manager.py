@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -17,11 +17,11 @@ from PySide6.QtWidgets import (
 
 from gui.components.commandbar import BarState, CommandBar
 from gui.components.error_banner import ErrorBanner, show_error
+from gui.components.sidebar import Sidebar
 from shared.components.state_panel import StatePanel
 from shared.icons import icon
-from shared.navrail import NavRail
 from shared.server_connection import ConnectionSettingsDialog
-from shared.theme import StatusChip, on_theme_changed
+from shared.theme import on_theme_changed
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .theme_manager import get_theme_manager
@@ -45,6 +45,15 @@ _SCREEN_ACTIONS = {
     0: ("run_analysis_button", True, "primary"),
     1: ("run_analysis_button", True, "secondary"),
 }
+
+# The sidebar's collapsed state is this PC's, like the theme -- same QSettings
+# pair theme_manager and log_viewer use. A function so tests can point it at
+# an INI file under tmp_path.
+_COLLAPSED_KEY = "shell/sidebar_collapsed"
+
+
+def _shell_settings() -> QSettings:
+    return QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
 
 
 def age_text(delta) -> str:
@@ -174,48 +183,44 @@ class UIManager:
         main_horizontal.setSpacing(0)
         main_horizontal.setContentsMargins(0, 0, 0, 0)
 
-        # The rail is the outermost chrome, left of everything else.
-        self.mw.nav_rail = NavRail(self.mw)
-        main_horizontal.addWidget(self.mw.nav_rail)
+        # The sidebar is the outermost chrome, left of everything else. Its
+        # NavRail keeps the name nav_rail, so every call site stays as it was.
+        self.mw.sidebar = Sidebar(self.mw)
+        self.mw.nav_rail = self.mw.sidebar.rail
+        main_horizontal.addWidget(self.mw.sidebar)
 
-        # Create right side container (header + tabs)
         right_side = QWidget()
         right_layout = QVBoxLayout(right_side)
-        right_layout.setSpacing(5)
-        right_layout.setContentsMargins(5, 5, 5, 5)
+        right_layout.setSpacing(0)
+        right_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Step 1: The command bar — client selector, session, status, actions.
-        # Replaces the two-row header: its own border-bottom is the separator.
+        # The command bar runs edge to edge; its own border-bottom is the divider.
         right_layout.addWidget(self._create_command_bar())
+
+        # The pages keep the 5px inset they were laid out against (phase 1 §5.1).
+        page_area = QWidget()
+        page_layout = QVBoxLayout(page_area)
+        page_layout.setSpacing(5)
+        page_layout.setContentsMargins(5, 5, 5, 5)
 
         # 9.25: a failure waits here, under the command bar, until dismissed.
         logs_index = self._RAIL_LABELS.index("Logs")
         self.mw.error_banner = ErrorBanner(
             open_logs=lambda: self.mw.main_tabs.setCurrentIndex(logs_index)
         )
-        right_layout.addWidget(self.mw.error_banner)
+        page_layout.addWidget(self.mw.error_banner)
 
-        # Step 2: Create main tab widget with 5 tabs
         self._create_tabs()
-        right_layout.addWidget(self.mw.main_tabs, 1)  # Stretch factor: 1
+        page_layout.addWidget(self.mw.main_tabs, 1)
 
-        # Add right side to horizontal layout
-        main_horizontal.addWidget(right_side, 1)  # Stretch tabs
+        right_layout.addWidget(page_area, 1)
+        main_horizontal.addWidget(right_side, 1)
+
+        self._wire_sidebar()
 
         # Every widget exists by now, so one pass sets every long-lived icon.
         # on_theme_changed applies immediately, so this is that first pass too.
-        on_theme_changed(self.mw, lambda _t: self._refresh_icons())
-
-        # Status bar: a fixed-height chip reporting connection state, in
-        # place of the free-text "Ready" message it replaces.
-        self.mw.statusBar().setFixedHeight(28)
-        self.mw.connection_chip = StatusChip(
-            "status_success",
-            "Server connected",
-            get_theme_manager().get_current_theme(),
-            parent=self.mw,
-        )
-        self.mw.statusBar().addPermanentWidget(self.mw.connection_chip)
+        on_theme_changed(self.mw, self._on_theme)
 
         self.mw.connectionChanged.connect(self._on_connection_changed)
 
@@ -223,7 +228,25 @@ class UIManager:
             "UI widgets created successfully with tab-based structure and sidebar."
         )
 
-    _OFFLINE_RAIL_ITEMS = (1, 2, 4)  # Results, Browse, Tools
+    def _wire_sidebar(self) -> None:
+        """The footer's three requests, and the collapse this PC remembers."""
+        sidebar = self.mw.sidebar
+        sidebar.settingsRequested.connect(
+            lambda: self.mw.actions_handler.open_settings_window()
+        )
+        sidebar.themeRequested.connect(
+            lambda name: get_theme_manager().set_theme(name)
+        )
+        sidebar.retryRequested.connect(self.mw.recheck_connection)
+        sidebar.expandedChanged.connect(
+            lambda expanded: _shell_settings().setValue(_COLLAPSED_KEY, not expanded)
+        )
+        collapsed = _shell_settings().value(_COLLAPSED_KEY, False, type=bool)
+        sidebar.set_expanded(not collapsed)
+
+    def _on_theme(self, tokens) -> None:
+        self._refresh_icons()
+        self.mw.sidebar.set_theme_name(tokens.name)
 
     def _on_connection_changed(self, connected: bool) -> None:
         """The one signal that drives every control which touches the share.
@@ -232,7 +255,8 @@ class UIManager:
         below carries a None-check, because none of them is reachable while
         this is False. Spec §5.1.
         """
-        for index in self._OFFLINE_RAIL_ITEMS:
+        # Task 6 replaces this with self._refresh_nav().
+        for index in (1, 2, 4):
             self.mw.nav_rail.button(index).setEnabled(connected)
         if not connected:
             self.mw.nav_rail.set_current(0)
@@ -247,14 +271,8 @@ class UIManager:
             1 if connected and self.mw.current_client_id else 0
         )
 
-        # Resting when connected -- nothing to act on. Live when not.
-        # Hollow either way: the system derived it, no person set it.
-        self.mw.connection_chip.set_status(
-            "status_success" if connected else "status_danger",
-            "Server connected" if connected else "Server unreachable",
-            get_theme_manager().get_current_theme(),
-            live=not connected,
-            manual=False,
+        self.mw.sidebar.set_connection(
+            connected, str(self.mw.profile_manager.base_path)
         )
 
         if not connected:
