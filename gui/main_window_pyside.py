@@ -412,6 +412,8 @@ class MainWindow(QMainWindow):
 
     def _focus_results_search(self):
         """Ctrl+F: the search field lives in the results document now."""
+        if not self.nav_rail.button(1).isEnabled():
+            return  # Results is not offered until an analysis exists (phase 1 §5.4)
         self.main_tabs.setCurrentIndex(1)
         self.results_view.setFocus()
         self.results_bridge.focusSearchRequested.emit()
@@ -506,6 +508,8 @@ class MainWindow(QMainWindow):
             self.ui_manager.set_export_enabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
             self.add_product_button_tab2.setEnabled(has_analysis and has_stock)
+
+        self.ui_manager._refresh_nav()
 
     def _on_inventory_memory_toggled(self, state: int):
         """Persist the inventory memory enabled flag when the checkbox is toggled."""

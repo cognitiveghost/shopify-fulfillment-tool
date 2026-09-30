@@ -138,9 +138,11 @@ def test_the_second_beat_has_no_accent_pixel_of_its_own(online_window):
     assert online_window.command_bar.client_selector.hasFocus()
 
 
-def test_every_rail_item_is_enabled_once_the_share_answers(online_window):
+def test_the_share_answering_offers_what_needs_no_client(online_window):
+    """Phase 1 spec section 5.4: Browse and Tools need a client, Results an
+    analysis. Setup and Logs are always offered."""
     rail = online_window.nav_rail
-    assert all(rail.button(i).isEnabled() for i in range(5))
+    assert [i for i in range(5) if rail.button(i).isEnabled()] == [0, 3]
 
 
 def test_the_rail_cannot_grow_a_footer_again():

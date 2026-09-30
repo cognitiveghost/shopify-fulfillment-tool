@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from gui.components.commandbar import BarState, CommandBar
 from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.sidebar import Sidebar
+from gui.shortcuts_dialog import ShortcutsDialog
 from shared.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.server_connection import ConnectionSettingsDialog
@@ -248,6 +249,36 @@ class UIManager:
         self._refresh_icons()
         self.mw.sidebar.set_theme_name(tokens.name)
 
+    def _refresh_nav(self) -> None:
+        """The one rule for which destinations the rail offers. Phase 1 spec §5.4.
+
+        Setup and Logs always: Logs is where an operator reads why the server
+        is unreachable. Browse and Tools need the share and a client; Results
+        needs an analysis. Disabled, never hidden.
+        """
+        connected = self.mw.is_connected()
+        has_client = bool(self.mw.current_client_id)
+        analysed = self.mw.analysis_results_df is not None
+        offered = (
+            True,
+            connected and analysed,
+            connected and has_client,
+            True,
+            connected and has_client,
+        )
+        rail = self.mw.nav_rail
+        for index, on in enumerate(offered):
+            rail.button(index).setEnabled(on)
+        label, tip = self._TAB_LABELS[1], self._TAB_TOOLTIPS[1]
+        rail.button(1).setToolTip(
+            f"{label} — {tip}"
+            if analysed
+            else f"{label} — available after Run analysis (Ctrl+2)"
+        )
+        self.mw.sidebar.set_settings_enabled(connected and has_client)
+        if not offered[rail.current_index()]:
+            rail.set_current(0)
+
     def _on_connection_changed(self, connected: bool) -> None:
         """The one signal that drives every control which touches the share.
 
@@ -255,11 +286,7 @@ class UIManager:
         below carries a None-check, because none of them is reachable while
         this is False. Spec §5.1.
         """
-        # Task 6 replaces this with self._refresh_nav().
-        for index in (1, 2, 4):
-            self.mw.nav_rail.button(index).setEnabled(connected)
-        if not connected:
-            self.mw.nav_rail.set_current(0)
+        self._refresh_nav()
 
         # The selector is not just empty while disconnected, it is disabled:
         # its "New client..." and "Manage groups..." rows are appended by the
@@ -351,7 +378,7 @@ class UIManager:
         return bar
 
     def _populate_overflow(self, bar) -> None:
-        """The client's own scope, then this PC. Spec §4.1.
+        """New session for the client, then this PC's server and shortcuts. Phase 1 spec §5.6.
 
         Rebuilt on a client change, because the first section's header is the
         client's name and a stale header points at the wrong profile.
@@ -369,21 +396,10 @@ class UIManager:
             lambda: self.mw.actions_handler.create_new_session(),
         )
         item.setEnabled(bool(self.mw.current_client_id))
-        item = menu.add_item(
-            "Client settings…",
-            lambda: self.mw.actions_handler.open_settings_window(),
-        )
-        item.setEnabled(bool(self.mw.current_client_id))
 
         menu.add_section("THIS PC")
         menu.add_item("Server connection…", self._open_connection_settings)
-
-        current = "Dark" if get_theme_manager().is_dark_theme() else "Light"
-        menu.add_choice_group(
-            ["Light", "Dark"],
-            current,
-            lambda name: get_theme_manager().set_theme(name.lower()),
-        )
+        menu.add_item("Keyboard shortcuts…", lambda: ShortcutsDialog(self.mw).exec())
 
     def _bind_screen_action(self, index: int) -> None:
         """Point the command bar's one primary at this screen's primary button."""

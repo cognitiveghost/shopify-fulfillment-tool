@@ -34,16 +34,17 @@ def test_client_profile_dialog_is_titled_client_profile():
 
 
 def test_settings_buttons_are_labelled_settings():
-    """Settings opens SettingsWindow from one entry point: the command-bar
-    overflow's "Client settings…" item (Bundle 4, spec §4.2). Tab 1's own
-    QPushButton copy was a duplicate of that shell control and Bundle 5
-    deleted it (spec §7) -- object config, not a screen action."""
+    """Settings opens SettingsWindow from one entry point: the sidebar footer's
+    "Client settings" (UI refresh phase 1, spec section 4.2), which replaced the
+    command-bar overflow item. Object config, not a screen action."""
     from pathlib import Path
 
     import gui.ui_manager as mod
+    from gui.components import sidebar
 
     source = Path(mod.__file__).read_text()
     assert source.count('QPushButton("Settings")') == 0
-    assert '"Client settings…"' in source
+    assert '"Client settings…"' not in source
     assert 'QPushButton("Client Settings")' not in source
     assert '"Client Settings",' not in source
+    assert '"Client settings"' in Path(sidebar.__file__).read_text()

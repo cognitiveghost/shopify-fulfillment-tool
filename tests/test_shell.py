@@ -114,6 +114,8 @@ def test_the_full_destination_name_survives_in_the_tooltip(main_window):
 
 @pytest.mark.parametrize("index", range(5))
 def test_clicking_the_rail_moves_the_page(main_window, index):
+    # The binding, not the gate: the gate has its own tests below.
+    main_window.nav_rail.button(index).setEnabled(True)
     main_window.nav_rail.button(index).click()
     assert main_window.main_tabs.currentIndex() == index
 
@@ -343,3 +345,123 @@ def test_undo_keeps_the_qt_toast_when_another_screen_shows(one_shot_undo, monkey
 
     qt_toast.assert_called_once()
     raised.assert_not_called()
+
+
+def _enabled(window):
+    return [i for i in range(5) if window.nav_rail.button(i).isEnabled()]
+
+
+def _pick_client(window, client_id="M"):
+    window.profile_manager.create_client_profile(client_id, f"Client {client_id}")
+    window.command_bar.set_clients([client_id])
+    window.command_bar.set_current_client(client_id)
+    QApplication.processEvents()
+    # The client's config may finish loading after this returns; the rule is
+    # what is under test, so run the refresh the load would end with.
+    window.update_ui_state()
+
+
+def _go_offline(window):
+    # _refresh_nav asks is_connected(), exactly as the real emitter does.
+    window.profile_manager.is_network_available = False
+    window.connectionChanged.emit(False)
+
+
+def test_with_no_client_only_setup_and_logs_are_offered(main_window):
+    assert main_window.current_client_id is None
+    assert _enabled(main_window) == [0, 3]
+
+
+def test_results_waits_for_an_analysis(main_window):
+    import pandas as pd
+
+    _pick_client(main_window)
+    assert _enabled(main_window) == [0, 2, 3, 4]
+    assert "available after Run analysis" in main_window.nav_rail.button(1).toolTip()
+    assert "Analysis Results" in main_window.nav_rail.button(1).toolTip()
+
+    main_window.analysis_results_df = pd.DataFrame({"Order_Number": ["1"]})
+    main_window.update_ui_state()
+    assert _enabled(main_window) == [0, 1, 2, 3, 4]
+    assert "available after" not in main_window.nav_rail.button(1).toolTip()
+
+
+def test_the_jump_to_results_after_a_run_survives_the_rule(main_window):
+    """actions_handler (after a run) and load_existing_session (a past session
+    with an analysis) both set the frame, jump to Results, then refresh. The
+    rule must not bounce that jump back to Setup."""
+    import pandas as pd
+
+    _pick_client(main_window)
+    main_window.analysis_results_df = pd.DataFrame({"Order_Number": ["1"]})
+    main_window.main_tabs.setCurrentIndex(1)
+    main_window.update_ui_state()
+    assert main_window.main_tabs.currentIndex() == 1
+    assert main_window.nav_rail.button(1).isEnabled()
+
+
+def test_going_offline_on_browse_returns_to_setup(main_window):
+    _pick_client(main_window)
+    main_window.main_tabs.setCurrentIndex(2)
+    _go_offline(main_window)
+    assert main_window.main_tabs.currentIndex() == 0
+
+
+def test_going_offline_on_logs_stays_on_logs(main_window):
+    main_window.main_tabs.setCurrentIndex(3)
+    _go_offline(main_window)
+    assert main_window.main_tabs.currentIndex() == 3
+
+
+def test_ctrl_f_does_not_open_a_results_page_that_is_not_offered(main_window):
+    assert not main_window.nav_rail.button(1).isEnabled()
+    main_window._focus_results_search()
+    assert main_window.main_tabs.currentIndex() == 0
+
+
+def test_client_settings_needs_a_client(main_window):
+    assert not main_window.sidebar.settings_button.isEnabled()
+    _pick_client(main_window)
+    assert main_window.sidebar.settings_button.isEnabled()
+
+
+def test_the_overflow_keeps_only_what_the_sidebar_does_not(main_window):
+    menu = main_window.command_bar.overflow
+    texts = [a.text() for a in menu.actions() if not a.isSeparator()]
+    assert texts == [
+        "No client",
+        "New session…",
+        "THIS PC",
+        "Server connection…",
+        "Keyboard shortcuts…",
+    ]
+    assert not any(a.isCheckable() for a in menu.actions())
+
+
+def test_collapsing_is_remembered_on_this_pc(tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+
+    import gui.ui_manager as ui
+
+    ini = str(tmp_path / "shell.ini")
+    monkeypatch.setattr(ui, "_shell_settings", lambda: QSettings(ini, QSettings.IniFormat))
+    monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
+    from gui.main_window_pyside import MainWindow
+
+    first = MainWindow()
+    first.show()
+    QApplication.processEvents()
+    first.sidebar.collapse_button.click()
+    assert QSettings(ini, QSettings.IniFormat).value(ui._COLLAPSED_KEY, type=bool) is True
+    first.close()
+
+    second = MainWindow()
+    second.show()
+    QApplication.processEvents()
+    try:
+        assert not second.sidebar.is_expanded()
+        assert second.sidebar.width() == 56
+        # Collapsed, the tooltip is the only place a destination is named.
+        assert "Session Setup" in second.nav_rail.button(0).toolTip()
+    finally:
+        second.close()
