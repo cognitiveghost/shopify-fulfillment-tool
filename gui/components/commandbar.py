@@ -123,6 +123,8 @@ class CommandBar(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         theme = get_theme_manager().get_current_theme()
+        # A QWidget subclass paints no QSS background without this.
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self._apply_theme()
         # A widget sheet outranks the app's, so baking the colours in once
         # would leave a light bar over dark pages after a theme toggle.

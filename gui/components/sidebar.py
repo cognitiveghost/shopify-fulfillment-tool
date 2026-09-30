@@ -65,8 +65,8 @@ class Sidebar(QWidget):
         self.mark.setAlignment(Qt.AlignCenter)
         self.title = QLabel("Fulfilment Tool", self.header)
         self.title.setMinimumWidth(0)
-        self.collapse_button = self._header_button("Collapse sidebar", 28, 28)
-        self.expand_button = self._header_button("Expand sidebar", 40, 32)
+        self.collapse_button = self._icon_button("Collapse sidebar", 28, 28)
+        self.expand_button = self._icon_button("Expand sidebar", 40, 32)
         self.collapse_button.clicked.connect(lambda: self._toggle(False))
         self.expand_button.clicked.connect(lambda: self._toggle(True))
         header.addWidget(self.mark)
@@ -107,7 +107,7 @@ class Sidebar(QWidget):
             button.clicked.connect(lambda _c=False, n=name: self.themeRequested.emit(n))
         footer.addWidget(self.theme_segment)
 
-        self.theme_toggle = self._header_button("", 40, 32)
+        self.theme_toggle = self._icon_button("", 40, 32)
         self.theme_toggle.clicked.connect(
             lambda: self.themeRequested.emit(
                 "light" if self._theme_name == "dark" else "dark"
@@ -165,7 +165,7 @@ class Sidebar(QWidget):
 
     # -- construction helpers -------------------------------------------------
 
-    def _header_button(self, tip: str, width: int, height: int) -> QToolButton:
+    def _icon_button(self, tip: str, width: int, height: int) -> QToolButton:
         button = QToolButton(self)
         button.setToolTip(tip)
         button.setAutoRaise(True)
@@ -241,6 +241,8 @@ class Sidebar(QWidget):
         self.setStyleSheet(
             f"Sidebar {{ background-color: {t.surface_sunken};"
             f" border-right: 1px solid {t.border_subtle}; }}"
+            # The app sheet's `QWidget` rule would paint these two on `surface`.
+            f"#SidebarHeader, #SidebarFooter {{ background-color: {t.surface_sunken}; }}"
             f"#SidebarHeader {{ border-bottom: 1px solid {t.border_subtle}; }}"
             f"#SidebarFooter {{ border-top: 1px solid {t.border_subtle}; }}"
             f"#SidebarMark {{ background-color: {t.accent_fill}; border-radius: 8px; }}"

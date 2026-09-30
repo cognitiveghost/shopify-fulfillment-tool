@@ -18,8 +18,8 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
-def _opaque_colors(qicon: QIcon, size: int = 32) -> set[str]:
-    image = qicon.pixmap(size, size).toImage()
+def _opaque_colors(qicon: QIcon, size: int = 32, mode=QIcon.Normal) -> set[str]:
+    image = qicon.pixmap(size, size, mode).toImage()
     # Fully-covered pixels only. Qt's antialiased edges are premultiplied, and
     # unpremultiplying drifts each RGB channel by +/-1 -- invisible for colours
     # whose channels are all 0 or 255, but the light theme's #1A1A1A is not one
@@ -62,6 +62,19 @@ def test_color_follows_a_theme_toggle():
         manager.set_theme("dark")
         dark = _opaque_colors(icon("wrench"))
         assert light != dark
+    finally:
+        manager.set_theme(original)
+
+
+def test_a_disabled_icon_paints_in_the_disabled_text_colour():
+    """Qt's own disabled pixmap barely dims a light glyph on the dark theme."""
+    manager = get_theme_manager()
+    original = manager.get_current_theme_name()
+    try:
+        for name in ("light", "dark"):
+            manager.set_theme(name)
+            expected = manager.get_current_theme().text_disabled.lower()
+            assert _opaque_colors(icon("settings"), mode=QIcon.Disabled) == {expected}
     finally:
         manager.set_theme(original)
 

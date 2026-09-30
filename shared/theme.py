@@ -82,8 +82,7 @@ class ThemeTokens:
     control_disabled_bg: str
 
     # --- Solid accent fill; on_accent is the text that sits on it (spec 3.4a) ---
-    # hover and active are theme-independent: a button fill sits on itself,
-    # not on a surface, so it needs no per-theme value (spec 2/C4).
+    # hover and active are per theme: dark fills lighten toward white.
     accent_fill: str
     accent_fill_hover: str
     accent_fill_active: str

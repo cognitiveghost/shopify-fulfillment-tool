@@ -21,6 +21,7 @@ from PySide6.QtCore import QEvent, QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from gui.settings.window import SettingsWindow
+from gui.ui_manager import _COLLAPSED_KEY
 
 # Chromium's sandbox needs unprivileged user namespaces, which the CI runner's
 # AppArmor profile refuses. Test-only: the app never sets this.
@@ -324,9 +325,12 @@ def clean_nav_setting():
     any test that builds a SettingsWindow would otherwise leave the developer's
     (and CI's) last-page setting behind and leak it into the next run."""
     store = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
-    store.remove(SettingsWindow.NAV_SETTINGS_KEY)
+    keys = (SettingsWindow.NAV_SETTINGS_KEY, _COLLAPSED_KEY)
+    for key in keys:
+        store.remove(key)
     yield
-    store.remove(SettingsWindow.NAV_SETTINGS_KEY)
+    for key in keys:
+        store.remove(key)
 
 
 @pytest.fixture(autouse=True)

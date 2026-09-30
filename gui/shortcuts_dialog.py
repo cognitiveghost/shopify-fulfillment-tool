@@ -4,6 +4,7 @@ SHORTCUTS is hand-kept; tests/test_shortcuts_dialog.py fails when a row names a
 key the main window no longer binds.
 """
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -26,6 +27,8 @@ class ShortcutsDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Keyboard shortcuts")
+        # Opened from the overflow menu each time; don't keep one per open.
+        self.setAttribute(Qt.WA_DeleteOnClose)
         layout = QVBoxLayout(self)
         form = QFormLayout()
         mono = current_tokens().font_family_mono

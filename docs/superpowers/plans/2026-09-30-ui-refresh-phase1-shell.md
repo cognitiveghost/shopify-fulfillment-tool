@@ -1592,6 +1592,7 @@ win = MainWindow()
 win.resize(1366, 768)
 win.show()
 manager = get_theme_manager()
+manager.apply_theme()  # set_theme() is a no-op on the current theme; without this there is no app sheet
 start = "dark" if manager.is_dark_theme() else "light"
 for theme in ("light", "dark"):
     manager.set_theme(theme)

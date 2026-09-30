@@ -220,7 +220,12 @@ def test_the_sidebar_asks_for_client_settings(main_window):
 def test_the_command_bar_sits_on_the_sunken_plane(main_window):
     from shared.theme import current_tokens
 
-    assert current_tokens().surface_sunken in main_window.command_bar.styleSheet()
+    # Painted, not just in the sheet: a QWidget subclass ignores its QSS
+    # background unless it opts in with WA_StyledBackground.
+    image = main_window.command_bar.grab().toImage()
+    assert image.pixelColor(2, 2).name() == current_tokens().surface_sunken.lower()
+    edge = image.pixelColor(2, image.height() - 1).name()
+    assert edge == current_tokens().border_subtle.lower()
     assert main_window.command_bar.client_selector.placeholderText() == "Choose a client"
 
 

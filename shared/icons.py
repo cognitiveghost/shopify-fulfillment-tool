@@ -55,11 +55,19 @@ def _pixmap(source: str, size: int, height: int | None = None) -> QPixmap:
 
 
 @cache
-def _render(name: str, color: str, sizes: tuple[int, ...]) -> QIcon:
+def _render(
+    name: str, color: str, sizes: tuple[int, ...], disabled: str | None = None
+) -> QIcon:
     source = _source(name).replace("currentColor", color)
     result = QIcon()
     for size in sizes:
         result.addPixmap(_pixmap(source, size))
+    # Qt's generated disabled pixmap barely dims a light glyph on the dark
+    # theme, and on a collapsed rail the glyph is the only signal.
+    if disabled is not None:
+        faded = _source(name).replace("currentColor", disabled)
+        for size in sizes:
+            result.addPixmap(_pixmap(faded, size), QIcon.Disabled)
     return result
 
 
@@ -83,9 +91,11 @@ def icon(
     the colour is part of the key, so it simply misses into a second set of
     entries, and two themes times fifteen glyphs is the ceiling.
     """
+    disabled = None
     if color is None:
-        color = current_tokens().text
-    return _render(name, color, sizes)
+        tokens = current_tokens()
+        color, disabled = tokens.text, tokens.text_disabled
+    return _render(name, color, sizes, disabled)
 
 
 def glyph_url(name: str, color: str | None = None, size: int = 18, height: int | None = None) -> str:
