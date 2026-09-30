@@ -9,7 +9,7 @@ Version: 1.3.0
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,22 +54,11 @@ def parse_timestamp(timestamp_str: str) -> datetime | None:
         dt = datetime.fromisoformat(timestamp_str)
         # If naive (no timezone), assume UTC
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
-    except (ValueError, TypeError):
-        # Try without timezone for backward compat
-        try:
-            # Handle 'Z' suffix (UTC)
-            if timestamp_str.endswith('Z'):
-                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-            # Try parsing without timezone (assume UTC)
-            dt = datetime.fromisoformat(timestamp_str)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Could not parse timestamp '{timestamp_str}': {e}")
-            return None
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Could not parse timestamp '{timestamp_str}': {e}")
+        return None
 
 
 def calculate_duration(start: str, end: str) -> int:

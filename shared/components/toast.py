@@ -73,7 +73,7 @@ class Toast(QFrame):
         on_theme_changed(self, self._restyle)
 
     @classmethod
-    def for_window(cls, window: QWidget) -> "Toast | None":
+    def for_window(cls, window: QWidget) -> Toast | None:
         return next((c for c in window.children() if isinstance(c, cls)), None)
 
     def text(self) -> str:
