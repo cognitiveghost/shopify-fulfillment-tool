@@ -64,7 +64,7 @@ The strongest screen, and the reference for the rest.
 
 - **Bug B1 — `CLIENT_None`.** With no client selected the empty state says "CLIENT_None has no sessions
   on the file server" and offers `New session`, which cannot work without a client
-  (`gui/session_browser_widget.py:713`). Fixed in this task.
+  (`SessionBrowserWidget._empty_reason`). Fixed in this task.
 - The toolbar is a full-width search box, a `0 sessions` count, a status combo and `Refresh`, which
   takes three different visual weights for four controls.
 - Rows (not rendered here: the throwaway server has no sessions) are a `QTreeWidget` with eight columns

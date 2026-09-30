@@ -29,7 +29,7 @@ Each prompt stands on its own after §0, so a screen can be redone without repla
 >
 > **Visual direction: the current Shopify admin (Polaris design language), rebuilt, not imported.**
 > Match its look and feel: a light neutral-grey canvas; white content cards with ~12px radius and a
-> soft, low shadow; compact 13px body text; semibold 14px card titles; a page header with the title
+> soft, low shadow; compact body text; bold card titles; a page header with the title
 > on the left and actions on the right; a **near-black primary button** with white text; plain
 > secondary buttons with a hairline border; tinted pill **badges** by tone (success, critical,
 > warning, info, neutral); index tables with a checkbox column, a bold identifier column, row hover
@@ -44,6 +44,9 @@ Each prompt stands on its own after §0, so a screen can be redone without repla
 >   changes are instant.
 > - Fonts: **Segoe UI** for text and **Consolas** for SKUs, order numbers and times. No web fonts:
 >   the app runs offline.
+> - Type sizes are points from the existing scale, never px: `caption` 9pt, `body` 10pt, `label`
+>   12pt bold, `heading` 14pt bold, `display` 17pt bold, `display_xl` 28pt bold. There is no
+>   semibold. If a design needs another size, name it as a new role and say why.
 > - Deliver **light and dark** themes for every screen. Polaris has no dark mode, so derive one:
 >   same structure, near-black canvas, cards one step lighter than the canvas, shadows replaced by a
 >   1px border in dark.
@@ -196,7 +199,7 @@ Attach: `current/light-browse-no-client.png`, `current/dark-browse-no-client.png
 > Active, Completed, Abandoned, Archived) in place of the status combo, as Shopify's Orders page does.
 >
 > States: 25 sessions, 4 needing attention; no client ("Choose a client — Pick a client in the bar above
-> to see its sessions."); client with no sessions ("No sessions yet — ACME has no sessions on the
+> to see its sessions."); client with no sessions ("No sessions yet — CLIENT_ACME has no sessions on the
 > file server." + *New session*); a search that matches nothing; loading ("Reading sessions from
 > the server…"); two rows selected.
 

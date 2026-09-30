@@ -36,7 +36,8 @@
   the tier, and it is still real: each move is priced in its own spec.
 - `shared/style_lint.py` (owned by packing-tool) still bans `box-shadow`. It changes in the first
   redesign PR that writes a shadow, together with a `card_shadow` token, so no rule changes before
-  something uses it. Packing Tool's Packer Mode page gets the same permission.
+  something uses it. The lint is shared, so that change reaches Packing Tool too; its own
+  ADR 0001 still bans shadows until a Packing Tool spec decides otherwise.
 - A Qt child widget still cannot paint above a `QWebEngineView` (ADR 0007), so each web screen keeps
   drawing its own toasts.
 
