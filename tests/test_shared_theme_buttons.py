@@ -26,9 +26,11 @@ def test_build_stylesheet_emits_every_role_block(theme, role):
 def test_the_unmarked_button_rule_is_secondary():
     # 2026-08-29: the default flipped from accent-filled to secondary -- primary
     # is now something a screen declares, not what every unmarked button gets.
+    # The fill, not the bare hex: since phase 1, dark accent_fill is also dark
+    # text (#E3E3E3), so the bare hex matches the label colour.
     sheet = build_stylesheet(DARK_THEME)
     plain = sheet.split('QPushButton[role=')[0]
-    assert DARK_THEME.accent_fill not in plain
+    assert f"background-color: {DARK_THEME.accent_fill}" not in plain
 
 
 def test_danger_is_an_outline_not_a_fill():
@@ -70,7 +72,7 @@ def test_an_unmarked_button_is_not_primary():
     for theme in (DARK_THEME, LIGHT_THEME):
         block = _default_button_block(build_stylesheet(theme))
         assert theme.surface_raised in block
-        assert theme.accent_fill not in block
+        assert f"background-color: {theme.accent_fill}" not in block
 
 
 def test_marking_a_button_primary_still_fills_it_with_the_accent():

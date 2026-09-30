@@ -74,6 +74,12 @@ class ThemeTokens:
     status_warning_bg: str
     status_danger: str
     status_danger_bg: str
+    # Phase 1 (spec 2026-09-30 section 3.2): the sidebar's connection dot and
+    # unreachable edge, and the disabled-button fill.
+    status_success_dot: str
+    status_danger_dot: str
+    status_danger_border: str
+    control_disabled_bg: str
 
     # --- Solid accent fill; on_accent is the text that sits on it (spec 3.4a) ---
     # hover and active are theme-independent: a button fill sits on itself,
@@ -120,86 +126,94 @@ class ThemeTokens:
 
 LIGHT_THEME = ThemeTokens(
     name="light",
-    surface_sunken="#DADADF",
+    surface_sunken="#F1F1F1",
     surface="#FFFFFF",
-    surface_raised="#F2F2F4",
-    surface_overlay="#E6E6EA",
-    text="#1A1A1A",
-    text_secondary="#50505A",
-    text_disabled="#6B6B73",
-    text_placeholder="#5C5C64",
-    border="#70707A",
-    border_subtle="#C6C6CC",
-    border_strong="#1A1A1A",
-    status_info="#005B99",
-    status_info_bg="#DCEBFA",
-    status_success="#2C6630",
-    status_success_bg="#E2F0E3",
-    status_warning="#7A4A00",
-    status_warning_bg="#F8EBD8",
-    status_danger="#B31308",
-    status_danger_bg="#FADFDD",
-    accent_fill="#006FBA",
-    accent_fill_hover="#005F9F",
-    accent_fill_active="#004B80",
+    surface_raised="#F7F7F7",
+    surface_overlay="#FFFFFF",
+    text="#303030",
+    text_secondary="#616161",
+    text_disabled="#888888",
+    text_placeholder="#6C6C6C",
+    border="#888888",
+    border_subtle="#E3E3E3",
+    border_strong="#888888",
+    status_info="#00527C",
+    status_info_bg="#E0F0FF",
+    status_success="#0C5132",
+    status_success_bg="#CDFEE1",
+    status_warning="#5E4200",
+    status_warning_bg="#FFEF9D",
+    status_danger="#8E0B21",
+    status_danger_bg="#FEE9E8",
+    status_success_dot="#29845A",
+    status_danger_dot="#E51C00",
+    status_danger_border="#FDB5B4",
+    control_disabled_bg="#F1F1F1",
+    accent_fill="#303030",
+    accent_fill_hover="#1A1A1A",
+    accent_fill_active="#000000",
     on_accent="#FFFFFF",
-    selection_border="#005B99",
-    selection_bg="#DCEBFA",
-    focus_ring="#005B99",
-    hover="#E6E6EA",
-    button_hover_light="#004B80",
-    button_hover_dark="#004B80",
+    selection_border="#005BD3",
+    selection_bg="#EAF4FF",
+    focus_ring="#005BD3",
+    hover="#F7F7F7",
+    button_hover_light="#000000",
+    button_hover_dark="#000000",
     # aliases
     background="#FFFFFF",
-    background_elevated="#F2F2F4",
-    accent_blue="#006FBA",
-    accent_green="#2C6630",
-    accent_orange="#7A4A00",
-    accent_red="#B31308",
-    active_background="#DCEBFA",
-    active_border="#005B99",
+    background_elevated="#F7F7F7",
+    accent_blue="#303030",
+    accent_green="#0C5132",
+    accent_orange="#5E4200",
+    accent_red="#8E0B21",
+    active_background="#EAF4FF",
+    active_border="#005BD3",
 )
 
 DARK_THEME = ThemeTokens(
     name="dark",
-    surface_sunken="#08080B",
-    surface="#101014",
-    surface_raised="#17171A",
-    surface_overlay="#232327",
-    text="#F2F2F2",
-    text_secondary="#B0B0B0",
-    text_disabled="#787878",
+    surface_sunken="#0F1012",
+    surface="#1A1B1E",
+    surface_raised="#232428",
+    surface_overlay="#2A2B30",
+    text="#E3E3E3",
+    text_secondary="#A3A3A8",
+    text_disabled="#767676",
     text_placeholder="#949494",
-    border="#787878",
-    border_subtle="#2E2E2E",
-    border_strong="#F2F2F2",
-    status_info="#29A0F0",
-    status_info_bg="#042134",
-    status_success="#4CAF50",
-    status_success_bg="#112712",
-    status_warning="#FF9800",
-    status_warning_bg="#342104",
-    status_danger="#FF6659",
-    status_danger_bg="#340704",
-    accent_fill="#006FBA",
-    accent_fill_hover="#005F9F",
-    accent_fill_active="#004B80",
-    on_accent="#FFFFFF",
-    selection_border="#29A0F0",
-    selection_bg="#042134",
-    focus_ring="#4DA9E8",
-    hover="#232327",
-    button_hover_light="#004B80",
-    button_hover_dark="#004B80",
+    border="#767676",
+    border_subtle="#34353A",
+    border_strong="#767676",
+    status_info="#7CC4F8",
+    status_info_bg="#0B2A40",
+    status_success="#6ED3A0",
+    status_success_bg="#0E3222",
+    status_warning="#F5C451",
+    status_warning_bg="#3A2C05",
+    status_danger="#FF9A9A",
+    status_danger_bg="#43141A",
+    status_success_dot="#6ED3A0",
+    status_danger_dot="#FF9A9A",
+    status_danger_border="#6B2029",
+    control_disabled_bg="#141518",
+    accent_fill="#E3E3E3",
+    accent_fill_hover="#FFFFFF",
+    accent_fill_active="#C4C4C8",
+    on_accent="#1A1B1E",
+    selection_border="#4A9CFF",
+    selection_bg="#12243B",
+    focus_ring="#4A9CFF",
+    hover="#232428",
+    button_hover_light="#C4C4C8",
+    button_hover_dark="#C4C4C8",
     # aliases
-    background="#101014",
-    background_elevated="#17171A",
-    accent_blue="#006FBA",
-    accent_green="#4CAF50",
-    accent_orange="#FF9800",
-    accent_red="#FF6659",
-    active_background="#042134",
-    active_border="#29A0F0",
+    background="#1A1B1E",
+    background_elevated="#232428",
+    accent_blue="#E3E3E3",
+    accent_green="#6ED3A0",
+    accent_orange="#F5C451",
+    accent_red="#FF9A9A",
+    active_background="#12243B",
+    active_border="#4A9CFF",
 )
 
 THEMES: dict = {"light": LIGHT_THEME, "dark": DARK_THEME}
@@ -491,6 +505,10 @@ _COLOR_FIELDS = (
     "status_warning_bg",
     "status_danger",
     "status_danger_bg",
+    "status_success_dot",
+    "status_danger_dot",
+    "status_danger_border",
+    "control_disabled_bg",
     "accent_fill",
     "accent_fill_hover",
     "accent_fill_active",
@@ -1132,9 +1150,9 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QPushButton:hover {{ background-color: {theme.hover}; }}
         QPushButton:pressed {{ background-color: {theme.selection_bg}; }}
         QPushButton:disabled {{
-            background-color: {theme.surface};
+            background-color: {theme.control_disabled_bg};
             color: {theme.text_disabled};
-            border: 1px solid {theme.border_subtle};
+            border: 1px dashed {theme.border_strong};
         }}
 
         QPushButton[role="primary"] {{
@@ -1182,9 +1200,9 @@ def build_stylesheet(theme: ThemeTokens) -> str:
         QPushButton[role="secondary"]:disabled,
         QPushButton[role="ghost"]:disabled,
         QPushButton[role="danger"]:disabled {{
-            background-color: {theme.surface};
+            background-color: {theme.control_disabled_bg};
             color: {theme.text_disabled};
-            border: 1px solid {theme.border_subtle};
+            border: 1px dashed {theme.border_strong};
         }}
 
         QLineEdit, QTextEdit, QPlainTextEdit {{
