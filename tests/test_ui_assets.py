@@ -13,6 +13,7 @@ EXPECTED_ICONS = [
     "folder-plus", "funnel-x", "info", "menu", "message-square", "package",
     "refresh-cw", "settings", "table", "tag", "tags", "trash-2", "wrench",
     "plus", "ellipsis-vertical", "check", "chevron-up", "chevron-down",
+    "toggle-off", "toggle-on",
 ]
 
 
@@ -47,3 +48,21 @@ def test_licenses_travel_with_the_assets():
     """Both ISC and SIL OFL require the notice ship alongside the files."""
     assert (ASSETS_DIR / "icons" / "LICENSE").is_file()
     assert (ASSETS_DIR / "fonts" / "OFL.txt").is_file()
+
+
+def test_glyph_url_renders_a_non_square_glyph(qapp):
+    """The toggle track is 36x20; a square render squashes it."""
+    from PySide6.QtGui import QPixmap
+
+    from shared.icons import glyph_url
+
+    url = glyph_url("check", "#000000", size=36, height=20)
+    path = url.removeprefix('url("').removesuffix('")')
+    assert QPixmap(path).size().toTuple() == (36, 20)
+
+
+def test_square_and_non_square_renders_do_not_collide(qapp):
+    from shared.icons import glyph_url
+
+    assert glyph_url("check", "#000000", size=36) != \
+           glyph_url("check", "#000000", size=36, height=20)

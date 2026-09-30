@@ -11,6 +11,7 @@ conftest is the only sharing mechanism that does not depend on sys.path.
 
 import gc
 import os
+import re
 from unittest.mock import Mock
 
 import pandas as pd
@@ -24,6 +25,26 @@ from gui.settings.window import SettingsWindow
 # Chromium's sandbox needs unprivileged user namespaces, which the CI runner's
 # AppArmor profile refuses. Test-only: the app never sets this.
 os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
+
+
+def _rule_block(sheet: str, selector: str) -> str:
+    """The text of one QSS rule, from `selector` at the start of a
+    (possibly indented) line to the next `}`. Used by theme tests to assert
+    on one rule without matching substrings that happen to appear elsewhere
+    in the sheet.
+
+    `selector` need only be the first entry of a comma-separated compound
+    selector (e.g. "QLineEdit" matches "QLineEdit, QTextEdit {"), and a
+    trailing `:` or other pseudo-state suffix on the line excludes it, so a
+    plain-selector lookup does not accidentally match its own `:focus` rule.
+    """
+    pattern = re.compile(rf"^[ \t]*{re.escape(selector)}(?=[,\s])", re.MULTILINE)
+    match = pattern.search(sheet)
+    if not match:
+        raise AssertionError(f"no rule block found for selector {selector!r}")
+    start = match.start()
+    end = sheet.index("}", start) + 1
+    return sheet[start:end]
 
 
 @pytest.fixture
