@@ -34,8 +34,10 @@ sets the phases that follow.
 
 `LIGHT_THEME` and `DARK_THEME` take these values. They come from the mockup's token table (`const T` in
 `component-sheet.html`). Where a mockup value failed a floor, the value shown here is the lightest grey that
-passes in light mode, or the darkest in dark mode, and it is marked ⚑. The whole table passes `validate_theme`.
-That was checked at Stage A with `dataclasses.replace`.
+clears the floor plus 0.1 in light mode, or the darkest in dark mode, and it is marked ⚑. The extra 0.1 is the
+margin `tests/test_theme_contrast.py::test_no_foreground_sits_within_a_tenth_of_its_floor` requires. At Stage
+A, the whole table was swapped into `shared/theme.py` as a throwaway probe. It passed `validate_theme` and the
+margin test. The probe also found the two button tests §8 amends.
 
 | token | light | dark |
 |---|---|---|
@@ -45,11 +47,11 @@ That was checked at Stage A with `dataclasses.replace`.
 | `surface_overlay` | `#FFFFFF` | `#2A2B30` |
 | `text` | `#303030` | `#E3E3E3` |
 | `text_secondary` | `#616161` | `#A3A3A8` |
-| `text_disabled` ⚑ | `#8B8B8B` | `#747474` |
-| `text_placeholder` ⚑ | `#6E6E6E` | `#929292` |
-| `border` ⚑ | `#8A8A8A` | `#747474` |
+| `text_disabled` ⚑ | `#888888` | `#767676` |
+| `text_placeholder` ⚑ | `#6C6C6C` | `#949494` |
+| `border` ⚑ | `#888888` | `#767676` |
 | `border_subtle` | `#E3E3E3` | `#34353A` |
-| `border_strong` | `#8A8A8A` | `#747474` |
+| `border_strong` | `#888888` | `#767676` |
 | `status_info` | `#00527C` | `#7CC4F8` |
 | `status_info_bg` | `#E0F0FF` | `#0B2A40` |
 | `status_success` | `#0C5132` | `#6ED3A0` |
@@ -83,8 +85,10 @@ now reads wrong.
 
 ### 3.2 New tokens
 
-Four tokens, the ones Phase 1 uses. They are ordinary `#RRGGBB` colour fields on `ThemeTokens`, declared with
-the status group, so `validate_theme`'s hex check and `theme_css_vars` pick them up with no other change.
+Four tokens, the ones Phase 1 uses. They are ordinary `#RRGGBB` colour fields on `ThemeTokens`, declared after
+`status_danger_bg`. Each is also added to the explicit `_COLOR_FIELDS` tuple after `"status_danger_bg"`, and
+that one registration gives it `validate_theme`'s hex check and the `theme_css_vars` emission check. None of the
+names starts with `surface` or `accent_fill`, so neither contrast matrix grows.
 
 | token | light | dark | used by |
 |---|---|---|---|
@@ -254,14 +258,17 @@ call it, and the loop over `_OFFLINE_RAIL_ITEMS` is deleted.
 | 4 | Tools | connected **and** a client is selected |
 
 If the current destination becomes disabled, `nav_rail.set_current(0)`, which is what happens offline today.
-The Results button's tooltip is "Results — available after Run analysis" while disabled, and its normal tooltip
-otherwise. Ctrl+1–5 already go through `_go_to_destination`, which checks `isEnabled()`, so shortcuts follow the
+The Results button's tooltip is "Analysis Results — available after Run analysis (Ctrl+2)" while disabled. The
+full destination name stays, because `test_the_full_destination_name_survives_in_the_tooltip` needs it. Otherwise it shows its normal tooltip. Ctrl+1–5 already go through `_go_to_destination`, which checks `isEnabled()`, so shortcuts follow the
 rule with no change.
 
 The analysis finishing, and a past session opening from Browse, must enable Results **before** the jump to it.
 Otherwise the rule bounces the operator back to Setup. §8 has a test for each path.
 
 `_refresh_nav` also calls `self.mw.sidebar.set_settings_enabled(connected and has_client)`.
+
+`MainWindow._focus_results_search` (Ctrl+F) jumps straight to `main_tabs.setCurrentIndex(1)`, which bypasses the
+rule. It returns early when `self.nav_rail.button(1).isEnabled()` is False.
 
 ### 5.5 Theme and collapse
 
@@ -323,13 +330,13 @@ item opens it with `exec()`. The window title is "Keyboard shortcuts".
 | Seam | File | Asserts |
 |---|---|---|
 | Palette | `test_theme_palette.py` (new) | Every §3.1 value and every §3.2 token, per theme; `validate_theme` passes for both. |
-| Disabled rule | `test_theme_palette.py` | `build_stylesheet(LIGHT_THEME)` contains `1px dashed #8A8A8A` and `#F1F1F1` inside the `QPushButton:disabled` rule |
+| Disabled rule | `test_theme_palette.py` | `build_stylesheet(LIGHT_THEME)` contains `1px dashed #888888` and `#F1F1F1` inside the `QPushButton:disabled` rule |
 | NavRail default unchanged | `test_components_navrail.py` | `NavRail()` items are `ToolButtonTextUnderIcon`; `set_expanded` raises `RuntimeError` |
 | NavRail sidebar mode | `test_components_navrail.py` | `NavRail(expanded_width=200)` is 200 wide with `TextBesideIcon` items 184 wide; `set_expanded(False)` gives 56, `IconOnly`, 40-wide items; `is_expanded()` follows |
 | Sidebar | `test_sidebar.py` (new) | Retry hidden when connected and shown when not; clicking it emits `retryRequested`; the path label's tooltip is the full path; clicking Dark emits `themeRequested("dark")`; the collapse button emits `expandedChanged(False)` and the width becomes 56; `set_settings_enabled(False)` disables the settings button |
 | No status bar | `test_shell.py` | `main_window.findChild(QStatusBar) is None`; replaces the `statusBar().height() == 28` assertion |
 | Nav rule | `test_shell.py` | With no client: Setup and Logs enabled, Results, Browse and Tools disabled; with a client and no analysis: Results disabled and its tooltip says "available after Run analysis"; setting `analysis_results_df` and calling `update_ui_state()` enables it; sitting on Browse when `connectionChanged(False)` fires moves to Setup |
-| Reaching Results | `test_shell.py` | After the analysis-finished path and after opening a past session (extend `test_resuming_a_past_session_reaches_the_session_state`), the current index is 1 and button 1 is enabled |
+| Reaching Results | `test_shell.py` | The order both call sites use (set `analysis_results_df`, `setCurrentIndex(1)`, `update_ui_state()`) leaves the current index at 1 with button 1 enabled |
 | Collapse persists | `test_shell.py` | With `_shell_settings` monkeypatched to an INI file, collapsing writes `True`; a new window starts collapsed at 56px |
 | Overflow | `test_shell.py` | Item texts are exactly New session…, Server connection…, Keyboard shortcuts…; no choice group |
 | Shortcuts stay true | `test_shortcuts_dialog.py` (new) | Every key in `SHORTCUTS` (with "Ctrl+1 … Ctrl+5" expanded to five) matches a `QShortcut` on the main window |
@@ -337,6 +344,8 @@ item opens it with `exec()`. The window title is "Keyboard shortcuts".
 | Report toast | `test_label_pdf_invalidation.py` | The message is read from `h.mw.results_bridge.raise_toast.call_args[0][0]` |
 | Entry point | `test_settings_entry_points.py` | As in §6 |
 | Glyphs | `test_ui_assets.py` | The five names in `EXPECTED_ICONS` |
+| Button tests | `test_shared_theme_buttons.py` | `test_the_unmarked_button_rule_is_secondary` and `test_an_unmarked_button_is_not_primary` assert `f"background-color: {theme.accent_fill}"` is absent, not the bare hex: dark `accent_fill` equals dark `text` (#E3E3E3), so the bare hex now matches the text colour |
+| Ctrl+F | `test_shell.py` | With Results disabled, `_focus_results_search()` leaves the current page unchanged |
 
 **Visual check (required, CLAUDE.md):** render `MainWindow` offscreen at 1366×768 in light and dark, expanded and
 collapsed, connected and unreachable. Save the PNGs, look at them, and compare them with
