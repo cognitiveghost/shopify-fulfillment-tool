@@ -349,6 +349,7 @@ def reset_theme_and_density():
         get_theme_manager,
         set_density,
     )
+    from shared import theme as shared_theme
 
     store = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
 
@@ -360,8 +361,12 @@ def reset_theme_and_density():
         # an app-wide stylesheet, which re-polishes every live widget -- paid on
         # all ~850 tests it would dwarf the suite, and almost none of them touch
         # theming at all.
+        # shared.theme keeps its own applied name: a test that set it directly
+        # would otherwise make a later set_theme() a silent no-op.
         dirty = (
-            manager._current_theme_name != "light" or get_density() != DEFAULT_DENSITY
+            manager._current_theme_name != "light"
+            or get_density() != DEFAULT_DENSITY
+            or shared_theme._current not in (None, "light")
         )
         manager._current_theme_name = "light"
         set_density(DEFAULT_DENSITY)

@@ -240,10 +240,9 @@ class GenerateReportsDialog(_BaseReportDialog):
         # glyph rather than Qt's native one.
         #
         # This deliberately duplicates build_stylesheet's QCheckBox::indicator
-        # block in shared/theme.py. shared/ is owned by packing-tool and synced
-        # one-way (CLAUDE.md), so the selector cannot be added upstream from
-        # here. If the checkbox look changes there, change it here too -- or
-        # add QListView::indicator to that block in packing-tool and drop this.
+        # block in shared/theme.py. If the checkbox look changes there, change
+        # it here too -- or add QListView::indicator to that block (shared/ is
+        # canonical in this repo, ADR 0017) and drop this.
         radius = self.theme.radius
         self.report_list.setStyleSheet(
             "QListView::indicator {"
