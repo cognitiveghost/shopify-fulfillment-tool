@@ -1,9 +1,13 @@
 """Session status derivation from packing progress and age (pure -- no Qt, no file server)."""
 from datetime import datetime, timedelta
 
+import pytest
+
 from shopify_tool.session_lifecycle import (
     ARCHIVE_WARNING_DAYS,
     DISPLAY_STATUSES,
+    IN_FLIGHT,
+    age_cell,
     age_label,
     blocked_orders,
     derive_status_updates,
@@ -370,3 +374,70 @@ class TestNeedsAttention:
     def test_unblocked_work_in_flight_does_not(self):
         assert not needs_attention("in_progress", 0)
         assert not needs_attention("in_progress", None)
+
+
+def _aged(age, **fields):
+    """An entry created `age` ago; active unless a field says otherwise."""
+    return {"created_at": (NOW - age).isoformat(), "status": "active", **fields}
+
+
+class TestAgeCell:
+    def test_under_an_hour(self):
+        assert age_cell(_aged(timedelta(minutes=20)), NOW)[0] == "<1 h"
+
+    def test_hours_under_a_day(self):
+        assert age_cell(_aged(timedelta(hours=6)), NOW)[0] == "6 h"
+        assert age_cell(_aged(timedelta(hours=23, minutes=59)), NOW)[0] == "23 h"
+
+    def test_days_from_the_first_day(self):
+        assert age_cell(_aged(timedelta(hours=24)), NOW)[0] == "1 d"
+        assert age_cell(_aged(timedelta(days=3)), NOW)[0] == "3 d"
+
+    def test_days_never_roll_up_into_weeks_or_months(self):
+        assert age_cell(_aged(timedelta(days=52)), NOW)[0] == "52 d"
+
+    def test_a_date_ahead_of_this_clock_reads_as_just_now(self):
+        assert age_cell(_aged(timedelta(hours=-5)), NOW)[0] == "<1 h"
+
+    def test_the_tooltip_carries_the_absolute_stamp(self):
+        created = NOW - timedelta(days=3)
+        assert age_cell(_aged(timedelta(days=3)), NOW)[1] == f"Created {created:%Y-%m-%d %H:%M}"
+
+    @pytest.mark.parametrize("entry", [{"created_at": "nope"}, {}, None, "text"])
+    def test_an_unreadable_date_says_so(self, entry):
+        assert age_cell(entry, NOW) == ("—", "Created date unreadable", False)
+
+    @pytest.mark.parametrize("status", ["active", "completed"])
+    @pytest.mark.parametrize("days", [23, 26, 29])
+    def test_the_countdown_runs_for_the_last_seven_days(self, status, days):
+        cell, tooltip, warn = age_cell(_aged(timedelta(days=days), status=status), NOW)
+        assert cell == f"{days} d"
+        assert warn is True
+        assert tooltip.endswith(f" · Archives in {30 - days} d")
+
+    @pytest.mark.parametrize("days", [22, 30, 40])
+    def test_no_countdown_outside_the_window(self, days):
+        _cell, tooltip, warn = age_cell(_aged(timedelta(days=days)), NOW)
+        assert warn is False
+        assert "Archives" not in tooltip
+
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"status": "abandoned"},
+            {"status": "archived"},
+            {"status": "active", "status_manually_set": True},
+            {"status": None},
+        ],
+    )
+    def test_a_session_the_automation_will_not_archive_never_counts_down(self, fields):
+        _cell, tooltip, warn = age_cell(_aged(timedelta(days=26), **fields), NOW)
+        assert warn is False
+        assert "Archives" not in tooltip
+
+    def test_the_warning_window_is_derived_not_typed(self):
+        assert ARCHIVE_WARNING_DAYS == 7
+
+
+def test_the_in_flight_states_are_the_four_before_a_session_closes():
+    assert IN_FLIGHT == ("not_started", "in_progress", "paused", "stale")

@@ -204,7 +204,7 @@ ARCHIVE_WARNING_DAYS = 7
 
 # The states still in flight. Blocked orders matter on these and nowhere
 # else: a blocked count on a session someone already closed is history.
-_IN_FLIGHT = ("not_started", "in_progress", "paused", "stale")
+IN_FLIGHT = ("not_started", "in_progress", "paused", "stale")
 
 
 def age_label(created, now: datetime) -> tuple[str, str]:
@@ -238,6 +238,43 @@ def age_label(created, now: datetime) -> tuple[str, str]:
     return (cell, tooltip)
 
 
+def age_cell(entry: dict, now: datetime) -> tuple[str, str, bool]:
+    """(cell, tooltip, warn) for the Age column.
+
+    The cell is short: hours under a day, days after that, never weeks or
+    months. The absolute stamp goes in the tooltip. `warn` is True when the
+    automation will archive this session within ARCHIVE_WARNING_DAYS, and the
+    tooltip then carries the countdown. It asks the two questions
+    derive_status_updates asks, so a session that will never be archived --
+    abandoned, already archived, or set by hand -- never counts down.
+    """
+    created = parse_created_at(entry.get("created_at")) if isinstance(entry, dict) else None
+    if created is None:
+        return ("—", "Created date unreadable", False)
+
+    # A created_at ahead of this PC's clock reads as "just now", not as a
+    # negative age.
+    age = max(now - created, timedelta(0))
+    hours = int(age.total_seconds() // 3600)
+    if hours < 1:
+        cell = "<1 h"
+    elif hours < 24:
+        cell = f"{hours} h"
+    else:
+        cell = f"{age.days} d"
+
+    tooltip = f"Created {created:%Y-%m-%d %H:%M}"
+    remaining = AUTO_ARCHIVE_AFTER_DAYS - age.days
+    warn = (
+        entry.get("status") in _ARCHIVABLE_FROM
+        and not entry.get("status_manually_set")
+        and 0 < remaining <= ARCHIVE_WARNING_DAYS
+    )
+    if warn:
+        tooltip += f" · Archives in {remaining} d"
+    return (cell, tooltip, warn)
+
+
 def needs_attention(state: str, blocked: int | None) -> bool:
     """True when this row belongs in the Needs attention group.
 
@@ -247,7 +284,7 @@ def needs_attention(state: str, blocked: int | None) -> bool:
     """
     if state in ("paused", "stale", "incomplete"):
         return True
-    return bool(blocked) and state in _IN_FLIGHT
+    return bool(blocked) and state in IN_FLIGHT
 
 
 def parse_created_at(value) -> datetime | None:
