@@ -72,24 +72,19 @@ def test_only_setup_and_info_stay_enabled(offline_window):
     assert all(rail.button(i).isVisible() for i in range(5))
 
 
-def test_setup_shows_the_panel_and_names_the_path(offline_window, unreachable):
-    from PySide6.QtWidgets import QLabel
+def test_setup_shows_the_unreachable_view_and_names_the_path(offline_window, unreachable):
+    state = offline_window.setup_bridge.state
+    assert state["view"] == "unreachable"
+    assert state["server_path"] == str(unreachable)
 
-    assert offline_window.setup_stack.currentIndex() == 0
-    rendered = " ".join(
-        label.text()
-        for label in offline_window.setup_state_panel.findChildren(QLabel)
+
+def test_the_way_out_opens_the_connection_dialog(offline_window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        offline_window.ui_manager, "_open_connection_settings", lambda: opened.append(1)
     )
-    assert "can't reach the fulfilment server" in rendered
-    assert str(unreachable) in rendered
-    assert "!" not in rendered
-    assert "sorry" not in rendered.lower()
-
-
-def test_the_one_accent_pixel_is_the_way_out(offline_window):
-    button = offline_window.setup_state_panel.button
-    assert button.text() == "Server connection…"
-    assert button.property("role") == "primary"
+    offline_window.setup_bridge.openConnection()
+    assert opened == [1]
 
 
 def test_the_sidebar_says_so_too(offline_window):
@@ -120,21 +115,12 @@ def online_window(tmp_path, monkeypatch):
 
 
 def test_a_reachable_share_with_no_clients_asks_for_one(online_window):
-    from PySide6.QtWidgets import QLabel
-
     assert online_window.is_connected() is True
-    assert online_window.setup_stack.currentIndex() == 0
-    rendered = " ".join(
-        label.text()
-        for label in online_window.setup_state_panel.findChildren(QLabel)
-    )
-    assert "Choose a client to begin" in rendered
+    assert online_window.setup_bridge.state["view"] == "no_client"
 
 
-def test_the_second_beat_has_no_accent_pixel_of_its_own(online_window):
-    # The action is the selector, which takes focus; the primary reappears in
-    # the command bar as New Session once a client exists. No third layout.
-    assert online_window.setup_state_panel.button is None
+def test_with_no_client_the_selector_has_the_focus(online_window):
+    # The action is the selector, so it takes focus; the page's panel has no button.
     assert online_window.command_bar.client_selector.hasFocus()
 
 

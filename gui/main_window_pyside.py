@@ -121,6 +121,10 @@ class MainWindow(QMainWindow):
         self.threadpool = QThreadPool()
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
         self._analysis_running = False  # Guard against duplicate analysis runs
+        self._analysis_step = 0  # index into core.ANALYSIS_STEPS while a run is going
+        self._analysis_cancelling = False
+        # The open session's name and times, read by update_session_chips.
+        self.session_facts = None
 
         # Initialize new architecture managers
         self._init_managers()
@@ -223,18 +227,6 @@ class MainWindow(QMainWindow):
                 self.current_client_id = client_id
                 logger.info(f"Loaded configuration for CLIENT_{client_id}")
 
-                # Sync the strategy radios (block signals to avoid spurious saves)
-                if hasattr(self, "strategy_multi_item"):
-                    mode = config.get("analysis_mode", "multi_first")
-                    self.strategy_multi_item.blockSignals(True)
-                    self.strategy_fifo.blockSignals(True)
-                    if mode == "fifo":
-                        self.strategy_fifo.setChecked(True)
-                    else:
-                        self.strategy_multi_item.setChecked(True)
-                    self.strategy_multi_item.blockSignals(False)
-                    self.strategy_fifo.blockSignals(False)
-
                 # Update UI to reflect new client
                 self.session_path_label.setText(
                     f"Client: CLIENT_{client_id} - No session started"
@@ -244,31 +236,9 @@ class MainWindow(QMainWindow):
                 self._reset_session_state()
                 self.session_path = None
                 self.command_bar.set_state(BarState.NO_SESSION)
-                self.ui_manager._refresh_setup_panel()
-                self.setup_stack.setCurrentIndex(
-                    1 if self.is_connected() and self.current_client_id else 0
-                )
-
-                # Restore inventory memory checkbox state from config
-                if hasattr(self, "inventory_memory_checkbox"):
-                    inv_mem_cfg = config.get("inventory_memory", {})
-                    self.inventory_memory_checkbox.blockSignals(True)
-                    self.inventory_memory_checkbox.setChecked(
-                        inv_mem_cfg.get("enabled", True)
-                    )
-                    self.inventory_memory_checkbox.setEnabled(True)
-                    self.inventory_memory_checkbox.blockSignals(False)
-
-                # Disable starting a new file pick until a session exists --
-                # not the whole slot, which would also grey out an invalid
-                # slot's recovery buttons.
-                self.orders_slot.choose_button.setEnabled(False)
-                self.orders_slot.choose_folder_button.setEnabled(False)
-                self.stock_slot.choose_button.setEnabled(False)
-                self.stock_slot.choose_folder_button.setEnabled(False)
+                self.ui_manager.refresh_setup()
 
                 # Disable report buttons until new analysis
-                self.run_analysis_button.setEnabled(False)
                 if hasattr(self, "results_bridge"):
                     self.ui_manager.set_export_enabled(False)
                 if hasattr(self, "add_product_button_tab2"):
@@ -346,29 +316,32 @@ class MainWindow(QMainWindow):
         self.command_bar.browseAllRequested.connect(
             lambda: self.main_tabs.setCurrentIndex(2)
         )
-        for slot, kind in (
-            (self.orders_slot, "orders"),
-            (self.stock_slot, "stock"),
-        ):
-            slot.chooseFileRequested.connect(
-                getattr(self.file_handler, f"select_{kind}_file")
-            )
-            slot.chooseFolderRequested.connect(
-                lambda k=kind: self.file_handler.select_folder(k)
-            )
-            slot.pathDropped.connect(
-                lambda p, k=kind: self.file_handler.accept_dropped_path(k, p)
-            )
-            # Straight to the mapping page: the slot only offers this when a
-            # column is unmapped, so landing on General is a search the user
-            # has already told us the answer to.
-            slot.mapColumnsRequested.connect(
-                lambda k=kind: self.actions_handler.open_settings_window(
-                    page=f"{k.capitalize()} Mapping"
-                )
-            )
-            slot.changed.connect(self.file_handler.check_files_ready)
-            slot.clearRequested.connect(lambda k=kind: self.file_handler.clear_file(k))
+        # The Setup page's requests. Lambdas, so each handler is looked up when
+        # the request arrives.
+        setup = self.setup_bridge
+        setup.fileRequested.connect(
+            lambda kind: getattr(self.file_handler, f"select_{kind}_file")()
+        )
+        setup.folderRequested.connect(lambda kind: self.file_handler.select_folder(kind))
+        setup.clearRequested.connect(lambda kind: self.file_handler.clear_file(kind))
+        setup.fixRequested.connect(self._fix_file_problem)
+        setup.memoryToggled.connect(self._on_inventory_memory_toggled)
+        setup.strategyChosen.connect(
+            lambda name: self._on_analysis_mode_changed(1 if name == "fifo" else 0)
+        )
+        setup.runRequested.connect(lambda: self.run_analysis_button.click())
+        setup.newSessionRequested.connect(
+            lambda: self.actions_handler.create_new_session()
+        )
+        setup.recentRequested.connect(
+            lambda: self.command_bar.session_button.showMenu()
+        )
+        setup.connectionRequested.connect(
+            lambda: self.ui_manager._open_connection_settings()
+        )
+        self.setup_view.pathDropped.connect(
+            lambda kind, path: self.file_handler.accept_dropped_path(kind, path)
+        )
 
         # Session browser (new architecture)
         self.session_browser.session_selected.connect(self.on_session_selected)
@@ -384,12 +357,6 @@ class MainWindow(QMainWindow):
 
         # Custom signals
         self.actions_handler.data_changed.connect(self._update_all_views)
-
-        # Inventory memory toggle
-        if hasattr(self, "inventory_memory_checkbox"):
-            self.inventory_memory_checkbox.stateChanged.connect(
-                self._on_inventory_memory_toggled
-            )
 
         # Add Ctrl+R shortcut for Run Analysis
         from PySide6.QtGui import QKeySequence, QShortcut
@@ -417,6 +384,12 @@ class MainWindow(QMainWindow):
         self.main_tabs.setCurrentIndex(1)
         self.results_view.setFocus()
         self.results_bridge.focusSearchRequested.emit()
+
+    def _fix_file_problem(self, kind: str) -> None:
+        """The link under a file card's problem: open the page that fixes it."""
+        page = (getattr(self, f"{kind}_slot").problem or {}).get("fix_page")
+        if page:
+            self.actions_handler.open_settings_window(page=page)
 
     def undo_last_operation(self):
         """Undo the last DataFrame modification."""
@@ -466,7 +439,6 @@ class MainWindow(QMainWindow):
         Called after state changes (client selected, files loaded, analysis run).
         """
         has_session = bool(self.session_path)
-        has_orders = bool(getattr(self, "orders_file_path", None))
         has_stock = bool(getattr(self, "stock_file_path", None))
         has_analysis = (
             hasattr(self, "analysis_results_df")
@@ -477,30 +449,6 @@ class MainWindow(QMainWindow):
         # New Session is state-owned (BarState.NO_SESSION) and Settings is in
         # the overflow, gated in _populate_overflow.
 
-        # File loading -- gate the pick, not the whole slot (an invalid
-        # slot's recovery buttons must stay usable regardless).
-        self.orders_slot.choose_button.setEnabled(has_session)
-        self.orders_slot.choose_folder_button.setEnabled(has_session)
-        self.stock_slot.choose_button.setEnabled(has_session)
-        self.stock_slot.choose_folder_button.setEnabled(has_session)
-
-        # Run Analysis button — memory mode allows skipping the stock file ONLY
-        # when memory is enabled AND actually holds a stored stock snapshot.
-        # An enabled-but-empty memory has no stock to reconstruct from, so every
-        # order would be marked Not Fulfillable — require a stock file instead.
-        inv_memory_has_skus = (
-            hasattr(self, "inventory_memory_checkbox")
-            and self.inventory_memory_checkbox.isChecked()
-            and bool(
-                (self.active_profile_config or {})
-                .get("inventory_memory", {})
-                .get("skus")
-            )
-        )
-        self.run_analysis_button.setEnabled(
-            has_session and has_orders and (has_stock or inv_memory_has_skus)
-        )
-
         # Reports and actions
         reports_enabled = has_session and has_analysis
 
@@ -510,13 +458,14 @@ class MainWindow(QMainWindow):
             self.add_product_button_tab2.setEnabled(has_analysis and has_stock)
 
         self.ui_manager._refresh_nav()
+        self.ui_manager.refresh_setup()
 
-    def _on_inventory_memory_toggled(self, state: int):
-        """Persist the inventory memory enabled flag when the checkbox is toggled."""
+    def _on_inventory_memory_toggled(self, enabled: bool):
+        """Persist the inventory memory switch when the Setup page flips it."""
         if not self.current_client_id or not self.active_profile_config:
             return
         try:
-            enabled = bool(state)
+            enabled = bool(enabled)
             inv_mem = self.active_profile_config.get("inventory_memory", {})
             inv_mem["enabled"] = enabled
             self.active_profile_config["inventory_memory"] = inv_mem
@@ -536,6 +485,7 @@ class MainWindow(QMainWindow):
                 "Inventory memory wasn't saved. Details are in Logs.",
                 role="error",
             )
+            self.ui_manager.refresh_setup()
 
     # --- Client and Session Management (New Architecture) ---
     def _load_client_data(self, client_id: str):
@@ -615,9 +565,8 @@ class MainWindow(QMainWindow):
             # load_client_config() re-reads shopify_config via profile_manager --
             # now a cache hit, since _load_client_data() already warmed the mtime
             # cache above -- and applies every widget-facing side effect this
-            # class depends on (active_profile_config, strategy radio sync,
-            # inventory_memory_checkbox restore, per-client button enable/disable,
-            # _update_all_views()). Dropping it (as a naive port of this method
+            # class depends on (active_profile_config, the Setup page's state,
+            # per-client button enable/disable, _update_all_views()). Dropping it (as a naive port of this method
             # might) would leave active_profile_config stale after every client
             # switch -- it's read throughout actions_handler.py/file_handler.py
             # for delimiters, column mappings, and tag categories.
@@ -1069,7 +1018,7 @@ class MainWindow(QMainWindow):
             self.ui_manager.set_ui_busy(False)
 
     def _on_analysis_mode_changed(self, index: int):
-        """Save the analysis mode selection to shopify_config when the combo changes."""
+        """Save the allocation strategy when the Setup page's radio cards change it."""
         if not self.current_client_id:
             return
         mode = "fifo" if index == 1 else "multi_first"
@@ -1088,6 +1037,7 @@ class MainWindow(QMainWindow):
                 "The analysis mode wasn't saved. Details are in Logs.",
                 role="error",
             )
+        self.ui_manager.refresh_setup()
 
     def log_activity(self, op_type, desc):
         """Records an operator action in the Logs destination.

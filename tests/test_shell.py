@@ -181,8 +181,8 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
 def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
     """1366x768 minus the 200px sidebar and the 48px command bar; no status bar.
 
-    main_tabs keeps the 5px inset every Qt page was laid out against (phase 1
-    spec section 5.1), so the page is 1366 - 200 - 10 wide.
+    A Qt page keeps the 5px inset it was laid out against (phase 1 spec section
+    5.1); Setup is a web page now and has none.
     """
     from PySide6.QtWidgets import QStatusBar
 
@@ -193,6 +193,9 @@ def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
     assert main_window.nav_rail is main_window.sidebar.rail
     assert main_window.command_bar.height() == 48
     assert main_window.findChild(QStatusBar) is None
+    assert main_window.main_tabs.width() == 1166  # Setup: a web page, no inset
+    main_window.main_tabs.setCurrentIndex(3)  # Logs: a Qt page
+    QApplication.processEvents()
     assert main_window.main_tabs.width() == 1156
 
 
@@ -487,6 +490,10 @@ def test_a_web_page_takes_the_page_area_to_its_edges(main_window):
     )
     assert main_window.main_tabs.width() == 1166
     main_window.main_tabs.setCurrentIndex(0)
+    QApplication.processEvents()
+    margins = main_window.page_area.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+    main_window.main_tabs.setCurrentIndex(3)
     QApplication.processEvents()
     assert main_window.page_area.layout().contentsMargins().left() == 5
     assert main_window.main_tabs.width() == 1156
