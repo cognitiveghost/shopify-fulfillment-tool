@@ -12,13 +12,11 @@ section 5) and Bundle 13
 (docs/superpowers/specs/2026-09-11-phase9-bundle13-pane-columns-design.md
 section 4). Add a member there before adding it here. Phase 2 added
 `openColumnMapping` (docs/superpowers/specs/2026-10-01-ui-refresh-phase2-results-kit-design.md section 6.3).
+The theme and the toast are PageBridge's (gui/web_page.py), shared with every other page's bridge.
 """
 
-from pathlib import Path
-
-from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
+from PySide6.QtCore import Property, Signal, Slot
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from gui.orders_view import (
@@ -28,12 +26,10 @@ from gui.orders_view import (
     order_payload,
     results_summary,
 )
-from gui.theme_manager import get_theme_manager
-from shared.theme import on_theme_changed, theme_css_vars
+from gui.web_page import THEME_MARKER, WEB_DIR, PageBridge, mount_page  # noqa: F401
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
+# THEME_MARKER and WEB_DIR are re-exported: tests and tools import them here.
 PAGE = WEB_DIR / "results.html"
-THEME_MARKER = "/* theme-vars */"
 CHANNEL_NAME = "results"
 
 
@@ -57,12 +53,11 @@ def normalize_column_settings(raw) -> dict:
     }
 
 
-class ResultsBridge(QObject):
+class ResultsBridge(PageBridge):
     """The results document's one channel object (Bundles 11 and 12)."""
 
     ordersChanged = Signal()
     summaryChanged = Signal()
-    themeCssChanged = Signal()
     exportEnabledChanged = Signal()
     columnsChanged = Signal()
     tagCategoriesChanged = Signal()
@@ -83,9 +78,6 @@ class ResultsBridge(QObject):
     tagRemovalRequested = Signal(str, str)
     columnSettingsChanged = Signal(dict)
     undoAvailableChanged = Signal()
-    # JS-facing: the page draws its own toast, because a Qt child widget
-    # cannot paint above this view's surface (ADR 0007).
-    toastRaised = Signal(str, bool)
     # Python-facing (Bundle 14): the selection bar's verbs. Named bulk* so
     # nothing collides with Bundle 13's singular pane signals.
     bulkStatusRequested = Signal(list, bool)
@@ -103,7 +95,6 @@ class ResultsBridge(QObject):
         super().__init__(parent)
         self._orders: list = []
         self._summary: dict = {}
-        self._theme_css = ""
         self._export_enabled = False
         self._selection: list[str] = []
         self._columns: dict = {**normalize_column_settings(None), "extras": []}
@@ -121,11 +112,6 @@ class ResultsBridge(QObject):
         return self._summary
 
     summary = Property("QVariantMap", _get_summary, notify=summaryChanged)
-
-    def _get_theme_css(self) -> str:
-        return self._theme_css
-
-    themeCss = Property(str, _get_theme_css, notify=themeCssChanged)
 
     def _get_export_enabled(self) -> bool:
         return self._export_enabled
@@ -303,21 +289,12 @@ class ResultsBridge(QObject):
         self._tag_categories = dict(categories or {})
         self.tagCategoriesChanged.emit()
 
-    def set_theme_css(self, css: str) -> None:
-        if css == self._theme_css:
-            return
-        self._theme_css = css
-        self.themeCssChanged.emit()
-
     def set_undo_available(self, available: bool) -> None:
         available = bool(available)
         if available == self._undo_available:
             return
         self._undo_available = available
         self.undoAvailableChanged.emit()
-
-    def raise_toast(self, message: str, undoable: bool = False) -> None:
-        self.toastRaised.emit(str(message), bool(undoable))
 
 
 def _orders(raw) -> list[str]:
@@ -326,25 +303,7 @@ def _orders(raw) -> list[str]:
 
 
 def mount_results_page(view: QWebEngineView) -> ResultsBridge:
-    """Load the results page into `view` and return the bridge it talks to.
-
-    The theme is written into the page before it loads, so the first paint is
-    already themed, then pushed through the bridge on every theme or density
-    change, so the document repaints without a reload. Both the bridge and
-    the channel are parented to `view` and die with it.
-    """
+    """Load the results page into `view` and return the bridge it talks to."""
     bridge = ResultsBridge(view)
-    channel = QWebChannel(view)
-    channel.registerObject(CHANNEL_NAME, bridge)
-    view.page().setWebChannel(channel)
-
-    def _push_theme(_tokens) -> None:
-        # The manager's tokens rather than the argument: only those carry the
-        # bundled Inter family the Qt tier renders in.
-        bridge.set_theme_css(theme_css_vars(get_theme_manager().get_current_theme()))
-
-    on_theme_changed(view, _push_theme)  # runs once now, then on every change
-
-    html = PAGE.read_text(encoding="utf-8").replace(THEME_MARKER, bridge.themeCss)
-    view.setHtml(html, QUrl.fromLocalFile(str(WEB_DIR) + "/"))
+    mount_page(view, bridge, PAGE, CHANNEL_NAME)
     return bridge
