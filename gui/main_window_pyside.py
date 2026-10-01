@@ -152,6 +152,24 @@ class MainWindow(QMainWindow):
     def is_connected(self) -> bool:
         return bool(getattr(self.profile_manager, "is_network_available", False))
 
+    def web_toast(self, text: str) -> bool:
+        """Draw a toast in the web page that is showing, if one is.
+
+        gui.components.toast asks this first: a Qt toast would land behind
+        the view (ADR 0007). False means "not a web page, use the Qt toast".
+        """
+        bridge = getattr(
+            self,
+            {0: "setup_bridge", 1: "results_bridge"}.get(
+                self.main_tabs.currentIndex(), ""
+            ),
+            None,
+        )
+        if bridge is None:
+            return False
+        bridge.raise_toast(text)
+        return True
+
     def recheck_connection(self) -> None:
         """The one way back from a degraded launch, in-session.
 
@@ -410,14 +428,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, "actions_handler"):
                 self.actions_handler._update_undo_button()
 
-            # ADR 0007: a Qt toast lands behind the results view's native
-            # surface, so an undo raised while that screen is showing has to
-            # go into the document instead. Elsewhere the Qt toast is visible.
-            results_view = getattr(self, "results_view", None)
-            if results_view is not None and results_view.isVisible():
-                self.results_bridge.raise_toast(message)
-            else:
-                toast(self, message)
+            # gui.components.toast sends it to the web page when one is showing.
+            toast(self, message)
         else:
             logger.error(f"Undo failed: {message}")
             show_error(self, "Undo didn't complete", "Details are in Logs.")

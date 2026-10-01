@@ -325,35 +325,15 @@ def test_undo_tells_the_results_page_there_is_nothing_left_to_undo(
     assert one_shot_undo.results_bridge.undoAvailable is False
 
 
-def test_undo_toasts_into_the_document_while_the_results_screen_shows(
-    one_shot_undo, monkeypatch
-):
-    """ADR 0007: a Qt toast raised over the results view lands behind it."""
-    qt_toast = Mock()
-    monkeypatch.setattr("gui.main_window_pyside.toast", qt_toast)
-    monkeypatch.setattr(one_shot_undo.results_view, "isVisible", lambda: True)
-    raised = Mock()
-    monkeypatch.setattr(one_shot_undo.results_bridge, "raise_toast", raised)
+def test_undo_says_so_once_through_the_window_toast(one_shot_undo, monkeypatch):
+    """Where it is drawn is the router's question (tests/test_toast_router.py);
+    undo only has to say it."""
+    said = Mock()
+    monkeypatch.setattr("gui.main_window_pyside.toast", said)
 
     one_shot_undo.undo_last_operation()
 
-    raised.assert_called_once_with("Undid the last thing")
-    qt_toast.assert_not_called()
-
-
-def test_undo_keeps_the_qt_toast_when_another_screen_shows(one_shot_undo, monkeypatch):
-    """The other side of the same branch: off the Results screen the Qt toast
-    is the visible one, so rerouting everything would lose the message."""
-    qt_toast = Mock()
-    monkeypatch.setattr("gui.main_window_pyside.toast", qt_toast)
-    monkeypatch.setattr(one_shot_undo.results_view, "isVisible", lambda: False)
-    raised = Mock()
-    monkeypatch.setattr(one_shot_undo.results_bridge, "raise_toast", raised)
-
-    one_shot_undo.undo_last_operation()
-
-    qt_toast.assert_called_once()
-    raised.assert_not_called()
+    said.assert_called_once_with(one_shot_undo, "Undid the last thing")
 
 
 def _enabled(window):
