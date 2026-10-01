@@ -335,7 +335,7 @@ function showPane() {
 }
 
 function bindPane() {
-  els.paneShow.innerHTML = svg(CHEVRON_LEFT, "glyph");
+  els.paneShow.insertAdjacentHTML("afterbegin", svg(CHEVRON_LEFT, "glyph"));
   els.paneShow.addEventListener("click", showPane);
   els.pane.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || !els.pane.querySelector(".pane-menu")) return;

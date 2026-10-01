@@ -36,7 +36,7 @@
     <button id="export" class="btn primary" type="button" disabled>Export</button>
   </div>
 
-  <section id="table-area" class="table-area" data-slot="none">
+  <section id="table-area" class="card split" data-slot="none">
     <div class="table-wrap">
       <div id="selection-bar" class="selection-bar" role="toolbar"
            aria-label="Actions for the selected orders" hidden>
@@ -75,8 +75,8 @@
     <div id="slot" class="slot">
       <aside id="pane" class="pane" aria-label="Order detail" hidden></aside>
       <div id="pane-strip" class="pane-strip" hidden>
-        <button id="pane-show" class="btn ghost icon strip-button" type="button"
-                aria-label="Show the pane" title="Show the pane"></button>
+        <button id="pane-show" class="pane-rail" type="button"
+                aria-label="Show order detail" title="Show detail"><span class="pane-rail-label">Order detail</span></button>
       </div>
       <aside id="columns-panel" class="columns-panel" aria-label="Columns" hidden></aside>
     </div>

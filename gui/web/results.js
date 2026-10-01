@@ -5,9 +5,11 @@
 // docs/superpowers/specs/2026-09-11-phase9-bundle12-results-doc-design.md
 "use strict";
 
-const HEADER_PX = 28;
+const HEADER_PX = 36;
+const ROW_EXTRA_PX = 4; // a results row is the density's row plus this
 const OVERSCAN = 4;
-const TABLE_MIN_PX = 780;
+const TABLE_MIN_PX = 728;
+const PANE_PX = 340;
 const DASH = "—";
 const FULFILLABLE = "Fulfillable";
 const BLOCKED = "Blocked";
@@ -23,8 +25,8 @@ const CHECK = "M20 6 9 17l-5-5";
 // Widths are the canvas's (W3); a column grows to its widest real value but
 // never reflows after that. Only Customer stretches (9.15). The registry
 // (columns.js) replaces the fixed list.
-const SELECT_COLUMN = { key: "select", title: "", width: 32 };
-const SLOT_NARROW_PX = 1192; // table minimum 780 + gap 12 + pane 400
+const SELECT_COLUMN = { key: "select", title: "", width: 36 };
+const SLOT_NARROW_PX = TABLE_MIN_PX + PANE_PX; // below this the pane folds to its rail
 
 const els = {};
 const state = {
@@ -37,7 +39,7 @@ const state = {
   selected: new Set(), // order numbers
   anchorKey: null, // the fixed end of a Shift range
   cursorKey: null, // the row the arrow keys move from
-  rowH: 28,
+  rowH: 32,
   visible: 0,
   columnSettings: { order: null, visible: null, auto_hide_empty: false, extras: [] },
   emptyKeys: new Set(),
@@ -379,6 +381,8 @@ function renderHeader() {
       cell.dataset.sort = col.key;
       cell.classList.toggle("sorted", sorted);
       cell.setAttribute("aria-sort", sorted ? (state.sort.dir === 1 ? "ascending" : "descending") : "none");
+      const s = (state.bridge && state.bridge.summary) || {};
+      if (col.key === "value" && s.orders !== undefined && s.value_total === null) cell.classList.add("unmapped");
       const label = document.createElement("span");
       label.textContent = col.title;
       cell.appendChild(label);
@@ -403,10 +407,9 @@ function measureColumns() {
     ctx.font = "700 " + caption;
     let widest = ctx.measureText(col.title).width + 14; // + the sort caret
     if (col.key === "status") {
-      ctx.font = caption;
-      widest = Math.max(widest, ctx.measureText(FULFILLABLE).width + 30); // chip padding + border
+      widest = Math.max(widest, ctx.measureText(FULFILLABLE).width + 18); // badge padding + edge
     } else {
-      ctx.font = col.mono ? mono : sans;
+      ctx.font = (col.key === "order" ? "700 " : "") + (col.mono ? mono : sans);
       for (const r of state.records) widest = Math.max(widest, ctx.measureText(col.text(r.o) || DASH).width);
     }
     const width = Math.max(col.width, Math.ceil(widest + 16));
@@ -414,7 +417,7 @@ function measureColumns() {
   });
   const fixed = widths.reduce((a, b) => a + b, 0);
   const stretch = cols.some((c) => c.stretch);
-  const customerMin = stretch ? Math.max(120, TABLE_MIN_PX - fixed) : 0;
+  const customerMin = stretch ? Math.max(140, TABLE_MIN_PX - fixed) : 0;
   const template = cols.map((col, i) => (col.stretch ? "minmax(" + customerMin + "px, 1fr)" : widths[i] + "px"));
   // Customer hidden: an empty track takes the growth, so no column stretches.
   if (!stretch) template.push("minmax(0, 1fr)");
@@ -438,7 +441,8 @@ function layout() {
     if (!narrow) state.paneForced = false;
     renderSlot();
   }
-  state.rowH = parseFloat(cssVar("--row-height")) || 28;
+  state.rowH = (parseFloat(cssVar("--row-height")) || 28) + ROW_EXTRA_PX;
+  els.table.style.setProperty("--results-row-height", state.rowH + "px");
   // The selection bar covers the header rather than adding to it, so the row
   // budget is the same whether or not anything is selected.
   const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - HEADER_PX) / state.rowH));
@@ -462,14 +466,14 @@ function refreshColumns() {
 function slotMode() {
   if (!state.records.length) return "none";
   if (state.columnsOpen) return "columns";
-  return state.paneHidden || (state.narrow && !state.paneForced) ? "strip" : "pane";
+  return state.paneHidden || (state.narrow && !state.paneForced) ? "rail" : "pane";
 }
 
 function renderSlot() {
   const mode = slotMode();
   els.tableArea.dataset.slot = mode;
   els.pane.hidden = mode !== "pane";
-  els.paneStrip.hidden = mode !== "strip";
+  els.paneStrip.hidden = mode !== "rail";
   els.columnsPanel.hidden = mode !== "columns";
   els.columnsButton.disabled = mode === "none";
   els.columnsButton.setAttribute("aria-pressed", String(state.columnsOpen));
@@ -515,9 +519,16 @@ function rowElement(record, index) {
   return row;
 }
 
+function statusBadge(o) {
+  const badge = document.createElement("span");
+  badge.className = "badge " + (isFulfillable(o) ? "success" : "danger");
+  badge.textContent = statusText(o);
+  return badge;
+}
+
 function cellElement(col, record, selected) {
   const cell = document.createElement("div");
-  cell.className = "cell " + col.key + (col.numeric ? " num" : "");
+  cell.className = "cell " + col.key + (col.numeric ? " num" : "") + (col.mono ? " mono" : "");
   cell.setAttribute("role", "gridcell");
   if (col.key === "select") {
     const box = document.createElement("input");
@@ -527,11 +538,12 @@ function cellElement(col, record, selected) {
     box.setAttribute("aria-label", "Select order " + record.key);
     cell.appendChild(box);
   } else if (col.key === "status") {
-    const ok = isFulfillable(record.o);
-    const chip = document.createElement("span");
-    chip.className = "chip " + (ok ? "success" : "danger");
-    chip.textContent = statusText(record.o);
-    cell.appendChild(chip);
+    cell.appendChild(statusBadge(record.o));
+  } else if (col.key === "repeat" && record.o._repeat === true) {
+    const badge = document.createElement("span");
+    badge.className = "badge info";
+    badge.textContent = "Repeat";
+    cell.appendChild(badge);
   } else {
     const text = col.text(record.o);
     const missing = text === "" || text === DASH;
@@ -719,6 +731,7 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   bridge.summaryChanged.connect(() => {
     renderKpis();
     renderExport();
+    renderHeader();
   });
   bridge.exportEnabledChanged.connect(renderExport);
   bridge.focusSearchRequested.connect(() => els.search.focus());

@@ -7,24 +7,24 @@
 const COLUMN_GROUPS = ["Order", "Customer", "Money", "Shipping", "Tags & notes", "Other"];
 
 const REGISTRY = [
-  { key: "status", title: "Status", group: "Order", width: 132, pinned: true, shown: true,
+  { key: "status", title: "Status", group: "Order", width: 108, pinned: true, shown: true,
     text: (o) => statusText(o), sortValue: (o) => (isFulfillable(o) ? 0 : 1) },
-  { key: "order", title: "Order", group: "Order", width: 84, pinned: true, shown: true, mono: true,
+  { key: "order", title: "Order", group: "Order", width: 64, pinned: true, shown: true, mono: true,
     text: (o) => str(o.Order_Number) },
   { key: "customer", title: "Customer", group: "Customer", stretch: true, shown: true, text: (o) => str(o.Customer) },
-  { key: "lines", title: "Lines", group: "Order", width: 56, shown: true, numeric: true,
+  { key: "lines", title: "Lines", group: "Order", width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtInt(o.Items), sortValue: (o) => num(o.Items) },
-  { key: "units", title: "Units", group: "Order", width: 56, shown: true, numeric: true,
+  { key: "units", title: "Units", group: "Order", width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtInt(o.Units), sortValue: (o) => num(o.Units) },
-  { key: "value", title: "Value", group: "Money", width: 84, shown: true, numeric: true,
+  { key: "value", title: "Value", group: "Money", width: 76, shown: true, numeric: true, mono: true,
     text: (o) => fmtMoney(o.Total_Price), sortValue: (o) => num(o.Total_Price) },
-  { key: "courier", title: "Courier", group: "Shipping", width: 76, shown: true, text: (o) => str(o.Shipping_Provider) },
-  { key: "age", title: "Age", group: "Order", width: 56, shown: true, numeric: true,
+  { key: "courier", title: "Courier", group: "Shipping", width: 72, shown: true, text: (o) => str(o.Shipping_Provider) },
+  { key: "age", title: "Age", group: "Order", width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtAge(o.Created_At), sortValue: (o) => ageMs(o.Created_At) },
   { key: "type", title: "Type", group: "Order", width: 64, maxWidth: 120, text: (o) => str(o.Order_Type) },
   { key: "reason", title: "Reason", group: "Order", width: 120, maxWidth: 240, text: (o) => str(o.Blocker) },
   { key: "country", title: "Country", group: "Customer", width: 64, maxWidth: 120, text: (o) => str(o.Destination_Country) },
-  { key: "subtotal", title: "Subtotal", group: "Money", width: 84, numeric: true,
+  { key: "subtotal", title: "Subtotal", group: "Money", width: 84, numeric: true, mono: true,
     text: (o) => fmtMoney(o.Subtotal), sortValue: (o) => num(o.Subtotal) },
   { key: "method", title: "Shipping method", group: "Shipping", width: 120, maxWidth: 240, text: (o) => str(o.Shipping_Method) },
   { key: "internal_tags", title: "Internal tags", group: "Tags & notes", width: 120, maxWidth: 240,
@@ -32,7 +32,7 @@ const REGISTRY = [
   { key: "shopify_tags", title: "Shopify tags", group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Tags) },
   { key: "notes", title: "Notes", group: "Tags & notes", width: 160, maxWidth: 240, text: (o) => str(o.Notes) },
   { key: "status_note", title: "Status note", group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Status_Note) },
-  { key: "repeat", title: "Repeat", group: "Tags & notes", width: 64, shown: true, text: (o) => (o._repeat === true ? "Repeat" : "") },
+  { key: "repeat", title: "Repeat", group: "Tags & notes", width: 76, shown: true, text: (o) => (o._repeat === true ? "Repeat" : "") },
 ];
 const PINNED_KEYS = REGISTRY.filter((c) => c.pinned).map((c) => c.key);
 

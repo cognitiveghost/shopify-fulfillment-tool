@@ -46,17 +46,17 @@ def _width(qtbot, view, selector):
     )
 
 
-def test_the_pane_slot_leaves_the_table_866_wide_and_17_rows(qtbot, doc):
+def test_the_pane_slot_leaves_the_table_920_wide_and_14_rows(qtbot, doc):
     view, _ = doc
     assert (
         _eval(qtbot, view, "document.getElementById('table-area').dataset.slot")
         == "pane"
     )
-    assert _width(qtbot, view, ".table-wrap") == 866
-    assert _width(qtbot, view, "#slot") == 400
+    assert _width(qtbot, view, ".table-wrap") == 920
+    assert _width(qtbot, view, "#slot") == 340
     assert (
         _eval(qtbot, view, "document.getElementById('table').dataset.visibleRows")
-        == "17"
+        == "14"
     )
 
 
@@ -127,7 +127,7 @@ def _settings(qtbot, view, bridge, js):
 def test_the_manager_keeps_the_table_width_and_counts_shown_and_hidden(qtbot, doc):
     view, _ = doc
     _open_columns(qtbot, view)
-    assert _width(qtbot, view, ".table-wrap") == 866
+    assert _width(qtbot, view, ".table-wrap") == 920
     assert (
         _eval(qtbot, view, "document.getElementById('columns-count').textContent")
         == "9 shown · 9 hidden"

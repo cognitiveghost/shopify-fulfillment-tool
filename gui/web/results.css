@@ -6,17 +6,18 @@
    header's place rather than pushing the table down (Shopify-style), so the
    two are one height, stated once. */
 :root {
-  --table-head-height: 28px;
+  --table-head-height: 36px;
 }
 
-/* --- page: 88 KPI + 40 filter bar + table, 12 apart, 16 in from the edge -- */
+/* --- page: KPI card, filter bar, split card, 12 apart -------------------- */
 
+/* The KPI row is fixed so the table's height never depends on a font. */
 #results {
   position: relative;
   height: 100%;
-  padding: var(--spacing-lg);
+  padding: 16px 24px 20px;
   display: grid;
-  grid-template-rows: 88px 40px minmax(0, 1fr);
+  grid-template-rows: 88px var(--control-height) minmax(0, 1fr);
   row-gap: var(--spacing-md);
   container-type: inline-size;
 }
@@ -108,27 +109,25 @@
 
 .chip-filter:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
-/* --- table ------------------------------------------------------------------ */
+/* --- the split card: table and pane on one surface, one rule between ----- */
 
 /* min-width: 0 overrides the grid item's default min-content size, which
-   would otherwise stretch to the row's 780px floor and push the whole page
-   wider than the viewport instead of scrolling inside #scroller. */
-/* The slot (Bundle 13 §6.1): pane or column manager 400 + 12, strip 36. */
-.table-area {
+   would otherwise stretch to the row's minimum and push the whole page wider
+   than the viewport instead of scrolling inside #scroller. */
+.split {
   position: relative;
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
 }
-.table-area[data-slot="pane"],
-.table-area[data-slot="columns"] {
-  grid-template-columns: minmax(0, 1fr) 400px;
-  column-gap: var(--spacing-md);
-}
-.table-area[data-slot="strip"] { grid-template-columns: minmax(0, 1fr) 36px; }
-.table-area[data-slot="none"] .slot { display: none; }
+.split[data-slot="pane"],
+.split[data-slot="columns"] { grid-template-columns: minmax(0, 1fr) 340px; }
+.split[data-slot="rail"] { grid-template-columns: minmax(0, 1fr) 40px; }
+.split[data-slot="none"] .slot { display: none; }
 .table-wrap, .slot { position: relative; min-width: 0; min-height: 0; }
+.slot { border-left: 1px solid var(--border-subtle); }
 .cell.filler { padding: 0; }
 
 /* --- selection bar (Bundle 14) ------------------------------------------- */
@@ -201,15 +200,17 @@
 .bulk-list .new-tag:focus,
 .bulk-list .bulk-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 
+/* --- table --------------------------------------------------------------- */
+
 .table:focus { outline: none; }
-.table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
 .scroller { overflow: auto; }
 
 .row {
   display: grid;
   grid-template-columns: var(--cols);
-  min-width: var(--table-min, 780px); /* results.js measureColumns */
+  min-width: var(--table-min, 728px); /* results.js measureColumns */
   background: var(--surface);
 }
 
@@ -218,18 +219,22 @@
   top: 0;
   z-index: var(--z-header);
   height: var(--table-head-height);
+  background: var(--surface-raised);
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.rows { position: relative; min-width: var(--table-min, 780px); }
+.rows { position: relative; min-width: var(--table-min, 728px); }
 
+/* --results-row-height is the density's row plus 4: results.js layout(). */
 .rows .row {
   position: absolute;
   left: 0;
   right: 0;
-  height: var(--row-height);
+  height: var(--results-row-height);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .rows .row:hover { background: var(--hover); }
+
 /* The selection ring: a closed rectangle, never a left border (F4). Drawn as
    a pseudo-element, not an outline: the sticky select/status cells are
    positioned, so they paint over anything the row itself draws. */
@@ -245,14 +250,14 @@
 
 .cell {
   padding: 0 8px;
-  line-height: var(--row-height);
+  line-height: var(--results-row-height);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .head {
-  line-height: 27px;
+  line-height: calc(var(--table-head-height) - 1px);
   font-size: var(--type-caption-size);
   font-weight: 700;
   color: var(--text-secondary);
@@ -261,6 +266,8 @@
 }
 .head.sorted { color: var(--text); }
 .head.select { cursor: default; }
+/* The Value column while no price column is mapped. */
+.head.unmapped { color: var(--text-disabled); }
 
 .caret {
   width: 12px;
@@ -275,43 +282,15 @@
 .head:hover .caret, .head.sorted .caret { visibility: visible; }
 
 .num { text-align: right; }
-.cell.order { font-family: var(--font-family-mono); }
-.cell.age, .cell.missing { color: var(--text-secondary); }
+.cell.mono { font-family: var(--font-family-mono); }
+.cell.order { font-weight: 700; }
+.cell.missing { color: var(--text-disabled); }
 
-/* Pinned when the table scrolls sideways. No z-index, so the row's selection
-   outline still paints over them. */
+/* Pinned when the table scrolls sideways. No z-index, so what the row draws
+   over itself still paints over them. */
 .cell.select, .cell.status { position: sticky; background: inherit; }
-.cell.select { left: 0; text-align: center; }
-.cell.status { left: 32px; }
-.cell.select input { margin: 0; vertical-align: middle; }
-
-/* --- status chip: shared.theme.StatusChip's "chip" variant, same geometry -- */
-
-.chip {
-  position: relative;
-  display: inline-block;
-  vertical-align: middle;
-  line-height: normal;
-  padding: 2px 8px 2px 20px;
-  border: 1px solid var(--chip-fg);
-  border-radius: var(--radius);
-  color: var(--chip-fg);
-  font-size: var(--type-caption-size);
-}
-/* The mark: hollow, because the run derived the status (CONTEXT.md "Mark"). */
-.chip::before {
-  content: "";
-  position: absolute;
-  left: 7px;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  margin-top: -4px;
-  border: 1.5px solid var(--chip-fg);
-  border-radius: 50%;
-}
-.chip.success { --chip-fg: var(--status-success); }
-.chip.danger { --chip-fg: var(--status-danger); background: var(--status-danger-bg); }
+.cell.select { left: 0; padding: 0; text-align: center; }
+.cell.status { left: 36px; }
 
 /* --- states -------------------------------------------------------------------- */
 
@@ -326,8 +305,7 @@
   flex-direction: column;
   padding: var(--spacing-lg);
   overflow: hidden;
-  background: var(--surface-raised);   /* the Card rule, as the KPI cards */
-  border-radius: var(--radius-md);
+  background: var(--surface);
 }
 .pane { gap: var(--spacing-md); }
 
@@ -375,7 +353,7 @@
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
-  background: var(--surface-raised);
+  background: var(--surface);
   font-size: var(--type-caption-size);
   font-weight: 700;
   color: var(--text-secondary);
@@ -440,8 +418,28 @@
   text-align: center;
 }
 
+/* Collapsed, the pane is a rail that says what it is. */
 .pane-strip { height: 100%; }
-.btn.strip-button { width: 36px; height: 28px; }
+.pane-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.pane-rail:hover { background: var(--hover); }
+.pane-rail:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.pane-rail-label {
+  writing-mode: vertical-rl;
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+}
 
 /* .btn.secondary and .btn.danger come from kit.css. */
 .tag-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
@@ -481,7 +479,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  background: var(--surface-raised);
+  background: var(--surface);
   font-size: var(--type-caption-size);
   font-weight: 700;
   letter-spacing: 0.06em;

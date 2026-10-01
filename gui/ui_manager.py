@@ -52,6 +52,11 @@ _SCREEN_ACTIONS = {
 # an INI file under tmp_path.
 _COLLAPSED_KEY = "shell/sidebar_collapsed"
 
+# The tabs drawn on the web tier. A web page paints the sunken plane to its
+# own edges, so the page area's 5px inset would show as a white ring around
+# it. Each phase that moves a screen adds its index (phase 2 spec section 5.1).
+_WEB_PAGES = frozenset({1})
+
 
 def _shell_settings() -> QSettings:
     return QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
@@ -200,6 +205,7 @@ class UIManager:
 
         # The pages keep the 5px inset they were laid out against (phase 1 §5.1).
         page_area = QWidget()
+        self.mw.page_area = page_area
         page_layout = QVBoxLayout(page_area)
         page_layout.setSpacing(5)
         page_layout.setContentsMargins(5, 5, 5, 5)
@@ -356,6 +362,7 @@ class UIManager:
             if hide_in_page:
                 getattr(self.mw, attribute).hide()
         self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
+        self.mw.main_tabs.currentChanged.connect(self._apply_page_inset)
         self._bind_screen_action(self.mw.main_tabs.currentIndex())
 
     def _create_command_bar(self) -> CommandBar:
@@ -400,6 +407,11 @@ class UIManager:
         menu.add_section("THIS PC")
         menu.add_item("Server connection…", self._open_connection_settings)
         menu.add_item("Keyboard shortcuts…", lambda: ShortcutsDialog(self.mw).exec())
+
+    def _apply_page_inset(self, index: int) -> None:
+        """No inset around a web page, the old 5px around a Qt one."""
+        inset = 0 if index in _WEB_PAGES else 5
+        self.mw.page_area.layout().setContentsMargins(inset, inset, inset, inset)
 
     def _bind_screen_action(self, index: int) -> None:
         """Point the command bar's one primary at this screen's primary button."""

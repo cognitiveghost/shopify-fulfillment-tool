@@ -110,14 +110,16 @@ def test_nothing_selected_says_how_to_move(qtbot, doc):
     assert "moves through the 4 shown." in _text(qtbot, view, "#pane-empty .state-text")
 
 
-def test_the_pane_is_400_by_508_beside_the_table(qtbot, doc):
+def test_the_pane_is_339_by_510_beside_the_table(qtbot, doc):
+    """The slot is 340; its left edge, the one rule between table and pane,
+    takes 1."""
     view, _ = doc
     size = _eval(
         qtbot,
         view,
         "(r => Math.round(r.width) + 'x' + Math.round(r.height))(document.getElementById('pane').getBoundingClientRect())",
     )
-    assert size == "400x508"
+    assert size == "339x510"
 
 
 def test_a_short_order_names_the_sku_and_both_numbers(qtbot, doc):
@@ -316,25 +318,26 @@ def _table_width(qtbot, view):
     )
 
 
-def test_hiding_leaves_a_strip_and_showing_restores_the_table(qtbot, doc):
+def test_hiding_leaves_a_rail_and_showing_restores_the_table(qtbot, doc):
     view, _ = doc
     _js(qtbot, view, "document.getElementById('pane-hide').click()")
     _until_js(
-        qtbot, view, "document.getElementById('table-area').dataset.slot === 'strip'"
+        qtbot, view, "document.getElementById('table-area').dataset.slot === 'rail'"
     )
-    assert _table_width(qtbot, view) == 1242
+    assert _text(qtbot, view, "#pane-show").strip() == "Order detail"
+    assert _table_width(qtbot, view) == 1220
     _js(qtbot, view, "document.getElementById('pane-show').click()")
     _until_js(
         qtbot, view, "document.getElementById('table-area').dataset.slot === 'pane'"
     )
-    assert _table_width(qtbot, view) == 866
+    assert _table_width(qtbot, view) == 920
 
 
 def test_a_narrow_page_collapses_the_pane_until_asked(qtbot, doc):
     view, _ = doc
     view.resize(1100, 692)
     _until_js(
-        qtbot, view, "document.getElementById('table-area').dataset.slot === 'strip'"
+        qtbot, view, "document.getElementById('table-area').dataset.slot === 'rail'"
     )
     _js(qtbot, view, "document.getElementById('pane-show').click()")
     _until_js(

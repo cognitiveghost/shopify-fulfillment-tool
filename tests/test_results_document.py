@@ -10,9 +10,11 @@ import pandas as pd
 import pytest
 from PySide6.QtGui import QColor
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from test_results_bridge import _eval, _until_js
+from test_results_bridge import _eval, _rgb, _until_js
 
 from gui.results_bridge import mount_results_page
+from gui.theme_manager import get_theme_manager
+from shared.theme import LIGHT_THEME
 
 
 def results_lines(orders=312):
@@ -116,23 +118,119 @@ def _key(qtbot, view, key, **modifiers):
 # --- 9.15: the numbers ------------------------------------------------------
 
 
-def test_17_whole_rows_at_1366(qtbot, doc):
+def test_14_whole_rows_at_1366(qtbot, doc):
+    """692 high: 36 of page padding, 88 of KPI, 32 of filter bar and two 12px
+    gaps leave a 512px card. Its edges leave 510, the header takes 36, and
+    474 holds 14 rows of 32."""
     view, _ = doc
     _until_js(
-        qtbot, view, "document.getElementById('table').dataset.visibleRows === '17'"
+        qtbot, view, "document.getElementById('table').dataset.visibleRows === '14'"
     )
     assert (
         _eval(qtbot, view, "document.getElementById('scroller').clientHeight")
-        == 28 + 17 * 28
+        == 36 + 14 * 32
     )
 
 
-def test_28_whole_rows_at_1920(qtbot, doc):
+def test_24_whole_rows_at_1920(qtbot, doc):
     view, _ = doc
     _resize(qtbot, view, 1864, 1004)
     _until_js(
-        qtbot, view, "document.getElementById('table').dataset.visibleRows === '28'"
+        qtbot, view, "document.getElementById('table').dataset.visibleRows === '24'"
     )
+
+
+def test_only_a_window_of_rows_exists(qtbot, doc):
+    view, _ = doc
+    assert (
+        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 14 + 8
+    )
+    _eval(qtbot, view, "document.getElementById('scroller').scrollTop = 32 * 150; true")
+    _until_js(qtbot, view, "!!document.querySelector('#rows .row[data-index=\"150\"]')")
+    assert (
+        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 14 + 8
+    )
+
+
+def test_the_header_is_36_tall_and_a_row_32(qtbot, doc):
+    view, _ = doc
+    assert _eval(qtbot, view, "document.getElementById('header').offsetHeight") == 36
+    assert _eval(qtbot, view, "document.querySelector('#rows .row').offsetHeight") == 32
+
+
+def test_floor_density_rows_are_four_taller_than_the_token(qtbot, doc):
+    """Review focus 4: the +4 holds in both densities, and the row maths follows."""
+    view, _ = doc
+    get_theme_manager().set_density("floor")  # conftest restores desk
+    _until_js(qtbot, view, "document.querySelector('#rows .row').offsetHeight === 44")
+    rows = int(
+        _eval(qtbot, view, "document.getElementById('table').dataset.visibleRows")
+    )
+    assert (
+        _eval(qtbot, view, "document.getElementById('scroller').clientHeight")
+        == 36 + rows * 44
+    )
+
+
+def test_the_table_and_the_pane_share_one_card(qtbot, doc):
+    view, _ = doc
+    area = "document.getElementById('table-area')"
+    assert _eval(qtbot, view, f"{area}.classList.contains('card')") is True
+    assert _eval(qtbot, view, f"{area}.contains(document.getElementById('pane'))") is True
+    assert _eval(
+        qtbot, view, "getComputedStyle(document.body).backgroundColor"
+    ) == _rgb(LIGHT_THEME.surface_sunken)
+
+
+def test_the_status_is_a_badge(qtbot, doc):
+    view, _ = doc
+    blocked = "document.querySelector('#rows .row[data-order=\"#10004\"] .status .badge')"
+    ready = "document.querySelector('#rows .row[data-order=\"#10001\"] .status .badge')"
+    assert _eval(qtbot, view, f"{blocked}.className") == "badge danger"
+    assert _eval(qtbot, view, f"{ready}.className") == "badge success"
+    # A repeat order wears an info badge in its Repeat cell.
+    assert (
+        _eval(
+            qtbot,
+            view,
+            "cellElement({key: 'repeat', text: function () { return 'Repeat'; }},"
+            " {key: 'x', o: {_repeat: true}}, false).querySelector('.badge.info') !== null",
+        )
+        is True
+    )
+
+
+def test_the_order_is_bold_mono_and_a_missing_value_is_quiet(qtbot, doc):
+    view, _ = doc
+    row = "#rows .row[data-order=\"#10004\"]"
+    for cell in ("order", "lines", "units", "value"):
+        assert (
+            _eval(
+                qtbot,
+                view,
+                f"document.querySelector('{row} .{cell}').classList.contains('mono')",
+            )
+            is True
+        ), cell
+    assert (
+        _eval(
+            qtbot, view, f"getComputedStyle(document.querySelector('{row} .order')).fontWeight"
+        )
+        == "700"
+    )
+    # i=3 ships with no courier: the dash is in the disabled text colour.
+    assert _eval(
+        qtbot, view, f"getComputedStyle(document.querySelector('{row} .courier')).color"
+    ) == _rgb(LIGHT_THEME.text_disabled)
+
+
+def test_the_value_header_is_quiet_until_a_price_column_is_mapped(qtbot, doc):
+    view, bridge = doc
+    head = "document.querySelector('#header .head.value')"
+    assert _eval(qtbot, view, f"{head}.classList.contains('unmapped')") is False
+    bridge.set_orders(results_lines().drop(columns=["Total_Price"]))
+    _until_js(qtbot, view, f"{head}.classList.contains('unmapped')")
+
 
 
 def test_no_horizontal_scroll_until_the_table_minimum(qtbot, doc):
@@ -145,16 +243,6 @@ def test_no_horizontal_scroll_until_the_table_minimum(qtbot, doc):
     _until_js(qtbot, view, f"{scroller}.scrollWidth > {scroller}.clientWidth")
 
 
-def test_only_a_window_of_rows_exists(qtbot, doc):
-    view, _ = doc
-    assert (
-        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 17 + 8
-    )
-    _eval(qtbot, view, "document.getElementById('scroller').scrollTop = 28 * 150; true")
-    _until_js(qtbot, view, "!!document.querySelector('#rows .row[data-index=\"150\"]')")
-    assert (
-        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 17 + 8
-    )
 
 
 # --- 9.13: the document -------------------------------------------------------
