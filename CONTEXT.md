@@ -15,8 +15,8 @@ for decisions.
 Everything except the two heavy views.
 
 **Web tier** — the part drawn in a `QWebEngineView`, styled with real CSS.
-Analysis Results today; ADR 0016 lets each other screen move in its own
-task. See ADR 0001 for why Results moved first.
+Analysis Results and Session Setup today; ADR 0016 lets each other screen move
+in its own task. See ADR 0001 for why Results moved first.
 
 **Renderer** — either tier, when the point is that there are two of them and
 one palette must serve both. Never used for `QSvgRenderer`; say
@@ -294,10 +294,26 @@ repeating each other inside one file.
 from each file) or an **override**: a fixed character someone set because Auto
 reads that client's files wrong. See ADR 0009.
 
-**File slot** — the widget holding one of the two input files. One slot per
-file, three states (empty, loaded, invalid), and the only thing that knows
+**File slot** — the record holding one of the two input files. One slot per
+file, three states (missing, loaded, problem), and the only thing that knows
 whether its file is usable. Not a **file picker**, which is the dialog a slot
 opens: the slot persists and changes state, the picker appears and closes.
+
+**File card** — a file slot as the Setup page draws it: a badge for its state,
+the file's name, its rows, its orders or SKUs, its delimiter, and under a
+problem the sentence that explains it and the link that fixes it.
+
+**Setup state** — the one map Python builds for the Setup page: which view
+shows, both file cards, the run summary's sentences, and whether a run may
+start. The page draws it and decides nothing.
+
+**Run summary** — the fixed column beside the file cards that says what the
+run will do, holds Run analysis with the reason it is disabled, and becomes
+the progress view while a run is going.
+
+**Step** — one of a run's four named stages: reading the files, checking the
+fulfilment history, allocating stock, saving the results. Cancel takes effect
+between steps and never once saving has begun.
 
 **Strategy** — how a run allocates stock across competing orders, either
 `multi-item-first` or `fifo`. Supersedes "analysis mode", which named the
@@ -310,6 +326,7 @@ in the stock file**, not only the SKUs an order touched: a SKU the run left
 alone keeps its opening level. Each run's stock file is the truth, so a SKU
 that leaves the file leaves memory — memory accumulates levels, never SKUs.
 A SKU listed on several stock rows is remembered at their sum.
+A loaded stock file is always used as it is; memory stands in only when a run has no stock file.
 
 **Memory baseline** — the opening stock a session's first run started from,
 kept in the session. A re-run of that session starts from its baseline, not

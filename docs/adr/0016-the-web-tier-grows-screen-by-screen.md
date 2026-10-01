@@ -41,9 +41,16 @@
   otherwise.
 - A Qt child widget still cannot paint above a `QWebEngineView` (ADR 0007), so each web screen keeps
   drawing its own toasts.
+- Setup moved in phase 3 (2026-10-01) with the second bridge, `SetupBridge`. What every bridge shares (the
+  theme, the toast, the mount) is `gui/web_page.py`.
 
 ## What would reverse it
 
 A frozen Windows build where a second `QWebEngineView` costs noticeably more memory or startup time
 on the warehouse PCs, measured over RDP. Point 1 would then return to one web view hosting several
 screens, or stop at the screens already moved.
+
+Measured on Linux, offscreen, 2026-10-01 (phase 3 spec section 2): the first view costs about 195 MB,
+each further view about 31 MB and at most 0.15 s. Two views total about 372 MB against 340 MB for one.
+A frozen Windows build over RDP has not been measured; that check is in the phase 3 PR and is done on a
+warehouse PC before the release that carries Setup.
