@@ -90,3 +90,12 @@ def test_type_and_density_are_the_active_profile(profile_name, density):
         assert decls[_name(f"type_{role}_weight")] == (
             "700" if style.bold else "400"
         ), role
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=lambda t: t.name)
+def test_the_css_value_tokens_reach_the_web_tier_verbatim(theme, density):
+    density("desk")
+    decls = _parse(theme_css_vars(theme))
+    assert decls["--card-border"] == theme.card_border
+    assert decls["--card-shadow"] == theme.card_shadow
+    assert decls["--overlay-shadow"] == theme.overlay_shadow

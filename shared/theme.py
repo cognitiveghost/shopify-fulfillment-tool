@@ -80,6 +80,16 @@ class ThemeTokens:
     status_danger_dot: str
     status_danger_border: str
     control_disabled_bg: str
+    # Phase 2 (spec 2026-10-01 section 3.1): the toast's inverse plane, the
+    # destructive confirm fill, and the web tier's card edge and shadows. The
+    # last three are CSS values, not colours -- see _CSS_VALUE_FIELDS.
+    surface_inverse: str
+    on_inverse: str
+    critical_fill: str
+    on_critical: str
+    card_border: str
+    card_shadow: str
+    overlay_shadow: str
 
     # --- Solid accent fill; on_accent is the text that sits on it (spec 3.4a) ---
     # hover and active are per theme: dark fills lighten toward white.
@@ -148,6 +158,13 @@ LIGHT_THEME = ThemeTokens(
     status_danger_dot="#E51C00",
     status_danger_border="#FDB5B4",
     control_disabled_bg="#F1F1F1",
+    surface_inverse="#303030",
+    on_inverse="#FFFFFF",
+    critical_fill="#C70A24",
+    on_critical="#FFFFFF",
+    card_border="transparent",
+    card_shadow="0 1px 0 rgba(26,26,26,0.07), 0 1px 3px rgba(26,26,26,0.12)",
+    overlay_shadow="0 4px 12px rgba(26,26,26,0.2)",
     accent_fill="#303030",
     accent_fill_hover="#1A1A1A",
     accent_fill_active="#000000",
@@ -194,6 +211,13 @@ DARK_THEME = ThemeTokens(
     status_danger_dot="#FF9A9A",
     status_danger_border="#6B2029",
     control_disabled_bg="#141518",
+    surface_inverse="#E3E3E3",
+    on_inverse="#1A1B1E",
+    critical_fill="#C4343F",
+    on_critical="#FFFFFF",
+    card_border="#2E2F34",
+    card_shadow="none",
+    overlay_shadow="none",
     accent_fill="#E3E3E3",
     accent_fill_hover="#FFFFFF",
     accent_fill_active="#C4C4C8",
@@ -508,6 +532,10 @@ _COLOR_FIELDS = (
     "status_danger_dot",
     "status_danger_border",
     "control_disabled_bg",
+    "surface_inverse",
+    "on_inverse",
+    "critical_fill",
+    "on_critical",
     "accent_fill",
     "accent_fill_hover",
     "accent_fill_active",
@@ -534,8 +562,23 @@ _COLOR_FIELDS = (
 # automatically. Proving on_accent against accent_fill alone is how #2D9FE8
 # shipped at 2.90:1 (spec 2/C4), and a second registration site to forget is
 # how that happens again.
-_SURFACE_PLANES = tuple(f for f in _COLOR_FIELDS if f.startswith("surface"))
+# surface_inverse is the toast's plane, not an elevation step: text is never
+# measured against it except on_inverse (see _INVERSE_PAIRS), and
+# packing-tool's tests/test_theme.py pins this tuple to the four planes.
+_SURFACE_PLANES = tuple(
+    f for f in _COLOR_FIELDS if f.startswith("surface") and f != "surface_inverse"
+)
 _ACCENT_FILLS = tuple(f for f in _COLOR_FIELDS if f.startswith("accent_fill"))
+# text -> the one fill it is drawn on. Each pair must clear AA (4.5:1).
+_INVERSE_PAIRS = (
+    ("on_inverse", "surface_inverse"),
+    ("on_critical", "critical_fill"),
+)
+
+# Tokens the web tier reads that are CSS values rather than colours: an edge
+# that is `transparent` in one theme, and shadows. Not hex-checked; checked
+# instead for the characters that would close the :root block they land in.
+_CSS_VALUE_FIELDS = ("card_border", "card_shadow", "overlay_shadow")
 
 # Legacy name -> canonical token. Each pair carries the same literal in both
 # theme constructors; validate_theme asserts they stay equal so the
@@ -605,6 +648,8 @@ def validate_theme(theme: ThemeTokens) -> None:
     alias still equals its canonical token, and every foreground clears its
     WCAG minimum on all four surface planes -- not just on the window
     background -- while on_accent clears AA against all three accent fills.
+    Text on the inverse and critical fills is checked the same way, and the three
+    CSS-value tokens are checked to be single values.
     The two matrices are the point: light mode shipped three status colors
     below AA for months, and dark's hover fill shipped at 2.90:1, because
     each was measured against exactly one partner.
@@ -669,6 +714,21 @@ def validate_theme(theme: ThemeTokens) -> None:
             raise ValueError(
                 f"{theme.name}.on_accent has {ratio:.2f}:1 contrast against "
                 f"{fill}, below the 4.5:1 minimum"
+            )
+
+    for text, fill in _INVERSE_PAIRS:
+        ratio = contrast_ratio(getattr(theme, text), getattr(theme, fill))
+        if ratio < 4.5:
+            raise ValueError(
+                f"{theme.name}.{text} has {ratio:.2f}:1 contrast against "
+                f"{fill}, below the 4.5:1 minimum"
+            )
+
+    for field_name in _CSS_VALUE_FIELDS:
+        value = getattr(theme, field_name)
+        if not isinstance(value, str) or not value.strip() or set(value) & set(";{}"):
+            raise ValueError(
+                f"{theme.name}.{field_name} = {value!r} is not a single CSS value"
             )
 
 
@@ -1086,7 +1146,8 @@ def theme_css_vars(theme: ThemeTokens) -> str:
         if f.name != "name" and f.name not in aliases
     }
     # Raised, not asserted: `python -O` strips assert statements.
-    missing = {_css_name(c) for c in _COLOR_FIELDS if c not in aliases} - decls.keys()
+    expected = [c for c in _COLOR_FIELDS if c not in aliases] + list(_CSS_VALUE_FIELDS)
+    missing = {_css_name(c) for c in expected} - decls.keys()
     if missing:
         raise AssertionError(f"theme_css_vars did not emit {sorted(missing)}")
 
