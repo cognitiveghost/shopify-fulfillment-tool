@@ -84,10 +84,11 @@ The module docstring's "banned" sentence is updated to say so and to cite ADR 00
 
 ### 4.1 Files
 
-- `gui/web/kit.css`: fonts, reset, kit geometry, components. No page-specific selector, no `#id`.
+- `gui/web/kit.css`: fonts, reset, kit geometry, the z-index scale (`--z-sticky` to `--z-toast`, moved from
+  `results.css` so every page stacks the same way), components. No page-specific selector, no `#id`.
 - `gui/web/results.html` links `kit.css` and then `results.css`.
 - `gui/web/results.css` keeps only what is Results': the page grid, KPI cells, filter bar layout, table,
-  selection bar, pane, column manager, and the z-index scale.
+  selection bar, pane and column manager.
 - Every colour is a `var(--token)` from `theme_css_vars`. Sizes that the theme does not own are kit constants
   on `:root` in `kit.css`:
 
@@ -153,7 +154,8 @@ Geometry is the mockup's at 1366×768 unless §9 says otherwise. Element ids tha
 ### 5.1 Page
 
 - `body` is `--surface-sunken`. `#results` has padding `16px 24px 20px` and three rows 12px apart:
-  the KPI card (auto height), the filter bar (auto), the split card (the rest).
+  the KPI card (88px, as today, so the table's height does not depend on a font), the filter bar
+  (`--control-height`), the split card (the rest).
 - `gui/ui_manager.py`: the page area's 5px inset becomes 0 while a web page is the current tab
   (`_WEB_PAGES = {1}`), and 5 again on a Qt page. Otherwise a white ring shows around the grey page.
 
@@ -228,7 +230,7 @@ mockup splits them.
 |---|---|
 | click a row | cursor and anchor move to it, and a pane the operator hid reopens. The checked set does not change |
 | click its checkbox, or Ctrl-click the row | toggles it in the checked set and moves the anchor. The cursor stays |
-| Shift-click | checks the range from the anchor to the row (replacing the set, or adding with Ctrl). The cursor stays |
+| Shift-click | checks the range from the anchor to the row (replacing the set, or adding with Ctrl) and moves the cursor to the row, so Shift+↑ ↓ carries on from it |
 | ↑ ↓ | move the cursor and the anchor from the cursor (from the first row when there is none); a hidden pane reopens |
 | Shift+↑ ↓ | move the cursor and check the range from the anchor to it |
 | Ctrl+A | checks every order shown |
@@ -248,9 +250,11 @@ column on, as today, so the header checkbox stays reachable.
   those are sent to `setStatus(keys, true)`. With none, the label is "Mark N fulfillable" over all checked and
   the button is disabled.
 - **Hold this** / **Hold these N** (secondary, compact): sends every checked order.
-- **More** (secondary, compact, chevron): a 268px menu. Add a tag, Remove a tag, Copy order numbers (Ctrl+C),
-  separator, Export to Excel, Export to CSV, separator, then in danger text: Remove a SKU from these orders…,
-  Remove orders containing a SKU…, Exclude these orders from the run….
+- **More** (secondary, compact, chevron): a 268px menu of eight items. The seven that exist keep today's
+  count-aware labels ("Add a tag to 3 orders", "Remove a SKU from this order"). Order: add a tag, remove a
+  tag, copy the order numbers (Ctrl+C), a separator (new), the two exports, a separator, then in danger text
+  the two SKU removals and a new third item, "Exclude this order from the run" / "Exclude these N orders from
+  the run".
 - The Exclude and Clear buttons leave the bar.
 
 ### 5.7 Bulk popover
@@ -320,7 +324,8 @@ behind it: the slot's `columns` mode is deleted.
   6. Tags: the removable tag chips and "+ Tag", as today.
   7. Notes, as today.
 - **Footer** (top rule, padding 10 14): the status verb (Hold or Mark fulfillable, secondary), **Exclude
-  order** (`.btn.ghost.danger`), the ⋯ menu (Copy order number), a spacer, and "↑ ↓  3 / 40" in mono caption.
+  order** (`.btn.ghost.danger`), a spacer, and "↑ ↓  3 / 40" in mono caption. Today's ⋯ menu held only Copy
+  order number and does not fit a 340px footer; Ctrl+C now copies the cursor's order number (§5.5).
 - **No cursor:** "No order selected" and today's hint, centred.
 - **Collapsed:** `#pane-show` fills a 40px rail: a chevron-left and "Order detail" written vertically
   (`writing-mode: vertical-rl`), hover `--hover`. Clicking a row or moving the cursor reopens a pane the
@@ -451,7 +456,8 @@ Add Product to Order, the toast's run badge, the stock-file age, the sixth "Olde
 page, the verdict's mark and its explanatory sentence.
 
 Dropped because the mockup does not draw them: the units, value and courier counts in the selection bar; the
-Exclude and Clear buttons in the bar (Exclude moved into More; the header checkbox and Esc clear).
+Exclude and Clear buttons in the bar (Exclude moved into More; the header checkbox and Esc clear); the pane
+footer's ⋯ menu (Ctrl+C copies the order number); the column manager's close and Done buttons.
 
 ## 10. Out of scope
 
