@@ -23,7 +23,7 @@ def test_no_style_literals_anywhere_in_the_gui():
     )
 
 
-def test_the_built_stylesheet_names_no_css_colour():
+def test_the_built_stylesheet_names_no_css_colour(qapp):
     """shared/theme.py is not scanned as source -- it is where colour values
     belong -- so check its product instead. build_stylesheet used to emit five
     literal `color: white` declarations that on_accent exists to replace."""
