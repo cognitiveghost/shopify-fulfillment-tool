@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+from collections.abc import Callable
 from datetime import datetime
 from functools import reduce
 from pathlib import Path
@@ -431,6 +432,33 @@ def count_csv_rows(file_path, delimiter=",") -> int:
         return 0
 
 
+def csv_row_stats(file_path, delimiter=",", key_column=None) -> tuple[int, int | None]:
+    """Data rows, and how many distinct values `key_column` holds.
+
+    One csv.reader pass, for the same reasons count_csv_rows gives. The key
+    column is the order number for an orders file and the SKU for a stock
+    file, so the second number is "orders" or "SKUs". It is None when the
+    header has no such column.
+    """
+    try:
+        with open(file_path, encoding="utf-8-sig", newline="") as handle:
+            rows = csv.reader(handle, delimiter=delimiter)
+            header = [name.strip() for name in next(rows, [])]
+            index = header.index(key_column) if key_column in header else None
+            count = 0
+            keys = set()
+            for row in rows:
+                if not any(field.strip() for field in row):
+                    continue
+                count += 1
+                if index is not None and index < len(row) and row[index].strip():
+                    keys.add(row[index].strip())
+            return count, (len(keys) if index is not None else None)
+    except Exception:
+        logger.exception(f"Could not read row stats from {file_path}")
+        return 0, None
+
+
 def _validate_and_prepare_inputs(
     stock_file_path: str | None,
     orders_file_path: str | None,
@@ -769,6 +797,23 @@ def write_memory_baseline(session_path, skus: dict, names: dict | None) -> None:
         atomic_write_json(
             _baseline_path(session_path), {"skus": skus, "names": names or {}}
         )
+
+
+def _discard_unsaved_baseline(config: dict, session_path) -> None:
+    """Remove the baseline a run wrote on load when it stops before it saves.
+
+    Left behind, the next run would reuse it, and because memory still belongs
+    to the session before, the save rule would never write memory for this one.
+    """
+    if (
+        session_path
+        and config.get("_stock_from_memory")
+        and not config.get("_memory_baseline_reused")
+    ):
+        try:
+            _baseline_path(session_path).unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning(f"Could not remove the unsaved memory baseline: {e}")
 
 
 def _load_history_data(
@@ -1415,6 +1460,21 @@ def _save_results_and_reports(
         return output_file_path, None
 
 
+# The four stages a run names while it works (phase 3 spec section 7). The
+# last one writes; a run that has reached it always finishes.
+ANALYSIS_STEPS = (
+    "Reading orders and stock",
+    "Checking fulfilment history",
+    "Allocating stock",
+    "Saving results",
+)
+CANCELLED = "cancelled"
+
+
+class AnalysisCancelled(Exception):
+    """Raised by a progress callback to stop a run before it saves."""
+
+
 def run_full_analysis(
     stock_file_path,
     orders_file_path,
@@ -1426,6 +1486,7 @@ def run_full_analysis(
     session_manager: Any | None = None,
     profile_manager: Any | None = None,
     session_path: str | None = None,
+    progress: Callable[[int], None] | None = None,
 ):
     """Orchestrates the entire fulfillment analysis process.
 
@@ -1468,8 +1529,10 @@ def run_full_analysis(
         profile_manager (ProfileManager, optional): Profile manager instance.
         session_path (str, optional): Path to existing session directory (new workflow).
             If not provided in session mode, a new session will be created automatically.
+        progress (callable, optional): Called with the index of each step in ANALYSIS_STEPS as it begins. It may raise AnalysisCancelled to stop the run before it saves.
 
     Returns:
+        A cancelled run returns (False, CANCELLED, None, None).
         tuple[bool, str | None, pd.DataFrame | None, dict | None]:
             A tuple containing:
             - bool: True for success, False for failure.
@@ -1483,7 +1546,13 @@ def run_full_analysis(
     """
     logger.info("--- Starting Full Analysis Process ---")
 
+    def step(index: int) -> None:
+        if progress is not None:
+            progress(index)
+
+    saving = False
     try:
+        step(0)
         # Step 1: Validate and prepare inputs
         logger.info("Step 1: Validating and preparing inputs...")
         use_session_mode, working_path, _, session_path = _validate_and_prepare_inputs(
@@ -1512,6 +1581,7 @@ def run_full_analysis(
             session_path,
         )
 
+        step(1)
         # Step 3: Load history data
         logger.info("Step 3: Loading fulfillment history...")
         history_df, history_readable = _load_history_data(
@@ -1526,6 +1596,7 @@ def run_full_analysis(
             history_df, packed_df, live_sessions
         )
 
+        step(2)
         # Step 4: Run analysis and apply rules
         logger.info("Step 4: Running analysis and applying rules...")
 
@@ -1559,6 +1630,8 @@ def run_full_analysis(
             )
         )
 
+        step(3)
+        saving = True
         # Step 5: Save results and reports
         logger.info("Step 5: Saving results and reports...")
         primary_path, _ = _save_results_and_reports(
@@ -1588,6 +1661,12 @@ def run_full_analysis(
         logger.info("Analysis completed successfully!")
         return True, primary_path, final_df, stats
 
+    except AnalysisCancelled:
+        # ponytail: cancelling a re-run leaves the new input copies beside the
+        # old results until the next run completes. Not guarded: a re-run needs
+        # the orders file loaded again, and running once more repairs it.
+        logger.info("Analysis cancelled")
+        return False, CANCELLED, None, None
     except FileNotFoundError as e:
         error_msg = f"File not found: {e!s}"
         logger.exception(error_msg)
@@ -1604,6 +1683,9 @@ def run_full_analysis(
         error_msg = f"Analysis failed: {e!s}"
         logger.exception(error_msg)
         return False, error_msg, None, None
+    finally:
+        if not saving:
+            _discard_unsaved_baseline(config, session_path)
 
 
 def create_packing_list_report(

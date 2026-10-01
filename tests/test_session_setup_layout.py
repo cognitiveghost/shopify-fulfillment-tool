@@ -1,15 +1,17 @@
-"""Session Setup is one card of three rows.
+"""Setup is one web page in tab 0 (phase 3 spec sections 3 and 4.5).
 
-Bundle 5 deleted the splitter, the scroll area and the recent-sessions
-strip. The constraints the previous version of this file protected — a
-706px column floor, a fixed recent-list height — belonged to a layout that
-no longer exists.
+What the page draws is tested in test_setup_page.py and what the state says
+in test_setup_state.py. This file tests the wiring: the window builds the
+state from its own facts and the page's requests reach the handlers.
 """
 
-import pytest
-from PySide6.QtWidgets import QApplication, QScrollArea, QSplitter
+from pathlib import Path
 
-from gui.components import Card, FileSlot, RadioCard
+import pytest
+from PySide6.QtWidgets import QApplication
+
+from gui.setup_bridge import SetupView
+from gui.setup_state import FileSlot
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -19,9 +21,6 @@ def qapp():
 
 @pytest.fixture
 def main_window(tmp_path, monkeypatch):
-    """A real MainWindow rooted at a throwaway server path -- same
-    construction test_shell.py uses; there is no conftest fixture for this,
-    and copying seven lines beats making one test file import another."""
     monkeypatch.setenv("FULFILLMENT_SERVER_PATH", str(tmp_path))
     from gui.main_window_pyside import MainWindow
 
@@ -29,146 +28,278 @@ def main_window(tmp_path, monkeypatch):
     win.resize(1366, 768)
     win.show()
     QApplication.processEvents()
-    win.main_tabs.setCurrentIndex(0)
-    # This file measures the card's own layout (page 1), not page 0's empty
-    # state -- and a QStackedWidget page that has never been current is
-    # never laid out, so every widget in it would read back as (0, 0).
-    win.setup_stack.setCurrentIndex(1)
-    QApplication.processEvents()
     yield win
     win.close()
 
 
-def test_the_setup_page_holds_exactly_one_card(main_window):
-    page = main_window.setup_stack.widget(1)
-    assert len(page.findChildren(Card)) == 1
+@pytest.fixture
+def client_window(main_window):
+    """The window with one client loaded, as test_file_handler.py does it."""
+    main_window.profile_manager.create_client_profile("acme", "Client Acme")
+    main_window.current_client_id = "acme"
+    main_window.load_client_config("acme")
+    main_window.update_ui_state()
+    return main_window
 
 
-def test_the_card_fits_above_530px(main_window):
-    """The spec's 480px estimate assumed the two RadioCard descriptions
-    would never wrap past two lines; rendering the real page (not just its
-    sizeHint at an untested width) showed a three-line wrap at the card's
-    actual 840px cap. The requirement behind the number -- no scrolling on
-    the 692px page at 1366x768 -- still holds at the measured 515px. Kept
-    within 15px of that so it still catches drift rather than absorbing it.
-    """
-    page = main_window.setup_stack.widget(1)
-    card = page.findChildren(Card)[0]
-    assert card.sizeHint().height() <= 530
+def _state(win):
+    return win.setup_bridge.state
 
 
-def test_nothing_on_the_setup_page_scrolls(main_window):
-    page = main_window.setup_stack.widget(1)
-    assert page.findChildren(QScrollArea) == []
-    assert page.findChildren(QSplitter) == []
+def _write_inputs(tmp_path):
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name,Lineitem sku,Lineitem quantity,Shipping Method\n"
+        "#1,A1,2,Standard\n#1,B2,1,Standard\n#2,A1,1,Express\n",
+        encoding="utf-8",
+    )
+    stock = tmp_path / "stock.csv"
+    stock.write_text("Артикул;Наличност\nA1;5\nB2;3\n", encoding="utf-8")
+    return orders, stock
 
 
-def test_the_page_has_two_file_slots(main_window):
-    page = main_window.setup_stack.widget(1)
-    assert len(page.findChildren(FileSlot)) == 2
+def test_tab_0_holds_the_setup_view(main_window):
+    assert isinstance(main_window.setup_view, SetupView)
+    assert main_window.main_tabs.widget(0).findChild(SetupView) is main_window.setup_view
 
 
-def test_the_strategy_is_two_radio_cards_not_a_combo(main_window):
-    page = main_window.setup_stack.widget(1)
-    cards = page.findChildren(RadioCard)
-    assert len(cards) == 2
-    assert {c.title_text for c in cards} == {"Multi-item first", "Oldest first"}
-    assert all(c.description_text for c in cards)
-
-
-def test_the_recent_sessions_strip_is_gone(main_window):
-    assert not hasattr(main_window, "recent_sessions_list")
-
-
-def test_the_shell_controls_are_not_duplicated_on_the_page(main_window):
-    for gone in (
-        "new_session_btn",
-        "settings_button",
-        "generate_reports_button",
-        "open_session_folder_button",
-        "add_product_button",
+def test_the_qt_setup_card_is_gone(main_window):
+    for name in (
+        "setup_stack",
+        "setup_state_panel",
+        "inventory_memory_checkbox",
+        "strategy_multi_item",
+        "strategy_fifo",
     ):
-        assert not hasattr(main_window, gone), f"{gone} still on the page"
+        assert not hasattr(main_window, name), name
 
 
-def test_the_label_gutter_is_208(main_window):
-    from PySide6.QtWidgets import QFormLayout
-
-    from gui.components import FormSection
-
-    page = main_window.setup_stack.widget(1)
-    section = page.findChildren(FormSection)[0]
-    label = section.form.itemAt(0, QFormLayout.LabelRole).widget()
-    assert label.width() == 208
+def test_the_slots_are_records(main_window):
+    assert isinstance(main_window.orders_slot, FileSlot)
+    assert isinstance(main_window.stock_slot, FileSlot)
+    assert main_window.orders_slot.kind == "orders"
+    assert main_window.stock_slot.kind == "stock"
 
 
-def test_there_is_no_session_name_row(main_window):
-    """PR #317 review picked dropping the row over wiring an inert field
-    sight unseen (design call 1, option (c))."""
-    assert not hasattr(main_window, "session_name_edit")
+def test_with_no_client_the_page_asks_for_one(main_window):
+    assert _state(main_window)["view"] == "no_client"
 
 
-def test_orders_file_is_the_first_row_of_the_card(main_window):
-    from PySide6.QtWidgets import QFormLayout
+def test_a_client_with_no_session_gets_the_no_session_view(client_window):
+    state = _state(client_window)
+    assert state["view"] == "no_session"
+    assert state["client"] == "acme"
+    assert client_window.run_analysis_button.isEnabled() is False
 
-    from gui.components import FormSection
 
-    page = main_window.setup_stack.widget(1)
-    section = page.findChildren(FormSection)[0]
-    assert section.form.itemAt(0, QFormLayout.FieldRole).widget() is (
-        main_window.orders_slot
+def test_new_session_opens_the_cards(client_window):
+    client_window.setup_bridge.newSession()
+    state = _state(client_window)
+    assert state["view"] == "setup"
+    assert state["session"]["name"] == Path(client_window.session_path).name
+    assert state["session"]["title"] == "New session"
+    assert state["session"]["meta"].startswith("acme · opened ")
+    assert state["files"]["orders"]["state"] == "missing"
+
+
+def test_run_follows_the_one_rule(client_window, tmp_path):
+    orders, stock = _write_inputs(tmp_path)
+    client_window.setup_bridge.newSession()
+
+    client_window.file_handler.load_file("orders", str(orders))
+    assert _state(client_window)["files"]["orders"]["state"] == "loaded"
+    assert client_window.run_analysis_button.isEnabled() is False
+
+    client_window.file_handler.load_file("stock", str(stock))
+    state = _state(client_window)
+    assert state["run"]["enabled"] is True
+    assert client_window.run_analysis_button.isEnabled() is True
+    assert state["summary"]["headline"] == (
+        "2 orders, 3 lines, stock for 2 SKUs, multi-item first"
+    )
+    assert [s["v"] for s in state["files"]["stock"]["stats"]] == ["2", "2", "Semicolon  ;"]
+
+
+def test_replace_empties_the_card(client_window, tmp_path):
+    orders, _stock = _write_inputs(tmp_path)
+    client_window.setup_bridge.newSession()
+    client_window.file_handler.load_file("orders", str(orders))
+
+    client_window.setup_bridge.clearFile("orders")
+
+    assert client_window.orders_file_path is None
+    assert _state(client_window)["files"]["orders"]["state"] == "missing"
+
+
+def test_losing_the_server_keeps_the_cards_and_stops_run(client_window, tmp_path):
+    orders, stock = _write_inputs(tmp_path)
+    client_window.setup_bridge.newSession()
+    client_window.file_handler.load_file("orders", str(orders))
+    client_window.file_handler.load_file("stock", str(stock))
+
+    client_window.profile_manager.is_network_available = False
+    client_window.connectionChanged.emit(False)
+
+    state = _state(client_window)
+    assert state["view"] == "setup"
+    assert state["run"]["enabled"] is False
+    assert state["summary"]["reason_tone"] == "danger"
+    assert client_window.run_analysis_button.isEnabled() is False
+
+
+def test_the_page_buttons_reach_the_file_dialogs(client_window, monkeypatch):
+    calls = []
+    handler = client_window.file_handler
+    monkeypatch.setattr(handler, "select_orders_file", lambda: calls.append("orders file"))
+    monkeypatch.setattr(handler, "select_stock_file", lambda: calls.append("stock file"))
+    monkeypatch.setattr(handler, "select_folder", lambda kind: calls.append(f"{kind} folder"))
+
+    bridge = client_window.setup_bridge
+    bridge.chooseFile("orders")
+    bridge.chooseFile("stock")
+    bridge.chooseFolder("orders")
+
+    assert calls == ["orders file", "stock file", "orders folder"]
+
+
+def test_a_dropped_path_takes_the_file_route(client_window, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        client_window.file_handler, "load_file", lambda kind, path: seen.append((kind, path))
+    )
+    client_window.setup_view.pathDropped.emit("stock", "/d/s.csv")
+    assert seen == [("stock", "/d/s.csv")]
+
+
+def test_the_strategy_is_saved_to_the_client(client_window):
+    client_window.setup_bridge.setStrategy("fifo")
+    assert client_window.active_profile_config["analysis_mode"] == "fifo"
+    assert _state(client_window)["strategy"] == "fifo"
+    saved = client_window.profile_manager.load_shopify_config("acme")
+    assert saved["analysis_mode"] == "fifo"
+
+
+def test_the_memory_switch_is_saved_to_the_client(client_window):
+    client_window.setup_bridge.setMemory(False)
+    assert client_window.active_profile_config["inventory_memory"]["enabled"] is False
+    assert _state(client_window)["memory"]["on"] is False
+    client_window.setup_bridge.setMemory(True)
+    assert _state(client_window)["memory"]["on"] is True
+
+
+def _a_run_saves_memory(win, skus):
+    """What a run does at save: memory goes to disk through a freshly loaded
+    config, past the window's own copy."""
+    assert win.profile_manager.save_inventory_memory("acme", skus, session="S1")
+
+
+def test_a_finished_run_brings_the_memory_it_saved_to_the_page(client_window):
+    client_window.session_path = client_window.session_manager.create_session("acme")
+    _a_run_saves_memory(client_window, {"A1": 4.0, "B2": 3.0})
+
+    client_window.actions_handler._on_analysis_finished()
+
+    memory = client_window.active_profile_config["inventory_memory"]
+    assert memory["skus"] == {"A1": 4.0, "B2": 3.0}
+    assert memory["session"] == "S1"
+
+
+@pytest.mark.parametrize(
+    "flip",
+    [lambda bridge: bridge.setMemory(False), lambda bridge: bridge.setStrategy("fifo")],
+    ids=["memory switch", "strategy"],
+)
+def test_a_setup_control_does_not_write_older_memory_back(client_window, flip):
+    """Both controls save the window's whole config. Its memory must be the
+    one on disk, or the save rolls the stock back to the last client load."""
+    _a_run_saves_memory(client_window, {"A1": 4.0})
+
+    flip(client_window.setup_bridge)
+
+    saved = client_window.profile_manager.load_shopify_config("acme")["inventory_memory"]
+    assert saved["skus"] == {"A1": 4.0}
+    assert saved["session"] == "S1"
+
+
+def test_the_fix_link_opens_the_page_the_problem_names(client_window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        client_window.actions_handler,
+        "open_settings_window",
+        lambda page=None: opened.append(page),
+    )
+    client_window.orders_slot.set_invalid(
+        "/d/o.csv", ["Lineitem sku"], ["Name"], {"Lineitem sku": "SKU"}
     )
 
+    client_window.setup_bridge.fixProblem("orders")
+    client_window.setup_bridge.fixProblem("stock")  # no problem there: nothing opens
 
-def test_inventory_memory_is_its_own_row_not_folded_into_stock_file(main_window):
-    """PR #317 review: the checkbox should be a labelled option on the card,
-    not a second widget squeezed into the Stock file row's field column."""
-    from PySide6.QtWidgets import QCheckBox, QFormLayout
-
-    from gui.components import FormSection
-
-    page = main_window.setup_stack.widget(1)
-    section = page.findChildren(FormSection)[0]
-    labels = [
-        section.form.itemAt(row, QFormLayout.LabelRole).widget().text()
-        for row in range(section.form.rowCount())
-    ]
-    assert "Inventory memory" in labels
-    row = labels.index("Inventory memory")
-    field = section.form.itemAt(row, QFormLayout.FieldRole).widget()
-    assert field is main_window.inventory_memory_checkbox
-    assert isinstance(field, QCheckBox)
+    assert opened == ["Orders Mapping"]
 
 
-def test_the_gutter_degrades_below_1024_and_flattens_below_840(qapp):
-    """Spec §8: 208 above 1024px, 96 down to the card's 840px cap, then 0
-    with labels stacked above their fields. Unreachable on the 1366px
-    Windows floor, but this page also runs on Linux, in dev and in tests --
-    tested standalone rather than through the full shell, where the page's
-    width is the stack's, not something a test can dial to an exact number.
-    """
-    from PySide6.QtWidgets import QFormLayout, QLineEdit
+def test_open_recent_from_the_page_opens_the_bars_menu(client_window, monkeypatch):
+    shown = []
+    monkeypatch.setattr(
+        client_window.command_bar.session_button, "showMenu", lambda: shown.append(1)
+    )
+    client_window.setup_bridge.openRecent()
+    assert shown == [1]
 
-    from gui.components import FormSection
-    from gui.ui_manager import _SetupPage
 
-    section = FormSection("", label_width=208)
-    section.add_row("Orders file", QLineEdit())
-    page = _SetupPage(section)
-    page.show()
-    label = section.form.itemAt(0, QFormLayout.LabelRole).widget()
+def test_the_unreachable_button_opens_the_connection_dialog(client_window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        client_window.ui_manager, "_open_connection_settings", lambda: opened.append(1)
+    )
+    client_window.setup_bridge.openConnection()
+    assert opened == [1]
 
-    page.resize(1200, 400)
-    QApplication.processEvents()
-    assert label.width() == 208
 
-    page.resize(900, 400)
-    QApplication.processEvents()
-    assert label.width() == 96
+def test_run_from_the_page_clicks_the_hidden_run_button(client_window, monkeypatch):
+    """The hidden button is the guard: the page goes through it, never round it."""
+    clicks = []
+    monkeypatch.setattr(
+        client_window.run_analysis_button, "click", lambda: clicks.append(1)
+    )
+    client_window.setup_bridge.runAnalysis()
+    assert clicks == [1]
 
-    page.resize(700, 400)
-    QApplication.processEvents()
-    assert label.maximumWidth() > 208
-    assert section.form.rowWrapPolicy() == QFormLayout.WrapAllRows
 
-    page.close()
+def test_an_opened_session_brings_its_facts(client_window, tmp_path):
+    path = client_window.session_manager.create_session("acme")
+    client_window.load_existing_session(path)
+    state = _state(client_window)
+    assert state["view"] == "setup"
+    assert state["session"]["name"] == Path(path).name
+
+
+def test_cancel_from_the_page_reaches_the_run(client_window, monkeypatch):
+    cancelled = []
+    monkeypatch.setattr(
+        client_window.actions_handler, "cancel_analysis", lambda: cancelled.append(1)
+    )
+    client_window.setup_bridge.cancelRun()
+    assert cancelled == [1]
+
+
+def test_a_step_shows_on_the_page_and_in_the_bar(client_window):
+    client_window.setup_bridge.newSession()
+    client_window._analysis_running = True
+    client_window.actions_handler.analysis_progress.emit(2)
+
+    run = client_window.setup_bridge.state["run"]
+    assert (run["running"], run["step"], run["step_name"]) == (
+        True,
+        2,
+        "Allocating stock",
+    )
+    assert client_window.command_bar.step_count_label.text() == "Step 3 of 4"
+    assert client_window.run_analysis_button.isEnabled() is False
+
+    client_window.actions_handler.cancel_analysis()
+    run = client_window.setup_bridge.state["run"]
+    assert (run["cancelling"], run["can_cancel"]) == (True, False)
+
+    client_window.actions_handler._on_analysis_finished()
+    assert client_window.setup_bridge.state["run"]["running"] is False

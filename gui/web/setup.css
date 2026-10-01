@@ -1,0 +1,186 @@
+/* The Setup page (phase 3 spec section 5). Layout only: every component is
+   the kit's. Every colour is a token from theme_css_vars(). */
+
+#setup {
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px;
+}
+
+/* --- the three panels ---------------------------------------------------- */
+
+#setup > .state { flex: 1; gap: 8px; }
+#setup > .state .state-glyph { width: 28px; height: 28px; }
+#setup > .state .state-title { font-size: var(--type-heading-size); }
+.state-path {
+  font-family: var(--font-family-mono);
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
+.state-actions { display: flex; gap: 8px; }
+
+/* --- the grid ------------------------------------------------------------ */
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+.setup-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.file-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+/* --- file card ----------------------------------------------------------- */
+
+.file-card { display: flex; flex-direction: column; min-width: 0; }
+.file-card[data-state="problem"] { border-color: var(--status-danger-border); }
+.file-card.over { border-color: var(--selection-border); }
+
+.file-head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 0; }
+.file-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.file-title { font-size: var(--type-label-size); font-weight: 700; }
+.file-hint { font-size: var(--type-caption-size); color: var(--text-secondary); }
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 12px 12px;
+  padding: 18px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--kit-radius);
+  background: var(--surface-raised);
+  text-align: center;
+}
+.file-card.over .dropzone {
+  border-color: var(--selection-border);
+  background: var(--selection-bg);
+}
+.dropzone-glyph {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dropzone-buttons { display: flex; gap: 6px; }
+.dropzone-note { font-size: var(--type-caption-size); color: var(--text-secondary); }
+
+.file-body { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; }
+.file-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.file-row .glyph { width: 16px; height: 16px; color: var(--text-secondary); stroke-width: 1.5; }
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-family-mono);
+  font-weight: 700;
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+
+.parts {
+  max-height: 156px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--kit-radius);
+}
+.part {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px;
+  font-family: var(--font-family-mono);
+  font-size: var(--type-caption-size);
+}
+.part + .part { border-top: 1px solid var(--border-subtle); }
+.part-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.part-rows { color: var(--text-secondary); white-space: nowrap; }
+.file-note { font-size: var(--type-caption-size); color: var(--text-secondary); }
+
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.stat-k { font-size: var(--type-caption-size); color: var(--text-secondary); }
+/* pre: "Comma  ," keeps its two spaces. */
+.stat-v { font-family: var(--font-family-mono); font-weight: 700; white-space: pre; }
+.stat-v.muted, .summary-v.muted { color: var(--text-disabled); }
+
+.file-card .banner { margin: 0 12px 12px; border-radius: var(--kit-radius); }
+.problem-title { font-weight: 700; color: var(--status-danger); }
+.file-card .banner .btn.link { align-self: flex-start; }
+
+/* --- options ------------------------------------------------------------- */
+
+.options { display: flex; flex-direction: column; }
+.memory { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.memory-toggle { display: flex; align-items: center; gap: 8px; }
+.memory-state { font-weight: 700; }
+.memory-text { color: var(--text-secondary); }
+.memory-previous { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.strategies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+/* --- run summary --------------------------------------------------------- */
+
+.summary {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+.summary-head { display: flex; flex-direction: column; gap: 4px; }
+.summary-label, .progress-label {
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
+.summary-headline {
+  font-size: var(--type-label-size);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+.summary-headline.ready { color: var(--text); }
+.summary-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+}
+.summary-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.summary-k { color: var(--text-secondary); }
+.summary-v { min-width: 0; }
+
+.progress { display: flex; flex-direction: column; gap: 4px; }
+.progress-step { font-weight: 700; }
+.progress-bars { display: flex; gap: 3px; margin-top: 4px; }
+.progress-bar { flex: 1; height: 4px; background: var(--border-subtle); }
+.progress-bar.done { background: var(--accent-fill); }
+
+.summary-actions { display: flex; gap: 6px; }
+.summary-actions .btn.primary { flex: 1; }
+.summary-reason { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.summary-reason.danger { color: var(--status-danger); }
+
+/* --- a narrow page ------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .file-cards, .strategies { grid-template-columns: minmax(0, 1fr); }
+}

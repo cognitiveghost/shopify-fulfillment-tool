@@ -1,11 +1,13 @@
-"""FileHandler reads FileSlot state, not a check mark rendered into a QLabel.
+"""FileHandler writes the file slot's record; the slot says whether Run may go.
 
-The bug this replaces: validity was the string "✓" in a QLabel, read back by
-check_files_ready(). FileSlot (Task 3) now owns that fact as data.
+Phase 3 spec section 6: one route for a picked and a dropped path, and every
+file failure lands in the slot as a problem, never in a dialog or a banner.
 """
 
+import copy
 import os
 from pathlib import Path
+from unittest.mock import Mock
 
 import pandas as pd
 import pytest
@@ -33,8 +35,10 @@ def main_window(tmp_path, monkeypatch):
 
     win.profile_manager.create_client_profile("acme", "Client Acme")
     win.current_client_id = "acme"
-    win.current_client_config = win.profile_manager.load_shopify_config("acme")
     win.load_client_config("acme")
+    # Files load only into an open session (the page shows no cards without one).
+    win.session_path = win.session_manager.create_session("acme")
+    win.update_ui_state()
 
     yield win
     win.close()
@@ -48,8 +52,8 @@ def test_check_files_ready_reads_the_slots_not_a_check_mark(main_window, tmp_pat
     orders.write_text("x")
     stock.write_text("x")
 
-    main_window.orders_slot.set_loaded(orders, "1 row")
-    main_window.stock_slot.set_loaded(stock, "1 row")
+    main_window.orders_slot.set_loaded(orders)
+    main_window.stock_slot.set_loaded(stock)
     assert handler.check_files_ready() is True
 
     main_window.stock_slot.set_invalid(stock, ["Stock"], ["SKU"])
@@ -68,9 +72,10 @@ def test_a_stock_file_missing_its_quantity_column_puts_the_slot_in_error(
     slot = main_window.stock_slot
     assert slot.is_valid is False
     assert slot.missing_columns
-    assert slot.map_columns_button.isEnabled()
-    assert slot.choose_other_button.isEnabled()
-    assert "Nothing can be allocated" in slot.error_text()
+    assert slot.problem["title"] == "No stock column"
+    assert slot.problem["fix_page"] == "Stock Mapping"
+    assert "“Наличност”" in slot.problem["text"]
+    assert slot.delimiter == ";"
 
 
 def test_an_orders_file_with_every_required_column_loads_the_slot(
@@ -111,8 +116,12 @@ def test_a_dropped_folder_merges_its_csvs_into_the_slot(
 
     slot = main_window.orders_slot
     assert slot.is_valid is True
-    assert "2 files merged" in slot._loaded_summary.text()
-    assert "2 rows" in slot._loaded_summary.text()
+    assert slot.is_folder is True
+    assert [p["name"] for p in slot.parts] == ["a.csv", "b.csv"]
+    assert [p["rows"] for p in slot.parts] == [1, 1]
+    assert (slot.rows, slot.keys, slot.delimiter) == (2, 2, ",")
+    assert slot.name == "exports\\  ·  2 CSVs merged"
+    assert slot.note == ""
 
 
 def test_a_dropped_missing_file_shows_the_invalid_state_instead_of_raising(
@@ -125,6 +134,9 @@ def test_a_dropped_missing_file_shows_the_invalid_state_instead_of_raising(
     )
 
     assert main_window.orders_slot.is_valid is False
+    assert main_window.orders_slot.problem["title"] == "The orders file couldn't be read"
+    assert main_window.orders_slot.problem["fix_page"] == ""
+    assert main_window.error_banner.isHidden()
 
 
 def test_a_semicolon_orders_file_loads_under_auto_without_a_toast(
@@ -163,10 +175,10 @@ def test_a_folder_merge_keeps_repeat_lines_and_reports_overlaps(
 
     main_window.file_handler.accept_dropped_path("orders", str(folder))
 
-    text = main_window.orders_slot._loaded_summary.text()
-    assert "2 files merged" in text
-    assert "3 rows" in text
-    assert "1 overlapping order skipped" in text
+    slot = main_window.orders_slot
+    assert len(slot.parts) == 2
+    assert slot.rows == 3
+    assert slot.note == "1 overlapping order skipped"
     merged = pd.read_csv(main_window.orders_file_path)
     assert (merged["Name"] == "#4148").sum() == 2
 
@@ -245,8 +257,8 @@ def test_clearing_a_slot_forgets_the_path_and_regates_run_analysis(
     stock.write_text("x")
     main_window.orders_file_path = str(orders)
     main_window.stock_file_path = str(stock)
-    main_window.orders_slot.set_loaded(orders, "1 row")
-    main_window.stock_slot.set_loaded(stock, "1 row")
+    main_window.orders_slot.set_loaded(orders)
+    main_window.stock_slot.set_loaded(stock)
     assert handler.check_files_ready() is True
 
     handler.clear_file("stock")
@@ -269,17 +281,207 @@ def test_clearing_the_stock_slot_keeps_run_analysis_alive_in_memory_mode(
     stock.write_text("x")
     main_window.orders_file_path = str(orders)
     main_window.stock_file_path = str(stock)
-    main_window.orders_slot.set_loaded(orders, "1 row")
-    main_window.stock_slot.set_loaded(stock, "1 row")
-    main_window.session_path = main_window.session_manager.create_session("acme")
+    main_window.orders_slot.set_loaded(orders)
+    main_window.stock_slot.set_loaded(stock)
     main_window.active_profile_config["inventory_memory"] = {
         "enabled": True,
         "skus": {"A": 10.0},
         "total_units": 10,
     }
-    main_window.inventory_memory_checkbox.setChecked(True)
 
     handler.clear_file("stock")
 
     assert main_window.stock_file_path is None
     assert main_window.run_analysis_button.isEnabled() is True
+
+
+def test_a_picked_and_a_dropped_path_take_the_same_route(main_window, monkeypatch):
+    seen = []
+    handler = main_window.file_handler
+    monkeypatch.setattr(handler, "load_file", lambda kind, path: seen.append((kind, path)))
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileName", lambda *a, **k: ("/d/picked.csv", "")
+    )
+
+    handler.select_orders_file()
+    handler.select_stock_file()
+    handler.accept_dropped_path("stock", "/d/dropped.csv")
+
+    assert seen == [
+        ("orders", "/d/picked.csv"),
+        ("stock", "/d/picked.csv"),
+        ("stock", "/d/dropped.csv"),
+    ]
+
+
+def test_a_cancelled_file_dialog_loads_nothing(main_window, monkeypatch):
+    seen = []
+    handler = main_window.file_handler
+    monkeypatch.setattr(handler, "load_file", lambda kind, path: seen.append((kind, path)))
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: ("", ""))
+    handler.select_orders_file()
+    handler.select_stock_file()
+    assert seen == []
+
+
+def test_a_dropped_stock_file_gets_the_anomaly_check(main_window, tmp_path, monkeypatch):
+    """A dropped stock file used to skip the check a picked one gets."""
+    stock = tmp_path / "stock.csv"
+    stock.write_text("Артикул;Наличност\nX;1\nY;1\n", encoding="utf-8")
+    memory = {"enabled": True, "skus": {"A": 50.0, "B": 50.0}, "total_units": 100}
+    main_window.active_profile_config["client_id"] = "acme"
+    monkeypatch.setattr(
+        main_window.profile_manager, "get_inventory_memory", lambda _client: memory
+    )
+    asked = []
+
+    def decline(*_args, **kwargs):
+        asked.append(kwargs.get("title"))
+        return False
+
+    monkeypatch.setattr("gui.file_handler.ConfirmDialog.ask", decline)
+
+    main_window.file_handler.accept_dropped_path("stock", str(stock))
+
+    assert asked == ["Use this stock file?"]
+    assert main_window.stock_file_path is None
+    assert main_window.stock_slot.path is None
+
+
+def test_an_unreadable_stock_file_is_a_problem_in_its_card(
+    main_window, tmp_path, monkeypatch
+):
+    stock = tmp_path / "stock.csv"
+    stock.write_text("x")
+    monkeypatch.setattr(
+        "gui.file_handler.pd.read_csv", Mock(side_effect=ValueError("not a csv"))
+    )
+
+    main_window.file_handler.load_file("stock", str(stock))
+
+    slot = main_window.stock_slot
+    assert slot.is_valid is False
+    assert slot.problem["title"] == "The stock file couldn't be read"
+    assert "Client settings › General" in slot.problem["text"]
+    assert slot.problem["fix_page"] == "General"
+    assert main_window.stock_file_path is None
+    assert main_window.error_banner.isHidden()
+
+
+def test_a_folder_with_no_csv_is_a_problem_in_its_card(main_window, tmp_path):
+    folder = tmp_path / "empty"
+    folder.mkdir()
+
+    main_window.file_handler.accept_dropped_path("orders", str(folder))
+
+    slot = main_window.orders_slot
+    assert slot.problem["title"] == "No CSV files in this folder"
+    assert slot.problem["text"] == "Choose a folder that holds the exported CSV files."
+    assert slot.problem["fix_page"] == ""
+    assert slot.name == "empty"
+    assert main_window.error_banner.isHidden()
+
+
+def test_a_folder_with_no_valid_csv_names_the_files_and_the_fix(main_window, tmp_path):
+    folder = tmp_path / "exports"
+    folder.mkdir()
+    (folder / "wrong.csv").write_text("A,B\n1,2\n")
+
+    main_window.file_handler.accept_dropped_path("orders", str(folder))
+
+    slot = main_window.orders_slot
+    assert slot.problem["title"] == "None of the 1 files can be used"
+    assert slot.problem["text"] == "wrong.csv. Each is missing a mapped column."
+    assert slot.problem["fix_page"] == "Orders Mapping"
+
+
+def test_a_folder_that_skips_a_file_says_so(main_window, tmp_path, monkeypatch):
+    folder = tmp_path / "exports"
+    folder.mkdir()
+    header = "Name,Lineitem sku,Lineitem quantity,Shipping Method\n"
+    (folder / "a.csv").write_text(header + "#1,A1,2,Standard\n")
+    (folder / "wrong.csv").write_text("A,B\n1,2\n")
+    monkeypatch.setattr(
+        main_window.file_handler, "show_file_preview", lambda *a, **k: True
+    )
+
+    main_window.file_handler.accept_dropped_path("orders", str(folder))
+
+    slot = main_window.orders_slot
+    assert slot.is_valid is True
+    assert slot.name == "exports\\  ·  1 CSV merged"
+    assert slot.note == "1 file skipped"
+
+
+def test_with_no_session_nothing_loads(main_window, tmp_path):
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A1,2,Standard\n"
+    )
+    main_window.session_path = None
+
+    main_window.file_handler.load_file("orders", str(orders))
+    main_window.file_handler.load_folder("orders", str(tmp_path))
+
+    assert main_window.orders_slot.path is None
+    assert main_window.orders_file_path is None
+
+
+def test_a_loaded_file_counts_its_rows_and_orders(main_window, tmp_path):
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name,Lineitem sku,Lineitem quantity,Shipping Method\n"
+        "#1,A1,2,Standard\n#1,B2,1,Standard\n#2,A1,1,Express\n"
+    )
+
+    main_window.file_handler.load_file("orders", str(orders))
+
+    slot = main_window.orders_slot
+    assert (slot.rows, slot.keys, slot.delimiter) == (3, 2, ",")
+
+
+def test_a_mapping_fixed_in_settings_clears_the_problem_on_revalidation(
+    main_window, tmp_path
+):
+    """The card's "Open Orders Mapping" link ends in a settings save, which
+    replaces active_profile_config and re-validates. That has to be enough."""
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name,Variant SKU,Lineitem quantity,Shipping Method\n#1,A1,2,Standard\n"
+    )
+    main_window.file_handler.load_file("orders", str(orders))
+    assert main_window.orders_slot.problem["title"] == "No SKU column"
+
+    fixed = copy.deepcopy(main_window.active_profile_config)
+    fixed["column_mappings"]["orders"] = {
+        "Name": "Order_Number",
+        "Variant SKU": "SKU",
+        "Lineitem quantity": "Quantity",
+        "Shipping Method": "Shipping_Method",
+    }
+    main_window.active_profile_config = fixed
+    main_window.file_handler.validate_file("orders")
+
+    assert main_window.orders_slot.is_valid is True
+    assert main_window.orders_slot.problem is None
+
+
+def test_revalidating_a_merged_folder_keeps_it_a_folder(
+    main_window, tmp_path, monkeypatch
+):
+    folder = tmp_path / "exports"
+    folder.mkdir()
+    header = "Name,Lineitem sku,Lineitem quantity,Shipping Method\n"
+    (folder / "a.csv").write_text(header + "#1,A1,2,Standard\n")
+    (folder / "b.csv").write_text(header + "#2,B2,1,Express\n")
+    monkeypatch.setattr(
+        main_window.file_handler, "show_file_preview", lambda *a, **k: True
+    )
+    main_window.file_handler.load_file("orders", str(folder))
+
+    main_window.file_handler.validate_file("orders")  # as a settings save does
+
+    slot = main_window.orders_slot
+    assert slot.is_folder is True
+    assert slot.name == "exports\\  ·  2 CSVs merged"
+    assert [p["name"] for p in slot.parts] == ["a.csv", "b.csv"]

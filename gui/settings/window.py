@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components import toast
 from gui.components.error_banner import show_error
 from gui.components.inline_message import InlineMessage
 from gui.settings.base import SettingsPage
@@ -35,7 +36,6 @@ from gui.settings.sets import SetsPage
 from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
-from shared.components.toast import toast
 from shared.theme import font_css, on_theme_changed
 from shopify_tool.core import effective_additional_columns
 

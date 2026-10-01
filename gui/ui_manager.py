@@ -3,12 +3,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox,
     QHBoxLayout,
-    QLabel,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
@@ -19,35 +17,14 @@ from gui.components.commandbar import BarState, CommandBar
 from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.sidebar import Sidebar
 from gui.orders_view import summary_text
+from gui.setup_state import FileSlot, MemoryFacts, RunFacts, SessionFacts, setup_state
 from gui.shortcuts_dialog import ShortcutsDialog
-from shared.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.server_connection import ConnectionSettingsDialog
 from shared.theme import on_theme_changed
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .theme_manager import get_theme_manager
-
-# The setup card. 208 is the label gutter W1 specifies; the 840 cap stops a
-# three-row form stretching to the page's full 1310, which turns a gutter
-# into a horizon.
-_SETUP_LABEL_GUTTER = 208
-_SETUP_CARD_MAX_WIDTH = 840
-
-# Tab index -> (main_window attribute holding that screen's command-bar action,
-# whether that button lives on a screen and must stop painting itself, and the
-# role the bar's slot takes). Results' one primary, Export, is inside the
-# results document (W3).
-#
-# New Session used to be entry 2, borrowed by the Browse screen from Session
-# Setup. Under Bundle 4 it is state-owned (BarState.NO_SESSION) and always
-# present in the command bar, so the borrow is dead -- new_session_btn is
-# hidden unconditionally below instead.
-# Results (1) has no bar action since phase 2: re-running the analysis lives
-# in its screen menu, as the mockup has it.
-_SCREEN_ACTIONS = {
-    0: ("run_analysis_button", True, "primary"),
-}
 
 # The sidebar's collapsed state is this PC's, like the theme -- same QSettings
 # pair theme_manager and log_viewer use. A function so tests can point it at
@@ -57,7 +34,7 @@ _COLLAPSED_KEY = "shell/sidebar_collapsed"
 # The tabs drawn on the web tier. A web page paints the sunken plane to its
 # own edges, so the page area's 5px inset would show as a white ring around
 # it. Each phase that moves a screen adds its index (phase 2 spec section 5.1).
-_WEB_PAGES = frozenset({1})
+_WEB_PAGES = frozenset({0, 1})
 
 
 def _shell_settings() -> QSettings:
@@ -75,30 +52,13 @@ def age_text(delta) -> str:
     return f"{hours // 24} d"
 
 
-class _SetupPage(QWidget):
-    """Slides the setup card's label gutter with window width.
-
-    Spec §8's ladder: 208px above 1024, 96 down to the card's own 840px cap,
-    0 (labels above fields) below that. Production never resizes below its
-    1366px floor, but this page also runs in tests and in dev at whatever
-    width Linux gives it, so the ladder has a trigger there even without one
-    on Windows.
-    """
-
-    def __init__(self, section) -> None:
-        super().__init__()
-        self._section = section
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        width = self.width()
-        if width >= 1024:
-            gutter = _SETUP_LABEL_GUTTER
-        elif width >= _SETUP_CARD_MAX_WIDTH:
-            gutter = 96
-        else:
-            gutter = 0
-        self._section.set_label_width(gutter)
+def _parse_time(text) -> datetime | None:
+    """An ISO timestamp from a JSON file, as a local aware datetime, or None."""
+    try:
+        moment = datetime.fromisoformat(text or "")
+    except (TypeError, ValueError):
+        return None
+    return moment.astimezone()
 
 
 class _SessionLabelShim:
@@ -160,9 +120,7 @@ class UIManager:
         "Activity and execution logs (Ctrl+4)",
         "PDF processing and utilities (Ctrl+5)",
     )
-    # Both former entries (open_session_folder_button, new_session_btn) were
-    # duplicates of shell controls Bundle 5 deleted; the command bar's own
-    # open_folder_button re-renders its icon directly (commandbar.py).
+    # No long-lived button icon is re-themed here: the bar re-renders its own.
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {}
 
     def __init__(self, main_window):
@@ -221,6 +179,9 @@ class UIManager:
 
         self._create_tabs()
         page_layout.addWidget(self.mw.main_tabs, 1)
+        # Setup is a web page and tab 0 is current from the start, so no
+        # currentChanged has told the page area yet.
+        self._apply_page_inset(self.mw.main_tabs.currentIndex())
 
         right_layout.addWidget(page_area, 1)
         main_horizontal.addWidget(right_side, 1)
@@ -301,10 +262,10 @@ class UIManager:
         # component itself and would still write to the unreachable share.
         self.mw.command_bar.client_selector.setEnabled(connected)
 
-        self._refresh_setup_panel()
-        self.mw.setup_stack.setCurrentIndex(
-            1 if connected and self.mw.current_client_id else 0
-        )
+        self.refresh_setup()
+        # With no client the selector is the thing to act on, so it takes focus.
+        if connected and not self.mw.current_client_id:
+            self.mw.command_bar.client_selector.setFocus()
 
         self.mw.sidebar.set_connection(
             connected, str(self.mw.profile_manager.base_path)
@@ -359,16 +320,14 @@ class UIManager:
 
         self._setup_tab_shortcuts()
 
-        # The screen's primary action moves into the command bar's one slot.
-        for attribute, hide_in_page, _role in _SCREEN_ACTIONS.values():
-            if hide_in_page:
-                getattr(self.mw, attribute).hide()
-        self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
         self.mw.main_tabs.currentChanged.connect(self._apply_page_inset)
+        # The session chip on every screen but Setup, whose page head shows it;
+        # the analysis age on Results.
         self.mw.main_tabs.currentChanged.connect(
-            lambda index: self.mw.command_bar.set_results_mode(index == 1)
+            lambda index: self.mw.command_bar.set_screen(
+                chip=index != 0, meta=index == 1
+            )
         )
-        self._bind_screen_action(self.mw.main_tabs.currentIndex())
 
     def _create_command_bar(self) -> CommandBar:
         """The one-row bar that replaces the two-row global header."""
@@ -385,47 +344,37 @@ class UIManager:
         bar.newSessionRequested.connect(
             lambda: self.mw.actions_handler.create_new_session()
         )
-        bar.openFolderRequested.connect(self._open_session_folder)
         self._populate_overflow(bar)
+        bar.overflow.aboutToShow.connect(self._refresh_overflow)
         return bar
 
     def _populate_overflow(self, bar) -> None:
-        """New session for the client, then this PC's server and shortcuts. Phase 1 spec §5.6.
+        """The open session's folder, then this PC's server and shortcuts.
 
         Rebuilt on a client change, because the first section's header is the
-        client's name and a stale header points at the wrong profile.
+        client's name and a stale header points at the wrong profile. New
+        session is the bar's own button now (phase 3 spec section 8).
         """
         menu = bar.overflow
         menu.clear()
 
-        client = self.mw.current_client_id or "No client"
-        menu.add_section(client)
-        # The bar's own New Session button is state-owned (BarState.NO_SESSION
-        # only) -- with a session already open, the overflow was the only
-        # scope-appropriate place left to reach it without switching clients.
-        item = menu.add_item(
-            "New session…",
-            lambda: self.mw.actions_handler.create_new_session(),
+        menu.add_section(self.mw.current_client_id or "No client")
+        self._open_folder_item = menu.add_item(
+            "Open session folder", self._open_session_folder
         )
-        item.setEnabled(bool(self.mw.current_client_id))
+        self._refresh_overflow()
 
         menu.add_section("THIS PC")
         menu.add_item("Server connection…", self._open_connection_settings)
         menu.add_item("Keyboard shortcuts…", lambda: ShortcutsDialog(self.mw).exec())
 
+    def _refresh_overflow(self) -> None:
+        self._open_folder_item.setEnabled(bool(getattr(self.mw, "session_path", None)))
+
     def _apply_page_inset(self, index: int) -> None:
         """No inset around a web page, the old 5px around a Qt one."""
         inset = 0 if index in _WEB_PAGES else 5
         self.mw.page_area.layout().setContentsMargins(inset, inset, inset, inset)
-
-    def _bind_screen_action(self, index: int) -> None:
-        """Point the command bar's one primary at this screen's primary button."""
-        entry = _SCREEN_ACTIONS.get(index)
-        if entry is None:
-            self.mw.command_bar.bind_action(None)
-            return
-        attribute, _hide_in_page, role = entry
-        self.mw.command_bar.bind_action(getattr(self.mw, attribute), role)
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog.
@@ -458,165 +407,79 @@ class UIManager:
             self.mw.main_tabs.setCurrentIndex(index)
 
     def _create_tab1_session_setup(self):
-        """Session Setup: one card, above a state-panel page 0.
+        """Setup: one QWebEngineView, no Qt inside (phase 3 spec).
 
-        Four group boxes, a splitter and a recent-sessions strip became one
-        card in Bundle 5. Run Analysis is not a row -- Bundle 4 made it this
-        screen's command-bar primary (_SCREEN_ACTIONS[0]), and drawing it
-        again here would be the fourth duplicate this screen just deleted.
-
-        No Session name row: the field was inert (nothing read it -- see the
-        PR body's design call) and PR #317 review picked dropping it over
-        wiring it up sight unseen.
+        Everything drawn on this screen is in gui/web/setup.*; what it draws
+        is built by refresh_setup(). The two slots are records the file
+        handler writes and setup_state reads.
         """
-        from PySide6.QtWidgets import QButtonGroup, QStackedWidget
+        from gui.setup_bridge import SetupView, mount_setup_page
 
-        from gui.components import Card, FileSlot, FormSection
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        self.mw.orders_slot = FileSlot(
-            "Orders file", "Drop the Shopify orders export here"
-        )
-        self.mw.stock_slot = FileSlot("Stock file", "Drop the stock export here")
+        self.mw.orders_slot = FileSlot("orders", on_change=self.refresh_setup)
+        self.mw.stock_slot = FileSlot("stock", on_change=self.refresh_setup)
 
-        section = FormSection("", label_width=_SETUP_LABEL_GUTTER)
-
-        tab = _SetupPage(section)
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(0, 0, 0, 0)
-
-        card = Card(margins=(16, 16, 16, 16), spacing=8)
-        # Fixed, not maximum: a QVBoxLayout fills its cross-axis by default,
-        # which is how the card reached 840px before -- but centring it
-        # needs an alignment flag on addWidget, and that switches sizing
-        # from "fill the cross-axis" to "use sizeHint", which without a
-        # fixed width would shrink the card to its unexpanded content size.
-        card.setFixedWidth(_SETUP_CARD_MAX_WIDTH)
-
-        section.add_row("Orders file", self.mw.orders_slot)
-        section.add_row("Stock file", self.mw.stock_slot)
-
-        # Its own row, not folded into the stock row's field column: PR #317
-        # review flagged the card as showing a control the three-row mockup
-        # doesn't, and the fix is to let it be the option it actually is.
-        self.mw.inventory_memory_checkbox = QCheckBox("Use Inventory Memory")
-        self.mw.inventory_memory_checkbox.setToolTip(
-            "When enabled, analysis starts from the final stock of the last "
-            "session instead of requiring a new stock file."
-        )
-        self.mw.inventory_memory_checkbox.setEnabled(False)  # enabled after client load
-        section.add_row("Inventory memory", self.mw.inventory_memory_checkbox)
-
-        section.add_row("Allocation", self._create_strategy_picker(QButtonGroup))
-
-        card.add_widget(section)
-        # Centred, not pinned to the page's top-left corner -- the page is
-        # 1310px wide and an 840px card left-aligned in it reads as stranded.
-        outer.addWidget(card, alignment=Qt.AlignHCenter)
-        outer.addStretch()
-
-        # The screen's primary, bound into the command bar by _SCREEN_ACTIONS.
-        # Never rendered here -- Bundle 4 hides it.
+        # Never shown. Its enabled state is the guard (refresh_setup sets it),
+        # and the page's Run analysis, Ctrl+R and Results' "Run analysis
+        # again" all click it.
         self.mw.run_analysis_button = QPushButton("Run analysis", tab)
         self.mw.run_analysis_button.setEnabled(False)
         self.mw.run_analysis_button.hide()
 
-        # Written by update_session_info_label() for compatibility; never
-        # shown -- the command bar's session picker is the visible
-        # presentation now.
-        self.mw.session_path_label = QLabel("No session", tab)
-        self.mw.session_path_label.hide()
+        view = SetupView(tab)
+        self.mw.setup_view = view
+        self.mw.setup_bridge = mount_setup_page(view)
+        layout.addWidget(view, 1)
+        return tab
 
-        self.mw.strategy_multi_item.toggled.connect(
-            lambda checked: self.mw._on_analysis_mode_changed(0) if checked else None
-        )
-        self.mw.strategy_fifo.toggled.connect(
-            lambda checked: self.mw._on_analysis_mode_changed(1) if checked else None
-        )
+    def refresh_setup(self) -> None:
+        """Build the Setup page's state from the window's facts and push it.
 
-        stack = QStackedWidget()
-        # Page 0 starts empty -- _refresh_setup_panel fills it, and is the
-        # only place either of its two forms is built.
-        stack.addWidget(QWidget())  # page 0, replaced by _refresh_setup_panel
-        stack.addWidget(tab)  # page 1, the card
-        self.mw.setup_stack = stack
-        self._refresh_setup_panel()
-        return stack
-
-    def _create_strategy_picker(self, QButtonGroup):
-        """The two allocation strategies, each stating its consequence."""
-        from gui.components import RadioCard
-
-        holder = QWidget()
-        layout = QVBoxLayout(holder)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        self.mw.strategy_multi_item = RadioCard(
-            "Multi-item first",
-            "Fills orders that can go out whole before partial ones. A few "
-            "old orders wait longer for stock instead.",
-        )
-        self.mw.strategy_fifo = RadioCard(
-            "Oldest first",
-            "Fills strictly by order date, whatever it contains. No order "
-            "waits behind a newer one; more leave part-filled.",
-        )
-        self.mw.strategy_multi_item.setChecked(True)
-
-        # QFormLayout's field-growth negotiation, once nested this deep
-        # (Card > FormSection > QFormLayout > holder > RadioCard), does not
-        # reliably re-query RadioCard's own (correct) heightForWidth after
-        # the first layout pass -- a known QFormLayout limitation, not a
-        # RadioCard bug (heightForWidth() is right when called directly; see
-        # docs/superpowers/plans/2026-09-04-phase9-bundle5-session-setup-plan.md
-        # Task 6 notes). A hard floor at the height each card itself knows it
-        # needs sidesteps the stale negotiation instead of fighting it.
-        for card in (self.mw.strategy_multi_item, self.mw.strategy_fifo):
-            card.setMinimumHeight(card.heightForWidth(card.sizeHint().width()))
-
-        group = QButtonGroup(holder)
-        group.addButton(self.mw.strategy_multi_item)
-        group.addButton(self.mw.strategy_fifo)
-        self.mw.strategy_group = group
-
-        layout.addWidget(self.mw.strategy_multi_item)
-        layout.addWidget(self.mw.strategy_fifo)
-        return holder
-
-    def _refresh_setup_panel(self) -> None:
-        """Page 0's two forms. Connection first, then client. No third one.
-
-        A new panel each time rather than mutating one: StatePanel's four
-        constructors differ in whether they have a button at all, and a
-        widget that grows and loses a button is two widgets wearing one name.
+        The one place Run analysis is gated (phase 3 spec section 4.3). Never
+        touches the share: the session's times are read where
+        update_session_chips already reads them.
         """
-        if not self.mw.is_connected():
-            panel = StatePanel.failed(
-                "This PC can't reach the fulfilment server",
-                "Clients, stock files and past sessions all live on the "
-                "server. Until this PC reaches it, there is nothing to set up.",
-                str(self.mw.profile_manager.base_path),
-                "Server connection…",
-            )
-            panel.button.clicked.connect(self._open_connection_settings)
-        else:
-            panel = StatePanel.nothing_loaded(
-                "Choose a client to begin",
-                "Pick a client in the bar above. Sessions, stock and reports "
-                "all belong to one client.",
-                "",
-            )
-            # This form's action is the selector, so it takes focus -- but
-            # only while it is still the thing to act on. Once a client is
-            # chosen the stack moves to page 1 and stealing focus back would
-            # yank it out of whatever the user just clicked.
-            if not self.mw.current_client_id:
-                self.mw.command_bar.client_selector.setFocus()
+        mw = self.mw
+        if not hasattr(mw, "setup_bridge"):
+            return  # asked before the page was mounted
+        config = mw.active_profile_config or {}
+        memory = config.get("inventory_memory") or {}
 
-        old = self.mw.setup_stack.widget(0)
-        self.mw.setup_stack.insertWidget(0, panel)
-        self.mw.setup_stack.removeWidget(old)
-        old.deleteLater()
-        self.mw.setup_state_panel = panel
+        session = None
+        if mw.session_path:
+            name = Path(mw.session_path).name
+            facts = mw.session_facts
+            session = (
+                facts
+                if facts is not None and facts.name == name
+                else SessionFacts(name, None, None)
+            )
+
+        state = setup_state(
+            connected=mw.is_connected(),
+            client=mw.current_client_id or "",
+            server_path=str(mw.profile_manager.base_path),
+            session=session,
+            orders=mw.orders_slot,
+            stock=mw.stock_slot,
+            memory=MemoryFacts(
+                on=bool(memory.get("enabled", True)),
+                skus=len(memory.get("skus") or {}),
+                session=memory.get("session") or "",
+                updated=_parse_time(memory.get("last_updated")),
+            ),
+            strategy=config.get("analysis_mode", "multi_first"),
+            run=RunFacts(
+                mw._analysis_running, mw._analysis_step, mw._analysis_cancelling
+            ),
+            now=datetime.now().astimezone(),
+        )
+        mw.run_analysis_button.setEnabled(state["run"]["enabled"])
+        mw.setup_bridge.set_state(state)
 
     def refresh_recent_sessions(self, client_id: str):
         """Fill the command bar's session picker — call this whenever the
@@ -732,11 +595,12 @@ class UIManager:
         self.mw.results_bridge.set_export_enabled(enabled)
 
     def update_session_chips(self) -> None:
-        """`Analysed 09:33` and `Stock file 19 h old` (W3's two command-bar chips).
+        """What the bar and the Setup page say about the open session's times.
 
-        Stock age is measured at analysis time, not now: it qualifies the
-        analysis. The stock copy in the session keeps the source file's mtime
-        (shutil.copy2 in core.py).
+        `Analysed 09:33` and `Stock file 19 h old` for the bar; when the
+        session was opened and analysed for the page. Stock age is measured at
+        analysis time, not now: it qualifies the analysis. The stock copy in
+        the session keeps the source file's mtime (shutil.copy2 in core.py).
         """
         bar = self.mw.command_bar
         session_path = getattr(self.mw, "session_path", None)
@@ -744,31 +608,34 @@ class UIManager:
             self.mw.session_manager.get_session_info(session_path)
             if session_path
             else None
-        )
-        try:
-            analysed = datetime.fromisoformat(
-                (info or {}).get("analysis_completed_at") or ""
+        ) or {}
+        analysed = _parse_time(info.get("analysis_completed_at"))
+        # The one read of session_info.json: refresh_setup never touches the share.
+        self.mw.session_facts = (
+            SessionFacts(
+                Path(session_path).name, _parse_time(info.get("created_at")), analysed
             )
-        except ValueError:
-            analysed = None
-        if analysed is None:
-            bar.set_status("text_secondary", "")
-            bar.set_stock_age("")
-            return
-        if analysed.tzinfo is None:
-            analysed = analysed.astimezone()
-        bar.set_status(
-            "text_secondary", f"Analysed {analysed.astimezone().strftime('%H:%M')}"
-        )
-        stock = (
-            Path(self.mw.session_manager.get_input_dir(session_path)) / "inventory.csv"
+            if session_path
+            else None
         )
         try:
-            copied = datetime.fromtimestamp(stock.stat().st_mtime, tz=UTC)
-        except OSError:
-            bar.set_stock_age("")
-            return
-        bar.set_stock_age(f"Stock file {age_text(analysed - copied)} old")
+            if analysed is None:
+                bar.set_status("text_secondary", "")
+                bar.set_stock_age("")
+                return
+            bar.set_status("text_secondary", f"Analysed {analysed.strftime('%H:%M')}")
+            stock = (
+                Path(self.mw.session_manager.get_input_dir(session_path))
+                / "inventory.csv"
+            )
+            try:
+                copied = datetime.fromtimestamp(stock.stat().st_mtime, tz=UTC)
+            except OSError:
+                bar.set_stock_age("")
+                return
+            bar.set_stock_age(f"Stock file {age_text(analysed - copied)} old")
+        finally:
+            self.refresh_setup()
 
     def _create_tab3_session_browser(self):
         """Create Tab 3: Session Browser
@@ -834,7 +701,7 @@ class UIManager:
             is_busy (bool): If True, disables interactive widgets. If False,
                 enables them based on the current application state.
         """
-        self.mw.run_analysis_button.setEnabled(not is_busy)
+        self.refresh_setup()
 
         # FIX: Check that DataFrame is not None before calling .empty
         is_data_loaded = (

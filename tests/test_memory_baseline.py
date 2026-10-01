@@ -57,7 +57,7 @@ def run(tmp_path, monkeypatch):
     )
     counter = iter(range(100))
 
-    def go(pm, order_rows, stock_rows=None, session="S1"):
+    def go(pm, order_rows, stock_rows=None, session="S1", progress=None):
         n = next(counter)
         orders = tmp_path / f"orders{n}.csv"
         pd.DataFrame(
@@ -82,10 +82,62 @@ def run(tmp_path, monkeypatch):
             client_id="C",
             profile_manager=pm,
             session_path=str(tmp_path / session),
+            progress=progress,
         )
-        assert ok, msg
+        assert ok or progress is not None, msg
+        return msg
 
     return go
+
+
+def _cancel_at(index):
+    def progress(step):
+        if step == index:
+            raise core.AnalysisCancelled
+
+    return progress
+
+
+@pytest.mark.parametrize("index", [1, 2, 3])
+def test_a_cancelled_memory_run_does_not_stop_the_next_run_updating_memory(
+    tmp_path, run, index
+):
+    pm = MemoryProfile(tmp_path, {"A": 10.0})
+    pm.memory["session"] = "S0"  # memory belongs to the session before
+
+    assert run(pm, [("#1", "A", 2)], progress=_cancel_at(index)) == core.CANCELLED
+
+    assert core.read_memory_baseline(tmp_path / "S1") is None
+    assert pm.memory == {"enabled": True, "skus": {"A": 10.0}, "names": {}, "session": "S0"}
+    run(pm, [("#1", "A", 2)])
+    assert pm.memory["skus"] == {"A": 8.0}
+    assert pm.memory["session"] == "S1"
+
+
+def test_a_failed_memory_run_does_not_stop_the_next_run_updating_memory(tmp_path, run):
+    pm = MemoryProfile(tmp_path, {"A": 10.0})
+    pm.memory["session"] = "S0"
+
+    def fail_at_allocation(step):
+        if step == 2:
+            raise RuntimeError("boom")
+
+    assert "boom" in run(pm, [("#1", "A", 2)], progress=fail_at_allocation)
+
+    run(pm, [("#1", "A", 2)])
+    assert pm.memory["skus"] == {"A": 8.0}
+    assert pm.memory["session"] == "S1"
+
+
+def test_cancelling_a_rerun_keeps_the_baseline_the_first_run_wrote(tmp_path, run):
+    pm = MemoryProfile(tmp_path, {"A": 10.0})
+    run(pm, [("#1", "A", 2)])
+
+    run(pm, [("#1", "A", 2)], progress=_cancel_at(2))
+
+    assert core.read_memory_baseline(tmp_path / "S1")["skus"] == {"A": 10.0}
+    run(pm, [("#1", "A", 2)])
+    assert pm.memory["skus"] == {"A": 8.0}
 
 
 def test_memory_mode_rerun_of_same_session_draws_once(tmp_path, run):

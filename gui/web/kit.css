@@ -474,9 +474,107 @@ input[type="checkbox"]:disabled::after { background: var(--text-disabled); }
 .page-meta { font-size: var(--type-caption-size); color: var(--text-secondary); }
 .page-head .code { height: 22px; padding: 0 8px; color: var(--text); }
 
+/* --- switch -------------------------------------------------------------- */
+
+/* A button with role="switch". The knob moves by justify-content: the web
+   tier may not transform anything (ADR 0016). */
+.switch {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  width: 32px;
+  height: 18px;
+  padding: 1px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--border);
+  cursor: pointer;
+}
+.switch-knob {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+.switch[aria-checked="true"] {
+  justify-content: flex-end;
+  background: var(--accent-fill);
+}
+.switch[aria-checked="true"] .switch-knob { background: var(--on-accent); }
+.switch:disabled {
+  border: 1px dashed var(--border);
+  background: var(--control-disabled-bg);
+  cursor: not-allowed;
+}
+.switch:disabled .switch-knob {
+  background: var(--text-disabled);
+  box-shadow: none;
+}
+
+/* --- radio card ---------------------------------------------------------- */
+
+/* A button with role="radio": a choice that states its consequence. */
+.radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--kit-radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.radio-card[aria-checked="true"] {
+  border-color: var(--selection-border);
+  background: var(--selection-bg);
+}
+.radio-mark {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.radio-card[aria-checked="true"] .radio-mark { border-color: var(--selection-border); }
+.radio-card[aria-checked="true"] .radio-mark::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--selection-border);
+}
+.radio-card-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.radio-card-title { font-weight: 700; }
+.radio-card-text { color: var(--text-secondary); }
+.radio-card:disabled { cursor: default; }
+.radio-card:disabled:not([aria-checked="true"]) .radio-card-title,
+.radio-card:disabled:not([aria-checked="true"]) .radio-card-text {
+  color: var(--text-disabled);
+}
+
+/* --- form row ------------------------------------------------------------ */
+
+/* A label column and a control: Setup's options, and Tools' cards later. */
+.form-row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px;
+}
+.form-row + .form-row { border-top: 1px solid var(--border-subtle); }
+.form-label { padding-top: 2px; font-weight: 700; }
+
 /* --- focus --------------------------------------------------------------- */
 
 .btn:focus-visible,
+.switch:focus-visible,
+.radio-card:focus-visible,
 .segment:focus-visible,
 .menu-item:focus-visible,
 .toast-action:focus-visible,

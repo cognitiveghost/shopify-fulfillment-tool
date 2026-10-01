@@ -69,3 +69,6 @@ The web toast now takes its look from the web kit (`gui/web/kit.css`): the inver
 dismiss button. "Two implementations, one appearance" no longer holds. The Qt toast in
 `shared/components/toast.py` keeps its look until the screens that raise it move to the web tier
 (ADR 0016), and then it is deleted rather than restyled.
+
+Since phase 3 (2026-10-01) one router decides: `gui.components.toast` asks the window (`web_toast`) and a
+window showing a web page has that page draw the toast. A toast with an action stays a Qt toast.

@@ -6,7 +6,8 @@ from pathlib import Path
 import pandas as pd
 from PySide6.QtWidgets import QFileDialog
 
-from gui.components import ConfirmDialog, show_error
+from gui.components import ConfirmDialog
+from gui.setup_state import FILE_NOUN, MAPPING_PAGE
 from shopify_tool import core
 from shopify_tool.csv_utils import (
     AUTO_DELIMITER,
@@ -21,6 +22,33 @@ from shopify_tool.csv_utils import (
 # ponytail: constants, not settings. Bind them to the slot's toggles when
 # §10.3's in-slot controls get built.
 _FOLDER_SCAN_RECURSIVE = True
+
+# What each kind of file must carry, and the column that counts its orders or
+# its SKUs.
+_REQUIRED = {
+    "orders": ("Order_Number", "SKU", "Quantity", "Shipping_Method"),
+    "stock": ("SKU", "Stock"),
+}
+_KEY = {"orders": "Order_Number", "stock": "SKU"}
+# A v1 profile names no columns: these are the defaults it meant.
+_V1_COLUMNS = {
+    "orders": {
+        "Name": "Order_Number",
+        "Lineitem sku": "SKU",
+        "Lineitem quantity": "Quantity",
+        "Shipping Method": "Shipping_Method",
+    },
+    "stock": {"Артикул": "SKU", "Наличност": "Stock"},
+}
+
+
+def _columns(config: dict | None, kind: str) -> dict:
+    """CSV column -> internal name, for the columns this client maps."""
+    mappings = (config or {}).get("column_mappings", {})
+    columns = mappings.get(kind, {})
+    if not columns and f"{kind}_required" in mappings:
+        return _V1_COLUMNS[kind]
+    return columns
 
 
 class FileHandler:
@@ -52,118 +80,94 @@ class FileHandler:
         return resolve_delimiter(path, settings.get(f"{kind}_csv_delimiter"), kind)
 
     def select_orders_file(self):
-        """Opens a file dialog for the user to select the orders CSV file.
-
-        After a file is selected, it updates the corresponding UI labels,
-        triggers header validation for the file, and checks if the application
-        is ready to run the analysis. The file is read with the client's
-        delimiter setting: Auto detects it per file, an override is used as is.
-        """
+        """Opens a file dialog for the orders CSV, then loads what was chosen."""
         filepath, _ = QFileDialog.getOpenFileName(
             self.mw, "Select Orders File", "", "CSV files (*.csv)"
         )
-        if not filepath:
-            return
-
-        self.mw.orders_file_path = filepath
-        self.log.info(f"Orders file selected: {filepath}")
-
-        delimiter = self._delimiter_for("orders", filepath)
-
-        # Load and store original orders DataFrame for column discovery
-        try:
-            import pandas as pd
-
-            orders_df = pd.read_csv(filepath, delimiter=delimiter, encoding="utf-8-sig")
-            self.mw.last_loaded_orders_df = orders_df.copy()
-            self.log.info(
-                f"Loaded orders DataFrame: {len(orders_df)} rows, {len(orders_df.columns)} columns"
-            )
-        except Exception as e:
-            self.log.warning(
-                f"Failed to load orders DataFrame for column discovery: {e}"
-            )
-            # Don't fail the file selection, just skip storing the DataFrame
-            self.mw.last_loaded_orders_df = None
-
-        self.validate_file("orders")
-        self.check_files_ready()
+        if filepath:
+            self.load_file("orders", filepath)
 
     def select_stock_file(self):
-        """Opens file dialog for stock CSV selection and loads file.
-
-        After a file is selected, it validates the file with the correct
-        delimiter setting: Auto detects it per file, an override is used as is.
-        """
+        """Opens a file dialog for the stock CSV, then loads what was chosen."""
         filepath, _ = QFileDialog.getOpenFileName(
             self.mw, "Select Stock File", "", "CSV files (*.csv);;All Files (*)"
         )
+        if filepath:
+            self.load_file("stock", filepath)
 
-        if not filepath:
+    def load_file(self, kind: str, path: str) -> None:
+        """A picked or a dropped path, loaded into its slot. One route for both.
+
+        A folder is a supported gesture, not a malformed file. The file is
+        read with the client's delimiter setting: Auto detects it per file,
+        an override is used as is.
+        """
+        if not self.mw.session_path:
+            self.log.warning(f"load_file({kind!r}) called with no session open")
+            return
+        if os.path.isdir(path):
+            self.load_folder(kind, path)
             return
 
-        self.mw.stock_file_path = filepath
-        self.log.info(f"Stock file selected: {filepath}")
+        setattr(self.mw, f"{kind}_file_path", path)
+        self.log.info(f"{kind} file selected: {path}")
+        if kind == "orders":
+            # For column discovery in Client settings; a failure here must not
+            # fail the load.
+            self._remember_orders_dataframe(path)
+        elif not self._stock_file_usable(path):
+            return
+        self.validate_file(kind)
 
-        delimiter = self._delimiter_for("stock", filepath)
+    def _fail(self, kind: str, path, title: str, text: str, fix_page: str = "") -> None:
+        """The file cannot be used: say so in its card and forget its path."""
+        setattr(self.mw, f"{kind}_file_path", None)
+        getattr(self.mw, f"{kind}_slot").set_problem(path, title, text, fix_page)
 
-        # Try to load CSV with determined delimiter to verify it's readable
-        # Force SKU columns to string type to prevent float conversion
+    def _stock_file_usable(self, path: str) -> bool:
+        """Read the stock file once and check it against inventory memory.
+
+        False when it cannot be read (its card says why) or when the operator
+        turned it down at the anomaly check (its slot is emptied).
+        """
+        delimiter = ""
         try:
-            # Get SKU columns from config to force as string
-            column_mappings = self.mw.active_profile_config.get("column_mappings", {})
-            stock_mappings = column_mappings.get("stock", {})
-            sku_columns = [
-                csv_col
-                for csv_col, internal_name in stock_mappings.items()
-                if internal_name == "SKU"
-            ]
-            dtype_dict = {col: str for col in sku_columns}
-
+            delimiter = self._delimiter_for("stock", path)
+            # SKU columns as text, so a numeric SKU is not read as a float.
+            dtype = {
+                column: str
+                for column, name in _columns(self.mw.active_profile_config, "stock").items()
+                if name == "SKU"
+            }
             stock_df = pd.read_csv(
-                filepath, delimiter=delimiter, encoding="utf-8-sig", dtype=dtype_dict
+                path, delimiter=delimiter, encoding="utf-8-sig", dtype=dtype
             )
             self.log.info(
                 f"Loaded stock CSV with delimiter '{delimiter}': {len(stock_df)} rows"
             )
-
         except Exception:
             self.log.exception("Failed to load stock CSV")
-            show_error(
-                self.mw,
-                "The stock file wasn't loaded",
-                f"Check the stock delimiter in Settings › General (it read {delimiter!r}), then choose the file again.",
+            self._fail(
+                "stock",
+                path,
+                "The stock file couldn't be read",
+                f"It was read with “{delimiter}” as the delimiter. Check the stock "
+                "delimiter in Client settings › General, then replace the file.",
+                "General",
             )
-            return
+            return False
 
-        # Anomaly check against saved inventory memory and update snapshot
-        client_id = (
-            self.mw.active_profile_config.get("client_id")
-            if self.mw.active_profile_config
-            else None
-        )
+        client_id = (self.mw.active_profile_config or {}).get("client_id")
         if client_id and hasattr(self.mw, "profile_manager"):
             try:
-                column_mappings = self.mw.active_profile_config.get(
-                    "column_mappings", {}
-                )
-                stock_mappings = column_mappings.get("stock", {})
-                sku_col = next(
-                    (c for c, n in stock_mappings.items() if n == "SKU"), None
-                )
-                stock_col = next(
-                    (c for c, n in stock_mappings.items() if n == "Stock"), None
-                )
-
-                # Build an internal-name view of stock for anomaly check and snapshot
-                mapped_df = stock_df.copy()
-                rename_map = {}
-                if sku_col and sku_col in mapped_df.columns:
-                    rename_map[sku_col] = "SKU"
-                if stock_col and stock_col in mapped_df.columns:
-                    rename_map[stock_col] = "Stock"
-                if rename_map:
-                    mapped_df = mapped_df.rename(columns=rename_map)
+                stock_mappings = _columns(self.mw.active_profile_config, "stock")
+                # An internal-name view of the stock file for the anomaly check.
+                rename_map = {
+                    column: name
+                    for column, name in stock_mappings.items()
+                    if name in ("SKU", "Stock") and column in stock_df.columns
+                }
+                mapped_df = stock_df.rename(columns=rename_map)
 
                 memory = self.mw.profile_manager.get_inventory_memory(client_id)
                 if memory.get("enabled", False):
@@ -176,17 +180,12 @@ class FileHandler:
                         body=anomaly_msg,
                         verb="Use this stock file",
                     ):
-                        # Cancel: clear the stock selection
                         self.clear_file("stock")
-                        return
-
-                # Memory is updated with Final Stock after analysis (not raw stock on load)
+                        return False
+                # Memory is updated with Final Stock after analysis, not on load.
             except Exception as e:
                 self.log.warning(f"Inventory memory check/update failed: {e}")
-
-        # Validate headers
-        self.validate_file("stock")
-        self.check_files_ready()
+        return True
 
     def _check_inventory_anomaly(
         self, new_stock_df: pd.DataFrame, memory: dict
@@ -227,82 +226,32 @@ class FileHandler:
             )
         return False, ""
 
-    def validate_file(self, file_type, summary: str | None = None):
-        """Validates that a selected CSV file contains the required headers.
+    def validate_file(self, file_type, loaded: dict | None = None):
+        """Checks a selected CSV for its mapped columns and writes its slot.
 
-        It reads the required column names from the client-specific configuration
-        and uses `core.validate_csv_headers` to perform the check. The result
-        is displayed to the user via a status label with a tooltip
-        providing details on failure.
+        The required column names come from the client's column mappings.
+        A valid file loads the slot with its row count, its orders or SKUs
+        and its delimiter; anything else is a problem the card explains.
 
         Args:
-            file_type (str): The type of file to validate, either "orders" or
-                             "stock".
-            summary (str, optional): What the loaded slot should say instead
-                of the single-file row/column count. Folder mode passes the
-                merge's own summary, which the merged file cannot describe.
+            file_type (str): "orders" or "stock".
+            loaded (dict, optional): For a folder merge, what the merged file
+                cannot say about itself: name, parts, note, delimiter.
         """
-        # Get client config from main window
-        if not self.mw.current_client_id or not self.mw.current_client_config:
+        if not self.mw.current_client_id or not self.mw.active_profile_config:
             self.log.warning("No client selected or config not loaded")
             return
 
-        client_config = self.mw.current_client_config
-        column_mappings = client_config.get("column_mappings", {})
-
-        # Define which internal names are required
-        REQUIRED_INTERNAL_ORDERS = [
-            "Order_Number",
-            "SKU",
-            "Quantity",
-            "Shipping_Method",
-        ]
-        REQUIRED_INTERNAL_STOCK = ["SKU", "Stock"]
-
-        if file_type == "orders":
-            path = self.mw.orders_file_path
-
-            # Get CSV column names from v2 mappings
-            orders_mappings = column_mappings.get("orders", {})
-
-            # Backward compatibility: check for v1 format
-            if not orders_mappings and "orders_required" in column_mappings:
-                # V1 format - use default Shopify column names
-                required_cols = [
-                    "Name",
-                    "Lineitem sku",
-                    "Lineitem quantity",
-                    "Shipping Method",
-                ]
-            else:
-                # V2 format - extract CSV column names that map to required internal names
-                required_cols = [
-                    csv_col
-                    for csv_col, internal in orders_mappings.items()
-                    if internal in REQUIRED_INTERNAL_ORDERS
-                ]
-
-        else:  # stock
-            path = self.mw.stock_file_path
-
-            # Get CSV column names from v2 mappings
-            stock_mappings = column_mappings.get("stock", {})
-
-            # Backward compatibility: check for v1 format
-            if not stock_mappings and "stock_required" in column_mappings:
-                # V1 format - use default Bulgarian column names
-                required_cols = ["Артикул", "Наличност"]
-            else:
-                # V2 format - extract CSV column names that map to required internal names
-                required_cols = [
-                    csv_col
-                    for csv_col, internal in stock_mappings.items()
-                    if internal in REQUIRED_INTERNAL_STOCK
-                ]
-
+        path = getattr(self.mw, f"{file_type}_file_path")
         if not path:
             self.log.warning(f"Validation skipped for '{file_type}': path is missing.")
             return
+
+        columns = _columns(self.mw.active_profile_config, file_type)
+        required_cols = [c for c, name in columns.items() if name in _REQUIRED[file_type]]
+        key_column = next(
+            (c for c, name in columns.items() if name == _KEY[file_type]), None
+        )
 
         delimiter = self._delimiter_for(file_type, path)
         self.log.info(f"Validating '{file_type}' file: {path}")
@@ -310,75 +259,65 @@ class FileHandler:
             path, required_cols, delimiter
         )
 
-        slot = self.mw.orders_slot if file_type == "orders" else self.mw.stock_slot
+        slot = getattr(self.mw, f"{file_type}_slot")
+        if loaded is None and slot.is_folder and slot.path == Path(path):
+            # Re-validating a merged folder (after a settings save): the
+            # merged file cannot say it was a folder, the slot still can.
+            loaded = {
+                "name": slot.name,
+                "parts": slot.parts,
+                "note": slot.note,
+                "delimiter": slot.delimiter,
+            }
         if is_valid:
-            slot.set_loaded(path, summary or self._summary_for(path, required_cols))
+            rows, keys = core.csv_row_stats(path, delimiter, key_column)
+            facts = {"rows": rows, "keys": keys, "delimiter": delimiter}
+            facts.update(loaded or {})
+            slot.set_loaded(path, **facts)
             self.log.info(f"'{file_type}' file is valid.")
-        else:
-            present = core.read_csv_headers(path, delimiter)
-            slot.set_invalid(path, missing_cols, present)
-            self.log.warning(
-                f"'{file_type}' file is invalid. Missing columns: "
-                f"{', '.join(missing_cols)}"
+            return
+
+        present = core.read_csv_headers(path, delimiter)
+        if not present:
+            # No header row at all: missing, a directory, not a CSV.
+            self._fail(
+                file_type,
+                path,
+                f"The {FILE_NOUN[file_type]} couldn't be read",
+                "Check that it still exists and is a CSV export, then replace it.",
             )
-
-    def _summary_for(self, path, required_cols: list[str]) -> str:
-        """ "1 842 rows · 4 columns matched" -- what the loaded slot shows.
-
-        A row count is the one number that tells a supervisor they picked
-        this morning's export and not last Friday's.
-        """
-        rows = core.count_csv_rows(path)
-        return f"{rows:,} rows · {len(required_cols)} columns matched".replace(",", " ")
+        else:
+            slot.set_invalid(
+                path,
+                missing_cols,
+                present,
+                columns,
+                rows=core.count_csv_rows(path, delimiter),
+                delimiter=delimiter,
+            )
+        self.log.warning(
+            f"'{file_type}' file is invalid. Missing columns: {', '.join(missing_cols)}"
+        )
 
     def check_files_ready(self):
-        """Checks if both orders and stock files are selected and valid.
+        """Whether both slots hold a usable file.
 
-        If both files have been selected and have passed validation, this
-        method enables the main 'Run Analysis' button in the UI. Otherwise,
-        the button remains disabled.
+        Run analysis is gated by setup_state (gui/setup_state.py), which also
+        knows that inventory memory can stand in for a stock file; this is
+        only the plain question.
         """
-        orders_ok = self.mw.orders_slot.is_valid
-        stock_ok = self.mw.stock_slot.is_valid
-        if orders_ok and stock_ok:
-            self.mw.run_analysis_button.setEnabled(True)
-            self.log.info("Both files are validated and ready for analysis.")
-        else:
-            self.mw.run_analysis_button.setEnabled(False)
-        return orders_ok and stock_ok
+        return self.mw.orders_slot.is_valid and self.mw.stock_slot.is_valid
 
     def clear_file(self, file_type: str) -> None:
-        """Empty one slot: forget the path, reset the widget, re-gate the run.
-
-        slot.clear() emits `changed` -> check_files_ready, but that only knows
-        about the two slots. update_ui_state is the one that also knows
-        inventory memory can stand in for a stock file, so without it the
-        memory-mode user -- the very one who wants an unwanted stock file
-        gone -- clears the slot and watches Run Analysis go grey for good.
-        """
+        """Empty one slot: forget the path, reset the record, re-gate the run."""
         setattr(self.mw, f"{file_type}_file_path", None)
         getattr(self.mw, f"{file_type}_slot").clear()
         self.mw.update_ui_state()
         self.log.info(f"Cleared the {file_type} slot")
 
     def accept_dropped_path(self, file_type: str, path: str) -> None:
-        """A file or a folder was dropped on a FileSlot -- load it in place.
-
-        Reuses validate_file() / load_folder(), the same routes the two
-        buttons run after a selection, rather than a third validation path.
-        A folder is a supported gesture, not a malformed file: without this
-        branch it reaches pandas and raises IsADirectoryError.
-        """
-        if os.path.isdir(path):
-            self.load_folder(file_type, path)
-            return
-
-        if file_type == "orders":
-            self.mw.orders_file_path = path
-        else:
-            self.mw.stock_file_path = path
-        self.validate_file(file_type)
-        self.check_files_ready()
+        """A file or a folder was dropped on a file card: the same route a pick takes."""
+        self.load_file(file_type, path)
 
     # ============================================================
     # Folder Loading Support
@@ -404,37 +343,42 @@ class FileHandler:
         """Scan, validate, merge and load a folder of CSVs into a slot.
 
         Split from select_folder so a dropped folder takes the same route as
-        a picked one -- the slot accepts either gesture, and they must not
-        be able to drift apart.
+        a picked one. Every way this can fail ends in the slot's card.
         """
+        if not self.mw.session_path:
+            self.log.warning(f"load_folder({file_type!r}) called with no session open")
+            return
         self.log.info(f"{file_type} folder selected: {folder_path}")
 
         csv_files = self.scan_folder_for_csv(folder_path, _FOLDER_SCAN_RECURSIVE)
         if not csv_files:
-            show_error(
-                self.mw,
-                f"No CSV files in {folder_path}",
+            self._fail(
+                file_type,
+                folder_path,
+                "No CSV files in this folder",
                 "Choose a folder that holds the exported CSV files.",
             )
             return
 
         try:
-            valid_files, invalid_files, total_rows = self.validate_multiple_files(
+            valid_files, invalid_files, total_rows, parts = self.validate_multiple_files(
                 csv_files, file_type
             )
         except Exception:
             self.log.exception("Error validating files")
-            show_error(
-                self.mw, "The files couldn't be validated", "Details are in Logs."
+            self._fail(
+                file_type, folder_path, "The files weren't merged", "Details are in Logs."
             )
             return
 
         if not valid_files:
             names = ", ".join(os.path.basename(f) for f, _m in invalid_files[:5])
-            show_error(
-                self.mw,
-                f"None of the {len(csv_files)} files are valid",
-                f"{names}. Details are in Logs.",
+            self._fail(
+                file_type,
+                folder_path,
+                f"None of the {len(csv_files)} files can be used",
+                f"{names}. Each is missing a mapped column.",
+                MAPPING_PAGE[file_type],
             )
             return
 
@@ -444,12 +388,14 @@ class FileHandler:
             return  # User cancelled
 
         try:
-            merged_path, rows, skipped = self.merge_and_save_files(
+            merged_path, _rows, skipped = self.merge_and_save_files(
                 valid_files, file_type, folder_path
             )
         except Exception:
             self.log.exception("Failed to merge files")
-            show_error(self.mw, "The files weren't merged", "Details are in Logs.")
+            self._fail(
+                file_type, folder_path, "The files weren't merged", "Details are in Logs."
+            )
             return
 
         if file_type == "orders":
@@ -460,20 +406,29 @@ class FileHandler:
             self.mw.stock_file_path = merged_path
             self.mw.stock_source_files = valid_files
 
-        summary = f"{len(valid_files)} files merged · " + f"{rows:,} rows".replace(
-            ",", " "
-        )
+        notes = []
         if skipped:
             noun = "order" if file_type == "orders" else "SKU"
-            summary += f" · {skipped} overlapping {noun}{'' if skipped == 1 else 's'} skipped"
+            notes.append(
+                f"{skipped} overlapping {noun}{'' if skipped == 1 else 's'} skipped"
+            )
         if invalid_files:
-            summary += f" · {len(invalid_files)} skipped"
+            n = len(invalid_files)
+            notes.append(f"{n} file{'' if n == 1 else 's'} skipped")
+        delimiters = {p["delimiter"] for p in parts}
+        count = len(valid_files)
 
-        self.validate_file(file_type, summary=summary)
-        self.check_files_ready()
-        self.log.info(
-            f"Successfully merged {len(valid_files)} files into {merged_path}"
+        self.validate_file(
+            file_type,
+            loaded={
+                "name": f"{Path(folder_path).name}\\  ·  "
+                f"{count} CSV{'' if count == 1 else 's'} merged",
+                "parts": [{"name": p["name"], "rows": p["rows"]} for p in parts],
+                "note": " · ".join(notes),
+                "delimiter": delimiters.pop() if len(delimiters) == 1 else "mixed",
+            },
         )
+        self.log.info(f"Successfully merged {count} files into {merged_path}")
 
     def _remember_orders_dataframe(self, path: str) -> None:
         """Keep the merged orders in memory for column discovery.
@@ -530,7 +485,7 @@ class FileHandler:
 
     def validate_multiple_files(
         self, file_paths: list[str], file_type: str
-    ) -> tuple[list[str], list[tuple[str, list[str]]], int]:
+    ) -> tuple[list[str], list[tuple[str, list[str]]], int, list[dict]]:
         """
         Validate multiple CSV files.
 
@@ -539,32 +494,20 @@ class FileHandler:
             file_type: "orders" or "stock"
 
         Returns:
-            Tuple: (valid_files, invalid_files, total_rows)
+            Tuple: (valid_files, invalid_files, total_rows, parts)
                 valid_files: List of valid file paths
                 invalid_files: List of (filepath, missing_columns)
                 total_rows: Total rows across all valid files
+                parts: per valid file, its name, rows and delimiter
         """
         valid_files = []
         invalid_files = []
         total_rows = 0
+        parts = []
 
-        # Get config
-        config = self.mw.active_profile_config
-        column_mappings = config.get("column_mappings", {})
-
-        # Get required columns based on file type
-        if file_type == "orders":
-            REQUIRED_INTERNAL = ["Order_Number", "SKU", "Quantity", "Shipping_Method"]
-            mappings = column_mappings.get("orders", {})
-        else:  # stock
-            REQUIRED_INTERNAL = ["SKU", "Stock"]
-            mappings = column_mappings.get("stock", {})
-
-        # Get CSV column names that map to required internal names
+        mappings = _columns(self.mw.active_profile_config, file_type)
         required_csv_cols = [
-            csv_col
-            for csv_col, internal_name in mappings.items()
-            if internal_name in REQUIRED_INTERNAL
+            csv_col for csv_col, name in mappings.items() if name in _REQUIRED[file_type]
         ]
 
         self.log.info(f"Validating {len(file_paths)} {file_type} files...")
@@ -588,6 +531,13 @@ class FileHandler:
                         filepath, delimiter=file_delimiter, encoding="utf-8-sig"
                     )
                     total_rows += len(df)
+                    parts.append(
+                        {
+                            "name": os.path.basename(filepath),
+                            "rows": len(df),
+                            "delimiter": file_delimiter,
+                        }
+                    )
 
                     self.log.info(f"  {os.path.basename(filepath)}: {len(df)} rows")
                 else:
@@ -600,7 +550,7 @@ class FileHandler:
                 invalid_files.append((filepath, [f"Error: {e!s}"]))
                 self.log.exception(f"  {os.path.basename(filepath)}")
 
-        return valid_files, invalid_files, total_rows
+        return valid_files, invalid_files, total_rows, parts
 
     def show_file_preview(
         self,

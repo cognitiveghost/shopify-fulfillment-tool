@@ -128,6 +128,34 @@
       </div>
     </div>
   </section>
+  <section class="card" style="grid-column: 1 / -1">
+    <h2>Switch, radio cards and form rows</h2>
+    <div class="form-row" id="f-row">
+      <span class="form-label" id="f-label">Inventory memory</span>
+      <div class="row">
+        <button id="w-off" class="switch" type="button" role="switch" aria-checked="false" aria-label="Off"><span class="switch-knob"></span></button>
+        <button id="w-on" class="switch" type="button" role="switch" aria-checked="true" aria-label="On"><span class="switch-knob"></span></button>
+        <button id="w-disabled" class="switch" type="button" role="switch" aria-checked="true" aria-label="Locked" disabled><span class="switch-knob"></span></button>
+      </div>
+    </div>
+    <div class="form-row">
+      <span class="form-label">Allocation strategy</span>
+      <div class="row" role="radiogroup" aria-label="Allocation strategy">
+        <button id="r-on" class="radio-card" type="button" role="radio" aria-checked="true">
+          <span class="radio-mark"></span>
+          <span class="radio-card-body"><span class="radio-card-title">Multi-item first</span><span class="radio-card-text">Fills orders that can go out whole before partial ones.</span></span>
+        </button>
+        <button id="r-off" class="radio-card" type="button" role="radio" aria-checked="false">
+          <span class="radio-mark"></span>
+          <span class="radio-card-body"><span class="radio-card-title">Oldest first</span><span class="radio-card-text">Fills strictly by order date.</span></span>
+        </button>
+        <button id="r-disabled" class="radio-card" type="button" role="radio" aria-checked="false" disabled>
+          <span class="radio-mark"></span>
+          <span class="radio-card-body"><span class="radio-card-title" id="r-disabled-title">Locked</span><span class="radio-card-text">While a run is in progress.</span></span>
+        </button>
+      </div>
+    </div>
+  </section>
 </main>
 <script>document.getElementById("c-mixed").indeterminate = true;</script>
 </body>

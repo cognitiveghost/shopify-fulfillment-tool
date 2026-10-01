@@ -63,4 +63,4 @@ def test_the_guard_can_actually_see_icon_calls():
     found = set()
     for path in _PY_FILES:
         found.update(_ICON_CALL.findall(path.read_text(encoding="utf-8")))
-    assert {"folder-open", "trash-2"} <= found
+    assert {"plus", "trash-2"} <= found

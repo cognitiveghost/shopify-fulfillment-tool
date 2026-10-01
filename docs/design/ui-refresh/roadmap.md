@@ -75,19 +75,28 @@ kept two. The column manager is the mockup's popover holding the full manager.
   collapses to a labelled rail. The bulk popover and Undo toasts follow the mockup's states.
 - The session chip in the command bar (`2026-09-30_1  analysed 14:06`) is drawn on Results only.
 
-### 3. Setup to the web tier
+### 3. Setup to the web tier (built in run 41)
 
-- The second `QWebEngineView`. Before building the page, measure what a second view costs in memory and
-  startup on a frozen Windows build over RDP. ADR 0016 says that cost is what would reverse the whole
-  direction, so the phase stops and asks if it is high.
+Spec: `docs/superpowers/specs/2026-10-01-ui-refresh-phase3-setup-web-design.md`.
+Plan: `docs/superpowers/plans/2026-10-01-ui-refresh-phase3-setup-web.md`.
+
+Built as listed below, with these differences. The second view was measured on Linux only (about +31 MB and
+at most +0.15 s); the Windows check over RDP is in the PR and is done before the release. With a client and
+no session the page shows the "No session open" panel from `app-shell.html`, not live cards. The run names
+four real steps and has no per-order count. The session chip is in the page head on Setup and in the bar on
+every other screen, until Browse, Logs and Tools get their own page heads. One router sends a toast to the
+web page that is showing.
+
+- The second `QWebEngineView`, with its own bridge (`SetupBridge`). `gui/web_page.py` holds what every
+  bridge shares.
 - File cards (Missing / Loaded / Problem) with rows, orders or SKUs, and the detected delimiter. Folder merge,
   and problems inline with a link to the fix. The inventory memory switch with its explanation, and
   allocation strategy as radio cards. A fixed 300px Run summary column holding Run analysis. The run summary
   becomes the progress view with its step and Cancel.
 - Picking files through the bridge (a Qt file dialog opened by a Slot) and dropping files onto the page.
-- Command bar, left over from Phase 1: New session is always shown as a secondary button and disabled with no
-  client. While running, the bar shows the step count and step name and a disabled "Running…". Cancel moves to
-  the page.
+- Command bar: New session is always shown as a secondary button and disabled with no client. While running,
+  the bar shows the step count and step name and a disabled "Running…". Cancel is on the page.
+- Kit: `.switch`, `.radio-card`, `.form-row`. Phase 5 reuses `.form-row`.
 
 ### 4. Browse to the web tier
 

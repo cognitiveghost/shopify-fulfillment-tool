@@ -47,7 +47,7 @@ def test_session_label_keeps_its_name_so_its_writer_needs_no_edit(main_window):
 
     main_window.command_bar.set_state(BarState.SESSION)
     main_window.session_info_label.setText("SESSION_7")
-    assert main_window.command_bar.session_button.text() == "SESSION_7"
+    assert main_window.command_bar.session_chip.text() == "SESSION_7"
 
 
 def test_choosing_a_client_in_the_dropdown_drives_on_client_changed(main_window):
@@ -181,8 +181,8 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
 def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
     """1366x768 minus the 200px sidebar and the 48px command bar; no status bar.
 
-    main_tabs keeps the 5px inset every Qt page was laid out against (phase 1
-    spec section 5.1), so the page is 1366 - 200 - 10 wide.
+    A Qt page keeps the 5px inset it was laid out against (phase 1 spec section
+    5.1); Setup is a web page now and has none.
     """
     from PySide6.QtWidgets import QStatusBar
 
@@ -193,6 +193,9 @@ def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
     assert main_window.nav_rail is main_window.sidebar.rail
     assert main_window.command_bar.height() == 48
     assert main_window.findChild(QStatusBar) is None
+    assert main_window.main_tabs.width() == 1166  # Setup: a web page, no inset
+    main_window.main_tabs.setCurrentIndex(3)  # Logs: a Qt page
+    QApplication.processEvents()
     assert main_window.main_tabs.width() == 1156
 
 
@@ -242,14 +245,15 @@ def test_resuming_a_past_session_reaches_the_session_state(main_window, tmp_path
     main_window.load_existing_session(str(session))
 
     assert main_window.command_bar._state is BarState.SESSION
-    assert main_window.command_bar.open_folder_button.isVisible()
+    menu = main_window.command_bar.overflow
+    menu.aboutToShow.emit()
+    item = next(a for a in menu.actions() if a.text() == "Open session folder")
+    assert item.isEnabled()
 
 
-def test_new_session_is_reachable_from_the_overflow_with_a_session_open(main_window):
-    """The bar's own New Session button is state-owned (BarState.NO_SESSION
-    only). PR #317 review: with a session already open, the only way back to
-    it was switching clients first -- the overflow is the fix.
-    """
+def test_new_session_is_reachable_from_the_bar_with_a_session_open(main_window):
+    """Phase 3 spec section 8: the bar's New session is always there, so the
+    overflow no longer carries a copy of it."""
     from gui.components.commandbar import BarState
 
     main_window.profile_manager.create_client_profile("M", "Client M")
@@ -257,13 +261,13 @@ def test_new_session_is_reachable_from_the_overflow_with_a_session_open(main_win
     main_window.command_bar.set_current_client("M")
     main_window.command_bar.set_state(BarState.SESSION)
 
-    menu = main_window.command_bar.overflow
-    item = next(a for a in menu.actions() if a.text() == "New session…")
-    assert item.isEnabled()
+    button = main_window.command_bar.new_session_button
+    assert button.isVisible()
+    assert button.isEnabled()
 
     calls = []
     main_window.actions_handler.create_new_session = lambda: calls.append(1)
-    item.trigger()
+    button.click()
     assert calls == [1]
 
 
@@ -321,35 +325,15 @@ def test_undo_tells_the_results_page_there_is_nothing_left_to_undo(
     assert one_shot_undo.results_bridge.undoAvailable is False
 
 
-def test_undo_toasts_into_the_document_while_the_results_screen_shows(
-    one_shot_undo, monkeypatch
-):
-    """ADR 0007: a Qt toast raised over the results view lands behind it."""
-    qt_toast = Mock()
-    monkeypatch.setattr("gui.main_window_pyside.toast", qt_toast)
-    monkeypatch.setattr(one_shot_undo.results_view, "isVisible", lambda: True)
-    raised = Mock()
-    monkeypatch.setattr(one_shot_undo.results_bridge, "raise_toast", raised)
+def test_undo_says_so_once_through_the_window_toast(one_shot_undo, monkeypatch):
+    """Where it is drawn is the router's question (tests/test_toast_router.py);
+    undo only has to say it."""
+    said = Mock()
+    monkeypatch.setattr("gui.main_window_pyside.toast", said)
 
     one_shot_undo.undo_last_operation()
 
-    raised.assert_called_once_with("Undid the last thing")
-    qt_toast.assert_not_called()
-
-
-def test_undo_keeps_the_qt_toast_when_another_screen_shows(one_shot_undo, monkeypatch):
-    """The other side of the same branch: off the Results screen the Qt toast
-    is the visible one, so rerouting everything would lose the message."""
-    qt_toast = Mock()
-    monkeypatch.setattr("gui.main_window_pyside.toast", qt_toast)
-    monkeypatch.setattr(one_shot_undo.results_view, "isVisible", lambda: False)
-    raised = Mock()
-    monkeypatch.setattr(one_shot_undo.results_bridge, "raise_toast", raised)
-
-    one_shot_undo.undo_last_operation()
-
-    qt_toast.assert_called_once()
-    raised.assert_not_called()
+    said.assert_called_once_with(one_shot_undo, "Undid the last thing")
 
 
 def _enabled(window):
@@ -435,12 +419,15 @@ def test_the_overflow_keeps_only_what_the_sidebar_does_not(main_window):
     texts = [a.text() for a in menu.actions() if not a.isSeparator()]
     assert texts == [
         "No client",
-        "New session…",
+        "Open session folder",
         "THIS PC",
         "Server connection…",
         "Keyboard shortcuts…",
     ]
     assert not any(a.isCheckable() for a in menu.actions())
+    menu.aboutToShow.emit()
+    folder = next(a for a in menu.actions() if a.text() == "Open session folder")
+    assert not folder.isEnabled()  # no session is open
 
 
 def test_collapsing_is_remembered_on_this_pc(tmp_path, monkeypatch):
@@ -487,6 +474,10 @@ def test_a_web_page_takes_the_page_area_to_its_edges(main_window):
     )
     assert main_window.main_tabs.width() == 1166
     main_window.main_tabs.setCurrentIndex(0)
+    QApplication.processEvents()
+    margins = main_window.page_area.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+    main_window.main_tabs.setCurrentIndex(3)
     QApplication.processEvents()
     assert main_window.page_area.layout().contentsMargins().left() == 5
     assert main_window.main_tabs.width() == 1156

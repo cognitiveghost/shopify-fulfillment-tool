@@ -16,6 +16,7 @@ from PySide6.QtCore import QThreadPool
 
 from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
+from shopify_tool import core
 
 
 @pytest.fixture
@@ -290,3 +291,154 @@ def test_the_writeoff_bypass_is_gone():
         not in inspect.signature(GenerateReportsDialog.__init__).parameters
     )
     assert not hasattr(ActionsHandler, "generate_writeoff_report")
+
+
+def _running_mw():
+    return SimpleNamespace(
+        _analysis_running=True,
+        _analysis_step=1,
+        _analysis_cancelling=False,
+        command_bar=Mock(),
+        ui_manager=Mock(),
+        sync_inventory_memory=Mock(),
+    )
+
+
+def test_a_step_the_run_reports_reaches_the_bar_and_the_page():
+    mw = _running_mw()
+    handler = ActionsHandler(mw)
+
+    handler._report_step(2)
+
+    assert mw._analysis_step == 2
+    mw.command_bar.set_step.assert_called_once_with(2, 4, "Allocating stock")
+    mw.ui_manager.refresh_setup.assert_called_once()
+
+
+def test_a_step_that_arrives_after_the_run_ended_is_ignored():
+    mw = _running_mw()
+    mw._analysis_running = False
+    handler = ActionsHandler(mw)
+
+    handler._report_step(3)
+
+    assert mw._analysis_step == 1
+    mw.command_bar.set_step.assert_not_called()
+
+
+def test_cancel_stops_the_run_at_its_next_step():
+    mw = _running_mw()
+    handler = ActionsHandler(mw)
+
+    handler.cancel_analysis()
+
+    assert mw._analysis_cancelling is True
+    mw.ui_manager.refresh_setup.assert_called_once()
+    with pytest.raises(core.AnalysisCancelled):
+        handler._report_step(2)
+
+
+def test_cancel_pressed_twice_is_one_cancel():
+    mw = _running_mw()
+    handler = ActionsHandler(mw)
+    handler.cancel_analysis()
+    handler.cancel_analysis()
+    mw.ui_manager.refresh_setup.assert_called_once()
+
+
+def test_cancel_with_no_run_going_does_nothing():
+    mw = _running_mw()
+    mw._analysis_running = False
+    handler = ActionsHandler(mw)
+
+    handler.cancel_analysis()
+
+    assert mw._analysis_cancelling is False
+    mw.ui_manager.refresh_setup.assert_not_called()
+    mw._analysis_running = True
+    handler._report_step(0)  # the next run is not cancelled before it starts
+
+
+def test_cancel_once_saving_has_begun_does_nothing():
+    mw = _running_mw()
+    mw._analysis_step = 3
+    handler = ActionsHandler(mw)
+
+    handler.cancel_analysis()
+
+    assert mw._analysis_cancelling is False
+
+
+def test_a_finished_run_leaves_no_cancel_behind():
+    mw = _running_mw()
+    handler = ActionsHandler(mw)
+    handler.cancel_analysis()
+
+    handler._on_analysis_finished()
+
+    assert mw._analysis_running is False
+    assert mw._analysis_cancelling is False
+    mw._analysis_running = True
+    handler._report_step(0)  # does not raise: the flag was cleared
+
+
+def test_a_cancelled_result_is_a_toast_not_an_error(monkeypatch):
+    said = Mock()
+    failed = Mock()
+    monkeypatch.setattr("gui.actions_handler.toast", said)
+    monkeypatch.setattr("gui.actions_handler.show_error", failed)
+    mw = _running_mw()
+    handler = ActionsHandler(mw)
+
+    handler.on_analysis_complete((False, core.CANCELLED, None, None))
+
+    said.assert_called_once_with(mw, "Analysis cancelled")
+    failed.assert_not_called()
+
+
+def test_a_failed_result_is_still_an_error(monkeypatch):
+    failed = Mock()
+    monkeypatch.setattr("gui.actions_handler.show_error", failed)
+    mw = _running_mw()
+    handler = ActionsHandler(mw)
+
+    handler.on_analysis_complete((False, "Validation error: no SKU", None, None))
+
+    failed.assert_called_once()
+
+
+def test_run_analysis_hands_the_run_its_progress_callback(monkeypatch):
+    captured = {}
+
+    def fake_worker(fn, *args, **kwargs):
+        captured["fn"] = fn
+        captured["kwargs"] = kwargs
+        return Mock()
+
+    monkeypatch.setattr("gui.actions_handler.Worker", fake_worker)
+    mw = SimpleNamespace(
+        session_path="/sessions/2026-09-30_1",
+        current_client_id="acme",
+        _analysis_running=False,
+        _analysis_step=3,
+        _analysis_cancelling=True,
+        active_profile_config={},
+        stock_file_path="/d/stock.csv",
+        orders_file_path="/d/orders.csv",
+        session_manager=Mock(),
+        profile_manager=Mock(),
+        threadpool=Mock(),
+        command_bar=Mock(),
+        ui_manager=Mock(),
+    )
+    handler = ActionsHandler(mw)
+
+    handler.run_analysis()
+
+    assert captured["fn"] is core.run_full_analysis
+    assert captured["kwargs"]["progress"] == handler._report_step
+    assert mw._analysis_running is True
+    assert mw._analysis_step == 0
+    assert mw._analysis_cancelling is False
+    mw.command_bar.set_step.assert_called_once_with(0, 4, "Reading orders and stock")
+    mw.threadpool.start.assert_called_once()
