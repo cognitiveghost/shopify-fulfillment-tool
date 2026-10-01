@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from gui.components.commandbar import BarState, CommandBar
 from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.sidebar import Sidebar
+from gui.orders_view import summary_text
 from gui.shortcuts_dialog import ShortcutsDialog
 from shared.components.state_panel import StatePanel
 from shared.icons import icon
@@ -35,22 +36,28 @@ _SETUP_CARD_MAX_WIDTH = 840
 
 # Tab index -> (main_window attribute holding that screen's command-bar action,
 # whether that button lives on a screen and must stop painting itself, and the
-# role the bar's slot takes). Results re-runs the analysis as a *secondary*
-# action: its one primary, Export, is inside the results document (W3).
+# role the bar's slot takes). Results' one primary, Export, is inside the
+# results document (W3).
 #
 # New Session used to be entry 2, borrowed by the Browse screen from Session
 # Setup. Under Bundle 4 it is state-owned (BarState.NO_SESSION) and always
 # present in the command bar, so the borrow is dead -- new_session_btn is
 # hidden unconditionally below instead.
+# Results (1) has no bar action since phase 2: re-running the analysis lives
+# in its screen menu, as the mockup has it.
 _SCREEN_ACTIONS = {
     0: ("run_analysis_button", True, "primary"),
-    1: ("run_analysis_button", True, "secondary"),
 }
 
 # The sidebar's collapsed state is this PC's, like the theme -- same QSettings
 # pair theme_manager and log_viewer use. A function so tests can point it at
 # an INI file under tmp_path.
 _COLLAPSED_KEY = "shell/sidebar_collapsed"
+
+# The tabs drawn on the web tier. A web page paints the sunken plane to its
+# own edges, so the page area's 5px inset would show as a white ring around
+# it. Each phase that moves a screen adds its index (phase 2 spec section 5.1).
+_WEB_PAGES = frozenset({1})
 
 
 def _shell_settings() -> QSettings:
@@ -200,6 +207,7 @@ class UIManager:
 
         # The pages keep the 5px inset they were laid out against (phase 1 §5.1).
         page_area = QWidget()
+        self.mw.page_area = page_area
         page_layout = QVBoxLayout(page_area)
         page_layout.setSpacing(5)
         page_layout.setContentsMargins(5, 5, 5, 5)
@@ -356,6 +364,10 @@ class UIManager:
             if hide_in_page:
                 getattr(self.mw, attribute).hide()
         self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
+        self.mw.main_tabs.currentChanged.connect(self._apply_page_inset)
+        self.mw.main_tabs.currentChanged.connect(
+            lambda index: self.mw.command_bar.set_results_mode(index == 1)
+        )
         self._bind_screen_action(self.mw.main_tabs.currentIndex())
 
     def _create_command_bar(self) -> CommandBar:
@@ -400,6 +412,11 @@ class UIManager:
         menu.add_section("THIS PC")
         menu.add_item("Server connection…", self._open_connection_settings)
         menu.add_item("Keyboard shortcuts…", lambda: ShortcutsDialog(self.mw).exec())
+
+    def _apply_page_inset(self, index: int) -> None:
+        """No inset around a web page, the old 5px around a Qt one."""
+        inset = 0 if index in _WEB_PAGES else 5
+        self.mw.page_area.layout().setContentsMargins(inset, inset, inset, inset)
 
     def _bind_screen_action(self, index: int) -> None:
         """Point the command bar's one primary at this screen's primary button."""
@@ -686,6 +703,10 @@ class UIManager:
         bridge.columnSettingsChanged.connect(
             lambda s: self.mw.schedule_results_columns_save(s)
         )
+        # The KPI strip's hint: straight to the page that maps the price column.
+        bridge.columnMappingRequested.connect(
+            lambda: actions().open_settings_window(page="Orders Mapping")
+        )
 
         # Bundle 14: the selection bar's verbs. The page sends the order list
         # it counted, so the set written is the set the button named -- each
@@ -835,6 +856,8 @@ class UIManager:
         the bridge. The QActions keep their old attribute names, because every
         caller reaches them through setEnabled / setToolTip / setText.
         Configure Columns returns with the column manager (Bundle 13).
+        Run analysis again, Open session folder and Copy summary came from the
+        command bar in phase 2.
         """
         from PySide6.QtGui import QAction
         from PySide6.QtWidgets import QMenu
@@ -852,6 +875,26 @@ class UIManager:
             menu.addAction(item)
             return item
 
+        # What the mockup moves out of the command bar on Results (phase 2
+        # spec section 6.2). Their enabled state is read when the menu opens.
+        self.mw.rerun_analysis_action = action(
+            "Run analysis again",
+            lambda: self.mw.run_analysis_button.click(),
+            "Run the analysis again on this session's files",
+        )
+        self.mw.open_folder_action = action(
+            "Open session folder",
+            self._open_session_folder,
+            "Open this session's folder",
+        )
+        self.mw.copy_summary_action = action(
+            "Copy summary",
+            self._copy_results_summary,
+            "Copy the session's numbers as one line",
+        )
+        menu.addSeparator()
+        menu.aboutToShow.connect(self._refresh_results_menu)
+
         self.mw.add_product_button_tab2 = action(
             "Add Product to Order",
             lambda: (
@@ -865,6 +908,21 @@ class UIManager:
             "Undo", self.mw.undo_last_operation, "Undo last operation (Ctrl+Z)"
         )
         return menu
+
+    def _refresh_results_menu(self) -> None:
+        """Enable what can run now. Called as the menu opens."""
+        self.mw.rerun_analysis_action.setEnabled(self.mw.run_analysis_button.isEnabled())
+        self.mw.open_folder_action.setEnabled(
+            bool(getattr(self.mw, "session_path", None))
+        )
+        self.mw.copy_summary_action.setEnabled(bool(self.mw.results_bridge.summary))
+
+    def _copy_results_summary(self) -> None:
+        text = summary_text(self.mw.results_bridge.summary)
+        if not text:
+            return
+        QGuiApplication.clipboard().setText(text)
+        self.mw.results_bridge.raise_toast("Summary copied")
 
     def _create_tab5_tools(self):
         """Create Tab 5: Tools

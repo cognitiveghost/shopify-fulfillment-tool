@@ -41,6 +41,17 @@ PALETTE = {
     "status_danger_dot": ("#E51C00", "#FF9A9A"),
     "status_danger_border": ("#FDB5B4", "#6B2029"),
     "control_disabled_bg": ("#F1F1F1", "#141518"),
+    # New in phase 2 (spec 2026-10-01 section 3.1).
+    "surface_inverse": ("#303030", "#E3E3E3"),
+    "on_inverse": ("#FFFFFF", "#1A1B1E"),
+    "critical_fill": ("#C70A24", "#C4343F"),
+    "on_critical": ("#FFFFFF", "#FFFFFF"),
+    "card_border": ("transparent", "#2E2F34"),
+    "card_shadow": (
+        "0 1px 0 rgba(26,26,26,0.07), 0 1px 3px rgba(26,26,26,0.12)",
+        "none",
+    ),
+    "overlay_shadow": ("0 4px 12px rgba(26,26,26,0.2)", "none"),
 }
 
 THEMES = pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=["light", "dark"])

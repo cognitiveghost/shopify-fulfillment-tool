@@ -141,3 +141,26 @@ def test_nothing_to_summarise_is_an_empty_dict():
 def test_both_survive_strict_json(lines):
     json.dumps(order_payload(lines), allow_nan=False)
     json.dumps(results_summary(lines), allow_nan=False)
+
+
+def test_summary_text_is_the_kpi_strip_on_one_line():
+    from gui.orders_view import summary_text
+
+    summary = {
+        "orders": 40,
+        "fulfillable": 30,
+        "blocked": 10,
+        "labels_by_courier": [["DHL", 10], ["DPD", 10], ["Speedy", 10]],
+        "value_ready": None,
+    }
+    assert summary_text(summary) == (
+        "40 orders · 30 fulfillable · 10 blocked · labels DHL 10, DPD 10, Speedy 10"
+    )
+    assert summary_text({**summary, "value_ready": 1234.5}).endswith(
+        " · value ready 1234.50"
+    )
+    assert summary_text({**summary, "labels_by_courier": []}) == (
+        "40 orders · 30 fulfillable · 10 blocked"
+    )
+    assert summary_text({**summary, "orders": 1}).startswith("1 order · ")
+    assert summary_text({}) == ""

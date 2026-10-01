@@ -5,9 +5,12 @@ on a warehouse screen, here and in packing-tool after its next sync, rather
 than as a red test. Same guard role as
 test_type_scale.py::test_body_role_matches_shared_button_size.
 """
+from dataclasses import replace
+
 import pytest
 
 from shared.theme import (
+    _CSS_VALUE_FIELDS,
     _MIN_CONTRAST_ON_PLANES,
     _SURFACE_PLANES,
     DARK_THEME,
@@ -88,3 +91,30 @@ def test_no_foreground_sits_within_a_tenth_of_its_floor(theme):
         for plane in _SURFACE_PLANES:
             ratio = contrast_ratio(getattr(theme, token), getattr(theme, plane))
             assert ratio >= floor + 0.1, f"{theme.name}.{token} on {plane}: {ratio:.2f}"
+
+
+def test_the_inverse_plane_is_not_a_surface_plane():
+    """Phase 2 spec section 3.2. Every text floor would fail against a dark
+    plane in light mode, and packing-tool's test pins this tuple."""
+    assert _SURFACE_PLANES == (
+        "surface_sunken",
+        "surface",
+        "surface_raised",
+        "surface_overlay",
+    )
+
+
+@pytest.mark.parametrize(
+    "text, fill", [("on_inverse", "surface_inverse"), ("on_critical", "critical_fill")]
+)
+def test_text_on_an_inverse_or_critical_fill_is_validated(text, fill):
+    broken = replace(LIGHT_THEME, **{text: getattr(LIGHT_THEME, fill)})
+    with pytest.raises(ValueError, match=text):
+        validate_theme(broken)
+
+
+@pytest.mark.parametrize("field", _CSS_VALUE_FIELDS)
+@pytest.mark.parametrize("value", ["", "none; } body { display: none", "0 0 0 {", "}"])
+def test_a_css_value_token_cannot_break_out_of_its_declaration(field, value):
+    with pytest.raises(ValueError, match=field):
+        validate_theme(replace(LIGHT_THEME, **{field: value}))

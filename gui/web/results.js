@@ -1,13 +1,17 @@
 // The results document (Bundle 12): KPI strip, filter bar and a windowed
 // order table over the bridge's `orders` and `summary`. The page owns sort,
-// search, filter chips and the selection gesture (ADR 0005). Python hears
-// only the selection and two commands. Numbers and copy:
+// search, filter chips and the selection gesture (ADR 0005). A click moves the
+// cursor; checkboxes, Ctrl and Shift build the checked set Python hears (phase 2
+// spec section 5.5). Python hears only the
+// selection and two commands. Numbers and copy:
 // docs/superpowers/specs/2026-09-11-phase9-bundle12-results-doc-design.md
 "use strict";
 
-const HEADER_PX = 28;
+const HEADER_PX = 36;
+const ROW_EXTRA_PX = 4; // a results row is the density's row plus this
 const OVERSCAN = 4;
-const TABLE_MIN_PX = 780;
+const TABLE_MIN_PX = 728;
+const PANE_PX = 340;
 const DASH = "—";
 const FULFILLABLE = "Fulfillable";
 const BLOCKED = "Blocked";
@@ -19,12 +23,18 @@ const NUMBER = new Intl.NumberFormat("en-US");
 const CHEVRON_DOWN = "m6 9 6 6 6-6";
 const CHEVRON_UP = "m18 15-6-6-6 6";
 const CHECK = "M20 6 9 17l-5-5";
+// Lucide x, columns-3 and download, each as one path.
+const X_MARK = "M18 6 6 18M6 6l12 12";
+const COLUMNS = "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 3v18M15 3v18";
+const DOWNLOAD = "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3";
+// Lucide info, as one path: a circle and its two strokes.
+const INFO = "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM12 16v-4M12 8h.01";
 
 // Widths are the canvas's (W3); a column grows to its widest real value but
 // never reflows after that. Only Customer stretches (9.15). The registry
 // (columns.js) replaces the fixed list.
-const SELECT_COLUMN = { key: "select", title: "", width: 32 };
-const SLOT_NARROW_PX = 1192; // table minimum 780 + gap 12 + pane 400
+const SELECT_COLUMN = { key: "select", title: "", width: 36 };
+const SLOT_NARROW_PX = TABLE_MIN_PX + PANE_PX; // below this the pane folds to its rail
 
 const els = {};
 const state = {
@@ -37,7 +47,7 @@ const state = {
   selected: new Set(), // order numbers
   anchorKey: null, // the fixed end of a Shift range
   cursorKey: null, // the row the arrow keys move from
-  rowH: 28,
+  rowH: 32,
   visible: 0,
   columnSettings: { order: null, visible: null, auto_hide_empty: false, extras: [] },
   emptyKeys: new Set(),
@@ -123,6 +133,27 @@ const FLAGS = [
 
 function chipId(chip) {
   return chip.kind + ":" + chip.value;
+}
+
+const CHIP_KEYS = { status: "Status", flag: "Flag", courier: "Courier", tag: "Tag" };
+
+// What the chip says after "is": the menu's label carries a "Courier: " or
+// "Tag: " prefix the chip's own key already states.
+function chipValue(chip) {
+  return chip.kind === "courier" || chip.kind === "tag" ? chip.value : chip.label;
+}
+
+// The filters as one sentence, for the no-match state. Flags all have to
+// hold; within Status, Courier and Tag the chips are alternatives.
+function filterSentence() {
+  const parts = [];
+  for (const kind of Object.keys(CHIP_KEYS)) {
+    const values = state.chips.filter((c) => c.kind === kind).map(chipValue);
+    if (values.length) parts.push(CHIP_KEYS[kind] + " is " + values.join(kind === "flag" ? " and " : " or "));
+  }
+  const query = els.search.value.trim();
+  if (query) parts.push("search is “" + query + "”");
+  return parts.join(" and ") + ".";
 }
 
 function menuGroups() {
@@ -240,57 +271,98 @@ function reportSelection() {
   state.bridge.setSelection(state.view.filter((r) => state.selected.has(r.key)).map((r) => r.key));
 }
 
+function kpiCell(key, label, value, sub, dot) {
+  const cell = document.createElement("div");
+  cell.className = "kpi" + (key === "oldest" ? " kpi-wide" : "");
+  cell.dataset.kpi = key;
+  const head = document.createElement("div");
+  head.className = "kpi-label";
+  if (dot) {
+    const mark = document.createElement("span");
+    mark.className = "kpi-dot " + dot;
+    head.appendChild(mark);
+  }
+  head.appendChild(document.createTextNode(label));
+  cell.appendChild(head);
+  for (const [cls, text] of [["kpi-value", value], ["kpi-sub", sub]]) {
+    const part = document.createElement("div");
+    part.className = cls;
+    part.textContent = text;
+    cell.appendChild(part);
+  }
+  return cell;
+}
+
+// Until a price column is mapped the cell is a hint with the way to fix it.
+function valueHint() {
+  const cell = document.createElement("div");
+  cell.className = "kpi kpi-hint";
+  cell.dataset.kpi = "value";
+  cell.innerHTML = svg(INFO, "glyph");
+  const body = document.createElement("div");
+  body.className = "kpi-hint-body";
+  const text = document.createElement("span");
+  text.textContent = "Order value shows once a price column is mapped.";
+  const link = document.createElement("button");
+  link.type = "button";
+  link.id = "map-columns";
+  link.className = "btn link";
+  link.textContent = "Map columns";
+  link.addEventListener("click", () => state.bridge && state.bridge.openColumnMapping());
+  body.append(text, link);
+  cell.appendChild(body);
+  return cell;
+}
+
 function renderKpis() {
   const s = (state.bridge && state.bridge.summary) || {};
   const has = s.orders !== undefined;
   const oldest = has ? s.oldest : null;
-  let valueSub = "";
-  if (has) {
-    valueSub = s.value_total === null ? "No price column mapped" : "of " + fmtCompact(s.value_total) + " analysed";
-  }
-  const cards = [
-    ["orders", "Orders", has ? fmtInt(s.orders) : DASH,
-      has ? NUMBER.format(s.lines) + " lines · " + NUMBER.format(s.skus) + " SKUs touched" : ""],
-    ["fulfillable", "Fulfillable", has ? fmtInt(s.fulfillable) : DASH,
-      has && s.orders ? Math.round((100 * s.fulfillable) / s.orders) + "% of orders" : ""],
-    ["blocked", "Blocked", has ? fmtInt(s.blocked) : DASH,
-      has ? NUMBER.format(s.blocked_lines) + " lines, " + NUMBER.format(s.blocked_skus) + " SKUs" : ""],
-    ["labels", "Labels", has ? fmtInt(s.fulfillable) : DASH,
-      has ? (s.labels_by_courier || []).map((p) => p[0] + " " + NUMBER.format(p[1])).join(" · ") : ""],
-    ["value", "Value ready", has && s.value_ready !== null ? fmtCompact(s.value_ready) : DASH, valueSub],
-    ["oldest", "Oldest waiting", oldest ? fmtAge(oldest.created_at) : DASH,
-      oldest ? "order " + oldest.order_number : ""],
+  const cells = [
+    kpiCell("orders", "Orders", has ? fmtInt(s.orders) : DASH,
+      has ? NUMBER.format(s.lines) + " lines · " + NUMBER.format(s.skus) + " SKUs touched" : ""),
+    kpiCell("fulfillable", "Fulfillable", has ? fmtInt(s.fulfillable) : DASH,
+      has && s.orders ? Math.round((100 * s.fulfillable) / s.orders) + "% of orders" : "", "success"),
+    kpiCell("blocked", "Blocked", has ? fmtInt(s.blocked) : DASH,
+      has ? NUMBER.format(s.blocked_lines) + " lines, " + NUMBER.format(s.blocked_skus) + " SKUs" : "", "danger"),
+    kpiCell("labels", "Labels", has ? fmtInt(s.fulfillable) : DASH,
+      has ? (s.labels_by_courier || []).map((p) => p[0] + " " + NUMBER.format(p[1])).join(" · ") : ""),
+    kpiCell("oldest", "Oldest waiting", oldest ? fmtAge(oldest.created_at) : DASH,
+      oldest ? "order " + oldest.order_number : ""),
+    has && s.value_total === null
+      ? valueHint()
+      : kpiCell("value", "Value ready", has && s.value_ready !== null ? fmtCompact(s.value_ready) : DASH,
+        has ? "across " + plural(s.fulfillable, "fulfillable order") : ""),
   ];
   els.kpis.classList.toggle("has-wide", Boolean(oldest));
-  els.kpis.textContent = "";
-  for (const [key, label, value, sub] of cards) {
-    const card = document.createElement("div");
-    card.className = "kpi" + (key === "oldest" ? " kpi-wide" : "");
-    card.dataset.kpi = key;
-    for (const [cls, text] of [["kpi-label", label], ["kpi-value", value], ["kpi-sub", sub]]) {
-      const part = document.createElement("div");
-      part.className = cls;
-      part.textContent = text;
-      card.appendChild(part);
-    }
-    els.kpis.appendChild(card);
-  }
+  els.kpis.replaceChildren(...cells);
 }
 
 function renderChips() {
   els.chips.textContent = "";
   for (const chip of state.chips) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chip-filter";
-    button.dataset.chip = chipId(chip);
-    button.title = "Remove this filter";
-    button.textContent = chip.label + "  ×";
-    button.addEventListener("click", () => {
+    const box = document.createElement("span");
+    box.className = "chip-filter";
+    box.dataset.chip = chipId(chip);
+    const key = document.createElement("span");
+    key.className = "chip-key";
+    key.textContent = CHIP_KEYS[chip.kind] + " is";
+    const value = document.createElement("span");
+    value.className = "chip-value";
+    value.textContent = chipValue(chip);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chip-remove";
+    remove.title = "Remove filter";
+    remove.setAttribute("aria-label", "Remove filter: " + CHIP_KEYS[chip.kind] + " is " + chipValue(chip));
+    remove.innerHTML = svg(X_MARK, "glyph");
+    remove.addEventListener("click", () => {
       toggleChip(chip);
       render();
     });
-    els.chips.appendChild(button);
+    // The text node is the space a reader hears; flex ignores it for layout.
+    box.append(key, " ", value, remove);
+    els.chips.appendChild(box);
   }
   els.clearAll.hidden = !(state.chips.length || state.query);
 }
@@ -304,7 +376,9 @@ function renderCount() {
 function renderExport() {
   const s = (state.bridge && state.bridge.summary) || {};
   const n = s.fulfillable || 0;
-  els.exportBtn.textContent = s.fulfillable === undefined ? "Export" : "Export " + plural(n, "order");
+  els.exportBtn.replaceChildren();
+  els.exportBtn.insertAdjacentHTML("beforeend", svg(DOWNLOAD, "glyph"));
+  els.exportBtn.append(s.fulfillable === undefined ? "Export" : "Export " + plural(n, "order"));
   els.exportBtn.disabled = !(state.bridge && state.bridge.exportEnabled && n > 0);
 }
 
@@ -313,6 +387,7 @@ function renderStates() {
   const noMatch = !none && state.view.length === 0;
   els.empty.hidden = !none;
   els.noMatch.hidden = !noMatch;
+  if (noMatch) els.noMatchText.textContent = filterSentence();
   els.table.hidden = none || noMatch;
   els.search.disabled = none;
   els.addFilter.disabled = none;
@@ -369,16 +444,20 @@ function renderHeader() {
       const box = document.createElement("input");
       box.type = "checkbox";
       box.tabIndex = -1;
-      box.setAttribute("aria-label", "Select every order shown");
+      // With anything checked the box clears; with nothing, it checks all shown.
+      box.title = picked > 0 ? "Clear selection" : "Select every order shown";
+      box.setAttribute("aria-label", box.title);
       box.checked = all;
       box.indeterminate = picked > 0 && !all;
-      box.addEventListener("click", () => selectAll(!all));
+      box.addEventListener("click", () => selectAll(picked === 0));
       cell.appendChild(box);
     } else {
       const sorted = Boolean(state.sort && state.sort.key === col.key);
       cell.dataset.sort = col.key;
       cell.classList.toggle("sorted", sorted);
       cell.setAttribute("aria-sort", sorted ? (state.sort.dir === 1 ? "ascending" : "descending") : "none");
+      const s = (state.bridge && state.bridge.summary) || {};
+      if (col.key === "value" && s.orders !== undefined && s.value_total === null) cell.classList.add("unmapped");
       const label = document.createElement("span");
       label.textContent = col.title;
       cell.appendChild(label);
@@ -403,10 +482,9 @@ function measureColumns() {
     ctx.font = "700 " + caption;
     let widest = ctx.measureText(col.title).width + 14; // + the sort caret
     if (col.key === "status") {
-      ctx.font = caption;
-      widest = Math.max(widest, ctx.measureText(FULFILLABLE).width + 30); // chip padding + border
+      widest = Math.max(widest, ctx.measureText(FULFILLABLE).width + 18); // badge padding + edge
     } else {
-      ctx.font = col.mono ? mono : sans;
+      ctx.font = (col.key === "order" ? "700 " : "") + (col.mono ? mono : sans);
       for (const r of state.records) widest = Math.max(widest, ctx.measureText(col.text(r.o) || DASH).width);
     }
     const width = Math.max(col.width, Math.ceil(widest + 16));
@@ -414,7 +492,7 @@ function measureColumns() {
   });
   const fixed = widths.reduce((a, b) => a + b, 0);
   const stretch = cols.some((c) => c.stretch);
-  const customerMin = stretch ? Math.max(120, TABLE_MIN_PX - fixed) : 0;
+  const customerMin = stretch ? Math.max(140, TABLE_MIN_PX - fixed) : 0;
   const template = cols.map((col, i) => (col.stretch ? "minmax(" + customerMin + "px, 1fr)" : widths[i] + "px"));
   // Customer hidden: an empty track takes the growth, so no column stretches.
   if (!stretch) template.push("minmax(0, 1fr)");
@@ -438,7 +516,8 @@ function layout() {
     if (!narrow) state.paneForced = false;
     renderSlot();
   }
-  state.rowH = parseFloat(cssVar("--row-height")) || 28;
+  state.rowH = (parseFloat(cssVar("--row-height")) || 28) + ROW_EXTRA_PX;
+  els.table.style.setProperty("--results-row-height", state.rowH + "px");
   // The selection bar covers the header rather than adding to it, so the row
   // budget is the same whether or not anything is selected.
   const rows = Math.max(0, Math.floor((els.tableArea.clientHeight - HEADER_PX) / state.rowH));
@@ -461,21 +540,27 @@ function refreshColumns() {
 
 function slotMode() {
   if (!state.records.length) return "none";
-  if (state.columnsOpen) return "columns";
-  return state.paneHidden || (state.narrow && !state.paneForced) ? "strip" : "pane";
+  return state.paneHidden || (state.narrow && !state.paneForced) ? "rail" : "pane";
 }
 
 function renderSlot() {
   const mode = slotMode();
   els.tableArea.dataset.slot = mode;
   els.pane.hidden = mode !== "pane";
-  els.paneStrip.hidden = mode !== "strip";
-  els.columnsPanel.hidden = mode !== "columns";
+  els.paneStrip.hidden = mode !== "rail";
+  // The column manager is a popover of its own; it only needs a session.
+  if (mode === "none") state.columnsOpen = false;
+  els.columnsPanel.hidden = !state.columnsOpen;
   els.columnsButton.disabled = mode === "none";
-  els.columnsButton.setAttribute("aria-pressed", String(state.columnsOpen));
-  els.columnsButton.textContent = "Columns " + visibleColumns().length + "/" + allColumns().length;
+  els.columnsButton.setAttribute("aria-expanded", String(state.columnsOpen));
+  const count = document.createElement("span");
+  count.className = "columns-count mono";
+  count.textContent = visibleColumns().length + "/" + allColumns().length;
+  els.columnsButton.replaceChildren();
+  els.columnsButton.insertAdjacentHTML("beforeend", svg(COLUMNS, "glyph"));
+  els.columnsButton.append("Columns ", count);
   if (mode === "pane") renderPane();
-  if (mode === "columns") renderColumnsPanel();
+  if (state.columnsOpen) renderColumnsPanel();
 }
 
 // The bridge hands `columns` over as a QVariantMap, which reaches JS with its keys
@@ -504,9 +589,11 @@ function renderRows() {
 function rowElement(record, index) {
   const row = document.createElement("div");
   const selected = state.selected.has(record.key);
-  row.className = "row" + (selected ? " selected" : "");
+  const cursor = state.cursorKey === record.key;
+  row.className = "row" + (selected ? " selected" : "") + (cursor ? " cursor" : "");
   row.setAttribute("role", "row");
   row.setAttribute("aria-selected", String(selected));
+  if (cursor) row.setAttribute("aria-current", "true");
   row.dataset.order = record.key;
   row.dataset.index = String(index);
   row.style.top = index * state.rowH + "px";
@@ -515,9 +602,16 @@ function rowElement(record, index) {
   return row;
 }
 
+function statusBadge(o) {
+  const badge = document.createElement("span");
+  badge.className = "badge " + (isFulfillable(o) ? "success" : "danger");
+  badge.textContent = statusText(o);
+  return badge;
+}
+
 function cellElement(col, record, selected) {
   const cell = document.createElement("div");
-  cell.className = "cell " + col.key + (col.numeric ? " num" : "");
+  cell.className = "cell " + col.key + (col.numeric ? " num" : "") + (col.mono ? " mono" : "");
   cell.setAttribute("role", "gridcell");
   if (col.key === "select") {
     const box = document.createElement("input");
@@ -527,11 +621,12 @@ function cellElement(col, record, selected) {
     box.setAttribute("aria-label", "Select order " + record.key);
     cell.appendChild(box);
   } else if (col.key === "status") {
-    const ok = isFulfillable(record.o);
-    const chip = document.createElement("span");
-    chip.className = "chip " + (ok ? "success" : "danger");
-    chip.textContent = statusText(record.o);
-    cell.appendChild(chip);
+    cell.appendChild(statusBadge(record.o));
+  } else if (col.key === "repeat" && record.o._repeat === true) {
+    const badge = document.createElement("span");
+    badge.className = "badge info";
+    badge.textContent = "Repeat";
+    cell.appendChild(badge);
   } else {
     const text = col.text(record.o);
     const missing = text === "" || text === DASH;
@@ -564,6 +659,14 @@ function selectRange(fromKey, toKey, additive) {
   for (let i = Math.min(a, b); i <= Math.max(a, b); i++) state.selected.add(keys[i]);
 }
 
+// The cursor is the one order the pane shows. Asking for an order brings a
+// pane the operator hid back; a pane folded because the page is narrow stays.
+function moveCursor(key) {
+  state.cursorKey = key;
+  state.anchorKey = key;
+  state.paneHidden = false;
+}
+
 function onRowClick(event) {
   const row = event.target.closest(".row");
   if (!row || !row.dataset.order) return;
@@ -571,15 +674,16 @@ function onRowClick(event) {
   const ctrl = event.ctrlKey || event.metaKey;
   if (event.shiftKey && state.anchorKey !== null) {
     selectRange(state.anchorKey, key, ctrl);
-  } else if (ctrl || event.target.matches("input[type=checkbox]")) {
+    state.cursorKey = key; // the range's moving end, so Shift+arrow carries on from it
+    state.paneHidden = false;
+  } else if (ctrl || event.target.closest(".cell.select")) {
+    // The whole select cell, not just its 16px box: a near miss must not move the cursor.
     if (state.selected.has(key)) state.selected.delete(key);
     else state.selected.add(key);
     state.anchorKey = key;
   } else {
-    state.selected = new Set([key]);
-    state.anchorKey = key;
+    moveCursor(key);
   }
-  state.cursorKey = key;
   els.table.focus({ preventScroll: true });
   render();
 }
@@ -601,9 +705,13 @@ function onTableKey(event) {
     return;
   }
   if (event.key === "Escape") {
-    state.selected = new Set();
-    state.anchorKey = null;
-    state.cursorKey = null;
+    // Innermost first: the checked orders, then the cursor.
+    if (state.selected.size) {
+      state.selected = new Set();
+    } else {
+      state.cursorKey = null;
+      state.anchorKey = null;
+    }
     render();
     return;
   }
@@ -611,16 +719,19 @@ function onTableKey(event) {
   event.preventDefault();
   if (!state.view.length) return;
   const keys = state.view.map((r) => r.key);
-  const at = state.cursorKey === null ? -1 : keys.indexOf(state.cursorKey);
+  const from = state.cursorKey !== null ? state.cursorKey : state.anchorKey;
+  const at = from === null ? -1 : keys.indexOf(from);
   const next = Math.min(keys.length - 1, Math.max(0, at + (event.key === "ArrowDown" ? 1 : -1)));
-  // Shift keeps the anchor and re-spans to the cursor, so reversing shrinks.
-  if (event.shiftKey && state.anchorKey !== null) {
-    selectRange(state.anchorKey, keys[next], false);
+  if (event.shiftKey) {
+    // The anchor stays and the range re-spans to the cursor, so reversing shrinks.
+    const anchor = state.anchorKey !== null ? state.anchorKey : keys[Math.max(0, at)];
+    selectRange(anchor, keys[next], false);
+    state.anchorKey = anchor;
+    state.cursorKey = keys[next];
+    state.paneHidden = false;
   } else {
-    state.selected = new Set([keys[next]]);
-    state.anchorKey = keys[next];
+    moveCursor(keys[next]);
   }
-  state.cursorKey = keys[next];
   scrollIntoView(next);
   render();
 }
@@ -636,6 +747,7 @@ function clearFilters() {
 
 function onOrders() {
   const orders = state.bridge.orders || [];
+  closeBulkPopover(); // what it said was true of the orders it was opened on
   state.records = orders.map((o, index) => ({ o: o, index: index, key: str(o.Order_Number), hay: searchText(o) }));
   renderKpis();
   refreshColumns();
@@ -653,17 +765,16 @@ function bind() {
     kpis: "kpis", search: "search", chips: "chips", addFilter: "add-filter", menu: "filter-menu",
     clearAll: "clear-all", count: "count", screenMenu: "screen-menu", exportBtn: "export",
     tableArea: "table-area", table: "table", scroller: "scroller", header: "header", rows: "rows",
-    empty: "results-empty", noMatch: "results-no-match", noMatchClear: "no-match-clear",
+    empty: "results-empty", noMatch: "results-no-match", noMatchClear: "no-match-clear", noMatchText: "no-match-text",
     themeVars: "theme-vars",
     columnsButton: "columns-button", pane: "pane", paneStrip: "pane-strip",
     paneShow: "pane-show", columnsPanel: "columns-panel",
     selectionBar: "selection-bar", selectionCount: "selection-count",
-    selectionSub: "selection-sub", selectionMark: "selection-mark",
+    selectionMark: "selection-mark",
     selectionHold: "selection-hold", selectionMore: "selection-more",
-    selectionMenu: "selection-menu", selectionExclude: "selection-exclude",
-    selectionClear: "selection-clear",
+    selectionMenu: "selection-menu",
     toast: "toast", toastText: "toast-text", toastBadge: "toast-badge",
-    toastUndo: "toast-undo",
+    toastUndo: "toast-undo", toastDismiss: "toast-dismiss",
   };
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 
@@ -719,6 +830,7 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   bridge.summaryChanged.connect(() => {
     renderKpis();
     renderExport();
+    renderHeader();
   });
   bridge.exportEnabledChanged.connect(renderExport);
   bridge.focusSearchRequested.connect(() => els.search.focus());

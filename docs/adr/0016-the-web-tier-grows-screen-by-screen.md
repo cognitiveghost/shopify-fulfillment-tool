@@ -34,10 +34,11 @@
 
 - Every screen that moves adds a bridge surface like `ResultsBridge`. That tax is why ADR 0001 capped
   the tier, and it is still real: each move is priced in its own spec.
-- `shared/style_lint.py` (owned by packing-tool) still bans `box-shadow`. It changes in the first
-  redesign PR that writes a shadow, together with a `card_shadow` token, so no rule changes before
-  something uses it. The lint is shared, so that change reaches Packing Tool too; its own
-  ADR 0001 still bans shadows until a Packing Tool spec decides otherwise.
+- `shared/style_lint.py` allows `box-shadow` in a web asset since phase 2 (2026-10-01), and only when its
+  whole value is `var(--card-shadow)`, `var(--overlay-shadow)` or `none`. Any other shadow is still a
+  finding, so a shadow is always one of the theme's two tokens. The lint is shared, so the allowance reaches
+  Packing Tool at its next sync; its own ADR 0001 still bans shadows until a Packing Tool spec decides
+  otherwise.
 - A Qt child widget still cannot paint above a `QWebEngineView` (ADR 0007), so each web screen keeps
   drawing its own toasts.
 

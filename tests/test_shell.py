@@ -470,3 +470,23 @@ def test_collapsing_is_remembered_on_this_pc(tmp_path, monkeypatch):
         assert "Session Setup" in second.nav_rail.button(0).toolTip()
     finally:
         second.close()
+
+
+def test_a_web_page_takes_the_page_area_to_its_edges(main_window):
+    """Phase 2 spec section 5.1: a Qt page keeps its 5px inset, a web page has
+    none, or a white ring would show around the grey page."""
+    main_window.resize(1366, 768)
+    main_window.main_tabs.setCurrentIndex(1)
+    QApplication.processEvents()
+    margins = main_window.page_area.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+        0,
+        0,
+        0,
+        0,
+    )
+    assert main_window.main_tabs.width() == 1166
+    main_window.main_tabs.setCurrentIndex(0)
+    QApplication.processEvents()
+    assert main_window.page_area.layout().contentsMargins().left() == 5
+    assert main_window.main_tabs.width() == 1156

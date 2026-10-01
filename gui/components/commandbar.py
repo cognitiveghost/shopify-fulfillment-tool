@@ -3,6 +3,7 @@
 Client selector, session id, status, and exactly one primary action. "One
 primary per screen" is enforced structurally: there is a single action button
 and it is the only place in the component library that marks a button primary.
+On Results the session is drawn as a chip (set_results_mode).
 Replaces the sidebar of 70px client cards with a dropdown.
 """
 
@@ -132,6 +133,7 @@ class CommandBar(QWidget):
 
         self._repopulating = False
         self._restore_client = ""
+        self._results_mode = False
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
@@ -170,7 +172,6 @@ class CommandBar(QWidget):
         self.session_button.setAutoRaise(True)
         self.session_button.setPopupMode(QToolButton.InstantPopup)
         self.session_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.session_button.setStyleSheet(font_css("caption"))
         self.session_menu = QMenu(self.session_button)
         self.session_button.setMenu(self.session_menu)
         layout.addWidget(self.session_button)
@@ -201,6 +202,12 @@ class CommandBar(QWidget):
         self.stock_chip.hide()
         layout.addWidget(self.stock_chip)
 
+        # Results only (phase 2 spec section 6.1): the two chips' text as one
+        # quiet caption beside the session chip.
+        self.meta_label = QLabel("", self)
+        self.meta_label.hide()
+        layout.addWidget(self.meta_label)
+
         self.progress_label = QLabel("", self)
         self.progress_label.setStyleSheet(font_css("caption"))
         self.progress_label.hide()
@@ -226,6 +233,7 @@ class CommandBar(QWidget):
 
         self._state = BarState.NO_CLIENT
         self._progress = (0, "")
+        on_theme_changed(self.session_button, self._style_session)
 
         self._bound_action = None
         self.action_button.clicked.connect(self._forward_action_click)
@@ -240,6 +248,42 @@ class CommandBar(QWidget):
             f"CommandBar {{ background-color: {theme.surface_sunken};"
             f" border-bottom: 1px solid {theme.border_subtle}; }}"
         )
+
+    def _style_session(self, theme=None) -> None:
+        """The session button as plain text, or on Results as the mockup's chip.
+
+        Its own sheet rather than the app's: this is the one QToolButton drawn
+        this way, and a widget sheet has to be re-applied on a theme change.
+        """
+        theme = theme or get_theme_manager().get_current_theme()
+        if self._results_mode:
+            self.session_button.setStyleSheet(
+                f"QToolButton {{ {font_css('caption')}"
+                f" font-family: {theme.font_family_mono};"
+                f" background-color: {theme.surface_raised};"
+                f" border: 1px solid {theme.border};"
+                f" border-radius: {theme.radius_md}px;"
+                " padding: 0px 8px; min-height: 20px; max-height: 20px; }"
+                " QToolButton::menu-indicator { image: none; }"
+            )
+        else:
+            self.session_button.setStyleSheet(font_css("caption"))
+        self.meta_label.setStyleSheet(
+            f"{font_css('caption')} color: {theme.text_secondary};"
+        )
+
+    def set_results_mode(self, on: bool) -> None:
+        """On Results the session is the mockup's chip and its age plain text."""
+        self._results_mode = bool(on)
+        self._style_session()
+        self._refresh()
+
+    def _refresh_meta(self) -> None:
+        """`analysed 14:06 · stock file 19 h old`, from the two chips' own text."""
+        parts = [t for t in (self.status_chip.text(), self.stock_chip.text()) if t]
+        self.meta_label.setText(" · ".join(t[0].lower() + t[1:] for t in parts))
+        has_session = self._state in (BarState.SESSION, BarState.RUNNING)
+        self.meta_label.setVisible(self._results_mode and has_session and bool(parts))
 
     def set_clients(self, names: list[str]) -> None:
         """The flat case: no pins, no groups, just a list."""
@@ -446,13 +490,15 @@ class CommandBar(QWidget):
 
     def set_status(self, role: str, text: str) -> None:
         self.status_chip.set_status(role, text, get_theme_manager().get_current_theme())
-        self.status_chip.setVisible(bool(text))
+        self.status_chip.setVisible(bool(text) and not self._results_mode)
+        self._refresh_meta()
 
     def set_stock_age(self, text: str) -> None:
         self.stock_chip.set_status(
             "text_secondary", text, get_theme_manager().get_current_theme()
         )
-        self.stock_chip.setVisible(bool(text))
+        self.stock_chip.setVisible(bool(text) and not self._results_mode)
+        self._refresh_meta()
 
     def set_action(self, label: str) -> QPushButton:
         """Label and reveal the screen's single primary action.
@@ -483,8 +529,7 @@ class CommandBar(QWidget):
         setEnabled call sites in file_handler and main_window_pyside keep working
         untouched, and the bar is a second presentation of it rather than a
         replacement. Passing None hides the slot, for a screen with no primary.
-        role is the slot's button role: Results re-runs the analysis as a
-        secondary action (W3).
+        role is the slot's button role.
 
         ponytail: a hidden QPushButton as the command's model is what QAction
         does properly, but QPushButton cannot consume a QAction -- only
@@ -494,6 +539,10 @@ class CommandBar(QWidget):
         """
         self._unbind()
         if button is None:
+            # The label goes too: _refresh shows the slot for any session
+            # state whose button has text, so a stale one would reappear.
+            self.action_button.setText("")
+            self.action_button.setToolTip("")
             self.action_button.hide()
             self._refresh()
             return
@@ -545,9 +594,11 @@ class CommandBar(QWidget):
             else:
                 self.session_button.setText(self._session_text)
                 self.session_button.setEnabled(state is BarState.SESSION)
-        self.open_folder_button.setVisible(has_session)
-        self.status_chip.setVisible(has_session and bool(self.status_chip.text()))
-        self.stock_chip.setVisible(has_session and bool(self.stock_chip.text()))
+        chips = has_session and not self._results_mode
+        self.open_folder_button.setVisible(chips)
+        self.status_chip.setVisible(chips and bool(self.status_chip.text()))
+        self.stock_chip.setVisible(chips and bool(self.stock_chip.text()))
+        self._refresh_meta()
 
         self.new_session_button.setVisible(state is BarState.NO_SESSION)
         self.cancel_button.setVisible(state is BarState.RUNNING)

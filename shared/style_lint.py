@@ -31,8 +31,9 @@ either repo today; `# style-lint: allow` handles them if one appears.
 
 Web assets (.css, .html, .js -- ADR 0001) are scanned as text with comments
 blanked out. They get the same four colour and size rules plus two of their
-own: `banned` (box-shadow, gradients, transitions, transforms, opacity --
-each a seam the Qt tier cannot match) and `alias` (a var() reading a frozen
+own: `banned` (gradients, transitions, transforms, opacity -- each a seam the
+Qt tier cannot match -- and box-shadow, unless its whole value is one of the
+theme's two shadow tokens or `none`: ADR 0016) and `alias` (a var() reading a frozen
 alias, which the web tier never receives).
 """
 
@@ -131,6 +132,16 @@ _BANNED = re.compile(
     r"(?:[bB]oxShadow|[tT]ransition\w*|[tT]ransform|scale|rotate|translate|opacity))\b"
     r"|setProperty\(\s*[\"'](" + _BANNED_PROPERTY + r")[\"']"
 )
+
+# ADR 0016: the web tier may cast a shadow, but only one of the theme's two
+# shadow tokens (or none, to take one off). The value must be the whole
+# declaration, so a second shadow cannot ride in after the token.
+_SHADOW_OK = re.compile(
+    r"\s*(?:var\(\s*--(?:card|overlay)-shadow\s*\)|none)\s*[;}]"
+)
+# Shadows belong in a stylesheet: an open style="..." earlier on the line means
+# the declaration is inline, token or not.
+_INLINE_STYLE = re.compile(r"style\s*=\s*([\"'])(?:(?!\1).)*$")
 
 # The aliases are never exported to the web tier, so var(--accent-blue)
 # resolves to nothing and paints transparent without a sound.
@@ -243,6 +254,15 @@ def _scan_web_asset(path: Path) -> list[str]:
             ln = code.count("\n", 0, m.start()) + 1
             # The marker usually sits in a comment, so read it from the raw line.
             if ALLOW_MARKER in lines[ln - 1]:
+                continue
+            if (
+                kind == "banned"
+                and m.group(1) == "box-shadow"
+                and _SHADOW_OK.match(code, m.end())
+                and not _INLINE_STYLE.search(
+                    code, code.rfind("\n", 0, m.start()) + 1, m.start()
+                )
+            ):
                 continue
             found.append((ln, kind, m.group(m.lastindex or 0)))
 

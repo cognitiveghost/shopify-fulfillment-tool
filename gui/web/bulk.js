@@ -1,4 +1,6 @@
 // The selection bar, its menu, the bulk popover and the toast (Bundle 14).
+// The three verbs that remove orders or lines say what will change and confirm
+// in the popover; no dialog follows (phase 2 spec section 5.7).
 // Loads before results.js: nothing here may name results.js's helpers at the
 // top level, only inside a function body.
 // Spec: docs/superpowers/specs/2026-09-14-phase9-bundle14-selection-bulk-design.md
@@ -12,22 +14,9 @@ function selectedKeys() {
   return state.view.filter((r) => state.selected.has(r.key)).map((r) => r.key);
 }
 
-function selectionSummary() {
-  const orders = selectedOrders();
-  let units = 0;
-  let value = 0;
-  let anyValue = false;
-  const couriers = new Set();
-  for (const o of orders) {
-    units += num(o.Units) || 0;
-    const v = num(o.Total_Price);
-    if (v !== null) {
-      value += v;
-      anyValue = true;
-    }
-    couriers.add(courierOf(o));
-  }
-  return { orders: orders.length, units, value: anyValue ? value : null, couriers: couriers.size };
+// Mark fulfillable only means something for an order that is not.
+function markableKeys() {
+  return state.view.filter((r) => state.selected.has(r.key) && !isFulfillable(r.o)).map((r) => r.key);
 }
 
 function countedWord(n, word) {
@@ -41,41 +30,26 @@ function theseOrders(n) {
 function renderSelectionBar() {
   const n = state.selected.size;
   els.selectionBar.hidden = n === 0;
-  els.exportBtn.className = "btn " + (n === 0 ? "primary" : "secondary");
   if (n === 0) {
     closeSelectionMenu();
     closeBulkPopover();
     return;
   }
-  const s = selectionSummary();
-  els.selectionCount.textContent =
-    countedWord(s.orders, "order") + " · " + countedWord(s.units, "unit") + " selected";
-  const parts = [];
-  if (s.value !== null) parts.push(fmtMoney(s.value));
-  parts.push(countedWord(s.couriers, "courier"));
-  els.selectionSub.textContent = parts.join(" · ");
-  els.selectionMark.textContent =
-    n === 1 ? "Mark fulfillable" : "Mark " + NUMBER.format(n) + " fulfillable";
-  els.selectionHold.textContent = n === 1 ? "Hold" : "Hold these " + NUMBER.format(n);
-}
-
-function clearSelection() {
-  state.selected = new Set();
-  render();
-  els.table.focus();
+  if (bulkKeys && bulkKeys.join("\n") !== selectedKeys().join("\n")) closeBulkPopover();
+  els.selectionCount.textContent = NUMBER.format(n) + " selected";
+  const markable = markableKeys().length;
+  els.selectionMark.textContent = "Mark " + NUMBER.format(markable || n) + " fulfillable";
+  els.selectionMark.disabled = markable === 0;
+  els.selectionHold.textContent = n === 1 ? "Hold this" : "Hold these " + NUMBER.format(n);
 }
 
 function bindSelectionBar() {
   els.selectionMark.addEventListener("click", () => {
-    state.bridge.setStatus(selectedKeys(), true);
+    state.bridge.setStatus(markableKeys(), true);
   });
   els.selectionHold.addEventListener("click", () => {
     state.bridge.setStatus(selectedKeys(), false);
   });
-  els.selectionExclude.addEventListener("click", () => {
-    state.bridge.excludeOrders(selectedKeys());
-  });
-  els.selectionClear.addEventListener("click", clearSelection);
   els.selectionMore.addEventListener("click", () => {
     if (els.selectionMenu.hidden) openSelectionMenu();
     else closeSelectionMenu();
@@ -84,8 +58,9 @@ function bindSelectionBar() {
     if (!e.target.closest("#selection-menu, #selection-more")) closeSelectionMenu();
     if (!e.target.closest("#bulk-popover, #selection-menu, #selection-more")) closeBulkPopover();
   });
+  els.selectionMore.insertAdjacentHTML("beforeend", svg(CHEVRON_DOWN, "glyph"));
   document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && state.selected.size) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && (state.selected.size || state.cursorKey !== null)) {
       const t = document.activeElement;
       if (t && t.matches && t.matches("input, textarea")) return;
       e.preventDefault();
@@ -133,6 +108,7 @@ function moreItems() {
       run: () => openTagPopover("remove"),
     },
     { id: "more-copy", label: "Copy " + countedWord(n, "order number"), hint: "Ctrl+C", run: copySelection },
+    { separator: true },
     {
       id: "more-export-xlsx",
       label: "Export " + theseOrders(n) + " to Excel",
@@ -146,12 +122,15 @@ function moreItems() {
     { separator: true },
     { id: "more-remove-sku", label: "Remove a SKU from " + theseOrders(n), danger: true, run: () => openSkuPopover("line") },
     { id: "more-remove-orders", label: "Remove whole orders containing a SKU", danger: true, run: () => openSkuPopover("order") },
+    { id: "more-exclude", label: "Exclude " + theseOrders(n) + " from the run", danger: true, run: openExcludePopover },
   ];
 }
 
+// The checked orders, or with none checked the order the cursor is on.
 function copySelection() {
-  state.bridge.copyText(selectedKeys().join("\n"));
-  raiseToast(countedWord(state.selected.size, "order number") + " copied", false);
+  const keys = state.selected.size ? selectedKeys() : [state.cursorKey];
+  state.bridge.copyText(keys.join("\n"));
+  raiseToast(countedWord(keys.length, "order number") + " copied", false);
 }
 
 function exportSelectionAs(fmt) {
@@ -243,50 +222,74 @@ function tagCounts(tags) {
 }
 
 let bulkPicked = null;
+// The checked orders the open popover speaks for. It is the only confirmation
+// a removal gets, so it commits these keys and no others, and it closes when
+// the checked set or the orders under it change (renderSelectionBar, onOrders).
+let bulkKeys = null;
 
 function closeBulkPopover() {
   const open = document.getElementById("bulk-popover");
   if (open) open.remove();
   bulkPicked = null;
+  bulkKeys = null;
 }
 
+// opts: title, danger, verb(value) -> {text, disabled}, onCommit(value, keys),
+// and optionally fill(list, pick) for a picker, prompt (the verb's label
+// before a pick) and changes(value) -> string[] for a verb that removes
+// something.
 function openBulkPopover(opts) {
   closeBulkPopover();
-  const box = el("div", "bulk-popover");
+  bulkKeys = selectedKeys();
+  const box = el("div", "popover bulk-popover");
   box.id = "bulk-popover";
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", opts.title);
+  // Never taller than the table under the bar, so the foot stays on screen.
+  box.style.maxHeight = Math.max(200, els.tableArea.clientHeight - HEADER_PX - 12) + "px";
 
   const title = el("div", "bulk-title", opts.title);
   title.id = "bulk-title";
-  box.appendChild(title);
 
+  const body = el("div", "bulk-body");
+  body.id = "bulk-body";
   const list = el("div", "bulk-list");
   list.id = "bulk-list";
-  box.appendChild(list);
+  list.hidden = !opts.fill;
+  const changes = el("div", "bulk-changes");
+  changes.id = "bulk-changes";
+  changes.hidden = true;
+  const hint = el("p", "bulk-hint", "You can undo this from the confirmation that follows.");
+  hint.hidden = !opts.changes;
+  body.append(list, changes, hint);
 
   const verb = document.createElement("button");
   verb.type = "button";
   verb.id = "bulk-verb";
-  verb.className = "btn " + (opts.danger ? "danger" : "primary");
+  verb.className = "btn " + (opts.danger ? "critical" : "primary");
+  verb.textContent = opts.prompt || "";
   verb.disabled = true;
   const cancel = document.createElement("button");
   cancel.type = "button";
-  cancel.className = "btn ghost";
+  cancel.className = "btn secondary";
   cancel.textContent = "Cancel";
   cancel.addEventListener("click", closeBulkPopover);
   const footer = el("div", "bulk-footer");
   footer.append(cancel, verb);
-  box.appendChild(footer);
+  box.append(title, body, footer);
 
-  opts.fill(list, (value, row) => {
+  const pick = (value, row) => {
     bulkPicked = value;
-    for (const other of list.querySelectorAll(".bulk-row")) other.classList.remove("picked");
-    row.classList.add("picked");
+    if (row) {
+      for (const other of list.querySelectorAll(".bulk-row")) other.classList.remove("picked");
+      row.classList.add("picked");
+    }
     const label = opts.verb(value);
     verb.textContent = label.text;
     verb.disabled = label.disabled;
-  });
+    if (opts.changes) renderBulkChanges(changes, opts.changes(value));
+  };
+  if (opts.fill) opts.fill(list, pick);
 
   list.addEventListener("keydown", (e) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -300,14 +303,24 @@ function openBulkPopover(opts) {
 
   verb.addEventListener("click", () => {
     const value = bulkPicked;
+    const keys = bulkKeys;
     closeBulkPopover();
-    opts.onCommit(value);
+    opts.onCommit(value, keys);
   });
 
-  els.selectionBar.appendChild(box);
+  // Under More, which opened it (the anchor is the popover's positioned parent).
+  els.selectionMore.parentElement.appendChild(box);
+  if (!opts.fill) pick(null, null); // nothing to choose: say what will change at once
   const first = list.querySelector(".bulk-row");
-  if (first) first.focus();
+  (first || cancel).focus();
   return box;
+}
+
+function renderBulkChanges(host, lines) {
+  host.textContent = "";
+  host.hidden = false;
+  host.append(el("div", "bulk-changes-title", "What will change"));
+  for (const line of lines) host.append(el("div", "bulk-change", line));
 }
 
 function openTagPopover(mode) {
@@ -325,18 +338,19 @@ function openTagPopover(mode) {
   openBulkPopover({
     title: (add ? "Add a tag to " : "Remove a tag from ") + orders,
     danger: false,
+    prompt: "Pick a tag",
     fill: (host, onPick) => {
       renderTagList(host, rows, badge, onPick);
       if (!add) return;
       host.appendChild(el("div", "menu-group", "NEW"));
-      const input = el("input", "new-tag");
+      const input = el("input", "field new-tag");
       input.id = "bulk-new-tag";
       input.placeholder = "New tag";
       input.setAttribute("aria-label", "New tag");
       input.addEventListener("keydown", (e) => {
         const tag = input.value.trim();
         if (e.key !== "Enter" || !tag) return;
-        const keys = selectedKeys();
+        const keys = bulkKeys;
         closeBulkPopover();
         state.bridge.addTag(keys, tag);
       });
@@ -351,8 +365,7 @@ function openTagPopover(mode) {
       }
       return { text: "Remove from " + countedWord(on, "order"), disabled: on === 0 };
     },
-    onCommit: (tag) => {
-      const keys = selectedKeys();
+    onCommit: (tag, keys) => {
       if (add) state.bridge.addTag(keys, tag);
       else state.bridge.removeTag(keys, tag);
     },
@@ -375,6 +388,65 @@ function skuCounts() {
   return counts;
 }
 
+// Up to four order numbers in full; beyond that three and a count.
+function orderList(orders) {
+  const ids = orders.map((o) => str(o.Order_Number));
+  if (ids.length <= 4) return ids.join(", ");
+  return ids.slice(0, 3).join(", ") + " and " + NUMBER.format(ids.length - 3) + " more";
+}
+
+// `leaving` fulfillable orders drop out of the export.
+function exportLine(leaving) {
+  const s = (state.bridge && state.bridge.summary) || {};
+  const from = num(s.fulfillable) || 0;
+  if (leaving === 0) return "Export stays at " + countedWord(from, "order");
+  return "Export goes from " + NUMBER.format(from) + " to " + countedWord(from - leaving, "order");
+}
+
+function skuLinesOf(o, sku) {
+  return (o.lines || []).filter((line) => str(line.SKU).trim() === sku);
+}
+
+function unitsOf(lines) {
+  return lines.reduce((sum, line) => sum + (num(line.Quantity) || 0), 0);
+}
+
+// Only a fulfillable order's SKU lines draw stock (ADR 0010), so only those
+// give units back.
+function skuRemovalChanges(sku) {
+  const hit = selectedOrders().filter((o) => skuLinesOf(o, sku).length);
+  if (!hit.length) return ["None of these orders contain " + sku];
+  const lines = hit.reduce((sum, o) => sum + skuLinesOf(o, sku).length, 0);
+  const emptied = hit.filter((o) => skuLinesOf(o, sku).length === (o.lines || []).length);
+  const blocked = hit.filter((o) => !emptied.includes(o) && !isFulfillable(o));
+  const units = unitsOf(hit.filter(isFulfillable).flatMap((o) => skuLinesOf(o, sku)));
+  const out = [NUMBER.format(lines) + " " + sku + (lines === 1 ? " line" : " lines") + " removed from " + orderList(hit)];
+  if (emptied.length) {
+    out.push(orderList(emptied) + (emptied.length === 1
+      ? " has no lines left and leaves the session"
+      : " have no lines left and leave the session"));
+  }
+  if (units) out.push(countedWord(units, "unit") + " of " + sku + (units === 1 ? " goes" : " go") + " back to stock");
+  if (blocked.length) {
+    out.push(orderList(blocked) + (blocked.length === 1 ? " stays" : " stay") + " Blocked until marked fulfillable");
+  }
+  out.push(exportLine(emptied.filter(isFulfillable).length));
+  return out;
+}
+
+function orderRemovalChanges(hit, sku) {
+  if (!hit.length) return ["None of these orders contain " + sku];
+  const ready = hit.filter(isFulfillable);
+  const units = unitsOf(ready.flatMap((o) => (o.lines || []).filter((line) => str(line.SKU).trim())));
+  const out = [orderList(hit) + (hit.length === 1 ? " leaves" : " leave") + " the session: results, export and labels"];
+  if (units) {
+    out.push(countedWord(units, "unit") + (units === 1 ? " goes" : " go") + " back to stock."
+      + " Other orders do not get them until you mark them fulfillable or run the analysis again");
+  }
+  out.push(exportLine(ready.length));
+  return out;
+}
+
 function openSkuPopover(mode) {
   const n = state.selected.size;
   const badge = { total: n, counts: skuCounts() };
@@ -388,9 +460,14 @@ function openSkuPopover(mode) {
       ? "Remove a SKU from " + theseOrders(n)
       : "Remove whole orders containing a SKU",
     danger: true,
+    prompt: "Pick a SKU",
+    changes: (sku) =>
+      line
+        ? skuRemovalChanges(sku)
+        : orderRemovalChanges(selectedOrders().filter((o) => skuLinesOf(o, sku).length), sku),
     fill: (host, onPick) => {
       if (skus.length > BULK_SEARCH_ABOVE) {
-        const search = el("input", "bulk-search");
+        const search = el("input", "field bulk-search");
         search.id = "bulk-search";
         search.type = "search";
         search.placeholder = "Find a SKU";
@@ -408,20 +485,32 @@ function openSkuPopover(mode) {
     verb: (sku) => {
       const on = badge.counts.get(sku) || 0;
       return {
-        text: (line ? "Remove from " : "Remove ") + countedWord(on, "order"),
+        text: line ? "Remove " + sku + " from " + NUMBER.format(on) : "Remove " + countedWord(on, "order"),
         disabled: on === 0,
       };
     },
-    onCommit: (sku) => {
-      const keys = selectedKeys();
+    onCommit: (sku, keys) => {
       if (line) state.bridge.removeSkuFromOrders(keys, sku);
       else state.bridge.removeOrdersWithSku(keys, sku);
     },
   });
 }
 
-// Mirrors gui/components/toast.py. Two implementations, one appearance --
-// change one and change the other (ADR 0007).
+// Exclude from the run: no picker, so the popover opens already saying what
+// will change.
+function openExcludePopover() {
+  const n = state.selected.size;
+  openBulkPopover({
+    title: "Exclude " + theseOrders(n) + " from the run",
+    danger: true,
+    changes: () => orderRemovalChanges(selectedOrders(), ""),
+    verb: () => ({ text: "Exclude " + countedWord(n, "order"), disabled: n === 0 }),
+    onCommit: (_none, keys) => state.bridge.excludeOrders(keys),
+  });
+}
+
+// The page's own toast (ADR 0007). It follows the web kit; the Qt toast in
+// shared/components/toast.py keeps its look until its screens move.
 const TOAST_MS = 4000;
 const TOAST_BADGE_AT = 3;
 let toastTimer = null;
@@ -460,4 +549,6 @@ function bindToast() {
     dismissToast();
     if (state.bridge) state.bridge.undo();
   });
+  els.toastDismiss.innerHTML = svg(X_MARK, "glyph");
+  els.toastDismiss.addEventListener("click", dismissToast);
 }

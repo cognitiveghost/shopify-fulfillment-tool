@@ -115,11 +115,67 @@ def test_set_ui_busy_drives_the_pages_export(main_window, lines_df):
     assert main_window.results_bridge.exportEnabled is False
 
 
-def test_the_screen_menu_holds_add_product_and_undo(main_window):
-    assert main_window.results_menu.actions() == [
-        main_window.add_product_button_tab2,
-        main_window.undo_button,
+def test_the_screen_menu_holds_what_left_the_bar_then_add_product_and_undo(main_window):
+    actions = main_window.results_menu.actions()
+    assert [a.text() for a in actions[:3]] == [
+        "Run analysis again",
+        "Open session folder",
+        "Copy summary",
     ]
+    assert actions[3].isSeparator()
+    assert actions[4:] == [main_window.add_product_button_tab2, main_window.undo_button]
+
+
+def test_results_has_no_bar_action_and_draws_the_session_chip(main_window):
+    from PySide6.QtWidgets import QApplication
+
+    bar = main_window.command_bar
+    main_window.main_tabs.setCurrentIndex(1)
+    QApplication.processEvents()
+    assert bar._bound_action is None
+    assert bar.action_button.isHidden()
+    assert bar._results_mode is True
+    main_window.main_tabs.setCurrentIndex(0)
+    QApplication.processEvents()
+    assert bar._results_mode is False
+    assert bar.action_button.property("role") == "primary"
+
+
+def test_run_analysis_again_clicks_the_run_button_and_follows_its_state(main_window):
+    """The real button starts an analysis, so a stand-in takes its place: the
+    menu reads `mw.run_analysis_button` when it is used, not when it is built."""
+    from PySide6.QtWidgets import QPushButton
+
+    real = main_window.run_analysis_button
+    stub = QPushButton("stand-in")
+    clicks = []
+    stub.clicked.connect(lambda: clicks.append(1))
+    main_window.run_analysis_button = stub
+    try:
+        stub.setEnabled(False)
+        main_window.results_menu.aboutToShow.emit()
+        assert not main_window.rerun_analysis_action.isEnabled()
+        stub.setEnabled(True)
+        main_window.results_menu.aboutToShow.emit()
+        assert main_window.rerun_analysis_action.isEnabled()
+        main_window.rerun_analysis_action.trigger()
+        assert clicks == [1]
+    finally:
+        main_window.run_analysis_button = real
+
+
+def test_copy_summary_puts_the_numbers_on_the_clipboard(main_window, lines_df):
+    from PySide6.QtGui import QGuiApplication
+
+    main_window.results_menu.aboutToShow.emit()
+    assert not main_window.copy_summary_action.isEnabled()
+    main_window.results_bridge.set_orders(lines_df)
+    main_window.results_menu.aboutToShow.emit()
+    assert main_window.copy_summary_action.isEnabled()
+    main_window.copy_summary_action.trigger()
+    assert QGuiApplication.clipboard().text().startswith(
+        f"{main_window.results_bridge.summary['orders']} orders · "
+    )
 
 
 GUI = Path(__file__).resolve().parent.parent / "gui"
@@ -140,19 +196,6 @@ def test_the_qt_results_screen_is_gone():
         if GONE.search(line)
     ]
     assert hits == []
-
-
-def test_results_binds_run_analysis_as_the_secondary_action(main_window):
-    from PySide6.QtWidgets import QApplication
-
-    bar = main_window.command_bar
-    main_window.main_tabs.setCurrentIndex(1)
-    QApplication.processEvents()
-    assert bar._bound_action is main_window.run_analysis_button
-    assert bar.action_button.property("role") == "secondary"
-    main_window.main_tabs.setCurrentIndex(0)
-    QApplication.processEvents()
-    assert bar.action_button.property("role") == "primary"
 
 
 @pytest.mark.parametrize(
@@ -352,3 +395,14 @@ def test_opening_a_session_reads_its_lots(main_window, tmp_path, monkeypatch):
     main_window.load_existing_session(str(tmp_path))
     assert asked == [str(tmp_path)]
     assert main_window.analysis_results_df["Lot_Details"].iloc[0][0]["batch"] == "B1"
+
+
+def test_map_columns_opens_the_orders_mapping_page(main_window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        main_window.actions_handler,
+        "open_settings_window",
+        lambda page=None: opened.append(page),
+    )
+    main_window.results_bridge.openColumnMapping()
+    assert opened == ["Orders Mapping"]

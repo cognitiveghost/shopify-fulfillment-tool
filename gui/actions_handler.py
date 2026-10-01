@@ -7,7 +7,7 @@ import pandas as pd
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QFileDialog
 
-from gui.components import ConfirmDialog, show_error, toast
+from gui.components import show_error, toast
 from gui.components.commandbar import BarState
 from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
@@ -1704,25 +1704,12 @@ class ActionsHandler(QObject):
         if not selected_indexes:
             return
         sku_value = str(sku)
-        orders_count, _ = self.mw.selection_helper.get_selection_summary()
-
         selected_df_full = self.mw.analysis_results_df.loc[selected_indexes]
         rows_to_remove = selected_df_full[selected_df_full["SKU"] == sku_value]
         affected_count = len(rows_to_remove)
         if affected_count == 0:
             return
         orders_touched = rows_to_remove["Order_Number"].nunique()
-
-        if not ConfirmDialog.ask(
-            self.mw,
-            title=f"Remove {sku_value} from {_plural(orders_touched, 'order')}?",
-            body=(
-                f"{orders_touched} of the {orders_count} selected orders carry "
-                "this SKU. Their other lines stay."
-            ),
-            verb="Remove the line",
-        ):
-            return
 
         affected_rows_before = rows_to_remove.copy()
         self.mw.analysis_results_df = stock_ledger.with_stock_left(
@@ -1770,17 +1757,6 @@ class ActionsHandler(QObject):
         items_count = len(rows_to_remove)
         orders_word = _plural(len(orders_with_sku), "order")
 
-        if not ConfirmDialog.ask(
-            self.mw,
-            title=f"Remove {orders_word} containing {sku_value}?",
-            body=(
-                f"This deletes {orders_word} ({_plural(items_count, 'item')}) "
-                "entirely, not just the SKU."
-            ),
-            verb=f"Remove {orders_word}",
-        ):
-            return
-
         affected_rows_before = rows_to_remove.copy()
         self.mw.analysis_results_df = stock_ledger.with_stock_left(
             self.mw.analysis_results_df.drop(rows_to_remove.index).reset_index(drop=True)
@@ -1810,24 +1786,13 @@ class ActionsHandler(QObject):
         )
 
     def bulk_delete_orders(self, order_numbers):
-        """Exclude the given orders from the run, after a confirm."""
+        """Exclude the given orders from the run. The page's popover has already said what will change."""
         self._set_selection(order_numbers)
         selected_indexes = self.mw.selection_helper.get_selected_source_rows()
         if not selected_indexes:
             return
         orders_count, items_count = self.mw.selection_helper.get_selection_summary()
         orders_word = _plural(orders_count, "order")
-
-        if not ConfirmDialog.ask(
-            self.mw,
-            title=f"Exclude {orders_word} from the run?",
-            body=(
-                "They leave this session's results and its reports. "
-                "Undo brings them back."
-            ),
-            verb=f"Exclude {orders_word}",
-        ):
-            return
 
         affected_rows_before = self.mw.analysis_results_df.loc[selected_indexes].copy()
 

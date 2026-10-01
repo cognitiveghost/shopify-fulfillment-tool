@@ -334,3 +334,63 @@ def test_every_script_spelling_of_a_banned_property_is_flagged(
 ):
     out = _scan_asset(tmp_path, "page.js", statement + "\n")
     assert out == [f"1: banned: {banned}"]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "var(--card-shadow)",
+        "var(--overlay-shadow)",
+        "none",
+        "var( --card-shadow )",
+    ],
+)
+def test_a_shadow_token_or_none_is_the_only_shadow_allowed(tmp_path, value):
+    """ADR 0016, phase 2 spec section 3.3."""
+    assert _scan_asset(tmp_path, "page.css", f".card {{ box-shadow: {value}; }}\n") == []
+    # The last declaration of a rule may end at the brace instead.
+    assert _scan_asset(tmp_path, "page.css", f".card {{ box-shadow: {value} }}\n") == []
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "box-shadow: 0 1px 2px var(--border);",
+        "box-shadow: inset 3px 0 0 var(--selection-border);",
+        "box-shadow: var(--border);",
+        "box-shadow: var(--card-shadow), 0 0 4px var(--border);",
+        "box-shadow: var(--card-shadow) !important;",
+    ],
+)
+def test_any_other_shadow_is_still_banned(tmp_path, declaration):
+    out = _scan_asset(tmp_path, "page.css", f".x {{ {declaration} }}\n")
+    assert out == ["1: banned: box-shadow"]
+
+
+def test_a_vendor_or_scripted_shadow_is_banned_even_with_a_token(tmp_path):
+    css = _scan_asset(tmp_path, "page.css", ".x { -webkit-box-shadow: var(--card-shadow); }\n")
+    assert css == ["1: banned: -webkit-box-shadow"]
+    js = _scan_asset(tmp_path, "page.js", "el.style.boxShadow = 'var(--card-shadow)';\n")
+    assert js == ["1: banned: boxShadow"]
+
+
+def test_a_shadow_in_an_inline_style_attribute_is_banned(tmp_path):
+    out = _scan_asset(
+        tmp_path, "page.html", '<div style="box-shadow: var(--card-shadow)"></div>\n'
+    )
+    assert out == ["1: banned: box-shadow"]
+    # A trailing semicolon, or a declaration after it, must not launder it.
+    closed = _scan_asset(
+        tmp_path,
+        "closed.html",
+        '<div style="box-shadow: var(--card-shadow);"></div>\n'
+        "<div style='color: inherit; box-shadow: none; margin: 0'></div>\n",
+    )
+    assert closed == ["1: banned: box-shadow", "2: banned: box-shadow"]
+    # A stylesheet rule sharing a line with a closed style attribute is clean.
+    sheet = _scan_asset(
+        tmp_path,
+        "sheet.html",
+        '<p style="margin: 0"></p><style>.a { box-shadow: none; }</style>\n',
+    )
+    assert sheet == []

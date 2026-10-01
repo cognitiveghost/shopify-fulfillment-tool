@@ -121,7 +121,7 @@ def test_the_first_paint_is_already_themed(qtbot):
     mount_results_page(view)
     view.show()
     _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
-    assert _eval(qtbot, view, "window.__firstPaint") == _rgb(LIGHT_THEME.surface)
+    assert _eval(qtbot, view, "window.__firstPaint") == _rgb(LIGHT_THEME.surface_sunken)
 
 
 def test_the_bundled_inter_loads_in_both_weights(qtbot, page):
@@ -150,7 +150,7 @@ def test_a_theme_switch_repaints_the_document_without_a_reload(qtbot, page):
     _until_js(
         qtbot,
         view,
-        f"getComputedStyle(document.body).backgroundColor === '{_rgb(DARK_THEME.surface)}'",
+        f"getComputedStyle(document.body).backgroundColor === '{_rgb(DARK_THEME.surface_sunken)}'",
     )
     assert _eval(qtbot, view, "window.__loadMarker") == "first load"
 
@@ -294,3 +294,12 @@ def test_tag_categories_notify(qtbot):
     with qtbot.waitSignal(bridge.tagCategoriesChanged, timeout=1000):
         bridge.set_tag_categories({"prio": {"label": "Priority", "tags": ["vip"]}})
     assert bridge.tagCategories["prio"]["tags"] == ["vip"]
+
+
+def test_open_column_mapping_is_a_request_python_hears(qapp):
+    """Phase 2 spec section 6.3: the KPI hint's Map columns link."""
+    bridge = ResultsBridge()
+    seen = []
+    bridge.columnMappingRequested.connect(lambda: seen.append(1))
+    bridge.openColumnMapping()
+    assert seen == [1]

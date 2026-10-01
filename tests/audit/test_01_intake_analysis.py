@@ -16,7 +16,6 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-import gui.actions_handler as actions_handler_module
 from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
 from shopify_tool.analysis import (
@@ -76,13 +75,6 @@ def window(df):
     return mw
 
 
-@pytest.fixture
-def confirm(monkeypatch):
-    monkeypatch.setattr(
-        actions_handler_module.ConfirmDialog, "ask", lambda *a, **k: True
-    )
-
-
 # ---------------------------------------------------------------------------
 # Findings
 # ---------------------------------------------------------------------------
@@ -132,7 +124,7 @@ def test_bulk_hold_moves_stock_left_like_single_hold():
 
 
 @pytest.mark.parametrize("verb", ["remove_entire_order", "bulk_delete_orders"])
-def test_removing_fulfillable_order_returns_its_stock(verb, confirm):
+def test_removing_fulfillable_order_returns_its_stock(verb):
     df, *_ = analyse(stock([("A", 3)]), orders([("#1", "A", 2), ("#2", "A", 2)]))
     assert status(df, "#1") == {"Fulfillable"} and status(df, "#2") == {"Not Fulfillable"}
     mw = window(df)
@@ -301,7 +293,7 @@ def test_bulk_status_change_touches_every_line_of_each_order():
     assert status(mw.analysis_results_df, "#1") == {"Fulfillable"}
 
 
-def test_undo_of_bulk_tag_and_bulk_delete_restores_content(confirm):
+def test_undo_of_bulk_tag_and_bulk_delete_restores_content():
     df, *_ = analyse(stock([("A", 5)]), orders([("#1", "A", 1), ("#2", "A", 1)]))
     mw = window(df)
     handler = ActionsHandler(mw)

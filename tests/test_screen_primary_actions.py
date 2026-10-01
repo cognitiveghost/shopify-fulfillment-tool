@@ -32,11 +32,10 @@ def test_each_screen_puts_its_own_primary_in_the_bar(main_window, qapp):
     # Screen 2 (Browse) no longer borrows Setup's New Session -- it is
     # state-owned and always in the left group under BarState.NO_SESSION
     # (Bundle 4, spec §3.2), so it has no entry in _SCREEN_ACTIONS any more.
-    # Results (1) re-runs the analysis as a secondary action now (Bundle 12,
-    # W3): its own primary, Export, lives inside the results document.
+    # Results (1) has no bar action: re-running the analysis lives in its
+    # screen menu (phase 2 spec section 6).
     expected = {
         0: ("Run analysis", "primary"),
-        1: ("Run analysis", "secondary"),
     }
     for index, (label, role) in expected.items():
         main_window.main_tabs.setCurrentIndex(index)
@@ -47,7 +46,7 @@ def test_each_screen_puts_its_own_primary_in_the_bar(main_window, qapp):
 
 
 def test_a_screen_with_no_primary_hides_the_slot(main_window, qapp):
-    for index in (3, 4):
+    for index in (1, 3, 4):
         main_window.main_tabs.setCurrentIndex(index)
         QApplication.processEvents()
         assert main_window.command_bar.action_button.isHidden()

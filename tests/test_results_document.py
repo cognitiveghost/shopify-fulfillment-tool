@@ -5,16 +5,16 @@ Qt chrome. 1366x768 -> 1310x692, 1920x1080 -> 1864x1004. Never mark skip.
 """
 
 import json
-import re
-from pathlib import Path
 
 import pandas as pd
 import pytest
 from PySide6.QtGui import QColor
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from test_results_bridge import _eval, _until_js
+from test_results_bridge import _eval, _rgb, _until_js
 
 from gui.results_bridge import mount_results_page
+from gui.theme_manager import get_theme_manager
+from shared.theme import LIGHT_THEME
 
 
 def results_lines(orders=312):
@@ -105,6 +105,15 @@ def _click_order(qtbot, view, order, **modifiers):
     )
 
 
+def _check(qtbot, view, order):
+    _eval(
+        qtbot,
+        view,
+        f"document.querySelector('#rows .row[data-order=\"{order}\"] input[type=checkbox]')"
+        ".click(); true",
+    )
+
+
 def _key(qtbot, view, key, **modifiers):
     init = json.dumps({"key": key, "bubbles": True, **modifiers})
     _eval(
@@ -118,23 +127,118 @@ def _key(qtbot, view, key, **modifiers):
 # --- 9.15: the numbers ------------------------------------------------------
 
 
-def test_17_whole_rows_at_1366(qtbot, doc):
+def test_14_whole_rows_at_1366(qtbot, doc):
+    """692 high: 36 of page padding, 88 of KPI, 32 of filter bar and two 12px
+    gaps leave a 512px card. Its edges leave 510, the header takes 36, and
+    474 holds 14 rows of 32."""
     view, _ = doc
     _until_js(
-        qtbot, view, "document.getElementById('table').dataset.visibleRows === '17'"
+        qtbot, view, "document.getElementById('table').dataset.visibleRows === '14'"
     )
     assert (
         _eval(qtbot, view, "document.getElementById('scroller').clientHeight")
-        == 28 + 17 * 28
+        == 36 + 14 * 32
     )
 
 
-def test_28_whole_rows_at_1920(qtbot, doc):
+def test_24_whole_rows_at_1920(qtbot, doc):
     view, _ = doc
     _resize(qtbot, view, 1864, 1004)
     _until_js(
-        qtbot, view, "document.getElementById('table').dataset.visibleRows === '28'"
+        qtbot, view, "document.getElementById('table').dataset.visibleRows === '24'"
     )
+
+
+def test_only_a_window_of_rows_exists(qtbot, doc):
+    view, _ = doc
+    assert (
+        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 14 + 8
+    )
+    _eval(qtbot, view, "document.getElementById('scroller').scrollTop = 32 * 150; true")
+    _until_js(qtbot, view, "!!document.querySelector('#rows .row[data-index=\"150\"]')")
+    assert (
+        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 14 + 8
+    )
+
+
+def test_the_header_is_36_tall_and_a_row_32(qtbot, doc):
+    view, _ = doc
+    assert _eval(qtbot, view, "document.getElementById('header').offsetHeight") == 36
+    assert _eval(qtbot, view, "document.querySelector('#rows .row').offsetHeight") == 32
+
+
+def test_floor_density_rows_are_four_taller_than_the_token(qtbot, doc):
+    """Review focus 4: the +4 holds in both densities, and the row maths follows."""
+    view, _ = doc
+    get_theme_manager().set_density("floor")  # conftest restores desk
+    _until_js(qtbot, view, "document.querySelector('#rows .row').offsetHeight === 44")
+    rows = int(
+        _eval(qtbot, view, "document.getElementById('table').dataset.visibleRows")
+    )
+    assert (
+        _eval(qtbot, view, "document.getElementById('scroller').clientHeight")
+        == 36 + rows * 44
+    )
+
+
+def test_the_table_and_the_pane_share_one_card(qtbot, doc):
+    view, _ = doc
+    area = "document.getElementById('table-area')"
+    assert _eval(qtbot, view, f"{area}.classList.contains('card')") is True
+    assert _eval(qtbot, view, f"{area}.contains(document.getElementById('pane'))") is True
+    assert _eval(
+        qtbot, view, "getComputedStyle(document.body).backgroundColor"
+    ) == _rgb(LIGHT_THEME.surface_sunken)
+
+
+def test_the_status_is_a_badge(qtbot, doc):
+    view, _ = doc
+    blocked = "document.querySelector('#rows .row[data-order=\"#10004\"] .status .badge')"
+    ready = "document.querySelector('#rows .row[data-order=\"#10001\"] .status .badge')"
+    assert _eval(qtbot, view, f"{blocked}.className") == "badge danger"
+    assert _eval(qtbot, view, f"{ready}.className") == "badge success"
+    # A repeat order wears an info badge in its Repeat cell.
+    assert (
+        _eval(
+            qtbot,
+            view,
+            "cellElement({key: 'repeat', text: function () { return 'Repeat'; }},"
+            " {key: 'x', o: {_repeat: true}}, false).querySelector('.badge.info') !== null",
+        )
+        is True
+    )
+
+
+def test_the_order_is_bold_mono_and_a_missing_value_is_quiet(qtbot, doc):
+    view, _ = doc
+    row = "#rows .row[data-order=\"#10004\"]"
+    for cell in ("order", "lines", "units", "value"):
+        assert (
+            _eval(
+                qtbot,
+                view,
+                f"document.querySelector('{row} .{cell}').classList.contains('mono')",
+            )
+            is True
+        ), cell
+    assert (
+        _eval(
+            qtbot, view, f"getComputedStyle(document.querySelector('{row} .order')).fontWeight"
+        )
+        == "700"
+    )
+    # i=3 ships with no courier: the dash is in the disabled text colour.
+    assert _eval(
+        qtbot, view, f"getComputedStyle(document.querySelector('{row} .courier')).color"
+    ) == _rgb(LIGHT_THEME.text_disabled)
+
+
+def test_the_value_header_is_quiet_until_a_price_column_is_mapped(qtbot, doc):
+    view, bridge = doc
+    head = "document.querySelector('#header .head.value')"
+    assert _eval(qtbot, view, f"{head}.classList.contains('unmapped')") is False
+    bridge.set_orders(results_lines().drop(columns=["Total_Price"]))
+    _until_js(qtbot, view, f"{head}.classList.contains('unmapped')")
 
 
 def test_no_horizontal_scroll_until_the_table_minimum(qtbot, doc):
@@ -145,18 +249,6 @@ def test_no_horizontal_scroll_until_the_table_minimum(qtbot, doc):
     )
     _resize(qtbot, view, 780, 692)
     _until_js(qtbot, view, f"{scroller}.scrollWidth > {scroller}.clientWidth")
-
-
-def test_only_a_window_of_rows_exists(qtbot, doc):
-    view, _ = doc
-    assert (
-        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 17 + 8
-    )
-    _eval(qtbot, view, "document.getElementById('scroller').scrollTop = 28 * 150; true")
-    _until_js(qtbot, view, "!!document.querySelector('#rows .row[data-index=\"150\"]')")
-    assert (
-        _eval(qtbot, view, "document.querySelectorAll('#rows .row').length") <= 17 + 8
-    )
 
 
 # --- 9.13: the document -------------------------------------------------------
@@ -284,54 +376,218 @@ def test_chips_and_across_groups_and_or_within_one(qtbot, doc):
     _count_is(qtbot, view, "312 orders")
 
 
-def test_a_chip_removes_itself_when_clicked(qtbot, doc):
+def test_the_filter_bar_reads_search_add_filter_then_chips(qtbot, doc):
     view, _ = doc
-    _choose_filter(qtbot, view, "Repeat")
+    order = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify([...document.getElementById('filterbar').children]"
+            ".map(function (e) { return e.id || e.className; }))",
+        )
+    )
+    assert order[:4] == ["input search", "filter-anchor", "chips", "clear-all"]
+    assert order[-3:] == ["columns-anchor", "screen-menu", "export"]
+
+
+def test_a_chip_names_its_key_and_only_its_x_removes_it(qtbot, doc):
+    view, _ = doc
+    _choose_filter(qtbot, view, "Courier: DPD")
     _until_js(
         qtbot, view, "document.querySelectorAll('#chips .chip-filter').length === 1"
     )
-    _eval(qtbot, view, "document.querySelector('#chips .chip-filter').click(); true")
+    assert _text(qtbot, view, "#chips .chip-filter") == "Courier is DPD"
+    _count_is(qtbot, view, "78 of 312 orders")
+    _eval(qtbot, view, "document.querySelector('#chips .chip-value').click(); true")
+    _count_is(qtbot, view, "78 of 312 orders")
+    assert (
+        _eval(qtbot, view, "document.querySelector('#chips .chip-remove').title")
+        == "Remove filter"
+    )
+    _eval(qtbot, view, "document.querySelector('#chips .chip-remove').click(); true")
     _count_is(qtbot, view, "312 orders")
 
+
+def test_no_match_says_what_is_filtering(qtbot, doc):
+    view, _ = doc
+    _choose_filter(qtbot, view, "Blocked")
+    _choose_filter(qtbot, view, "Courier: DHL")  # no blocked order ships DHL
+    _until_js(qtbot, view, "!document.getElementById('results-no-match').hidden")
+    assert _text(qtbot, view, "#no-match-text") == "Status is Blocked and Courier is DHL."
+    _search(qtbot, view, "zzz")
+    _until_js(
+        qtbot,
+        view,
+        "document.getElementById('no-match-text').textContent"
+        " === 'Status is Blocked and Courier is DHL and search is “zzz”.'",
+    )
+    # Within Courier the chips are alternatives, and the sentence says so.
+    _choose_filter(qtbot, view, "Courier: DPD")
+    assert (
+        _eval(qtbot, view, "filterSentence()")
+        == "Status is Blocked and Courier is DHL or DPD and search is “zzz”."
+    )
+    assert _text(qtbot, view, "#no-match-clear") == "Clear filters"
+    _eval(qtbot, view, "document.getElementById('no-match-clear').click(); true")
+    _count_is(qtbot, view, "312 orders")
+
+
+def test_columns_and_export_keep_their_words_beside_a_glyph(qtbot, doc):
+    view, _ = doc
+    assert _text(qtbot, view, "#columns-button") == "Columns 9/18"
+    assert _eval(qtbot, view, "!!document.querySelector('#columns-button svg')") is True
+    _until_js(
+        qtbot,
+        view,
+        "document.getElementById('export').textContent === 'Export 281 orders'",
+    )
+    assert _eval(qtbot, view, "!!document.querySelector('#export svg')") is True
 
 # --- selection and sort ------------------------------------------------------------
 
 
-def test_a_row_click_reaches_python_and_a_hiding_filter_drops_it(qtbot, doc):
+def _has_class(order, name):
+    return (
+        f"document.querySelector('#rows .row[data-order=\"{order}\"]')"
+        f".classList.contains('{name}')"
+    )
+
+
+def test_a_row_click_moves_the_cursor_and_checks_nothing(qtbot, doc):
     view, bridge = doc
-    with qtbot.waitSignal(bridge.selectionChanged, timeout=5000) as blocker:
-        _eval(
-            qtbot,
-            view,
-            "document.querySelector('#rows .row[data-order=\"#10001\"] .order').click(); true",
-        )
-    assert blocker.args == [["#10001"]]
+    _click_order(qtbot, view, "#10001")
+    _until_js(qtbot, view, _has_class("#10001", "cursor"))
+    assert bridge.selection() == []
+    assert _eval(qtbot, view, "state.selected.size") == 0
+    assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
+
+
+def test_a_checkbox_checks_the_order_and_leaves_the_cursor(qtbot, doc):
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _check(qtbot, view, "#10003")
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10003"])
+    assert _eval(qtbot, view, "state.cursorKey") == "#10001"
+    assert _eval(qtbot, view, _has_class("#10003", "selected")) is True
+    assert _eval(qtbot, view, _has_class("#10003", "cursor")) is False
+    assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is False
+    _click_order(qtbot, view, "#10003", ctrlKey=True)  # Ctrl-click toggles too
+    qtbot.waitUntil(lambda: bridge.selection() == [])
+
+
+def test_a_hiding_filter_unchecks_the_order_and_empties_the_pane(qtbot, doc):
+    """Review focus 3: nothing keeps pointing at an order the operator cannot see."""
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _check(qtbot, view, "#10001")
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10001"])
     with qtbot.waitSignal(bridge.selectionChanged, timeout=5000) as blocker:
         _choose_filter(qtbot, view, "Blocked")  # #10001 is fulfillable
     assert blocker.args == [[]]
+    assert _eval(qtbot, view, "state.cursorKey === null") is True
+    assert _eval(qtbot, view, "document.querySelectorAll('#rows .row.cursor').length") == 0
+    assert _text(qtbot, view, "#pane-empty .state-title") == "No order selected"
 
 
-def test_arrow_down_moves_the_selection(qtbot, doc):
+def test_arrow_down_moves_the_cursor_only(qtbot, doc):
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _key(qtbot, view, "ArrowDown")
+    _until_js(qtbot, view, "state.cursorKey === '#10002'")
+    assert bridge.selection() == []
+
+
+def test_escape_clears_the_checked_orders_and_then_the_cursor(qtbot, doc):
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _check(qtbot, view, "#10002")
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
+    _key(qtbot, view, "Escape")
+    qtbot.waitUntil(lambda: bridge.selection() == [])
+    assert _eval(qtbot, view, "state.cursorKey") == "#10001"
+    _key(qtbot, view, "Escape")
+    _until_js(qtbot, view, "state.cursorKey === null")
+
+
+def test_the_header_box_checks_everything_or_clears(qtbot, doc):
+    view, bridge = doc
+    box = "document.querySelector('#header .select input')"
+    _choose_filter(qtbot, view, "Blocked")
+    _count_is(qtbot, view, "31 of 312 orders")
+    _eval(qtbot, view, f"{box}.click(); true")
+    qtbot.waitUntil(lambda: len(bridge.selection()) == 31)
+    assert _eval(qtbot, view, f"{box}.title") == "Clear selection"
+    _check(qtbot, view, "#10004")  # 30 of 31: the box is mixed, and still clears
+    qtbot.waitUntil(lambda: len(bridge.selection()) == 30)
+    assert _eval(qtbot, view, f"{box}.indeterminate") is True
+    _eval(qtbot, view, f"{box}.click(); true")
+    qtbot.waitUntil(lambda: bridge.selection() == [])
+
+
+def test_the_cursor_row_wears_a_bar_on_its_left_edge(qtbot, doc):
+    """The bar is a pseudo-element above the sticky cells, or they would paint
+    over it. Only pixels can tell -- getComputedStyle cannot."""
+    view, _ = doc
+    _click_order(qtbot, view, "#10001")
+    rect = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify(document.querySelector('#rows .row.cursor')"
+            ".getBoundingClientRect())",
+        )
+    )
+
+    def token(name):
+        return QColor(
+            _eval(
+                qtbot,
+                view,
+                "getComputedStyle(document.documentElement)"
+                f".getPropertyValue('{name}').trim()",
+            )
+        ).name()
+
+    x = int(rect["left"]) + 1  # inside the 3px bar
+    y = int(rect["top"]) + int(rect["height"]) // 2
+    qtbot.waitUntil(
+        lambda: view.grab().toImage().pixelColor(x, y).name()
+        == token("--selection-border"),
+        timeout=5000,
+    )
+    # The rest of the row is the selection tint: sampled in the last cell's
+    # right padding, clear of any text.
+    tint_x = int(rect["right"]) - 4
+    assert view.grab().toImage().pixelColor(tint_x, y).name() == token("--selection-bg")
+
+
+def test_a_near_miss_beside_the_checkbox_still_checks(qtbot, doc):
+    """The whole select cell toggles, so a click 5px off the box does not move
+    the cursor instead."""
     view, bridge = doc
     _eval(
         qtbot,
         view,
-        "document.querySelector('#rows .row[data-order=\"#10001\"] .order').click(); true",
+        "document.querySelector('#rows .row[data-order=\"#10002\"] .cell.select')"
+        ".dispatchEvent(new MouseEvent('click', {bubbles: true})); true",
     )
-    with qtbot.waitSignal(bridge.selectionChanged, timeout=5000) as blocker:
-        _eval(
-            qtbot,
-            view,
-            "document.getElementById('table').dispatchEvent("
-            "new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true})); true",
-        )
-    assert blocker.args == [["#10002"]]
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
+    assert _eval(qtbot, view, "state.cursorKey === null") is True
+
+
+def test_a_shift_click_reopens_a_hidden_pane(qtbot, doc):
+    view, _ = doc
+    _click_order(qtbot, view, "#10001")
+    _eval(qtbot, view, "state.paneHidden = true; render(); true")
+    assert _eval(qtbot, view, "document.getElementById('pane').hidden") is True
+    _click_order(qtbot, view, "#10003", shiftKey=True)
+    assert _eval(qtbot, view, "document.getElementById('pane').hidden") is False
 
 
 def test_an_orders_push_keeps_the_selection(qtbot, doc):
     """Every tag, status or undo re-pushes the session; the selection stays."""
     view, bridge = doc
-    _click_order(qtbot, view, "#10002")
+    _check(qtbot, view, "#10002")
     qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
     _eval(qtbot, view, "document.querySelector('#rows .row').dataset.stale = '1'; true")
     bridge.set_orders(results_lines())
@@ -388,61 +644,97 @@ def test_sorting_value_twice_is_descending(qtbot, doc):
     )
 
 
-def test_the_selection_ring_closes_across_the_frozen_cells(qtbot, doc):
-    """The select and status cells are sticky, so they paint over anything the
-    row draws: the ring has to be a pseudo-element above them, or it comes out
-    open on its left end. Only pixels can tell -- getComputedStyle cannot."""
+def test_the_kpi_strip_is_one_card(qtbot, doc):
     view, _ = doc
-    _click_order(qtbot, view, "#10001")
-    rect = json.loads(
-        _eval(
-            qtbot,
-            view,
-            "JSON.stringify(document.querySelector('#rows .row.selected')"
-            ".getBoundingClientRect())",
-        )
+    assert (
+        _eval(qtbot, view, "document.getElementById('kpis').classList.contains('card')")
+        is True
     )
-    ring = QColor(
-        _eval(
-            qtbot,
-            view,
-            "getComputedStyle(document.documentElement)"
-            ".getPropertyValue('--selection-border').trim()",
-        )
-    ).name()
-    top = int(rect["top"]) + 1  # inside the 2px ring
-    # Right of every sticky cell the ring always worked; wait for the click to
-    # reach the compositor there, or an unpainted grab passes on every sample.
-    plain_x = int(rect["right"]) - 40
-    qtbot.waitUntil(
-        lambda: view.grab().toImage().pixelColor(plain_x, top).name() == ring,
-        timeout=5000,
+    # Cells, not cards: five of them at this width, the wide one hidden.
+    assert _eval(qtbot, view, "document.querySelectorAll('#kpis .kpi').length") == 6
+    assert _eval(qtbot, view, "document.querySelectorAll('#kpis .card').length") == 0
+    assert (
+        _eval(qtbot, view, "document.querySelectorAll('#kpis .kpi-dot').length") == 2
     )
-    image = view.grab().toImage()
-    for x in (int(rect["left"]) + 16, 40, 100):  # the checkbox, then the chip
-        assert image.pixelColor(x, top).name() == ring, f"gap at x={x}"
 
 
-_CSS = Path(__file__).resolve().parents[1] / "gui" / "web" / "results.css"
+def test_a_mapped_price_gives_the_value_ready_cell(qtbot, doc):
+    view, _ = doc
+    _until_js(
+        qtbot,
+        view,
+        "document.querySelector('[data-kpi=value] .kpi-label') !== null"
+        " && document.querySelector('[data-kpi=value] .kpi-sub').textContent !== ''",
+    )
+    assert _text(qtbot, view, "[data-kpi=value] .kpi-label") == "Value ready"
+    assert (
+        _text(qtbot, view, "[data-kpi=value] .kpi-sub")
+        == "across 281 fulfillable orders"
+    )
+    assert _eval(qtbot, view, "document.getElementById('map-columns') === null") is True
 
 
-def _layers() -> dict:
-    """The named layer scale, read out of :root."""
-    text = _CSS.read_text(encoding="utf-8")
-    return {
-        name: int(value) for name, value in re.findall(r"--z-([a-z]+):\s*(\d+)", text)
-    }
+def test_an_unmapped_price_gives_a_hint_that_opens_the_mapping(qtbot, doc):
+    view, bridge = doc
+    bridge.set_orders(results_lines().drop(columns=["Total_Price"]))
+    _until_js(qtbot, view, "document.getElementById('map-columns') !== null")
+    assert (
+        "Order value shows once a price column is mapped."
+        in _text(qtbot, view, "[data-kpi=value]")
+    )
+    assert _text(qtbot, view, "#map-columns") == "Map columns"
+    with qtbot.waitSignal(bridge.columnMappingRequested, timeout=5000):
+        _eval(qtbot, view, "document.getElementById('map-columns').click(); true")
 
 
-def test_a_popover_is_never_covered_by_the_selection_bar():
-    """The Add filter menu opened underneath the selection bar because the two
-    tied at z-index 3 and the bar came later in the document."""
-    z = _layers()
-    assert z["popover"] > z["bar"] > z["header"] > z["sticky"]
-    assert z["toast"] > z["popover"]
+def test_the_lines_column_cells_are_not_boxed_like_the_panes_line_list(qtbot, doc):
+    """The pane's `.lines` list and the table's Lines column share a word; the
+    pane's border once leaked onto every cell of the column."""
+    view, _ = doc
+    cell = "document.querySelector('#rows .row .cell.lines')"
+    assert _eval(qtbot, view, f"getComputedStyle({cell}).borderTopWidth") == "0px"
 
 
-def test_no_bare_z_index_survives_in_results_css():
-    text = _CSS.read_text(encoding="utf-8")
-    bare = re.findall(r"z-index:\s*(\d+)", text)
-    assert bare == [], f"z-index must come from the layer scale, found {bare}"
+def test_the_pane_footer_fits_its_longest_verb_and_a_three_digit_position(qtbot, doc):
+    """A blocked order's verb is "Mark fulfillable", the longest; it shares
+    339px with Exclude order and "↑ ↓  250 / 312" in Inter."""
+    view, _ = doc
+    _eval(
+        qtbot,
+        view,
+        "state.cursorKey = state.view.filter(r => !isFulfillable(r.o)).pop().key;"
+        " render(); true",
+    )
+    _until_js(qtbot, view, "!!document.querySelector('#pane .pane-actions')")
+    assert _text(qtbot, view, "#pane-status-verb") == "Mark fulfillable"
+    position = _text(qtbot, view, "#pane .pane-position")
+    assert position.endswith(" / 312") and len(position.split("/")[0].split()[-1]) == 3
+    fits = _eval(
+        qtbot,
+        view,
+        "(function () { var f = document.querySelector('#pane .pane-actions');"
+        " return f.scrollWidth <= f.clientWidth; })()",
+    )
+    assert fits is True
+
+
+def test_the_pane_footer_stays_on_one_row_for_a_forty_order_session(qtbot, doc):
+    """Spacer-free: "Mark fulfillable", "Exclude order" and "↑ ↓  25 / 40"
+    share one row at 339px (the wrap is only for three-digit positions)."""
+    view, _ = doc
+    _eval(
+        qtbot,
+        view,
+        "state.view = state.view.slice(0, 40);"
+        " state.cursorKey = state.view.filter(r => !isFulfillable(r.o)).pop().key;"
+        " renderPane(); true",
+    )
+    _until_js(qtbot, view, "!!document.querySelector('#pane .pane-actions')")
+    rows = _eval(
+        qtbot,
+        view,
+        "new Set([...document.querySelectorAll('#pane .pane-actions > *')]"
+        ".map(e => { var r = e.getBoundingClientRect();"
+        " return Math.round(r.top + r.height / 2); })).size",
+    )
+    assert rows == 1

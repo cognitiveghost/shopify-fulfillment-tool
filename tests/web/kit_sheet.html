@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web kit sheet</title>
+<style id="theme-vars">/* theme-vars */</style>
+<link rel="stylesheet" href="kit.css">
+<style>
+  body { overflow: auto; }
+  main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px 24px 20px; }
+  section { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .stage { position: relative; height: 72px; }
+  section > .menu { position: static; }
+  h2 { margin: 0; font-size: var(--type-label-size); }
+</style>
+</head>
+<body>
+<main>
+  <div class="page-head" style="grid-column: 1 / -1">
+    <span class="page-title">Components</span>
+    <span class="code">2026-09-30_1</span>
+    <span class="page-meta">ACME · opened 14:02</span>
+    <span class="spacer"></span>
+    <button class="btn secondary" type="button">Secondary</button>
+    <button class="btn primary" type="button">Primary</button>
+  </div>
+
+  <section class="card">
+    <h2>Buttons</h2>
+    <div class="row">
+      <button id="b-primary" class="btn primary" type="button">Export 30 orders</button>
+      <button id="b-secondary" class="btn secondary" type="button">Add filter</button>
+      <button id="b-ghost" class="btn ghost" type="button">Plain</button>
+      <button id="b-dashed" class="btn dashed" type="button">Add filter</button>
+      <button id="b-danger" class="btn danger" type="button">Write off stock</button>
+      <button id="b-ghost-danger" class="btn ghost danger" type="button">Exclude order</button>
+      <button id="b-critical" class="btn critical" type="button">Remove 3 orders</button>
+    </div>
+    <div class="row">
+      <button id="b-disabled" class="btn primary" type="button" disabled>Export 0 orders</button>
+      <button id="b-compact" class="btn secondary compact" type="button">Hold these 3</button>
+      <button id="b-icon" class="btn ghost icon" type="button" aria-label="More">⋯</button>
+      <button id="b-link" class="btn link" type="button">Map columns</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Badges</h2>
+    <div class="row">
+      <span id="g-success" class="badge success">Fulfillable</span>
+      <span id="g-danger" class="badge danger">Blocked</span>
+      <span id="g-warning" class="badge warning">2 stock left</span>
+      <span id="g-info" class="badge info">Repeat</span>
+      <span id="g-neutral" class="badge neutral">Lot L-2409</span>
+      <span id="g-code" class="code">STOCK_SHORT</span>
+    </div>
+    <h2>Segmented control</h2>
+    <div class="segmented" role="radiogroup" aria-label="Status">
+      <button id="s-on" class="segment" type="button" role="radio" aria-checked="true">All <span class="segment-count">40</span></button>
+      <button id="s-off" class="segment" type="button" role="radio" aria-checked="false">Fulfillable <span class="segment-count">30</span></button>
+      <button class="segment" type="button" role="radio" aria-checked="false">Blocked <span class="segment-count">10</span></button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Inputs</h2>
+    <label id="i-search" class="input">
+      <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM21 21l-4.3-4.3"/></svg>
+      <input type="search" placeholder="Order, customer or SKU">
+    </label>
+    <label id="i-invalid" class="input invalid"><input type="text" value="1O42"></label>
+    <input id="i-field" class="field" type="text" placeholder="New tag">
+    <div class="row">
+      <input id="c-off" type="checkbox" aria-label="Unchecked">
+      <input id="c-on" type="checkbox" checked aria-label="Checked">
+      <input id="c-mixed" type="checkbox" aria-label="Mixed">
+      <input id="c-disabled" type="checkbox" checked disabled aria-label="Disabled">
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Menu</h2>
+    <div class="menu" role="menu">
+      <div class="menu-group">Status</div>
+      <button class="menu-item" type="button" role="menuitemcheckbox" aria-checked="true"><svg class="check" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Fulfillable</button>
+      <button id="m-item" class="menu-item" type="button" role="menuitem">Copy 3 order numbers<span class="menu-hint">Ctrl+C</span></button>
+      <div class="menu-separator"></div>
+      <button id="m-danger" class="menu-item danger" type="button" role="menuitem">Remove a SKU from these 3 orders</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>State panel</h2>
+    <div class="state">
+      <svg class="state-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM21 21l-4.3-4.3M13.5 8.5l-5 5M8.5 8.5l5 5"/></svg>
+      <p class="state-title">No orders match</p>
+      <p class="state-text">Status is Blocked and Courier is DPD.</p>
+      <button class="btn secondary" type="button">Clear filters</button>
+    </div>
+  </section>
+
+  <section>
+    <div id="n-danger" class="banner danger">
+      <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4M12 17h.01"/></svg>
+      <div class="banner-body">
+        <div class="banner-title">Stock export could not be read</div>
+        <div class="banner-text">acme-stock-30-09.csv has no SKU column. Found: Code, Qty, Lot.</div>
+        <div class="banner-actions">
+          <button class="btn secondary compact" type="button">Choose another file</button>
+          <button class="btn ghost compact" type="button">Map columns</button>
+        </div>
+      </div>
+    </div>
+    <div id="n-neutral" class="banner neutral">
+      <div class="banner-body">
+        <div class="banner-title">Open a session to use these tools</div>
+        <div class="banner-text">Both tools read the session's files and save into its folder.</div>
+      </div>
+      <button class="btn primary" type="button">New session</button>
+    </div>
+    <div class="stage">
+      <div id="t-toast" class="toast" role="status">
+        <span class="toast-text">Packing lists saved for 30 orders</span>
+        <span class="toast-badge">3</span>
+        <button class="toast-action" type="button">Undo</button>
+        <button class="toast-close" type="button" aria-label="Dismiss"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+    </div>
+  </section>
+</main>
+<script>document.getElementById("c-mixed").indeterminate = true;</script>
+</body>
+</html>

@@ -4,9 +4,10 @@ import time
 
 import pytest
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from test_results_bridge import _eval, _until_js
+from test_results_bridge import _eval, _rgb, _until_js
 
 from gui.results_bridge import mount_results_page
+from shared.theme import LIGHT_THEME
 
 
 @pytest.fixture
@@ -98,3 +99,24 @@ def test_it_dismisses_itself(qtbot, page):
     _wait_until(
         qtbot, view, "document.getElementById('toast').hidden === true", timeout_ms=6000
     )
+
+
+def test_the_toast_can_be_dismissed(qtbot, page):
+    view, bridge = page
+    bridge.raise_toast("3 orders held")
+    _until_js(qtbot, view, "document.getElementById('toast').hidden === false")
+    assert (
+        _eval(qtbot, view, "document.getElementById('toast-dismiss').getAttribute('aria-label')")
+        == "Dismiss"
+    )
+    _eval(qtbot, view, "document.getElementById('toast-dismiss').click(); true")
+    assert _eval(qtbot, view, "document.getElementById('toast').hidden") is True
+
+
+def test_the_toast_sits_on_the_inverse_plane(qtbot, page):
+    view, bridge = page
+    bridge.raise_toast("3 orders held")
+    _until_js(qtbot, view, "document.getElementById('toast').hidden === false")
+    assert _eval(
+        qtbot, view, "getComputedStyle(document.getElementById('toast')).backgroundColor"
+    ) == _rgb(LIGHT_THEME.surface_inverse)

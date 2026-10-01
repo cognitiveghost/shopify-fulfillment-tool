@@ -62,3 +62,10 @@ Qt gaining a reliable way to composite a child widget above a
 ships to. If that happens, the web toast is deleted, the eleven
 `_results_toast` call sites in `actions_handler.py` go back to `toast()`, and
 `undo_last_operation` stops asking which tier to use.
+
+## Amendment, 2026-10-01 (UI refresh phase 2)
+
+The web toast now takes its look from the web kit (`gui/web/kit.css`): the inverse plane, a shadow, and a
+dismiss button. "Two implementations, one appearance" no longer holds. The Qt toast in
+`shared/components/toast.py` keeps its look until the screens that raise it move to the web tier
+(ADR 0016), and then it is deleted rather than restyled.
