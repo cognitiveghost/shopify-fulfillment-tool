@@ -390,7 +390,7 @@ def test_the_filter_bar_reads_search_add_filter_then_chips(qtbot, doc):
         )
     )
     assert order[:4] == ["input search", "filter-anchor", "chips", "clear-all"]
-    assert order[-3:] == ["columns-button", "screen-menu", "export"]
+    assert order[-3:] == ["columns-anchor", "screen-menu", "export"]
 
 
 def test_a_chip_names_its_key_and_only_its_x_removes_it(qtbot, doc):

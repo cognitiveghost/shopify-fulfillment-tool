@@ -112,9 +112,7 @@ ROW = "document.querySelector('.col-row[data-key=\"{}\"] {}')"
 
 def _open_columns(qtbot, view):
     _eval(qtbot, view, "document.getElementById('columns-button').click()")
-    _until_js(
-        qtbot, view, "document.getElementById('table-area').dataset.slot === 'columns'"
-    )
+    _until_js(qtbot, view, "!document.getElementById('columns-panel').hidden")
 
 
 def _settings(qtbot, view, bridge, js):
@@ -124,10 +122,27 @@ def _settings(qtbot, view, bridge, js):
     return blocker.args[0]
 
 
-def test_the_manager_keeps_the_table_width_and_counts_shown_and_hidden(qtbot, doc):
+def test_the_manager_opens_over_the_page_and_the_pane_stays(qtbot, doc):
+    """Phase 2 spec section 5.8: a popover under the Columns button, not a
+    mode of the slot."""
     view, _ = doc
     _open_columns(qtbot, view)
     assert _width(qtbot, view, ".table-wrap") == 920
+    assert (
+        _eval(qtbot, view, "document.getElementById('table-area').dataset.slot")
+        == "pane"
+    )
+    assert _eval(qtbot, view, "document.getElementById('pane').hidden") is False
+    assert (
+        _eval(
+            qtbot,
+            view,
+            "document.getElementById('columns-anchor')"
+            ".contains(document.getElementById('columns-panel'))",
+        )
+        is True
+    )
+    assert _width(qtbot, view, "#columns-panel") == 280
     assert (
         _eval(qtbot, view, "document.getElementById('columns-count').textContent")
         == "9 shown · 9 hidden"
@@ -309,22 +324,16 @@ def test_reset_clears_the_layout_and_keeps_auto_hide(qtbot, doc):
     _until_js(qtbot, view, _has_header("Customer"))
 
 
-def test_done_closes_the_manager_and_returns_focus_to_the_button(qtbot, doc):
+def test_a_second_click_on_columns_closes_the_manager(qtbot, doc):
     view, _ = doc
     _open_columns(qtbot, view)
-    _eval(qtbot, view, "document.getElementById('columns-done').click()")
-    _until_js(
-        qtbot, view, "document.getElementById('table-area').dataset.slot === 'pane'"
-    )
+    button = "document.getElementById('columns-button')"
+    assert _eval(qtbot, view, f"{button}.getAttribute('aria-expanded')") == "true"
+    _eval(qtbot, view, f"{button}.click()")
+    _until_js(qtbot, view, "document.getElementById('columns-panel').hidden")
     assert _eval(qtbot, view, "document.activeElement.id") == "columns-button"
-    assert (
-        _eval(
-            qtbot,
-            view,
-            "document.getElementById('columns-button').getAttribute('aria-pressed')",
-        )
-        == "false"
-    )
+    assert _eval(qtbot, view, f"{button}.getAttribute('aria-expanded')") == "false"
+    assert _eval(qtbot, view, "document.getElementById('columns-done')") in (None, "")
 
 
 def test_escape_closes_the_manager(qtbot, doc):
@@ -337,9 +346,7 @@ def test_escape_closes_the_manager(qtbot, doc):
         "document.getElementById('columns-panel').dispatchEvent("
         "new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}))",
     )
-    _until_js(
-        qtbot, view, "document.getElementById('table-area').dataset.slot === 'pane'"
-    )
+    _until_js(qtbot, view, "document.getElementById('columns-panel').hidden")
 
 
 def _sorted_header(qtbot, view):
@@ -409,3 +416,22 @@ def test_the_bridge_echoing_the_pages_own_layout_does_not_rerender(qtbot, doc):
         _eval(qtbot, view, "document.querySelector('.col-row').dataset.sentinel")
         == "kept"
     )
+
+
+def test_a_click_outside_closes_the_manager_and_one_inside_does_not(qtbot, doc):
+    view, _ = doc
+    _open_columns(qtbot, view)
+    _eval(
+        qtbot,
+        view,
+        "document.getElementById('columns-scroller').dispatchEvent("
+        "new MouseEvent('mousedown', {bubbles: true})); true",
+    )
+    assert _eval(qtbot, view, "document.getElementById('columns-panel').hidden") is False
+    _eval(
+        qtbot,
+        view,
+        "document.getElementById('search').dispatchEvent("
+        "new MouseEvent('mousedown', {bubbles: true})); true",
+    )
+    assert _eval(qtbot, view, "document.getElementById('columns-panel').hidden") is True

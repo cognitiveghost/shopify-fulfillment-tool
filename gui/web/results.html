@@ -33,7 +33,11 @@
     <button id="clear-all" class="btn ghost" type="button" hidden>Clear all</button>
     <span class="spacer"></span>
     <span id="count" class="count"></span>
-    <button id="columns-button" class="btn ghost" type="button" aria-pressed="false" disabled></button>
+    <div id="columns-anchor" class="menu-anchor">
+      <button id="columns-button" class="btn ghost" type="button"
+              aria-haspopup="dialog" aria-expanded="false" disabled></button>
+      <div id="columns-panel" class="popover columns-panel" role="dialog" aria-label="Columns" hidden></div>
+    </div>
     <button id="screen-menu" class="btn ghost icon" type="button"
             title="More actions for this screen" aria-label="More actions for this screen">⋯</button>
     <button id="export" class="btn primary" type="button" disabled></button>
@@ -75,7 +79,6 @@
         <button id="pane-show" class="pane-rail" type="button"
                 aria-label="Show order detail" title="Show detail"><span class="pane-rail-label">Order detail</span></button>
       </div>
-      <aside id="columns-panel" class="columns-panel" aria-label="Columns" hidden></aside>
     </div>
   </section>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden>

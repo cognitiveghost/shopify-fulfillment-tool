@@ -149,8 +149,7 @@
   grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
 }
-.split[data-slot="pane"],
-.split[data-slot="columns"] { grid-template-columns: minmax(0, 1fr) 340px; }
+.split[data-slot="pane"] { grid-template-columns: minmax(0, 1fr) 340px; }
 .split[data-slot="rail"] { grid-template-columns: minmax(0, 1fr) 40px; }
 .split[data-slot="none"] .slot { display: none; }
 .table-wrap, .slot { position: relative; min-width: 0; min-height: 0; }
@@ -333,7 +332,7 @@
 
 /* --- detail pane and column manager planes (Bundle 13 §6.2, §6.9) ----------- */
 
-.pane, .columns-panel {
+.pane {
   position: relative;
   height: 100%;
   display: flex;
@@ -479,31 +478,25 @@
 /* .btn.secondary and .btn.danger come from kit.css. */
 .tag-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
-/* --- the column manager (Bundle 13 §6.9) ------------------------------------ */
-/* 16 + 40 + 8 + 32 + 8 + scroller + 8 + 32 + 16 = 508, so the scroller is 348. */
+/* --- the column manager: a popover under the Columns button -------------- */
 
-.columns-panel { gap: var(--spacing-sm); }
-
-.columns-head { flex-shrink: 0; display: flex; align-items: flex-start; height: 40px; }
-.columns-titles { min-width: 0; }
-.columns-title { font-size: var(--type-label-size); font-weight: 700; }
-.columns-count-line { font-size: var(--type-caption-size); color: var(--text-secondary); }
-.btn.columns-close { width: 32px; height: 32px; }
-
-.columns-search {
-  flex: 0 0 32px;
-  width: 100%;
-  padding: 0 var(--padding-h);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+.columns-panel {
+  left: auto;
+  right: 0;
+  width: 280px;
+  gap: var(--spacing-sm);
+  padding: 10px 12px;
 }
-.columns-search::placeholder { color: var(--text-placeholder); }
-.columns-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 
-.columns-scroller { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.columns-head { display: flex; align-items: baseline; gap: var(--spacing-sm); }
+.columns-title { flex: 1; font-weight: 700; }
+.columns-count-line { font-size: var(--type-caption-size); color: var(--text-secondary); }
+
+.columns-search { width: 100%; }
+
+.columns-scroller { max-height: 340px; overflow-y: auto; scrollbar-gutter: stable; }
 .columns-scroller::-webkit-scrollbar { width: 10px; }
-.columns-scroller::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+.columns-scroller::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 5px; }
 .columns-scroller::-webkit-scrollbar-track { background: transparent; }
 
 .col-group {
@@ -514,7 +507,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  background: var(--surface);
+  background: var(--surface-overlay);
   font-size: var(--type-caption-size);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -529,6 +522,7 @@
   grid-template-columns: 16px 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--spacing-xs);
+  border-radius: var(--radius-md);
 }
 .col-row:hover { background: var(--hover); }
 .col-row:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
@@ -550,5 +544,5 @@
 .col-row[data-drop="before"]::before { top: 0; }
 .col-row[data-drop="after"]::before { bottom: 0; }
 
-.columns-foot { flex: 0 0 32px; display: flex; align-items: center; gap: var(--spacing-sm); }
-.columns-hide-empty { display: flex; align-items: center; gap: var(--spacing-xs); white-space: nowrap; }
+.columns-foot { display: flex; align-items: center; gap: var(--spacing-sm); }
+.columns-hide-empty { display: flex; align-items: center; gap: 6px; white-space: nowrap; }

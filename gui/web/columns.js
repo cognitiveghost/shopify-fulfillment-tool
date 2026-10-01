@@ -77,8 +77,9 @@ function storeColumns(changes, send) {
 }
 
 // --- the column manager (spec §6.9) -----------------------------------------
-// The slot's third mode. It shows every column grouped for finding, while the
-// table beside it keeps the one order a drop rearranges.
+// A popover under the Columns button (phase 2 spec section 5.8). It shows every
+// column grouped for finding, while the table behind it keeps the one order a
+// drop rearranges.
 
 // Six dots, drawn as zero-length round-capped subpaths.
 const GRIP = "M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01";
@@ -94,11 +95,12 @@ function openColumnsPanel() {
   search.focus();
 }
 
-function closeColumnsPanel() {
+// An outside click closes without taking focus from what was clicked.
+function closeColumnsPanel(restoreFocus = true) {
   state.columnsOpen = false;
   columnDragKey = null;
   renderSlot();
-  els.columnsButton.focus();
+  if (restoreFocus) els.columnsButton.focus();
 }
 
 // The chrome is built once so typing in the search box keeps the caret.
@@ -115,15 +117,10 @@ function renderColumnsPanel() {
 function buildColumnsChrome() {
   const panel = els.columnsPanel;
   const head = el("div", "columns-head");
-  const titles = el("div", "columns-titles");
-  titles.append(el("div", "columns-title", "Columns"), el("div", "columns-count-line"));
-  titles.lastChild.id = "columns-count";
-  const close = paneButton("ghost icon columns-close", "×", "Close column manager");
-  close.id = "columns-close";
-  close.addEventListener("click", closeColumnsPanel);
-  head.append(titles, el("span", "spacer"), close);
+  head.append(el("div", "columns-title", "Columns"), el("div", "columns-count-line"));
+  head.lastChild.id = "columns-count";
 
-  const search = el("input", "columns-search");
+  const search = el("input", "field columns-search");
   search.id = "columns-search";
   search.type = "search";
   search.placeholder = "Find a column";
@@ -145,13 +142,11 @@ function buildColumnsChrome() {
     storeColumns({ auto_hide_empty: hideBox.checked }, (b) => b.setAutoHideEmpty(hideBox.checked)),
   );
   hideLabel.append(hideBox, el("span", "", "Hide empty columns"));
-  const reset = paneButton("ghost", "Reset to defaults");
+  const reset = paneButton("ghost compact", "Reset");
   reset.id = "columns-reset";
+  reset.title = "Reset to defaults";
   reset.addEventListener("click", () => storeColumns({ order: null, visible: null }, (b) => b.resetColumns()));
-  const done = paneButton("secondary", "Done");
-  done.id = "columns-done";
-  done.addEventListener("click", closeColumnsPanel);
-  foot.append(hideLabel, el("span", "spacer"), reset, done);
+  foot.append(hideLabel, el("span", "spacer"), reset);
 
   panel.append(head, search, scroller, foot);
 }
@@ -294,5 +289,8 @@ function bindColumns() {
     if (e.key !== "Escape") return;
     e.stopPropagation();
     closeColumnsPanel();
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (state.columnsOpen && !e.target.closest("#columns-anchor")) closeColumnsPanel(false);
   });
 }

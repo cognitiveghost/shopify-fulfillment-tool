@@ -540,7 +540,6 @@ function refreshColumns() {
 
 function slotMode() {
   if (!state.records.length) return "none";
-  if (state.columnsOpen) return "columns";
   return state.paneHidden || (state.narrow && !state.paneForced) ? "rail" : "pane";
 }
 
@@ -549,9 +548,11 @@ function renderSlot() {
   els.tableArea.dataset.slot = mode;
   els.pane.hidden = mode !== "pane";
   els.paneStrip.hidden = mode !== "rail";
-  els.columnsPanel.hidden = mode !== "columns";
+  // The column manager is a popover of its own; it only needs a session.
+  if (mode === "none") state.columnsOpen = false;
+  els.columnsPanel.hidden = !state.columnsOpen;
   els.columnsButton.disabled = mode === "none";
-  els.columnsButton.setAttribute("aria-pressed", String(state.columnsOpen));
+  els.columnsButton.setAttribute("aria-expanded", String(state.columnsOpen));
   const count = document.createElement("span");
   count.className = "columns-count mono";
   count.textContent = visibleColumns().length + "/" + allColumns().length;
@@ -559,7 +560,7 @@ function renderSlot() {
   els.columnsButton.insertAdjacentHTML("beforeend", svg(COLUMNS, "glyph"));
   els.columnsButton.append("Columns ", count);
   if (mode === "pane") renderPane();
-  if (mode === "columns") renderColumnsPanel();
+  if (state.columnsOpen) renderColumnsPanel();
 }
 
 // The bridge hands `columns` over as a QVariantMap, which reaches JS with its keys
