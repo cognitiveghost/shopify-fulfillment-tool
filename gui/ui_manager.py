@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from gui.components.commandbar import BarState, CommandBar
 from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.sidebar import Sidebar
+from gui.orders_view import summary_text
 from gui.shortcuts_dialog import ShortcutsDialog
 from shared.components.state_panel import StatePanel
 from shared.icons import icon
@@ -35,16 +36,17 @@ _SETUP_CARD_MAX_WIDTH = 840
 
 # Tab index -> (main_window attribute holding that screen's command-bar action,
 # whether that button lives on a screen and must stop painting itself, and the
-# role the bar's slot takes). Results re-runs the analysis as a *secondary*
-# action: its one primary, Export, is inside the results document (W3).
+# role the bar's slot takes). Results' one primary, Export, is inside the
+# results document (W3).
 #
 # New Session used to be entry 2, borrowed by the Browse screen from Session
 # Setup. Under Bundle 4 it is state-owned (BarState.NO_SESSION) and always
 # present in the command bar, so the borrow is dead -- new_session_btn is
 # hidden unconditionally below instead.
+# Results (1) has no bar action since phase 2: re-running the analysis lives
+# in its screen menu, as the mockup has it.
 _SCREEN_ACTIONS = {
     0: ("run_analysis_button", True, "primary"),
-    1: ("run_analysis_button", True, "secondary"),
 }
 
 # The sidebar's collapsed state is this PC's, like the theme -- same QSettings
@@ -363,6 +365,9 @@ class UIManager:
                 getattr(self.mw, attribute).hide()
         self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
         self.mw.main_tabs.currentChanged.connect(self._apply_page_inset)
+        self.mw.main_tabs.currentChanged.connect(
+            lambda index: self.mw.command_bar.set_results_mode(index == 1)
+        )
         self._bind_screen_action(self.mw.main_tabs.currentIndex())
 
     def _create_command_bar(self) -> CommandBar:
@@ -851,6 +856,8 @@ class UIManager:
         the bridge. The QActions keep their old attribute names, because every
         caller reaches them through setEnabled / setToolTip / setText.
         Configure Columns returns with the column manager (Bundle 13).
+        Run analysis again, Open session folder and Copy summary came from the
+        command bar in phase 2.
         """
         from PySide6.QtGui import QAction
         from PySide6.QtWidgets import QMenu
@@ -868,6 +875,26 @@ class UIManager:
             menu.addAction(item)
             return item
 
+        # What the mockup moves out of the command bar on Results (phase 2
+        # spec section 6.2). Their enabled state is read when the menu opens.
+        self.mw.rerun_analysis_action = action(
+            "Run analysis again",
+            lambda: self.mw.run_analysis_button.click(),
+            "Run the analysis again on this session's files",
+        )
+        self.mw.open_folder_action = action(
+            "Open session folder",
+            self._open_session_folder,
+            "Open this session's folder",
+        )
+        self.mw.copy_summary_action = action(
+            "Copy summary",
+            self._copy_results_summary,
+            "Copy the session's numbers as one line",
+        )
+        menu.addSeparator()
+        menu.aboutToShow.connect(self._refresh_results_menu)
+
         self.mw.add_product_button_tab2 = action(
             "Add Product to Order",
             lambda: (
@@ -881,6 +908,21 @@ class UIManager:
             "Undo", self.mw.undo_last_operation, "Undo last operation (Ctrl+Z)"
         )
         return menu
+
+    def _refresh_results_menu(self) -> None:
+        """Enable what can run now. Called as the menu opens."""
+        self.mw.rerun_analysis_action.setEnabled(self.mw.run_analysis_button.isEnabled())
+        self.mw.open_folder_action.setEnabled(
+            bool(getattr(self.mw, "session_path", None))
+        )
+        self.mw.copy_summary_action.setEnabled(bool(self.mw.results_bridge.summary))
+
+    def _copy_results_summary(self) -> None:
+        text = summary_text(self.mw.results_bridge.summary)
+        if not text:
+            return
+        QGuiApplication.clipboard().setText(text)
+        self.mw.results_bridge.raise_toast("Summary copied")
 
     def _create_tab5_tools(self):
         """Create Tab 5: Tools

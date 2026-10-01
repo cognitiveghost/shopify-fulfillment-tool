@@ -196,3 +196,48 @@ def test_the_menu_ends_with_a_route_to_the_browser(qapp, qtbot):
     assert "Browse all sessions" in last.text()
     with qtbot.waitSignal(bar.browseAllRequested):
         last.trigger()
+
+
+def _analysed(bar):
+    bar.set_session_text("2026-09-30_1")
+    bar.set_status("text_secondary", "Analysed 14:06")
+    bar.set_stock_age("Stock file 19 h old")
+    bar.set_state(BarState.SESSION)
+    return bar
+
+
+def test_results_mode_draws_the_session_as_a_chip_and_its_age_as_text(bar):
+    """Phase 2 spec section 6.1."""
+    _analysed(bar).set_results_mode(True)
+    assert not bar.status_chip.isVisible()
+    assert not bar.stock_chip.isVisible()
+    assert not bar.open_folder_button.isVisible()
+    assert bar.meta_label.isVisible()
+    assert bar.meta_label.text() == "analysed 14:06 · stock file 19 h old"
+    assert bar.session_button.text() == "2026-09-30_1"
+    assert "border-radius: 6px" in bar.session_button.styleSheet()
+
+
+def test_leaving_results_mode_puts_the_bar_back(bar):
+    _analysed(bar).set_results_mode(True)
+    bar.set_results_mode(False)
+    assert bar.status_chip.isVisible()
+    assert bar.stock_chip.isVisible()
+    assert bar.open_folder_button.isVisible()
+    assert not bar.meta_label.isVisible()
+    assert "border-radius" not in bar.session_button.styleSheet()
+
+
+def test_results_mode_follows_chips_that_change_under_it(bar):
+    _analysed(bar).set_results_mode(True)
+    bar.set_stock_age("")
+    assert bar.meta_label.text() == "analysed 14:06"
+    assert not bar.stock_chip.isVisible()
+    bar.set_status("text_secondary", "")
+    assert not bar.meta_label.isVisible()
+
+
+def test_results_mode_with_no_session_adds_nothing(bar):
+    bar.set_state(BarState.NO_SESSION)
+    bar.set_results_mode(True)
+    assert not bar.meta_label.isVisible()

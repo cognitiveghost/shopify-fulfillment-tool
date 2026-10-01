@@ -434,3 +434,22 @@ def results_summary(df: pd.DataFrame) -> dict:
             values[values.index.isin(fulfillable_orders)].sum()
         )
     return summary
+
+
+def summary_text(summary: dict) -> str:
+    """The KPI strip as one line for the clipboard (phase 2 spec section 6.2)."""
+    if not summary:
+        return ""
+    parts = [
+        f"{summary['orders']} orders",
+        f"{summary['fulfillable']} fulfillable",
+        f"{summary['blocked']} blocked",
+    ]
+    labels = ", ".join(
+        f"{name} {count}" for name, count in summary.get("labels_by_courier") or []
+    )
+    if labels:
+        parts.append(f"labels {labels}")
+    if summary.get("value_ready") is not None:
+        parts.append(f"value ready {summary['value_ready']:.2f}")
+    return " · ".join(parts)
