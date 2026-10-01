@@ -153,6 +153,15 @@ def test_opening_a_session_without_analysis_drops_the_previous_orders(main_windo
     assert main_window.analysis_results_df is None
 
 
+def test_opening_a_session_without_analysis_lands_on_setup(main_window):
+    path = main_window.session_manager.create_session("acme")
+    main_window.main_tabs.setCurrentIndex(2)
+
+    main_window.load_existing_session(path)
+
+    assert main_window.main_tabs.currentIndex() == 0
+
+
 def test_a_new_session_starts_without_the_previous_orders(main_window):
     first = _session_with_analysis(main_window, _orders("Fulfillable"))
     main_window.load_existing_session(first)

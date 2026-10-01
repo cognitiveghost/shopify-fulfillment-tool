@@ -157,13 +157,13 @@ class MainWindow(QMainWindow):
         gui.components.toast asks this first: a Qt toast would land behind
         the view (ADR 0007). False means "not a web page, use the Qt toast".
         """
-        bridge = getattr(
-            self,
-            {0: "setup_bridge", 1: "results_bridge"}.get(
-                self.main_tabs.currentIndex(), ""
-            ),
-            None,
-        )
+        index = self.main_tabs.currentIndex()
+        if index == 2:
+            bridge = getattr(getattr(self, "session_browser", None), "bridge", None)
+        else:
+            bridge = getattr(
+                self, {0: "setup_bridge", 1: "results_bridge"}.get(index, ""), None
+            )
         if bridge is None:
             return False
         bridge.raise_toast(text)
@@ -387,6 +387,14 @@ class MainWindow(QMainWindow):
 
         # Add Ctrl+Z shortcut for Undo
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_operation)
+
+        # F5 reloads the session list, on Browse only
+        QShortcut(QKeySequence("F5"), self, self._refresh_browse)
+
+    def _refresh_browse(self):
+        """F5: reload the sessions, when Browse is the screen showing."""
+        if self.main_tabs.currentIndex() == 2:
+            self.session_browser.refresh_sessions()
 
     def _focus_results_search(self):
         """Ctrl+F: the search field lives in the results document now."""
@@ -982,7 +990,9 @@ class MainWindow(QMainWindow):
                         f"{self.analysis_results_df['Order_Number'].nunique()} orders.",
                     )
                 else:
-                    # Session exists but no analysis yet
+                    # Session exists but no analysis yet: Setup is where its
+                    # files and Run analysis are (phase 4 spec section 7).
+                    self.main_tabs.setCurrentIndex(0)
                     self.log_activity(
                         "Session", f"Opened session (no analysis): {session_name}"
                     )

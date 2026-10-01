@@ -20,6 +20,7 @@ SHORTCUTS = (
     ("Ctrl+R", "Run analysis"),
     ("Ctrl+F", "Search results"),
     ("Ctrl+Z", "Undo the last change"),
+    ("F5", "Refresh the session list, on Browse"),
 )
 
 

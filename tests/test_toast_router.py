@@ -56,6 +56,19 @@ def test_on_results_the_results_page_draws_it(main_window):
     assert other == []
 
 
+def test_on_browse_the_browse_page_draws_it(main_window):
+    main_window.main_tabs.setCurrentIndex(2)
+    seen = _raised(main_window.session_browser.bridge)
+    other = _raised(main_window.setup_bridge)
+
+    shown = toast(main_window, "Combined stock export saved: stock.xlsx.")
+
+    assert seen == [("Combined stock export saved: stock.xlsx.", False)]
+    assert other == []
+    assert shown is None
+    assert Toast.for_window(main_window) is None
+
+
 def test_on_a_qt_page_the_qt_toast_shows(main_window):
     main_window.main_tabs.setCurrentIndex(3)
     seen = _raised(main_window.setup_bridge)
