@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Setup</title>
+<!-- gui/web_page.py writes theme_css_vars() over the marker before the page
+     loads, then setup.js keeps it current from the bridge. -->
+<style id="theme-vars">/* theme-vars */</style>
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="setup.css">
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="setup.js" defer></script>
+</head>
+<body>
+<main id="setup" data-view=""></main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden>
+  <span id="toast-text"></span>
+  <button id="toast-dismiss" class="toast-close" type="button" aria-label="Dismiss"></button>
+</div>
+</body>
+</html>
