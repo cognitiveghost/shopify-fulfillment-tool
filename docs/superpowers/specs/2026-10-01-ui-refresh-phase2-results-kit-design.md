@@ -72,8 +72,9 @@ and paints white on it, and a hex in a stylesheet is banned, so the white needs 
 In a web asset, a `box-shadow` declaration is clean when its whole value is `var(--card-shadow)`,
 `var(--overlay-shadow)` or `none`, ended by `;` or `}`. Everything else is still a `banned` finding: any
 other value (including `inset` and a literal offset), `-webkit-box-shadow`, `.style.boxShadow`, and
-`setProperty("box-shadow", …)`. A shadow in an inline `style="…"` attribute is flagged too, because its value
-ends in a quote: shadows belong in a stylesheet.
+`setProperty("box-shadow", …)`. A shadow in an inline `style="…"` attribute is flagged too, token or not:
+shadows belong in a stylesheet. The value's ending does not show that (an inline declaration can end in `;`
+as well), so the scan also looks for an unclosed `style="` earlier on the line (`_INLINE_STYLE`).
 
 Implementation: `_BANNED` stays as it is. `_scan_web_asset` skips a `banned` match whose captured property is
 exactly `box-shadow` when `_SHADOW_OK.match(code, m.end())` succeeds, where
@@ -229,9 +230,9 @@ mockup splits them.
 | gesture | effect |
 |---|---|
 | click a row | cursor and anchor move to it, and a pane the operator hid reopens. The checked set does not change |
-| click its checkbox, or Ctrl-click the row | toggles it in the checked set and moves the anchor. The cursor stays |
-| Shift-click | checks the range from the anchor to the row (replacing the set, or adding with Ctrl) and moves the cursor to the row, so Shift+↑ ↓ carries on from it |
-| ↑ ↓ | move the cursor and the anchor from the cursor (from the first row when there is none); a hidden pane reopens |
+| click its checkbox (anywhere in the select cell), or Ctrl-click the row | toggles it in the checked set and moves the anchor. The cursor stays |
+| Shift-click | checks the range from the anchor to the row (replacing the set, or adding with Ctrl) and moves the cursor to the row, so Shift+↑ ↓ carries on from it; a hidden pane reopens |
+| ↑ ↓ | move the cursor and the anchor from the cursor (with no cursor, from the anchor a checkbox click left; with neither, from the first row); a hidden pane reopens |
 | Shift+↑ ↓ | move the cursor and check the range from the anchor to it |
 | Ctrl+A | checks every order shown |
 | Ctrl+C | copies the checked order numbers; with none checked, the cursor's order number |
@@ -250,7 +251,7 @@ column on, as today, so the header checkbox stays reachable.
   those are sent to `setStatus(keys, true)`. With none, the label is "Mark N fulfillable" over all checked and
   the button is disabled.
 - **Hold this** / **Hold these N** (secondary, compact): sends every checked order.
-- **More** (secondary, compact, chevron): a 268px menu of eight items. The seven that exist keep today's
+- **More** (secondary, compact, chevron): a menu of eight items, as wide as its labels (§9). The seven that exist keep today's
   count-aware labels ("Add a tag to 3 orders", "Remove a SKU from this order"). Order: add a tag, remove a
   tag, copy the order numbers (Ctrl+C), a separator (new), the two exports, a separator, then in danger text
   the two SKU removals and a new third item, "Exclude this order from the run" / "Exclude these N orders from
@@ -271,7 +272,9 @@ footer with Cancel (secondary) and the verb.
   `.btn.critical`, disabled until the box has something to say.
 
 Every line in the box is computed in the page from the order payload and `summary.fulfillable`, and is true
-of what Python then does. `hit` is the checked orders that carry the SKU (all checked orders for Exclude).
+of what Python then does. The popover is the only confirmation a removal gets, so it speaks for the checked
+set it was opened on: its verb sends those keys, and it closes when the checked set changes (Ctrl+A or
+Shift+↑ ↓ from the table) or the orders are pushed again (an undo). `hit` is the checked orders that carry the SKU (all checked orders for Exclude).
 A list of order numbers shows up to four, or three and "and N more".
 
 | verb | lines |
@@ -407,8 +410,8 @@ commit as the change, never skipped or deleted without a replacement.
 selected, Bulk popover, No match, Toast), plus the pane collapsed and the Columns popover open. Render the kit
 sheet in both themes. Render `MainWindow` on Results in both themes for the command bar and the page inset.
 Compare with `mockups/renders/results.png` and `renders/component-sheet.png`, and with the mockup's other
-states opened in Chrome. Save the light Default, the dark Three selected and the light kit sheet under
-`docs/design/ui-refresh/renders/phase2/` and attach them to the PR.
+states opened in Chrome. Save the light Default, the dark Three selected, the light Bulk popover and the
+light kit sheet under `docs/design/ui-refresh/renders/phase2/` and attach them to the PR.
 
 **Gate:** `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q` and `ruff check .`, then `graphify update .`.
 
@@ -450,6 +453,8 @@ states opened in Chrome. Save the light Default, the dark Three selected and the
 | Segoe UI | Inter | The bundled face both tiers use |
 | "Open recent" and "New session" beside the chip | The chip is the recent-sessions menu; New session stays in the overflow | Roadmap phase 3 owns the bar |
 | A trash button per line | A ⋯ menu per line | Change quantity and Copy SKU exist |
+| A 268px More menu | As wide as its longest label (282px at desk) | The count-aware labels are longer than the mockup's |
+| No scrollbar drawn | Chromium's bar in theme colours (`scrollbar-color` in `kit.css`) | A real session scrolls; the default bar is a light strip in dark |
 
 Kept though the mockup does not draw them: Clear all, the tags row, notes, product names, Change quantity,
 Add Product to Order, the toast's run badge, the stock-file age, the sixth "Oldest waiting" cell on a wide

@@ -162,4 +162,5 @@ def test_summary_text_is_the_kpi_strip_on_one_line():
     assert summary_text({**summary, "labels_by_courier": []}) == (
         "40 orders · 30 fulfillable · 10 blocked"
     )
+    assert summary_text({**summary, "orders": 1}).startswith("1 order · ")
     assert summary_text({}) == ""

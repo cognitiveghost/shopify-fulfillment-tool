@@ -171,8 +171,9 @@ function paneCodes(o) {
 function stockSentence(o, line) {
   if (line.Short) {
     const sku = str(line.SKU);
-    const p = ((o.Verdict && o.Verdict.problems) || []).find((x) => x.sku === sku);
-    if (p && p.code === "short") {
+    // Only the short problem: the SKU may carry another one (a bad quantity) first.
+    const p = ((o.Verdict && o.Verdict.problems) || []).find((x) => x.sku === sku && x.code === "short");
+    if (p) {
       return { short: true, text: NUMBER.format(p.have) + " of " + NUMBER.format(p.need) +
         " in stock, short " + NUMBER.format(p.need - p.have) };
     }

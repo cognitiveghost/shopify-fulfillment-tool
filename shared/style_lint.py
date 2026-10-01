@@ -139,6 +139,9 @@ _BANNED = re.compile(
 _SHADOW_OK = re.compile(
     r"\s*(?:var\(\s*--(?:card|overlay)-shadow\s*\)|none)\s*[;}]"
 )
+# Shadows belong in a stylesheet: an open style="..." earlier on the line means
+# the declaration is inline, token or not.
+_INLINE_STYLE = re.compile(r"style\s*=\s*([\"'])(?:(?!\1).)*$")
 
 # The aliases are never exported to the web tier, so var(--accent-blue)
 # resolves to nothing and paints transparent without a sound.
@@ -256,6 +259,9 @@ def _scan_web_asset(path: Path) -> list[str]:
                 kind == "banned"
                 and m.group(1) == "box-shadow"
                 and _SHADOW_OK.match(code, m.end())
+                and not _INLINE_STYLE.search(
+                    code, code.rfind("\n", 0, m.start()) + 1, m.start()
+                )
             ):
                 continue
             found.append((ln, kind, m.group(m.lastindex or 0)))

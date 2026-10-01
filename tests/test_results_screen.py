@@ -198,9 +198,6 @@ def test_the_qt_results_screen_is_gone():
     assert hits == []
 
 
-
-
-
 @pytest.mark.parametrize(
     "minutes, text",
     [

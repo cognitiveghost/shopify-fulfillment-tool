@@ -441,7 +441,7 @@ def summary_text(summary: dict) -> str:
     if not summary:
         return ""
     parts = [
-        f"{summary['orders']} orders",
+        f"{summary['orders']} order{'' if summary['orders'] == 1 else 's'}",
         f"{summary['fulfillable']} fulfillable",
         f"{summary['blocked']} blocked",
     ]

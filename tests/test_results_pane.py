@@ -444,6 +444,14 @@ def test_a_line_says_what_stock_it_has(qtbot, doc):
     assert _text(qtbot, view, "#pane .line[data-index=\"0\"] .line-qty") == "× 6"
     _select(qtbot, view, "#10449")
     assert _text(qtbot, view, "#pane .line[data-index=\"0\"] .line-stock") == "None in stock"
+    # The SKU's short problem is found behind another problem on the same SKU.
+    behind = (
+        "stockSentence({Verdict: {problems: ["
+        "{sku: 'A', code: 'invalid_quantity'},"
+        "{sku: 'A', code: 'short', have: 4, need: 6}]}},"
+        " {SKU: 'A', Short: true}).text"
+    )
+    assert _eval(qtbot, view, behind) == "4 of 6 in stock, short 2"
 
 
 def test_a_line_names_its_lot(qtbot, doc):

@@ -35,6 +35,7 @@ function renderSelectionBar() {
     closeBulkPopover();
     return;
   }
+  if (bulkKeys && bulkKeys.join("\n") !== selectedKeys().join("\n")) closeBulkPopover();
   els.selectionCount.textContent = NUMBER.format(n) + " selected";
   const markable = markableKeys().length;
   els.selectionMark.textContent = "Mark " + NUMBER.format(markable || n) + " fulfillable";
@@ -221,18 +222,25 @@ function tagCounts(tags) {
 }
 
 let bulkPicked = null;
+// The checked orders the open popover speaks for. It is the only confirmation
+// a removal gets, so it commits these keys and no others, and it closes when
+// the checked set or the orders under it change (renderSelectionBar, onOrders).
+let bulkKeys = null;
 
 function closeBulkPopover() {
   const open = document.getElementById("bulk-popover");
   if (open) open.remove();
   bulkPicked = null;
+  bulkKeys = null;
 }
 
-// opts: title, danger, verb(value) -> {text, disabled}, onCommit(value), and
-// optionally fill(list, pick) for a picker, rest (the verb's label before a
-// pick) and changes(value) -> string[] for a verb that removes something.
+// opts: title, danger, verb(value) -> {text, disabled}, onCommit(value, keys),
+// and optionally fill(list, pick) for a picker, prompt (the verb's label
+// before a pick) and changes(value) -> string[] for a verb that removes
+// something.
 function openBulkPopover(opts) {
   closeBulkPopover();
+  bulkKeys = selectedKeys();
   const box = el("div", "popover bulk-popover");
   box.id = "bulk-popover";
   box.setAttribute("role", "dialog");
@@ -259,7 +267,7 @@ function openBulkPopover(opts) {
   verb.type = "button";
   verb.id = "bulk-verb";
   verb.className = "btn " + (opts.danger ? "critical" : "primary");
-  verb.textContent = opts.rest || "";
+  verb.textContent = opts.prompt || "";
   verb.disabled = true;
   const cancel = document.createElement("button");
   cancel.type = "button";
@@ -295,11 +303,13 @@ function openBulkPopover(opts) {
 
   verb.addEventListener("click", () => {
     const value = bulkPicked;
+    const keys = bulkKeys;
     closeBulkPopover();
-    opts.onCommit(value);
+    opts.onCommit(value, keys);
   });
 
-  els.selectionBar.appendChild(box);
+  // Under More, which opened it (the anchor is the popover's positioned parent).
+  els.selectionMore.parentElement.appendChild(box);
   if (!opts.fill) pick(null, null); // nothing to choose: say what will change at once
   const first = list.querySelector(".bulk-row");
   (first || cancel).focus();
@@ -328,7 +338,7 @@ function openTagPopover(mode) {
   openBulkPopover({
     title: (add ? "Add a tag to " : "Remove a tag from ") + orders,
     danger: false,
-    rest: "Pick a tag",
+    prompt: "Pick a tag",
     fill: (host, onPick) => {
       renderTagList(host, rows, badge, onPick);
       if (!add) return;
@@ -340,7 +350,7 @@ function openTagPopover(mode) {
       input.addEventListener("keydown", (e) => {
         const tag = input.value.trim();
         if (e.key !== "Enter" || !tag) return;
-        const keys = selectedKeys();
+        const keys = bulkKeys;
         closeBulkPopover();
         state.bridge.addTag(keys, tag);
       });
@@ -355,8 +365,7 @@ function openTagPopover(mode) {
       }
       return { text: "Remove from " + countedWord(on, "order"), disabled: on === 0 };
     },
-    onCommit: (tag) => {
-      const keys = selectedKeys();
+    onCommit: (tag, keys) => {
       if (add) state.bridge.addTag(keys, tag);
       else state.bridge.removeTag(keys, tag);
     },
@@ -451,7 +460,7 @@ function openSkuPopover(mode) {
       ? "Remove a SKU from " + theseOrders(n)
       : "Remove whole orders containing a SKU",
     danger: true,
-    rest: "Pick a SKU",
+    prompt: "Pick a SKU",
     changes: (sku) =>
       line
         ? skuRemovalChanges(sku)
@@ -480,8 +489,7 @@ function openSkuPopover(mode) {
         disabled: on === 0,
       };
     },
-    onCommit: (sku) => {
-      const keys = selectedKeys();
+    onCommit: (sku, keys) => {
       if (line) state.bridge.removeSkuFromOrders(keys, sku);
       else state.bridge.removeOrdersWithSku(keys, sku);
     },
@@ -497,7 +505,7 @@ function openExcludePopover() {
     danger: true,
     changes: () => orderRemovalChanges(selectedOrders(), ""),
     verb: () => ({ text: "Exclude " + countedWord(n, "order"), disabled: n === 0 }),
-    onCommit: () => state.bridge.excludeOrders(selectedKeys()),
+    onCommit: (_none, keys) => state.bridge.excludeOrders(keys),
   });
 }
 

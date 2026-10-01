@@ -241,7 +241,6 @@ def test_the_value_header_is_quiet_until_a_price_column_is_mapped(qtbot, doc):
     _until_js(qtbot, view, f"{head}.classList.contains('unmapped')")
 
 
-
 def test_no_horizontal_scroll_until_the_table_minimum(qtbot, doc):
     view, _ = doc
     scroller = "document.getElementById('scroller')"
@@ -250,8 +249,6 @@ def test_no_horizontal_scroll_until_the_table_minimum(qtbot, doc):
     )
     _resize(qtbot, view, 780, 692)
     _until_js(qtbot, view, f"{scroller}.scrollWidth > {scroller}.clientWidth")
-
-
 
 
 # --- 9.13: the document -------------------------------------------------------
@@ -564,7 +561,27 @@ def test_the_cursor_row_wears_a_bar_on_its_left_edge(qtbot, doc):
     assert view.grab().toImage().pixelColor(tint_x, y).name() == token("--selection-bg")
 
 
+def test_a_near_miss_beside_the_checkbox_still_checks(qtbot, doc):
+    """The whole select cell toggles, so a click 5px off the box does not move
+    the cursor instead."""
+    view, bridge = doc
+    _eval(
+        qtbot,
+        view,
+        "document.querySelector('#rows .row[data-order=\"#10002\"] .cell.select')"
+        ".dispatchEvent(new MouseEvent('click', {bubbles: true})); true",
+    )
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
+    assert _eval(qtbot, view, "state.cursorKey === null") is True
 
+
+def test_a_shift_click_reopens_a_hidden_pane(qtbot, doc):
+    view, _ = doc
+    _click_order(qtbot, view, "#10001")
+    _eval(qtbot, view, "state.paneHidden = true; render(); true")
+    assert _eval(qtbot, view, "document.getElementById('pane').hidden") is True
+    _click_order(qtbot, view, "#10003", shiftKey=True)
+    assert _eval(qtbot, view, "document.getElementById('pane').hidden") is False
 
 
 def test_an_orders_push_keeps_the_selection(qtbot, doc):
@@ -625,9 +642,6 @@ def test_sorting_value_twice_is_descending(qtbot, doc):
         view,
         "document.querySelector('#rows .row[data-index=\"0\"]').dataset.order === '#10312'",
     )
-
-
-
 
 
 def test_the_kpi_strip_is_one_card(qtbot, doc):

@@ -233,8 +233,7 @@ class CommandBar(QWidget):
 
         self._state = BarState.NO_CLIENT
         self._progress = (0, "")
-        self._style_session()
-        get_theme_manager().theme_changed.connect(self._style_session)
+        on_theme_changed(self.session_button, self._style_session)
 
         self._bound_action = None
         self.action_button.clicked.connect(self._forward_action_click)
@@ -250,19 +249,20 @@ class CommandBar(QWidget):
             f" border-bottom: 1px solid {theme.border_subtle}; }}"
         )
 
-    def _style_session(self) -> None:
+    def _style_session(self, theme=None) -> None:
         """The session button as plain text, or on Results as the mockup's chip.
 
         Its own sheet rather than the app's: this is the one QToolButton drawn
         this way, and a widget sheet has to be re-applied on a theme change.
         """
-        theme = get_theme_manager().get_current_theme()
+        theme = theme or get_theme_manager().get_current_theme()
         if self._results_mode:
             self.session_button.setStyleSheet(
                 f"QToolButton {{ {font_css('caption')}"
                 f" font-family: {theme.font_family_mono};"
                 f" background-color: {theme.surface_raised};"
-                f" border: 1px solid {theme.border}; border-radius: 6px;"
+                f" border: 1px solid {theme.border};"
+                f" border-radius: {theme.radius_md}px;"
                 " padding: 0px 8px; min-height: 20px; max-height: 20px; }"
                 " QToolButton::menu-indicator { image: none; }"
             )

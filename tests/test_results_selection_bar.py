@@ -140,18 +140,6 @@ def test_the_header_box_clears_the_checked_orders_and_hides_the_bar(qtbot, page)
     assert _eval(qtbot, view, "document.getElementById('selection-clear')") in (None, "")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 def test_the_bar_covers_the_header_so_the_table_never_moves(qtbot, page):
     """The bar takes the header row's place instead of pushing the table
     down, so clicking an order leaves every row where it was."""
@@ -182,9 +170,6 @@ def test_mounting_the_bar_does_not_move_focus(qtbot, page):
     _eval(qtbot, view, "document.getElementById('search').focus(); true")
     _select(qtbot, view, ["10443"])
     assert _eval(qtbot, view, "document.activeElement.id") == "search"
-
-
-
 
 
 def test_more_lists_its_eight_items_in_order(qtbot, page):

@@ -36,6 +36,10 @@
 
 html, body { margin: 0; height: 100%; }
 
+/* Inherited, so every scroller on every page: Chromium's default bar is a
+   light strip in the dark theme. */
+html { scrollbar-color: var(--border) transparent; }
+
 body {
   overflow: hidden;
   background: var(--surface-sunken);

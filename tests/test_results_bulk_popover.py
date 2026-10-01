@@ -402,7 +402,41 @@ def test_thirty_skus_scroll_and_the_verb_stays_on_screen(qtbot, page):
     assert fits == [True, True]
 
 
+def _open_exclude(qtbot, view, orders):
+    _select(qtbot, view, orders)
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    _eval(qtbot, view, "document.getElementById('more-exclude').click(); true")
 
+
+def test_the_popover_opens_under_more(qtbot, page):
+    view, _ = page
+    _open_exclude(qtbot, view, ["10444"])
+    edges = _json(
+        qtbot,
+        view,
+        "['bulk-popover', 'selection-more'].map("
+        "id => document.getElementById(id).getBoundingClientRect().left)",
+    )
+    assert edges[0] == edges[1]
+
+
+def test_a_changed_selection_closes_the_popover(qtbot, page):
+    """The popover is the only confirmation a removal gets, so it must never
+    say one order and then act on every order shown (Ctrl+A from the table)."""
+    view, _ = page
+    _open_exclude(qtbot, view, ["10444"])
+    assert _eval(qtbot, view, "document.querySelectorAll('#bulk-popover').length") == 1
+    _eval(qtbot, view, "selectAll(true); true")
+    assert _eval(qtbot, view, "document.querySelectorAll('#bulk-popover').length") == 0
+
+
+def test_an_orders_push_closes_the_popover(qtbot, page):
+    """An undo or a tag re-pushes the session: the lines it showed may be stale."""
+    view, bridge = page
+    _open_exclude(qtbot, view, ["10444"])
+    bridge.set_orders(popover_orders())
+    _until_js(qtbot, view, "document.querySelectorAll('#bulk-popover').length === 0")
+    assert _eval(qtbot, view, "state.selected.size") == 1
 
 
 def test_committing_a_line_removal_sends_the_sku(qtbot, page):

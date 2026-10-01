@@ -179,8 +179,8 @@
 
 /* --- bulk popover: one surface carries a whole bulk action --------------- */
 
-/* Opens under the selection bar. results.js caps its height to the table
-   area, so the foot and its verb are always on screen. */
+/* Opens under More. bulk.js caps its height to the table area, so the foot
+   and its verb are always on screen. */
 .bulk-popover { width: 384px; }
 .bulk-title { padding: 12px 14px 6px; font-size: var(--type-label-size); font-weight: 700; }
 .bulk-body { flex: 1; min-height: 0; overflow-y: auto; }
@@ -503,9 +503,6 @@
 .columns-search { width: 100%; }
 
 .columns-scroller { max-height: 340px; overflow-y: auto; scrollbar-gutter: stable; }
-.columns-scroller::-webkit-scrollbar { width: 10px; }
-.columns-scroller::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 5px; }
-.columns-scroller::-webkit-scrollbar-track { background: transparent; }
 
 .col-group {
   position: sticky;

@@ -675,7 +675,9 @@ function onRowClick(event) {
   if (event.shiftKey && state.anchorKey !== null) {
     selectRange(state.anchorKey, key, ctrl);
     state.cursorKey = key; // the range's moving end, so Shift+arrow carries on from it
-  } else if (ctrl || event.target.matches("input[type=checkbox]")) {
+    state.paneHidden = false;
+  } else if (ctrl || event.target.closest(".cell.select")) {
+    // The whole select cell, not just its 16px box: a near miss must not move the cursor.
     if (state.selected.has(key)) state.selected.delete(key);
     else state.selected.add(key);
     state.anchorKey = key;
@@ -745,6 +747,7 @@ function clearFilters() {
 
 function onOrders() {
   const orders = state.bridge.orders || [];
+  closeBulkPopover(); // what it said was true of the orders it was opened on
   state.records = orders.map((o, index) => ({ o: o, index: index, key: str(o.Order_Number), hay: searchText(o) }));
   renderKpis();
   refreshColumns();

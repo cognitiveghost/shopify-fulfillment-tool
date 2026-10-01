@@ -379,3 +379,18 @@ def test_a_shadow_in_an_inline_style_attribute_is_banned(tmp_path):
         tmp_path, "page.html", '<div style="box-shadow: var(--card-shadow)"></div>\n'
     )
     assert out == ["1: banned: box-shadow"]
+    # A trailing semicolon, or a declaration after it, must not launder it.
+    closed = _scan_asset(
+        tmp_path,
+        "closed.html",
+        '<div style="box-shadow: var(--card-shadow);"></div>\n'
+        "<div style='color: inherit; box-shadow: none; margin: 0'></div>\n",
+    )
+    assert closed == ["1: banned: box-shadow", "2: banned: box-shadow"]
+    # A stylesheet rule sharing a line with a closed style attribute is clean.
+    sheet = _scan_asset(
+        tmp_path,
+        "sheet.html",
+        '<p style="margin: 0"></p><style>.a { box-shadow: none; }</style>\n',
+    )
+    assert sheet == []
