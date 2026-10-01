@@ -21,6 +21,8 @@ const NUMBER = new Intl.NumberFormat("en-US");
 const CHEVRON_DOWN = "m6 9 6 6 6-6";
 const CHEVRON_UP = "m18 15-6-6-6 6";
 const CHECK = "M20 6 9 17l-5-5";
+// Lucide info, as one path: a circle and its two strokes.
+const INFO = "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM12 16v-4M12 8h.01";
 
 // Widths are the canvas's (W3); a column grows to its widest real value but
 // never reflows after that. Only Customer stretches (9.15). The registry
@@ -242,41 +244,71 @@ function reportSelection() {
   state.bridge.setSelection(state.view.filter((r) => state.selected.has(r.key)).map((r) => r.key));
 }
 
+function kpiCell(key, label, value, sub, dot) {
+  const cell = document.createElement("div");
+  cell.className = "kpi" + (key === "oldest" ? " kpi-wide" : "");
+  cell.dataset.kpi = key;
+  const head = document.createElement("div");
+  head.className = "kpi-label";
+  if (dot) {
+    const mark = document.createElement("span");
+    mark.className = "kpi-dot " + dot;
+    head.appendChild(mark);
+  }
+  head.appendChild(document.createTextNode(label));
+  cell.appendChild(head);
+  for (const [cls, text] of [["kpi-value", value], ["kpi-sub", sub]]) {
+    const part = document.createElement("div");
+    part.className = cls;
+    part.textContent = text;
+    cell.appendChild(part);
+  }
+  return cell;
+}
+
+// Until a price column is mapped the cell is a hint with the way to fix it.
+function valueHint() {
+  const cell = document.createElement("div");
+  cell.className = "kpi kpi-hint";
+  cell.dataset.kpi = "value";
+  cell.innerHTML = svg(INFO, "glyph");
+  const body = document.createElement("div");
+  body.className = "kpi-hint-body";
+  const text = document.createElement("span");
+  text.textContent = "Order value shows once a price column is mapped.";
+  const link = document.createElement("button");
+  link.type = "button";
+  link.id = "map-columns";
+  link.className = "btn link";
+  link.textContent = "Map columns";
+  link.addEventListener("click", () => state.bridge && state.bridge.openColumnMapping());
+  body.append(text, link);
+  cell.appendChild(body);
+  return cell;
+}
+
 function renderKpis() {
   const s = (state.bridge && state.bridge.summary) || {};
   const has = s.orders !== undefined;
   const oldest = has ? s.oldest : null;
-  let valueSub = "";
-  if (has) {
-    valueSub = s.value_total === null ? "No price column mapped" : "of " + fmtCompact(s.value_total) + " analysed";
-  }
-  const cards = [
-    ["orders", "Orders", has ? fmtInt(s.orders) : DASH,
-      has ? NUMBER.format(s.lines) + " lines · " + NUMBER.format(s.skus) + " SKUs touched" : ""],
-    ["fulfillable", "Fulfillable", has ? fmtInt(s.fulfillable) : DASH,
-      has && s.orders ? Math.round((100 * s.fulfillable) / s.orders) + "% of orders" : ""],
-    ["blocked", "Blocked", has ? fmtInt(s.blocked) : DASH,
-      has ? NUMBER.format(s.blocked_lines) + " lines, " + NUMBER.format(s.blocked_skus) + " SKUs" : ""],
-    ["labels", "Labels", has ? fmtInt(s.fulfillable) : DASH,
-      has ? (s.labels_by_courier || []).map((p) => p[0] + " " + NUMBER.format(p[1])).join(" · ") : ""],
-    ["value", "Value ready", has && s.value_ready !== null ? fmtCompact(s.value_ready) : DASH, valueSub],
-    ["oldest", "Oldest waiting", oldest ? fmtAge(oldest.created_at) : DASH,
-      oldest ? "order " + oldest.order_number : ""],
+  const cells = [
+    kpiCell("orders", "Orders", has ? fmtInt(s.orders) : DASH,
+      has ? NUMBER.format(s.lines) + " lines · " + NUMBER.format(s.skus) + " SKUs touched" : ""),
+    kpiCell("fulfillable", "Fulfillable", has ? fmtInt(s.fulfillable) : DASH,
+      has && s.orders ? Math.round((100 * s.fulfillable) / s.orders) + "% of orders" : "", "success"),
+    kpiCell("blocked", "Blocked", has ? fmtInt(s.blocked) : DASH,
+      has ? NUMBER.format(s.blocked_lines) + " lines, " + NUMBER.format(s.blocked_skus) + " SKUs" : "", "danger"),
+    kpiCell("labels", "Labels", has ? fmtInt(s.fulfillable) : DASH,
+      has ? (s.labels_by_courier || []).map((p) => p[0] + " " + NUMBER.format(p[1])).join(" · ") : ""),
+    kpiCell("oldest", "Oldest waiting", oldest ? fmtAge(oldest.created_at) : DASH,
+      oldest ? "order " + oldest.order_number : ""),
+    has && s.value_total === null
+      ? valueHint()
+      : kpiCell("value", "Value ready", has && s.value_ready !== null ? fmtCompact(s.value_ready) : DASH,
+        has ? "across " + plural(s.fulfillable, "fulfillable order") : ""),
   ];
   els.kpis.classList.toggle("has-wide", Boolean(oldest));
-  els.kpis.textContent = "";
-  for (const [key, label, value, sub] of cards) {
-    const card = document.createElement("div");
-    card.className = "kpi" + (key === "oldest" ? " kpi-wide" : "");
-    card.dataset.kpi = key;
-    for (const [cls, text] of [["kpi-label", label], ["kpi-value", value], ["kpi-sub", sub]]) {
-      const part = document.createElement("div");
-      part.className = cls;
-      part.textContent = text;
-      card.appendChild(part);
-    }
-    els.kpis.appendChild(card);
-  }
+  els.kpis.replaceChildren(...cells);
 }
 
 function renderChips() {

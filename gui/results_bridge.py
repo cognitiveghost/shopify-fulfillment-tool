@@ -10,7 +10,8 @@ docs/superpowers/specs/2026-09-11-phase9-bundle11-seam-design.md, as amended
 by Bundle 12 (docs/superpowers/specs/2026-09-11-phase9-bundle12-results-doc-design.md
 section 5) and Bundle 13
 (docs/superpowers/specs/2026-09-11-phase9-bundle13-pane-columns-design.md
-section 4). Add a member there before adding it here.
+section 4). Add a member there before adding it here. Phase 2 added
+`openColumnMapping` (docs/superpowers/specs/2026-10-01-ui-refresh-phase2-results-kit-design.md section 6.3).
 """
 
 from pathlib import Path
@@ -95,6 +96,8 @@ class ResultsBridge(QObject):
     bulkOrderRemovalRequested = Signal(list, str)
     bulkExportRequested = Signal(list, str)
     undoRequested = Signal()
+    # Python-facing (phase 2): the KPI hint's link to the column mappings.
+    columnMappingRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -163,6 +166,10 @@ class ResultsBridge(QObject):
     @Slot()
     def openScreenMenu(self) -> None:
         self.screenMenuRequested.emit()
+
+    @Slot()
+    def openColumnMapping(self) -> None:
+        self.columnMappingRequested.emit()
 
     @Slot(str)
     def holdOrder(self, order_number) -> None:

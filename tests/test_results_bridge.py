@@ -294,3 +294,12 @@ def test_tag_categories_notify(qtbot):
     with qtbot.waitSignal(bridge.tagCategoriesChanged, timeout=1000):
         bridge.set_tag_categories({"prio": {"label": "Priority", "tags": ["vip"]}})
     assert bridge.tagCategories["prio"]["tags"] == ["vip"]
+
+
+def test_open_column_mapping_is_a_request_python_hears(qapp):
+    """Phase 2 spec section 6.3: the KPI hint's Map columns link."""
+    bridge = ResultsBridge()
+    seen = []
+    bridge.columnMappingRequested.connect(lambda: seen.append(1))
+    bridge.openColumnMapping()
+    assert seen == [1]

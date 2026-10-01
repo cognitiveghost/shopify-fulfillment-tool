@@ -698,6 +698,10 @@ class UIManager:
         bridge.columnSettingsChanged.connect(
             lambda s: self.mw.schedule_results_columns_save(s)
         )
+        # The KPI strip's hint: straight to the page that maps the price column.
+        bridge.columnMappingRequested.connect(
+            lambda: actions().open_settings_window(page="Orders Mapping")
+        )
 
         # Bundle 14: the selection bar's verbs. The page sends the order list
         # it counted, so the set written is the set the button named -- each

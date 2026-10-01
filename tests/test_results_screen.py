@@ -352,3 +352,14 @@ def test_opening_a_session_reads_its_lots(main_window, tmp_path, monkeypatch):
     main_window.load_existing_session(str(tmp_path))
     assert asked == [str(tmp_path)]
     assert main_window.analysis_results_df["Lot_Details"].iloc[0][0]["batch"] == "B1"
+
+
+def test_map_columns_opens_the_orders_mapping_page(main_window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        main_window.actions_handler,
+        "open_settings_window",
+        lambda page=None: opened.append(page),
+    )
+    main_window.results_bridge.openColumnMapping()
+    assert opened == ["Orders Mapping"]

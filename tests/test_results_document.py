@@ -507,3 +507,46 @@ def test_the_selection_ring_closes_across_the_frozen_cells(qtbot, doc):
     image = view.grab().toImage()
     for x in (int(rect["left"]) + 16, 40, 100):  # the checkbox, then the chip
         assert image.pixelColor(x, top).name() == ring, f"gap at x={x}"
+
+
+def test_the_kpi_strip_is_one_card(qtbot, doc):
+    view, _ = doc
+    assert (
+        _eval(qtbot, view, "document.getElementById('kpis').classList.contains('card')")
+        is True
+    )
+    # Cells, not cards: five of them at this width, the wide one hidden.
+    assert _eval(qtbot, view, "document.querySelectorAll('#kpis .kpi').length") == 6
+    assert _eval(qtbot, view, "document.querySelectorAll('#kpis .card').length") == 0
+    assert (
+        _eval(qtbot, view, "document.querySelectorAll('#kpis .kpi-dot').length") == 2
+    )
+
+
+def test_a_mapped_price_gives_the_value_ready_cell(qtbot, doc):
+    view, _ = doc
+    _until_js(
+        qtbot,
+        view,
+        "document.querySelector('[data-kpi=value] .kpi-label') !== null"
+        " && document.querySelector('[data-kpi=value] .kpi-sub').textContent !== ''",
+    )
+    assert _text(qtbot, view, "[data-kpi=value] .kpi-label") == "Value ready"
+    assert (
+        _text(qtbot, view, "[data-kpi=value] .kpi-sub")
+        == "across 281 fulfillable orders"
+    )
+    assert _eval(qtbot, view, "document.getElementById('map-columns') === null") is True
+
+
+def test_an_unmapped_price_gives_a_hint_that_opens_the_mapping(qtbot, doc):
+    view, bridge = doc
+    bridge.set_orders(results_lines().drop(columns=["Total_Price"]))
+    _until_js(qtbot, view, "document.getElementById('map-columns') !== null")
+    assert (
+        "Order value shows once a price column is mapped."
+        in _text(qtbot, view, "[data-kpi=value]")
+    )
+    assert _text(qtbot, view, "#map-columns") == "Map columns"
+    with qtbot.waitSignal(bridge.columnMappingRequested, timeout=5000):
+        _eval(qtbot, view, "document.getElementById('map-columns').click(); true")
