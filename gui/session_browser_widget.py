@@ -22,15 +22,12 @@ from shopify_tool.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
-# What a status or a comment change can alter in session_info.json, and so
-# what Undo puts back. A key the session did not have is restored as absent.
-_UNDO_KEYS = (
-    "status",
-    "status_manually_set",
-    "status_updated_at",
-    "comments",
-    "last_updated",
-)
+# What each kind of change writes in session_info.json, and so what its Undo
+# puts back: SessionManager.update_session_status stamps the first three,
+# update_session_info({"comments": ...}) the other two. A key the session did
+# not have is restored as absent. Undo touches nothing its change did not.
+_STATUS_KEYS = ("status", "status_manually_set", "status_updated_at")
+_COMMENT_KEYS = ("comments", "last_updated")
 
 
 def _what(entries: list[dict]) -> str:
@@ -279,14 +276,18 @@ class SessionBrowserWidget(QWidget):
         so nothing from the page is ever used as a path.
         """
         wanted = set(names)
-        return [
-            entry
-            for entry in self.sessions_data
-            if isinstance(entry, dict)
-            and isinstance(entry.get("session_name"), str)
-            and entry["session_name"] in wanted
-            and entry.get("session_path")
-        ]
+        found = {}
+        for entry in self.sessions_data:
+            if (
+                isinstance(entry, dict)
+                and isinstance(entry.get("session_name"), str)
+                and entry["session_name"] in wanted
+                and entry.get("session_path")
+            ):
+                # A hand-copied folder repeats a name, and with it the path:
+                # that is one session, acted on once.
+                found.setdefault(entry["session_path"], entry)
+        return list(found.values())
 
     def _open(self, name: str) -> None:
         for entry in self._entries([name]):
@@ -307,6 +308,7 @@ class SessionBrowserWidget(QWidget):
             lambda path: self.session_manager.update_session_status(
                 path, status, manual=True
             ),
+            undo_keys=_STATUS_KEYS,
             done=f"Set {{what}} to {status.capitalize()}",
             one_failed="The status wasn't updated",
         )
@@ -317,11 +319,12 @@ class SessionBrowserWidget(QWidget):
             lambda path: self.session_manager.update_session_info(
                 path, {"comments": text}
             ),
+            undo_keys=_COMMENT_KEYS,
             done="Comment saved on {what}" if text else "Comment cleared on {what}",
             one_failed="The comment wasn't saved",
         )
 
-    def _write(self, names, write, *, done: str, one_failed: str) -> None:
+    def _write(self, names, write, *, undo_keys, done: str, one_failed: str) -> None:
         """Apply one change to every named session, then say so once.
 
         One banner for the sessions that failed, one toast with Undo for the
@@ -332,13 +335,24 @@ class SessionBrowserWidget(QWidget):
         if not entries:
             return
         written = []
+        undo = {}
         for entry in entries:
+            path = entry["session_path"]
             try:
-                write(entry["session_path"])
+                # What Undo puts back comes from the file, not from the list
+                # on screen: the list is as old as the last refresh, and
+                # another PC may have written to the session since.
+                # ponytail: this read is outside the write's lock, so a write
+                # from another PC in the few ms between the two is still lost
+                # on Undo. If that ever shows, have the SessionManager writers
+                # return the prior values from inside their lock.
+                stored = self.session_manager.get_session_info(path) or {}
+                write(path)
             except Exception:
                 logger.exception(f"Failed to update {entry['session_name']}")
             else:
                 written.append(entry)
+                undo[path] = {key: stored.get(key) for key in undo_keys}
 
         failed = len(entries) - len(written)
         if failed:
@@ -350,10 +364,7 @@ class SessionBrowserWidget(QWidget):
                 "Details are in Logs.",
             )
         if written:
-            self._undo = {
-                entry["session_path"]: {key: entry.get(key) for key in _UNDO_KEYS}
-                for entry in written
-            }
+            self._undo = undo
             self.bridge.raise_toast(done.format(what=_what(written)), True)
         self.refresh_sessions(quiet=True)
 

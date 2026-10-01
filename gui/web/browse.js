@@ -5,7 +5,8 @@
 // counts and groups rows it already holds, and reports what the operator asks
 // for through the bridge's named slots, always by session name.
 //
-// ponytail: the list is redrawn whole on every change, with no row windowing.
+// ponytail: the list is redrawn whole on every change but a row's own check
+// (see onListClick), with no row windowing.
 // A client has tens of sessions and archived ones are hidden by default.
 // Window the rows, as results.js does, if a client ever shows thousands.
 "use strict";
@@ -185,7 +186,7 @@ function rowHtml(row) {
   const comment = row.comment
     ? `<span class="cell-comment" title="${esc(row.comment)}">${esc(row.comment)}</span>`
     : `<span class="cell-comment none">—</span>`;
-  return `<div class="row grid${on ? " checked" : ""}" data-row="${name}">
+  return `<div class="row grid${on ? " checked" : ""}" data-row="${name}" title="Double-click to open">
     <span class="cell-check"><input type="checkbox" data-key="row-${name}" aria-label="Select ${name}"${on ? " checked" : ""}></span>
     <span class="cell-name">${name}</span>
     <span class="cell-age${row.age_warn ? " warn" : ""}" title="${esc(row.age_title)}">${esc(row.age)}</span>
@@ -319,6 +320,7 @@ function onState() {
     view.query = "";
     view.showArchived = false;
     els.search.value = "";
+    els.toastUndo.hidden = true; // Python forgot the undo with the client
     uncheckAll();
   } else if (s.view === "loading") {
     uncheckAll();
@@ -427,9 +429,18 @@ function onListClick(event) {
   const row = event.target.closest(".row");
   if (!row) return;
   const name = row.dataset.row;
-  if (view.checked.has(name)) view.checked.delete(name);
-  else view.checked.add(name);
-  render();
+  const on = !view.checked.has(name);
+  if (on) view.checked.add(name);
+  else view.checked.delete(name);
+  // In place, not render(): a redraw between the two clicks of a double-click
+  // detaches the row the second click landed on, and Chromium then sends the
+  // dblclick nowhere. A hand-copied folder repeats a name: its rows check together.
+  for (const twin of els.list.querySelectorAll(".row")) {
+    if (twin.dataset.row !== name) continue;
+    twin.classList.toggle("checked", on);
+    twin.querySelector("input").checked = on;
+  }
+  renderBar(false, visibleRows());
 }
 
 function onListDoubleClick(event) {

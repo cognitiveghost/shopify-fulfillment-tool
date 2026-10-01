@@ -296,7 +296,12 @@ count in mono caption `--text-secondary`; the note in caption `--text-secondary`
 
 **A row** is `--row-height` high with a `--border-subtle` rule under it, on the grid of §5.3. Hover:
 `--hover`. Checked: `--selection-bg` and a 3px `--selection-border` strip on its left edge (a positioned
-`::before`, not a shadow). Clicking a row toggles its checkbox; double-clicking opens it.
+`::before`, not a shadow). Clicking a row toggles its checkbox; double-clicking opens it. `title` is
+"Double-click to open", as in the mockup; a cell with its own `title` shows that instead.
+
+A row's click is drawn in place (the row's class, its checkbox, the bar), not by redrawing the list. A
+redraw between the two clicks of a double-click detaches the row the second click landed on, and Chromium
+then delivers the `dblclick` nowhere (found in review; a test sends real mouse events).
 
 | cell | drawing |
 |---|---|
@@ -354,7 +359,7 @@ checkbox or the selection bar's controls, the rows' checkboxes, the footer link.
 After a render, focus returns to the element with the same `data-key` (a row's checkbox is keyed by its
 session name), as on Setup.
 
-`# ponytail:` the list is redrawn whole on every change, with no row virtualisation. A client has tens of
+`# ponytail:` the list is redrawn whole on every change but a row's own check, with no row virtualisation. A client has tens of
 sessions and archived ones are hidden by default. Window the rows, as the Results table does, if a client
 ever shows thousands.
 
@@ -388,7 +393,8 @@ The status combo is gone, so the server-side `status_filter` argument is no long
 
 ### 6.2 What the page asks for
 
-`_entries(names)` returns the loaded entries whose `session_name` is in `names`, in list order.
+`_entries(names)` returns the loaded entries whose `session_name` is in `names`, in list order, one per
+path: a hand-copied folder repeats a name and so a path, and is acted on once.
 
 | request | does |
 |---|---|
@@ -412,9 +418,17 @@ session's name for one, "{n} sessions" for several, counting the ones that were 
 
 ### 6.3 Undo
 
-Before a write, the widget snapshots each entry's `status`, `status_manually_set`, `status_updated_at`,
-`comments` and `last_updated` (a missing key as `None`). After it, `_undo` is `{path: snapshot}` for the
+Just before each write, the widget reads the session's file (`get_session_info`) and snapshots the fields
+that write stamps (a missing key as `None`): `status`, `status_manually_set` and `status_updated_at` for a
+status change; `comments` and `last_updated` for a comment. After it, `_undo` is `{path: snapshot}` for the
 sessions that were written. One change is remembered; the next one replaces it, and a client change clears it.
+
+The snapshot is the file, not the loaded list, and only the change's own fields (changed in review). The list
+is as old as the last refresh, so a snapshot of it would put back hours-old values over what another PC wrote
+since, and restoring all five fields would revert a status when a comment is undone, or a comment when a
+status is. Two windows stay open and are accepted: the few ms between the read and the write (the read is
+outside the write's lock), and the time between a change and its Undo, in which another PC's write to the
+same fields is overwritten. ADR 0011 leaves the Results undo history last-writer-wins in the same way.
 
 `undoRequested` calls `SessionManager.restore_session_fields(path, snapshot)` for each, clears `_undo`, and
 refreshes quietly. A failure is logged and counted, and the banner reads "The change wasn't undone" (one) or
@@ -503,7 +517,8 @@ write, the `title` tooltips.
 | Page: toast | `test_browse_page.py` | An undoable toast shows Undo, which calls `undo`; a plain one does not; dismiss hides it |
 | Widget: loading | `test_session_browser_reload.py` (adapted), `test_session_browser_widget.py` (new) | The hidden-load retry and the client-switch rules as today; a loud refresh pushes `loading`; a load error pushes `failed`; a client change empties the rows; a quiet refresh keeps them |
 | Widget: writes | `test_session_browser_widget.py` | Status and comment reach `SessionManager` for every named entry with `manual=True`; an unknown name is ignored; the toast texts; one failure in three shows the banner and still toasts for two; open and export emit paths |
-| Widget: Undo | `test_session_browser_widget.py` | On a real `SessionManager` in `tmp_path`: archive two sessions then Undo restores status, the hand-set flag and `status_updated_at`; a comment then Undo restores the comment and `last_updated`; a second Undo does nothing |
+| Widget: Undo | `test_session_browser_widget.py` | On a real `SessionManager` in `tmp_path`: archive two sessions then Undo restores status, the hand-set flag and `status_updated_at`; a comment then Undo restores the comment and `last_updated`; a second Undo does nothing; with a second `SessionManager` as another PC, undoing an archive keeps a comment written since the load, and undoing a comment keeps a status set since the load |
+| Page: real input | `test_browse_page.py` | Real mouse events on the view: a double-click opens the session and leaves it unchecked; a click on a row and on its checkbox checks it |
 | Lifecycle sync | `test_session_browser_lifecycle_sync.py` | Unchanged: it tests the worker |
 | Shell | `test_shell.py` | Tab 2 holds a `QWebEngineView`; the inset is 0 on Browse and 5 on Logs |
 | Toast router | `test_toast_router.py` | On Browse a toast reaches `session_browser.bridge` and no Qt toast shows; the Qt case moves to Logs |

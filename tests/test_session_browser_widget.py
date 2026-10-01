@@ -13,7 +13,7 @@ import pytest
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 import gui.session_browser_widget as browser_module
-from gui.session_browser_widget import _UNDO_KEYS, SessionBrowserWidget
+from gui.session_browser_widget import SessionBrowserWidget
 from shopify_tool.session_manager import SessionManager
 
 NAMES = ["2026-09-30_2", "2026-09-30_1", "2026-09-29_1"]
@@ -48,6 +48,11 @@ def browser(qtbot, monkeypatch, told):
     monkeypatch.setattr(SessionBrowserWidget, "USE_ASYNC", False)
     manager = Mock()
     manager.list_client_sessions.return_value = [_entry(name) for name in NAMES]
+    # The file holds what the list shows, until a test says another PC wrote.
+    manager.get_session_info.side_effect = lambda path: next(
+        (e for e in manager.list_client_sessions.return_value if e["session_path"] == path),
+        None,
+    )
     widget = SessionBrowserWidget(manager)
     qtbot.addWidget(widget)
     widget.show()
@@ -275,10 +280,15 @@ def test_the_empty_panels_button_asks_for_a_new_session(browser, qtbot):
 # --- Undo --------------------------------------------------------------------
 
 
-def test_undo_hands_back_what_each_session_held(browser):
+def test_undoing_a_status_hands_back_the_status_fields_only(browser):
     browser.session_manager.list_client_sessions.return_value = [
         _entry(NAMES[0], comments="first", last_updated="2026-09-30T09:00:00+00:00"),
-        _entry(NAMES[1], status="completed", status_manually_set=True),
+        _entry(
+            NAMES[1],
+            status="completed",
+            status_manually_set=True,
+            status_updated_at="2026-09-29T17:00:00+00:00",
+        ),
     ]
     browser.refresh_sessions()
 
@@ -288,28 +298,61 @@ def test_undo_hands_back_what_each_session_held(browser):
     assert browser.session_manager.restore_session_fields.call_args_list == [
         call(
             _path(NAMES[0]),
-            {
-                "status": "active",
-                "status_manually_set": None,
-                "status_updated_at": None,
-                "comments": "first",
-                "last_updated": "2026-09-30T09:00:00+00:00",
-            },
+            {"status": "active", "status_manually_set": None, "status_updated_at": None},
         ),
         call(
             _path(NAMES[1]),
             {
                 "status": "completed",
                 "status_manually_set": True,
-                "status_updated_at": None,
-                "comments": "",
-                "last_updated": None,
+                "status_updated_at": "2026-09-29T17:00:00+00:00",
             },
         ),
     ]
-    assert set(_UNDO_KEYS) == set(
-        browser.session_manager.restore_session_fields.call_args_list[0].args[1]
+
+
+def test_undoing_a_comment_hands_back_the_comment_and_its_timestamp_only(browser):
+    browser.session_manager.list_client_sessions.return_value = [
+        _entry(NAMES[0], comments="first", last_updated="2026-09-30T09:00:00+00:00"),
+        _entry(NAMES[1]),
+    ]
+    browser.refresh_sessions()
+
+    browser.bridge.setComment(NAMES[:2], "late van")
+    browser.bridge.undo()
+
+    assert browser.session_manager.restore_session_fields.call_args_list == [
+        call(_path(NAMES[0]), {"comments": "first", "last_updated": "2026-09-30T09:00:00+00:00"}),
+        call(_path(NAMES[1]), {"comments": "", "last_updated": None}),
+    ]
+
+
+def test_undo_remembers_the_file_not_the_list_on_screen(browser):
+    # Another PC completed the session after this one loaded its list.
+    on_disk = _entry(NAMES[0], status="completed", status_manually_set=True)
+    browser.session_manager.get_session_info.side_effect = lambda _path: on_disk
+
+    browser.bridge.setStatus([NAMES[0]], "archived")
+    browser.bridge.undo()
+
+    browser.session_manager.restore_session_fields.assert_called_once_with(
+        _path(NAMES[0]),
+        {"status": "completed", "status_manually_set": True, "status_updated_at": None},
     )
+
+
+def test_a_name_two_entries_share_is_one_session(browser):
+    # A hand-copied folder repeats its session_name, and so its path.
+    browser.session_manager.list_client_sessions.return_value = [_entry(NAMES[0]), _entry(NAMES[0])]
+    browser.refresh_sessions()
+    opened = []
+    browser.session_selected.connect(opened.append)
+
+    browser.bridge.openSession(NAMES[0])
+    browser.bridge.setStatus([NAMES[0]], "archived")
+
+    assert opened == [_path(NAMES[0])]
+    browser.session_manager.update_session_status.assert_called_once()
 
 
 def test_undo_is_spent_once_and_does_nothing_with_nothing_to_undo(browser):
@@ -433,3 +476,64 @@ def test_a_session_that_left_the_share_is_reported_and_the_rest_are_written(real
     assert _stored(paths[1])["status"] == "completed"
     assert toasts == [(f"Set {names[1]} to Completed", True)]
     assert [row["name"] for row in widget.bridge.state["rows"]] == [names[1]]
+
+
+@pytest.fixture
+def other_pc(real):
+    """A second SessionManager on the same share: another PC."""
+    widget, _paths = real
+    return SessionManager(widget.session_manager.profile_manager)
+
+
+def test_undoing_an_archive_keeps_a_comment_another_pc_wrote_since_the_load(real, other_pc):
+    widget, paths = real
+    name = Path(paths[0]).name
+    other_pc.update_session_info(paths[0], {"comments": "courier moved to 16:00"})
+
+    widget.bridge.setStatus([name], "archived")
+    widget.bridge.undo()
+
+    after = _stored(paths[0])
+    assert after["status"] == "active"
+    assert after["comments"] == "courier moved to 16:00"
+
+
+def test_undoing_a_comment_keeps_a_status_another_pc_set_since_the_load(real, other_pc):
+    widget, paths = real
+    name = Path(paths[0]).name
+    other_pc.update_session_status(paths[0], "completed", manual=True)
+    before = _stored(paths[0])
+
+    widget.bridge.setComment([name], "note")
+    widget.bridge.undo()
+
+    assert _stored(paths[0]) == before
+
+
+def test_undoing_the_second_of_two_changes_keeps_the_first(real):
+    widget, paths = real
+    name = Path(paths[0]).name
+    widget.bridge.setStatus([name], "completed")
+    widget.bridge.setComment([name], "note")
+
+    widget.bridge.undo()
+
+    after = _stored(paths[0])
+    assert after["status"] == "completed"
+    assert after["status_manually_set"] is True
+    assert after["comments"] == "first"
+
+
+def test_a_comment_on_a_session_with_an_unknown_status_can_be_undone(real, told):
+    widget, paths = real
+    name = Path(paths[0]).name
+    info = _stored(paths[0])
+    info["status"] = "frozen"
+    (Path(paths[0]) / "session_info.json").write_text(json.dumps(info))
+
+    widget.bridge.setComment([name], "note")
+    widget.bridge.undo()
+
+    assert told == []
+    assert _stored(paths[0])["comments"] == "first"
+    assert _stored(paths[0])["status"] == "frozen"

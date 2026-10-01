@@ -68,11 +68,15 @@ pass and fail counts. On this branch at d952bbe (code identical to `origin/main`
 
 1. **A session name or a comment carrying quotes, angle brackets or spaces** (a folder someone copied by
    hand, a comment pasted from an email). It is drawn as text, the row can still be checked, focus survives
-   the redraw, and Python is given the name exactly (tests in Task 5).
+   the redraw, and Python is given the name exactly (tests in Task 5). *Corrected in review (Stage C):* a
+   row's click no longer redraws the list, because the redraw swallowed a real double-click (spec §5.6).
 2. **Checked rows that leave the tab** (archiving two sessions on All). The selection bar goes, an open menu
    closes, and nothing acts on rows the operator can no longer see (test in Task 5).
 3. **Packing Tool or another PC writes the session between a change and its Undo.** Undo puts back only the
    five fields the change could alter; packing progress written in between survives (test in Task 6).
+   *Corrected in review (Stage C):* the code below restored all five fields from the loaded list, whatever
+   the change. Undo now restores only the fields its change stamps, read from the file just before the
+   write; spec §6.3 has the rule. The Task 6 widget code and its Undo tests in this plan are superseded.
 4. **A session folder that left the share between the load and a write.** It is counted and reported in the
    banner, the other sessions are written, and the list reloads without it (test in Task 6).
 5. **A narrow window.** The count label goes under 980px, the card keeps a 780px minimum and the page

@@ -7,7 +7,10 @@ Every test pushes a state built by browse_state() and reads the DOM back.
 import json
 
 import pytest
+from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QApplication
 from test_browse_state import D, H, make_state, session
 from test_results_bridge import _eval, _rgb, _until_js
 
@@ -143,6 +146,47 @@ def _never(qtbot, signal):
     """Give a signal that must not fire the time to fire."""
     with qtbot.assertNotEmitted(signal, wait=300):
         pass
+
+
+# Real mouse events, sent to the widget Chromium reads its input from. A
+# synthetic .click() or dispatchEvent cannot show an event that is lost because
+# the page redrew between a press and what follows it.
+_clock = [100_000]  # event timestamps in ms: Chromium counts a double-click by them
+
+
+def _mouse(view, kind, point, gap):
+    target = view.focusProxy()
+    _clock[0] += gap
+    buttons = Qt.NoButton if kind == QEvent.MouseButtonRelease else Qt.LeftButton
+    event = QMouseEvent(
+        kind, QPointF(point), QPointF(target.mapToGlobal(point)), Qt.LeftButton, buttons, Qt.NoModifier
+    )
+    event.setTimestamp(_clock[0])
+    QApplication.sendEvent(target, event)
+
+
+def _centre(qtbot, view, selector):
+    x, y = _json(
+        qtbot,
+        view,
+        f"(function () {{ var r = document.querySelector({selector!r}).getBoundingClientRect();"
+        " return [r.left + r.width / 2, r.top + r.height / 2]; })()",
+    )
+    return QPoint(int(x), int(y))
+
+
+def _real_click(qtbot, view, selector):
+    point = _centre(qtbot, view, selector)
+    _mouse(view, QEvent.MouseButtonPress, point, 2000)
+    _mouse(view, QEvent.MouseButtonRelease, point, 20)
+
+
+def _real_double_click(qtbot, view, selector):
+    point = _centre(qtbot, view, selector)
+    _real_click(qtbot, view, selector)
+    qtbot.wait(100)  # as a hand does it: the page has time to act on the first click
+    _mouse(view, QEvent.MouseButtonDblClick, point, 100)
+    _mouse(view, QEvent.MouseButtonRelease, point, 20)
 
 
 def test_the_page_carries_the_theme_marker_exactly_once():
@@ -554,6 +598,54 @@ def test_double_click_and_enter_open_the_session(qtbot, listed):
     assert opened.args == ["2026-09-28_1"]
 
 
+def test_a_real_double_click_opens_the_session_and_leaves_it_unchecked(qtbot, listed):
+    view, bridge = listed
+    with qtbot.waitSignal(bridge.openRequested, timeout=5000) as opened:
+        _real_double_click(qtbot, view, f"{_row('2026-09-29_1')} .cell-name")
+    assert opened.args == ["2026-09-29_1"]
+    assert _count(qtbot, view, ".row.checked") == 0
+    assert _hidden(qtbot, view, "selbar") is True
+
+
+def test_a_real_click_on_a_row_checks_it(qtbot, listed):
+    view, _bridge = listed
+    _real_click(qtbot, view, f"{_row('2026-09-29_1')} .cell-name")
+    _until_js(qtbot, view, "document.querySelectorAll('.row.checked').length === 1")
+    assert _eval(qtbot, view, f"document.querySelector('{_row('2026-09-29_1')} input').checked") is True
+    assert _text(qtbot, view, "#sel-count") == "1 selected"
+
+
+def test_a_real_click_on_a_checkbox_checks_its_row(qtbot, listed):
+    view, _bridge = listed
+    box = f"{_row('2026-09-29_1')} input"
+    _real_click(qtbot, view, box)
+    _until_js(qtbot, view, "document.querySelectorAll('.row.checked').length === 1")
+    assert _eval(qtbot, view, f"document.querySelector('{box}').checked") is True
+    assert _text(qtbot, view, "#sel-count") == "1 selected"
+
+
+def test_rows_that_share_a_name_check_together(qtbot, page):
+    # A hand-copied session folder repeats its session_name.
+    view, bridge = page
+    _show(qtbot, view, bridge, make_state([session("twin"), session("twin"), session("other")]))
+    _click(qtbot, view, _row("twin"))
+    assert _count(qtbot, view, ".row.checked") == 2
+    assert _count(qtbot, view, ".row.checked input:checked") == 2
+
+
+def test_a_row_says_how_to_open_it(qtbot, listed):
+    view, _bridge = listed
+    assert _eval(qtbot, view, f"document.querySelector('{_row('2026-09-29_1')}').title") == "Double-click to open"
+
+
+def test_another_client_takes_undo_off_the_toast(qtbot, listed):
+    view, bridge = listed
+    bridge.raise_toast("Set 2026-09-29_1 to Archived", True)
+    _until_js(qtbot, view, "document.getElementById('toast').hidden === false")
+    _show(qtbot, view, bridge, make_state(SESSIONS, client="BETA"))
+    assert _hidden(qtbot, view, "toast-undo") is True
+
+
 def test_up_and_down_walk_the_rows_across_groups(qtbot, listed):
     view, _bridge = listed
     last_attention = f"{_row('2026-09-23_1')} input"
@@ -564,7 +656,7 @@ def test_up_and_down_walk_the_rows_across_groups(qtbot, listed):
     assert _focused(qtbot, view) == "row-2026-09-23_1"
 
 
-def test_a_checked_checkbox_keeps_focus_through_the_redraw(qtbot, listed):
+def test_a_checked_checkbox_keeps_focus(qtbot, listed):
     view, _bridge = listed
     box = f"{_row('2026-09-29_1')} input"
     _eval(qtbot, view, f"document.querySelector('{box}').focus(); true")
