@@ -170,23 +170,13 @@
   z-index: var(--z-bar); /* over the sticky .header */
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 6px;
   height: var(--table-head-height);
-  padding: 0 var(--spacing-md) 0 var(--spacing-sm);
+  padding: 0 8px;
   background: var(--surface-raised);
   border-bottom: 1px solid var(--border-subtle);
 }
-/* Full-size controls do not fit a header row; the bar runs compact ones. */
-.selection-bar .btn { height: 24px; padding: 0 var(--spacing-sm); }
-.selection-counts { display: flex; align-items: baseline; gap: var(--spacing-sm); }
-.selection-count { color: var(--text-primary); font-weight: 700; }
-.selection-sub { color: var(--text-secondary); font-size: var(--type-caption-size); }
-.selection-separator {
-  width: 1px;
-  height: 20px;
-  margin: 0 var(--spacing-sm);
-  background: var(--border-subtle);
-}
+.selection-count { margin-right: 6px; font-weight: 700; white-space: nowrap; }
 
 .bulk-popover {
   position: absolute;
@@ -262,16 +252,20 @@
 }
 .rows .row:hover { background: var(--hover); }
 
-/* The selection ring: a closed rectangle, never a left border (F4). Drawn as
-   a pseudo-element, not an outline: the sticky select/status cells are
-   positioned, so they paint over anything the row itself draws. */
-.rows .row.selected { background: var(--selection-bg); }
-.rows .row.selected::after {
+/* A checked row is raised; the cursor row is tinted and wears a bar on its
+   left edge. The bar is a pseudo-element, not a border: the sticky select and
+   status cells are positioned, so they paint over anything the row draws. */
+.rows .row.selected { background: var(--surface-raised); }
+.rows .row.cursor { background: var(--selection-bg); }
+.rows .row.cursor::before {
   content: "";
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
   z-index: var(--z-sticky); /* over the sticky cells, which sit at auto */
-  border: 2px solid var(--selection-border);
+  background: var(--selection-border);
   pointer-events: none;
 }
 

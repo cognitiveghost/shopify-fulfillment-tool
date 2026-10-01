@@ -1,7 +1,9 @@
 // The results document (Bundle 12): KPI strip, filter bar and a windowed
 // order table over the bridge's `orders` and `summary`. The page owns sort,
-// search, filter chips and the selection gesture (ADR 0005). Python hears
-// only the selection and two commands. Numbers and copy:
+// search, filter chips and the selection gesture (ADR 0005). A click moves the
+// cursor; checkboxes, Ctrl and Shift build the checked set Python hears (phase 2
+// spec section 5.5). Python hears only the
+// selection and two commands. Numbers and copy:
 // docs/superpowers/specs/2026-09-11-phase9-bundle12-results-doc-design.md
 "use strict";
 
@@ -442,10 +444,12 @@ function renderHeader() {
       const box = document.createElement("input");
       box.type = "checkbox";
       box.tabIndex = -1;
-      box.setAttribute("aria-label", "Select every order shown");
+      // With anything checked the box clears; with nothing, it checks all shown.
+      box.title = picked > 0 ? "Clear selection" : "Select every order shown";
+      box.setAttribute("aria-label", box.title);
       box.checked = all;
       box.indeterminate = picked > 0 && !all;
-      box.addEventListener("click", () => selectAll(!all));
+      box.addEventListener("click", () => selectAll(picked === 0));
       cell.appendChild(box);
     } else {
       const sorted = Boolean(state.sort && state.sort.key === col.key);
@@ -584,9 +588,11 @@ function renderRows() {
 function rowElement(record, index) {
   const row = document.createElement("div");
   const selected = state.selected.has(record.key);
-  row.className = "row" + (selected ? " selected" : "");
+  const cursor = state.cursorKey === record.key;
+  row.className = "row" + (selected ? " selected" : "") + (cursor ? " cursor" : "");
   row.setAttribute("role", "row");
   row.setAttribute("aria-selected", String(selected));
+  if (cursor) row.setAttribute("aria-current", "true");
   row.dataset.order = record.key;
   row.dataset.index = String(index);
   row.style.top = index * state.rowH + "px";
@@ -652,6 +658,14 @@ function selectRange(fromKey, toKey, additive) {
   for (let i = Math.min(a, b); i <= Math.max(a, b); i++) state.selected.add(keys[i]);
 }
 
+// The cursor is the one order the pane shows. Asking for an order brings a
+// pane the operator hid back; a pane folded because the page is narrow stays.
+function moveCursor(key) {
+  state.cursorKey = key;
+  state.anchorKey = key;
+  state.paneHidden = false;
+}
+
 function onRowClick(event) {
   const row = event.target.closest(".row");
   if (!row || !row.dataset.order) return;
@@ -659,15 +673,14 @@ function onRowClick(event) {
   const ctrl = event.ctrlKey || event.metaKey;
   if (event.shiftKey && state.anchorKey !== null) {
     selectRange(state.anchorKey, key, ctrl);
+    state.cursorKey = key; // the range's moving end, so Shift+arrow carries on from it
   } else if (ctrl || event.target.matches("input[type=checkbox]")) {
     if (state.selected.has(key)) state.selected.delete(key);
     else state.selected.add(key);
     state.anchorKey = key;
   } else {
-    state.selected = new Set([key]);
-    state.anchorKey = key;
+    moveCursor(key);
   }
-  state.cursorKey = key;
   els.table.focus({ preventScroll: true });
   render();
 }
@@ -689,9 +702,13 @@ function onTableKey(event) {
     return;
   }
   if (event.key === "Escape") {
-    state.selected = new Set();
-    state.anchorKey = null;
-    state.cursorKey = null;
+    // Innermost first: the checked orders, then the cursor.
+    if (state.selected.size) {
+      state.selected = new Set();
+    } else {
+      state.cursorKey = null;
+      state.anchorKey = null;
+    }
     render();
     return;
   }
@@ -699,16 +716,19 @@ function onTableKey(event) {
   event.preventDefault();
   if (!state.view.length) return;
   const keys = state.view.map((r) => r.key);
-  const at = state.cursorKey === null ? -1 : keys.indexOf(state.cursorKey);
+  const from = state.cursorKey !== null ? state.cursorKey : state.anchorKey;
+  const at = from === null ? -1 : keys.indexOf(from);
   const next = Math.min(keys.length - 1, Math.max(0, at + (event.key === "ArrowDown" ? 1 : -1)));
-  // Shift keeps the anchor and re-spans to the cursor, so reversing shrinks.
-  if (event.shiftKey && state.anchorKey !== null) {
-    selectRange(state.anchorKey, keys[next], false);
+  if (event.shiftKey) {
+    // The anchor stays and the range re-spans to the cursor, so reversing shrinks.
+    const anchor = state.anchorKey !== null ? state.anchorKey : keys[Math.max(0, at)];
+    selectRange(anchor, keys[next], false);
+    state.anchorKey = anchor;
+    state.cursorKey = keys[next];
+    state.paneHidden = false;
   } else {
-    state.selected = new Set([keys[next]]);
-    state.anchorKey = keys[next];
+    moveCursor(keys[next]);
   }
-  state.cursorKey = keys[next];
   scrollIntoView(next);
   render();
 }
@@ -746,10 +766,9 @@ function bind() {
     columnsButton: "columns-button", pane: "pane", paneStrip: "pane-strip",
     paneShow: "pane-show", columnsPanel: "columns-panel",
     selectionBar: "selection-bar", selectionCount: "selection-count",
-    selectionSub: "selection-sub", selectionMark: "selection-mark",
+    selectionMark: "selection-mark",
     selectionHold: "selection-hold", selectionMore: "selection-more",
     selectionMenu: "selection-menu", selectionExclude: "selection-exclude",
-    selectionClear: "selection-clear",
     toast: "toast", toastText: "toast-text", toastBadge: "toast-badge",
     toastUndo: "toast-undo",
   };

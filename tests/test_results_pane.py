@@ -348,3 +348,15 @@ def test_a_narrow_page_collapses_the_pane_until_asked(qtbot, doc):
         view,
         "(s => s.scrollWidth > s.clientWidth)(document.getElementById('scroller'))",
     )
+
+
+def test_clicking_a_row_brings_a_hidden_pane_back(qtbot, doc):
+    view, _ = doc
+    _js(qtbot, view, "document.getElementById('pane-hide').click()")
+    _until_js(
+        qtbot, view, "document.getElementById('table-area').dataset.slot === 'rail'"
+    )
+    _js(qtbot, view, "document.querySelector('#rows .row[data-order=\"#10445\"]').click()")
+    _until_js(
+        qtbot, view, "document.getElementById('table-area').dataset.slot === 'pane'"
+    )

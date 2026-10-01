@@ -11,7 +11,7 @@ from gui.results_bridge import mount_results_page
 
 
 def selection_bar_orders():
-    """Three orders: 7 + 5 + 7 = 19 units, 150.00 + 184.60 = 334.60, 2 couriers."""
+    """Three orders; 10445 is blocked, the other two fulfillable."""
     rows = [
         {
             "Order_Number": "10443",
@@ -43,7 +43,7 @@ def selection_bar_orders():
             "Product_Name": "Product TS-9999-Z",
             "Quantity": 7,
             "Final_Stock": 12,
-            "Order_Fulfillment_Status": "Fulfillable",
+            "Order_Fulfillment_Status": "Not Fulfillable",
             "Shipping_Provider": "DPD",
             "Total_Price": 99.00,
             "Internal_Tags": "[]",
@@ -90,43 +90,66 @@ def test_the_bar_is_absent_with_no_selection(qtbot, page):
     assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
 
 
-def test_the_bar_counts_orders_and_units(qtbot, page):
+def test_the_bar_counts_the_checked_orders(qtbot, page):
     view, _ = page
     _select(qtbot, view, ["10443", "10444", "10445"])
-    assert _text(qtbot, view, "#selection-count") == "3 orders · 19 units selected"
+    assert _text(qtbot, view, "#selection-count") == "3 selected"
+    assert _eval(qtbot, view, "document.getElementById('selection-sub')") in (None, "")
 
 
-def test_one_order_reads_singular_and_the_verbs_drop_their_count(qtbot, page):
-    view, _ = page
-    _select(qtbot, view, ["10443"])
-    assert _text(qtbot, view, "#selection-count") == "1 order · 7 units selected"
-    assert _text(qtbot, view, "#selection-mark") == "Mark fulfillable"
-    assert _text(qtbot, view, "#selection-hold") == "Hold"
+def test_mark_counts_and_sends_only_the_blocked_orders(qtbot, page):
+    view, bridge = page
+    _select(qtbot, view, ["10443", "10444", "10445"])
+    assert _text(qtbot, view, "#selection-mark") == "Mark 1 fulfillable"
+    assert _eval(qtbot, view, "document.getElementById('selection-mark').disabled") is False
+    with qtbot.waitSignal(bridge.bulkStatusRequested, timeout=3000) as blocker:
+        _eval(qtbot, view, "document.getElementById('selection-mark').click(); true")
+    assert list(blocker.args) == [["10445"], True]
 
 
-def test_the_verbs_carry_the_count_above_one(qtbot, page):
+def test_mark_is_disabled_when_every_checked_order_is_fulfillable(qtbot, page):
     view, _ = page
     _select(qtbot, view, ["10443", "10444"])
     assert _text(qtbot, view, "#selection-mark") == "Mark 2 fulfillable"
-    assert _text(qtbot, view, "#selection-hold") == "Hold these 2"
+    assert _eval(qtbot, view, "document.getElementById('selection-mark').disabled") is True
 
 
-def test_the_sub_line_counts_value_and_couriers(qtbot, page):
-    view, _ = page
-    _select(qtbot, view, ["10443", "10444"])
-    assert _text(qtbot, view, "#selection-sub") == "334.60 · 2 couriers"
+def test_hold_names_this_one_or_these_n_and_sends_them_all(qtbot, page):
+    view, bridge = page
+    _select(qtbot, view, ["10443"])
+    assert _text(qtbot, view, "#selection-hold") == "Hold this"
+    _select(qtbot, view, ["10443", "10444", "10445"])
+    assert _text(qtbot, view, "#selection-hold") == "Hold these 3"
+    with qtbot.waitSignal(bridge.bulkStatusRequested, timeout=3000) as blocker:
+        _eval(qtbot, view, "document.getElementById('selection-hold').click(); true")
+    assert list(blocker.args) == [["10443", "10444", "10445"], False]
 
 
-def test_export_drops_to_secondary_while_the_bar_is_up(qtbot, page):
+def test_export_stays_the_screens_primary_while_the_bar_is_up(qtbot, page):
     view, _ = page
     _select(qtbot, view, ["10443"])
-    assert "secondary" in _eval(
-        qtbot, view, "document.getElementById('export').className"
-    )
-    _eval(qtbot, view, "document.getElementById('selection-clear').click(); true")
-    assert "primary" in _eval(
-        qtbot, view, "document.getElementById('export').className"
-    )
+    assert "primary" in _eval(qtbot, view, "document.getElementById('export').className")
+
+
+def test_the_header_box_clears_the_checked_orders_and_hides_the_bar(qtbot, page):
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    _eval(qtbot, view, "document.querySelector('#header .select input').click(); true")
+    assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
+    assert _eval(qtbot, view, "state.selected.size") == 0
+    assert _eval(qtbot, view, "document.getElementById('selection-clear')") in (None, "")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def test_the_bar_covers_the_header_so_the_table_never_moves(qtbot, page):
@@ -161,11 +184,7 @@ def test_mounting_the_bar_does_not_move_focus(qtbot, page):
     assert _eval(qtbot, view, "document.activeElement.id") == "search"
 
 
-def test_clear_empties_the_selection_and_hides_the_bar(qtbot, page):
-    view, _ = page
-    _select(qtbot, view, ["10443"])
-    _eval(qtbot, view, "document.getElementById('selection-clear').click(); true")
-    assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
+
 
 
 def test_more_lists_its_seven_items_in_order(qtbot, page):
@@ -343,3 +362,17 @@ def test_opening_more_closes_the_filter_menu(qtbot, page):
     assert (
         _eval(qtbot, view, "document.getElementById('selection-menu').hidden") is False
     )
+
+
+def test_ctrl_c_with_nothing_checked_copies_the_cursors_order(qtbot, page):
+    from PySide6.QtGui import QGuiApplication
+
+    view, _ = page
+    _eval(qtbot, view, "state.cursorKey = '10444'; render(); true")
+    _eval(
+        qtbot,
+        view,
+        "document.dispatchEvent(new KeyboardEvent('keydown', "
+        "{key: 'c', ctrlKey: true, bubbles: true})); true",
+    )
+    assert QGuiApplication.clipboard().text() == "10444"

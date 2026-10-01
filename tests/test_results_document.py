@@ -105,6 +105,15 @@ def _click_order(qtbot, view, order, **modifiers):
     )
 
 
+def _check(qtbot, view, order):
+    _eval(
+        qtbot,
+        view,
+        f"document.querySelector('#rows .row[data-order=\"{order}\"] input[type=checkbox]')"
+        ".click(); true",
+    )
+
+
 def _key(qtbot, view, key, **modifiers):
     init = json.dumps({"key": key, "bubbles": True, **modifiers})
     _eval(
@@ -440,41 +449,128 @@ def test_columns_and_export_keep_their_words_beside_a_glyph(qtbot, doc):
 # --- selection and sort ------------------------------------------------------------
 
 
-def test_a_row_click_reaches_python_and_a_hiding_filter_drops_it(qtbot, doc):
+def _has_class(order, name):
+    return (
+        f"document.querySelector('#rows .row[data-order=\"{order}\"]')"
+        f".classList.contains('{name}')"
+    )
+
+
+def test_a_row_click_moves_the_cursor_and_checks_nothing(qtbot, doc):
     view, bridge = doc
-    with qtbot.waitSignal(bridge.selectionChanged, timeout=5000) as blocker:
-        _eval(
-            qtbot,
-            view,
-            "document.querySelector('#rows .row[data-order=\"#10001\"] .order').click(); true",
-        )
-    assert blocker.args == [["#10001"]]
+    _click_order(qtbot, view, "#10001")
+    _until_js(qtbot, view, _has_class("#10001", "cursor"))
+    assert bridge.selection() == []
+    assert _eval(qtbot, view, "state.selected.size") == 0
+    assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
+
+
+def test_a_checkbox_checks_the_order_and_leaves_the_cursor(qtbot, doc):
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _check(qtbot, view, "#10003")
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10003"])
+    assert _eval(qtbot, view, "state.cursorKey") == "#10001"
+    assert _eval(qtbot, view, _has_class("#10003", "selected")) is True
+    assert _eval(qtbot, view, _has_class("#10003", "cursor")) is False
+    assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is False
+    _click_order(qtbot, view, "#10003", ctrlKey=True)  # Ctrl-click toggles too
+    qtbot.waitUntil(lambda: bridge.selection() == [])
+
+
+def test_a_hiding_filter_unchecks_the_order_and_empties_the_pane(qtbot, doc):
+    """Review focus 3: nothing keeps pointing at an order the operator cannot see."""
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _check(qtbot, view, "#10001")
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10001"])
     with qtbot.waitSignal(bridge.selectionChanged, timeout=5000) as blocker:
         _choose_filter(qtbot, view, "Blocked")  # #10001 is fulfillable
     assert blocker.args == [[]]
+    assert _eval(qtbot, view, "state.cursorKey === null") is True
+    assert _eval(qtbot, view, "document.querySelectorAll('#rows .row.cursor').length") == 0
+    assert _text(qtbot, view, "#pane-empty .state-title") == "No order selected"
 
 
-def test_arrow_down_moves_the_selection(qtbot, doc):
+def test_arrow_down_moves_the_cursor_only(qtbot, doc):
     view, bridge = doc
-    _eval(
-        qtbot,
-        view,
-        "document.querySelector('#rows .row[data-order=\"#10001\"] .order').click(); true",
-    )
-    with qtbot.waitSignal(bridge.selectionChanged, timeout=5000) as blocker:
+    _click_order(qtbot, view, "#10001")
+    _key(qtbot, view, "ArrowDown")
+    _until_js(qtbot, view, "state.cursorKey === '#10002'")
+    assert bridge.selection() == []
+
+
+def test_escape_clears_the_checked_orders_and_then_the_cursor(qtbot, doc):
+    view, bridge = doc
+    _click_order(qtbot, view, "#10001")
+    _check(qtbot, view, "#10002")
+    qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
+    _key(qtbot, view, "Escape")
+    qtbot.waitUntil(lambda: bridge.selection() == [])
+    assert _eval(qtbot, view, "state.cursorKey") == "#10001"
+    _key(qtbot, view, "Escape")
+    _until_js(qtbot, view, "state.cursorKey === null")
+
+
+def test_the_header_box_checks_everything_or_clears(qtbot, doc):
+    view, bridge = doc
+    box = "document.querySelector('#header .select input')"
+    _choose_filter(qtbot, view, "Blocked")
+    _count_is(qtbot, view, "31 of 312 orders")
+    _eval(qtbot, view, f"{box}.click(); true")
+    qtbot.waitUntil(lambda: len(bridge.selection()) == 31)
+    assert _eval(qtbot, view, f"{box}.title") == "Clear selection"
+    _check(qtbot, view, "#10004")  # 30 of 31: the box is mixed, and still clears
+    qtbot.waitUntil(lambda: len(bridge.selection()) == 30)
+    assert _eval(qtbot, view, f"{box}.indeterminate") is True
+    _eval(qtbot, view, f"{box}.click(); true")
+    qtbot.waitUntil(lambda: bridge.selection() == [])
+
+
+def test_the_cursor_row_wears_a_bar_on_its_left_edge(qtbot, doc):
+    """The bar is a pseudo-element above the sticky cells, or they would paint
+    over it. Only pixels can tell -- getComputedStyle cannot."""
+    view, _ = doc
+    _click_order(qtbot, view, "#10001")
+    rect = json.loads(
         _eval(
             qtbot,
             view,
-            "document.getElementById('table').dispatchEvent("
-            "new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true})); true",
+            "JSON.stringify(document.querySelector('#rows .row.cursor')"
+            ".getBoundingClientRect())",
         )
-    assert blocker.args == [["#10002"]]
+    )
+
+    def token(name):
+        return QColor(
+            _eval(
+                qtbot,
+                view,
+                "getComputedStyle(document.documentElement)"
+                f".getPropertyValue('{name}').trim()",
+            )
+        ).name()
+
+    x = int(rect["left"]) + 1  # inside the 3px bar
+    y = int(rect["top"]) + int(rect["height"]) // 2
+    qtbot.waitUntil(
+        lambda: view.grab().toImage().pixelColor(x, y).name()
+        == token("--selection-border"),
+        timeout=5000,
+    )
+    # The rest of the row is the selection tint: sampled in the last cell's
+    # right padding, clear of any text.
+    tint_x = int(rect["right"]) - 4
+    assert view.grab().toImage().pixelColor(tint_x, y).name() == token("--selection-bg")
+
+
+
 
 
 def test_an_orders_push_keeps_the_selection(qtbot, doc):
     """Every tag, status or undo re-pushes the session; the selection stays."""
     view, bridge = doc
-    _click_order(qtbot, view, "#10002")
+    _check(qtbot, view, "#10002")
     qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
     _eval(qtbot, view, "document.querySelector('#rows .row').dataset.stale = '1'; true")
     bridge.set_orders(results_lines())
@@ -531,39 +627,7 @@ def test_sorting_value_twice_is_descending(qtbot, doc):
     )
 
 
-def test_the_selection_ring_closes_across_the_frozen_cells(qtbot, doc):
-    """The select and status cells are sticky, so they paint over anything the
-    row draws: the ring has to be a pseudo-element above them, or it comes out
-    open on its left end. Only pixels can tell -- getComputedStyle cannot."""
-    view, _ = doc
-    _click_order(qtbot, view, "#10001")
-    rect = json.loads(
-        _eval(
-            qtbot,
-            view,
-            "JSON.stringify(document.querySelector('#rows .row.selected')"
-            ".getBoundingClientRect())",
-        )
-    )
-    ring = QColor(
-        _eval(
-            qtbot,
-            view,
-            "getComputedStyle(document.documentElement)"
-            ".getPropertyValue('--selection-border').trim()",
-        )
-    ).name()
-    top = int(rect["top"]) + 1  # inside the 2px ring
-    # Right of every sticky cell the ring always worked; wait for the click to
-    # reach the compositor there, or an unpainted grab passes on every sample.
-    plain_x = int(rect["right"]) - 40
-    qtbot.waitUntil(
-        lambda: view.grab().toImage().pixelColor(plain_x, top).name() == ring,
-        timeout=5000,
-    )
-    image = view.grab().toImage()
-    for x in (int(rect["left"]) + 16, 40, 100):  # the checkbox, then the chip
-        assert image.pixelColor(x, top).name() == ring, f"gap at x={x}"
+
 
 
 def test_the_kpi_strip_is_one_card(qtbot, doc):

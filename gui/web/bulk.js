@@ -12,22 +12,9 @@ function selectedKeys() {
   return state.view.filter((r) => state.selected.has(r.key)).map((r) => r.key);
 }
 
-function selectionSummary() {
-  const orders = selectedOrders();
-  let units = 0;
-  let value = 0;
-  let anyValue = false;
-  const couriers = new Set();
-  for (const o of orders) {
-    units += num(o.Units) || 0;
-    const v = num(o.Total_Price);
-    if (v !== null) {
-      value += v;
-      anyValue = true;
-    }
-    couriers.add(courierOf(o));
-  }
-  return { orders: orders.length, units, value: anyValue ? value : null, couriers: couriers.size };
+// Mark fulfillable only means something for an order that is not.
+function markableKeys() {
+  return state.view.filter((r) => state.selected.has(r.key) && !isFulfillable(r.o)).map((r) => r.key);
 }
 
 function countedWord(n, word) {
@@ -41,33 +28,21 @@ function theseOrders(n) {
 function renderSelectionBar() {
   const n = state.selected.size;
   els.selectionBar.hidden = n === 0;
-  els.exportBtn.className = "btn " + (n === 0 ? "primary" : "secondary");
   if (n === 0) {
     closeSelectionMenu();
     closeBulkPopover();
     return;
   }
-  const s = selectionSummary();
-  els.selectionCount.textContent =
-    countedWord(s.orders, "order") + " · " + countedWord(s.units, "unit") + " selected";
-  const parts = [];
-  if (s.value !== null) parts.push(fmtMoney(s.value));
-  parts.push(countedWord(s.couriers, "courier"));
-  els.selectionSub.textContent = parts.join(" · ");
-  els.selectionMark.textContent =
-    n === 1 ? "Mark fulfillable" : "Mark " + NUMBER.format(n) + " fulfillable";
-  els.selectionHold.textContent = n === 1 ? "Hold" : "Hold these " + NUMBER.format(n);
-}
-
-function clearSelection() {
-  state.selected = new Set();
-  render();
-  els.table.focus();
+  els.selectionCount.textContent = NUMBER.format(n) + " selected";
+  const markable = markableKeys().length;
+  els.selectionMark.textContent = "Mark " + NUMBER.format(markable || n) + " fulfillable";
+  els.selectionMark.disabled = markable === 0;
+  els.selectionHold.textContent = n === 1 ? "Hold this" : "Hold these " + NUMBER.format(n);
 }
 
 function bindSelectionBar() {
   els.selectionMark.addEventListener("click", () => {
-    state.bridge.setStatus(selectedKeys(), true);
+    state.bridge.setStatus(markableKeys(), true);
   });
   els.selectionHold.addEventListener("click", () => {
     state.bridge.setStatus(selectedKeys(), false);
@@ -75,7 +50,6 @@ function bindSelectionBar() {
   els.selectionExclude.addEventListener("click", () => {
     state.bridge.excludeOrders(selectedKeys());
   });
-  els.selectionClear.addEventListener("click", clearSelection);
   els.selectionMore.addEventListener("click", () => {
     if (els.selectionMenu.hidden) openSelectionMenu();
     else closeSelectionMenu();
@@ -84,8 +58,9 @@ function bindSelectionBar() {
     if (!e.target.closest("#selection-menu, #selection-more")) closeSelectionMenu();
     if (!e.target.closest("#bulk-popover, #selection-menu, #selection-more")) closeBulkPopover();
   });
+  els.selectionMore.insertAdjacentHTML("beforeend", svg(CHEVRON_DOWN, "glyph"));
   document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && state.selected.size) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && (state.selected.size || state.cursorKey !== null)) {
       const t = document.activeElement;
       if (t && t.matches && t.matches("input, textarea")) return;
       e.preventDefault();
@@ -149,9 +124,11 @@ function moreItems() {
   ];
 }
 
+// The checked orders, or with none checked the order the cursor is on.
 function copySelection() {
-  state.bridge.copyText(selectedKeys().join("\n"));
-  raiseToast(countedWord(state.selected.size, "order number") + " copied", false);
+  const keys = state.selected.size ? selectedKeys() : [state.cursorKey];
+  state.bridge.copyText(keys.join("\n"));
+  raiseToast(countedWord(keys.length, "order number") + " copied", false);
 }
 
 function exportSelectionAs(fmt) {
