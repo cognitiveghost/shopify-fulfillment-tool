@@ -164,3 +164,45 @@ def test_an_input_and_a_menu_take_their_edges(qtbot, theme):
     assert _style(qtbot, view, ".menu", "borderTopColor") == _rgb(theme.border_subtle)
     assert _style(qtbot, view, "#m-danger", "color") == _rgb(theme.status_danger)
     assert _style(qtbot, view, ".page-title", "fontWeight") == "700"
+
+
+@THEMES
+def test_the_switch_takes_the_accent_when_on(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#w-on", "backgroundColor") == _rgb(theme.accent_fill)
+    assert _style(qtbot, view, "#w-on", "justifyContent") == "flex-end"
+    assert _style(qtbot, view, "#w-on .switch-knob", "backgroundColor") == _rgb(
+        theme.on_accent
+    )
+    assert _style(qtbot, view, "#w-off", "backgroundColor") == _rgb(theme.border)
+    assert _style(qtbot, view, "#w-off .switch-knob", "backgroundColor") == _rgb(
+        theme.surface
+    )
+    assert _style(qtbot, view, "#w-off", "width") == "32px"
+    assert _style(qtbot, view, "#w-off", "height") == "18px"
+
+
+@THEMES
+def test_a_disabled_switch_is_dashed_and_flat(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#w-disabled", "borderTopStyle") == "dashed"
+    assert _style(qtbot, view, "#w-disabled", "backgroundColor") == _rgb(
+        theme.control_disabled_bg
+    )
+    assert _style(qtbot, view, "#w-disabled .switch-knob", "boxShadow") == "none"
+
+
+@THEMES
+def test_the_checked_radio_card_wears_the_selection_tokens(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#r-on", "borderTopColor") == _rgb(theme.selection_border)
+    assert _style(qtbot, view, "#r-on", "backgroundColor") == _rgb(theme.selection_bg)
+    assert _style(qtbot, view, "#r-off", "borderTopColor") == _rgb(theme.border)
+    assert _style(qtbot, view, "#r-off", "backgroundColor") == _rgb(theme.surface)
+    assert _style(qtbot, view, "#r-disabled-title", "color") == _rgb(theme.text_disabled)
+
+
+def test_a_form_row_pins_its_label_column(qtbot):
+    view = _sheet(qtbot, LIGHT_THEME)
+    assert _style(qtbot, view, "#f-row", "gridTemplateColumns").startswith("160px ")
+    assert _style(qtbot, view, "#f-label", "fontWeight") == "700"
