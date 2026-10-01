@@ -178,44 +178,58 @@
 }
 .selection-count { margin-right: 6px; font-weight: 700; white-space: nowrap; }
 
-.bulk-popover {
-  position: absolute;
-  z-index: var(--z-popover);
-  top: var(--table-head-height);
-  right: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  width: 320px;
-  max-height: 380px;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.bulk-title { padding: var(--spacing-sm) var(--spacing-md); font-weight: 700; }
-.bulk-list { flex: 1; min-height: 0; overflow-y: auto; }
+/* --- bulk popover: one surface carries a whole bulk action --------------- */
+
+/* Opens under the selection bar. results.js caps its height to the table
+   area, so the foot and its verb are always on screen. */
+.bulk-popover { width: 384px; }
+.bulk-title { padding: 12px 14px 6px; font-size: var(--type-label-size); font-weight: 700; }
+.bulk-body { flex: 1; min-height: 0; overflow-y: auto; }
+.bulk-list { max-height: 180px; overflow-y: auto; padding: 0 6px; }
 .bulk-list .menu-group { position: sticky; top: 0; background: var(--surface-overlay); }
+.bulk-list .field { display: block; width: calc(100% - 8px); margin: 4px; }
 .bulk-row.picked { background: var(--selection-bg); }
 .bulk-count { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
+
+.bulk-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--kit-radius);
+  background: var(--surface-raised);
+}
+.bulk-changes-title {
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.bulk-change { position: relative; padding-left: 12px; }
+.bulk-change::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+.bulk-hint {
+  margin: 10px 14px 0;
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
 .bulk-footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  margin-top: 10px;
+  padding: 10px 14px;
   border-top: 1px solid var(--border-subtle);
 }
-.bulk-list .new-tag,
-.bulk-list .bulk-search {
-  display: block;
-  margin: var(--spacing-xs) var(--spacing-md);
-  width: calc(100% - 2 * var(--spacing-md));
-  height: var(--control-height);
-  padding: 0 var(--padding-h);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-.bulk-list .new-tag:focus,
-.bulk-list .bulk-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 
 /* --- table --------------------------------------------------------------- */
 

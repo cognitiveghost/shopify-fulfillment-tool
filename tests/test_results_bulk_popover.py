@@ -231,6 +231,19 @@ def _open_sku(qtbot, view, orders, item):
     _eval(qtbot, view, f"document.getElementById('{item}').click(); true")
 
 
+def _pick(qtbot, view, tag):
+    _eval(qtbot, view, f"document.querySelector(\"[data-tag='{tag}']\").click(); true")
+
+
+def _changes(qtbot, view):
+    return _json(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('#bulk-changes .bulk-change')]"
+        ".map(e => e.textContent)",
+    )
+
+
 def test_the_sku_list_counts_orders_not_lines(qtbot, page):
     view, _ = page
     _open_sku(qtbot, view, ["10443", "10445"], "more-remove-sku")
@@ -248,25 +261,148 @@ def test_the_sku_list_sorts_by_count_then_name(qtbot, page):
     assert skus[0] == "TS-4409-B"  # on 2 orders, ahead of TS-0001-X on 1
 
 
-def test_the_line_removal_verb_names_the_orders_it_touches(qtbot, page):
+def test_removing_a_sku_says_what_will_change(qtbot, page):
+    """Phase 2 spec section 5.7. 10443 keeps its other line; 10445 has only
+    this one. All three orders in the session are fulfillable."""
     view, _ = page
     _open_sku(qtbot, view, ["10443", "10445"], "more-remove-sku")
-    _eval(
-        qtbot, view, "document.querySelector(\"[data-tag='TS-4409-B']\").click(); true"
-    )
-    assert _text(qtbot, view, "#bulk-verb") == "Remove from 2 orders"
-    assert "danger" in _eval(
-        qtbot, view, "document.getElementById('bulk-verb').className"
+    assert _eval(qtbot, view, "document.getElementById('bulk-verb').disabled") is True
+    assert _eval(qtbot, view, "document.getElementById('bulk-changes').hidden") is True
+    _pick(qtbot, view, "TS-4409-B")
+    assert _changes(qtbot, view) == [
+        "2 TS-4409-B lines removed from 10443, 10445",
+        "10445 has no lines left and leaves the session",
+        "2 units of TS-4409-B go back to stock",
+        "Export goes from 3 to 2 orders",
+    ]
+    assert _text(qtbot, view, "#bulk-verb") == "Remove TS-4409-B from 2"
+    assert "critical" in _eval(qtbot, view, "document.getElementById('bulk-verb').className")
+    assert _eval(qtbot, view, "document.getElementById('bulk-verb').disabled") is False
+    assert (
+        _text(qtbot, view, ".bulk-hint")
+        == "You can undo this from the confirmation that follows."
     )
 
 
-def test_the_order_removal_verb_names_the_orders_it_deletes(qtbot, page):
+def test_removing_orders_with_a_sku_says_what_will_change(qtbot, page):
     view, _ = page
     _open_sku(qtbot, view, ["10443", "10445"], "more-remove-orders")
-    _eval(
-        qtbot, view, "document.querySelector(\"[data-tag='TS-4409-B']\").click(); true"
-    )
+    _pick(qtbot, view, "TS-4409-B")
+    assert _changes(qtbot, view) == [
+        "10443, 10445 leave the session: results, export and labels",
+        (
+            "3 units go back to stock. Other orders do not get them until you mark"
+            " them fulfillable or run the analysis again"
+        ),
+        "Export goes from 3 to 1 order",
+    ]
     assert _text(qtbot, view, "#bulk-verb") == "Remove 2 orders"
+
+
+def test_excluding_orders_needs_no_pick_and_says_what_will_change(qtbot, page):
+    view, bridge = page
+    _select(qtbot, view, ["10444"])
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    _eval(qtbot, view, "document.getElementById('more-exclude').click(); true")
+    assert _text(qtbot, view, "#bulk-title") == "Exclude this order from the run"
+    assert _eval(qtbot, view, "document.getElementById('bulk-list').hidden") is True
+    assert _changes(qtbot, view) == [
+        "10444 leaves the session: results, export and labels",
+        (
+            "1 unit goes back to stock. Other orders do not get them until you mark"
+            " them fulfillable or run the analysis again"
+        ),
+        "Export goes from 3 to 2 orders",
+    ]
+    assert _text(qtbot, view, "#bulk-verb") == "Exclude 1 order"
+    with qtbot.waitSignal(bridge.bulkExcludeRequested, timeout=3000) as blocker:
+        _eval(qtbot, view, "document.getElementById('bulk-verb').click(); true")
+    assert list(blocker.args) == [["10444"]]
+
+
+def _line(order, sku, status, note="", qty=1):
+    return {
+        "Order_Number": order,
+        "SKU": sku,
+        "Product_Name": "Product " + sku,
+        "Quantity": qty,
+        "Final_Stock": 10,
+        "Order_Fulfillment_Status": status,
+        "Shipping_Provider": "DPD",
+        "Total_Price": 10.0,
+        "Internal_Tags": "[]",
+        "Customer": "A",
+        "System_note": note,
+    }
+
+
+def test_a_blocked_order_is_told_it_stays_blocked(qtbot, page):
+    """The app does not re-evaluate an order when its short line goes, so the
+    popover must not promise that it does."""
+    view, bridge = page
+    short = "Cannot fulfill: X-1: Insufficient stock (need 2, have 0)"
+    bridge.set_orders(
+        pd.DataFrame(
+            [
+                _line("B1", "X-1", "Not Fulfillable", short, qty=2),
+                _line("B1", "Y-1", "Not Fulfillable", short),
+                _line("F1", "Y-1", "Fulfillable"),
+            ]
+        )
+    )
+    _until_js(qtbot, view, "document.querySelectorAll('#rows .row').length === 2")
+    _open_sku(qtbot, view, ["B1"], "more-remove-sku")
+    _pick(qtbot, view, "X-1")
+    assert _changes(qtbot, view) == [
+        "1 X-1 line removed from B1",
+        "B1 stays Blocked until marked fulfillable",
+        "Export stays at 1 order",
+    ]
+
+
+def test_fifty_orders_are_named_three_and_counted(qtbot, page):
+    """Review focus 2."""
+    view, bridge = page
+    bridge.set_orders(
+        pd.DataFrame([_line(f"O{i:02d}", "S-1", "Fulfillable") for i in range(1, 51)])
+    )
+    _until_js(qtbot, view, "state.records.length === 50")
+    _eval(
+        qtbot,
+        view,
+        "state.selected = new Set(state.records.map(r => r.key)); render(); true",
+    )
+    _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
+    _eval(qtbot, view, "document.getElementById('more-exclude').click(); true")
+    assert _changes(qtbot, view)[0] == (
+        "O01, O02, O03 and 47 more leave the session: results, export and labels"
+    )
+    assert _text(qtbot, view, "#bulk-verb") == "Exclude 50 orders"
+
+
+def test_thirty_skus_scroll_and_the_verb_stays_on_screen(qtbot, page):
+    """Review focus 1: the picker scrolls inside the popover; the foot does not."""
+    view, bridge = page
+    bridge.set_orders(
+        pd.DataFrame([_line("W1", f"SKU-{i:02d}", "Fulfillable") for i in range(30)])
+    )
+    _until_js(qtbot, view, "document.querySelectorAll('#rows .row').length === 1")
+    _open_sku(qtbot, view, ["W1"], "more-remove-sku")
+    _pick(qtbot, view, "SKU-00")
+    fits = _json(
+        qtbot,
+        view,
+        "(function () {"
+        " var verb = document.getElementById('bulk-verb').getBoundingClientRect();"
+        " var area = document.getElementById('table-area').getBoundingClientRect();"
+        " var list = document.getElementById('bulk-list');"
+        " return [verb.bottom <= area.bottom, list.scrollHeight > list.clientHeight];"
+        " })()",
+    )
+    assert fits == [True, True]
+
+
+
 
 
 def test_committing_a_line_removal_sends_the_sku(qtbot, page):

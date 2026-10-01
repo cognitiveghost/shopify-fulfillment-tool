@@ -244,9 +244,8 @@ def test_removing_an_item_asks_nothing_and_offers_undo(mw, monkeypatch):
     def refuse(*a, **k):
         raise AssertionError("an undoable removal must not confirm")
 
-    # ConfirmDialog, not QMessageBox: Bundle 14 took the last QMessageBox out
-    # of actions_handler, so patching that one could no longer fail.
-    monkeypatch.setattr("gui.actions_handler.ConfirmDialog.ask", refuse)
+    # Patched on the class itself: actions_handler no longer imports it.
+    monkeypatch.setattr("shared.components.confirm_dialog.ConfirmDialog.ask", refuse)
 
     ActionsHandler(mw).remove_item_from_order("1001", "SKU-A", row_position=1)
 

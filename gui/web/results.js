@@ -768,7 +768,7 @@ function bind() {
     selectionBar: "selection-bar", selectionCount: "selection-count",
     selectionMark: "selection-mark",
     selectionHold: "selection-hold", selectionMore: "selection-more",
-    selectionMenu: "selection-menu", selectionExclude: "selection-exclude",
+    selectionMenu: "selection-menu",
     toast: "toast", toastText: "toast-text", toastBadge: "toast-badge",
     toastUndo: "toast-undo",
   };

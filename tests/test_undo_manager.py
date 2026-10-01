@@ -116,7 +116,6 @@ def test_undo_bulk_add_tag_restores_every_line_of_a_multiline_order(mw_multiline
 
 from unittest.mock import Mock
 
-import gui.actions_handler as actions_handler_module
 from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
 
@@ -141,11 +140,6 @@ def _window(df):
 
 def _final_stock(df, sku):
     return df.loc[df["SKU"] == sku, "Final_Stock"].iloc[0]
-
-
-@pytest.fixture
-def confirm(monkeypatch):
-    monkeypatch.setattr(actions_handler_module.ConfirmDialog, "ask", lambda *a, **k: True)
 
 
 def test_undo_of_hold_on_mixed_order_restores_each_line():
@@ -179,7 +173,7 @@ def test_undo_without_row_positions_still_appends():
     assert _final_stock(mw.analysis_results_df, "A") == 3
 
 
-def test_undo_of_bulk_delete_restores_row_order(confirm):
+def test_undo_of_bulk_delete_restores_row_order():
     df = pd.DataFrame({"Order_Number": ["#1", "#2", "#3"], "SKU": ["A"] * 3, "Quantity": [1] * 3,
                        "Order_Fulfillment_Status": ["Fulfillable"] * 3,
                        "Stock": [9] * 3, "Final_Stock": [6.0] * 3})

@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 from PySide6.QtWidgets import QFileDialog
 
-import gui.actions_handler as actions_handler_module
 from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
 
@@ -156,78 +155,49 @@ def test_bulk_remove_tag_toasts_with_undo(handler, mw):
     )
 
 
-def test_bulk_delete_orders_confirms_before_it_writes(handler, mw, monkeypatch):
-    asked = {}
+@pytest.fixture
+def no_confirm(monkeypatch):
+    """The popover is the confirmation now (phase 2 spec section 5.7). A Qt
+    confirm on top of it would ask twice about something Undo takes back."""
 
-    def fake_ask(parent, *, title, body, verb):
-        asked.update(title=title, verb=verb)
-        return False
+    def refuse(*args, **kwargs):
+        raise AssertionError("an undoable bulk action must not confirm")
 
-    monkeypatch.setattr(actions_handler_module.ConfirmDialog, "ask", fake_ask)
-    before = len(mw.analysis_results_df)
-    handler.bulk_delete_orders(["10443"])
-    assert asked["title"] == "Exclude 1 order from the run?"
-    assert asked["verb"] == "Exclude 1 order"
-    assert len(mw.analysis_results_df) == before
+    monkeypatch.setattr("shared.components.confirm_dialog.ConfirmDialog.ask", refuse)
 
 
-def test_bulk_delete_orders_writes_when_confirmed(handler, mw, monkeypatch):
-    monkeypatch.setattr(
-        actions_handler_module.ConfirmDialog,
-        "ask",
-        lambda parent, **kw: True,
-    )
+def test_bulk_delete_orders_writes_without_asking(handler, mw, no_confirm):
     handler.bulk_delete_orders(["10443"])
     assert "10443" not in set(mw.analysis_results_df["Order_Number"])
+    mw.undo_manager.record_operation.assert_called_once()
     mw.results_bridge.raise_toast.assert_called_once_with(
         "1 order excluded from the run", undoable=True
     )
 
 
-def test_bulk_remove_sku_from_orders_confirms_before_it_writes(
-    handler, mw, monkeypatch
-):
-    monkeypatch.setattr(
-        actions_handler_module.ConfirmDialog, "ask", lambda p, **k: False
-    )
-    before = len(mw.analysis_results_df)
-    handler.bulk_remove_sku_from_orders(["10443", "10444"], "TS-4409-B")
-    assert len(mw.analysis_results_df) == before
-
-
-def test_bulk_remove_sku_from_orders_writes_when_confirmed(handler, mw, monkeypatch):
-    monkeypatch.setattr(
-        actions_handler_module.ConfirmDialog, "ask", lambda p, **k: True
-    )
+def test_bulk_remove_sku_from_orders_writes_without_asking(handler, mw, no_confirm):
     handler.bulk_remove_sku_from_orders(["10443", "10444"], "TS-4409-B")
     remaining = mw.analysis_results_df
     assert "TS-4409-B" not in set(remaining["SKU"])
     assert {"10443", "10444"} <= set(remaining["Order_Number"])
+    mw.undo_manager.record_operation.assert_called_once()
     mw.results_bridge.raise_toast.assert_called_once_with(
         "TS-4409-B removed from 2 orders", undoable=True
     )
 
 
-def test_bulk_remove_orders_with_sku_confirms_before_it_writes(
-    handler, mw, monkeypatch
-):
-    monkeypatch.setattr(
-        actions_handler_module.ConfirmDialog, "ask", lambda p, **k: False
-    )
-    before = len(mw.analysis_results_df)
-    handler.bulk_remove_orders_with_sku(["10443", "10444"], "TS-4409-B")
-    assert len(mw.analysis_results_df) == before
-
-
-def test_bulk_remove_orders_with_sku_writes_when_confirmed(handler, mw, monkeypatch):
-    monkeypatch.setattr(
-        actions_handler_module.ConfirmDialog, "ask", lambda p, **k: True
-    )
+def test_bulk_remove_orders_with_sku_writes_without_asking(handler, mw, no_confirm):
     handler.bulk_remove_orders_with_sku(["10443", "10444"], "TS-4409-B")
     assert set(mw.analysis_results_df["Order_Number"]) == {"10445"}
+    mw.undo_manager.record_operation.assert_called_once()
     mw.results_bridge.raise_toast.assert_called_once_with(
         "2 orders containing TS-4409-B removed", undoable=True
     )
+
+
+def test_actions_handler_holds_no_confirm_dialog():
+    source = Path("gui/actions_handler.py").read_text(encoding="utf-8")
+    assert "ConfirmDialog" not in source
 
 
 def test_bulk_export_selection_writes_the_file_and_toasts(

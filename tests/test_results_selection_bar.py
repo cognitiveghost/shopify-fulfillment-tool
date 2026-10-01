@@ -187,7 +187,7 @@ def test_mounting_the_bar_does_not_move_focus(qtbot, page):
 
 
 
-def test_more_lists_its_seven_items_in_order(qtbot, page):
+def test_more_lists_its_eight_items_in_order(qtbot, page):
     view, _ = page
     _select(qtbot, view, ["10443", "10444", "10445"])
     _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
@@ -205,10 +205,11 @@ def test_more_lists_its_seven_items_in_order(qtbot, page):
         "Export these 3 orders to CSV",
         "Remove a SKU from these 3 orders",
         "Remove whole orders containing a SKU",
+        "Exclude these 3 orders from the run",
     ]
 
 
-def test_a_separator_sits_above_the_two_destructive_items(qtbot, page):
+def test_separators_fence_off_the_exports_and_the_destructive_items(qtbot, page):
     view, _ = page
     _select(qtbot, view, ["10443"])
     _eval(qtbot, view, "document.getElementById('selection-more').click(); true")
@@ -218,7 +219,7 @@ def test_a_separator_sits_above_the_two_destructive_items(qtbot, page):
             view,
             "document.querySelectorAll('#selection-menu .menu-separator').length",
         )
-        == 1
+        == 2
     )
 
 
@@ -376,3 +377,11 @@ def test_ctrl_c_with_nothing_checked_copies_the_cursors_order(qtbot, page):
         "{key: 'c', ctrlKey: true, bubbles: true})); true",
     )
     assert QGuiApplication.clipboard().text() == "10444"
+
+
+def test_the_bar_has_no_exclude_button_of_its_own(qtbot, page):
+    view, _ = page
+    _select(qtbot, view, ["10443"])
+    assert _eval(qtbot, view, "document.getElementById('selection-exclude')") in (None, "")
+    labels = _json(qtbot, view, "moreItems().map(i => i.label || '')")
+    assert "Exclude this order from the run" in labels
