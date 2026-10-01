@@ -330,6 +330,7 @@ class MainWindow(QMainWindow):
             lambda name: self._on_analysis_mode_changed(1 if name == "fifo" else 0)
         )
         setup.runRequested.connect(lambda: self.run_analysis_button.click())
+        setup.cancelRequested.connect(lambda: self.actions_handler.cancel_analysis())
         setup.newSessionRequested.connect(
             lambda: self.actions_handler.create_new_session()
         )

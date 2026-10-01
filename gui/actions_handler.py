@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -55,6 +56,9 @@ class ActionsHandler(QObject):
     """
 
     data_changed = Signal()
+    # Emitted on the analysis thread; the connection to the slot below is
+    # queued across threads, which is how a step reaches the UI.
+    analysis_progress = Signal(int)
 
     def __init__(self, main_window):
         """Initializes the ActionsHandler.
@@ -67,6 +71,9 @@ class ActionsHandler(QObject):
         self.mw = main_window
         self.log = logging.getLogger(__name__)
         self._stats_workers = set()  # keeps in-flight stats-recording Workers alive
+        # Set by Cancel on the UI thread, read by the run at each step.
+        self._cancel = threading.Event()
+        self.analysis_progress.connect(self._on_analysis_progress)
 
     def create_new_session(self):
         """Creates a new session using SessionManager.
@@ -161,6 +168,12 @@ class ActionsHandler(QObject):
             return
 
         self.mw._analysis_running = True
+        self.mw._analysis_step = 0
+        self.mw._analysis_cancelling = False
+        self._cancel.clear()
+        self.mw.command_bar.set_step(
+            0, len(core.ANALYSIS_STEPS), core.ANALYSIS_STEPS[0]
+        )
         self.mw.command_bar.set_state(BarState.RUNNING)
         self.mw.ui_manager.set_ui_busy(True)
         self.log.info("Starting analysis thread.")
@@ -183,15 +196,52 @@ class ActionsHandler(QObject):
             session_manager=self.mw.session_manager,
             profile_manager=self.mw.profile_manager,
             session_path=self.mw.session_path,
+            progress=self._report_step,
         )
         worker.signals.result.connect(self.on_analysis_complete)
         worker.signals.error.connect(self.on_task_error)
         worker.signals.finished.connect(self._on_analysis_finished)
         self.mw.threadpool.start(worker)
 
+    def _report_step(self, index: int) -> None:
+        """The run's progress callback. Runs on the analysis thread.
+
+        Raising here is how Cancel reaches the run: core catches it before
+        anything is saved. Nothing else may touch the UI from this thread, so
+        the step travels as a signal.
+        """
+        if self._cancel.is_set():
+            raise core.AnalysisCancelled
+        self.analysis_progress.emit(index)
+
+    def _on_analysis_progress(self, index: int) -> None:
+        if not self.mw._analysis_running:
+            return  # a step delivered after the run ended
+        self.mw._analysis_step = index
+        self.mw.command_bar.set_step(
+            index, len(core.ANALYSIS_STEPS), core.ANALYSIS_STEPS[index]
+        )
+        self.mw.ui_manager.refresh_setup()
+
+    def cancel_analysis(self) -> None:
+        """Stop the run at its next step. No effect once saving has begun.
+
+        If the run passes its last checkpoint before it sees the flag, it
+        finishes normally: a result that arrives is never thrown away.
+        """
+        if not self.mw._analysis_running or self._cancel.is_set():
+            return
+        if self.mw._analysis_step >= len(core.ANALYSIS_STEPS) - 1:
+            return
+        self._cancel.set()
+        self.mw._analysis_cancelling = True
+        self.mw.ui_manager.refresh_setup()
+
     def _on_analysis_finished(self):
         """Reset analysis-running guard and update UI after analysis finishes."""
         self.mw._analysis_running = False
+        self.mw._analysis_cancelling = False
+        self._cancel.clear()
         self.mw.command_bar.set_state(BarState.SESSION)
         # Here, not in _update_all_views: the chips read session_info and stat
         # the stock copy over the share, which every tag or undo would repeat.
@@ -210,6 +260,10 @@ class ActionsHandler(QObject):
         """
         self.log.info("Analysis thread finished.")
         success, result_msg, df, stats = result
+        if not success and result_msg == core.CANCELLED:
+            self.log.info("Analysis cancelled by the operator")
+            toast(self.mw, "Analysis cancelled")
+            return
         if success:
             self.mw.analysis_results_df = df
             # The run's own stock file is now the session's; later refreshes

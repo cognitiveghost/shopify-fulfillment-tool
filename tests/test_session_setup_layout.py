@@ -241,3 +241,34 @@ def test_an_opened_session_brings_its_facts(client_window, tmp_path):
     state = _state(client_window)
     assert state["view"] == "setup"
     assert state["session"]["name"] == Path(path).name
+
+
+def test_cancel_from_the_page_reaches_the_run(client_window, monkeypatch):
+    cancelled = []
+    monkeypatch.setattr(
+        client_window.actions_handler, "cancel_analysis", lambda: cancelled.append(1)
+    )
+    client_window.setup_bridge.cancelRun()
+    assert cancelled == [1]
+
+
+def test_a_step_shows_on_the_page_and_in_the_bar(client_window):
+    client_window.setup_bridge.newSession()
+    client_window._analysis_running = True
+    client_window.actions_handler.analysis_progress.emit(2)
+
+    run = client_window.setup_bridge.state["run"]
+    assert (run["running"], run["step"], run["step_name"]) == (
+        True,
+        2,
+        "Allocating stock",
+    )
+    assert client_window.command_bar.step_count_label.text() == "Step 3 of 4"
+    assert client_window.run_analysis_button.isEnabled() is False
+
+    client_window.actions_handler.cancel_analysis()
+    run = client_window.setup_bridge.state["run"]
+    assert (run["cancelling"], run["can_cancel"]) == (True, False)
+
+    client_window.actions_handler._on_analysis_finished()
+    assert client_window.setup_bridge.state["run"]["running"] is False
