@@ -246,6 +246,8 @@ class ActionsHandler(QObject):
         # Here, not in _update_all_views: the chips read session_info and stat
         # the stock copy over the share, which every tag or undo would repeat.
         self.mw.ui_manager.update_session_chips()
+        # The run saved inventory memory from its own copy of the config.
+        self.mw.sync_inventory_memory()
         self.mw.ui_manager.set_ui_busy(False)
 
     def on_analysis_complete(self, result):

@@ -4,6 +4,7 @@ Phase 3 spec section 6: one route for a picked and a dropped path, and every
 file failure lands in the slot as a problem, never in a dialog or a banner.
 """
 
+import copy
 import os
 from pathlib import Path
 from unittest.mock import Mock
@@ -34,7 +35,6 @@ def main_window(tmp_path, monkeypatch):
 
     win.profile_manager.create_client_profile("acme", "Client Acme")
     win.current_client_id = "acme"
-    win.current_client_config = win.profile_manager.load_shopify_config("acme")
     win.load_client_config("acme")
     # Files load only into an open session (the page shows no cards without one).
     win.session_path = win.session_manager.create_session("acme")
@@ -438,3 +438,50 @@ def test_a_loaded_file_counts_its_rows_and_orders(main_window, tmp_path):
 
     slot = main_window.orders_slot
     assert (slot.rows, slot.keys, slot.delimiter) == (3, 2, ",")
+
+
+def test_a_mapping_fixed_in_settings_clears_the_problem_on_revalidation(
+    main_window, tmp_path
+):
+    """The card's "Open Orders Mapping" link ends in a settings save, which
+    replaces active_profile_config and re-validates. That has to be enough."""
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name,Variant SKU,Lineitem quantity,Shipping Method\n#1,A1,2,Standard\n"
+    )
+    main_window.file_handler.load_file("orders", str(orders))
+    assert main_window.orders_slot.problem["title"] == "No SKU column"
+
+    fixed = copy.deepcopy(main_window.active_profile_config)
+    fixed["column_mappings"]["orders"] = {
+        "Name": "Order_Number",
+        "Variant SKU": "SKU",
+        "Lineitem quantity": "Quantity",
+        "Shipping Method": "Shipping_Method",
+    }
+    main_window.active_profile_config = fixed
+    main_window.file_handler.validate_file("orders")
+
+    assert main_window.orders_slot.is_valid is True
+    assert main_window.orders_slot.problem is None
+
+
+def test_revalidating_a_merged_folder_keeps_it_a_folder(
+    main_window, tmp_path, monkeypatch
+):
+    folder = tmp_path / "exports"
+    folder.mkdir()
+    header = "Name,Lineitem sku,Lineitem quantity,Shipping Method\n"
+    (folder / "a.csv").write_text(header + "#1,A1,2,Standard\n")
+    (folder / "b.csv").write_text(header + "#2,B2,1,Express\n")
+    monkeypatch.setattr(
+        main_window.file_handler, "show_file_preview", lambda *a, **k: True
+    )
+    main_window.file_handler.load_file("orders", str(folder))
+
+    main_window.file_handler.validate_file("orders")  # as a settings save does
+
+    slot = main_window.orders_slot
+    assert slot.is_folder is True
+    assert slot.name == "exports\\  ·  2 CSVs merged"
+    assert [p["name"] for p in slot.parts] == ["a.csv", "b.csv"]

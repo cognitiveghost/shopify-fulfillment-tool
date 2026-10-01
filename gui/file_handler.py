@@ -7,6 +7,7 @@ import pandas as pd
 from PySide6.QtWidgets import QFileDialog
 
 from gui.components import ConfirmDialog
+from gui.setup_state import FILE_NOUN, MAPPING_PAGE
 from shopify_tool import core
 from shopify_tool.csv_utils import (
     AUTO_DELIMITER,
@@ -39,8 +40,6 @@ _V1_COLUMNS = {
     },
     "stock": {"Артикул": "SKU", "Наличност": "Stock"},
 }
-_FILE = {"orders": "orders file", "stock": "stock file"}
-_MAPPING_PAGE = {"orders": "Orders Mapping", "stock": "Stock Mapping"}
 
 
 def _columns(config: dict | None, kind: str) -> dict:
@@ -239,7 +238,7 @@ class FileHandler:
             loaded (dict, optional): For a folder merge, what the merged file
                 cannot say about itself: name, parts, note, delimiter.
         """
-        if not self.mw.current_client_id or not self.mw.current_client_config:
+        if not self.mw.current_client_id or not self.mw.active_profile_config:
             self.log.warning("No client selected or config not loaded")
             return
 
@@ -248,7 +247,7 @@ class FileHandler:
             self.log.warning(f"Validation skipped for '{file_type}': path is missing.")
             return
 
-        columns = _columns(self.mw.current_client_config, file_type)
+        columns = _columns(self.mw.active_profile_config, file_type)
         required_cols = [c for c, name in columns.items() if name in _REQUIRED[file_type]]
         key_column = next(
             (c for c, name in columns.items() if name == _KEY[file_type]), None
@@ -261,6 +260,15 @@ class FileHandler:
         )
 
         slot = getattr(self.mw, f"{file_type}_slot")
+        if loaded is None and slot.is_folder and slot.path == Path(path):
+            # Re-validating a merged folder (after a settings save): the
+            # merged file cannot say it was a folder, the slot still can.
+            loaded = {
+                "name": slot.name,
+                "parts": slot.parts,
+                "note": slot.note,
+                "delimiter": slot.delimiter,
+            }
         if is_valid:
             rows, keys = core.csv_row_stats(path, delimiter, key_column)
             facts = {"rows": rows, "keys": keys, "delimiter": delimiter}
@@ -275,7 +283,7 @@ class FileHandler:
             self._fail(
                 file_type,
                 path,
-                f"The {_FILE[file_type]} couldn't be read",
+                f"The {FILE_NOUN[file_type]} couldn't be read",
                 "Check that it still exists and is a CSV export, then replace it.",
             )
         else:
@@ -370,7 +378,7 @@ class FileHandler:
                 folder_path,
                 f"None of the {len(csv_files)} files can be used",
                 f"{names}. Each is missing a mapped column.",
-                _MAPPING_PAGE[file_type],
+                MAPPING_PAGE[file_type],
             )
             return
 

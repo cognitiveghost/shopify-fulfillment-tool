@@ -296,8 +296,8 @@ reads that client's files wrong. See ADR 0009.
 
 **File slot** — the record holding one of the two input files. One slot per
 file, three states (missing, loaded, problem), and the only thing that knows
-whether its file is usable. Not a **file picker**, which is the dialog a slot
-opens: the slot persists and changes state, the picker appears and closes.
+whether its file is usable. Not a **file picker**, which is the dialog that
+fills a slot: the slot persists and changes state, the picker appears and closes.
 
 **File card** — a file slot as the Setup page draws it: a badge for its state,
 the file's name, its rows, its orders or SKUs, its delimiter, and under a
@@ -305,7 +305,10 @@ problem the sentence that explains it and the link that fixes it.
 
 **Setup state** — the one map Python builds for the Setup page: which view
 shows, both file cards, the run summary's sentences, and whether a run may
-start. The page draws it and decides nothing.
+start. The page draws it and works out no rule of its own. Every sentence that
+depends on a fact comes from Python; the page's own words are fixed labels,
+plus the progress line and the Run and Cancel captions, worded from the run's
+step.
 
 **Run summary** — the fixed column beside the file cards that says what the
 run will do, holds Run analysis with the reason it is disabled, and becomes

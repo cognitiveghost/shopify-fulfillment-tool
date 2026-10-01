@@ -7,7 +7,6 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QLabel,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
@@ -430,10 +429,6 @@ class UIManager:
         self.mw.run_analysis_button = QPushButton("Run analysis", tab)
         self.mw.run_analysis_button.setEnabled(False)
         self.mw.run_analysis_button.hide()
-
-        # Written by update_session_info_label() for compatibility; never shown.
-        self.mw.session_path_label = QLabel("No session", tab)
-        self.mw.session_path_label.hide()
 
         view = SetupView(tab)
         self.mw.setup_view = view

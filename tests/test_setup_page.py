@@ -237,6 +237,24 @@ def test_a_problem_without_a_fix_has_no_link(qtbot, page):
     assert _count(qtbot, view, "[data-card='orders'] [data-act='fix']") == 0
 
 
+def test_markup_in_a_name_is_drawn_as_text(qtbot, page):
+    """A file, part or column name is whatever the export called it."""
+    view, bridge = page
+    markup = '"><img src=x onerror="document.title=\'hit\'">'
+    orders = loaded(
+        "orders", parts=[{"name": markup, "rows": 1}], name=markup, note=markup
+    )
+    stock = FileSlot("stock")
+    stock.set_invalid("/d/stock.csv", [markup], [markup], {markup: "Stock"})
+
+    _show(qtbot, view, bridge, make_state(orders=orders, stock=stock))
+
+    assert _count(qtbot, view, "img") == 0
+    assert _eval(qtbot, view, "document.title") != "hit"
+    assert _text(qtbot, view, "[data-card='orders'] .part-name") == markup
+    assert markup in _text(qtbot, view, "[data-card='stock'] .banner-text")
+
+
 # --- options -----------------------------------------------------------------
 
 

@@ -300,6 +300,7 @@ def _running_mw():
         _analysis_cancelling=False,
         command_bar=Mock(),
         ui_manager=Mock(),
+        sync_inventory_memory=Mock(),
     )
 
 

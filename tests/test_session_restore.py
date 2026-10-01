@@ -26,7 +26,6 @@ def main_window(tmp_path, monkeypatch):
     QApplication.processEvents()
     win.profile_manager.create_client_profile("acme", "Client Acme")
     win.current_client_id = "acme"
-    win.current_client_config = win.profile_manager.load_shopify_config("acme")
     win.load_client_config("acme")
     yield win
     win.close()

@@ -121,7 +121,7 @@ takes the drop, as verified with a throwaway probe on 2026-10-01:
 - A drop that lands on no card, or while the page shows no cards (another view, or a run in progress, where
   the cards carry no `data-file-kind`), does nothing.
 
-`UIManager` connects `pathDropped` to `FileHandler.accept_dropped_path`.
+`MainWindow.connect_signals` connects `pathDropped` to `FileHandler.accept_dropped_path`.
 
 ## 4. The state
 
@@ -267,7 +267,10 @@ calls `setup_bridge.set_state`. It is called by `update_ui_state` (its last line
 `set_ui_busy` no longer sets the run button itself: it calls `refresh_setup()`.
 
 - `MemoryFacts` comes from `active_profile_config["inventory_memory"]`: `enabled` (default `True`, as the
-  checkbox restored it), `len(skus)`, `session`, `last_updated`.
+  checkbox restored it), `len(skus)`, `session`, `last_updated`. A run and every edit write memory to disk
+  through a freshly loaded config, so `MainWindow.sync_inventory_memory()` re-reads that key when a run
+  finishes and before the switch or the strategy saves the window's config (found in review: without it the
+  page stated the memory of the last client load, and either control wrote that older stock back).
 - `strategy` is `active_profile_config.get("analysis_mode", "multi_first")`.
 - `SessionFacts` is read from `session_info.json` **only** where `update_session_chips` already reads it
   (a new session, an opened session, a finished run) and kept on `mw.session_facts`. `refresh_setup` never
@@ -471,8 +474,12 @@ handlers, logs "Analysis cancelled", and returns `(False, CANCELLED, None, None)
 `progress(3)` returns, so a run that has begun saving always finishes.
 
 What a cancelled run leaves: the input copies in `<session>/input/` and their two keys in
-`session_info.json` (step 1), and possibly `memory_baseline.json` (step 2). No analysis state, no reports,
-no history, no memory write.
+`session_info.json` (step 1). No analysis state, no reports, no history, no memory write.
+
+A memory-mode run writes `memory_baseline.json` on load (step 2). A run that stops before saving, cancelled
+or failed, removes the baseline it wrote (found in review): left behind, the next run would reuse it, and
+because memory still belongs to the session before, the save rule would never write memory for this session.
+A baseline an earlier run of the session wrote is kept.
 
 `# ponytail:` cancelling a **re-run** leaves the new input copies beside the old results until the next run
 completes. Not guarded: a re-run needs the orders file loaded again, and running once more repairs it.
@@ -551,6 +558,7 @@ No call site's text changes. Nothing in `shared/` changes.
 | "No files" with no session: the cards are live and the chip appears with the first file | The no-session panel from `app-shell.html` | Owner, §2 |
 | "This run starts from the stock left by the previous run instead of the stock file's numbers" | "A run with no stock file starts from … A loaded stock file is always used as it is." | That is what the code does (`_load_and_validate_files`): memory stands in only when no stock file is loaded |
 | With memory on and a stock file loaded, the Stock row reads "From 2026-09-29_2" | "Stock file · 188 SKUs"; "From …" only while memory covers a missing file | The same |
+| "The orders file needs a SKU column before this can run" | "The orders file needs fixing before this can run" | One headline for every problem a file can have; the card names the column |
 | A stock card with no file is always "Missing" | "From memory" while memory covers it | Run is enabled then; "Missing" would contradict it |
 | Steps "Matching 1,204 lines to stock", "Building results"; "Allocating stock — 140 of 312 orders" | The four real steps, no count | Owner, §2; the names say what the code does |
 | "Analysis finished · opening Results" for 1.8 s | Dropped | The app opens Results at once; holding the page back to show a line is a delay with no use |

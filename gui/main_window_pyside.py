@@ -108,7 +108,6 @@ class MainWindow(QMainWindow):
         # Core application attributes
         self.session_path = None
         self.current_client_id = None
-        self.current_client_config = None
         self.active_profile_config = {}
 
         self.orders_file_path = None
@@ -245,11 +244,6 @@ class MainWindow(QMainWindow):
                 self.current_client_id = client_id
                 logger.info(f"Loaded configuration for CLIENT_{client_id}")
 
-                # Update UI to reflect new client
-                self.session_path_label.setText(
-                    f"Client: CLIENT_{client_id} - No session started"
-                )
-
                 # Reset analysis data when switching clients
                 self._reset_session_state()
                 self.session_path = None
@@ -344,9 +338,7 @@ class MainWindow(QMainWindow):
         setup.clearRequested.connect(lambda kind: self.file_handler.clear_file(kind))
         setup.fixRequested.connect(self._fix_file_problem)
         setup.memoryToggled.connect(self._on_inventory_memory_toggled)
-        setup.strategyChosen.connect(
-            lambda name: self._on_analysis_mode_changed(1 if name == "fifo" else 0)
-        )
+        setup.strategyChosen.connect(self._on_analysis_mode_changed)
         setup.runRequested.connect(lambda: self.run_analysis_button.click())
         setup.cancelRequested.connect(lambda: self.actions_handler.cancel_analysis())
         setup.newSessionRequested.connect(
@@ -443,9 +435,6 @@ class MainWindow(QMainWindow):
         session_name = os.path.basename(self.session_path)
         self.session_info_label.setText(session_name)
 
-        # Update session_path_label as well for compatibility
-        self.session_path_label.setText(f"Session: {session_name}")
-
     def update_ui_state(self):
         """Update button states based on application state.
 
@@ -473,11 +462,28 @@ class MainWindow(QMainWindow):
         self.ui_manager._refresh_nav()
         self.ui_manager.refresh_setup()
 
+    def sync_inventory_memory(self) -> None:
+        """Take inventory memory from disk into active_profile_config.
+
+        A run and every edit write memory through a freshly loaded config,
+        past this copy. Without this the Setup page states the memory of the
+        last client load, and saving this config (the switch, the strategy)
+        would write that older stock back over the newer one.
+        """
+        try:
+            config = self.profile_manager.load_shopify_config(self.current_client_id)
+        except Exception:
+            logger.exception("Could not re-read inventory memory")
+            return
+        if config and "inventory_memory" in config:
+            self.active_profile_config["inventory_memory"] = config["inventory_memory"]
+
     def _on_inventory_memory_toggled(self, enabled: bool):
         """Persist the inventory memory switch when the Setup page flips it."""
         if not self.current_client_id or not self.active_profile_config:
             return
         try:
+            self.sync_inventory_memory()
             enabled = bool(enabled)
             inv_mem = self.active_profile_config.get("inventory_memory", {})
             inv_mem["enabled"] = enabled
@@ -573,8 +579,6 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.current_client_config = shopify_config
-
             # load_client_config() re-reads shopify_config via profile_manager --
             # now a cache hit, since _load_client_data() already warmed the mtime
             # cache above -- and applies every widget-facing side effect this
@@ -1030,11 +1034,12 @@ class MainWindow(QMainWindow):
             # Never skipped: a failed push must not leave the window stuck busy.
             self.ui_manager.set_ui_busy(False)
 
-    def _on_analysis_mode_changed(self, index: int):
+    def _on_analysis_mode_changed(self, name: str):
         """Save the allocation strategy when the Setup page's radio cards change it."""
         if not self.current_client_id:
             return
-        mode = "fifo" if index == 1 else "multi_first"
+        mode = "fifo" if name == "fifo" else "multi_first"
+        self.sync_inventory_memory()
         self.active_profile_config["analysis_mode"] = mode
         try:
             self.profile_manager.save_shopify_config(

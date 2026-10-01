@@ -37,9 +37,6 @@ def client_window(main_window):
     """The window with one client loaded, as test_file_handler.py does it."""
     main_window.profile_manager.create_client_profile("acme", "Client Acme")
     main_window.current_client_id = "acme"
-    main_window.current_client_config = main_window.profile_manager.load_shopify_config(
-        "acme"
-    )
     main_window.load_client_config("acme")
     main_window.update_ui_state()
     return main_window
@@ -188,6 +185,40 @@ def test_the_memory_switch_is_saved_to_the_client(client_window):
     assert _state(client_window)["memory"]["on"] is False
     client_window.setup_bridge.setMemory(True)
     assert _state(client_window)["memory"]["on"] is True
+
+
+def _a_run_saves_memory(win, skus):
+    """What a run does at save: memory goes to disk through a freshly loaded
+    config, past the window's own copy."""
+    assert win.profile_manager.save_inventory_memory("acme", skus, session="S1")
+
+
+def test_a_finished_run_brings_the_memory_it_saved_to_the_page(client_window):
+    client_window.session_path = client_window.session_manager.create_session("acme")
+    _a_run_saves_memory(client_window, {"A1": 4.0, "B2": 3.0})
+
+    client_window.actions_handler._on_analysis_finished()
+
+    memory = client_window.active_profile_config["inventory_memory"]
+    assert memory["skus"] == {"A1": 4.0, "B2": 3.0}
+    assert memory["session"] == "S1"
+
+
+@pytest.mark.parametrize(
+    "flip",
+    [lambda bridge: bridge.setMemory(False), lambda bridge: bridge.setStrategy("fifo")],
+    ids=["memory switch", "strategy"],
+)
+def test_a_setup_control_does_not_write_older_memory_back(client_window, flip):
+    """Both controls save the window's whole config. Its memory must be the
+    one on disk, or the save rolls the stock back to the last client load."""
+    _a_run_saves_memory(client_window, {"A1": 4.0})
+
+    flip(client_window.setup_bridge)
+
+    saved = client_window.profile_manager.load_shopify_config("acme")["inventory_memory"]
+    assert saved["skus"] == {"A1": 4.0}
+    assert saved["session"] == "S1"
 
 
 def test_the_fix_link_opens_the_page_the_problem_names(client_window, monkeypatch):

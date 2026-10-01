@@ -1,7 +1,8 @@
 // The Setup page (phase 3 spec section 5). Python builds everything this page
 // draws (gui/setup_state.py) and sends it as bridge.state; this file renders
-// that map and reports clicks through the bridge's named slots. It decides
-// nothing: no sentence, count or enabled flag is computed here.
+// that map and reports clicks through the bridge's named slots. No rule, count
+// or enabled flag is computed here. Its own words are fixed labels, plus the
+// progress line and the Run and Cancel captions, worded from the run's step.
 "use strict";
 
 const TOAST_MS = 4000;

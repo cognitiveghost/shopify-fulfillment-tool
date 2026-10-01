@@ -799,6 +799,23 @@ def write_memory_baseline(session_path, skus: dict, names: dict | None) -> None:
         )
 
 
+def _discard_unsaved_baseline(config: dict, session_path) -> None:
+    """Remove the baseline a run wrote on load when it stops before it saves.
+
+    Left behind, the next run would reuse it, and because memory still belongs
+    to the session before, the save rule would never write memory for this one.
+    """
+    if (
+        session_path
+        and config.get("_stock_from_memory")
+        and not config.get("_memory_baseline_reused")
+    ):
+        try:
+            _baseline_path(session_path).unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning(f"Could not remove the unsaved memory baseline: {e}")
+
+
 def _load_history_data(
     orders_file_path: str | None,
     client_id: str | None,
@@ -1533,6 +1550,7 @@ def run_full_analysis(
         if progress is not None:
             progress(index)
 
+    saving = False
     try:
         step(0)
         # Step 1: Validate and prepare inputs
@@ -1613,6 +1631,7 @@ def run_full_analysis(
         )
 
         step(3)
+        saving = True
         # Step 5: Save results and reports
         logger.info("Step 5: Saving results and reports...")
         primary_path, _ = _save_results_and_reports(
@@ -1664,6 +1683,9 @@ def run_full_analysis(
         error_msg = f"Analysis failed: {e!s}"
         logger.exception(error_msg)
         return False, error_msg, None, None
+    finally:
+        if not saving:
+            _discard_unsaved_baseline(config, session_path)
 
 
 def create_packing_list_report(

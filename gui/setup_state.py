@@ -14,8 +14,8 @@ from pathlib import Path
 
 from shopify_tool.core import ANALYSIS_STEPS
 
-_FILE = {"orders": "orders file", "stock": "stock file"}
-_MAPPING_PAGE = {"orders": "Orders Mapping", "stock": "Stock Mapping"}
+FILE_NOUN = {"orders": "orders file", "stock": "stock file"}
+MAPPING_PAGE = {"orders": "Orders Mapping", "stock": "Stock Mapping"}
 # How an internal column name reads in a sentence.
 _INTERNAL = {
     "Order_Number": "order number",
@@ -110,7 +110,7 @@ class FileSlot:
             mapped = names.get(column, "")
             return _INTERNAL.get(mapped, mapped or column)
 
-        file = _FILE[self.kind]
+        file = FILE_NOUN[self.kind]
         if len(self.missing_columns) == 1:
             column = self.missing_columns[0]
             title = f"No {internal(column)} column"
@@ -122,7 +122,7 @@ class FileSlot:
             listed = ", ".join(f"“{c}” ({internal(c)})" for c in self.missing_columns)
             title = f"{len(self.missing_columns)} mapped columns missing"
             text = f"The {file}'s header row has none of: {listed}."
-        self.problem = _problem(title, text, _MAPPING_PAGE[self.kind])
+        self.problem = _problem(title, text, MAPPING_PAGE[self.kind])
         self.on_change()
 
     def set_problem(self, path, title: str, text: str, fix_page: str = "") -> None:
