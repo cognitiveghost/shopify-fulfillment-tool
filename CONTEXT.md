@@ -15,8 +15,8 @@ for decisions.
 Everything except the two heavy views.
 
 **Web tier** — the part drawn in a `QWebEngineView`, styled with real CSS.
-Analysis Results only. See ADR 0001, which also records the deletion of
-Info › Statistics that leaves it the sole occupant.
+Analysis Results today; ADR 0016 lets each other screen move in its own
+task. See ADR 0001 for why Results moved first.
 
 **Renderer** — either tier, when the point is that there are two of them and
 one palette must serve both. Never used for `QSvgRenderer`; say
@@ -32,6 +32,11 @@ seam is what must not be seen.
 printed-label templates are not web assets: they are rendered to PDF, never
 shown in the web tier, and keep their own font.
 
+**Web kit** — `gui/web/kit.css`, the stylesheet every web page links first:
+cards, buttons, badges, inputs, menus, the toast, the banner, the state panel,
+the page header. Components only, never a page's layout. Its sheet,
+`tests/web/kit_sheet.html`, shows one of each.
+
 **Order frame** — the analysis result folded to one row per order, with its
 lines counted rather than listed. What the Qt tier's table shows.
 
@@ -40,9 +45,9 @@ per order, with that order's lines nested inside it.
 
 ## Results
 
-**Results document** — the web tier's one page: KPI strip, filter bar and
-order table, with a slot beside the table for the detail pane. It owns its
-view state (ADR 0005). Not the "results table", which named the Qt table it
+**Results document** — the Results page: two cards on the sunken plane, the KPI
+strip and one split card that holds the order table and, beside it, the detail
+pane. It owns its view state (ADR 0005). Not the "results table", which named the Qt table it
 replaced.
 
 **Fulfillable order** — an order the session can ship complete. This is the
@@ -69,6 +74,7 @@ stock file was when the analysis ran.
 **Detail pane** — what the results document's slot shows by default: the
 cursor order's identity, verdict, lines, tags, notes and actions. It shows one
 order, never the multi-selection. It replaces the Qt tier's order detail pane.
+It collapses to a rail that still says what it is.
 
 **Verdict** — the pane's one sentence saying whether an order ships and, if
 not, why. It is built from the run's reason codes, not from the status.
@@ -98,8 +104,8 @@ units: its **Lot allocation**, fitted to the line's current quantity
 (ADR 0014). Units the opening lots can't cover, or a session with no stock
 file, have no lot label.
 
-**Column manager** — the slot's other occupant. It chooses and orders the
-table's columns and is saved per client. The pane comes back when it closes.
+**Column manager** — a popover under the Columns button. It chooses and orders
+the table's columns and is saved per client. The pane stays visible behind it.
 
 **Pinned column** — Status and Order: always first and always shown.
 
@@ -173,28 +179,40 @@ label. Distinguished from a **filter chip**, which is interactive and
 dismissible, and from the **edge** variant, a lane marker that carries no
 status of its own.
 
+**Badge** — the web tier's status pill: a tinted fill, no outline and no mark.
+Authorship, which the mark carries on a chip, is said in the pane's verdict
+instead. Not a **chip**, which stays the Qt tier's silhouette.
+
 **Selection ring** — the closed rectangle around a selected table row. Its
 horizontal sides come from QSS, its two end caps from a delegate, because
 `QTableView::item` styles cells and a QSS left border would repeat at every
 column boundary. Distinguished from the **status edge**, the 3px role-coloured
-bar on the row's leftmost visible column, which insets inside the ring.
+bar on the row's leftmost visible column, which insets inside the ring. The Qt
+tier's only: on the web tier the **cursor** row wears a bar on its left edge.
+
+**Cursor** — the one order the detail pane shows, moved by a click or ↑ ↓. Not
+a selection: a bulk action never reaches it.
+
+**Checked orders** — the set a bulk action reaches, built with the row
+checkboxes, Ctrl-click, Shift-click and Ctrl+A. It is what Python hears as the
+selection. A filter that hides an order unchecks it.
 
 **State panel** — the widget a screen shows instead of its table when there
 is nothing to show: nothing-loaded, working, no-results, or failed. Names the
 cause, names the file or filter that caused it, and offers the action that
 resolves it.
 
-**Selection bar** — the 44px bar that exists only while orders are selected.
-It counts the selection in two units, orders and units, and holds every verb
-that acts on more than one order. It takes its height from the table rather
-than floating over rows. The results document has one; the Session Browser has
-a Qt one of the same composition and no shared code.
+**Selection bar** — the bar that exists only while orders are checked. It takes
+the table header's place, counts the checked orders and holds every verb that
+acts on more than one. It never floats over rows. The results document has
+one; the Session Browser has a Qt one of the same composition and no shared
+code.
 
 **Bulk popover** — one surface carrying a whole bulk action: what it will
 affect, the choice it needs, and the verb naming the consequence. It replaces
-a chain of blocking dialogs. It never confirms, because the verb states the
-count and Undo is real; the three verbs that destroy data raise a **confirm**
-on top of it instead.
+a chain of blocking dialogs. For a verb that removes orders or lines it lists
+what will change, and its own verb is the confirmation: no dialog follows,
+because Undo is real.
 
 ## Messages
 

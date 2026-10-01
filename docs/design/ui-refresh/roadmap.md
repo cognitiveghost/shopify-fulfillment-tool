@@ -53,7 +53,15 @@ Client settings, the theme switch and the connection block with Retry. The statu
 command-bar overflow is cut down to Server connection… and Keyboard shortcuts. Results stays greyed out until
 the session has been analysed.
 
-### 2. Results to mockup, and the web kit
+### 2. Results to mockup, and the web kit (built in run 38)
+
+Spec: `docs/superpowers/specs/2026-10-01-ui-refresh-phase2-results-kit-design.md`.
+Plan: `docs/superpowers/plans/2026-10-01-ui-refresh-phase2-results-kit.md`.
+
+Built as listed below, with these differences. Two more tokens, `critical_fill` and `on_critical`, for the
+popover's confirm button. The kit has a sheet, `tests/web/kit_sheet.html`, where the components no screen
+draws yet (segmented control, banner, page header) are tested and rendered. Held is not a status: the owner
+kept two. The column manager is the mockup's popover holding the full manager.
 
 - Pulls the parts every web page shares (tokens as CSS variables, cards, buttons, badges, segmented control,
   inputs, toast, banner, state panel, page header) out of `gui/web/results.css` into `gui/web/kit.css`.
@@ -125,5 +133,9 @@ place where it had to decide something the mockup does not show.
 
 ## After the roadmap
 
+- Re-evaluate an order's status when its short SKU is removed. The mockup's popover promises "becomes
+  Fulfillable"; today the order stays Blocked until someone marks it fulfillable, and the popover says so.
+  Stock-ledger work with its own spec.
+- `gui/web/kit.css` moves to `shared/` when Packing Tool adopts it.
 - Packing Tool adopts the wide sidebar and the web kit in its own tasks.
 - Revisit this file whenever a phase changes the plan for the ones after it.

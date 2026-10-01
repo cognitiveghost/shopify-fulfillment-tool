@@ -459,6 +459,13 @@ Dropped because the mockup does not draw them: the units, value and courier coun
 Exclude and Clear buttons in the bar (Exclude moved into More; the header checkbox and Esc clear); the pane
 footer's ⋯ menu (Ctrl+C copies the order number); the column manager's close and Done buttons.
 
+Found while building, and kept: the pane footer's two buttons are the kit's compact size, with 10px padding
+and a wrap fallback, because "Mark fulfillable", "Exclude order" and "↑ ↓  25 / 40" fill 339px in Inter and a
+three-digit position wraps to a second row rather than clip. The Results filter chips still clip when a
+second chip meets a narrow page (the row's existing `overflow: hidden`); the mockup has room for one chip.
+Inter's tabular digits are wider than the mockup's Segoe UI, so every width in the Results table is
+measured from the page's own font, not copied from the mockup.
+
 ## 10. Out of scope
 
 - Re-evaluating an order's status when its short SKU is removed (stock-ledger work; follow-up task).
