@@ -11,14 +11,14 @@ sample what actually renders.
 from collections import Counter
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
-from gui.components.commandbar import CommandBar
+from gui.components.commandbar import BarState, CommandBar
 from gui.theme_manager import get_theme_manager
 from shared.components.state_panel import StatePanel
 from shared.icons import icon
 from shared.navrail import NavRail
-from shared.theme import StatusChip, build_stylesheet
+from shared.theme import StatusChip, build_stylesheet, set_button_role
 
 # Spec §3.5: the eleven states Bundle 3 ships (4 Shopify + 7 Packing), not the
 # artboard's thirteen -- the remaining two are 9.19's, gated on a data change.
@@ -62,15 +62,21 @@ def _dominant_color(widget) -> str:
     return pixels.most_common(1)[0][0]
 
 
-def test_the_command_bar_action_still_renders_primary(styled_app):
-    theme = get_theme_manager().get_current_theme()
+def test_the_bars_new_session_button_takes_its_role_from_the_app_sheet(styled_app):
+    """The bar's own sheet is type-scoped, so it must not flatten a child's role."""
     bar = CommandBar()
-    bar.set_action("Process")
-    bar.resize(600, 40)
+    bar.set_state(BarState.NO_SESSION)
+    bar.resize(600, 48)
     bar.show()
     QApplication.processEvents()
 
-    assert _dominant_color(bar.action_button).lower() == theme.accent_fill.lower()
+    plain = QPushButton("New session")
+    set_button_role(plain, "secondary")
+    plain.resize(bar.new_session_button.size())
+    plain.show()
+    QApplication.processEvents()
+
+    assert _dominant_color(bar.new_session_button) == _dominant_color(plain)
 
 
 def test_the_nav_rail_shows_which_item_is_current(styled_app):

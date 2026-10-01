@@ -1,15 +1,14 @@
 """The one-row bar across the top of every screen.
 
-Client selector, session id, status, and exactly one primary action. "One
-primary per screen" is enforced structurally: there is a single action button
-and it is the only place in the component library that marks a button primary.
-On Results the session is drawn as a chip (set_results_mode).
-Replaces the sidebar of 70px client cards with a dropdown.
+Client selector, New session, Open recent, and the open session's name as a
+chip. It holds no screen's action: each page draws its own primary. While a
+run is going it names the step beside a disabled "Running…" (phase 3 spec
+section 8). Replaces the sidebar of 70px client cards with a dropdown.
 """
 
 import enum
 
-from PySide6.QtCore import QEvent, QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QIcon,
@@ -32,18 +31,17 @@ from PySide6.QtWidgets import (
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from shared.components.overflow import OverflowMenu, overflow_button
 from shared.icons import icon
-from shared.theme import StatusChip, on_theme_changed
+from shared.theme import on_theme_changed
 
 BAR_HEIGHT = 48
 _CLIENT_NAME_WIDTH = 200
 
 
 class BarState(enum.Enum):
-    """What the bar knows about, which decides where the one primary sits.
+    """What the bar knows about: no client, no session, a session, a run.
 
-    Orthogonal to which screen is showing: the state decides *whether* a
-    right-hand primary exists, bind_action decides *which button* it is.
-    Collapsing the two would leave Generate Reports with no home.
+    It decides what is enabled and whether the chip and the step readout
+    show. Which screen is showing is set_screen's, separately.
     """
 
     NO_CLIENT = "no_client"
@@ -70,7 +68,7 @@ _ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS)
 _LADDER = (
     (1100, "spacer"),  # inter-group spacer collapses to 8px
     (900, "client"),  # client name elides inside its 200px
-    (700, "progress"),  # progress drops the phase name, keeps the percent
+    (700, "step"),  # the step readout drops its name, keeps the count
     (500, "new_session"),  # New Session goes icon-only
 )
 
@@ -114,16 +112,12 @@ class CommandBar(QWidget):
     createClientRequested = Signal()
     manageGroupsRequested = Signal()
     refreshRequested = Signal()
-    actionTriggered = Signal()
     newSessionRequested = Signal()
-    openFolderRequested = Signal()
-    cancelRequested = Signal()
     sessionChosen = Signal(str)
     browseAllRequested = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        theme = get_theme_manager().get_current_theme()
         # A QWidget subclass paints no QSS background without this.
         self.setAttribute(Qt.WA_StyledBackground, True)
         self._apply_theme()
@@ -133,7 +127,14 @@ class CommandBar(QWidget):
 
         self._repopulating = False
         self._restore_client = ""
-        self._results_mode = False
+        self._show_chip = False
+        self._show_meta = False
+        self._analysed_text = ""
+        self._stock_text = ""
+        self._recent: list[tuple[str, str]] = []
+        self._session_text = ""
+        self._state = BarState.NO_CLIENT
+        self._step = (0, 0, "")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
@@ -157,86 +158,61 @@ class CommandBar(QWidget):
         self.setFixedHeight(BAR_HEIGHT)
         self.client_selector.setFixedWidth(_CLIENT_NAME_WIDTH)
 
-        self.new_session_button = QPushButton("New Session", self)
-        set_button_role(self.new_session_button, "primary")
+        # Always there: a session can be started from any screen. Secondary,
+        # because the screen's primary is the page's own.
+        self.new_session_button = QPushButton("New session", self)
+        set_button_role(self.new_session_button, "secondary")
         self.new_session_button.clicked.connect(self.newSessionRequested.emit)
-        self.new_session_button.hide()
+        # A QIcon is a snapshot: re-rendered on a theme change.
+        on_theme_changed(
+            self.new_session_button,
+            lambda _t=None, b=self.new_session_button: b.setIcon(icon("plus")),
+        )
         layout.addWidget(self.new_session_button)
 
-        # A menu button, not a label: the recent-sessions strip Bundle 5
-        # deletes from the Setup page was the only route back to yesterday's
-        # work, and navigation belongs in the shell. Bundle 4 §3.3 forbids
-        # eliding the session ID at any width, so no maximum width is set
-        # and the style is TextOnly.
+        # The route back to yesterday's work. Always reads "Open recent": the
+        # open session's name is the chip beside it, or the page's own head.
         self.session_button = QToolButton(self)
         self.session_button.setAutoRaise(True)
         self.session_button.setPopupMode(QToolButton.InstantPopup)
         self.session_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.session_button.setText("Open recent")
         self.session_menu = QMenu(self.session_button)
         self.session_button.setMenu(self.session_menu)
         layout.addWidget(self.session_button)
-        self._recent: list[tuple[str, str]] = []
-        self._session_text = ""
 
-        # Icon-only: its target is the string to its left. The glyph is
-        # re-rendered on a theme change -- a QIcon is a snapshot, and the
-        # dark theme's grey is invisible on the light one.
-        self.open_folder_button = QToolButton(self)
-        self.open_folder_button.setAutoRaise(True)
-        self.open_folder_button.setToolTip("Open session folder")
-        self.open_folder_button.setIcon(icon("folder-open"))
-        on_theme_changed(
-            self.open_folder_button,
-            lambda _t=None, b=self.open_folder_button: b.setIcon(icon("folder-open")),
-        )
-        self.open_folder_button.clicked.connect(self.openFolderRequested.emit)
-        self.open_folder_button.hide()
-        layout.addWidget(self.open_folder_button)
+        # The open session's name, never elided: an elided ID is a wrong ID.
+        self.session_chip = QLabel("", self)
+        self.session_chip.hide()
+        layout.addWidget(self.session_chip)
 
-        self.status_chip = StatusChip("text_secondary", "", theme, parent=self)
-        self.status_chip.hide()  # an empty chip still paints a tinted pill
-        layout.addWidget(self.status_chip)
-
-        # W3's second chip: how old the stock file was when the analysis ran.
-        self.stock_chip = StatusChip("text_secondary", "", theme, parent=self)
-        self.stock_chip.hide()
-        layout.addWidget(self.stock_chip)
-
-        # Results only (phase 2 spec section 6.1): the two chips' text as one
-        # quiet caption beside the session chip.
+        # Results only: "analysed 14:06 · stock file 19 h old".
         self.meta_label = QLabel("", self)
         self.meta_label.hide()
         layout.addWidget(self.meta_label)
 
-        self.progress_label = QLabel("", self)
-        self.progress_label.setStyleSheet(font_css("caption"))
-        self.progress_label.hide()
-        layout.addWidget(self.progress_label)
-
         layout.addStretch()
 
-        self.action_button = QPushButton("", self)
-        set_button_role(self.action_button, "primary")
-        self.action_button.clicked.connect(self.actionTriggered.emit)
-        self.action_button.hide()
-        layout.addWidget(self.action_button)
-
-        self.cancel_button = QPushButton("Cancel", self)
-        set_button_role(self.cancel_button, "danger")
-        self.cancel_button.clicked.connect(self.cancelRequested.emit)
-        self.cancel_button.hide()
-        layout.addWidget(self.cancel_button)
+        # While a run is going: "Step 2 of 4", the step's name, and a button
+        # that only says so. Cancel is on the Setup page.
+        self.step_count_label = QLabel("", self)
+        self.step_count_label.hide()
+        layout.addWidget(self.step_count_label)
+        self.step_name_label = QLabel("", self)
+        self.step_name_label.hide()
+        layout.addWidget(self.step_name_label)
+        self.running_button = QPushButton("Running…", self)
+        set_button_role(self.running_button, "primary")
+        self.running_button.setEnabled(False)
+        self.running_button.hide()
+        layout.addWidget(self.running_button)
 
         self.overflow = OverflowMenu(self)
         self.overflow_button = overflow_button(self.overflow, self)
         layout.addWidget(self.overflow_button)
 
-        self._state = BarState.NO_CLIENT
-        self._progress = (0, "")
-        on_theme_changed(self.session_button, self._style_session)
-
-        self._bound_action = None
-        self.action_button.clicked.connect(self._forward_action_click)
+        on_theme_changed(self.session_chip, self._style_labels)
+        self._refresh()
 
     def _apply_theme(self) -> None:
         theme = get_theme_manager().get_current_theme()
@@ -249,41 +225,43 @@ class CommandBar(QWidget):
             f" border-bottom: 1px solid {theme.border_subtle}; }}"
         )
 
-    def _style_session(self, theme=None) -> None:
-        """The session button as plain text, or on Results as the mockup's chip.
+    def _style_labels(self, theme=None) -> None:
+        """The chip, the meta text and the step readout.
 
-        Its own sheet rather than the app's: this is the one QToolButton drawn
-        this way, and a widget sheet has to be re-applied on a theme change.
+        Their own sheets rather than the app's: a widget sheet has to be
+        re-applied on a theme change.
         """
         theme = theme or get_theme_manager().get_current_theme()
-        if self._results_mode:
-            self.session_button.setStyleSheet(
-                f"QToolButton {{ {font_css('caption')}"
-                f" font-family: {theme.font_family_mono};"
-                f" background-color: {theme.surface_raised};"
-                f" border: 1px solid {theme.border};"
-                f" border-radius: {theme.radius_md}px;"
-                " padding: 0px 8px; min-height: 20px; max-height: 20px; }"
-                " QToolButton::menu-indicator { image: none; }"
-            )
-        else:
-            self.session_button.setStyleSheet(font_css("caption"))
-        self.meta_label.setStyleSheet(
-            f"{font_css('caption')} color: {theme.text_secondary};"
+        self.session_button.setStyleSheet(font_css("caption"))
+        self.session_chip.setStyleSheet(
+            f"QLabel {{ {font_css('caption')}"
+            f" font-family: {theme.font_family_mono};"
+            f" background-color: {theme.surface_raised};"
+            f" border: 1px solid {theme.border};"
+            f" border-radius: {theme.radius_md}px;"
+            " padding: 0px 8px; min-height: 20px; max-height: 20px; }"
         )
+        quiet = f"{font_css('caption')} color: {theme.text_secondary};"
+        self.meta_label.setStyleSheet(quiet)
+        self.step_count_label.setStyleSheet(
+            f"{quiet} font-family: {theme.font_family_mono};"
+        )
+        self.step_name_label.setStyleSheet(font_css("caption", bold=True))
 
-    def set_results_mode(self, on: bool) -> None:
-        """On Results the session is the mockup's chip and its age plain text."""
-        self._results_mode = bool(on)
-        self._style_session()
+    def set_screen(self, chip: bool, meta: bool) -> None:
+        """Which screen is showing: whether the bar draws the session chip
+        (every screen but Setup, whose page head has it) and the analysis age
+        (Results)."""
+        self._show_chip = bool(chip)
+        self._show_meta = bool(meta)
         self._refresh()
 
     def _refresh_meta(self) -> None:
-        """`analysed 14:06 · stock file 19 h old`, from the two chips' own text."""
-        parts = [t for t in (self.status_chip.text(), self.stock_chip.text()) if t]
+        """`analysed 14:06 · stock file 19 h old`."""
+        parts = [t for t in (self._analysed_text, self._stock_text) if t]
         self.meta_label.setText(" · ".join(t[0].lower() + t[1:] for t in parts))
         has_session = self._state in (BarState.SESSION, BarState.RUNNING)
-        self.meta_label.setVisible(self._results_mode and has_session and bool(parts))
+        self.meta_label.setVisible(self._show_meta and has_session and bool(parts))
 
     def set_clients(self, names: list[str]) -> None:
         """The flat case: no pins, no groups, just a list."""
@@ -489,124 +467,49 @@ class CommandBar(QWidget):
         self._refresh()
 
     def set_status(self, role: str, text: str) -> None:
-        self.status_chip.set_status(role, text, get_theme_manager().get_current_theme())
-        self.status_chip.setVisible(bool(text) and not self._results_mode)
+        """When the open session was analysed. `role` is kept for the callers
+        that pass one; the text is drawn in one quiet colour."""
+        self._analysed_text = text
         self._refresh_meta()
 
     def set_stock_age(self, text: str) -> None:
-        self.stock_chip.set_status(
-            "text_secondary", text, get_theme_manager().get_current_theme()
-        )
-        self.stock_chip.setVisible(bool(text) and not self._results_mode)
+        self._stock_text = text
         self._refresh_meta()
-
-    def set_action(self, label: str) -> QPushButton:
-        """Label and reveal the screen's single primary action.
-
-        Drops any bind_action mirroring, and resets what the mirror had set --
-        otherwise a set_action screen following a bind_action one inherits the
-        old button's tooltip and enabled state, and one click fires both
-        actionTriggered and the button that is no longer on screen.
-        """
-        self._unbind()
-        set_button_role(self.action_button, "primary")
-        self.action_button.setToolTip("")
-        self.action_button.setEnabled(True)
-        self.action_button.setText(label)
-        self.action_button.show()
-        self._refresh()
-        return self.action_button
-
-    def _unbind(self) -> None:
-        if self._bound_action is not None:
-            self._bound_action.removeEventFilter(self)
-            self._bound_action = None
-
-    def bind_action(self, button: QPushButton | None, role: str = "primary") -> None:
-        """Mirror a screen's own primary button in the bar's action slot.
-
-        The bound button stays the command: its clicked connections and the
-        setEnabled call sites in file_handler and main_window_pyside keep working
-        untouched, and the bar is a second presentation of it rather than a
-        replacement. Passing None hides the slot, for a screen with no primary.
-        role is the slot's button role.
-
-        ponytail: a hidden QPushButton as the command's model is what QAction
-        does properly, but QPushButton cannot consume a QAction -- only
-        QToolButton can, via setDefaultAction -- so retrofitting one would change
-        the widget class at every call site that touches these three buttons.
-        Revisit if a third presentation of the same command ever appears.
-        """
-        self._unbind()
-        if button is None:
-            # The label goes too: _refresh shows the slot for any session
-            # state whose button has text, so a stale one would reappear.
-            self.action_button.setText("")
-            self.action_button.setToolTip("")
-            self.action_button.hide()
-            self._refresh()
-            return
-        self._bound_action = button
-        set_button_role(self.action_button, role)
-        button.installEventFilter(self)
-        self.action_button.setToolTip(button.toolTip())
-        self.action_button.setEnabled(button.isEnabled())
-        self.action_button.setText(button.text())
-        self.action_button.show()
-        self._refresh()
-
-    def _forward_action_click(self) -> None:
-        if self._bound_action is not None:
-            self._bound_action.click()
-
-    def eventFilter(self, watched, event):
-        # QWidget has no enabledChanged signal; this event is Qt's only notice.
-        if watched is self._bound_action and event.type() == QEvent.Type.EnabledChange:
-            self.action_button.setEnabled(watched.isEnabled())
-        return super().eventFilter(watched, event)
 
     def set_state(self, state: BarState) -> None:
         """Which of the four situations the bar is in. See BarState."""
         self._state = state
         self._refresh()
 
-    def set_progress(self, percent: int, phase: str) -> None:
-        self._progress = (percent, phase)
+    def set_step(self, index: int, total: int, name: str) -> None:
+        """The run's current step: its index in the run's steps, how many
+        there are, and its name."""
+        self._step = (int(index), int(total), str(name))
         self._refresh()
 
     def _refresh(self) -> None:
-        """Resolve state and bound button into what is actually visible.
+        """Resolve state and screen into what is actually visible.
 
-        One method rather than two setters that each hide things: with two,
-        whichever ran last won, and ui_manager calls them from a connection
-        change and a screen change that do not know about each other.
+        One method rather than setters that each hide things: ui_manager
+        calls them from a connection change and a screen change that do not
+        know about each other.
         """
         state = self._state
         has_session = state in (BarState.SESSION, BarState.RUNNING)
+        usable = state in (BarState.NO_SESSION, BarState.SESSION)
 
-        if state is BarState.NO_CLIENT:
-            self.session_button.hide()
-        else:
-            self.session_button.show()
-            if state is BarState.NO_SESSION:
-                self.session_button.setText("Open recent")
-                self.session_button.setEnabled(bool(self._recent))
-            else:
-                self.session_button.setText(self._session_text)
-                self.session_button.setEnabled(state is BarState.SESSION)
-        chips = has_session and not self._results_mode
-        self.open_folder_button.setVisible(chips)
-        self.status_chip.setVisible(chips and bool(self.status_chip.text()))
-        self.stock_chip.setVisible(chips and bool(self.stock_chip.text()))
+        self.new_session_button.setEnabled(usable)
+        self.session_button.setEnabled(usable)
+
+        self.session_chip.setText(self._session_text)
+        self.session_chip.setVisible(
+            has_session and self._show_chip and bool(self._session_text)
+        )
         self._refresh_meta()
 
-        self.new_session_button.setVisible(state is BarState.NO_SESSION)
-        self.cancel_button.setVisible(state is BarState.RUNNING)
-        self.action_button.setVisible(
-            state is BarState.SESSION and bool(self.action_button.text())
-        )
-
-        self.progress_label.setVisible(state is BarState.RUNNING)
+        running = state is BarState.RUNNING
+        self.step_count_label.setVisible(running)
+        self.running_button.setVisible(running)
         self._apply_ladder(self.width())
 
     def resizeEvent(self, event):
@@ -622,10 +525,11 @@ class CommandBar(QWidget):
             120 if "client" in fired else _CLIENT_NAME_WIDTH
         )
 
-        percent, phase = self._progress
-        if "progress" in fired or not phase:
-            self.progress_label.setText(f"{percent}%")
-        else:
-            self.progress_label.setText(f"{phase} {percent}%")
+        index, total, name = self._step
+        self.step_count_label.setText(f"Step {index + 1} of {total}" if total else "")
+        self.step_name_label.setText(name)
+        self.step_name_label.setVisible(
+            self._state is BarState.RUNNING and "step" not in fired and bool(name)
+        )
 
-        self.new_session_button.setText("" if "new_session" in fired else "New Session")
+        self.new_session_button.setText("" if "new_session" in fired else "New session")

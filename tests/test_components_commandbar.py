@@ -1,5 +1,4 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QPushButton
 
 from gui.components.commandbar import (
     ROW_ACTION,
@@ -51,40 +50,8 @@ def test_session_id_is_shown_verbatim(qapp):
     bar = CommandBar()
     bar.set_session_text("PL-2026-08-27-004")
     bar.set_state(BarState.SESSION)
-    assert bar.session_button.text() == "PL-2026-08-27-004"
-
-
-def test_status_uses_a_shared_status_chip(qapp):
-    from shared.theme import StatusChip
-
-    bar = CommandBar()
-    bar.set_status("status_success", "Completed")
-    assert isinstance(bar.status_chip, StatusChip)
-    assert bar.status_chip.text() == "Completed"
-
-
-def test_the_action_button_is_the_screens_one_primary(qapp):
-    bar = CommandBar()
-    button = bar.set_action("Start Packing")
-    assert button.property("role") == "primary"
-    assert button.text() == "Start Packing"
-
-
-def test_the_action_emits_actionTriggered(qapp):
-    bar = CommandBar()
-    button = bar.set_action("Start Packing")
-    seen = []
-    bar.actionTriggered.connect(lambda: seen.append(1))
-    button.click()
-    assert seen == [1]
-
-
-def test_set_action_called_twice_relabels_one_button(qapp):
-    bar = CommandBar()
-    first = bar.set_action("Start Packing")
-    second = bar.set_action("Resume Packing")
-    assert first is second
-    assert second.text() == "Resume Packing"
+    bar.set_screen(chip=True, meta=False)
+    assert bar.session_chip.text() == "PL-2026-08-27-004"
 
 
 DATA = {
@@ -313,66 +280,6 @@ def test_a_selection_made_before_the_rows_arrive_still_wins(qapp):
     assert bar.current_client() == "NEW"
 
 
-def test_bind_action_mirrors_the_bound_buttons_label_and_state(qapp):
-    source = QPushButton("▶ Run Analysis")
-    source.setToolTip("Start the fulfillment analysis")
-    source.setEnabled(False)
-
-    bar = CommandBar()
-    # A bound button only becomes the bar's visible primary in SESSION -- the
-    # state decides whether a right-hand primary exists at all (Bundle 4).
-    bar.set_state(BarState.SESSION)
-    bar.bind_action(source)
-
-    assert bar.action_button.text() == "▶ Run Analysis"
-    assert bar.action_button.toolTip() == "Start the fulfillment analysis"
-    assert not bar.action_button.isEnabled()
-    assert not bar.action_button.isHidden()
-
-
-def test_a_later_setEnabled_on_the_source_reaches_the_bar(qapp):
-    """QWidget has no enabledChanged signal; EnabledChange is the only notice."""
-    source = QPushButton("Run")
-    source.setEnabled(False)
-    bar = CommandBar()
-    bar.bind_action(source)
-
-    source.setEnabled(True)
-
-    assert bar.action_button.isEnabled()
-
-
-def test_the_bars_click_fires_the_bound_buttons_own_connections(qapp):
-    source = QPushButton("Run")
-    seen = []
-    source.clicked.connect(lambda: seen.append(1))
-    bar = CommandBar()
-    bar.bind_action(source)
-
-    bar.action_button.click()
-
-    assert seen == [1]
-
-
-def test_binding_none_hides_the_slot(qapp):
-    bar = CommandBar()
-    bar.bind_action(QPushButton("Run"))
-    bar.bind_action(None)
-    assert bar.action_button.isHidden()
-
-
-def test_rebinding_stops_the_old_button_reaching_the_bar(qapp):
-    first, second = QPushButton("First"), QPushButton("Second")
-    bar = CommandBar()
-    bar.bind_action(first)
-    bar.bind_action(second)
-
-    first.setEnabled(False)
-
-    assert bar.action_button.text() == "Second"
-    assert bar.action_button.isEnabled()
-
-
 def test_a_theme_toggle_restyles_the_bar(qapp):
     from gui.theme_manager import get_theme_manager
 
@@ -386,20 +293,3 @@ def test_a_theme_toggle_restyles_the_bar(qapp):
         manager.toggle_theme()
 
 
-def test_set_action_after_a_bind_stops_mirroring_the_old_button(qapp):
-    """packing-tool's 8.6b uses set_action on a screen with no button to bind."""
-    source = QPushButton("Run")
-    source.setToolTip("Start the run")
-    source.setEnabled(False)
-    seen = []
-    source.clicked.connect(lambda: seen.append(1))
-    bar = CommandBar()
-    bar.bind_action(source)
-
-    bar.set_action("Pack")
-    bar.action_button.click()
-
-    assert bar.action_button.text() == "Pack"
-    assert bar.action_button.toolTip() == ""
-    assert bar.action_button.isEnabled()
-    assert seen == []

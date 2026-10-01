@@ -27,21 +27,6 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 
 from .theme_manager import get_theme_manager
 
-# Tab index -> (main_window attribute holding that screen's command-bar action,
-# whether that button lives on a screen and must stop painting itself, and the
-# role the bar's slot takes). Results' one primary, Export, is inside the
-# results document (W3).
-#
-# New Session used to be entry 2, borrowed by the Browse screen from Session
-# Setup. Under Bundle 4 it is state-owned (BarState.NO_SESSION) and always
-# present in the command bar, so the borrow is dead -- new_session_btn is
-# hidden unconditionally below instead.
-# Results (1) has no bar action since phase 2: re-running the analysis lives
-# in its screen menu, as the mockup has it.
-_SCREEN_ACTIONS = {
-    0: ("run_analysis_button", True, "primary"),
-}
-
 # The sidebar's collapsed state is this PC's, like the theme -- same QSettings
 # pair theme_manager and log_viewer use. A function so tests can point it at
 # an INI file under tmp_path.
@@ -136,9 +121,7 @@ class UIManager:
         "Activity and execution logs (Ctrl+4)",
         "PDF processing and utilities (Ctrl+5)",
     )
-    # Both former entries (open_session_folder_button, new_session_btn) were
-    # duplicates of shell controls Bundle 5 deleted; the command bar's own
-    # open_folder_button re-renders its icon directly (commandbar.py).
+    # No long-lived button icon is re-themed here: the bar re-renders its own.
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {}
 
     def __init__(self, main_window):
@@ -338,16 +321,14 @@ class UIManager:
 
         self._setup_tab_shortcuts()
 
-        # The screen's primary action moves into the command bar's one slot.
-        for attribute, hide_in_page, _role in _SCREEN_ACTIONS.values():
-            if hide_in_page:
-                getattr(self.mw, attribute).hide()
-        self.mw.main_tabs.currentChanged.connect(self._bind_screen_action)
         self.mw.main_tabs.currentChanged.connect(self._apply_page_inset)
+        # The session chip on every screen but Setup, whose page head shows it;
+        # the analysis age on Results.
         self.mw.main_tabs.currentChanged.connect(
-            lambda index: self.mw.command_bar.set_results_mode(index == 1)
+            lambda index: self.mw.command_bar.set_screen(
+                chip=index != 0, meta=index == 1
+            )
         )
-        self._bind_screen_action(self.mw.main_tabs.currentIndex())
 
     def _create_command_bar(self) -> CommandBar:
         """The one-row bar that replaces the two-row global header."""
@@ -364,47 +345,37 @@ class UIManager:
         bar.newSessionRequested.connect(
             lambda: self.mw.actions_handler.create_new_session()
         )
-        bar.openFolderRequested.connect(self._open_session_folder)
         self._populate_overflow(bar)
+        bar.overflow.aboutToShow.connect(self._refresh_overflow)
         return bar
 
     def _populate_overflow(self, bar) -> None:
-        """New session for the client, then this PC's server and shortcuts. Phase 1 spec §5.6.
+        """The open session's folder, then this PC's server and shortcuts.
 
         Rebuilt on a client change, because the first section's header is the
-        client's name and a stale header points at the wrong profile.
+        client's name and a stale header points at the wrong profile. New
+        session is the bar's own button now (phase 3 spec section 8).
         """
         menu = bar.overflow
         menu.clear()
 
-        client = self.mw.current_client_id or "No client"
-        menu.add_section(client)
-        # The bar's own New Session button is state-owned (BarState.NO_SESSION
-        # only) -- with a session already open, the overflow was the only
-        # scope-appropriate place left to reach it without switching clients.
-        item = menu.add_item(
-            "New session…",
-            lambda: self.mw.actions_handler.create_new_session(),
+        menu.add_section(self.mw.current_client_id or "No client")
+        self._open_folder_item = menu.add_item(
+            "Open session folder", self._open_session_folder
         )
-        item.setEnabled(bool(self.mw.current_client_id))
+        self._refresh_overflow()
 
         menu.add_section("THIS PC")
         menu.add_item("Server connection…", self._open_connection_settings)
         menu.add_item("Keyboard shortcuts…", lambda: ShortcutsDialog(self.mw).exec())
 
+    def _refresh_overflow(self) -> None:
+        self._open_folder_item.setEnabled(bool(getattr(self.mw, "session_path", None)))
+
     def _apply_page_inset(self, index: int) -> None:
         """No inset around a web page, the old 5px around a Qt one."""
         inset = 0 if index in _WEB_PAGES else 5
         self.mw.page_area.layout().setContentsMargins(inset, inset, inset, inset)
-
-    def _bind_screen_action(self, index: int) -> None:
-        """Point the command bar's one primary at this screen's primary button."""
-        entry = _SCREEN_ACTIONS.get(index)
-        if entry is None:
-            self.mw.command_bar.bind_action(None)
-            return
-        attribute, _hide_in_page, role = entry
-        self.mw.command_bar.bind_action(getattr(self.mw, attribute), role)
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog.

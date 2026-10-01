@@ -1,7 +1,12 @@
-"""The command bar's four states: exactly one primary, and it moves."""
+"""The command bar's four states (phase 3 spec section 8).
+
+New session and Open recent are always there. The session's name is a chip
+on every screen but Setup, whose page head shows it. While a run is going the
+bar names the step beside a disabled "Running…".
+"""
 
 import pytest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication
 
 from gui.components.commandbar import BarState, CommandBar
 
@@ -22,162 +27,178 @@ def bar(qapp):
     widget.deleteLater()
 
 
-def test_no_client_has_no_primary_anywhere(bar):
-    bar.bind_action(QPushButton("Run Analysis"))
-    bar.set_state(BarState.NO_CLIENT)
-    assert not bar.action_button.isVisible()
-    assert not bar.new_session_button.isVisible()
+def _analysed(bar):
+    bar.set_session_text("2026-09-30_1")
+    bar.set_status("text_secondary", "Analysed 14:06")
+    bar.set_stock_age("Stock file 19 h old")
+    bar.set_state(BarState.SESSION)
+    return bar
 
 
-def test_no_session_puts_the_primary_beside_the_selector(bar):
-    bar.bind_action(QPushButton("Run Analysis"))
-    bar.set_state(BarState.NO_SESSION)
+@pytest.mark.parametrize("state", list(BarState))
+def test_new_session_and_open_recent_are_always_shown(bar, state):
+    bar.set_state(state)
     assert bar.new_session_button.isVisible()
-    # The screen still has a bound button; the state says there is no
-    # right-hand primary yet, and the state wins.
-    assert not bar.action_button.isVisible()
+    assert bar.session_button.isVisible()
+    assert bar.session_button.text() == "Open recent"
 
 
-def test_session_puts_the_screens_own_button_on_the_right(bar):
-    bar.bind_action(QPushButton("Run Analysis"))
-    bar.set_state(BarState.SESSION)
-    assert bar.action_button.isVisible()
-    assert bar.action_button.text() == "Run Analysis"
-    assert not bar.new_session_button.isVisible()
+@pytest.mark.parametrize(
+    ("state", "usable"),
+    [
+        (BarState.NO_CLIENT, False),
+        (BarState.NO_SESSION, True),
+        (BarState.SESSION, True),
+        (BarState.RUNNING, False),
+    ],
+)
+def test_they_are_usable_with_a_client_and_no_run(bar, state, usable):
+    bar.set_state(state)
+    assert bar.new_session_button.isEnabled() is usable
+    assert bar.session_button.isEnabled() is usable
 
 
-def test_session_with_no_bound_button_still_has_no_primary(bar):
-    bar.bind_action(None)
-    bar.set_state(BarState.SESSION)
-    assert not bar.action_button.isVisible()
-    assert not bar.new_session_button.isVisible()
-
-
-def test_running_has_no_primary_and_cancel_takes_the_danger_role(bar):
-    bar.bind_action(QPushButton("Run Analysis"))
-    bar.set_state(BarState.RUNNING)
-    assert not bar.action_button.isVisible()
-    assert not bar.new_session_button.isVisible()
-    assert bar.cancel_button.isVisible()
-    assert bar.cancel_button.property("role") == "danger"
-
-
-def test_binding_after_the_state_is_set_still_resolves(bar):
-    # Order must not matter: ui_manager sets the state on a connection change
-    # and binds on a screen change, and neither knows which ran last.
-    bar.set_state(BarState.SESSION)
-    bar.bind_action(QPushButton("Generate Reports"))
-    assert bar.action_button.isVisible()
-    assert bar.action_button.text() == "Generate Reports"
-
-
-def test_open_folder_appears_only_once_a_session_exists(bar):
+def test_new_session_is_a_secondary_button_that_asks_for_a_session(bar, qtbot):
     bar.set_state(BarState.NO_SESSION)
-    assert not bar.open_folder_button.isVisible()
+    assert bar.new_session_button.property("role") == "secondary"
+    assert bar.new_session_button.text() == "New session"
+    assert not bar.new_session_button.icon().isNull()
+    with qtbot.waitSignal(bar.newSessionRequested):
+        bar.new_session_button.click()
+
+
+def test_the_bar_has_no_screen_action_cancel_or_folder_button(bar):
+    for name in (
+        "action_button",
+        "cancel_button",
+        "open_folder_button",
+        "status_chip",
+        "stock_chip",
+        "progress_label",
+    ):
+        assert not hasattr(bar, name), name
+
+
+def test_the_chip_shows_the_session_off_setup(bar):
+    _analysed(bar).set_screen(chip=True, meta=False)
+    assert bar.session_chip.isVisible()
+    assert bar.session_chip.text() == "2026-09-30_1"
+    assert "border-radius: 6px" in bar.session_chip.styleSheet()
+    assert not bar.meta_label.isVisible()
+
+
+def test_setup_shows_no_chip_because_its_page_head_does(bar):
+    _analysed(bar).set_screen(chip=False, meta=False)
+    assert not bar.session_chip.isVisible()
+    assert not bar.meta_label.isVisible()
+
+
+def test_results_adds_the_analysis_age_as_text(bar):
+    _analysed(bar).set_screen(chip=True, meta=True)
+    assert bar.session_chip.isVisible()
+    assert bar.meta_label.isVisible()
+    assert bar.meta_label.text() == "analysed 14:06 · stock file 19 h old"
+
+
+def test_the_meta_text_follows_what_changes_under_it(bar):
+    _analysed(bar).set_screen(chip=True, meta=True)
+    bar.set_stock_age("")
+    assert bar.meta_label.text() == "analysed 14:06"
+    bar.set_status("text_secondary", "")
+    assert not bar.meta_label.isVisible()
+
+
+@pytest.mark.parametrize("state", [BarState.NO_CLIENT, BarState.NO_SESSION])
+def test_with_no_session_there_is_no_chip_and_no_meta(bar, state):
+    bar.set_session_text("No session")
+    bar.set_state(state)
+    bar.set_screen(chip=True, meta=True)
+    assert not bar.session_chip.isVisible()
+    assert not bar.meta_label.isVisible()
+
+
+def test_the_session_id_is_never_elided(bar):
+    bar.set_session_text("2026-09-04_tuesday-restock")
     bar.set_state(BarState.SESSION)
-    assert bar.open_folder_button.isVisible()
+    bar.set_screen(chip=True, meta=False)
+    assert bar.session_chip.text() == "2026-09-04_tuesday-restock"
+    assert bar.session_chip.maximumWidth() >= 16777215
+
+
+def test_running_names_the_step_beside_a_disabled_running_button(bar):
+    _analysed(bar).set_screen(chip=False, meta=False)
+    bar.set_state(BarState.RUNNING)
+    bar.set_step(1, 4, "Checking fulfilment history")
+    assert bar.step_count_label.isVisible()
+    assert bar.step_count_label.text() == "Step 2 of 4"
+    assert bar.step_name_label.isVisible()
+    assert bar.step_name_label.text() == "Checking fulfilment history"
+    assert bar.running_button.isVisible()
+    assert bar.running_button.text() == "Running…"
+    assert bar.running_button.property("role") == "primary"
+    assert not bar.running_button.isEnabled()
+
+
+@pytest.mark.parametrize(
+    "state", [BarState.NO_CLIENT, BarState.NO_SESSION, BarState.SESSION]
+)
+def test_nothing_about_a_run_shows_when_none_is_going(bar, state):
+    bar.set_step(2, 4, "Allocating stock")
+    bar.set_state(state)
+    assert not bar.step_count_label.isVisible()
+    assert not bar.step_name_label.isVisible()
+    assert not bar.running_button.isVisible()
 
 
 def test_the_bar_is_the_height_every_later_screen_assumes(bar):
     assert bar.height() == 48
 
 
-# The worst realistic content: the longest client name a validated id can
-# produce (20 chars, profile_manager.validate_client_id) and a session id.
-_WORST_CLIENT = "CLIENT_WAREHOUSE_NTH"
-_WORST_SESSION = "Session 2026-09-04_18-45-02"
-
-
-def _loaded(bar):
-    bar.set_clients([_WORST_CLIENT])
-    bar.set_current_client(_WORST_CLIENT)
-    bar.set_session_text(_WORST_SESSION)
-    bar.set_status("status_warning", "Analysis complete")
-    bar.set_action("Generate Reports")
-    bar.set_state(BarState.SESSION)
-    return bar
-
-
-def test_the_never_truncate_four_survive_the_design_width(bar):
-    _loaded(bar)
-    bar.resize(1310, 48)
-    QApplication.processEvents()
-
-    assert bar.session_button.text() == _WORST_SESSION
-    assert bar.action_button.text() == "Generate Reports"
-    assert bar.overflow_button.isVisible()
-    assert bar.status_chip.isVisible()
-
-
 def test_the_client_name_is_what_gives_way_first(bar):
-    _loaded(bar)
+    bar.set_clients(["CLIENT_WAREHOUSE_NTH"])
+    bar.set_current_client("CLIENT_WAREHOUSE_NTH")
+    _analysed(bar).set_screen(chip=True, meta=False)
     bar.resize(700, 48)
     QApplication.processEvents()
-
-    # Step 2 of the ladder fired; step 4 did not, because New Session is not
-    # even shown in this state.
-    # 120, not "<= 200": the selector is setFixedWidth to one of exactly
-    # two values, so a <= assertion passes whether or not the rung fired.
+    # 120, not "<= 200": the selector is setFixedWidth to one of exactly two
+    # values, so a <= assertion passes whether or not the rung fired.
     assert bar.client_selector.width() == 120
-    assert bar.session_button.text() == _WORST_SESSION
+    assert bar.session_chip.text() == "2026-09-30_1"
 
 
-def test_progress_keeps_the_percentage_and_drops_the_phase(bar):
-    _loaded(bar)
+def test_a_narrow_bar_keeps_the_step_count_and_drops_its_name(bar):
+    _analysed(bar)
     bar.set_state(BarState.RUNNING)
-    bar.set_progress(62, "Allocating stock")
+    bar.set_step(2, 4, "Allocating stock")
     bar.resize(1310, 48)
     QApplication.processEvents()
-    assert bar.progress_label.text() == "Allocating stock 62%"
+    assert bar.step_name_label.isVisible()
 
     bar.resize(620, 48)
     QApplication.processEvents()
-    assert bar.progress_label.text() == "62%"
+    assert bar.step_count_label.text() == "Step 3 of 4"
+    assert not bar.step_name_label.isVisible()
 
 
 def test_new_session_goes_icon_only_last(bar):
-    bar.set_clients([_WORST_CLIENT])
-    bar.set_current_client(_WORST_CLIENT)
     bar.set_state(BarState.NO_SESSION)
     bar.resize(1310, 48)
     QApplication.processEvents()
-    assert bar.new_session_button.text() == "New Session"
+    assert bar.new_session_button.text() == "New session"
 
     bar.resize(420, 48)
     QApplication.processEvents()
     assert bar.new_session_button.text() == ""
+    assert not bar.new_session_button.icon().isNull()
 
 
-def test_the_session_button_reads_open_recent_with_no_session(qapp):
-    bar = CommandBar()
-    bar.set_recent_sessions([("Tuesday restock", "/s/1")])
-    bar.set_state(BarState.NO_SESSION)
-    assert bar.session_button.isVisible() or not bar.isVisible()
-    assert bar.session_button.text() == "Open recent"
-    assert bar.session_button.isEnabled()
-
-
-def test_the_session_button_is_disabled_when_the_client_has_no_sessions(qapp):
+def test_open_recent_is_usable_even_with_no_recent_sessions(qapp):
+    """Its menu always ends with the route to the browser."""
     bar = CommandBar()
     bar.set_recent_sessions([])
     bar.set_state(BarState.NO_SESSION)
-    assert not bar.session_button.isEnabled()
-
-
-def test_the_session_id_is_never_elided(qapp):
-    bar = CommandBar()
-    bar.set_session_text("2026-09-04_tuesday-restock")
-    bar.set_state(BarState.SESSION)
-    assert bar.session_button.text() == "2026-09-04_tuesday-restock"
-    assert bar.session_button.maximumWidth() >= 16777215
-
-
-def test_the_picker_is_disabled_while_a_run_holds_the_turn(qapp):
-    bar = CommandBar()
-    bar.set_session_text("2026-09-04_tuesday-restock")
-    bar.set_state(BarState.RUNNING)
-    assert bar.session_button.text() == "2026-09-04_tuesday-restock"
-    assert not bar.session_button.isEnabled()
+    assert bar.session_button.isEnabled()
+    assert "Browse all sessions" in bar.session_menu.actions()[-1].text()
 
 
 def test_choosing_a_session_emits_its_path(qapp, qtbot):
@@ -196,61 +217,3 @@ def test_the_menu_ends_with_a_route_to_the_browser(qapp, qtbot):
     assert "Browse all sessions" in last.text()
     with qtbot.waitSignal(bar.browseAllRequested):
         last.trigger()
-
-
-def _analysed(bar):
-    bar.set_session_text("2026-09-30_1")
-    bar.set_status("text_secondary", "Analysed 14:06")
-    bar.set_stock_age("Stock file 19 h old")
-    bar.set_state(BarState.SESSION)
-    return bar
-
-
-def test_results_mode_draws_the_session_as_a_chip_and_its_age_as_text(bar):
-    """Phase 2 spec section 6.1."""
-    _analysed(bar).set_results_mode(True)
-    assert not bar.status_chip.isVisible()
-    assert not bar.stock_chip.isVisible()
-    assert not bar.open_folder_button.isVisible()
-    assert bar.meta_label.isVisible()
-    assert bar.meta_label.text() == "analysed 14:06 · stock file 19 h old"
-    assert bar.session_button.text() == "2026-09-30_1"
-    assert "border-radius: 6px" in bar.session_button.styleSheet()
-
-
-def test_leaving_results_mode_puts_the_bar_back(bar):
-    _analysed(bar).set_results_mode(True)
-    bar.set_results_mode(False)
-    assert bar.status_chip.isVisible()
-    assert bar.stock_chip.isVisible()
-    assert bar.open_folder_button.isVisible()
-    assert not bar.meta_label.isVisible()
-    assert "border-radius" not in bar.session_button.styleSheet()
-
-
-def test_results_mode_follows_chips_that_change_under_it(bar):
-    _analysed(bar).set_results_mode(True)
-    bar.set_stock_age("")
-    assert bar.meta_label.text() == "analysed 14:06"
-    assert not bar.stock_chip.isVisible()
-    bar.set_status("text_secondary", "")
-    assert not bar.meta_label.isVisible()
-
-
-def test_results_mode_with_no_session_adds_nothing(bar):
-    bar.set_state(BarState.NO_SESSION)
-    bar.set_results_mode(True)
-    assert not bar.meta_label.isVisible()
-
-
-def test_a_screen_with_no_action_stays_without_one_once_a_session_is_open(bar):
-    """bind_action(None) hid the slot but left the old label behind, so the
-    next refresh -- any session state change -- showed it again."""
-    run = QPushButton("Run analysis")
-    bar.bind_action(run, "primary")
-    _analysed(bar)
-    assert bar.action_button.isVisible()
-    bar.bind_action(None)
-    bar.set_state(BarState.SESSION)
-    assert not bar.action_button.isVisible()
-    assert bar.action_button.text() == ""

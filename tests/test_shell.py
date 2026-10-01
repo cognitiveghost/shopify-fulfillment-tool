@@ -47,7 +47,7 @@ def test_session_label_keeps_its_name_so_its_writer_needs_no_edit(main_window):
 
     main_window.command_bar.set_state(BarState.SESSION)
     main_window.session_info_label.setText("SESSION_7")
-    assert main_window.command_bar.session_button.text() == "SESSION_7"
+    assert main_window.command_bar.session_chip.text() == "SESSION_7"
 
 
 def test_choosing_a_client_in_the_dropdown_drives_on_client_changed(main_window):
@@ -245,14 +245,15 @@ def test_resuming_a_past_session_reaches_the_session_state(main_window, tmp_path
     main_window.load_existing_session(str(session))
 
     assert main_window.command_bar._state is BarState.SESSION
-    assert main_window.command_bar.open_folder_button.isVisible()
+    menu = main_window.command_bar.overflow
+    menu.aboutToShow.emit()
+    item = next(a for a in menu.actions() if a.text() == "Open session folder")
+    assert item.isEnabled()
 
 
-def test_new_session_is_reachable_from_the_overflow_with_a_session_open(main_window):
-    """The bar's own New Session button is state-owned (BarState.NO_SESSION
-    only). PR #317 review: with a session already open, the only way back to
-    it was switching clients first -- the overflow is the fix.
-    """
+def test_new_session_is_reachable_from_the_bar_with_a_session_open(main_window):
+    """Phase 3 spec section 8: the bar's New session is always there, so the
+    overflow no longer carries a copy of it."""
     from gui.components.commandbar import BarState
 
     main_window.profile_manager.create_client_profile("M", "Client M")
@@ -260,13 +261,13 @@ def test_new_session_is_reachable_from_the_overflow_with_a_session_open(main_win
     main_window.command_bar.set_current_client("M")
     main_window.command_bar.set_state(BarState.SESSION)
 
-    menu = main_window.command_bar.overflow
-    item = next(a for a in menu.actions() if a.text() == "New session…")
-    assert item.isEnabled()
+    button = main_window.command_bar.new_session_button
+    assert button.isVisible()
+    assert button.isEnabled()
 
     calls = []
     main_window.actions_handler.create_new_session = lambda: calls.append(1)
-    item.trigger()
+    button.click()
     assert calls == [1]
 
 
@@ -438,12 +439,15 @@ def test_the_overflow_keeps_only_what_the_sidebar_does_not(main_window):
     texts = [a.text() for a in menu.actions() if not a.isSeparator()]
     assert texts == [
         "No client",
-        "New session…",
+        "Open session folder",
         "THIS PC",
         "Server connection…",
         "Keyboard shortcuts…",
     ]
     assert not any(a.isCheckable() for a in menu.actions())
+    menu.aboutToShow.emit()
+    folder = next(a for a in menu.actions() if a.text() == "Open session folder")
+    assert not folder.isEnabled()  # no session is open
 
 
 def test_collapsing_is_remembered_on_this_pc(tmp_path, monkeypatch):

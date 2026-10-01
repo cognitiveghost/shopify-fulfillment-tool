@@ -126,19 +126,19 @@ def test_the_screen_menu_holds_what_left_the_bar_then_add_product_and_undo(main_
     assert actions[4:] == [main_window.add_product_button_tab2, main_window.undo_button]
 
 
-def test_results_has_no_bar_action_and_draws_the_session_chip(main_window):
+def test_the_bar_draws_the_chip_and_the_age_on_results_only(main_window):
     from PySide6.QtWidgets import QApplication
 
     bar = main_window.command_bar
     main_window.main_tabs.setCurrentIndex(1)
     QApplication.processEvents()
-    assert bar._bound_action is None
-    assert bar.action_button.isHidden()
-    assert bar._results_mode is True
+    assert (bar._show_chip, bar._show_meta) == (True, True)
+    main_window.main_tabs.setCurrentIndex(3)
+    QApplication.processEvents()
+    assert (bar._show_chip, bar._show_meta) == (True, False)
     main_window.main_tabs.setCurrentIndex(0)
     QApplication.processEvents()
-    assert bar._results_mode is False
-    assert bar.action_button.property("role") == "primary"
+    assert (bar._show_chip, bar._show_meta) == (False, False)
 
 
 def test_run_analysis_again_clicks_the_run_button_and_follows_its_state(main_window):
@@ -239,8 +239,9 @@ def test_session_chips_read_the_analysis_and_the_stock_copy(
 
     main_window.ui_manager.update_session_chips()
 
-    assert main_window.command_bar.status_chip.text() == "Analysed 09:33"
-    assert main_window.command_bar.stock_chip.text() == "Stock file 19 h old"
+    assert main_window.command_bar.meta_label.text() == (
+        "analysed 09:33 · stock file 19 h old"
+    )
 
 
 def test_session_chips_blank_without_an_analysis(main_window, tmp_path, monkeypatch):
@@ -249,8 +250,7 @@ def test_session_chips_blank_without_an_analysis(main_window, tmp_path, monkeypa
     )
     main_window.session_path = str(tmp_path)
     main_window.ui_manager.update_session_chips()
-    assert main_window.command_bar.status_chip.text() == ""
-    assert main_window.command_bar.stock_chip.text() == ""
+    assert main_window.command_bar.meta_label.text() == ""
 
 
 def test_opening_a_session_drops_the_previous_sessions_chips(
@@ -263,8 +263,7 @@ def test_opening_a_session_drops_the_previous_sessions_chips(
         main_window.session_manager, "get_session_info", lambda _path: {}
     )
     main_window.load_existing_session(str(tmp_path))
-    assert bar.status_chip.text() == ""
-    assert bar.stock_chip.text() == ""
+    assert bar.meta_label.text() == ""
 
 
 class _Profiles:
