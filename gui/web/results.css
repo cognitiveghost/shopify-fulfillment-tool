@@ -395,7 +395,7 @@
 
 .pane-lines { display: flex; flex-direction: column; gap: 6px; }
 .pane-numbers { font-size: var(--type-caption-size); font-weight: 700; color: var(--text-secondary); }
-.lines { border: 1px solid var(--border-subtle); border-radius: var(--kit-radius); }
+.pane-lines > .lines { border: 1px solid var(--border-subtle); border-radius: var(--kit-radius); }
 .line {
   display: flex;
   align-items: flex-start;
@@ -423,15 +423,21 @@
   color: var(--text-secondary);
 }
 
+/* "Mark fulfillable", "Exclude order" and a position like "↑ ↓  25 / 40"
+   just fit 339px in Inter. Beyond that the position wraps to a second row
+   rather than clip. */
 .pane-actions {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
+  gap: 6px 4px;
+  padding: 10px;
   border-top: 1px solid var(--border-subtle);
 }
+.pane-actions .btn.compact { padding: 0 8px; }
 .pane-position {
+  margin-left: auto;
   font-family: var(--font-family-mono);
   font-size: var(--type-caption-size);
   color: var(--text-secondary);

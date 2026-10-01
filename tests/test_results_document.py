@@ -671,3 +671,56 @@ def test_an_unmapped_price_gives_a_hint_that_opens_the_mapping(qtbot, doc):
     assert _text(qtbot, view, "#map-columns") == "Map columns"
     with qtbot.waitSignal(bridge.columnMappingRequested, timeout=5000):
         _eval(qtbot, view, "document.getElementById('map-columns').click(); true")
+
+
+def test_the_lines_column_cells_are_not_boxed_like_the_panes_line_list(qtbot, doc):
+    """The pane's `.lines` list and the table's Lines column share a word; the
+    pane's border once leaked onto every cell of the column."""
+    view, _ = doc
+    cell = "document.querySelector('#rows .row .cell.lines')"
+    assert _eval(qtbot, view, f"getComputedStyle({cell}).borderTopWidth") == "0px"
+
+
+def test_the_pane_footer_fits_its_longest_verb_and_a_three_digit_position(qtbot, doc):
+    """A blocked order's verb is "Mark fulfillable", the longest; it shares
+    339px with Exclude order and "↑ ↓  250 / 312" in Inter."""
+    view, _ = doc
+    _eval(
+        qtbot,
+        view,
+        "state.cursorKey = state.view.filter(r => !isFulfillable(r.o)).pop().key;"
+        " render(); true",
+    )
+    _until_js(qtbot, view, "!!document.querySelector('#pane .pane-actions')")
+    assert _text(qtbot, view, "#pane-status-verb") == "Mark fulfillable"
+    position = _text(qtbot, view, "#pane .pane-position")
+    assert position.endswith(" / 312") and len(position.split("/")[0].split()[-1]) == 3
+    fits = _eval(
+        qtbot,
+        view,
+        "(function () { var f = document.querySelector('#pane .pane-actions');"
+        " return f.scrollWidth <= f.clientWidth; })()",
+    )
+    assert fits is True
+
+
+def test_the_pane_footer_stays_on_one_row_for_a_forty_order_session(qtbot, doc):
+    """Spacer-free: "Mark fulfillable", "Exclude order" and "↑ ↓  25 / 40"
+    share one row at 339px (the wrap is only for three-digit positions)."""
+    view, _ = doc
+    _eval(
+        qtbot,
+        view,
+        "state.view = state.view.slice(0, 40);"
+        " state.cursorKey = state.view.filter(r => !isFulfillable(r.o)).pop().key;"
+        " renderPane(); true",
+    )
+    _until_js(qtbot, view, "!!document.querySelector('#pane .pane-actions')")
+    rows = _eval(
+        qtbot,
+        view,
+        "new Set([...document.querySelectorAll('#pane .pane-actions > *')]"
+        ".map(e => { var r = e.getBoundingClientRect();"
+        " return Math.round(r.top + r.height / 2); })).size",
+    )
+    assert rows == 1

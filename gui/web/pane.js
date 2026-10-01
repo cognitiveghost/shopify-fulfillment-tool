@@ -270,19 +270,19 @@ function paneFooter(o, index) {
   const order = str(o.Order_Number);
   const fulfillable = isFulfillable(o);
   const box = el("div", "pane-actions");
-  const verb = paneButton("secondary", fulfillable ? "Hold" : "Mark fulfillable");
+  const verb = paneButton("secondary compact", fulfillable ? "Hold" : "Mark fulfillable");
   verb.id = "pane-status-verb";
   verb.addEventListener("click", () => {
     if (!state.bridge) return;
     if (fulfillable) state.bridge.holdOrder(order);
     else state.bridge.fulfillOrder(order);
   });
-  const exclude = paneButton("ghost danger", "Exclude order");
+  const exclude = paneButton("ghost danger compact", "Exclude order");
   exclude.id = "pane-exclude";
   exclude.addEventListener("click", () => state.bridge && state.bridge.excludeOrder(order));
   const position = el("span", "pane-position",
     "↑ ↓  " + NUMBER.format(index + 1) + " / " + NUMBER.format(state.view.length));
-  box.append(verb, exclude, el("span", "spacer"), position);
+  box.append(verb, exclude, position);
   return box;
 }
 

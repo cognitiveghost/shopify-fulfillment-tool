@@ -241,3 +241,16 @@ def test_results_mode_with_no_session_adds_nothing(bar):
     bar.set_state(BarState.NO_SESSION)
     bar.set_results_mode(True)
     assert not bar.meta_label.isVisible()
+
+
+def test_a_screen_with_no_action_stays_without_one_once_a_session_is_open(bar):
+    """bind_action(None) hid the slot but left the old label behind, so the
+    next refresh -- any session state change -- showed it again."""
+    run = QPushButton("Run analysis")
+    bar.bind_action(run, "primary")
+    _analysed(bar)
+    assert bar.action_button.isVisible()
+    bar.bind_action(None)
+    bar.set_state(BarState.SESSION)
+    assert not bar.action_button.isVisible()
+    assert bar.action_button.text() == ""

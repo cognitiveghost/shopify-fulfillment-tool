@@ -529,8 +529,7 @@ class CommandBar(QWidget):
         setEnabled call sites in file_handler and main_window_pyside keep working
         untouched, and the bar is a second presentation of it rather than a
         replacement. Passing None hides the slot, for a screen with no primary.
-        role is the slot's button role: Results re-runs the analysis as a
-        secondary action (W3).
+        role is the slot's button role.
 
         ponytail: a hidden QPushButton as the command's model is what QAction
         does properly, but QPushButton cannot consume a QAction -- only
@@ -540,6 +539,10 @@ class CommandBar(QWidget):
         """
         self._unbind()
         if button is None:
+            # The label goes too: _refresh shows the slot for any session
+            # state whose button has text, so a stale one would reappear.
+            self.action_button.setText("")
+            self.action_button.setToolTip("")
             self.action_button.hide()
             self._refresh()
             return
