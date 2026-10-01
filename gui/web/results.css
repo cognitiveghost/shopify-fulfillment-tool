@@ -330,27 +330,48 @@
 
 .table-wrap > .state { position: absolute; inset: 0; }
 
-/* --- detail pane and column manager planes (Bundle 13 §6.2, §6.9) ----------- */
+/* --- detail pane (phase 2 spec section 5.9) ------------------------------ */
 
 .pane {
   position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-lg);
   overflow: hidden;
   background: var(--surface);
 }
-.pane { gap: var(--spacing-md); }
 
-.pane-head { flex-shrink: 0; display: flex; align-items: center; gap: var(--spacing-sm); height: 28px; }
-.pane-order { font-family: var(--font-family-mono); font-size: var(--type-heading-size); font-weight: 700; }
-.pane-age, .pane-position { font-size: var(--type-caption-size); color: var(--text-secondary); white-space: nowrap; }
-.btn.pane-icon { width: 24px; height: 24px; }
+.pane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  height: var(--table-head-height);
+  padding: 0 6px 0 14px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pane-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pane-order { font-family: var(--font-family-mono); }
 
-.pane-who { flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The body scrolls; the header and the footer never do. */
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+}
 
-.verdict { flex-shrink: 0; }
 .verdict[data-role="success"] { --role: var(--status-success); }
 .verdict[data-role="danger"] { --role: var(--status-danger); }
 .verdict[data-role="warning"] { --role: var(--status-warning); }
@@ -358,89 +379,68 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  font-size: var(--type-label-size);
+  font-size: var(--type-heading-size);
   font-weight: 700;
+  line-height: 1.3;
+  color: var(--role);
 }
 /* The mark (CONTEXT.md): hollow when detected by the run, solid when set by a person. */
 .mark { flex-shrink: 0; width: 8px; height: 8px; border: 1.5px solid var(--role); border-radius: 50%; }
 .mark.solid { background: var(--role); }
-.verdict-text {
-  margin: var(--spacing-xs) 0 0;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  overflow: hidden;
-}
+.verdict-text { margin: 6px 0 0; }
 .verdict-source { margin: var(--spacing-xs) 0 0; font-size: var(--type-caption-size); color: var(--text-secondary); }
-.pane-numbers { flex-shrink: 0; font-size: var(--type-caption-size); color: var(--text-secondary); }
 
-/* Lines scroll inside the pane; the pane itself never scrolls. */
-.lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pane-meta { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.pane-codes { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); }
+
+.pane-lines { display: flex; flex-direction: column; gap: 6px; }
+.pane-numbers { font-size: var(--type-caption-size); font-weight: 700; color: var(--text-secondary); }
+.lines { border: 1px solid var(--border-subtle); border-radius: var(--kit-radius); }
 .line {
-  position: relative;
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) 48px 48px 24px;
-  align-items: center;
-  height: 28px;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: 8px 6px 8px 10px;
 }
-.line.line-head {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  background: var(--surface);
+.line + .line { border-top: 1px solid var(--border-subtle); }
+.line-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.line-top { display: flex; align-items: baseline; gap: var(--spacing-sm); }
+.line-sku { font-family: var(--font-family-mono); font-weight: 700; }
+.line-qty {
+  font-family: var(--font-family-mono);
   font-size: var(--type-caption-size);
-  font-weight: 700;
   color: var(--text-secondary);
 }
-.line-cell { padding: 0 var(--spacing-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.line-cell.sku { font-family: var(--font-family-mono); }
-.line-cell.product { color: var(--text-secondary); }
-/* Short lines are edged, not tinted. */
-.line.short::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 3px;
-  background: var(--status-danger);
-}
-.btn.line-menu-button { visibility: hidden; width: 24px; height: 24px; padding: 0; }
-.line:hover .line-menu-button, .line:focus-within .line-menu-button { visibility: visible; }
+.line-product, .line-stock, .line-lot { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.line-product { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.line-stock.short { color: var(--status-danger); font-weight: 700; }
 
-.pane-tags { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-xs); }
-.flag-chip {
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  font-size: var(--type-caption-size);
-  color: var(--text-secondary);
-}
+.pane-tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-xs); }
 .pane-notes {
-  flex-shrink: 0;
   margin: 0;
   white-space: pre-line;
   font-size: var(--type-caption-size);
   color: var(--text-secondary);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
 }
-.pane-actions { flex-shrink: 0; display: flex; gap: var(--spacing-sm); }
 
-.pane-menu { top: auto; max-height: 240px; }
-.pane-menu .new-tag {
-  display: block;
-  margin: var(--spacing-xs) var(--spacing-md);
-  width: calc(100% - 2 * var(--spacing-md));
-  height: var(--control-height);
-  padding: 0 var(--padding-h);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+.pane-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
 }
-.pane-menu .new-tag:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+.pane-position {
+  font-family: var(--font-family-mono);
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Menus open upward inside the pane, which clips anything outside it. */
+.pane-menu { top: auto; max-height: 240px; }
+.pane-menu .field { display: block; width: calc(100% - 8px); margin: 4px; }
 
 .pane-empty {
   flex: 1;
@@ -448,9 +448,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-sm);
+  gap: 6px;
+  padding: var(--spacing-xl);
   text-align: center;
 }
+.pane-empty .state-title { font-size: inherit; }
 
 /* Collapsed, the pane is a rail that says what it is. */
 .pane-strip { height: 100%; }

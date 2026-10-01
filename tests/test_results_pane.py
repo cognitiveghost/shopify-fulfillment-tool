@@ -133,7 +133,7 @@ def test_a_short_order_names_the_sku_and_both_numbers(qtbot, doc):
     assert (
         _eval(qtbot, view, "document.querySelectorAll('#pane .line.short').length") == 1
     )
-    assert _text(qtbot, view, ".pane-position") == "2 of 4"
+    assert _text(qtbot, view, ".pane-position") == "↑ ↓  2 / 4"
     assert _text(qtbot, view, "#pane-status-verb") == "Mark fulfillable"
 
 
@@ -360,3 +360,133 @@ def test_clicking_a_row_brings_a_hidden_pane_back(qtbot, doc):
     _until_js(
         qtbot, view, "document.getElementById('table-area').dataset.slot === 'pane'"
     )
+
+
+def _codes(qtbot, view):
+    return _eval(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('#pane .pane-codes .code')]"
+        ".map(c => c.textContent).join('|')",
+    )
+
+
+def test_the_header_names_the_order_and_wears_its_status(qtbot, doc):
+    view, _ = doc
+    assert _text(qtbot, view, "#pane .pane-title") == "Order detail"
+    _select(qtbot, view, "#10445")
+    assert _text(qtbot, view, "#pane .pane-title") == "Order #10445"
+    assert _text(qtbot, view, "#pane .pane-head .badge") == "Blocked"
+    assert (
+        _eval(qtbot, view, "document.getElementById('pane-hide').title") == "Hide detail"
+    )
+
+
+@pytest.mark.parametrize(
+    ("order", "codes"),
+    [
+        ("#10443", "ALL_LINES_IN_STOCK"),
+        ("#10445", "STOCK_SHORT"),
+        ("#10447", "NO_SKU|UNKNOWN_SKU"),
+        ("#10449", "MARKED_FULFILLABLE|OUT_OF_STOCK"),
+    ],
+)
+def test_the_reason_codes_follow_the_verdict(qtbot, doc, order, codes):
+    view, _ = doc
+    _select(qtbot, view, order)
+    assert _codes(qtbot, view) == codes
+
+
+def test_a_hand_hold_and_a_rule_hold_name_themselves(qtbot, doc):
+    view, bridge = doc
+    row = pane_lines().iloc[0].to_dict()
+    held = {"Order_Fulfillment_Status": "Not Fulfillable"}
+    bridge.set_orders(
+        pd.DataFrame(
+            [
+                {**row, **held, "Order_Number": "H1", "System_note": ""},
+                {
+                    **row,
+                    **held,
+                    "Order_Number": "R1",
+                    "System_note": "Cannot fulfill: Held by rule: Fragile first",
+                },
+            ]
+        )
+    )
+    _until_js(qtbot, view, "document.querySelectorAll('#rows .row').length === 2")
+    _select(qtbot, view, "H1")
+    assert _codes(qtbot, view) == "HELD_BY_USER"
+    _select(qtbot, view, "R1")
+    assert _codes(qtbot, view) == "HELD_BY_RULE"
+
+
+def test_the_meta_line_gathers_who_where_how_old_and_how_much(qtbot, doc):
+    view, _ = doc
+    _select(qtbot, view, "#10443")
+    meta = _text(qtbot, view, "#pane .pane-meta")
+    assert meta.startswith("B. Fischer · AT · DPD · ")
+    assert meta.endswith(" old · 204.30")
+    assert _text(qtbot, view, "#pane .pane-numbers") == "2 lines · 6 units"
+
+
+def test_a_line_says_what_stock_it_has(qtbot, doc):
+    view, _ = doc
+    _select(qtbot, view, "#10445")
+    short = "#pane .line[data-index=\"0\"] .line-stock"
+    assert _text(qtbot, view, short) == "4 of 6 in stock, short 2"
+    assert (
+        _eval(qtbot, view, f"document.querySelector('{short}').classList.contains('short')")
+        is True
+    )
+    assert _text(qtbot, view, "#pane .line[data-index=\"1\"] .line-stock") == "18 left in stock"
+    assert _text(qtbot, view, "#pane .line[data-index=\"0\"] .line-sku") == "TS-4409-B"
+    assert _text(qtbot, view, "#pane .line[data-index=\"0\"] .line-qty") == "× 6"
+    _select(qtbot, view, "#10449")
+    assert _text(qtbot, view, "#pane .line[data-index=\"0\"] .line-stock") == "None in stock"
+
+
+def test_a_line_names_its_lot(qtbot, doc):
+    view, bridge = doc
+    lot = {
+        "batch": "B7",
+        "expiry": "261230",
+        "expiry_dt": pd.Timestamp("2026-12-30").date(),
+        "qty_allocated": 4,
+    }
+    lines = pane_lines()
+    lines["Lot_Details"] = [[lot] if i == 0 else None for i in range(len(lines))]
+    bridge.set_orders(lines)
+    _until_js(qtbot, view, "document.querySelectorAll('#rows .row').length === 4")
+    _select(qtbot, view, "#10443")
+    # The click can land before the new payload does; wait for the lot itself.
+    _until_js(qtbot, view, "!!document.querySelector('#pane .line-lot')")
+    assert _text(qtbot, view, "#pane .line[data-index=\"0\"] .line-lot") == "Lot B7 · exp 261230"
+    assert _eval(qtbot, view, "document.querySelectorAll('#pane .line-lot').length") == 1
+
+
+def test_the_last_line_cannot_be_removed(qtbot, doc):
+    view, _ = doc
+    _select(qtbot, view, "#10449")  # one line
+    _js(qtbot, view, "document.querySelector('#pane .line .line-menu-button').click()")
+    item = (
+        "[...document.querySelectorAll('#line-menu .menu-item')]"
+        ".find(b => b.textContent === 'Remove this line')"
+    )
+    assert _eval(qtbot, view, f"{item}.disabled") is True
+    assert _eval(qtbot, view, f"{item}.title") == "Last line: exclude the order instead"
+
+
+def test_the_footer_holds_the_verb_exclude_and_the_position(qtbot, doc):
+    view, _ = doc
+    _select(qtbot, view, "#10443")
+    assert _text(qtbot, view, "#pane-exclude") == "Exclude order"
+    assert _text(qtbot, view, "#pane .pane-position") == "↑ ↓  1 / 4"
+    assert _eval(qtbot, view, "document.getElementById('pane-more')") in (None, "")
+    fits = _eval(
+        qtbot,
+        view,
+        "(function () { var f = document.querySelector('#pane .pane-actions');"
+        " return f.scrollWidth <= f.clientWidth; })()",
+    )
+    assert fits is True

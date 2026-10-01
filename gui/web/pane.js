@@ -1,13 +1,22 @@
-// The order detail pane (Bundle 13 spec §6.2-6.7): the cursor order's
-// identity, verdict, lines, tags, notes and actions. One order, never the
-// multi-selection. No optimistic updates: it changes when `orders` comes back.
+// The order detail pane (phase 2 spec section 5.9): the cursor order's
+// header, verdict, reason codes, lines, tags, notes and footer. One order,
+// never the checked set. No optimistic updates: it changes when `orders`
+// comes back.
 "use strict";
 
 const RUN_SOURCE = "Detected by the run, not set by a person.";
 const HAND_SOURCE = "Set by a person, not detected by the run.";
 const CHEVRON_RIGHT = "m9 18 6-6-6-6";
 const CHEVRON_LEFT = "m15 18-6-6 6-6";
-const FLAG_CHIPS = [["_repeat", "Repeat"], ["Unknown_SKU", "Unknown SKU"], ["Low_Stock", "Low stock"]];
+const FLAG_CODES = [["_repeat", "REPEAT_CUSTOMER"], ["Unknown_SKU", "UNKNOWN_SKU"], ["Low_Stock", "LOW_STOCK"]];
+const PROBLEM_CODES = {
+  short: "STOCK_SHORT",
+  out_of_stock: "OUT_OF_STOCK",
+  invalid_quantity: "INVALID_QUANTITY",
+  no_sku: "NO_SKU",
+  rule_hold: "HELD_BY_RULE",
+  other: "OTHER",
+};
 const MENU_WIDTH = 220;
 let paneMenuOpener = null;
 
@@ -89,16 +98,13 @@ function renderPane() {
   const pane = els.pane;
   pane.textContent = ""; // also drops any open pane menu
   const hit = paneRecord();
+
   const head = el("div", "pane-head");
-  if (hit) {
-    head.append(
-      el("span", "pane-order", str(hit.o.Order_Number)),
-      el("span", "pane-age", ageMs(hit.o.Created_At) === null ? "" : fmtAge(hit.o.Created_At) + " old"),
-    );
-  }
-  head.append(el("span", "spacer"));
-  if (hit) head.append(el("span", "pane-position", NUMBER.format(hit.index + 1) + " of " + NUMBER.format(state.view.length)));
-  const hide = paneButton("ghost icon pane-icon", undefined, "Hide the pane");
+  const title = el("span", "pane-title", hit ? "Order " : "Order detail");
+  if (hit) title.append(el("span", "pane-order", str(hit.o.Order_Number)));
+  head.append(title);
+  if (hit) head.append(statusBadge(hit.o));
+  const hide = paneButton("ghost icon compact", undefined, "Hide detail");
   hide.id = "pane-hide";
   hide.innerHTML = svg(CHEVRON_RIGHT, "glyph");
   hide.addEventListener("click", hidePane);
@@ -117,12 +123,9 @@ function renderPane() {
     return;
   }
   const o = hit.o;
-  pane.append(paneWho(o), paneVerdict(o), paneNumbers(o), paneLines(o), paneTags(o), paneNotes(o), paneActions(o));
-}
-
-function paneWho(o) {
-  const parts = [o.Customer, o.Destination_Country, o.Shipping_Provider].map((v) => str(v).trim()).filter(Boolean);
-  return el("div", "pane-who", parts.length ? parts.join(" · ") : DASH);
+  const body = el("div", "pane-body");
+  body.append(paneVerdict(o), paneMeta(o), paneCodes(o), paneLines(o), paneTags(o), paneNotes(o));
+  pane.append(body, paneFooter(o, hit.index));
 }
 
 function paneVerdict(o) {
@@ -140,45 +143,107 @@ function paneVerdict(o) {
   return box;
 }
 
-function paneNumbers(o) {
-  const parts = [plural((o.lines || []).length, "line"), plural(num(o.Units) || 0, "unit")];
+function paneMeta(o) {
+  const parts = [o.Customer, o.Destination_Country, o.Shipping_Provider].map((v) => str(v).trim()).filter(Boolean);
+  if (ageMs(o.Created_At) !== null) parts.push(fmtAge(o.Created_At) + " old");
   if (num(o.Total_Price) !== null) parts.push(fmtMoney(o.Total_Price));
-  return el("div", "pane-numbers", parts.join(" · "));
+  return el("div", "pane-meta", parts.length ? parts.join(" · ") : DASH);
+}
+
+// The verdict's causes as machine words, then the order's flags.
+function reasonCodes(o) {
+  const v = o.Verdict || { state: "ready", by_hand: false, problems: [] };
+  const codes = [];
+  if (v.state === "ready") codes.push("ALL_LINES_IN_STOCK");
+  if (v.by_hand) codes.push(isFulfillable(o) ? "MARKED_FULFILLABLE" : "HELD_BY_USER");
+  for (const p of v.problems || []) codes.push(PROBLEM_CODES[p.code] || PROBLEM_CODES.other);
+  for (const [field, code] of FLAG_CODES) if (o[field] === true) codes.push(code);
+  return [...new Set(codes)];
+}
+
+function paneCodes(o) {
+  const box = el("div", "pane-codes");
+  for (const code of reasonCodes(o)) box.append(el("span", "code", code));
+  return box;
+}
+
+// What the run saw for a short line; stock left for every other.
+function stockSentence(o, line) {
+  if (line.Short) {
+    const sku = str(line.SKU);
+    const p = ((o.Verdict && o.Verdict.problems) || []).find((x) => x.sku === sku);
+    if (p && p.code === "short") {
+      return { short: true, text: NUMBER.format(p.have) + " of " + NUMBER.format(p.need) +
+        " in stock, short " + NUMBER.format(p.need - p.have) };
+    }
+    return { short: true, text: "None in stock" };
+  }
+  const left = num(line.Final_Stock);
+  return left === null ? null : { short: false, text: NUMBER.format(left) + " left in stock" };
+}
+
+// The run writes "1" where the stock file has no lot; that is not a label.
+function lotWord(value) {
+  const text = str(value).trim();
+  return text === "1" ? "" : text;
+}
+
+// One caption per lot. A cell read back from disk as text is shown as it is.
+function lotTexts(line) {
+  const lots = line.Lot_Details;
+  if (!lots) return [];
+  if (!Array.isArray(lots)) return [str(lots)];
+  const real = lots.filter((lot) => lot && typeof lot === "object");
+  return real.map((lot) => {
+    const parts = [];
+    if (lotWord(lot.batch)) parts.push("Lot " + lotWord(lot.batch));
+    if (lotWord(lot.expiry)) parts.push("exp " + lotWord(lot.expiry));
+    if (parts.length && real.length > 1 && num(lot.qty_allocated) !== null) {
+      parts.push("×" + NUMBER.format(lot.qty_allocated));
+    }
+    return parts.join(" · ");
+  }).filter(Boolean);
 }
 
 function paneLines(o) {
   const order = str(o.Order_Number);
+  const lines = o.lines || [];
+  const wrap = el("div", "pane-lines");
+  wrap.append(el("div", "pane-numbers", plural(lines.length, "line") + " · " + plural(num(o.Units) || 0, "unit")));
   const box = el("div", "lines");
-  const head = el("div", "line line-head");
-  for (const [text, cls] of [["SKU", ""], ["Product", ""], ["Want", " num"], ["Left", " num"], ["", ""]]) {
-    head.append(el("span", "line-cell" + cls, text));
-  }
-  box.append(head);
-  (o.lines || []).forEach((line, index) => {
+  lines.forEach((line, index) => {
     const sku = str(line.SKU);
     const row = el("div", "line" + (line.Short ? " short" : ""));
     row.dataset.index = String(index);
-    const product = el("span", "line-cell product", str(line.Product_Name) || DASH);
-    product.title = str(line.Product_Name);
-    const more = paneButton("ghost icon line-menu-button", "⋯", "Actions for this line");
+    const main = el("div", "line-main");
+    const top = el("div", "line-top");
+    top.append(el("span", "line-sku", sku || DASH), el("span", "line-qty", "× " + fmtInt(line.Quantity)));
+    main.append(top);
+    if (str(line.Product_Name)) {
+      const product = el("div", "line-product", str(line.Product_Name));
+      product.title = str(line.Product_Name);
+      main.append(product);
+    }
+    const stock = stockSentence(o, line);
+    if (stock) main.append(el("div", "line-stock" + (stock.short ? " short" : ""), stock.text));
+    for (const text of lotTexts(line)) main.append(el("div", "line-lot", text));
+    const more = paneButton("ghost icon compact line-menu-button", "⋯", "Actions for this line");
     more.addEventListener("click", () => openPaneMenu(more, "line-menu", [
-      ["Remove this line", () => state.bridge.removeLine(order, index, sku)],
+      ["Remove this line", () => state.bridge.removeLine(order, index, sku),
+        lines.length < 2 ? "Last line: exclude the order instead" : ""],
       ["Change quantity…", () => openQtyMenu(more, order, index, sku, line.Quantity)],
       ["Copy SKU", () => state.bridge.copyText(sku)],
     ]));
-    const actions = el("span", "line-cell");
-    actions.append(more);
-    row.append(el("span", "line-cell sku", sku || DASH), product,
-      el("span", "line-cell num", fmtInt(line.Quantity)), el("span", "line-cell num", fmtInt(line.Final_Stock)), actions);
+    row.append(main, more);
     box.append(row);
   });
-  return box;
+  wrap.append(box);
+  return wrap;
 }
 
 function paneTags(o) {
   const order = str(o.Order_Number);
   const box = el("div", "pane-tags");
-  for (const [field, label] of FLAG_CHIPS) if (o[field] === true) box.append(el("span", "flag-chip", label));
   for (const tag of (o.Tag_List || []).map(String)) {
     const chip = paneButton("", tag + "  ×", "Remove tag " + tag);
     chip.className = "chip-filter tag-chip";
@@ -199,8 +264,9 @@ function paneNotes(o) {
   return el("p", "pane-notes", parts.length ? parts.join("\n") : "No notes on this order.");
 }
 
-// Never a primary: the screen's one primary is Export (§6.6).
-function paneActions(o) {
+// Never a primary: the screen's one primary is Export. Copy order number
+// left with its menu: Ctrl+C copies the cursor's order (bulk.js).
+function paneFooter(o, index) {
   const order = str(o.Order_Number);
   const fulfillable = isFulfillable(o);
   const box = el("div", "pane-actions");
@@ -211,15 +277,12 @@ function paneActions(o) {
     if (fulfillable) state.bridge.holdOrder(order);
     else state.bridge.fulfillOrder(order);
   });
-  const exclude = paneButton("danger", "Exclude from run");
+  const exclude = paneButton("ghost danger", "Exclude order");
   exclude.id = "pane-exclude";
   exclude.addEventListener("click", () => state.bridge && state.bridge.excludeOrder(order));
-  const more = paneButton("ghost icon", "⋯", "More actions for this order");
-  more.id = "pane-more";
-  more.addEventListener("click", () => openPaneMenu(more, "order-menu", [
-    ["Copy order number", () => state.bridge.copyText(order)],
-  ]));
-  box.append(verb, exclude, more);
+  const position = el("span", "pane-position",
+    "↑ ↓  " + NUMBER.format(index + 1) + " / " + NUMBER.format(state.view.length));
+  box.append(verb, exclude, el("span", "spacer"), position);
   return box;
 }
 
@@ -254,10 +317,14 @@ function newMenu(id) {
   return menu;
 }
 
-function menuItem(label, act) {
+function menuItem(label, act, disabledTitle) {
   const item = el("button", "menu-item", label);
   item.type = "button";
   item.setAttribute("role", "menuitem");
+  if (disabledTitle) {
+    item.disabled = true;
+    item.title = disabledTitle;
+  }
   item.addEventListener("click", () => {
     closePaneMenus();
     if (state.bridge) act();
@@ -267,7 +334,7 @@ function menuItem(label, act) {
 
 function openPaneMenu(anchor, id, items) {
   const menu = newMenu(id);
-  for (const [label, act] of items) menu.append(menuItem(label, act));
+  for (const [label, act, disabledTitle] of items) menu.append(menuItem(label, act, disabledTitle));
   placeMenu(menu, anchor);
 }
 
@@ -280,7 +347,7 @@ function openTagMenu(anchor, o) {
     closePaneMenus();
     if (state.bridge) state.bridge.addOrderTag(order, tag);
   });
-  const input = el("input", "new-tag");
+  const input = el("input", "field new-tag");
   input.id = "new-tag";
   input.placeholder = "New tag";
   input.setAttribute("aria-label", "New tag");
@@ -300,7 +367,7 @@ function openTagMenu(anchor, o) {
 function openQtyMenu(anchor, order, index, sku, current) {
   const own = num(current);
   const menu = newMenu("qty-menu");
-  const input = el("input", "new-tag");
+  const input = el("input", "field new-tag");
   input.id = "line-qty";
   input.type = "number";
   input.min = "1";
@@ -343,6 +410,6 @@ function bindPane() {
     closePaneMenus();
   });
   document.addEventListener("mousedown", (e) => {
-    if (!e.target.closest(".pane-menu, .line-menu-button, #pane-add-tag, #pane-more")) closePaneMenus();
+    if (!e.target.closest(".pane-menu, .line-menu-button, #pane-add-tag")) closePaneMenus();
   });
 }
