@@ -1,0 +1,483 @@
+/* The web kit: what every web page shares (phase 2 spec section 4, ADR 0016).
+   Components only -- no page layout and no #id. Every colour is a token from
+   theme_css_vars(). A box-shadow is one of the theme's two shadow tokens or
+   none, and nothing else (shared/style_lint.py). Lines: a decorative edge is
+   --border-subtle, the edge of a control is --border (ADR 0018). */
+
+/* Chromium cannot see fonts registered with Qt's QFontDatabase, so the
+   bundled Inter the Qt tier renders in is declared again here. The relative
+   path holds in the dev tree and under _internal/ in the --onedir build. */
+@font-face {
+  font-family: "Inter";
+  font-weight: 400;
+  src: url("../../shared/assets/fonts/Inter-Regular.ttf");
+}
+@font-face {
+  font-family: "Inter";
+  font-weight: 700;
+  src: url("../../shared/assets/fonts/Inter-Bold.ttf");
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Geometry the theme does not own, and the one layer scale every page
+   stacks by. Two surfaces used to tie at 3 -- a menu and the selection bar --
+   and document order put the menu underneath. */
+:root {
+  --kit-radius: 8px;
+  --kit-radius-card: 12px;
+  --kit-control-compact: 24px;
+  --z-sticky: 1;
+  --z-header: 2;
+  --z-bar: 3;
+  --z-popover: 5;
+  --z-toast: 6;
+}
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  overflow: hidden;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: var(--type-body-size);
+  font-variant-numeric: tabular-nums;
+}
+
+button, input { font: inherit; color: inherit; }
+
+[hidden] { display: none !important; }
+
+/* --- utilities ----------------------------------------------------------- */
+
+.spacer { flex: 1 1 auto; }
+.mono { font-family: var(--font-family-mono); }
+
+.glyph {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+/* --- card ---------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--kit-radius-card);
+  box-shadow: var(--card-shadow);
+}
+
+/* --- buttons ------------------------------------------------------------- */
+
+.btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--kit-radius);
+  background: transparent;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn.primary {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  box-shadow: var(--card-shadow);
+}
+.btn.primary:hover { background: var(--accent-fill-hover); }
+.btn.primary:active { background: var(--accent-fill-active); }
+
+.btn.secondary {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+.btn.secondary:hover { background: var(--hover); }
+.btn.secondary:active { background: var(--selection-bg); }
+
+.btn.ghost:hover { background: var(--hover); }
+
+.btn.dashed { border: 1px dashed var(--border); }
+.btn.dashed:hover { background: var(--surface); }
+
+.btn.danger {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--status-danger);
+  box-shadow: var(--card-shadow);
+}
+.btn.danger:hover, .btn.danger:active { background: var(--status-danger-bg); }
+.btn.ghost.danger {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.btn.ghost.danger:hover { background: var(--status-danger-bg); }
+
+.btn.critical { background: var(--critical-fill); color: var(--on-critical); }
+
+.btn.icon { width: var(--control-height); padding: 0; }
+.btn.compact { height: var(--kit-control-compact); padding: 0 10px; }
+.btn.compact.icon { width: var(--kit-control-compact); padding: 0; }
+
+/* A link in a sentence: no box, just the underline. */
+.btn.link { height: auto; padding: 0; border: 0; text-decoration: underline; }
+
+/* The component sheet's disabled button: a dropped fill and a dashed edge.
+   After every role, so it wins at equal specificity. */
+.btn:disabled,
+.btn:disabled:hover {
+  border: 1px dashed var(--border);
+  background: var(--control-disabled-bg);
+  color: var(--text-disabled);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* --- badges -------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.badge.success { background: var(--status-success-bg); color: var(--status-success); }
+.badge.danger { background: var(--status-danger-bg); color: var(--status-danger); }
+.badge.warning { background: var(--status-warning-bg); color: var(--status-warning); }
+.badge.info { background: var(--status-info-bg); color: var(--status-info); }
+.badge.neutral {
+  background: var(--surface-raised);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+/* A machine word: a reason code, a session id. */
+.code {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--type-caption-size);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* --- inputs -------------------------------------------------------------- */
+
+/* A label wrapping a glyph and its <input>. */
+.input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--control-height);
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--kit-radius);
+  background: var(--surface);
+  color: var(--text-placeholder);
+}
+.input input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+.input input::placeholder { color: var(--text-placeholder); }
+.input:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.input.invalid { border-color: var(--status-danger); background: var(--status-danger-bg); }
+
+/* A bare <input>, where there is no glyph to wrap. */
+.field {
+  height: var(--control-height);
+  padding: 0 var(--padding-h);
+  border: 1px solid var(--border);
+  border-radius: var(--kit-radius);
+  background: var(--surface);
+}
+.field::placeholder { color: var(--text-placeholder); }
+.field:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+
+/* The tick and the bar are clipped shapes: the web tier may not rotate
+   anything (ADR 0001), so no bordered box turned 45 degrees. */
+input[type="checkbox"] {
+  appearance: none;
+  flex-shrink: 0;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  vertical-align: middle;
+  cursor: pointer;
+}
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  display: none;
+  background: var(--on-accent);
+}
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate {
+  border-color: transparent;
+  background: var(--accent-fill);
+}
+input[type="checkbox"]:checked::after {
+  display: block;
+  inset: 2px;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+input[type="checkbox"]:indeterminate::after {
+  display: block;
+  inset: 6px 3px;
+  clip-path: none;
+}
+input[type="checkbox"]:disabled {
+  border: 1px dashed var(--border);
+  background: var(--control-disabled-bg);
+  cursor: not-allowed;
+}
+input[type="checkbox"]:disabled::after { background: var(--text-disabled); }
+
+/* --- segmented control --------------------------------------------------- */
+
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--kit-radius);
+  background: var(--surface-sunken);
+}
+.segment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.segment[aria-checked="true"] {
+  border-color: var(--card-border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: var(--card-shadow);
+}
+.segment-count {
+  font-family: var(--font-family-mono);
+  font-size: var(--type-caption-size);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* --- menus and popovers -------------------------------------------------- */
+
+.menu-anchor { position: relative; flex-shrink: 0; }
+
+.menu, .popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: var(--z-popover);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--kit-radius-card);
+  box-shadow: var(--overlay-shadow);
+}
+.menu {
+  min-width: 220px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+}
+/* A titled panel with its own head and foot. */
+.popover { display: flex; flex-direction: column; }
+
+.menu-group {
+  padding: 4px 10px;
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menu-item:hover { background: var(--hover); }
+.menu-item.danger { color: var(--status-danger); }
+.menu-item:disabled,
+.menu-item:disabled:hover {
+  background: transparent;
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+.menu-separator { height: 1px; margin: 5px 0; background: var(--border-subtle); }
+.menu-hint { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
+
+.check {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  visibility: hidden;
+}
+.menu-item[aria-checked="true"] .check { visibility: visible; }
+
+/* --- toast (ADR 0007: a web page draws its own) -------------------------- */
+
+.toast {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  max-width: 480px;
+  padding: 6px 8px 6px 14px;
+  border-radius: var(--kit-radius);
+  background: var(--surface-inverse);
+  color: var(--on-inverse);
+  box-shadow: var(--overlay-shadow);
+}
+.toast-badge {
+  min-width: 18px;
+  padding: 0 var(--spacing-xs);
+  border: 1px solid var(--on-inverse);
+  border-radius: var(--radius-sm);
+  font-size: var(--type-caption-size);
+  text-align: center;
+}
+.toast-action, .toast-close {
+  flex-shrink: 0;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--on-inverse);
+  cursor: pointer;
+}
+.toast-action { padding: 0 8px; font-weight: 700; text-decoration: underline; }
+.toast-close { display: grid; place-items: center; width: 26px; padding: 0; }
+
+/* --- banner -------------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--kit-radius-card);
+}
+.banner.danger {
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+}
+.banner.danger > .glyph { width: 18px; height: 18px; color: var(--status-danger); }
+.banner.neutral {
+  align-items: center;
+  background: var(--surface);
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+.banner-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.banner-title { font-weight: 700; }
+.banner.neutral .banner-text { color: var(--text-secondary); }
+.banner-actions { display: flex; gap: 6px; }
+
+/* --- state panel --------------------------------------------------------- */
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--spacing-xl);
+  text-align: center;
+}
+.state-glyph {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.state-title { margin: 0; font-size: var(--type-label-size); font-weight: 700; }
+.state-text { margin: 0; max-width: 380px; color: var(--text-secondary); }
+.state .btn { margin-top: 4px; }
+
+/* --- page header --------------------------------------------------------- */
+
+.page-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.page-title { font-size: var(--type-heading-size); font-weight: 700; }
+.page-meta { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.page-head .code { height: 22px; padding: 0 8px; color: var(--text); }
+
+/* --- focus --------------------------------------------------------------- */
+
+.btn:focus-visible,
+.segment:focus-visible,
+.menu-item:focus-visible,
+.toast-action:focus-visible,
+.toast-close:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}

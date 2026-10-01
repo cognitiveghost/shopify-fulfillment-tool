@@ -1,53 +1,13 @@
-/* The results document (Bundle 12). Every value is a token from
-   theme_css_vars(): no hex, and nothing the Qt tier cannot draw
-   (ADR 0001, shared/style_lint.py). Geometry: spec section 6. */
-
-/* Chromium cannot see fonts registered with Qt's QFontDatabase, so the
-   bundled Inter the Qt tier renders in is declared again here. The relative
-   path holds in the dev tree and under _internal/ in the --onedir build. */
-@font-face {
-  font-family: "Inter";
-  font-weight: 400;
-  src: url("../../shared/assets/fonts/Inter-Regular.ttf");
-}
-@font-face {
-  font-family: "Inter";
-  font-weight: 700;
-  src: url("../../shared/assets/fonts/Inter-Bold.ttf");
-}
-
-*, *::before, *::after { box-sizing: border-box; }
+/* The results page: what is Results' alone. Components come from kit.css,
+   which the page links first (phase 2 spec section 4). Every value is a token
+   from theme_css_vars(). */
 
 /* Page geometry the theme does not own. The selection bar takes the table
    header's place rather than pushing the table down (Shopify-style), so the
    two are one height, stated once. */
-/* The --z-* scale below is one layer scale for every stacked surface on this
-   screen. Two surfaces used to tie at 3 -- .menu and .selection-bar -- and the
-   tie was broken by document order, which put the Add filter menu underneath
-   the bar. */
 :root {
   --table-head-height: 28px;
-  --z-sticky: 1;
-  --z-header: 2;
-  --z-bar: 3;
-  --z-popover: 5;
-  --z-toast: 6;
 }
-
-html, body { margin: 0; height: 100%; }
-
-body {
-  overflow: hidden;
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--font-family);
-  font-size: var(--type-body-size);
-  font-variant-numeric: tabular-nums;
-}
-
-button, input { font: inherit; color: inherit; }
-
-[hidden] { display: none !important; }
 
 /* --- page: 88 KPI + 40 filter bar + table, 12 apart, 16 in from the edge -- */
 
@@ -140,92 +100,13 @@ button, input { font: inherit; color: inherit; }
 }
 .chip-filter:hover { background: var(--hover); }
 
-.spacer { flex: 1 1 auto; }
-
 .count {
   font-size: var(--type-caption-size);
   color: var(--text-secondary);
   white-space: nowrap;
 }
 
-.btn {
-  flex-shrink: 0;
-  height: var(--control-height);
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  background: transparent;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.btn.ghost:hover { background: var(--hover); }
-.btn.icon { width: var(--control-height); padding: 0; }
-.btn.primary { background: var(--accent-fill); color: var(--on-accent); font-weight: 700; }
-.btn.primary:hover { background: var(--accent-fill-hover); }
-.btn.primary:active { background: var(--accent-fill-active); }
-/* QPushButton[role=…]:disabled in build_stylesheet. */
-.btn:disabled,
-.btn:disabled:hover {
-  background: var(--surface);
-  color: var(--text-disabled);
-  border-color: var(--border-subtle);
-  cursor: default;
-}
-
-.btn:focus-visible,
-.chip-filter:focus-visible,
-.menu-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-
-.menu-anchor { position: relative; flex-shrink: 0; }
-
-.menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: var(--z-popover);
-  min-width: 220px;
-  max-height: 360px;
-  overflow-y: auto;
-  padding: var(--spacing-xs) 0;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.menu-group {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--type-caption-size);
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  width: 100%;
-  padding: var(--spacing-xs) var(--spacing-md);
-  border: 0;
-  background: transparent;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.menu-item:hover { background: var(--hover); }
-.menu-separator { height: 1px; margin: var(--spacing-xs) 0; background: var(--border-subtle); }
-.menu-item.danger { color: var(--status-danger); }
-.menu-hint { margin-left: auto; padding-left: var(--spacing-md); color: var(--text-secondary); }
-
-.check {
-  flex-shrink: 0;
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  visibility: hidden;
-}
-.menu-item[aria-checked="true"] .check { visibility: visible; }
+.chip-filter:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 /* --- table ------------------------------------------------------------------ */
 
@@ -319,32 +200,6 @@ button, input { font: inherit; color: inherit; }
 }
 .bulk-list .new-tag:focus,
 .bulk-list .bulk-search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
-
-/* Mirrors gui/components/toast.py: 16px margin, 360 max, no fade (ADR 0007). */
-.toast {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: var(--z-toast);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  max-width: 360px;
-  padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) var(--spacing-md);
-  background: var(--surface-overlay);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-}
-.toast-badge {
-  min-width: 18px;
-  padding: 0 var(--spacing-xs);
-  background: var(--surface-sunken);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--type-caption-size);
-  text-align: center;
-}
 
 .table:focus { outline: none; }
 .table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
@@ -460,18 +315,7 @@ button, input { font: inherit; color: inherit; }
 
 /* --- states -------------------------------------------------------------------- */
 
-.state {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  text-align: center;
-}
-.state-title { margin: 0; font-weight: 700; }
-.state-text { margin: 0; max-width: 420px; color: var(--text-secondary); }
+.table-wrap > .state { position: absolute; inset: 0; }
 
 /* --- detail pane and column manager planes (Bundle 13 §6.2, §6.9) ----------- */
 
@@ -491,7 +335,6 @@ button, input { font: inherit; color: inherit; }
 .pane-order { font-family: var(--font-family-mono); font-size: var(--type-heading-size); font-weight: 700; }
 .pane-age, .pane-position { font-size: var(--type-caption-size); color: var(--text-secondary); white-space: nowrap; }
 .btn.pane-icon { width: 24px; height: 24px; }
-.glyph { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; vertical-align: middle; }
 
 .pane-who { flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -561,7 +404,6 @@ button, input { font: inherit; color: inherit; }
   font-size: var(--type-caption-size);
   color: var(--text-secondary);
 }
-.btn.small { height: 24px; padding: 0 var(--spacing-sm); font-size: var(--type-caption-size); }
 .pane-notes {
   flex-shrink: 0;
   margin: 0;
@@ -601,15 +443,8 @@ button, input { font: inherit; color: inherit; }
 .pane-strip { height: 100%; }
 .btn.strip-button { width: 36px; height: 28px; }
 
-.btn.secondary { border-color: var(--border); background: var(--surface); }
-.btn.secondary:hover { background: var(--hover); }
-.btn.secondary:active { background: var(--selection-bg); }
-.btn.danger { border-color: var(--status-danger); color: var(--status-danger); }
-.btn.danger:hover, .btn.danger:active { background: var(--status-danger-bg); }
-.btn.secondary:focus-visible, .btn.danger:focus-visible, .tag-chip:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
+/* .btn.secondary and .btn.danger come from kit.css. */
+.tag-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 /* --- the column manager (Bundle 13 §6.9) ------------------------------------ */
 /* 16 + 40 + 8 + 32 + 8 + scroller + 8 + 32 + 16 = 508, so the scroller is 348. */

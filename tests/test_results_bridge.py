@@ -121,7 +121,7 @@ def test_the_first_paint_is_already_themed(qtbot):
     mount_results_page(view)
     view.show()
     _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
-    assert _eval(qtbot, view, "window.__firstPaint") == _rgb(LIGHT_THEME.surface)
+    assert _eval(qtbot, view, "window.__firstPaint") == _rgb(LIGHT_THEME.surface_sunken)
 
 
 def test_the_bundled_inter_loads_in_both_weights(qtbot, page):
@@ -150,7 +150,7 @@ def test_a_theme_switch_repaints_the_document_without_a_reload(qtbot, page):
     _until_js(
         qtbot,
         view,
-        f"getComputedStyle(document.body).backgroundColor === '{_rgb(DARK_THEME.surface)}'",
+        f"getComputedStyle(document.body).backgroundColor === '{_rgb(DARK_THEME.surface_sunken)}'",
     )
     assert _eval(qtbot, view, "window.__loadMarker") == "first load"
 

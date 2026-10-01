@@ -186,7 +186,7 @@ function paneTags(o) {
     chip.addEventListener("click", () => state.bridge && state.bridge.removeOrderTag(order, tag));
     box.append(chip);
   }
-  const add = paneButton("ghost small", "+ Tag");
+  const add = paneButton("ghost compact", "+ Tag");
   add.id = "pane-add-tag";
   add.addEventListener("click", () => openTagMenu(add, o));
   box.append(add);
