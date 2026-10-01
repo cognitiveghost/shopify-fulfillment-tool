@@ -145,7 +145,7 @@ class FileSlot:
     missing_columns: list[str] = field(default_factory=list)
     present_columns: list[str] = field(default_factory=list)
 
-    def set_loaded(self, path, *, rows, keys, delimiter, parts=(), note="") -> None
+    def set_loaded(self, path, *, rows=None, keys=None, delimiter="", parts=(), note="", name="") -> None
     def set_invalid(self, path, missing: list[str], present: list[str], names: dict[str, str],
                     *, rows=None, delimiter="") -> None
     def set_problem(self, path, title: str, text: str, fix_page: str = "") -> None
@@ -159,7 +159,8 @@ class MemoryFacts:   on: bool; skus: int; session: str; updated: datetime | None
 class RunFacts:      running: bool = False; step: int = 0; cancelling: bool = False
 ```
 
-Every `FileSlot` mutator ends by calling `on_change()`. `set_loaded` with `parts` sets `is_folder`.
+Every `FileSlot` mutator ends by calling `on_change()`. `set_loaded` with `parts` sets `is_folder`, and its
+`name` replaces the file name the card shows (a folder merge's path is the merged file, not the folder).
 `names` in `set_invalid` maps each missing CSV column to the internal name it is mapped to (§6.4); its
 `rows` and `delimiter` fill the Problem card's stats, where the key count stays unknown ("—").
 `fix_label` is `"Open " + fix_page`, or `""` with no page.
@@ -263,6 +264,7 @@ is always used as it is."
 Gathers the inputs from `MainWindow`, calls `setup_state`, sets `run_analysis_button`'s enabled state, and
 calls `setup_bridge.set_state`. It is called by `update_ui_state` (its last line), by each slot's
 `on_change`, by `_on_connection_changed`, and by the run's start, progress, cancel and finish.
+`set_ui_busy` no longer sets the run button itself: it calls `refresh_setup()`.
 
 - `MemoryFacts` comes from `active_profile_config["inventory_memory"]`: `enabled` (default `True`, as the
   checkbox restored it), `len(skus)`, `session`, `last_updated`.
@@ -332,7 +334,7 @@ A `.card` with `data-file-kind`. In the Problem state its border is `--status-da
 Stats: "Rows", then "Orders" or "SKUs", then "Delimiter". A delimiter reads "Comma  ,", "Semicolon  ;",
 "Tab", "Pipe  |", "Mixed", or the bare character. An unknown value is "—", muted.
 
-A folder's name is "{folder name}\  ·  {n} CSVs merged".
+A folder's name is "{folder name}\  ·  {n} CSVs merged" ("1 CSV merged" for one).
 
 ### 5.4 Options card
 
@@ -374,7 +376,7 @@ A `.card` (`aside`), padding 12, a column with a 12px gap.
 
 | class | what it is |
 |---|---|
-| `.switch` | A button, 32×18, radius 9, a flex row with 1px padding. Off: `--surface-sunken`, `1px solid var(--border)`, knob at the start. `[aria-checked="true"]`: `--accent-fill`, transparent edge, knob at the end (`justify-content: flex-end`; no transform). `.switch-knob`: 14px circle, `--surface` off and `--on-accent` on, `box-shadow: var(--card-shadow)`. `:disabled`: `--control-disabled-bg`, `1px dashed var(--border)`, knob `--text-disabled`, no shadow |
+| `.switch` | A button, 32×18, radius 9, a flex row with 1px padding. Off: a `--border` fill with a transparent edge, knob at the start. `[aria-checked="true"]`: `--accent-fill`, transparent edge, knob at the end (`justify-content: flex-end`; no transform). `.switch-knob`: 14px circle, `--surface` off and `--on-accent` on, `box-shadow: var(--card-shadow)`. `:disabled`: `--control-disabled-bg`, `1px dashed var(--border)`, knob `--text-disabled`, no shadow |
 | `.radio-card` | A button: flex, gap 10, padding `10px 12px`, radius 8, `1px solid var(--border)`, `--surface`, text left, wraps. `[aria-checked="true"]`: `--selection-border` edge, `--selection-bg`. `.radio-mark`: 16px circle, `1px solid var(--border)`, `--surface`; checked: `--selection-border` edge and an 8px `--selection-border` dot (`::after`). `.radio-card-title`: bold. `.radio-card-text`: `--text-secondary`. `:disabled`: cursor default; an unchecked one's title and text are `--text-disabled` |
 | `.form-row` | A grid, `160px minmax(0, 1fr)`, gap 16, padding 12. `.form-row + .form-row` has a `--border-subtle` top rule. `.form-label`: bold |
 
@@ -436,7 +438,8 @@ re-validates both files on save, as today.
 |---|---|---|---|
 | one mapped column missing | "No {internal} column" | "The {file}'s header row has no “{column}” column, which is mapped to {internal}." | "Orders Mapping" / "Stock Mapping" |
 | several missing | "{n} mapped columns missing" | "The {file}'s header row has none of: “{column}” ({internal}), …" | the same |
-| the stock file cannot be read | "The stock file couldn't be read" | "It was read with “{delimiter}” as the delimiter. Check the stock delimiter in Client settings › General, then replace the file." | "General" |
+| no header row can be read (the file is gone, or is not a CSV) | "The {file} couldn't be read" | "Check that it still exists and is a CSV export, then replace it." | none |
+| the stock file cannot be parsed | "The stock file couldn't be read" | "It was read with “{delimiter}” as the delimiter. Check the stock delimiter in Client settings › General, then replace the file." | "General" |
 | a folder with no CSV | "No CSV files in this folder" | "Choose a folder that holds the exported CSV files." | none |
 | a folder with no valid CSV | "None of the {n} files can be used" | "{up to five names}. Each is missing a mapped column." | the mapping page |
 | the files could not be validated or merged | "The files weren't merged" | "Details are in Logs." | none |
@@ -586,10 +589,11 @@ Kept though the mockup does not draw them: the folder merge's note (overlaps and
 | Run | `test_actions_handler.py` | `run_analysis` passes a `progress`; a progress signal updates the bar and the state; `cancel_analysis` sets the flag; a cancelled result toasts "Analysis cancelled" and raises no error |
 | Command bar | `test_commandbar_states.py`, `test_components_commandbar.py` (rewritten where they pin the old bar) | New session is shown in every state, secondary, disabled in `NO_CLIENT` and `RUNNING`; Open recent always reads "Open recent"; the chip follows `set_screen` and the state; the meta text only with `meta`; `RUNNING` shows the step text and a disabled "Running…"; no `action_button`, `cancel_button` or `open_folder_button` |
 | Shell | `test_shell.py`, `test_session_setup_layout.py` (rewritten) | Tab 0 holds a `SetupView`; the inset is 0 on Setup and Results and 5 on Browse; the overflow's items in order; `refresh_setup` pushes `no_session` after a client is chosen and `setup` after New session; `recentRequested` opens the menu |
-| Toast router | `test_message_routes.py` | On Setup and on Results a `toast(window, …)` reaches that page's bridge and no Qt toast shows; on Browse the Qt toast shows; a toast with an action stays Qt |
+| Toast router | `test_toast_router.py` (new) | On Setup and on Results a `toast(window, …)` reaches that page's bridge and no Qt toast shows; on Browse the Qt toast shows; a toast with an action stays Qt |
 | Lint | `test_style_literals_guard.py` | unchanged: `gui/` scans clean with the three new assets |
 
-`test_components_radio_card.py` and `test_screen_primary_actions.py` are deleted with what they test. Every
+`test_components_radio_card.py` and `test_screen_primary_actions.py` are deleted with what they test; the kit
+and page tests, and `test_commandbar_states.py`, pin what replaces them. Every
 other test that pins what this spec changes is rewritten to the new behaviour in the same commit as the
 change, never skipped.
 
