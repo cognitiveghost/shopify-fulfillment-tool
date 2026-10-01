@@ -81,7 +81,7 @@
   .kpis.has-wide .kpi-wide { display: flex; }
 }
 
-/* --- filter bar ------------------------------------------------------------- */
+/* --- filter bar ---------------------------------------------------------- */
 
 .filterbar {
   display: flex;
@@ -90,38 +90,51 @@
   min-width: 0;
 }
 
-#search {
-  flex: 0 0 280px;
-  height: var(--control-height);
-  padding: 0 var(--padding-h);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-#search::placeholder { color: var(--text-placeholder); }
-#search:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+.search { flex: 0 0 260px; }
 
-.chips { display: flex; gap: var(--spacing-xs); min-width: 0; overflow: hidden; }
+.chips { display: flex; gap: var(--spacing-sm); min-width: 0; overflow: hidden; }
 
+/* A filter chip states its filter; only its x removes it. */
 .chip-filter {
   flex-shrink: 0;
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--control-height);
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--kit-radius);
   background: var(--surface);
-  font-size: var(--type-caption-size);
+  box-shadow: var(--card-shadow);
   white-space: nowrap;
+}
+.chip-key { color: var(--text-secondary); }
+.chip-value { font-weight: 700; }
+.chip-remove {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
 }
-.chip-filter:hover { background: var(--hover); }
+.chip-remove:hover { background: var(--hover); }
+.chip-remove:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+/* The pane's tag chip is one button: the whole chip removes the tag. */
+.tag-chip { height: var(--kit-control-compact); padding: 0 8px; box-shadow: none; cursor: pointer; }
+.tag-chip:hover { background: var(--hover); }
 
 .count {
   font-size: var(--type-caption-size);
   color: var(--text-secondary);
   white-space: nowrap;
 }
-
-.chip-filter:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.columns-count { font-size: var(--type-caption-size); font-weight: 400; color: var(--text-secondary); }
 
 /* --- the split card: table and pane on one surface, one rule between ----- */
 

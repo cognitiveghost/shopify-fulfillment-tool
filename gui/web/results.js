@@ -21,6 +21,10 @@ const NUMBER = new Intl.NumberFormat("en-US");
 const CHEVRON_DOWN = "m6 9 6 6 6-6";
 const CHEVRON_UP = "m18 15-6-6-6 6";
 const CHECK = "M20 6 9 17l-5-5";
+// Lucide x, columns-3 and download, each as one path.
+const X_MARK = "M18 6 6 18M6 6l12 12";
+const COLUMNS = "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 3v18M15 3v18";
+const DOWNLOAD = "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3";
 // Lucide info, as one path: a circle and its two strokes.
 const INFO = "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM12 16v-4M12 8h.01";
 
@@ -127,6 +131,27 @@ const FLAGS = [
 
 function chipId(chip) {
   return chip.kind + ":" + chip.value;
+}
+
+const CHIP_KEYS = { status: "Status", flag: "Flag", courier: "Courier", tag: "Tag" };
+
+// What the chip says after "is": the menu's label carries a "Courier: " or
+// "Tag: " prefix the chip's own key already states.
+function chipValue(chip) {
+  return chip.kind === "courier" || chip.kind === "tag" ? chip.value : chip.label;
+}
+
+// The filters as one sentence, for the no-match state. Flags all have to
+// hold; within Status, Courier and Tag the chips are alternatives.
+function filterSentence() {
+  const parts = [];
+  for (const kind of Object.keys(CHIP_KEYS)) {
+    const values = state.chips.filter((c) => c.kind === kind).map(chipValue);
+    if (values.length) parts.push(CHIP_KEYS[kind] + " is " + values.join(kind === "flag" ? " and " : " or "));
+  }
+  const query = els.search.value.trim();
+  if (query) parts.push("search is “" + query + "”");
+  return parts.join(" and ") + ".";
 }
 
 function menuGroups() {
@@ -314,17 +339,28 @@ function renderKpis() {
 function renderChips() {
   els.chips.textContent = "";
   for (const chip of state.chips) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chip-filter";
-    button.dataset.chip = chipId(chip);
-    button.title = "Remove this filter";
-    button.textContent = chip.label + "  ×";
-    button.addEventListener("click", () => {
+    const box = document.createElement("span");
+    box.className = "chip-filter";
+    box.dataset.chip = chipId(chip);
+    const key = document.createElement("span");
+    key.className = "chip-key";
+    key.textContent = CHIP_KEYS[chip.kind] + " is";
+    const value = document.createElement("span");
+    value.className = "chip-value";
+    value.textContent = chipValue(chip);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chip-remove";
+    remove.title = "Remove filter";
+    remove.setAttribute("aria-label", "Remove filter: " + CHIP_KEYS[chip.kind] + " is " + chipValue(chip));
+    remove.innerHTML = svg(X_MARK, "glyph");
+    remove.addEventListener("click", () => {
       toggleChip(chip);
       render();
     });
-    els.chips.appendChild(button);
+    // The text node is the space a reader hears; flex ignores it for layout.
+    box.append(key, " ", value, remove);
+    els.chips.appendChild(box);
   }
   els.clearAll.hidden = !(state.chips.length || state.query);
 }
@@ -338,7 +374,9 @@ function renderCount() {
 function renderExport() {
   const s = (state.bridge && state.bridge.summary) || {};
   const n = s.fulfillable || 0;
-  els.exportBtn.textContent = s.fulfillable === undefined ? "Export" : "Export " + plural(n, "order");
+  els.exportBtn.replaceChildren();
+  els.exportBtn.insertAdjacentHTML("beforeend", svg(DOWNLOAD, "glyph"));
+  els.exportBtn.append(s.fulfillable === undefined ? "Export" : "Export " + plural(n, "order"));
   els.exportBtn.disabled = !(state.bridge && state.bridge.exportEnabled && n > 0);
 }
 
@@ -347,6 +385,7 @@ function renderStates() {
   const noMatch = !none && state.view.length === 0;
   els.empty.hidden = !none;
   els.noMatch.hidden = !noMatch;
+  if (noMatch) els.noMatchText.textContent = filterSentence();
   els.table.hidden = none || noMatch;
   els.search.disabled = none;
   els.addFilter.disabled = none;
@@ -509,7 +548,12 @@ function renderSlot() {
   els.columnsPanel.hidden = mode !== "columns";
   els.columnsButton.disabled = mode === "none";
   els.columnsButton.setAttribute("aria-pressed", String(state.columnsOpen));
-  els.columnsButton.textContent = "Columns " + visibleColumns().length + "/" + allColumns().length;
+  const count = document.createElement("span");
+  count.className = "columns-count mono";
+  count.textContent = visibleColumns().length + "/" + allColumns().length;
+  els.columnsButton.replaceChildren();
+  els.columnsButton.insertAdjacentHTML("beforeend", svg(COLUMNS, "glyph"));
+  els.columnsButton.append("Columns ", count);
   if (mode === "pane") renderPane();
   if (mode === "columns") renderColumnsPanel();
 }
@@ -697,7 +741,7 @@ function bind() {
     kpis: "kpis", search: "search", chips: "chips", addFilter: "add-filter", menu: "filter-menu",
     clearAll: "clear-all", count: "count", screenMenu: "screen-menu", exportBtn: "export",
     tableArea: "table-area", table: "table", scroller: "scroller", header: "header", rows: "rows",
-    empty: "results-empty", noMatch: "results-no-match", noMatchClear: "no-match-clear",
+    empty: "results-empty", noMatch: "results-no-match", noMatchClear: "no-match-clear", noMatchText: "no-match-text",
     themeVars: "theme-vars",
     columnsButton: "columns-button", pane: "pane", paneStrip: "pane-strip",
     paneShow: "pane-show", columnsPanel: "columns-panel",

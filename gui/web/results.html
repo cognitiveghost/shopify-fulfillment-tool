@@ -19,21 +19,24 @@
   <section id="kpis" class="card kpis" aria-label="Session numbers"></section>
 
   <div id="filterbar" class="filterbar">
-    <input id="search" type="search" placeholder="Order, customer or SKU"
-           aria-label="Search orders" autocomplete="off" spellcheck="false">
-    <div id="chips" class="chips"></div>
+    <label class="input search">
+      <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM21 21l-4.3-4.3"/></svg>
+      <input id="search" type="search" placeholder="Order, customer or SKU"
+             aria-label="Search orders" autocomplete="off" spellcheck="false">
+    </label>
     <div id="filter-anchor" class="menu-anchor">
-      <button id="add-filter" class="btn ghost" type="button"
-              aria-haspopup="menu" aria-expanded="false">Add filter</button>
+      <button id="add-filter" class="btn dashed" type="button"
+              aria-haspopup="menu" aria-expanded="false"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>Add filter</button>
       <div id="filter-menu" class="menu" role="menu" hidden></div>
     </div>
+    <div id="chips" class="chips"></div>
     <button id="clear-all" class="btn ghost" type="button" hidden>Clear all</button>
     <span class="spacer"></span>
     <span id="count" class="count"></span>
-    <button id="columns-button" class="btn ghost" type="button" aria-pressed="false" disabled>Columns</button>
+    <button id="columns-button" class="btn ghost" type="button" aria-pressed="false" disabled></button>
     <button id="screen-menu" class="btn ghost icon" type="button"
             title="More actions for this screen" aria-label="More actions for this screen">⋯</button>
-    <button id="export" class="btn primary" type="button" disabled>Export</button>
+    <button id="export" class="btn primary" type="button" disabled></button>
   </div>
 
   <section id="table-area" class="card split" data-slot="none">
@@ -67,9 +70,10 @@
         <p class="state-text">Load the orders and stock files in Setup, then run the analysis. Every order it finds lands here.</p>
       </div>
       <div id="results-no-match" class="state" hidden>
+        <svg class="state-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0zM21 21l-4.3-4.3M13.5 8.5l-5 5M8.5 8.5l5 5"/></svg>
         <p class="state-title">No orders match</p>
-        <p class="state-text">Remove a filter or clear the search.</p>
-        <button id="no-match-clear" class="btn ghost" type="button">Clear all</button>
+        <p id="no-match-text" class="state-text"></p>
+        <button id="no-match-clear" class="btn secondary" type="button">Clear filters</button>
       </div>
     </div>
     <div id="slot" class="slot">

@@ -370,15 +370,72 @@ def test_chips_and_across_groups_and_or_within_one(qtbot, doc):
     _count_is(qtbot, view, "312 orders")
 
 
-def test_a_chip_removes_itself_when_clicked(qtbot, doc):
+def test_the_filter_bar_reads_search_add_filter_then_chips(qtbot, doc):
     view, _ = doc
-    _choose_filter(qtbot, view, "Repeat")
+    order = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify([...document.getElementById('filterbar').children]"
+            ".map(function (e) { return e.id || e.className; }))",
+        )
+    )
+    assert order[:4] == ["input search", "filter-anchor", "chips", "clear-all"]
+    assert order[-3:] == ["columns-button", "screen-menu", "export"]
+
+
+def test_a_chip_names_its_key_and_only_its_x_removes_it(qtbot, doc):
+    view, _ = doc
+    _choose_filter(qtbot, view, "Courier: DPD")
     _until_js(
         qtbot, view, "document.querySelectorAll('#chips .chip-filter').length === 1"
     )
-    _eval(qtbot, view, "document.querySelector('#chips .chip-filter').click(); true")
+    assert _text(qtbot, view, "#chips .chip-filter") == "Courier is DPD"
+    _count_is(qtbot, view, "78 of 312 orders")
+    _eval(qtbot, view, "document.querySelector('#chips .chip-value').click(); true")
+    _count_is(qtbot, view, "78 of 312 orders")
+    assert (
+        _eval(qtbot, view, "document.querySelector('#chips .chip-remove').title")
+        == "Remove filter"
+    )
+    _eval(qtbot, view, "document.querySelector('#chips .chip-remove').click(); true")
     _count_is(qtbot, view, "312 orders")
 
+
+def test_no_match_says_what_is_filtering(qtbot, doc):
+    view, _ = doc
+    _choose_filter(qtbot, view, "Blocked")
+    _choose_filter(qtbot, view, "Courier: DHL")  # no blocked order ships DHL
+    _until_js(qtbot, view, "!document.getElementById('results-no-match').hidden")
+    assert _text(qtbot, view, "#no-match-text") == "Status is Blocked and Courier is DHL."
+    _search(qtbot, view, "zzz")
+    _until_js(
+        qtbot,
+        view,
+        "document.getElementById('no-match-text').textContent"
+        " === 'Status is Blocked and Courier is DHL and search is “zzz”.'",
+    )
+    # Within Courier the chips are alternatives, and the sentence says so.
+    _choose_filter(qtbot, view, "Courier: DPD")
+    assert (
+        _eval(qtbot, view, "filterSentence()")
+        == "Status is Blocked and Courier is DHL or DPD and search is “zzz”."
+    )
+    assert _text(qtbot, view, "#no-match-clear") == "Clear filters"
+    _eval(qtbot, view, "document.getElementById('no-match-clear').click(); true")
+    _count_is(qtbot, view, "312 orders")
+
+
+def test_columns_and_export_keep_their_words_beside_a_glyph(qtbot, doc):
+    view, _ = doc
+    assert _text(qtbot, view, "#columns-button") == "Columns 9/18"
+    assert _eval(qtbot, view, "!!document.querySelector('#columns-button svg')") is True
+    _until_js(
+        qtbot,
+        view,
+        "document.getElementById('export').textContent === 'Export 281 orders'",
+    )
+    assert _eval(qtbot, view, "!!document.querySelector('#export svg')") is True
 
 # --- selection and sort ------------------------------------------------------------
 
