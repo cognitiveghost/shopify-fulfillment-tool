@@ -8,7 +8,6 @@ from shopify_tool.session_lifecycle import (
     DISPLAY_STATUSES,
     IN_FLIGHT,
     age_cell,
-    age_label,
     blocked_orders,
     derive_status_updates,
     display_status,
@@ -310,50 +309,6 @@ class TestDisplayStatus:
 
     def test_survives_a_non_dict(self):
         assert display_status(None, NOW) == "active"
-
-
-class TestAgeLabel:
-    def test_today(self):
-        cell, tip = age_label(NOW - timedelta(hours=3), NOW)
-        assert cell == "today"
-        assert tip.startswith("Created ")
-
-    def test_days(self):
-        assert age_label(NOW - timedelta(days=3), NOW)[0] == "3d"
-
-    def test_weeks_start_at_fourteen_days(self):
-        assert age_label(NOW - timedelta(days=13), NOW)[0] == "13d"
-        assert age_label(NOW - timedelta(days=14), NOW)[0] == "2w"
-
-    def test_months_start_at_sixty_days(self):
-        assert age_label(NOW - timedelta(days=59), NOW)[0] == "8w"
-        assert age_label(NOW - timedelta(days=60), NOW)[0] == "2mo"
-
-    def test_the_countdown_appears_seven_days_before_archiving(self):
-        cell, _ = age_label(NOW - timedelta(days=26), NOW)
-        assert cell == "26d · archives in 4d"
-
-    def test_no_countdown_the_day_before_the_window_opens(self):
-        # The bucket the cell falls in outside the window is the Age column's
-        # own business; what this asserts is that the countdown has not
-        # started yet. Pinning the string here once made the implementation
-        # widen the plain-day zone a week early to satisfy the test.
-        cell, _ = age_label(NOW - timedelta(days=22), NOW)
-        assert "archives in" not in cell
-
-    def test_the_countdown_stops_at_zero_it_never_goes_negative(self):
-        cell, _ = age_label(NOW - timedelta(days=40), NOW)
-        assert "archives in" not in cell
-
-    def test_the_tooltip_carries_the_absolute_stamp(self):
-        created = NOW - timedelta(days=3)
-        assert age_label(created, NOW)[1] == f"Created {created:%Y-%m-%d %H:%M}"
-
-    def test_an_unreadable_date_says_so(self):
-        assert age_label(None, NOW) == ("—", "Created date unreadable")
-
-    def test_the_warning_window_is_derived_not_typed(self):
-        assert ARCHIVE_WARNING_DAYS == 7
 
 
 class TestNeedsAttention:

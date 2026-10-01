@@ -78,21 +78,17 @@ def test_the_edge_only_paints_on_the_leftmost_visible_column(qapp):
 
 
 def test_role_status_collides_with_no_other_custom_role():
-    """Spec §10. These are every custom item role in the repo.
+    """Spec §10. ROLE_STATUS is the one custom item role left in the repo.
 
-    session_row_delegates' roles live on a different table, so they cannot
-    actually collide here. The delegate that *does* share this table is
-    TagDelegate, and it is safe for a different reason: it reads only
-    Qt.DisplayRole (gui/tag_delegate.py), never a custom role.
+    The delegate that shares this table is TagDelegate, and it is safe for a
+    different reason: it reads only Qt.DisplayRole (gui/tag_delegate.py),
+    never a custom role.
     """
     from PySide6.QtCore import Qt
 
     from gui.pandas_model import ROLE_STATUS
-    from gui.session_row_delegates import ROLE_LIVE, ROLE_SHAPE, ROLE_TOKEN
 
-    assert ROLE_STATUS not in (
-        Qt.ItemDataRole.UserRole, ROLE_TOKEN, ROLE_SHAPE, ROLE_LIVE
-    )
+    assert ROLE_STATUS != Qt.ItemDataRole.UserRole
 
 
 def _rendered(view):

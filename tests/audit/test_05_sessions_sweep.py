@@ -350,7 +350,13 @@ def test_a_comment_that_fails_to_save_is_reported(qapp, monkeypatch):
     monkeypatch.setattr(browser_module, "show_error", lambda *a, **k: told.append(a))
 
     widget = browser_module.SessionBrowserWidget(manager)
-    widget._on_comments_changed("/share/Sessions/CLIENT_M/2026-07-01_1", "call courier")
+    widget.sessions_data = [
+        {
+            "session_name": "2026-07-01_1",
+            "session_path": "/share/Sessions/CLIENT_M/2026-07-01_1",
+        }
+    ]
+    widget.bridge.setComment(["2026-07-01_1"], "call courier")
 
     assert told
 

@@ -6,7 +6,6 @@ from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.form_section import FormSection, row_widget
 from gui.components.inline_message import InlineMessage
 from gui.components.print_options import PrintOptions
-from gui.components.selectionbar import ContextualSelectionBar
 from shared.components import (
     Card,
     ConfirmDialog,
@@ -43,7 +42,6 @@ __all__ = [
     "Card",
     "CommandBar",
     "ConfirmDialog",
-    "ContextualSelectionBar",
     "ElidedLabel",
     "ErrorBanner",
     "FilterBar",
