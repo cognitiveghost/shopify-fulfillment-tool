@@ -1,0 +1,271 @@
+/* The Browse page (phase 4 spec section 5). Layout, and the three components
+   only this page draws: the tab, the badge dot and the skeleton bar. Every
+   colour is a token from theme_css_vars(). A divider is --border-subtle, the
+   edge of a control is --border (ADR 0018). */
+
+#browse {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px 20px;
+}
+#browse > .card {
+  flex: 1;
+  min-width: 780px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- the three panels ---------------------------------------------------- */
+
+#panel { align-items: center; justify-content: center; }
+#panel .state { gap: 8px; }
+#panel .state-glyph { width: 28px; height: 28px; }
+#panel .state-title { font-size: var(--type-heading-size); }
+
+/* --- toolbar ------------------------------------------------------------- */
+
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tabs { display: flex; align-items: center; gap: 2px; }
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--control-height);
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--kit-radius);
+  background: transparent;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab:hover { background: var(--hover); }
+.tab[aria-selected="true"] {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-weight: 700;
+}
+.tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.search { flex: 0 1 260px; min-width: 150px; }
+.count {
+  min-width: 84px;
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* --- the row grid: header row, rows and skeleton rows share it ----------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: 36px 150px 64px 124px 72px 72px 72px 150px minmax(0, 1fr);
+  align-items: center;
+}
+.grid > * { min-width: 0; padding: 0 8px; }
+.cell-check { display: grid; place-items: center; }
+.grid > .cell-check { padding: 0; }
+.num { text-align: right; }
+
+.list-head, .selbar {
+  flex: none;
+  height: 36px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.list-head {
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* --- selection bar ------------------------------------------------------- */
+
+.selbar { display: flex; align-items: center; gap: 6px; padding-right: 8px; }
+.selbar .cell-check { flex: none; width: 36px; }
+.sel-count { margin-right: 6px; font-weight: 700; white-space: nowrap; }
+
+.status-menu { width: 300px; }
+.status-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.status-item:hover { background: var(--hover); }
+.status-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.status-note { font-size: var(--type-caption-size); color: var(--text-secondary); }
+
+.comment-pop { width: 340px; }
+.comment-body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+.comment-title { font-size: var(--type-label-size); font-weight: 700; }
+.comment-text {
+  resize: none;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--kit-radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.comment-text::placeholder { color: var(--text-placeholder); }
+.comment-text:focus { outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+.comment-note { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.comment-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* --- the list ------------------------------------------------------------ */
+
+.list { flex: 1; min-height: 0; overflow: auto; }
+.list > .state { padding: 80px 24px; }
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row-height);
+  padding: 0 12px;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.group-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-warning);
+}
+.group-label { font-weight: 700; }
+.group-count, .group-note { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.group-count { font-family: var(--font-family-mono); }
+
+.row {
+  position: relative;
+  height: var(--row-height);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: default;
+  user-select: none;
+}
+.row:hover { background: var(--hover); }
+.row.checked { background: var(--selection-bg); }
+/* The checked row's edge. A strip, not a shadow: only the theme's two shadow
+   tokens may be a box-shadow (ADR 0016). */
+.row.checked::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--selection-border);
+}
+
+.cell-name, .cell-age, .cell-num, .pack-text { font-family: var(--font-family-mono); white-space: nowrap; }
+.cell-name { overflow: hidden; font-weight: 700; text-overflow: ellipsis; }
+.cell-age { color: var(--text-secondary); text-align: right; }
+.cell-age.warn { color: var(--status-warning); }
+.cell-num { text-align: right; }
+.cell-num.alert { color: var(--status-danger); font-weight: 700; }
+.cell-pack { display: flex; align-items: center; gap: 8px; }
+.pack-text { flex: none; width: 72px; }
+.pack-track {
+  flex: 1;
+  max-width: 48px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+.pack-fill { display: block; height: 100%; border-radius: 2px; background: var(--text-secondary); }
+.pack-fill.success { background: var(--status-success-dot); }
+.pack-fill.danger { background: var(--status-danger-dot); }
+.grid > .cell-comment {
+  overflow: hidden;
+  padding-right: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* The dash of an empty cell. After the cells, so it wins at equal weight. */
+.grid .none { color: var(--text-disabled); }
+
+/* How far a session has come. The half is a clipped block: the web tier may
+   not draw a gradient (ADR 0016). */
+.badge-dot {
+  flex: none;
+  position: relative;
+  width: 6px;
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.badge-dot.solid { background: currentColor; }
+.badge-dot.half::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  background: currentColor;
+}
+
+/* --- loading ------------------------------------------------------------- */
+
+.loading-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.sk-row { height: var(--row-height); border-bottom: 1px solid var(--border-subtle); }
+.sk { display: block; height: 8px; border-radius: 4px; background: var(--border-subtle); }
+
+/* --- footer -------------------------------------------------------------- */
+
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
+.footer .btn.link { color: var(--text); }
+
+/* --- a narrow page ------------------------------------------------------- */
+
+@media (max-width: 980px) {
+  .count { display: none; }
+}
