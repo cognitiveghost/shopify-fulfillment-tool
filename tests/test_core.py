@@ -528,3 +528,120 @@ class TestBuildInventorySnapshot:
         result = core.build_inventory_snapshot(final_df, stock_df)
 
         assert result == {"A-1": 6.0, "B-2": 5.0, "C-3": 7.0}
+
+
+class TestCsvRowStats:
+    def test_rows_and_distinct_keys(self, tmp_path):
+        path = tmp_path / "orders.csv"
+        path.write_text("Name,Lineitem sku\n#1,A\n#1,B\n#2,A\n")
+        assert core.csv_row_stats(path, ",", "Name") == (3, 2)
+
+    def test_a_semicolon_file(self, tmp_path):
+        path = tmp_path / "stock.csv"
+        path.write_text("Артикул;Наличност\nA;5\nB;0\n", encoding="utf-8")
+        assert core.csv_row_stats(path, ";", "Артикул") == (2, 2)
+
+    def test_a_quoted_newline_is_one_row(self, tmp_path):
+        path = tmp_path / "orders.csv"
+        path.write_text('Name,Note\n#1,"two\nlines"\n#2,x\n')
+        assert core.csv_row_stats(path, ",", "Name") == (2, 2)
+
+    def test_a_missing_key_column_counts_rows_only(self, tmp_path):
+        path = tmp_path / "orders.csv"
+        path.write_text("A,B\n1,2\n")
+        assert core.csv_row_stats(path, ",", "Name") == (1, None)
+        assert core.csv_row_stats(path, ",", None) == (1, None)
+
+    def test_a_header_only_file_has_no_rows_and_no_keys(self, tmp_path):
+        path = tmp_path / "orders.csv"
+        path.write_text("Name,Lineitem sku\n")
+        assert core.csv_row_stats(path, ",", "Name") == (0, 0)
+
+    def test_a_file_that_is_not_there_is_zero_not_a_crash(self, tmp_path):
+        assert core.csv_row_stats(tmp_path / "gone.csv", ",", "Name") == (0, None)
+
+
+def _run_small_analysis(tmp_path, monkeypatch, progress):
+    monkeypatch.setattr(
+        core,
+        "load_session_signals",
+        lambda _pm, _cid: (
+            pd.DataFrame(columns=["Order_Number", "Execution_Date", "Session"]),
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        fulfillment_history, "get_persistent_data_path", lambda _n: tmp_path / "h.csv"
+    )
+    orders = tmp_path / "orders.csv"
+    orders.write_text(
+        "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A1,1,Standard\n",
+        encoding="utf-8",
+    )
+    stock = tmp_path / "stock.csv"
+    stock.write_text("Артикул,Име,Наличност\nA1,Widget,5\n", encoding="utf-8")
+    return core.run_full_analysis(
+        str(stock),
+        str(orders),
+        str(tmp_path / "out"),
+        ",",
+        ",",
+        {
+            "settings": {"repeat_detection_days": 1},
+            "column_mappings": {
+                "orders": _ORDERS_MAPPING,
+                "stock": {"Артикул": "SKU", "Име": "Product_Name", "Наличност": "Stock"},
+            },
+        },
+        progress=progress,
+    )
+
+
+class TestAnalysisProgress:
+    def test_there_are_four_named_steps(self):
+        assert core.ANALYSIS_STEPS == (
+            "Reading orders and stock",
+            "Checking fulfilment history",
+            "Allocating stock",
+            "Saving results",
+        )
+
+    def test_a_run_reports_each_step_in_order(self, tmp_path, monkeypatch):
+        seen = []
+        ok, msg, _df, _stats = _run_small_analysis(tmp_path, monkeypatch, seen.append)
+        assert ok, msg
+        assert seen == [0, 1, 2, 3]
+
+    def test_a_run_without_a_callback_still_runs(self, tmp_path, monkeypatch):
+        ok, msg, _df, _stats = _run_small_analysis(tmp_path, monkeypatch, None)
+        assert ok, msg
+
+    def test_a_callback_that_cancels_stops_the_run_before_it_saves(
+        self, tmp_path, monkeypatch
+    ):
+        seen = []
+
+        def cancel_at_allocation(step):
+            seen.append(step)
+            if step == 2:
+                raise core.AnalysisCancelled
+
+        result = _run_small_analysis(tmp_path, monkeypatch, cancel_at_allocation)
+
+        assert result == (False, core.CANCELLED, None, None)
+        assert seen == [0, 1, 2]
+        out = tmp_path / "out"
+        assert not out.exists() or not any(out.iterdir())
+
+    def test_cancelling_at_the_last_checkpoint_still_saves_nothing(
+        self, tmp_path, monkeypatch
+    ):
+        def cancel_before_saving(step):
+            if step == 3:
+                raise core.AnalysisCancelled
+
+        result = _run_small_analysis(tmp_path, monkeypatch, cancel_before_saving)
+
+        assert result == (False, core.CANCELLED, None, None)
+        out = tmp_path / "out"
+        assert not out.exists() or not any(out.iterdir())
