@@ -219,7 +219,10 @@ A row, gap 8, padding 8, a `--border-subtle` rule under it.
 | **Visible rows** | In the current tab, and the search text (trimmed, lower case) is in the name or in the comment (lower case) |
 | **Count label** | Loading: "Reading…". With a search: "{visible} of {in tab} sessions". Otherwise "{in tab} sessions". One session reads "1 session" |
 
-Choosing a tab, typing in the search box and Show or Hide each uncheck every row and close any popover.
+Choosing a tab, typing in the search box and Show or Hide each uncheck every row and close any popover. So
+does a loud reload (the `loading` view). A state for another client also returns the page to the All tab with
+an empty search and archived rows hidden: session names are dates and repeat between clients, so one
+client's checked rows must never carry over to the next.
 
 ### 5.3 Header row and selection bar
 
@@ -450,7 +453,9 @@ automation's care, and a hand-set status stays hand-set.
   exports in `gui/components/__init__.py`. The Session Browser was the last user of both.
 - `session_lifecycle.age_label`.
 - Tests: `test_session_browser_1e.py`, `test_session_browser_columns.py`, `test_components_selectionbar.py`,
-  and the `age_label` cases in `test_session_lifecycle.py`. §10 lists what pins the behaviour instead.
+  the `age_label` cases in `test_session_lifecycle.py`, and the `STATE_STYLES` cases in
+  `test_status_channels.py` (its one test of `shared.theme.status_style` stays). `test_status_edge_delegate.py`
+  stops importing the deleted roles. §10 lists what pins the behaviour instead.
 
 Kept: `gui/selection_ring.py` and `gui/status_edge_delegate.py` (the log viewer uses them until phase 6),
 `shared.components.FilterBar` and `shared.theme.paint_status_shape` (`shared/` is not this task's).
@@ -529,10 +534,9 @@ and attach them to the PR.
   - **Shape**: no screen of this app draws it now; the session row's badge dot took its place.
   - Add **Browse state**: the map Python builds for the Browse page: the view and one record per session.
     The page filters and groups it and decides no fact.
-  - Add **Display status**: one of the eight states a session row shows. Four are stored and a person can
-    set them; the other four are derived from packing and idle time.
   - Add **Needs attention**: the group of sessions that are paused, stale, incomplete, or in flight with
-    blocked orders.
+    blocked orders. (**Display status** is already defined.)
+  - **Qt tier**: everything except the screens that have moved to the web tier.
 - ADR 0016, Consequences: `BrowseBridge` is the third bridge; a third view, on the phase 3 measurement.
 - `docs/design/ui-refresh/roadmap.md`: phase 4 gets its spec and plan paths and the differences from its
   list (Export stays, no sorting, the countdown in the tooltip, Undo restores timestamps, the chip stays in
