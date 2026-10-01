@@ -43,6 +43,9 @@
   drawing its own toasts.
 - Setup moved in phase 3 (2026-10-01) with the second bridge, `SetupBridge`. What every bridge shares (the
   theme, the toast, the mount) is `gui/web_page.py`.
+- Browse moved in phase 4 (2026-10-01) with the third bridge, `BrowseBridge`, and a third view, on the
+  phase 3 measurement (about 31 MB a view). Its page owns its view state (tab, search, checked rows), as
+  the results document does; Python owns every fact about a session.
 
 ## What would reverse it
 

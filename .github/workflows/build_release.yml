@@ -151,7 +151,7 @@ jobs:
         # and the window and taskbar show a blank icon.
         shell: pwsh
         run: |
-          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html", "setup.html", "pikepdf", "fulfilment-tool.ico", "qico.dll") {
+          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html", "setup.html", "browse.html", "pikepdf", "fulfilment-tool.ico", "qico.dll") {
             if (-not (Get-ChildItem -Path "dist\FulfilmentTool" -Recurse -Filter $name)) {
               throw "PyInstaller did not bundle $name."
             }

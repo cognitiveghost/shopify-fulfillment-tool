@@ -84,7 +84,7 @@ Built as listed below, with these differences. The second view was measured on L
 at most +0.15 s); the Windows check over RDP is in the PR and is done before the release. With a client and
 no session the page shows the "No session open" panel from `app-shell.html`, not live cards. The run names
 four real steps and has no per-order count. The session chip is in the page head on Setup and in the bar on
-every other screen, until Browse, Logs and Tools get their own page heads. One router sends a toast to the
+every other screen, until Logs and Tools get their own page heads (Browse's mockup has none). One router sends a toast to the
 web page that is showing.
 
 - The second `QWebEngineView`, with its own bridge (`SetupBridge`). `gui/web_page.py` holds what every
@@ -98,13 +98,22 @@ web page that is showing.
   the bar shows the step count and step name and a disabled "Running…". Cancel is on the page.
 - Kit: `.switch`, `.radio-card`, `.form-row`. Phase 5 reuses `.form-row`.
 
-### 4. Browse to the web tier
+### 4. Browse to the web tier (built in run 44)
+
+Spec: `docs/superpowers/specs/2026-10-01-ui-refresh-phase4-browse-web-design.md`.
+Plan: `docs/superpowers/plans/2026-10-01-ui-refresh-phase4-browse-web.md`.
+
+Built as listed below, with these differences. Export combined stock stays in the selection bar (two or more
+checked). Column sorting is gone: rows are newest first inside each group. The auto-archive countdown moved
+from the Age cell to its tooltip, with the age in the warning colour, and shows only on sessions the
+automation will really archive. Packing counts packing lists. A session with no analysis opens on Setup.
+Undo restores the status, the hand-set flag, the comment and the timestamps. A failed load is a panel in
+the page. The session chip stays in the bar on Browse.
 
 Status tabs with live counts (All, Active, Completed, Abandoned, Archived), search and Refresh on one row. The
 "Needs attention" group first, with its reasons, then "Everything else". Eight display statuses as badges.
 The Status menu offers the four a person can set and says what each one resolves to. Comment, and an Undo
-toast for every change. The packing progress bar. The archived footer. Double-click opens the session in
-Results.
+toast for every change. The packing progress bar. The archived footer. Double-click opens the session.
 
 ### 5. Tools to the web tier
 
