@@ -771,7 +771,7 @@ function bind() {
     selectionHold: "selection-hold", selectionMore: "selection-more",
     selectionMenu: "selection-menu",
     toast: "toast", toastText: "toast-text", toastBadge: "toast-badge",
-    toastUndo: "toast-undo",
+    toastUndo: "toast-undo", toastDismiss: "toast-dismiss",
   };
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 

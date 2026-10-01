@@ -501,8 +501,8 @@ function openExcludePopover() {
   });
 }
 
-// Mirrors gui/components/toast.py. Two implementations, one appearance --
-// change one and change the other (ADR 0007).
+// The page's own toast (ADR 0007). It follows the web kit; the Qt toast in
+// shared/components/toast.py keeps its look until its screens move.
 const TOAST_MS = 4000;
 const TOAST_BADGE_AT = 3;
 let toastTimer = null;
@@ -541,4 +541,6 @@ function bindToast() {
     dismissToast();
     if (state.bridge) state.bridge.undo();
   });
+  els.toastDismiss.innerHTML = svg(X_MARK, "glyph");
+  els.toastDismiss.addEventListener("click", dismissToast);
 }
