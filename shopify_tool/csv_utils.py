@@ -157,6 +157,36 @@ def read_csv_headers(file_path: str, encoding: str = 'utf-8-sig') -> list[str]:
     )
 
 
+def read_csv_preview(
+    file_path: str, encoding: str = 'utf-8-sig'
+) -> tuple[list[str], dict[str, str]]:
+    """A CSV's column names and its first data row, as text.
+
+    For the settings pages that show which column holds what. The delimiter
+    is detected, as in read_csv_headers. Two rows are all it reads. A file
+    with a header and no rows gives an empty dict.
+
+    Returns:
+        (column names in file order, {column: the first row's value}); an
+        empty cell is "".
+    """
+    delimiter, _method = detect_csv_delimiter(file_path, encoding)
+    frame = pd.read_csv(
+        file_path,
+        sep=delimiter,
+        encoding=encoding,
+        nrows=1,
+        dtype=str,
+        keep_default_na=False,
+    )
+    headers = [str(column) for column in frame.columns]
+    if frame.empty:
+        return headers, {}
+    return headers, {
+        column: str(value) for column, value in zip(headers, frame.iloc[0], strict=True)
+    }
+
+
 def validate_delimiter(file_path: str, delimiter: str, encoding: str = 'utf-8-sig') -> bool:
     """
     Validate that a delimiter works for a CSV file.
