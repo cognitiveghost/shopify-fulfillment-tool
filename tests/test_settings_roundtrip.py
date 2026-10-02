@@ -49,11 +49,11 @@ def test_no_page_silently_drops_a_field(window):
     from, section by section.
 
     Blind spot to know about: General and Weight hold the *live* sub-dict
-    (see gui/settings/base.py), so for those two this compares an object to
-    a deepcopy of itself and a dropped key still shows up. Their key coverage
-    lives in test_settings_page_{general,weight}.py, which detach the page
-    from the live dict first. Every other page builds a fresh dict, so this
-    still bites for them.
+    (see gui/settings/contract.py), so for those two this compares an object
+    to a deepcopy of itself and a dropped key still shows up. Their key
+    coverage lives in test_settings_draft_general.py and
+    test_settings_page_weight.py, which detach the page from the live dict
+    first. Every other page builds a fresh dict, so this still bites for them.
     """
     before = copy.deepcopy(window.config_data)
 
@@ -66,17 +66,17 @@ def test_no_page_silently_drops_a_field(window):
 
 
 def test_deleting_a_courier_row_survives_the_save_merge(window, no_modals):
-    """Guards the live-reference contract OrdersMappingPage depends on.
+    """Guards the live-reference contract OrdersDraft depends on.
 
     `courier_mappings` holds a variable set of keys, and the shell's merge is
-    `dict.update()`, which never drops one. OrdersMappingPage only gets away
-    with this because window.py hands it the *live* sub-dict, which it clears
-    and refills in place. Hand it a copy instead and this test fails while
-    every page-level test stays green.
+    `dict.update()`, which never drops one. OrdersDraft only gets away with
+    this because window.py hands it the *live* sub-dict, which it clears and
+    refills in place. Hand it a copy instead and this test fails while every
+    draft-level test stays green.
     """
-    mappings = window._pages[window._page_index_by_name["Orders mapping"]]
-    for row_refs in list(mappings.courier_mapping_widgets):
-        mappings._delete_courier_row(row_refs)
+    mappings = window._pages_by_name["Orders mapping"]
+    while mappings.courier_rows:
+        mappings.apply("courier_remove", ["0"])
 
     window.save_settings()
 
@@ -182,3 +182,72 @@ def test_a_crashed_write_points_to_logs(window, monkeypatch):
     )
     window._on_save_settings_error((ValueError, ValueError("disk"), "tb"))
     assert errors == [("Settings weren't saved", "Details are in Logs.")]
+
+
+def test_the_three_web_pages_share_one_widget_in_the_stack(window):
+    """General and both mappings are drafts: the stack shows one host for all
+    three, and the nav tells the host which to draw."""
+    host = window._web_host
+    for name, key in (
+        ("General", "general"),
+        ("Orders mapping", "orders"),
+        ("Stock mapping", "stock"),
+    ):
+        window._select_page(name)
+        assert window.tab_widget.currentWidget() is host
+        assert host.bridge.state["page"] == key
+    window._select_page("Sets")
+    assert window.tab_widget.currentWidget() is window._pages_by_name["Sets"]
+
+
+def test_an_edit_on_a_web_page_marks_it_unsaved_at_once(window):
+    window._select_page("General")
+    window._web_host.bridge.edit("threshold", ["9"])
+    assert window._unsaved == {"General"}
+    window._web_host.bridge.edit("threshold", ["5"])
+    assert window._unsaved == set()
+
+
+def test_a_web_page_edit_is_what_gets_saved(window, no_modals, started_workers):
+    window._select_page("Orders mapping")
+    window._web_host.bridge.edit("courier_add", [])
+    window._web_host.bridge.edit("courier_pattern", ["2", "evri"])
+    window._web_host.bridge.edit("courier_code", ["2", "Evri"])
+    window._select_page("General")
+    window._web_host.bridge.edit("delimiter", ["orders", "tab"])
+
+    window.save_settings()
+
+    assert no_modals == []
+    assert len(started_workers) == 1
+    assert window.config_data["courier_mappings"]["Evri"] == {
+        "patterns": ["evri"],
+        "case_sensitive": False,
+    }
+    assert window.config_data["settings"]["orders_csv_delimiter"] == "\t"
+
+
+def test_a_mapping_page_opens_with_the_file_loaded_on_setup(
+    qapp, no_modals, started_workers, make_settings_config, tmp_path
+):
+    orders = tmp_path / "orders-30-09.csv"
+    orders.write_text("Name,Lineitem sku\n#1,ABC\n", encoding="utf-8")
+    win = SettingsWindow(
+        client_id="M",
+        client_config=make_settings_config(),
+        profile_manager=Mock(),
+        loaded_files={"orders": str(orders), "stock": str(tmp_path / "gone.csv")},
+    )
+    drafts = win._web_host.drafts
+    assert drafts["orders"].file.name == "orders-30-09.csv"
+    assert drafts["orders"].file.loaded is True
+    assert drafts["orders"].file.columns == ("Name", "Lineitem sku")
+    # A file that cannot be read is no file, and nothing is raised.
+    assert drafts["stock"].file is None
+    assert win.refresh_dirty() == []
+    win.deleteLater()
+
+
+def test_with_no_loaded_files_the_mapping_pages_have_no_file(window):
+    assert window._web_host.drafts["orders"].file is None
+    assert window._web_host.drafts["stock"].file is None

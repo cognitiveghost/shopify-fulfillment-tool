@@ -24,15 +24,17 @@ from gui.components import toast
 from gui.components.error_banner import show_error
 from gui.components.inline_message import InlineMessage
 from gui.settings.base import SettingsPage
-from gui.settings.general import GeneralPage
-from gui.settings.mappings import (
+from gui.settings.contract import PageContract
+from gui.settings.page_state import (
     ADDITIONAL_COLUMNS_UNREADABLE,
-    OrdersMappingPage,
-    StockMappingPage,
+    GeneralDraft,
+    OrdersDraft,
+    StockDraft,
 )
 from gui.settings.reports import ReportsPage
 from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
+from gui.settings.web_host import SettingsWebHost, read_file_columns
 from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
@@ -59,6 +61,14 @@ SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
     "Weight": ["volumetric", "divisor", "dimensions", "boxes", "packaging", "kg"],
     "Reports": ["packing list", "stock export", "filters", "output", "writeoff"],
     "Tag categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
+}
+
+# Nav name -> the key SettingsWebHost draws that page under (phase 7). Every
+# other page is a Qt widget.
+WEB_PAGE_KEYS: dict[str, str] = {
+    "General": "general",
+    "Orders mapping": "orders",
+    "Stock mapping": "stock",
 }
 
 
@@ -114,6 +124,7 @@ class SettingsWindow(QDialog):
         analysis_df=None,
         parent=None,
         initial_page=None,
+        loaded_files=None,
     ):
         """Initializes the SettingsWindow.
 
@@ -130,6 +141,9 @@ class SettingsWindow(QDialog):
                 name SETTINGS_NAV_GROUPS uses. A caller that already knows
                 which page answers the user's problem says so; everyone else
                 gets the last page they were on. Defaults to None.
+            loaded_files (dict, optional): {"orders": path, "stock": path} for
+                the files loaded on Setup. A mapping page opens with that
+                file's columns. Defaults to None.
         """
         super().__init__(parent)
         self._initial_page = initial_page
@@ -225,12 +239,32 @@ class SettingsWindow(QDialog):
         content_layout.addLayout(page_column, 1)
 
         self._page_index_by_name = {}
-        self._pages: list[SettingsPage] = []
-        self._pages_by_name: dict[str, SettingsPage] = {}
+        self._pages: list[PageContract] = []
+        self._pages_by_name: dict[str, PageContract] = {}
         self._unsaved: set[str] = set()
 
+        # The three pages the web tier draws are drafts: pages with no widget.
+        # One host widget shows whichever of them the nav selects.
+        client = str(self.client_id)
+        column_mappings = self.config_data.get("column_mappings", {})
+        drafts = {
+            "general": GeneralDraft(self.config_data.get("settings", {}), client),
+            "orders": OrdersDraft(
+                column_mappings,
+                self.config_data.get("courier_mappings", {}),
+                client,
+                fallback_additional_columns=self._stored_additional_columns(),
+                file=self._loaded_file(loaded_files, "orders"),
+            ),
+            "stock": StockDraft(
+                column_mappings, client, file=self._loaded_file(loaded_files, "stock")
+            ),
+        }
+        self._web_host = SettingsWebHost(drafts)
+        self._web_host.edited.connect(self._on_web_edit)
+
         # Create all tabs (unchanged call order/method names)
-        self._add_page(GeneralPage(self.config_data.get("settings", {})), "General")
+        self._add_page(drafts["general"], "General", self._web_host)
         self._add_page(
             RulesPage(
                 self.config_data.get("rules", []),
@@ -247,18 +281,8 @@ class SettingsWindow(QDialog):
             ),
             "Reports",
         )
-        self._add_page(
-            OrdersMappingPage(
-                self.config_data.get("column_mappings", {}),
-                self.config_data.get("courier_mappings", {}),
-                fallback_additional_columns=self._stored_additional_columns(),
-            ),
-            "Orders mapping",
-        )
-        self._add_page(
-            StockMappingPage(self.config_data.get("column_mappings", {})),
-            "Stock mapping",
-        )
+        self._add_page(drafts["orders"], "Orders mapping", self._web_host)
+        self._add_page(drafts["stock"], "Stock mapping", self._web_host)
         self._add_page(SetsPage(self.config_data.get("set_decoders", {})), "Sets")
         self._add_page(
             WeightPage(
@@ -342,18 +366,46 @@ class SettingsWindow(QDialog):
         self._dirty_poll.timeout.connect(self._poll_current_page)
         self._dirty_poll.start()
 
-    def _add_page(self, page: SettingsPage, name: str) -> None:
+    def _add_page(self, page: PageContract, name: str, widget=None) -> None:
         """Register a settings page under `name`. Tracked in _pages so
         save_settings validates and collects from it.
 
-        Replaces the old `self.tab_widget.addTab(page, name)` calls — the
-        10-tab horizontal strip is replaced by a grouped left-nav
-        (_build_settings_nav) that looks up pages by this same name.
+        `widget` is what the stack shows for it: the page itself when it is a
+        Qt page, the web host when it is a draft. The grouped left-nav
+        (_build_settings_nav) looks pages up by this same name.
         """
+        widget = page if widget is None else widget
         self._pages.append(page)
         self._pages_by_name[name] = page
-        self.tab_widget.addWidget(page)
-        self._page_index_by_name[name] = self.tab_widget.count() - 1
+        if self.tab_widget.indexOf(widget) < 0:
+            self.tab_widget.addWidget(widget)
+        self._page_index_by_name[name] = self.tab_widget.indexOf(widget)
+
+    @staticmethod
+    def _loaded_file(loaded_files, kind: str):
+        """The columns of the file loaded on Setup, or None.
+
+        A file that cannot be read is no file: the mapping page then says no
+        CSV has been read, and the operator can pick one.
+        """
+        path = (loaded_files or {}).get(kind)
+        if not path:
+            return None
+        try:
+            return read_file_columns(path, loaded=True)
+        except Exception:
+            logger.exception(f"The loaded {kind} file's columns couldn't be read")
+            return None
+
+    def _on_web_edit(self) -> None:
+        """A draft changed: its unsaved mark follows at once, with no poll."""
+        changed = False
+        for name in WEB_PAGE_KEYS:
+            if self._pages_by_name[name].is_dirty() != (name in self._unsaved):
+                self._unsaved ^= {name}
+                changed = True
+        if changed:
+            self._render_unsaved()
 
     def _stored_additional_columns(self):
         """The list's pre-Bundle-13 home, read only as a fallback (ADR 0006).
@@ -451,14 +503,17 @@ class SettingsWindow(QDialog):
                 self._settings_nav.setCurrentItem(item)
                 return
 
-    def _on_settings_nav_changed(self, current, _previous):
+    def _on_settings_nav_changed(self, current, previous):
         self._validation_message.clear()
         # The page being left may hold an edit the 400ms poll hasn't seen.
-        self._poll_current_page()
+        if previous is not None:
+            self._poll_page(previous.text())
         if current is None:
             return
         index = current.data(Qt.ItemDataRole.UserRole)
         if index is not None:
+            if current.text() in WEB_PAGE_KEYS:
+                self._web_host.show_page(WEB_PAGE_KEYS[current.text()])
             self.tab_widget.setCurrentIndex(index)
             QSettings("ShopifyFulfillmentTool", "FulfillmentApp").setValue(
                 self.NAV_SETTINGS_KEY, current.text()
@@ -485,9 +540,14 @@ class SettingsWindow(QDialog):
         return self._unsaved_names()
 
     def _poll_current_page(self) -> None:
-        page = self.tab_widget.currentWidget()
-        name = next((n for n, p in self._pages_by_name.items() if p is page), None)
-        if name is None:
+        item = self._settings_nav.currentItem()
+        if item is not None:
+            self._poll_page(item.text())
+
+    def _poll_page(self, name: str) -> None:
+        # By the nav's name, not the stack's widget: three pages share one.
+        page = self._pages_by_name.get(name)
+        if page is None:
             return
         if page.is_dirty() != (name in self._unsaved):
             self._unsaved ^= {name}

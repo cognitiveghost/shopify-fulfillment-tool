@@ -457,6 +457,10 @@ class ActionsHandler(QObject):
             analysis_df=self.mw.analysis_results_df,
             parent=self.mw,
             initial_page=page,
+            loaded_files={
+                "orders": self.mw.orders_file_path,
+                "stock": self.mw.stock_file_path,
+            },
         )
 
         if settings_win.exec():

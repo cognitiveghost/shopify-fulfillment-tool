@@ -70,9 +70,10 @@ def test_both_are_order_level():
 
 
 def test_the_mapping_page_offers_both():
-    from gui.settings.mappings import OrdersMappingPage
+    from gui.settings.page_state import FIELDS
 
-    assert {"Customer", "Created_At"} <= set(OrdersMappingPage.OPTIONAL_FIELDS)
+    optional = {f.name for f in FIELDS["orders"] if not f.required}
+    assert {"Customer", "Created_At"} <= optional
 
 
 def test_new_profiles_map_shopifys_headers(profile_manager):

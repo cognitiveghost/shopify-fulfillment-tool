@@ -12,7 +12,9 @@ def test_no_page_leaves_an_unmarked_button_competing_with_save(window):
     """An unmarked button still renders accent-blue, so it would read as a
     second primary action. Inside the Hub every in-page button is secondary."""
     unmarked = []
-    for page in window._pages:
+    # The stack's widgets, not _pages: three pages are drafts with no widget.
+    for index in range(window.tab_widget.count()):
+        page = window.tab_widget.widget(index)
         for button in page.findChildren(QPushButton):
             if button.property("role") is None:
                 unmarked.append(f"{type(page).__name__}: {button.text()!r}")
