@@ -245,3 +245,57 @@ def test_a_disabled_segment_and_field_go_quiet(qtbot, theme):
         theme.control_disabled_bg
     )
     assert _style(qtbot, view, "#i-field-disabled", "color") == _rgb(theme.text_disabled)
+
+
+# --- the settings page anatomy (phase 7 spec section 5.6) --------------------
+
+
+@THEMES
+def test_a_split_page_head_stacks_a_secondary_sentence_under_the_title(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#p-sub", "color") == _rgb(theme.text_secondary)
+    assert _style(qtbot, view, ".page-head-text", "flexDirection") == "column"
+    assert _style(qtbot, view, ".page-head.split", "alignItems") == "flex-start"
+
+
+@THEMES
+def test_a_card_head_has_a_bold_title_and_a_secondary_sentence(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#k-title", "fontWeight") == "700"
+    assert _style(qtbot, view, "#k-text", "color") == _rgb(theme.text_secondary)
+    assert _style(qtbot, view, "#k-head", "paddingTop") == "14px"
+    assert _style(qtbot, view, "#k-head", "paddingLeft") == "16px"
+
+
+@THEMES
+def test_a_card_row_is_a_label_column_and_a_control_under_a_hairline(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#k-row", "borderTopColor") == _rgb(theme.border_subtle)
+    assert _style(qtbot, view, "#k-row", "borderTopWidth") == "1px"
+    assert _style(qtbot, view, "#k-row", "gridTemplateColumns").startswith("180px ")
+    assert _style(qtbot, view, "#k-label", "width") == "180px"
+
+
+@THEMES
+def test_a_hint_is_secondary_and_a_problem_is_the_danger_colour(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#k-hint", "color") == _rgb(theme.text_secondary)
+    assert _style(qtbot, view, "#k-problem", "color") == _rgb(theme.status_danger)
+
+
+@THEMES
+def test_a_chip_is_a_raised_value_with_a_control_edge(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#k-chip", "backgroundColor") == _rgb(theme.surface_raised)
+    assert _style(qtbot, view, "#k-chip", "borderTopColor") == _rgb(theme.border)
+    assert _style(qtbot, view, "#k-chip", "height") == "26px"
+    assert _style(qtbot, view, "#k-chip-remove", "width") == "20px"
+
+
+@THEMES
+def test_an_invalid_field_and_select_take_the_danger_edge(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    for selector in ("#k-field-invalid", "#k-select-invalid"):
+        assert _style(qtbot, view, selector, "borderTopColor") == _rgb(
+            theme.status_danger
+        )

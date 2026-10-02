@@ -172,6 +172,41 @@
       <input id="i-field-disabled" class="field" type="text" value="68" disabled>
     </div>
   </section>
+  <div class="page-head split" style="grid-column: 1 / -1">
+    <div class="page-head-text">
+      <span class="page-title">Orders mapping</span>
+      <span id="p-sub" class="page-sub">Which column of ACME's orders CSV holds each field.</span>
+    </div>
+    <button class="btn secondary" type="button">Read columns from CSV…</button>
+  </div>
+  <section class="card" style="grid-column: 1 / -1; gap: 0; padding: 0">
+    <div id="k-head" class="card-head">
+      <div class="card-head-text">
+        <span id="k-title" class="card-title">Stock alerts</span>
+        <span id="k-text" class="card-text">When a SKU is flagged as low stock in Results.</span>
+      </div>
+      <button class="btn secondary" type="button">Add name</button>
+    </div>
+    <div id="k-row" class="card-row">
+      <span id="k-label" class="card-label">Low-stock threshold</span>
+      <div class="card-control">
+        <div class="row">
+          <input id="k-field-invalid" class="field invalid" type="text" value="1x" style="width: 72px">
+          <button id="k-select-invalid" class="select invalid" type="button" aria-haspopup="menu" aria-expanded="false" style="width: 240px"><span class="select-value placeholder">Choose column</span><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
+        <span id="k-hint" class="hint">A SKU is low when fewer than this are left.</span>
+        <span id="k-problem" class="problem"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20M12 8v4M12 16h.01"/></svg><span>Type a whole number, 0 or more.</span></span>
+      </div>
+    </div>
+    <div class="card-row">
+      <span class="card-label">Additional columns</span>
+      <div class="card-control">
+        <div class="row">
+          <span id="k-chip" class="chip mono">Notes<button id="k-chip-remove" class="chip-remove" type="button" aria-label="Remove"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 <script>document.getElementById("c-mixed").indeterminate = true;</script>
 </body>
