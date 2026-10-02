@@ -10,6 +10,7 @@ spec's section 3.4: add one there before adding it here. The page sends
 strings and booleans only; an edit of any other shape is dropped.
 """
 
+import json
 import re
 from dataclasses import dataclass, field
 
@@ -186,3 +187,264 @@ class GeneralDraft(PageContract):
                 },
             },
         }
+
+
+# --- column mapping ----------------------------------------------------------
+
+READ_ACTION = "Read columns from CSV…"
+NOT_IN_FILE = "Not in this file"
+MAPPING_TITLE = {"orders": "Orders mapping", "stock": "Stock mapping"}
+
+
+@dataclass(frozen=True)
+class MappingField:
+    """One internal field a CSV column can be mapped to."""
+
+    name: str  # the internal name the analysis reads
+    label: str
+    required: bool = False
+    hint: str = ""
+    example: str = ""  # a column that usually holds it; required fields only
+
+
+# Expiry_Date and Batch are the exact internal names _build_fifo_lots() looks
+# for (shopify_tool/analysis.py): renaming them here silently turns FIFO lot
+# allocation off.
+FIELDS: dict[str, tuple[MappingField, ...]] = {
+    "orders": (
+        MappingField("Order_Number", "Order number", True, example="Name"),
+        MappingField("SKU", "SKU", True, example="Lineitem sku"),
+        MappingField("Quantity", "Quantity", True, example="Lineitem quantity"),
+        MappingField(
+            "Shipping_Method", "Shipping method", True, example="Shipping Method"
+        ),
+        MappingField("Product_Name", "Product name"),
+        MappingField("Shipping_Country", "Country"),
+        MappingField("Tags", "Tags"),
+        MappingField("Notes", "Notes"),
+        MappingField("Total_Price", "Total price"),
+        MappingField("Subtotal", "Subtotal"),
+        MappingField("Customer", "Customer"),
+        MappingField("Created_At", "Created at"),
+    ),
+    "stock": (
+        MappingField("SKU", "SKU", True, example="Артикул"),
+        MappingField("Stock", "Quantity", True, example="Наличност"),
+        MappingField("Product_Name", "Product name"),
+        MappingField(
+            "Expiry_Date",
+            "Expiry date",
+            hint=(
+                "When mapped, stock is allocated oldest expiry first, and each "
+                "packing list row shows its lot. Reads YYMMDD, YYYYMMDD, DDMMYY "
+                "and MMYY."
+            ),
+        ),
+        MappingField(
+            "Batch",
+            "Batch",
+            hint=(
+                "Lot or batch number. Shown per lot on packing lists, and keeps "
+                "separate deliveries of one SKU apart."
+            ),
+        ),
+    ),
+}
+
+
+class MappingDraft(PageContract):
+    """One CSV's column mapping, stored as {csv column: internal name}.
+
+    Both mapping drafts hold the SAME live config_data["column_mappings"] dict
+    and write only their own sub-key into it, in place. Never clear() it and
+    never rebuild it: whichever draft collect()s second would wipe the other's
+    sub-key.
+    """
+
+    def __init__(
+        self,
+        kind: str,
+        column_mappings: dict,
+        client: str,
+        file: FileColumns | None = None,
+    ):
+        self.kind = kind
+        self.column_mappings = column_mappings
+        self.client = client
+        self.file = file
+        self.fields = FIELDS[kind]
+        by_internal = {internal: column for column, internal in self._stored().items()}
+        self.chosen = {f.name: by_internal.get(f.name, "") for f in self.fields}
+
+    def _stored(self) -> dict:
+        stored = self.column_mappings.get(self.kind)
+        return stored if isinstance(stored, dict) else {}
+
+    def _field(self, name: str) -> MappingField | None:
+        return next((f for f in self.fields if f.name == name), None)
+
+    def set_file(self, file: FileColumns) -> None:
+        """Offer this file's columns. It changes no mapping."""
+        self.file = file
+
+    def apply(self, action: str, args) -> bool:
+        if action != "column" or not _shaped(args, str, str):
+            return False
+        name, column = args
+        target = self._field(name)
+        if target is None or self.file is None:
+            return False
+        if column == "":
+            if target.required:
+                return False
+        elif column not in self.file.columns:
+            return False
+        if self.chosen[name] == column:
+            return False
+        if column:
+            # The profile stores one field per column, so the column moves.
+            for other in self.chosen:
+                if self.chosen[other] == column:
+                    self.chosen[other] = ""
+            self._column_taken(column)
+        self.chosen[name] = column
+        return True
+
+    def _column_taken(self, column: str) -> None:
+        """A field now holds `column`. OrdersDraft lets go of it elsewhere."""
+
+    def mappings(self) -> dict:
+        """{csv column: internal name}, as stored.
+
+        Entries for internal names this page has no row for are carried
+        through untouched: dropping them is how the Expiry_Date and Batch
+        mappings that drive FIFO were once deleted on every save. A field
+        with no column is left out.
+        """
+        managed = {f.name for f in self.fields}
+        result = {
+            column: internal
+            for column, internal in self._stored().items()
+            if internal not in managed
+        }
+        for f in self.fields:
+            if self.chosen[f.name]:
+                result[self.chosen[f.name]] = f.name
+        return result
+
+    def _write_mapping(self) -> dict:
+        """Write this draft's sub-key into the live dict and return the dict."""
+        self.column_mappings["version"] = 2
+        self.column_mappings[self.kind] = self.mappings()
+        return self.column_mappings
+
+    def collect(self) -> dict:
+        return {"column_mappings": self._write_mapping()}
+
+    def snapshot(self) -> str:
+        """Only this draft's own mapping: column_mappings is one live dict
+        shared by both mapping drafts, so a snapshot of collect() would mark
+        both unsaved when either changes."""
+        return json.dumps(self.mappings(), sort_keys=True, default=str)
+
+    def _missing(self) -> MappingField | None:
+        return next(
+            (f for f in self.fields if f.required and not self.chosen[f.name]), None
+        )
+
+    def blocker(self) -> str | None:
+        missing = self._missing()
+        return f"Map {missing.label}" if missing else None
+
+    def blocker_key(self) -> str:
+        missing = self._missing()
+        return f"field-{missing.name}" if missing else ""
+
+    def _problem(self, f: MappingField) -> tuple[str, str]:
+        """(sentence, example): the page draws the example in the mono face
+        and closes the sentence after it."""
+        if not f.required or self.chosen[f.name]:
+            return "", ""
+        if self.file is None:
+            return (
+                f"{f.label} is required. Use {READ_ACTION}, then choose its column.",
+                "",
+            )
+        return f"{f.label} is required. Choose the column that holds it, e.g.", f.example
+
+    def validate(self) -> tuple[bool, list[str]]:
+        problems = []
+        for f in self.fields:
+            sentence, example = self._problem(f)
+            if sentence:
+                problems.append(f"{sentence} {example}." if example else sentence)
+        return not problems, problems
+
+    def _source(self) -> dict:
+        if self.file is None:
+            return {
+                "lead": f"No CSV has been read. Use {READ_ACTION} to change a field.",
+                "file": "",
+                "tail": "",
+            }
+        return {
+            "lead": "Columns read from",
+            "file": self.file.name,
+            "tail": ", the file loaded on Setup." if self.file.loaded else ".",
+        }
+
+    def _field_view(self, f: MappingField) -> dict:
+        column = self.chosen[f.name]
+        lacking = bool(column) and self.file is not None and column not in self.file.columns
+        if lacking:
+            sample = NOT_IN_FILE
+        elif column and self.file is not None:
+            sample = self.file.first_row.get(column, "")
+        else:
+            sample = ""
+        problem, example = self._problem(f)
+        return {
+            "name": f.name,
+            "label": f.label,
+            "required": f.required,
+            "column": column,
+            "placeholder": "Choose column" if f.required else "Not imported",
+            "sample": sample,
+            "sample_missing": lacking,
+            "problem": problem,
+            "example": example,
+            "hint": f.hint,
+        }
+
+    def _mapping_view(self) -> dict:
+        labels = {f.name: f.label for f in self.fields}
+        return {
+            "kind": self.kind,
+            "source": self._source(),
+            "can_pick": self.file is not None,
+            "columns": list(self.file.columns) if self.file is not None else [],
+            "held": {
+                column: labels[name] for name, column in self.chosen.items() if column
+            },
+            "fields": [self._field_view(f) for f in self.fields],
+        }
+
+    def view(self) -> dict:
+        return {
+            "page": self.kind,
+            "title": MAPPING_TITLE[self.kind],
+            "subtitle": (
+                f"Which column of {self.client}'s {self.kind} CSV holds each field."
+            ),
+            "action": READ_ACTION,
+            "mapping": self._mapping_view(),
+        }
+
+
+class StockDraft(MappingDraft):
+    """Stock CSV columns, including the two that drive FIFO lot allocation."""
+
+    def __init__(
+        self, column_mappings: dict, client: str, file: FileColumns | None = None
+    ):
+        super().__init__("stock", column_mappings, client, file)
