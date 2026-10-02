@@ -14,7 +14,10 @@ import json
 import re
 from dataclasses import dataclass, field
 
+import pandas as pd
+
 from gui.settings.contract import PageContract
+from shopify_tool.csv_utils import discover_additional_columns
 
 
 @dataclass(frozen=True)
@@ -448,3 +451,270 @@ class StockDraft(MappingDraft):
         self, column_mappings: dict, client: str, file: FileColumns | None = None
     ):
         super().__init__("stock", column_mappings, client, file)
+
+
+# --- orders: courier names and additional columns ----------------------------
+
+ADDITIONAL_COLUMNS_UNREADABLE = object()
+"""Passed as `fallback_additional_columns` when the client config could not be
+read, so the draft can tell "there are none" from "we don't know" (ADR 0006).
+Saving the first over the second would discard the profile's real list."""
+
+COURIER_TEXT = (
+    "A shipping method that contains the text on the left is filed under the "
+    "courier on the right. Anything else keeps its own name."
+)
+COURIER_EMPTY = "No courier names yet. The built-in ones apply: DHL, DPD and PostOne."
+ADDITIONAL_TEXT = (
+    "Orders columns with no field, carried through the analysis under their own names."
+)
+ADDITIONAL_EMPTY = "None kept."
+ADDITIONAL_UNKNOWN = (
+    "The saved list couldn't be read, so saving leaves it as it is. "
+    "Add a column to replace it."
+)
+NOT_FILLED_DOWN = "not filled down"
+
+
+def _is_entry(value) -> bool:
+    return isinstance(value, dict) and bool(value.get("csv_name"))
+
+
+def _additional_entry(value: dict) -> dict:
+    """A stored entry with every key discover_additional_columns reads."""
+    name = str(value["csv_name"])
+    return {
+        "csv_name": name,
+        "internal_name": value.get("internal_name")
+        or name.strip().replace(" ", "_").replace("-", "_"),
+        "enabled": bool(value.get("enabled", False)),
+        "is_order_level": bool(value.get("is_order_level", True)),
+        "exists_in_df": value.get("exists_in_df", True),
+    }
+
+
+def _courier_rows(courier_mappings) -> list[list[str]]:
+    """One [text, code] row per stored pattern, in stored order.
+
+    A legacy entry is {pattern: code}: the analysis still matches it, so it
+    loads as a row instead of being dropped on the next save.
+    """
+    rows: list[list[str]] = []
+    if not isinstance(courier_mappings, dict):
+        return rows
+    for code, data in courier_mappings.items():
+        if isinstance(data, dict):
+            rows.extend([str(text), str(code)] for text in data.get("patterns") or [])
+        elif isinstance(data, str):
+            rows.append([str(code), data])
+    return rows
+
+
+class OrdersDraft(MappingDraft):
+    """Orders CSV columns, the courier names that resolve the shipping method
+    those columns carry, and the additional columns kept beside them."""
+
+    def __init__(
+        self,
+        column_mappings: dict,
+        courier_mappings: dict,
+        client: str,
+        fallback_additional_columns=None,
+        file: FileColumns | None = None,
+    ):
+        super().__init__("orders", column_mappings, client, file)
+        self.courier_mappings = courier_mappings
+        self.courier_rows = _courier_rows(courier_mappings)
+
+        # ADR 0006: the list lives in column_mappings; a profile not saved
+        # since Bundle 13 still has it only in the client config.
+        source = (
+            column_mappings.get("additional_columns")
+            if "additional_columns" in column_mappings
+            else fallback_additional_columns
+        )
+        # A client config that could not be read means the stored list is
+        # unknown, not empty: collect() must leave it alone, not save [] over it.
+        self.additional_known = source is not ADDITIONAL_COLUMNS_UNREADABLE
+        if not self.additional_known:
+            source = []
+        self.entries = [_additional_entry(e) for e in (source or []) if _is_entry(e)]
+
+    # --- edits ---------------------------------------------------------------
+
+    def _row(self, text: str) -> int | None:
+        if text.isdecimal() and int(text) < len(self.courier_rows):
+            return int(text)
+        return None
+
+    def _entry(self, name: str) -> dict | None:
+        return next((e for e in self.entries if e["csv_name"] == name), None)
+
+    def apply(self, action: str, args) -> bool:
+        if action == "column":
+            return super().apply(action, args)
+        if action == "courier_add" and _shaped(args):
+            self.courier_rows.append(["", ""])
+            return True
+        if action in ("courier_pattern", "courier_code") and _shaped(args, str, str):
+            row = self._row(args[0])
+            side = 0 if action == "courier_pattern" else 1
+            value = args[1] if side == 0 else args[1].strip()
+            if row is None or (side == 1 and not value):
+                return False
+            if self.courier_rows[row][side] == value:
+                return False
+            self.courier_rows[row][side] = value
+            return True
+        if action == "courier_remove" and _shaped(args, str):
+            row = self._row(args[0])
+            if row is None:
+                return False
+            del self.courier_rows[row]
+            return True
+        if action == "column_add" and _shaped(args, str):
+            return self._keep(args[0])
+        if action == "column_remove" and _shaped(args, str):
+            entry = self._entry(args[0])
+            if entry is None or not entry["enabled"]:
+                return False
+            entry["enabled"] = False
+            return True
+        if action == "column_fill" and _shaped(args, str, bool):
+            entry = self._entry(args[0])
+            if entry is None or entry["is_order_level"] == args[1]:
+                return False
+            entry["is_order_level"] = args[1]
+            return True
+        return False
+
+    def _keep(self, name: str) -> bool:
+        """Keep a candidate: turn its entry on, or store a discovered one."""
+        candidate = next(
+            (e for e in self._discovered() if e["csv_name"] == name and not e["enabled"]),
+            None,
+        )
+        if candidate is None:
+            return False
+        entry = self._entry(name)
+        if entry is None:
+            self.entries.append({**candidate, "enabled": True})
+        else:
+            entry["enabled"] = True
+        # What the operator keeps supersedes a list that could not be read.
+        self.additional_known = True
+        return True
+
+    def _column_taken(self, column: str) -> None:
+        entry = self._entry(column)
+        if entry is not None:
+            entry["enabled"] = False
+
+    # --- what is saved -------------------------------------------------------
+
+    def couriers(self) -> dict:
+        """courier_mappings as stored: codes in the order their first row
+        appears. A row missing its text or its courier is left out."""
+        result: dict[str, dict] = {}
+        for text, code in self.courier_rows:
+            text, code = text.strip(), code.strip()
+            if not text or not code:
+                continue
+            patterns = result.setdefault(
+                code, {"patterns": [], "case_sensitive": False}
+            )["patterns"]
+            if text not in patterns:
+                patterns.append(text)
+        return result
+
+    def collect(self) -> dict:
+        # Same live-dict contract as column_mappings: clear and refill in
+        # place, so a removed courier does not survive the save.
+        couriers = self.couriers()
+        self.courier_mappings.clear()
+        self.courier_mappings.update(couriers)
+
+        mappings = self._write_mapping()
+        if self.additional_known:
+            mappings["additional_columns"] = [dict(e) for e in self.entries]
+        return {"column_mappings": mappings, "courier_mappings": self.courier_mappings}
+
+    def snapshot(self) -> str:
+        return json.dumps(
+            [super().snapshot(), self.couriers(), self.entries],
+            sort_keys=True,
+            default=str,
+        )
+
+    # --- what the page draws -------------------------------------------------
+
+    def _discovered(self) -> list[dict]:
+        """Every additional column there is to show.
+
+        With a file read: its unmapped columns and the stored entries, each
+        saying whether the file has it. With none: the stored entries. Nothing
+        here is stored until the operator keeps it.
+        """
+        if self.file is None:
+            return [dict(e) for e in self.entries]
+        return discover_additional_columns(
+            pd.DataFrame(columns=list(self.file.columns)),
+            {"orders": self.mappings()},
+            self.entries,
+        )
+
+    def _additional_view(self) -> dict:
+        read = self.file is not None
+        chips, candidates = [], []
+        for entry in self._discovered():
+            lacking = read and not entry["exists_in_df"]
+            if entry["enabled"]:
+                notes = [NOT_IN_FILE] if lacking else []
+                if not entry["is_order_level"]:
+                    notes.append(NOT_FILLED_DOWN)
+                chips.append(
+                    {
+                        "name": entry["csv_name"],
+                        "note": ", ".join(notes),
+                        "fill": bool(entry["is_order_level"]),
+                    }
+                )
+            else:
+                candidates.append(
+                    {"name": entry["csv_name"], "note": NOT_IN_FILE if lacking else ""}
+                )
+        if candidates:
+            add_title = ""
+        elif read:
+            add_title = "Every column in this file is mapped or kept."
+        else:
+            add_title = f"Use {READ_ACTION} to list the file's unmapped columns."
+        return {
+            "text": ADDITIONAL_TEXT,
+            "chips": chips,
+            "candidates": candidates,
+            "group": (
+                f"Unmapped columns in {self.file.name}" if read else "Turned off earlier"
+            ),
+            "empty": ADDITIONAL_EMPTY,
+            "notice": "" if self.additional_known else ADDITIONAL_UNKNOWN,
+            "add_title": add_title,
+        }
+
+    def _couriers_view(self) -> dict:
+        codes: list[str] = []
+        for _text, code in self.courier_rows:
+            if code and code not in codes:
+                codes.append(code)
+        return {
+            "text": COURIER_TEXT,
+            "rows": [{"text": text, "code": code} for text, code in self.courier_rows],
+            "codes": codes,
+            "empty": COURIER_EMPTY,
+        }
+
+    def _mapping_view(self) -> dict:
+        view = super()._mapping_view()
+        view["couriers"] = self._couriers_view()
+        view["additional"] = self._additional_view()
+        return view
