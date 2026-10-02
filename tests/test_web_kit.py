@@ -206,3 +206,42 @@ def test_a_form_row_pins_its_label_column(qtbot):
     view = _sheet(qtbot, LIGHT_THEME)
     assert _style(qtbot, view, "#f-row", "gridTemplateColumns").startswith("160px ")
     assert _style(qtbot, view, "#f-label", "fontWeight") == "700"
+
+
+@THEMES
+def test_a_select_shows_its_value_and_wears_its_states(qtbot, theme):
+    """Phase 5 spec section 5.8."""
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#sel-value", "borderTopColor") == _rgb(theme.border)
+    assert _style(qtbot, view, "#sel-value", "backgroundColor") == _rgb(theme.surface)
+    assert _style(qtbot, view, "#sel-value .select-value", "fontWeight") == "700"
+    assert _style(qtbot, view, "#sel-value .select-meta", "color") == _rgb(
+        theme.text_secondary
+    )
+    assert _style(qtbot, view, "#sel-placeholder", "color") == _rgb(theme.text_placeholder)
+    assert _style(qtbot, view, "#sel-placeholder", "fontWeight") == "400"
+    assert _style(qtbot, view, "#sel-open", "borderTopColor") == _rgb(theme.text)
+
+
+@THEMES
+def test_a_disabled_select_is_dashed_and_quiet(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#sel-disabled", "borderTopStyle") == "dashed"
+    assert _style(qtbot, view, "#sel-disabled", "backgroundColor") == _rgb(
+        theme.control_disabled_bg
+    )
+    assert _style(qtbot, view, "#sel-disabled-value", "color") == _rgb(theme.text_disabled)
+    assert _style(qtbot, view, "#sel-disabled .glyph", "color") == _rgb(theme.text_disabled)
+
+
+@THEMES
+def test_a_disabled_segment_and_field_go_quiet(qtbot, theme):
+    view = _sheet(qtbot, theme)
+    assert _style(qtbot, view, "#s-locked-off", "color") == _rgb(theme.text_disabled)
+    # The chosen one still reads: the operator must see which mode is set.
+    assert _style(qtbot, view, "#s-locked-on", "color") == _rgb(theme.text)
+    assert _style(qtbot, view, "#i-field-disabled", "borderTopStyle") == "dashed"
+    assert _style(qtbot, view, "#i-field-disabled", "backgroundColor") == _rgb(
+        theme.control_disabled_bg
+    )
+    assert _style(qtbot, view, "#i-field-disabled", "color") == _rgb(theme.text_disabled)

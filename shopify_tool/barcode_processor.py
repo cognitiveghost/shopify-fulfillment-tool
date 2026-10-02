@@ -391,3 +391,115 @@ def generate_qr_labels_pdf(orders: list[dict[str, Any]], output_pdf: Path) -> Pa
 
     logger.info(f"Generated QR labels PDF: {output_pdf} ({len(records)} pages)")
     return output_pdf
+
+
+# === ONE PACKING LIST, START TO FINISH ===
+
+def packing_list_orders(xlsx_path) -> frozenset:
+    """The order numbers a packing list workbook holds, as pandas reads them.
+
+    Raises:
+        ValueError: If the sheet has no Order_Number column.
+    """
+    frame = pd.read_excel(xlsx_path)
+    if "Order_Number" not in frame.columns:
+        raise ValueError(f"Packing list has no Order_Number column: {xlsx_path}")
+    return frozenset(frame["Order_Number"].dropna().unique())
+
+
+def _writing(count: int, kind: str) -> str:
+    return f"Writing {count:,} {kind} label{'' if count == 1 else 's'}…"
+
+
+def generate_list_labels(
+    orders_df: pd.DataFrame,
+    folder,
+    list_stem: str,
+    *,
+    qr: bool = False,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Write one packing list's label PDFs: the barcode labels, and with
+    `qr` the QR labels beside them.
+
+    Everything slow is in here, so a caller runs it on a worker thread
+    (phase 5 spec section 7.2). `progress` is told one sentence before each
+    render; a render is a single WeasyPrint call and reports nothing itself.
+
+    Args:
+        orders_df: The Fulfillable rows of the orders on this list, one row
+            per order line (Order_Number, Quantity, Shipping_Provider, ...).
+        folder: Where the PDFs go (barcodes_dir(session, list_stem)).
+        list_stem: The packing list's name; it names the PDFs.
+
+    Returns:
+        {"list", "folder", "labels": labels written, "failed": orders whose
+        number could not be encoded, "pdf": path or None, "qr_pdf": path or
+        None, "qr_failed": bool}
+
+    Raises:
+        BarcodeGenerationError: If the barcode PDF cannot be rendered. A QR
+            failure is logged and reported as qr_failed; the barcode PDF stands.
+    """
+    # Local imports: both modules import this one's helpers.
+    from shopify_tool.packing_lists import sort_for_packing_list
+    from shopify_tool.tag_manager import merge_tags
+
+    # One row per order, carrying the order's total quantity.
+    unique_orders = orders_df.groupby("Order_Number").first().reset_index()
+    item_counts = orders_df.groupby("Order_Number")["Quantity"].sum().to_dict()
+    unique_orders["item_count"] = unique_orders["Order_Number"].map(item_counts)
+
+    # Merge tags from ALL rows of each order (not just the first row).
+    # Internal_Tags is a serialized list (JSON string or native list), not
+    # flat comma-separated text -- use tag_manager's parser/merger rather
+    # than splitting the string ourselves, which corrupts multi-tag values
+    # into something format_tags_for_barcode can't parse and leaks the raw
+    # literal onto the printed label.
+    if "Internal_Tags" in orders_df.columns:
+        merged_tags = {
+            order: merge_tags(group["Internal_Tags"].dropna().tolist())
+            for order, group in orders_df.groupby("Order_Number", sort=False)
+        }
+        unique_orders["Internal_Tags"] = unique_orders["Order_Number"].map(merged_tags)
+
+    # Label N is the N-th order on the packing list.
+    unique_orders = sort_for_packing_list(unique_orders).reset_index(drop=True)
+
+    results = generate_barcodes_batch(df=unique_orders)
+    successful = [r for r in results if r["success"]]
+    folder = Path(folder)
+    outcome: dict[str, Any] = {
+        "list": list_stem,
+        "folder": str(folder),
+        "labels": len(successful),
+        "failed": len(results) - len(successful),
+        "pdf": None,
+        "qr_pdf": None,
+        "qr_failed": False,
+    }
+    logger.info(
+        f"Barcode generation for packing list {list_stem!r}: "
+        f"{len(results)} orders filtered, "
+        f"{outcome['labels']} labels written, {outcome['failed']} failed"
+    )
+    if not successful:
+        return outcome
+
+    if progress:
+        progress(_writing(len(successful), "barcode"))
+    outcome["pdf"] = str(
+        generate_code128_labels_pdf(successful, barcode_pdf_path(folder, list_stem))
+    )
+
+    if qr:
+        if progress:
+            progress(_writing(len(successful), "QR"))
+        try:
+            outcome["qr_pdf"] = str(
+                generate_qr_labels_pdf(successful, qr_pdf_path(folder, list_stem))
+            )
+        except Exception:
+            logger.exception("QR labels PDF generation failed")
+            outcome["qr_failed"] = True
+    return outcome

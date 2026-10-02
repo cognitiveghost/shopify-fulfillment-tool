@@ -57,6 +57,33 @@ class MappingError(PDFProcessorError):
     """Error matching pages to references."""
 
 
+class ProcessingCancelled(PDFProcessorError):
+    """Raised by a progress callback to stop a run before it saves."""
+
+
+# What a progress callback is told, as callback(done, total, label): each page
+# read, each page stamped, then one SAVING call. Nothing is written before
+# SAVING and nothing is called after it, so a callback that raises
+# ProcessingCancelled leaves no file (phase 5 spec section 7.1).
+READING, STAMPING, SAVING = "Reading labels", "Stamping labels", "Saving"
+
+
+def pdf_page_count(pdf_path) -> int:
+    """How many pages a PDF has.
+
+    Raises:
+        InvalidPDFError: If it cannot be opened, or has no pages
+    """
+    try:
+        with pikepdf.open(pdf_path) as pdf:
+            pages = len(pdf.pages)
+    except Exception as e:
+        raise InvalidPDFError(f"Cannot read PDF: {e}") from e
+    if pages == 0:
+        raise InvalidPDFError("PDF file has no pages")
+    return pages
+
+
 def process_reference_labels(
     pdf_path: str,
     csv_path: str,
@@ -70,7 +97,10 @@ def process_reference_labels(
         pdf_path: Path to input PDF
         csv_path: Path to CSV mapping file
         output_dir: Output directory for processed PDF
-        progress_callback: Optional callback(current, total, message)
+        progress_callback: Optional callback(done, total, label), called per
+            page with one of READING, STAMPING or SAVING as the label. It may
+            raise ProcessingCancelled to stop the run: nothing is written
+            before SAVING.
 
     Returns:
         dict: {
@@ -84,6 +114,7 @@ def process_reference_labels(
     Raises:
         InvalidPDFError: If PDF is invalid or cannot be read
         InvalidCSVError: If CSV is invalid or has wrong format
+        ProcessingCancelled: When progress_callback raised it
         PDFProcessorError: For other processing errors
     """
     start_time = time.time()
@@ -93,9 +124,6 @@ def process_reference_labels(
     src = None
     try:
         # Step 1: Load and validate PDF
-        if progress_callback:
-            progress_callback(0, 100, "Loading PDF...")
-
         try:
             src = pikepdf.open(pdf_path)
             total_pages = len(src.pages)
@@ -109,9 +137,6 @@ def process_reference_labels(
             raise InvalidPDFError(f"Cannot read PDF: {e}")
 
         # Step 2: Load and validate CSV mapping
-        if progress_callback:
-            progress_callback(5, 100, "Loading CSV mapping...")
-
         try:
             mapping = load_csv_mapping(csv_path)
 
@@ -125,24 +150,12 @@ def process_reference_labels(
         except Exception as e:
             raise InvalidCSVError(f"Cannot read CSV: {e}")
 
-        # Step 3: Process pages and match references
-        if progress_callback:
-            progress_callback(10, 100, "Processing pages...")
-
+        # Step 3: Read every page's text (the slow half), then match references
         page_data_list = []
 
-        page_texts = _page_texts(pdf_path, total_pages)
+        page_texts = _page_texts(pdf_path, total_pages, progress_callback)
 
         for i, page in enumerate(src.pages):
-            # Update progress
-            progress_pct = 10 + int((i / total_pages) * 70)
-            if progress_callback:
-                progress_callback(
-                    progress_pct,
-                    100,
-                    f"Processing page {i+1}/{total_pages}"
-                )
-
             # Match reference
             ref_data = match_reference(page_texts[i], mapping)
 
@@ -161,30 +174,28 @@ def process_reference_labels(
             })
 
         # Step 4: Sort pages by reference number
-        if progress_callback:
-            progress_callback(80, 100, "Sorting pages...")
-
         sorted_pages = sort_pages_by_reference(page_data_list)
 
-        # Step 5: Add reference overlays and save
-        if progress_callback:
-            progress_callback(85, 100, "Adding reference labels...")
-
+        # Step 5: Add reference overlays
         out = pikepdf.new()
 
         stamped_refs = []
         name_matched = 0
-        for page_data in sorted_pages:
+        for done, page_data in enumerate(sorted_pages, start=1):
             page, ref = page_data['page'], page_data['ref']
+            stamped = False
             if ref:
                 try:
                     _stamp_reference(out, page, ref)
                     stamped_refs.append(ref)
                     name_matched += page_data['method'] == 'name'
-                    continue
+                    stamped = True
                 except Exception:
                     logger.exception(f"Failed to add overlay for ref {ref}; page kept unstamped")
-            out.pages.append(page)
+            if not stamped:
+                out.pages.append(page)
+            if progress_callback:
+                progress_callback(done, total_pages, STAMPING)
 
         # "matched" is pages actually stamped, not pages a REF was found for
         matched = len(stamped_refs)
@@ -194,9 +205,10 @@ def process_reference_labels(
         missing_refs = sorted(mapping['refs'] - set(counts), key=reference_sort_key)
         logger.info(f"Matching complete: {matched} matched, {unmatched} unmatched")
 
-        # Step 6: Save output PDF
+        # Step 6: Save output PDF. The last call a callback gets: a run that
+        # has begun saving always finishes.
         if progress_callback:
-            progress_callback(95, 100, "Saving PDF...")
+            progress_callback(total_pages, total_pages, SAVING)
 
         output_file = Path(output_dir) / generate_output_filename()
 
@@ -208,9 +220,6 @@ def process_reference_labels(
             f"PDF processing complete: {output_file} "
             f"({processing_time:.1f}s)"
         )
-
-        if progress_callback:
-            progress_callback(100, 100, "Complete!")
 
         return {
             'output_file': str(output_file),
@@ -235,14 +244,20 @@ def process_reference_labels(
             src.close()
 
 
-def _page_texts(pdf_path: str, total_pages: int) -> list[str]:
+def _page_texts(pdf_path: str, total_pages: int, progress_callback=None) -> list[str]:
     """Each page's text, read by pypdf: reference matching was tuned
     against its extraction (spec D4). A file pypdf cannot open still
-    processes -- its pages just come out unmatched."""
+    processes -- its pages just come out unmatched.
+
+    progress_callback is told (i, total_pages, READING) after each page. It
+    is called outside the per-page try, so a ProcessingCancelled it raises
+    is not swallowed as an extraction failure."""
     try:
         reader = PdfReader(pdf_path)
     except Exception:
         logger.warning(f"pypdf could not open {pdf_path}; pages will be unmatched", exc_info=True)
+        if progress_callback:
+            progress_callback(total_pages, total_pages, READING)
         return [""] * total_pages
     texts = []
     for i in range(total_pages):
@@ -251,6 +266,8 @@ def _page_texts(pdf_path: str, total_pages: int) -> list[str]:
         except Exception as e:
             logger.warning(f"Failed to extract text from page {i+1}: {e}")
             texts.append("")
+        if progress_callback:
+            progress_callback(i + 1, total_pages, READING)
     return texts
 
 
@@ -296,7 +313,7 @@ def _stamp_reference(out: pikepdf.Pdf, page: pikepdf.Page, ref: str) -> None:
         raise
 
 
-def load_csv_mapping(csv_path: str) -> dict[str, dict]:
+def load_csv_mapping(csv_path: str) -> dict:
     """
     Load CSV mapping file.
 
@@ -310,12 +327,13 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
         csv_path: Path to CSV file
 
     Returns:
-        Dict with four mappings:
+        Dict with four mappings and the row count:
         {
             'by_postone': {postone_id: {ref, name}},
             'by_tracking': {tracking: {ref, name}},
             'by_name': {normalized_name: [{ref, name}, ...]},  # distinct packs
-            'refs': {every non-empty REF in the CSV}
+            'refs': {every non-empty REF in the CSV},
+            'rows': int  # usable rows
         }
 
     Raises:
@@ -374,6 +392,7 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
 
             if row_count > 0:
                 logger.info(f"CSV loaded with encoding {encoding}: {row_count} rows")
+                mappings['rows'] = row_count
                 return mappings
 
         except UnicodeDecodeError:

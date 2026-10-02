@@ -115,7 +115,19 @@ Status tabs with live counts (All, Active, Completed, Abandoned, Archived), sear
 The Status menu offers the four a person can set and says what each one resolves to. Comment, and an Undo
 toast for every change. The packing progress bar. The archived footer. Double-click opens the session.
 
-### 5. Tools to the web tier
+### 5. Tools to the web tier (built in run 47)
+
+Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase5-tools-web-design.md`.
+Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase5-tools-web.md`.
+
+Built as listed below, with these differences. Reference labels has the count and Cancel; Barcode labels
+says "Writing 120 barcode labels…" with neither, because its render is one call. Print prints what exists:
+Reference after a run, Barcode whenever the list's PDF is on disk. Barcode's output folder is fixed, with no
+Change…. The print settings the mockup does not draw (target, label size, rotate, invert) sit behind a
+"Label setup" fold under Print mode, and the printer menu shows in Driver mode too. The CSV problem reads
+"This CSV has no usable rows": the file is read by column position, not by header. A PDF that cannot be
+opened is flagged the same way. The session chip is in the page head on Tools, as on Setup. The kit gained
+`.select`.
 
 One card per tool (Reference labels, Barcode labels), each using the Setup row grid. A Driver / Raw ZPL switch
 per card, saved per PC, with the printer target shown for Raw ZPL. With no session, one banner explains why

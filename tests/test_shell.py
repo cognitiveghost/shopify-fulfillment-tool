@@ -513,3 +513,70 @@ def test_f5_reloads_the_session_list_on_browse_only(main_window, monkeypatch):
     main_window.main_tabs.setCurrentIndex(2)
     main_window._refresh_browse()
     assert calls == ["refresh"]
+
+
+def test_tools_is_one_web_view(main_window):
+    """Phase 5 spec section 6.4: tab 4 holds the Tools page and nothing else."""
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+
+    from gui.tools_widget import ToolsWidget
+
+    tab = main_window.main_tabs.widget(4)
+    assert isinstance(tab, ToolsWidget)
+    assert tab is main_window.tools_widget
+    assert tab.findChildren(QWebEngineView) == [tab.view]
+    margins = tab.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+
+
+def test_tools_takes_the_page_area_to_its_edges(main_window):
+    main_window.resize(1366, 768)
+    main_window.main_tabs.setCurrentIndex(4)
+    QApplication.processEvents()
+    margins = main_window.page_area.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+    assert main_window.main_tabs.width() == 1166
+
+
+def test_the_bar_leaves_the_session_chip_to_the_setup_and_tools_page_heads(main_window):
+    from gui.components import BarState
+
+    main_window.command_bar.set_state(BarState.SESSION)
+    main_window.command_bar.set_session_text("2026-09-30_1")
+    for index, shown in ((0, False), (1, True), (2, True), (3, True), (4, False)):
+        main_window.main_tabs.setCurrentIndex(index)
+        QApplication.processEvents()
+        assert main_window.command_bar.session_chip.isVisible() is shown, index
+
+
+def test_a_session_change_reaches_the_tools_page(main_window, tmp_path):
+    """refresh_setup() is where every session change passes; Tools follows it."""
+    state = main_window.tools_widget.bridge.state
+    assert state["banner"] is True and state["session"] == {}
+
+    session = tmp_path / "2026-09-30_1"
+    session.mkdir()
+    main_window.session_path = str(session)
+    main_window.ui_manager.refresh_setup()
+
+    state = main_window.tools_widget.bridge.state
+    assert state["banner"] is False
+    assert state["session"]["name"] == "2026-09-30_1"
+    assert state["reference"]["folder"]["title"] == str(session / "reference_labels")
+
+    main_window.session_path = None
+    main_window.ui_manager.refresh_setup()
+    assert main_window.tools_widget.bridge.state["banner"] is True
+
+
+def test_the_tools_banner_reaches_new_session_and_the_recent_menu(main_window, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        main_window.actions_handler, "create_new_session", lambda: calls.append("new")
+    )
+    monkeypatch.setattr(
+        main_window.command_bar.session_button, "showMenu", lambda: calls.append("recent")
+    )
+    main_window.tools_widget.bridge.newSession()
+    main_window.tools_widget.bridge.openRecent()
+    assert calls == ["new", "recent"]

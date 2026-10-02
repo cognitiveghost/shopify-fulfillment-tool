@@ -177,6 +177,15 @@ def _when(moment: datetime, now: datetime) -> str:
     return local.strftime("%d %b %H:%M")
 
 
+def session_meta(client: str, session: SessionFacts, now: datetime) -> str:
+    """What a page head says beside the session chip: "ACME · opened 14:02",
+    "ACME · analysed 14:06" once analysed, the client alone with no time.
+    Setup and Tools both draw it."""
+    moment = session.analysed or session.opened
+    verb = "analysed" if session.analysed is not None else "opened"
+    return f"{client} · {verb} {_when(moment, now)}" if moment else client
+
+
 def _stat(key: str, value) -> dict:
     return {"k": key, "v": _n(value), "muted": value is None}
 
@@ -321,12 +330,10 @@ def setup_state(
     if session is None:
         session_out = {}
     else:
-        moment = session.analysed or session.opened
-        verb = "analysed" if analysed else "opened"
         session_out = {
             "name": session.name,
             "title": "Session" if analysed else "New session",
-            "meta": f"{client} · {verb} {_when(moment, now)}" if moment else client,
+            "meta": session_meta(client, session, now),
         }
 
     if not memory.on:

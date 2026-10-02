@@ -5,7 +5,6 @@ from gui.components.elided_label import ElidedLabel
 from gui.components.error_banner import ErrorBanner, show_error
 from gui.components.form_section import FormSection, row_widget
 from gui.components.inline_message import InlineMessage
-from gui.components.print_options import PrintOptions
 from shared.components import (
     Card,
     ConfirmDialog,
@@ -49,7 +48,6 @@ __all__ = [
     "InlineMessage",
     "NavRail",
     "OverflowMenu",
-    "PrintOptions",
     "StatePanel",
     "Toast",
     "overflow_button",

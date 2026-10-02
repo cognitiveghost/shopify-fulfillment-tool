@@ -368,3 +368,126 @@ class TestProcessReferenceLabelsPikepdf:
         assert "REF: REF-001" in pages[0].extract_text()  # matched sorts first
         assert "REF:" not in pages[1].extract_text()
         assert pages[1].rotation == 90
+
+
+def _two_page_run(tmp_path):
+    """A two-page courier PDF (one page matches), its mapping and an empty out dir."""
+    pdf_path = tmp_path / "two.pdf"
+    c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))
+    c.drawString(20, 400, "Nobody we know")
+    c.showPage()
+    c.drawString(20, 400, "Acme Warehouse Co")
+    c.showPage()
+    c.save()
+    csv_path = tmp_path / "mapping.csv"
+    csv_path.write_text(_MAPPING)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    return str(pdf_path), str(csv_path), out_dir
+
+
+class TestProgressAndCancel:
+    """Phase 5 spec section 7.1: counted progress, and a cancel that writes nothing."""
+
+    def test_a_run_reports_each_page_read_each_page_stamped_then_saving(self, tmp_path):
+        pdf_path, csv_path, out_dir = _two_page_run(tmp_path)
+        calls = []
+        pdf_processor.process_reference_labels(
+            pdf_path, csv_path, str(out_dir), progress_callback=lambda *a: calls.append(a)
+        )
+        assert calls == [
+            (1, 2, pdf_processor.READING),
+            (2, 2, pdf_processor.READING),
+            (1, 2, pdf_processor.STAMPING),
+            (2, 2, pdf_processor.STAMPING),
+            (2, 2, pdf_processor.SAVING),
+        ]
+
+    def test_the_labels_are_the_words_the_page_shows(self):
+        assert (pdf_processor.READING, pdf_processor.STAMPING, pdf_processor.SAVING) == (
+            "Reading labels",
+            "Stamping labels",
+            "Saving",
+        )
+
+    @pytest.mark.parametrize("phase", [pdf_processor.READING, pdf_processor.STAMPING])
+    def test_cancelling_in_a_counted_phase_writes_no_file(self, tmp_path, phase):
+        pdf_path, csv_path, out_dir = _two_page_run(tmp_path)
+
+        def cancel(_done, _total, label):
+            if label == phase:
+                raise pdf_processor.ProcessingCancelled
+
+        with pytest.raises(pdf_processor.ProcessingCancelled):
+            pdf_processor.process_reference_labels(
+                pdf_path, csv_path, str(out_dir), progress_callback=cancel
+            )
+        assert list(out_dir.iterdir()) == []
+
+    def test_cancelled_is_one_of_the_processors_own_errors(self):
+        # So process_reference_labels' "except PDFProcessorError: raise" lets
+        # it through instead of wrapping it as an unexpected error.
+        assert issubclass(pdf_processor.ProcessingCancelled, pdf_processor.PDFProcessorError)
+
+    def test_a_pdf_pypdf_cannot_open_still_reports_the_reading_phase(
+        self, tmp_path, monkeypatch
+    ):
+        pdf_path, csv_path, out_dir = _two_page_run(tmp_path)
+
+        def broken(*_a, **_k):
+            raise ValueError("pypdf choked")
+
+        monkeypatch.setattr(pdf_processor, "PdfReader", broken)
+        calls = []
+        pdf_processor.process_reference_labels(
+            pdf_path, csv_path, str(out_dir), progress_callback=lambda *a: calls.append(a)
+        )
+        assert calls[0] == (2, 2, pdf_processor.READING)
+        assert calls[-1] == (2, 2, pdf_processor.SAVING)
+
+    def test_no_callback_still_runs(self, tmp_path):
+        pdf_path, csv_path, out_dir = _two_page_run(tmp_path)
+        result = pdf_processor.process_reference_labels(pdf_path, csv_path, str(out_dir))
+        assert result["pages_processed"] == 2
+
+
+class TestPdfPageCount:
+    def test_counts_the_pages(self, tmp_path):
+        pdf_path, _csv, _out = _two_page_run(tmp_path)
+        assert pdf_processor.pdf_page_count(pdf_path) == 2
+
+    def test_a_file_that_is_not_a_pdf_is_invalid(self, tmp_path):
+        bad = tmp_path / "notes.pdf"
+        bad.write_text("this is not a pdf")
+        with pytest.raises(pdf_processor.InvalidPDFError):
+            pdf_processor.pdf_page_count(str(bad))
+
+    def test_a_missing_file_is_invalid(self, tmp_path):
+        with pytest.raises(pdf_processor.InvalidPDFError):
+            pdf_processor.pdf_page_count(str(tmp_path / "gone.pdf"))
+
+    def test_a_pdf_with_no_pages_is_invalid(self, tmp_path):
+        import pikepdf
+
+        empty = tmp_path / "empty.pdf"
+        pikepdf.new().save(empty)
+        with pytest.raises(pdf_processor.InvalidPDFError):
+            pdf_processor.pdf_page_count(str(empty))
+
+
+class TestCsvMappingRows:
+    def test_the_mapping_says_how_many_rows_it_used(self, tmp_path):
+        csv_path = tmp_path / "mapping.csv"
+        csv_path.write_text(
+            "PostOne,Tracking,Reference,Col3,Col4,Col5,Name\n"
+            ",,REF-001,,,,Acme Warehouse Co\n"
+            "short,row\n"
+            ",,REF-002,,,,Borealis Ltd\n"
+        )
+        assert pdf_processor.load_csv_mapping(str(csv_path))["rows"] == 2
+
+    def test_a_csv_with_no_seven_column_row_is_invalid(self, tmp_path):
+        csv_path = tmp_path / "mapping.csv"
+        csv_path.write_text("Order,Tracking,Date\n#1,TR1,2026-09-30\n")
+        with pytest.raises(pdf_processor.InvalidCSVError):
+            pdf_processor.load_csv_mapping(str(csv_path))

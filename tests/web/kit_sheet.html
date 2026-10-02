@@ -156,6 +156,22 @@
       </div>
     </div>
   </section>
+  <section class="card" style="grid-column: 1 / -1">
+    <h2>Select, and disabled segment and field</h2>
+    <div class="row">
+      <button id="sel-value" class="select" type="button" aria-haspopup="menu" aria-expanded="false" style="width: 260px"><span class="select-value">DHL</span><span class="select-meta">120 Fulfillable</span><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button id="sel-empty" class="select" type="button" aria-haspopup="menu" aria-expanded="false" style="width: 200px"><span id="sel-placeholder" class="select-value placeholder">Choose a printer</span><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button id="sel-open" class="select" type="button" aria-haspopup="menu" aria-expanded="true" style="width: 200px"><span class="select-value">Zebra ZD421</span><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button id="sel-disabled" class="select" type="button" aria-haspopup="menu" aria-expanded="false" style="width: 200px" disabled><span id="sel-disabled-value" class="select-value placeholder">No packing lists</span><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
+    <div class="row">
+      <div class="segmented" role="radiogroup" aria-label="Print mode">
+        <button id="s-locked-on" class="segment" type="button" role="radio" aria-checked="true" disabled>Driver</button>
+        <button id="s-locked-off" class="segment" type="button" role="radio" aria-checked="false" disabled>Raw ZPL</button>
+      </div>
+      <input id="i-field-disabled" class="field" type="text" value="68" disabled>
+    </div>
+  </section>
 </main>
 <script>document.getElementById("c-mixed").indeterminate = true;</script>
 </body>

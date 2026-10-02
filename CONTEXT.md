@@ -15,8 +15,8 @@ for decisions.
 Everything except the screens that have moved to the web tier.
 
 **Web tier** — the part drawn in a `QWebEngineView`, styled with real CSS.
-Analysis Results, Session Setup and Browse today; ADR 0016 lets each other screen move
-in its own task. See ADR 0001 for why Results moved first.
+Analysis Results, Session Setup, Browse and Tools today; ADR 0016 lets each other
+screen move in its own task. See ADR 0001 for why Results moved first.
 
 **Renderer** — either tier, when the point is that there are two of them and
 one palette must serve both. Never used for `QSvgRenderer`; say
@@ -354,6 +354,13 @@ shows, and one record per session with its age, badge, counts, packing and
 attention reason already worded. The page filters, counts and groups those
 records and decides no fact about a session.
 
+**Tools state** — the one map Python builds for the Tools page: the session,
+each tool card's rows, its print block, its footer's reason and what is
+enabled. The page draws it and decides nothing.
+
+**Tool card** — one tool on the Tools page (Reference labels, Barcode labels),
+with its inputs, its print mode and its footer.
+
 **Needs attention** — the group Browse draws first: sessions that are paused,
 stale or incomplete, and sessions still in flight that carry blocked orders.
 Each row's reason is named in the group's heading.
@@ -383,8 +390,11 @@ session's `session_info.json` records.
 system's print dialog (**driver**), or as raw ZPL sent straight to a printer
 target (**Raw ZPL**). Chosen per tool and per PC.
 
-**Print options** — one tool's print mode and the settings that mode needs.
+**Print options** — one tool's print mode, its printer and its label setup.
 Stored on the PC, not in the client profile.
+
+**Label setup** — the Raw ZPL settings a tool keeps behind a fold under Print
+mode: the printer target, the label size, rotate and invert.
 
 **Actual size** — a label PDF printed at its own page dimensions, scaled
 uniformly only when the chosen paper differs, and never shrunk into page

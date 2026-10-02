@@ -12,7 +12,7 @@ import sys
 import pytest
 from PySide6.QtWidgets import QApplication, QMainWindow
 
-from gui.tools_widget import ToolsWidget
+import gui.tools_widget
 from gui.ui_manager import UIManager
 
 
@@ -23,11 +23,9 @@ def qapp():
 
 
 def test_tools_widget_no_longer_wires_sku_labels_subtab(qapp):
-    # ToolsWidget._init_ui() needs a full MainWindow (session_changed signal,
-    # session_manager, etc.) to actually construct -- checking its source
-    # avoids that heavyweight fixture while still failing if the SKU Labels
-    # sub-tab wiring is ever reintroduced.
-    source = inspect.getsource(ToolsWidget._init_ui)
+    # Checking the module's source avoids building the page while still
+    # failing if the SKU Labels sub-tab wiring is ever reintroduced.
+    source = inspect.getsource(gui.tools_widget)
     assert "SKULabelWidget" not in source
     assert "SKU Labels" not in source
 

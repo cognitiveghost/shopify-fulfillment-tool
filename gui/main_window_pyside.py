@@ -160,6 +160,8 @@ class MainWindow(QMainWindow):
         index = self.main_tabs.currentIndex()
         if index == 2:
             bridge = getattr(getattr(self, "session_browser", None), "bridge", None)
+        elif index == 4:
+            bridge = getattr(getattr(self, "tools_widget", None), "bridge", None)
         else:
             bridge = getattr(
                 self, {0: "setup_bridge", 1: "results_bridge"}.get(index, ""), None
@@ -363,6 +365,14 @@ class MainWindow(QMainWindow):
             self.actions_handler.create_new_session
         )
 
+        # The Tools page's no-session banner
+        self.tools_widget.new_session_requested.connect(
+            lambda: self.actions_handler.create_new_session()
+        )
+        self.tools_widget.recent_requested.connect(
+            lambda: self.command_bar.session_button.showMenu()
+        )
+
         # Main actions
         self.run_analysis_button.clicked.connect(self.actions_handler.run_analysis)
 
@@ -557,9 +567,9 @@ class MainWindow(QMainWindow):
         # this PySide6 build -- destroys the QRunnable's unparented
         # WorkerSignals object before its already-queued cross-thread result
         # signal is dispatched to the main thread, silently dropping the
-        # client switch. Verified via a minimal repro; the existing bare
-        # `worker = Worker(...)` pattern elsewhere in this codebase
-        # (e.g. barcode_generator_widget.py) has the same latent exposure.
+        # client switch. Verified via a minimal repro; a bare
+        # `worker = Worker(...)` anywhere else in this codebase has the same
+        # latent exposure (the Tools page's tools hold theirs for this reason).
         # Tracked in a set, not a single slot: a second switch before this one
         # finishes must not drop the first worker's reference out from under it.
         self._client_load_workers.add(worker)

@@ -257,3 +257,166 @@ def test_colliding_orders_all_fail_and_name_each_other():
     assert not by_order["#1001/2"]["success"] and not by_order["#10012"]["success"]
     assert "would also scan as order(s) #10012" in by_order["#1001/2"]["error"]
     assert by_order["#1001/2"]["safe_order_number"] is None
+
+
+# --- one packing list, start to finish (phase 5 spec section 7.2) -------------
+
+
+def _order_lines():
+    """Three order lines over two orders, out of packing-list order."""
+    return pd.DataFrame(
+        {
+            "Order_Number": ["#10", "#9", "#9"],
+            "SKU": ["A", "B", "C"],
+            "Quantity": [1, 2, 3],
+            "Shipping_Provider": ["DHL", "DHL", "DHL"],
+            "Destination_Country": ["DE", "BG", "BG"],
+            "Internal_Tags": ['["GIFT"]', '["BOX"]', '["FRAGILE"]'],
+        }
+    )
+
+
+class TestPackingListOrders:
+    def test_reads_the_order_numbers(self, tmp_path):
+        from shopify_tool.barcode_processor import packing_list_orders
+
+        path = tmp_path / "DHL.xlsx"
+        pd.DataFrame({"Order_Number": ["#9", "#9", "#10"], "SKU": ["B", "C", "A"]}).to_excel(
+            path, index=False
+        )
+        assert packing_list_orders(path) == frozenset({"#9", "#10"})
+
+    def test_a_sheet_with_no_order_number_column_is_refused(self, tmp_path):
+        from shopify_tool.barcode_processor import packing_list_orders
+
+        path = tmp_path / "odd.xlsx"
+        pd.DataFrame({"SKU": ["A"]}).to_excel(path, index=False)
+        with pytest.raises(ValueError, match="Order_Number"):
+            packing_list_orders(path)
+
+
+class TestGenerateListLabels:
+    def test_writes_the_barcode_pdf_and_says_what_it_did(self, tmp_path):
+        from shopify_tool.barcode_processor import generate_list_labels
+
+        folder = tmp_path / "barcodes" / "DHL"
+        said = []
+        outcome = generate_list_labels(_order_lines(), folder, "DHL", progress=said.append)
+
+        assert outcome == {
+            "list": "DHL",
+            "folder": str(folder),
+            "labels": 2,
+            "failed": 0,
+            "pdf": str(folder / "DHL_barcodes.pdf"),
+            "qr_pdf": None,
+            "qr_failed": False,
+        }
+        assert len(pypdf.PdfReader(outcome["pdf"]).pages) == 2
+        assert said == ["Writing 2 barcode labels…"]
+
+    def test_with_qr_it_writes_both_and_reports_twice(self, tmp_path):
+        from shopify_tool.barcode_processor import generate_list_labels
+
+        folder = tmp_path / "barcodes" / "DHL"
+        said = []
+        outcome = generate_list_labels(
+            _order_lines(), folder, "DHL", qr=True, progress=said.append
+        )
+
+        assert outcome["qr_pdf"] == str(folder / "DHL_qr_labels.pdf")
+        assert len(pypdf.PdfReader(outcome["qr_pdf"]).pages) == 2
+        assert said == ["Writing 2 barcode labels…", "Writing 2 QR labels…"]
+
+    def test_one_label_is_singular(self, tmp_path, monkeypatch):
+        from shopify_tool import barcode_processor
+
+        monkeypatch.setattr(
+            barcode_processor, "generate_code128_labels_pdf", lambda orders, path: path
+        )
+        said = []
+        barcode_processor.generate_list_labels(
+            _order_lines().iloc[:1], tmp_path, "DHL", progress=said.append
+        )
+        assert said == ["Writing 1 barcode label…"]
+
+    def test_labels_are_numbered_in_packing_list_order_with_summed_items(
+        self, tmp_path, monkeypatch
+    ):
+        from shopify_tool import barcode_processor
+
+        seen = []
+        monkeypatch.setattr(
+            barcode_processor,
+            "generate_code128_labels_pdf",
+            lambda orders, path: seen.extend(orders) or path,
+        )
+        barcode_processor.generate_list_labels(_order_lines(), tmp_path, "DHL")
+
+        # "#9" sorts before "#10", and its two lines add up.
+        assert [(o["order_number"], o["sequential_num"], o["item_count"]) for o in seen] == [
+            ("#9", 1, 5),
+            ("#10", 2, 1),
+        ]
+        # Every line's tags reach the label, not just the first line's.
+        assert seen[0]["tag"] == "BOX|FRAGILE"
+
+    def test_a_qr_failure_keeps_the_barcode_pdf(self, tmp_path, monkeypatch):
+        from shopify_tool import barcode_processor
+
+        def broken(_orders, _path):
+            raise barcode_processor.BarcodeGenerationError("no QR today")
+
+        monkeypatch.setattr(barcode_processor, "generate_qr_labels_pdf", broken)
+        folder = tmp_path / "barcodes" / "DHL"
+        outcome = barcode_processor.generate_list_labels(
+            _order_lines(), folder, "DHL", qr=True
+        )
+        assert outcome["qr_failed"] is True
+        assert outcome["qr_pdf"] is None
+        assert (folder / "DHL_barcodes.pdf").exists()
+
+    def test_a_barcode_render_failure_raises(self, tmp_path, monkeypatch):
+        from shopify_tool import barcode_processor
+
+        def broken(_orders, _path):
+            raise barcode_processor.BarcodeGenerationError("renderer down")
+
+        monkeypatch.setattr(barcode_processor, "generate_code128_labels_pdf", broken)
+        with pytest.raises(barcode_processor.BarcodeGenerationError):
+            barcode_processor.generate_list_labels(_order_lines(), tmp_path, "DHL")
+
+    def test_order_numbers_that_cannot_be_encoded_are_counted_not_rendered(
+        self, tmp_path, monkeypatch
+    ):
+        from shopify_tool import barcode_processor
+
+        rendered = []
+        monkeypatch.setattr(
+            barcode_processor,
+            "generate_code128_labels_pdf",
+            lambda orders, path: rendered.append(len(orders)) or path,
+        )
+        lines = _order_lines()
+        lines.loc[0, "Order_Number"] = "!!!"
+        outcome = barcode_processor.generate_list_labels(lines, tmp_path, "DHL")
+        assert (outcome["labels"], outcome["failed"]) == (1, 1)
+        assert rendered == [1]
+
+    def test_when_no_order_can_be_encoded_nothing_is_rendered(self, tmp_path, monkeypatch):
+        from shopify_tool import barcode_processor
+
+        rendered = []
+        monkeypatch.setattr(
+            barcode_processor,
+            "generate_code128_labels_pdf",
+            lambda orders, path: rendered.append(1) or path,
+        )
+        lines = _order_lines().iloc[:1].copy()
+        lines.loc[0, "Order_Number"] = "!!!"
+        said = []
+        outcome = barcode_processor.generate_list_labels(
+            lines, tmp_path, "DHL", qr=True, progress=said.append
+        )
+        assert (outcome["labels"], outcome["failed"], outcome["pdf"]) == (0, 1, None)
+        assert rendered == [] and said == []
