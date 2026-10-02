@@ -46,6 +46,9 @@
 - Browse moved in phase 4 (2026-10-01) with the third bridge, `BrowseBridge`, and a third view, on the
   phase 3 measurement (about 31 MB a view). Its page owns its view state (tab, search, checked rows), as
   the results document does; Python owns every fact about a session.
+- Tools moved in phase 5 (2026-10-02) with the fourth bridge, `ToolsBridge`, and a fourth view, on the same
+  measurement. Its page owns only which menu and which Label setup fold is open; Python owns every fact
+  about a tool.
 
 ## What would reverse it
 
