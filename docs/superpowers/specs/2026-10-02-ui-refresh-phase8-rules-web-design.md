@@ -83,7 +83,7 @@ settings_rules.js ──► bridge.testRule(uid) ──► host ──► Worker
 | `gui/web/settings.css`, `settings.html` | The Rules and Test sections; the second script tag |
 | `shopify_tool/rules.py` | `RuleEngine` skips a rule whose `enabled` is false |
 | `shared/theme.py` | `scrim`; `--color-scheme` |
-| `gui/rule_validator.py` | Docstring only: it names `RulesPage` |
+| `gui/rule_validator.py` | Docstring only: it named `RulesPage` |
 | Deleted | `gui/settings/rules.py`, `gui/rule_test_dialog.py` |
 
 `gui/settings/fields.py` keeps `CONDITION_OPERATORS`, `ACTION_TYPES` and `LEGACY_ACTION_TYPES`; the draft
@@ -240,6 +240,8 @@ Under an action row:
 | Any other unknown type | This version does not know this action, so it does nothing. | No |
 
 A field menu whose stored value is not offered lists it first, marked "Not available", and keeps it.
+A condition's field menu does the same, but leaves the mark off when there is no analysis and the field is
+not an order field: it may be a client's own column.
 
 ### 4.6 Blockers and `validate()`
 
@@ -265,6 +267,7 @@ A field menu whose stored value is not offered lists it first, marked "Not avail
       "level": "article", "label": "Article rules", "note": "Check one order line at a time.",
       "rows": [{
         "uid": "4", "num": "01", "name": "VIP priority", "on": True, "open": False,
+        "label": "VIP priority",                           # "Unnamed rule" for a rule with no name
         "switch_title": "Turn off", "badge": "",          # "Off"
         "can_up": False, "can_down": True, "can_drag": True, "move_title": "",
         "can_test": True, "test_title": "",
@@ -298,14 +301,14 @@ The open rule's `editor`:
     "match": {"show": False, "options": [{"value": "ALL", "label": "All", "checked": True},
                                          {"value": "ANY", "label": "Any", "checked": False}],
               "tail": "of these match"},
-    "conditions": [{"field": "Tags", "field_missing": False,
-                    "operator": "contains", "operator_missing": False,
+    "conditions": [{"field": "Tags", "extra_field": None, "field_invalid": False,
+                    "operator": "contains", "extra_operator": None,
                     "value": {"kind": "text", "text": "VIP", "placeholder": "Value", "suggestions": []},
                     "problem": "", "hint": "", "invalid": False}],
     "actions": [{"type": "ADD_INTERNAL_TAG", "label": "Add internal tag", "extra_type": None,
                  "params": [{"name": "value", "kind": "suggest", "value": "priority",
                              "placeholder": "Tag", "options": ["FRAGILE", "GIFT"], "lead": "",
-                             "missing": False, "invalid": False}],
+                             "extra": None, "invalid": False}],
                  "problem": "", "hint": ""}],
   }],
 }
@@ -313,7 +316,11 @@ The open rule's `editor`:
 
 A parameter's `kind` is `text`, `suggest`, `number`, `field` (a menu of the article fields) or `choice` (a
 menu of `options`, each `{"value", "label"}`). `lead` is a word or sign drawn before it: `→`, `×` or `""`.
-`extra_type` is `{"value", "label"}` for a row holding a type the menu does not offer.
+`extra_type` is `{"value", "label"}` for a row holding a type the menu does not offer. In the same way
+`extra_field` is `{"value", "note"}` for a condition whose field the level does not offer (`note` is "Not
+available" or `""`), `extra_operator` is the stored operator when it is not a known one, and a field
+parameter's `extra` is its stored value when the menu does not offer it. `field_invalid` is true when the
+engine cannot read the field; `invalid` on a condition or a parameter is true when its value blocks Save.
 
 ### 4.8 The sentences
 
@@ -322,6 +329,7 @@ menu of `options`, each `{"value", "label"}`). `lead` is a word or sign drawn be
 | Subtitle | Change orders at the end of each analysis. Rules run top to bottom. |
 | Empty state | No rules yet / Rules change orders at the end of each analysis, e.g. tag VIP orders. / Add rule |
 | Count | {n} rules · {m} on (1 rule · 1 on) |
+| A rule with no name | Unnamed rule (the row's name and the switch's label; the stored name stays empty) |
 | No hits | No rules named “{filter}”. |
 | Group, article | Article rules / Check one order line at a time. |
 | Group, order | Order rules / Check the whole order. Run after every article rule. |
@@ -351,16 +359,17 @@ One card. Its first line: the filter (kit `.input`, 260px, a magnifier glyph), t
 in `--text-secondary`. With rules of both levels, each group starts with a label line: the label in 9pt bold
 secondary, then its note in secondary.
 
-A row is the mockup's grid `20px 28px minmax(0, 1fr) auto`, gap 12px, padding `12px 16px`, a
-`--border-subtle` rule above it:
+A row is the mockup's grid with the kit's switch in it, `20px 32px minmax(0, 1fr) auto` (the mockup's
+switch is 28px, the kit's 32px), gap 12px, padding `12px 16px`, a `--border-subtle` rule above it:
 
 - the grip: six dots, `--text-disabled`, `--text-secondary` on hover;
 - the switch: kit `.switch`, `role="switch"`;
 - the text: the number in 9pt mono secondary, the name in bold (a button that opens the editor), the "Off"
   badge (`.badge.neutral`); under them one summary line per When and Then. A summary's label column is 36px,
-  60px on a rule with steps. A chip is 22px, mono, `--surface-raised`, `--border`, radius 6px;
+  60px on a rule with steps. A chip is 22px, mono, `--surface-raised`, `--border`, radius 6px. A chip
+  longer than its line is cut with an ellipsis and carries the whole value as its title;
 - the actions: Test… (`.btn.secondary.compact`, 9pt bold), up, down and "…" (24px ghost icon buttons in
-  `--text-secondary`).
+  `--text-secondary`). A move button at its group's edge only greys: no dashed box.
 
 A rule that is off draws its name and its summary in `--text-secondary`.
 
@@ -405,8 +414,9 @@ column, with fields where the chips were.
   row. A blocking value has `.invalid`. A field or operator that is kept but not offered has `.invalid` too.
 - **The field menu** is grouped with `.menu-group` labels, 280px tall at most. A stored field the level does
   not offer is listed first with the hint "Not available". The operator menu is flat.
-- **An action row:** a wrapping line: the type (`.select`, 190px), its parameters, then a ghost ✕ ("Remove
-  action") at the row's end. The line of §4.5 sits under the row.
+- **An action row:** the type (`.select`, 190px) and its parameters on a wrapping line, and a ghost ✕
+  ("Remove action") in its own 28px column at the right, level with the type. The line of §4.5 sits under
+  the row.
 - **Suggestions** are an `<input list>` with a `<datalist>`; any text can be typed. **Dates** are an
   `<input type="date">`. Both popups are Chromium's own, themed by `color-scheme` (§8).
 - **Steps.** With one step there is no step heading. With two or more, each step starts with a rule
@@ -461,7 +471,8 @@ viewport less 32px.
 3. For each of the first `limit` matched orders:
    - **Matched on:** one part per distinct condition field of the rule, in rule order, joined by " · ".
      A column: `{field}: {values}`, the distinct values over the order's matched lines (every line of the
-     order on an order rule), at most three, then "…"; an empty one reads "empty". A numeric order field
+     order on an order rule), joined by "; " (a value can hold commas), at most three, then "…"; an empty
+     one reads "empty". A numeric order field
      (`item_count`, `total_quantity`, `unique_sku_count`, `max_quantity`, `order_volumetric_weight`): the
      number the engine computes. The other order fields (`has_sku`, `has_product`, `all_no_packaging`,
      `order_min_box`): the condition's own value. A field that is neither is left out.
@@ -516,7 +527,8 @@ A `--scrim` backdrop fixed over the page area, and on it the mockup's panel: 580
   (the number in 14pt bold mono, then the rest) and the table: a `--border` box, radius 8px, a head row on
   `--surface-raised` in 9pt bold secondary, rows on the grid `90px minmax(0, 1fr) 150px` with a
   `--border-subtle` rule above each. Order is mono bold; Matched on is mono, one line, ellipsis; Change is
-  mono in `--status-success`, or secondary when it reads "No change". Then "and N more" in secondary, and
+  mono in `--status-success`, or secondary when it reads "No change", one line, ellipsis, with the whole
+  text as its title. Then "and N more" in secondary, and
   the note.
 - Running: the message in secondary in place of the count and the table. Failed: a `.problem` line.
 - Foot: a `--border-subtle` rule and Close (secondary) on the right.
@@ -594,7 +606,7 @@ are flagged; `SET_STATUS` always holds; the list is in run order; a move stays i
 | `tests/test_settings_bridge.py` | `SettingsBridge` | `testRule`, `closeTest` |
 | `tests/test_settings_rules_page.py` (new) | The page in a real Chromium, fed views built by the draft | The list row's DOM against the mockup's grid; groups; the empty state; the filter; the switch; up and down; the "…" menu; the editor's controls per operator and per action type; typing keeps focus; a drag by synthetic pointer events sends `rule_move_to`; the Test panel in its three states, `inert`, Esc, focus; both themes read from tokens |
 | `tests/test_settings_web_host.py` | `SettingsWebHost`, with the thread pool patched | A test shows running, then the result; a result after Close is dropped; `show_page` closes the panel; a raising test shows the failed view; `focus_problem` reveals |
-| `tests/test_settings_footer.py`, `test_settings_roundtrip.py`, `test_settings_unsaved.py`, `test_settings_nav.py`, `test_settings_entry_points.py` | The window | Rules is a draft; its blocker in the footer and its link; the unsaved mark follows a rule edit at once; `session_name` reaches the host |
+| `tests/test_settings_rules_window.py` (new), `tests/test_actions_handler.py` | The window | Rules is a draft; its blocker in the footer and its link; the unsaved mark follows a rule edit at once; Save writes a rule that is off; `session_name` reaches the host. The existing window tests (`test_settings_footer.py`, `test_settings_roundtrip.py`, `test_settings_unsaved.py`, `test_settings_nav.py`, `test_settings_entry_points.py`) pass unchanged |
 | `tests/audit/test_03_rule_engine.py` | The four tests that used the Qt page or dialog | Rewritten against the draft and `run_rule_test`, same assertions |
 | Deleted | | `tests/test_rules_page.py`, `test_settings_page_rules.py`, `test_rule_test_dialog.py`: their cases move to the two new files |
 
