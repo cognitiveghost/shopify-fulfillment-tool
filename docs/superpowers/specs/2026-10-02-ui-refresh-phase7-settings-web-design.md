@@ -83,15 +83,17 @@ settings.js ──► SettingsBridge.edit(action, args) ──► draft.apply(..
 | `shopify_tool/csv_utils.py` | `read_csv_preview(path)` |
 | `shared/assets/icons/circle-alert.svg` (new) | Lucide's glyph, for the nav mark and the footer |
 | `gui/actions_handler.py` | Passes the loaded files; the result means "saved at least once" |
-| `gui/ui_manager.py`, `gui/main_window_pyside.py` | `"Orders Mapping"` becomes `"Orders mapping"` |
+| `gui/setup_state.py`, `gui/ui_manager.py`, `gui/settings/weight.py` | `"Orders Mapping"` becomes `"Orders mapping"`, and `"Stock Mapping"` `"Stock mapping"` |
 | Deleted | `gui/settings/general.py`, `gui/settings/mappings.py`, `gui/column_mapping_widget.py` |
 
 `shared/` gains one icon file. Packing Tool gets it at its next sync and needs no change.
 
 ### 3.2 `PageContract` (`gui/settings/contract.py`)
 
-Today's `SettingsPage` methods, moved unchanged (`collect`, `validate`, `snapshot`, `mark_clean`, `is_dirty`,
-`_safe_snapshot`, `UNCOLLECTABLE`), plus one:
+Today's `SettingsPage` methods, moved (`collect`, `validate`, `snapshot`, `mark_clean`, `is_dirty`,
+`_safe_snapshot`, `UNCOLLECTABLE`). `mark_clean(snapshot=None)` can take a snapshot made earlier with
+`current_snapshot()`, so a save marks clean what it wrote and not what is on screen when it ends. Two more,
+`blocker()` and `blocker_key()` (the `data-key` of the control the blocker is about, `""` by default):
 
 ```python
 def blocker(self) -> str | None:
@@ -126,11 +128,13 @@ and unused: the page has no toast.
 
 `draft.apply(action: str, args: list) -> bool` returns whether anything changed. An unknown action, a wrong
 number of arguments, a wrong type or a value outside the ones listed is dropped and returns False; the host
-logs a warning. Nothing the page sends is used as a path.
+logs it at debug level, since a repeat of the current value returns False too. The page sends strings and
+booleans only: a row index travels as a string (`"2"`), because a JavaScript number reaches Python as a
+float. Nothing the page sends is used as a path.
 
 | Draft | action | args | effect |
 |---|---|---|---|
-| General | `delimiter` | `[kind, value]` | `kind` is `"stock"` or `"orders"`; `value` is `"auto"`, `","`, `";"`, `"\t"` or `"other"` |
+| General | `delimiter` | `[kind, mode]` | `kind` is `"stock"` or `"orders"`; `mode` is `"auto"`, `"comma"`, `"semicolon"`, `"tab"` or `"other"` |
 | General | `delimiter_char` | `[kind, text]` | The Other character. Kept as typed |
 | General | `threshold` | `[text]` | Kept as typed |
 | Orders, Stock | `column` | `[field, column]` | `column` is one of the read file's columns, or `""` for Not imported on an optional field. Any other field holding that column loses it. On Orders, an additional column of that name is turned off |
@@ -140,7 +144,7 @@ logs a warning. Nothing the page sends is used as a path.
 | Orders | `courier_remove` | `[index]` | |
 | Orders | `column_add` | `[name]` | Keeps a candidate (§4.4). Makes an unreadable list known |
 | Orders | `column_remove` | `[name]` | `enabled` becomes False; the entry stays in the list |
-| Orders | `column_fill` | `[name, on]` | `is_order_level` |
+| Orders | `column_fill` | `[name, on]` | `is_order_level`; `on` is a boolean |
 
 ## 4. The drafts (`gui/settings/page_state.py`)
 
@@ -164,7 +168,7 @@ unsaved edit. A file with a header and no rows gives an empty dict.
 Holds the live `config_data["settings"]` dict and updates it in place on `collect()`, so keys the page does
 not draw survive (the contract's rule).
 
-- Per kind, a mode (`auto`, `,`, `;`, `\t`, `other`) and an Other character. A stored value that is not one of
+- Per kind, a mode (`auto`, `comma`, `semicolon`, `tab`, `other`) and an Other character. A stored value that is not one of
   the four named ones opens as Other with that value as the character, so Pipe and a hand-edited value are
   kept.
 - The threshold as text.
@@ -247,6 +251,7 @@ General adds:
 
 ```python
 "general": {
+    "csv_text": str, "alerts_text": str,   # the two cards' sentences
     "delimiters": [  # stock, then orders
         {"kind": "stock", "label": "Stock CSV delimiter",
          "options": [{"value": "auto", "label": "Auto", "checked": True}, ...],  # Auto Comma Semicolon Tab Other
@@ -269,11 +274,13 @@ A mapping draft adds:
         {"name": "Order_Number", "label": "Order number", "required": True,
          "column": "Name", "placeholder": "Choose column",   # or "Not imported"
          "sample": "#10482", "sample_missing": False,         # True: sample reads "Not in this file"
-         "problem": "", "hint": ""},
+         "problem": "", "example": "", "hint": ""},   # example: drawn mono, after the problem
     ],
     # Orders only:
-    "couriers": {"rows": [{"text": "dhl", "code": "DHL"}], "codes": ["DHL", "DPD"], "empty": str},
+    "couriers": {"text": str, "rows": [{"text": "dhl", "code": "DHL"}], "codes": ["DHL", "DPD"],
+                 "empty": str},
     "additional": {
+        "text": str,
         "chips": [{"name": "Notes", "note": "", "fill": True}],
         "candidates": [{"name": "Discount Code", "note": ""}],
         "group": str, "empty": "None kept.", "notice": "", "add_title": str,
@@ -309,9 +316,9 @@ A mapping draft adds:
 | Courier names, no rows | No courier names yet. The built-in ones apply: DHL, DPD and PostOne. |
 | Additional columns card | Orders columns with no field, carried through the analysis under their own names. |
 | Additional columns, list unknown | The saved list couldn't be read, so saving leaves it as it is. Add a column to replace it. |
-| Add column, nothing to add | Use Read columns from CSV… to list the file's unmapped columns. (the button's title) |
+| Add column, nothing to add | Use Read columns from CSV… to list the file's unmapped columns. (the button's title; with a file read: "Every column in this file is mapped or kept.") |
 | Add column menu group | Unmapped columns in {file} (or "Turned off earlier" with no file) |
-| Chip notes | Not in this file · not filled down |
+| Chip notes | "Not in this file", "not filled down", or both joined by a comma |
 | Chip menu | Fill down onto every line of the order |
 
 ## 5. The page (`gui/web/settings.*`)
@@ -384,8 +391,8 @@ Components phases 8 and 9 reuse. Each is drawn on `tests/web/kit_sheet.html` and
 
 | Class | What it is |
 |---|---|
-| `.page-head.split`, `.page-sub` | A head with the title and subtitle stacked on the left and an action on the right |
-| `.card-head`, `.card-title`, `.card-text` | A card's title (12pt bold) and its secondary sentence; padding `14px 16px 12px` |
+| `.page-head.split`, `.page-head-text`, `.page-sub` | A head with the title and subtitle stacked on the left and an action on the right |
+| `.card-head`, `.card-head-text`, `.card-title`, `.card-text` | A card's title (12pt bold) and its secondary sentence, with room for an action on the right; padding `14px 16px 12px` |
 | `.card-row`, `.card-label`, `.card-control` | A label column (180px) and a control column; padding `12px 16px`; a `--border-subtle` rule above every row |
 | `.hint` | A 9pt secondary line under a control |
 | `.problem` | A `--status-danger` line with the alert glyph |
@@ -406,9 +413,10 @@ Tools keeps its own `.tool-head` rules; folding them into `.card-head` is not th
 - Every control has a `data-key`; a render that rebuilds the focused control gives focus back by key.
 - `problemFocusRequested(key)` focuses that control and scrolls it into view.
 
-Keys: `segment-{kind}-{value}`, `char-{kind}`, `threshold`, `read-columns`, `field-{internal}`,
-`courier-add`, `courier-text-{n}`, `courier-code-{n}`, `courier-remove-{n}`, `column-add`, `chip-{name}`,
-`chip-remove-{name}`.
+Keys: `segment-{kind}-{mode}`, `char-{kind}`, `threshold`, `read-columns`, `field-{internal}`,
+`courier-add`, `courier-text-{n}`, `courier-code-{n}`, `courier-new-{n}`, `courier-remove-{n}`,
+`column-add`, `chip:{name}`, `chip-fill:{name}`, `chip-remove:{name}`. A key that carries a column's name
+is found by comparing `dataset.key`, never by a selector built from the name.
 
 ### 5.8 Small windows
 
@@ -479,8 +487,9 @@ A hairline (`border_subtle`), then a 60px row: the status line on the left, Canc
 3. Collects every page into `config_data`.
 4. Hands the worker a deep copy (`json.loads(json.dumps(config_data))`), so an edit made while it runs cannot
    change what is written.
-5. On success: every page is marked clean, the footer shows the saved line, and Cancel reads Close. No toast.
-   The dialog stays open, unless the save came from the close guard's Save & close.
+5. On success: every page is marked clean as of what was written, the footer shows the saved line, and
+   Cancel reads Close. No toast. The dialog stays open, unless the save came from the close guard's Save &
+   close. An edit made while the write ran still reads unsaved.
 6. On failure: today's error boxes, unchanged.
 
 An edit after a save returns the footer to the unsaved line and Close to Cancel.
@@ -519,8 +528,7 @@ class SettingsWebHost(QWidget):
 | What fails | What the operator sees |
 |---|---|
 | The file loaded on Setup cannot be read when the dialog opens | The Fields card says no CSV has been read. Logged |
-| The picked CSV cannot be read | `show_error`: "The column names couldn't be read", "Details are in Logs." (today's) |
-| The picked CSV has no header | `show_error`: "No columns found", "That file has no column headers." (today's) |
+| The picked CSV cannot be read, or is empty | `show_error`: "The column names couldn't be read", "Details are in Logs." (today's) |
 | A required field has no column; a threshold or Other character is wrong | The message under the control, the nav mark, the footer line, Save disabled |
 | A Qt page fails `validate()` on Save | Its page opens with the message above it (today's) |
 | `collect()` raises | `show_error`: "Settings weren't saved", "A value couldn't be read. Details are in Logs." (today's) |
@@ -559,7 +567,7 @@ whose cases move to the draft tests. The "Settings saved" toast. `unsaved_summar
 
 | File | Seam | Covers |
 |---|---|---|
-| `tests/test_settings_page_state.py` (new) | The drafts, no Qt | Loading stored values (Pipe, a hand-edited delimiter, legacy couriers, the unreadable list); every action in §3.4, including the dropped ones; `collect()` in place and what it leaves alone; `snapshot()` per draft; `blocker()`; every sentence in §4.6 |
+| `tests/test_settings_draft_general.py`, `test_settings_draft_mapping.py`, `test_settings_draft_orders.py` (new) | The drafts, no Qt | Loading stored values (Pipe, a hand-edited delimiter, legacy couriers, the unreadable list); every action in §3.4, including the dropped ones; `collect()` in place and what it leaves alone; `snapshot()` per draft; `blocker()`; every sentence in §4.6 |
 | `tests/test_csv_utils_preview.py` (new) | `read_csv_preview` | Header and first row; `;` and tab files; no data rows; a BOM |
 | `tests/test_settings_bridge.py` (new) | `SettingsBridge` | `set_state` notifies only on change; `edit` drops non-list args; `readColumns` |
 | `tests/test_settings_web_page.py` (new) | The page in a real Chromium, fed views built by the drafts | Each card's DOM; a click or typing reaches `editRequested` with the right action and args; menus, Esc, arrows; focus kept while typing; the invalid select; both themes read from tokens |
