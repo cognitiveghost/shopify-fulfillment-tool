@@ -570,9 +570,65 @@ input[type="checkbox"]:disabled::after { background: var(--text-disabled); }
 .form-row + .form-row { border-top: 1px solid var(--border-subtle); }
 .form-label { padding-top: 2px; font-weight: 700; }
 
+/* --- select -------------------------------------------------------------- */
+
+/* A button that shows a value and opens a .menu beside it (phase 5). The
+   value and an optional mono meta, then a chevron glyph. */
+.select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--kit-radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.select > .glyph { color: var(--text-secondary); }
+.select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.select-value.placeholder { font-weight: 400; color: var(--text-placeholder); }
+.select-meta {
+  font-family: var(--font-family-mono);
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.select[aria-expanded="true"] { border-color: var(--text); }
+.select:disabled {
+  border: 1px dashed var(--border);
+  background: var(--control-disabled-bg);
+  cursor: not-allowed;
+}
+.select:disabled .select-value,
+.select:disabled .select-meta,
+.select:disabled > .glyph { color: var(--text-disabled); }
+
+/* --- disabled segment and field ------------------------------------------ */
+
+.segment:disabled { cursor: default; }
+.segment:disabled:not([aria-checked="true"]) { color: var(--text-disabled); }
+
+.field:disabled {
+  border: 1px dashed var(--border);
+  background: var(--control-disabled-bg);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
 /* --- focus --------------------------------------------------------------- */
 
 .btn:focus-visible,
+.select:focus-visible,
 .switch:focus-visible,
 .radio-card:focus-visible,
 .segment:focus-visible,
