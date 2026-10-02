@@ -33,6 +33,15 @@ def test_it_detects_a_tab_file(tmp_path):
     assert first == {"Sku": "ABC-1", "Available": "40"}
 
 
+def test_a_given_delimiter_wins_over_detection(tmp_path):
+    """The file loaded on Setup is split the way Setup split it."""
+    path = _write(tmp_path, "Sku|Note, with commas\nABC-1|a, b, c\n")
+    assert read_csv_preview(path, "|") == (
+        ["Sku", "Note, with commas"],
+        {"Sku": "ABC-1", "Note, with commas": "a, b, c"},
+    )
+
+
 def test_values_stay_text_and_an_empty_cell_is_an_empty_string(tmp_path):
     """A SKU of 00123 must not turn into 123, nor an empty cell into nan."""
     path = _write(tmp_path, "Sku,Note,Stock\n00123,,7\n00124,x,8\n")

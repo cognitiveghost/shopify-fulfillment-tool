@@ -21,15 +21,19 @@ const els = {};
 const page = { bridge: null, state: null, renders: 0 };
 // menu: "field-<internal name>", "courier-code-<row>", "column-add",
 // "chip:<column>", or null. shown: the page the last render drew. pending: a
-// data-key to focus once the state that creates it arrives.
-const view = { menu: null, shown: null, pending: null };
+// data-key to focus once the state that creates it arrives. problem: the key
+// the footer's link asked for while another page was still showing.
+const view = { menu: null, shown: null, pending: null, problem: null };
 
+// A carriage return too: the parser would turn a bare one into a line feed,
+// and a column's name has to come back from a data- attribute as it was sent.
 function esc(value) {
   return String(value == null ? "" : value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/\r/g, "&#13;");
 }
 
 function svg(path, cls) {
@@ -360,6 +364,11 @@ function render() {
     focusKey(key);
   }
   if (view.pending !== null && focusKey(view.pending)) view.pending = null;
+  if (view.problem !== null) {
+    const problem = view.problem;
+    view.problem = null;
+    focusProblem(problem, true);
+  }
   page.renders += 1;
   document.documentElement.dataset.renders = String(page.renders);
 }
@@ -462,9 +471,14 @@ function onKey(event) {
 }
 
 // The footer's link: put the operator on the control that blocks the save.
-function focusProblem(key) {
+// When the link also changed the page, the request gets here before the state
+// that draws the control: it waits for the next render, and no longer.
+function focusProblem(key, drawn) {
   const el = byKey(key);
-  if (!el) return;
+  if (!el) {
+    if (!drawn) view.problem = key;
+    return;
+  }
   el.scrollIntoView({ block: "center" });
   if (!el.disabled) el.focus();
 }

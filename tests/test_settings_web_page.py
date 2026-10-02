@@ -24,6 +24,7 @@ from gui.settings.page_state import (
     OrdersDraft,
     StockDraft,
 )
+from gui.settings.web_host import SettingsWebHost
 from gui.theme_manager import get_theme_manager
 from gui.web_page import THEME_MARKER
 
@@ -716,6 +717,16 @@ def test_a_column_name_with_quotes_in_it_still_works(qtbot, page):
     qtbot.waitUntil(lambda: seen == [("column_remove", [name])])
 
 
+def test_a_column_name_with_a_carriage_return_comes_back_as_it_was_sent(qtbot, page):
+    """A quoted header can span lines. The parser turns a bare carriage return
+    into a line feed, and Python would not know the name that came back."""
+    view, bridge = page
+    name = "Gift\r\nNote"
+    seen = _wired(qtbot, view, bridge, orders(additional=[_entry(name)]))
+    _click(qtbot, view, ".chip-remove")
+    qtbot.waitUntil(lambda: seen == [("column_remove", [name])])
+
+
 def test_an_unreadable_list_shows_the_notice(qtbot, page):
     view, bridge = page
     _show(qtbot, view, bridge, orders(fallback=ADDITIONAL_COLUMNS_UNREADABLE))
@@ -730,6 +741,53 @@ def test_a_problem_focus_request_focuses_that_control(qtbot, page):
     _show(qtbot, view, bridge, general(low_stock_threshold="x"))
     bridge.problemFocusRequested.emit("threshold")
     _until_js(qtbot, view, "document.activeElement.dataset.key === 'threshold'")
+
+
+def test_the_link_reaches_a_control_on_a_page_that_is_not_showing(qtbot):
+    """Through the host, in the window's order: the page, then the request.
+    The request gets to Chromium first, before the state that draws the
+    control."""
+    host = SettingsWebHost(
+        {"general": general(low_stock_threshold="x"), "stock": stock()}
+    )
+    qtbot.addWidget(host)
+    host.resize(868, 560)
+    host.show()
+    view = host.view
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    host.show_page("stock")
+    _until_js(
+        qtbot, view, "document.querySelector('.settings-page').dataset.page === 'stock'"
+    )
+
+    host.show_page("general")
+    host.focus_problem("threshold")
+
+    _until_js(qtbot, view, "document.activeElement.dataset.key === 'threshold'")
+
+
+def test_every_blocker_key_names_a_control_the_page_draws(qtbot, page):
+    """The keys are spelled in page_state.py and again in settings.js: a
+    rename on one side would leave the footer's link pointing at nothing."""
+    view, bridge = page
+    other = general()
+    other.apply("delimiter", ["orders", "other"])
+    unmapped = dict(ORDERS)
+    del unmapped["Shipping Method"]
+    no_quantity = StockDraft(
+        {"version": 2, "orders": {}, "stock": {"Article": "SKU"}}, "ACME"
+    )
+    drafts = (general(low_stock_threshold="x"), other, orders(unmapped), no_quantity)
+    for draft in drafts:
+        key = draft.blocker_key()
+        assert key
+        _show(qtbot, view, bridge, draft)
+        assert _eval(
+            qtbot,
+            view,
+            "Array.from(document.querySelectorAll('[data-key]'))"
+            f".some((el) => el.dataset.key === {json.dumps(key)})",
+        ), key
 
 
 # --- theme -------------------------------------------------------------------

@@ -33,17 +33,19 @@ from gui.settings.page_state import (
     GeneralDraft,
     OrdersDraft,
     StockDraft,
+    read_file_columns,
 )
 from gui.settings.reports import ReportsPage
 from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
-from gui.settings.web_host import SettingsWebHost, read_file_columns
+from gui.settings.web_host import SettingsWebHost
 from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
 from shared.icons import icon
 from shared.theme import current_tokens, font_css, on_theme_changed
 from shopify_tool.core import effective_additional_columns
+from shopify_tool.csv_utils import resolve_delimiter
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +54,7 @@ logger = logging.getLogger(__name__)
 NAV_MARGIN_PX = 12
 NAV_MIN_WIDTH_PX = 208
 NAV_ROW_PX = 30
-NAV_GROUP_PX = 28
+NAV_GROUP_PX = 26
 NAV_SEARCH_PLACEHOLDER = "Search settings"
 # Clear button, frame and text margins the placeholder has to share the field with.
 NAV_SEARCH_CHROME_PX = 44
@@ -350,6 +352,9 @@ class SettingsWindow(QDialog):
         )
         self._build_settings_nav()
 
+        # The platform's order (Save first on Windows), not the mockup's Cancel
+        # then Save: every dialog's footer is a QDialogButtonBox
+        # (tests/test_dialog_button_guard.py).
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = button_box.button(QDialogButtonBox.Save)
         self.save_button.setToolTip("Ctrl+S")
@@ -363,13 +368,13 @@ class SettingsWindow(QDialog):
         # the save, else the unsaved pages, else the last save. A glyph before it.
         self._status_icon = QLabel()
         self._status_icon.setFixedSize(FOOTER_ICON_PX, FOOTER_ICON_PX)
-        self._unsaved_label = QLabel("")
-        self._unsaved_label.setTextFormat(Qt.TextFormat.RichText)
-        self._unsaved_label.setTextInteractionFlags(
+        self._status_label = QLabel("")
+        self._status_label.setTextFormat(Qt.TextFormat.RichText)
+        self._status_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.LinksAccessibleByMouse
             | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
-        self._unsaved_label.linkActivated.connect(self._open_blocker)
+        self._status_label.linkActivated.connect(self._open_blocker)
         footer_rule = QFrame()
         footer_rule.setFixedHeight(1)
         on_theme_changed(
@@ -385,7 +390,7 @@ class SettingsWindow(QDialog):
         footer_row = QHBoxLayout(self._footer)
         footer_row.setContentsMargins(FOOTER_MARGIN_PX, 0, FOOTER_MARGIN_PX, 0)
         footer_row.addWidget(self._status_icon)
-        footer_row.addWidget(self._unsaved_label, 1)
+        footer_row.addWidget(self._status_label, 1)
         footer_row.addWidget(button_box)
         main_layout.addWidget(self._footer)
 
@@ -426,7 +431,7 @@ class SettingsWindow(QDialog):
         for page in self._pages:
             page.mark_clean()
         on_theme_changed(self._settings_nav, self._rebuild_nav_marks)
-        on_theme_changed(self._unsaved_label, lambda _tokens: self._render_footer())
+        on_theme_changed(self._status_label, lambda _tokens: self._render_footer())
         QShortcut(QKeySequence(QKeySequence.StandardKey.Save), self).activated.connect(
             self._save_shortcut
         )
@@ -460,18 +465,22 @@ class SettingsWindow(QDialog):
             self.tab_widget.addWidget(widget)
         self._page_index_by_name[name] = self.tab_widget.indexOf(widget)
 
-    @staticmethod
-    def _loaded_file(loaded_files, kind: str):
+    def _loaded_file(self, loaded_files, kind: str):
         """The columns of the file loaded on Setup, or None.
 
-        A file that cannot be read is no file: the mapping page then says no
-        CSV has been read, and the operator can pick one.
+        Split on the delimiter Setup read it with: the client's saved setting,
+        an override included. A file that cannot be read is no file: the
+        mapping page then says no CSV has been read, and the operator can pick
+        one.
         """
         path = (loaded_files or {}).get(kind)
         if not path:
             return None
+        setting = self.config_data.get("settings", {}).get(f"{kind}_csv_delimiter")
         try:
-            return read_file_columns(path, loaded=True)
+            return read_file_columns(
+                path, loaded=True, delimiter=resolve_delimiter(path, setting, kind)
+            )
         except Exception:
             logger.exception(f"The loaded {kind} file's columns couldn't be read")
             return None
@@ -484,10 +493,16 @@ class SettingsWindow(QDialog):
         """Re-check what an edit on a web page can change: the drafts' unsaved
         state, and what blocks the save. Both are cheap, so every edit runs it."""
         for name in WEB_PAGE_KEYS:
-            if self._pages_by_name[name].is_dirty() != (name in self._unsaved):
-                self._unsaved ^= {name}
+            self._sync_unsaved(name)
         self._check_blockers()
-        self._render_unsaved()
+        self._render_status()
+
+    def _sync_unsaved(self, name: str) -> bool:
+        """Re-check one page's unsaved state; whether it changed."""
+        changed = self._pages_by_name[name].is_dirty() != (name in self._unsaved)
+        if changed:
+            self._unsaved ^= {name}
+        return changed
 
     def _check_blockers(self) -> None:
         self._blocked = {
@@ -638,7 +653,7 @@ class SettingsWindow(QDialog):
             name for name, page in self._pages_by_name.items() if page.is_dirty()
         }
         self._check_blockers()
-        self._render_unsaved()
+        self._render_status()
         return self._unsaved_names()
 
     def _poll_current_page(self) -> None:
@@ -648,14 +663,10 @@ class SettingsWindow(QDialog):
 
     def _poll_page(self, name: str) -> None:
         # By the nav's name, not the stack's widget: three pages share one.
-        page = self._pages_by_name.get(name)
-        if page is None:
-            return
-        if page.is_dirty() != (name in self._unsaved):
-            self._unsaved ^= {name}
-            self._render_unsaved()
+        if name in self._pages_by_name and self._sync_unsaved(name):
+            self._render_status()
 
-    def _render_unsaved(self) -> None:
+    def _render_status(self) -> None:
         names = self._unsaved_names()
         if names:
             # An edit after a save: the footer goes back to naming it.
@@ -703,8 +714,8 @@ class SettingsWindow(QDialog):
             pixmap = icon("check", tokens.status_success).pixmap(size, size)
         else:
             text, color = "", tokens.text_secondary
-        self._unsaved_label.setText(text)
-        self._unsaved_label.setStyleSheet(
+        self._status_label.setText(text)
+        self._status_label.setStyleSheet(
             f"{font_css('body', bold=bold)} color: {color};"
         )
         self._status_icon.setVisible(pixmap is not None)
@@ -714,6 +725,11 @@ class SettingsWindow(QDialog):
         can_save = bool(names) and not self._blocked and not self._is_saving
         self.save_button.setEnabled(can_save)
         self.save_and_close_button.setEnabled(not self._blocked)
+        # The close guard hides the status line: a disabled Save & close says
+        # why itself.
+        self.save_and_close_button.setToolTip(
+            f"{self._blocked[name]} in {name} to save." if self._blocked else ""
+        )
         self.cancel_button.setText("Close" if self._saved and not names else "Cancel")
 
     def _open_blocker(self, name: str) -> None:
@@ -906,9 +922,14 @@ class SettingsWindow(QDialog):
             self._saved = True
             self._saved_once = True
             # Re-reads every page: one edited while the write ran is unsaved.
-            self.refresh_dirty()
+            unsaved = self.refresh_dirty()
             if self._close_after_save:
-                self._finish()
+                self._close_after_save = False
+                # That edit was not in the write: ask again, do not drop it.
+                if unsaved:
+                    self._show_close_guard()
+                else:
+                    self._finish()
         else:
             self._close_after_save = False
             self._render_footer()

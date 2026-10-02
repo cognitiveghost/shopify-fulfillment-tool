@@ -82,6 +82,16 @@ def test_a_hand_edited_value_survives_a_round_trip():
     assert draft.blocker() is None
 
 
+@pytest.mark.parametrize("stored", [None, ""])
+def test_a_null_or_empty_delimiter_is_auto(stored):
+    """resolve_delimiter reads both as Auto. Neither may open as Other: null
+    would be saved as the text "None", and "" would block the save."""
+    draft, _settings = _draft(orders_csv_delimiter=stored)
+    assert _checked(draft, "orders") == ["auto"]
+    assert draft.blocker() is None
+    assert draft.collect()["settings"]["orders_csv_delimiter"] == "auto"
+
+
 # --- edits -------------------------------------------------------------------
 
 

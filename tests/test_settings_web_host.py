@@ -12,8 +12,9 @@ from gui.settings.page_state import (
     GeneralDraft,
     OrdersDraft,
     StockDraft,
+    read_file_columns,
 )
-from gui.settings.web_host import SettingsWebHost, read_file_columns
+from gui.settings.web_host import SettingsWebHost
 
 
 @pytest.fixture

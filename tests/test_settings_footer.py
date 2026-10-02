@@ -30,7 +30,7 @@ def _results(win):
 
 
 def test_a_fresh_window_says_nothing_and_cannot_save(window):
-    assert window._unsaved_label.text() == ""
+    assert window._status_label.text() == ""
     assert window._status_icon.isHidden()
     assert not window.save_button.isEnabled()
     assert window.cancel_button.text() == "Cancel"
@@ -39,7 +39,7 @@ def test_a_fresh_window_says_nothing_and_cannot_save(window):
 
 def test_an_unsaved_page_is_named_and_makes_save_live(window):
     _edit_general(window)
-    assert window._unsaved_label.text() == "Unsaved changes in General"
+    assert window._status_label.text() == "Unsaved changes in General"
     assert not window._status_icon.isHidden()
     assert window.save_button.isEnabled()
 
@@ -48,26 +48,26 @@ def test_every_unsaved_page_is_named_in_nav_order(window):
     _edit_sets(window)
     _edit_general(window)
     window.refresh_dirty()
-    assert window._unsaved_label.text() == "Unsaved changes in General, Sets"
+    assert window._status_label.text() == "Unsaved changes in General, Sets"
 
 
 def test_undoing_the_edit_empties_the_line_and_disables_save(window):
     _edit_general(window)
     _edit_general(window, "5")
-    assert window._unsaved_label.text() == ""
+    assert window._status_label.text() == ""
     assert not window.save_button.isEnabled()
 
 
 def test_a_blocker_takes_the_line_and_disables_save(window):
     _edit_general(window, "x")
-    text = window._unsaved_label.text()
+    text = window._status_label.text()
     assert text.startswith('Set Low-stock threshold in <a href="General"')
     assert text.endswith(">General</a> to save.")
     assert not window.save_button.isEnabled()
     assert not window.save_and_close_button.isEnabled()
 
     _edit_general(window, "7")
-    assert window._unsaved_label.text() == "Unsaved changes in General"
+    assert window._status_label.text() == "Unsaved changes in General"
     assert window.save_button.isEnabled()
     assert window.save_and_close_button.isEnabled()
 
@@ -78,10 +78,10 @@ def test_the_first_blocked_page_in_nav_order_is_the_one_named(
     config = make_settings_config()
     del config["column_mappings"]["orders"]["Shipping Method"]
     win = SettingsWindow(client_id="M", client_config=config, profile_manager=Mock())
-    assert "Map Shipping method in" in win._unsaved_label.text()
-    assert ">Orders mapping</a>" in win._unsaved_label.text()
+    assert "Map Shipping method in" in win._status_label.text()
+    assert ">Orders mapping</a>" in win._status_label.text()
     _edit_general(win, "x")
-    assert ">General</a>" in win._unsaved_label.text()
+    assert ">General</a>" in win._status_label.text()
     win.deleteLater()
 
 
@@ -92,15 +92,45 @@ def test_the_lines_link_opens_the_page_and_points_at_the_control(window):
     asked = []
     window._web_host.bridge.problemFocusRequested.connect(asked.append)
 
-    window._unsaved_label.linkActivated.emit("General")
+    window._status_label.linkActivated.emit("General")
 
     assert window._settings_nav.currentItem().text() == "General"
     assert asked == ["threshold"]
 
 
 def test_a_link_to_no_page_does_nothing(window):
-    window._unsaved_label.linkActivated.emit("Nope")
+    window._status_label.linkActivated.emit("Nope")
     assert window._settings_nav.currentItem().text() == "General"
+
+
+def test_a_disabled_save_and_close_says_what_blocks_it(window):
+    """The close guard hides the status line that would have said it."""
+    _edit_general(window, "x")
+    assert (
+        window.save_and_close_button.toolTip()
+        == "Set Low-stock threshold in General to save."
+    )
+    _edit_general(window, "7")
+    assert window.save_and_close_button.toolTip() == ""
+
+
+def test_the_loaded_file_is_split_on_the_clients_saved_delimiter(
+    qapp, no_modals, started_workers, make_settings_config, tmp_path
+):
+    """Setup read it with the client's override, so the mapping page must:
+    detection alone would split this one on its commas."""
+    path = tmp_path / "orders.csv"
+    path.write_text("Name|Note, a, b\n#1|x, y, z\n", encoding="utf-8")
+    config = make_settings_config()
+    config["settings"]["orders_csv_delimiter"] = "|"
+    win = SettingsWindow(
+        client_id="M",
+        client_config=config,
+        profile_manager=Mock(),
+        loaded_files={"orders": str(path)},
+    )
+    assert win._web_host.drafts["orders"].file.columns == ("Name", "Note, a, b")
+    win.deleteLater()
 
 
 # --- Save --------------------------------------------------------------------
@@ -123,7 +153,7 @@ def test_save_writes_a_copy_and_the_dialog_stays_open(window, started_workers):
     window._on_save_settings_result(True)
 
     assert results == []
-    assert window._unsaved_label.text() == SAVED_LINE
+    assert window._status_label.text() == SAVED_LINE
     assert window.save_button.text() == "Save"
     assert not window.save_button.isEnabled()
     assert window.cancel_button.text() == "Close"
@@ -138,12 +168,12 @@ def test_an_edit_after_a_save_brings_the_unsaved_line_and_cancel_back(window):
 
     _edit_general(window, "11")
 
-    assert window._unsaved_label.text() == "Unsaved changes in General"
+    assert window._status_label.text() == "Unsaved changes in General"
     assert window.cancel_button.text() == "Cancel"
     assert window.save_button.isEnabled()
     # Undoing it does not bring "Saved" back: that line is the save's own.
     _edit_general(window, "9")
-    assert window._unsaved_label.text() == ""
+    assert window._status_label.text() == ""
 
 
 def test_an_edit_made_while_the_write_runs_stays_unsaved(window, started_workers):
@@ -155,7 +185,7 @@ def test_an_edit_made_while_the_write_runs_stays_unsaved(window, started_workers
 
     assert started_workers[0].args[1]["settings"]["low_stock_threshold"] == 9
     assert window.refresh_dirty() == ["General"]
-    assert window._unsaved_label.text() == "Unsaved changes in General"
+    assert window._status_label.text() == "Unsaved changes in General"
     assert window.save_button.isEnabled()
 
 
@@ -166,7 +196,7 @@ def test_a_failed_write_leaves_the_page_unsaved_and_save_live(window, monkeypatc
 
     window._on_save_settings_result(False)
 
-    assert window._unsaved_label.text() == "Unsaved changes in General"
+    assert window._status_label.text() == "Unsaved changes in General"
     assert window.save_button.isEnabled()
     assert window.save_button.text() == "Save"
 
@@ -239,6 +269,30 @@ def test_save_and_close_closes_once_the_write_succeeds(window, started_workers):
 
     window._on_save_settings_result(True)
 
+    assert results == [QDialog.DialogCode.Accepted]
+
+
+def test_save_and_close_asks_again_about_an_edit_made_while_the_write_ran(
+    window, started_workers
+):
+    """That edit was not in the write: closing now would drop it unasked."""
+    results = _results(window)
+    _edit_sets(window)
+    window.reject()
+    window.save_and_close_button.click()
+    _edit_general(window, "12")
+
+    window._on_save_settings_result(True)
+
+    assert results == []
+    assert not window._close_guard.isHidden()
+    assert window._close_guard_label.text() == (
+        "Unsaved changes in General. Closing now discards them."
+    )
+    # A second Save & close writes it and closes.
+    window.save_and_close_button.click()
+    window._on_save_settings_result(True)
+    assert started_workers[1].args[1]["settings"]["low_stock_threshold"] == 12
     assert results == [QDialog.DialogCode.Accepted]
 
 

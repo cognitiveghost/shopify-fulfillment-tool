@@ -7,7 +7,6 @@ of them at a time, hands the page's edits to it, and says when it changed.
 """
 
 import logging
-from pathlib import Path
 
 from PySide6.QtCore import Signal
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -15,16 +14,9 @@ from PySide6.QtWidgets import QFileDialog, QVBoxLayout, QWidget
 
 from gui.components import show_error
 from gui.settings.bridge import mount_settings_page
-from gui.settings.page_state import FileColumns, MappingDraft
-from shopify_tool.csv_utils import read_csv_preview
+from gui.settings.page_state import MappingDraft, read_file_columns
 
 logger = logging.getLogger(__name__)
-
-
-def read_file_columns(path, loaded: bool) -> FileColumns:
-    """A CSV's header and first row. Raises what reading the file raises."""
-    headers, first_row = read_csv_preview(str(path))
-    return FileColumns(Path(path).name, tuple(headers), first_row, loaded)
 
 
 class SettingsWebHost(QWidget):

@@ -144,7 +144,7 @@ def test_a_successful_save_says_so_in_the_footer_and_stays_open(window):
     window._on_save_settings_result(True)
 
     assert closed == []
-    assert window._unsaved_label.text() == "Saved. Applies from the next analysis."
+    assert window._status_label.text() == "Saved. Applies from the next analysis."
 
 
 def test_a_failed_write_shows_a_banner_and_stays_open(window, monkeypatch):

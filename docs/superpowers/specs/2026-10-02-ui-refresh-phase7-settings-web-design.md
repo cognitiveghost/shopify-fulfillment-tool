@@ -159,9 +159,14 @@ class FileColumns:
     loaded: bool = False         # True: the file loaded on Setup. False: picked in the dialog
 ```
 
-`csv_utils.read_csv_preview(path) -> tuple[list[str], dict[str, str]]` reads the header and one row, as text,
-with the delimiter `detect_csv_delimiter` finds. It does not use the General page's delimiter, which may be an
-unsaved edit. A file with a header and no rows gives an empty dict.
+`csv_utils.read_csv_preview(path, delimiter=None) -> tuple[list[str], dict[str, str]]` reads the header and one
+row, as text. A file picked in the dialog is split on the delimiter `detect_csv_delimiter` finds. The file loaded
+on Setup is split the way Setup split it: `resolve_delimiter` over the client's saved setting, so a client whose
+files need an override sees the same columns here (added at review; the first draft detected for both). Neither
+uses the General page's drafted delimiter, which may be an unsaved edit. A file with a header and no rows gives
+an empty dict.
+
+`page_state.read_file_columns(path, loaded, delimiter=None)` wraps it into a `FileColumns`.
 
 ### 4.2 `GeneralDraft(settings: dict, client: str)`
 
@@ -473,8 +478,8 @@ A hairline (`border_subtle`), then a 60px row: the status line on the left, Canc
 | Otherwise | Empty | Disabled |
 
 - The link selects that page, gives the web view focus and emits `problemFocusRequested` with the draft's
-  `blocker_key()`. The first blocked page in nav order is the one named.
-- Save's tooltip is "Ctrl+S". Ctrl+S re-checks every page first, then saves if Save would be enabled.
+  `blocker_key()`. The first blocked page in nav order is the one named. When the link changes the page, the
+  request reaches the page before the state that draws the control; the page keeps it for the next render.- Save's tooltip is "Ctrl+S". Ctrl+S re-checks every page first, then saves if Save would be enabled.
 - While a save runs, Save reads "Saving…" and is disabled.
 - The host's `edited` signal re-checks the three drafts' unsaved state and every page's `blocker()` at once.
   The Qt pages are still polled every 400ms, the visible one only.
@@ -489,7 +494,8 @@ A hairline (`border_subtle`), then a 60px row: the status line on the left, Canc
    change what is written.
 5. On success: every page is marked clean as of what was written, the footer shows the saved line, and
    Cancel reads Close. No toast. The dialog stays open, unless the save came from the close guard's Save &
-   close. An edit made while the write ran still reads unsaved.
+   close. An edit made while the write ran still reads unsaved; after Save & close it brings the close guard
+   back instead of closing.
 6. On failure: today's error boxes, unchanged.
 
 An edit after a save returns the footer to the unsaved line and Close to Cancel.
@@ -501,7 +507,8 @@ Esc, Cancel or Close, and the title bar's ✕ all go through `reject()`:
 - during a save, nothing;
 - with the close guard showing, it hides the guard;
 - with unsaved pages, it shows the guard: `{unsaved line}. Closing now discards them.`, Keep editing, Discard,
-  Save & close. Save & close is disabled while a page has a blocker;
+  Save & close. Save & close is disabled while a page has a blocker, and its tooltip then says which
+  (`{blocker} in {page} to save.`), since the guard covers the status line;
 - otherwise it closes.
 
 The dialog closes with `Accepted` when it saved at least once and `Rejected` otherwise, whatever closed it.
@@ -542,7 +549,8 @@ class SettingsWebHost(QWidget):
 whose cases move to the draft tests. The "Settings saved" toast. `unsaved_summary`'s "on N pages" wording.
 `FormSection`, `InlineMessage` and the other Qt components stay: five Qt pages still use them.
 
-`csv_utils.discover_additional_columns` stays and is still used.
+`csv_utils.discover_additional_columns` stays and is still used. `csv_utils.read_csv_headers` goes: the deleted
+mapping pages were its only caller (`core.read_csv_headers`, which Setup uses, is another function and stays).
 
 ## 9. Departures from the mockup
 
@@ -562,6 +570,11 @@ whose cases move to the draft tests. The "Settings saved" toast. `unsaved_summar
 | Picking a column another field holds leaves both | The column moves | The profile stores one field per column |
 | "Columns read from {file}, the last file loaded." | "…, the file loaded on Setup." or "Columns read from {file}." | The app does not remember a file between sessions |
 | The search field is 30px | The theme's control height | One height for every Qt control |
+| Cancel, then Save | The platform's order: Save, then Cancel on Windows | Every dialog's footer is a `QDialogButtonBox` (`tests/test_dialog_button_guard.py`); the mockup's order comes with the web frame in phase 10 |
+| The search field has a magnifier glyph | No glyph | The icon set has none, and the field is Qt until phase 10 |
+| "Match the courier names in the CSV to your couriers. Unmatched names show as-is." | "A shipping method that contains the text on the left is filed under the courier on the right. Anything else keeps its own name." | The match is a substring of the shipping method, not a name-to-name table |
+| "Unmapped CSV columns to keep and show in Results." | "Orders columns with no field, carried through the analysis under their own names." | The glossary's wording (`CONTEXT.md`, Additional column): the analysis carries them through; Results is one place they show |
+| "Choose the column that names the shipping method, e.g. …" | "{label} is required. Choose the column that holds it, e.g. …" | One sentence for all four required fields |
 
 ## 10. Tests (test-first; the seams)
 

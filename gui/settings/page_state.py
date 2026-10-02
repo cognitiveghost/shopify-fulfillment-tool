@@ -13,11 +13,12 @@ strings and booleans only; an edit of any other shape is dropped.
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pandas as pd
 
 from gui.settings.contract import PageContract
-from shopify_tool.csv_utils import discover_additional_columns
+from shopify_tool.csv_utils import discover_additional_columns, read_csv_preview
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,15 @@ class FileColumns:
     columns: tuple[str, ...]  # the header row, in file order
     first_row: dict[str, str] = field(default_factory=dict)  # "" when empty
     loaded: bool = False  # True: the file loaded on Setup. False: picked here
+
+
+def read_file_columns(path, loaded: bool, delimiter: str | None = None) -> FileColumns:
+    """A CSV's header and first row. Raises what reading the file raises.
+
+    `delimiter` is what to split it on; None detects it.
+    """
+    headers, first_row = read_csv_preview(str(path), delimiter)
+    return FileColumns(Path(path).name, tuple(headers), first_row, loaded)
 
 
 def _shaped(args, *kinds: type) -> bool:
@@ -77,7 +87,8 @@ class GeneralDraft(PageContract):
         self.mode: dict[str, str] = {}
         self.char: dict[str, str] = {}
         for kind in KINDS:
-            stored = settings.get(f"{kind}_csv_delimiter", "auto")
+            # None and "" read as Auto, as resolve_delimiter reads them.
+            stored = settings.get(f"{kind}_csv_delimiter") or "auto"
             # Pipe, and any hand-edited value, open as Other: kept, not rewritten.
             self.mode[kind] = _MODE_OF.get(stored, OTHER)
             self.char[kind] = "" if stored in _MODE_OF else str(stored)
@@ -116,9 +127,12 @@ class GeneralDraft(PageContract):
             for kind in KINDS
             if self.mode[kind] == OTHER and not self.char[kind]
         ]
-        if not _WHOLE.fullmatch(self.threshold.strip()):
+        if self._bad_threshold():
             found.append(("Set Low-stock threshold", "threshold", THRESHOLD_PROBLEM))
         return found
+
+    def _bad_threshold(self) -> bool:
+        return not _WHOLE.fullmatch(self.threshold.strip())
 
     def blocker(self) -> str | None:
         problems = self._problems()
@@ -168,7 +182,6 @@ class GeneralDraft(PageContract):
         }
 
     def view(self) -> dict:
-        bad_threshold = not _WHOLE.fullmatch(self.threshold.strip())
         return {
             "page": "general",
             "title": "General",
@@ -186,7 +199,7 @@ class GeneralDraft(PageContract):
                     "value": self.threshold,
                     "unit": "units",
                     "hint": THRESHOLD_HINT,
-                    "problem": THRESHOLD_PROBLEM if bad_threshold else "",
+                    "problem": THRESHOLD_PROBLEM if self._bad_threshold() else "",
                 },
             },
         }

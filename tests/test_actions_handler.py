@@ -265,7 +265,7 @@ def test_settings_that_save_but_fail_to_reload_say_so(monkeypatch):
     )
     monkeypatch.setattr(
         "gui.actions_handler.SettingsWindow",
-        lambda **kwargs: SimpleNamespace(exec=lambda: True),
+        lambda **kwargs: SimpleNamespace(exec=lambda: True, deleteLater=lambda: None),
     )
     profile_manager = Mock()
     profile_manager.load_shopify_config.side_effect = [
@@ -287,10 +287,13 @@ def test_settings_that_save_but_fail_to_reload_say_so(monkeypatch):
 
 def test_the_settings_window_is_told_which_files_are_loaded(monkeypatch):
     seen = {}
+    deleted = []
 
     def window(**kwargs):
         seen.update(kwargs)
-        return SimpleNamespace(exec=lambda: False)
+        return SimpleNamespace(
+            exec=lambda: False, deleteLater=lambda: deleted.append(True)
+        )
 
     monkeypatch.setattr("gui.actions_handler.SettingsWindow", window)
     profile_manager = Mock()
@@ -307,6 +310,9 @@ def test_the_settings_window_is_told_which_files_are_loaded(monkeypatch):
 
     assert seen["loaded_files"] == {"orders": "/data/orders.csv", "stock": None}
     assert seen["initial_page"] == "Orders mapping"
+    # The main window is the dialog's parent: left alone, every open would
+    # leave a dialog and its web view alive (ADR 0016).
+    assert deleted == [True]
 
 
 def test_the_writeoff_bypass_is_gone():

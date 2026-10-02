@@ -463,7 +463,11 @@ class ActionsHandler(QObject):
             },
         )
 
-        if settings_win.exec():
+        saved = settings_win.exec()
+        # The main window is its parent, so nothing else ever deletes it, and
+        # it holds a web view (ADR 0016: the view lives while the dialog is open).
+        settings_win.deleteLater()
+        if saved:
             # It saved at least once while it was open; its footer said so.
             try:
                 self.mw.active_profile_config = (

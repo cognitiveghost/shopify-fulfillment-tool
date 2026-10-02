@@ -249,7 +249,7 @@ def test_the_nav_is_a_232px_column_of_30px_rows(window):
     nav = window._settings_nav
     assert nav.width() + 2 * NAV_MARGIN_PX >= 232
     assert nav.item(_page_row(window, "General")).sizeHint().height() == 30
-    assert nav.item(_page_row(window, "Data")).sizeHint().height() == 28
+    assert nav.item(_page_row(window, "Data")).sizeHint().height() == 26
     assert window._nav_panel.objectName() == "settingsNavPanel"
     assert nav.parentWidget() is window._nav_panel
 

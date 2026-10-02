@@ -30,7 +30,7 @@ def test_unsaved_summary_names_every_page():
 
 def test_a_fresh_window_has_no_unsaved_pages(window):
     assert window.refresh_dirty() == []
-    assert window._unsaved_label.text() == ""
+    assert window._status_label.text() == ""
 
 
 def test_an_edit_marks_its_nav_row_and_the_footer(window):
@@ -38,7 +38,7 @@ def test_an_edit_marks_its_nav_row_and_the_footer(window):
     assert window.refresh_dirty() == ["Sets"]
     assert _nav_item(window, "Sets").toolTip() == "Unsaved changes"
     assert _nav_item(window, "General").toolTip() == ""
-    assert window._unsaved_label.text() == "Unsaved changes in Sets"
+    assert window._status_label.text() == "Unsaved changes in Sets"
 
 
 def test_reverting_an_edit_clears_the_mark(window):
@@ -54,7 +54,7 @@ def test_the_poll_checks_the_page_on_screen(window):
     window._select_page("Sets")
     _edit_sets(window)
     window._poll_current_page()
-    assert window._unsaved_label.text() == "Unsaved changes in Sets"
+    assert window._status_label.text() == "Unsaved changes in Sets"
 
 
 def test_leaving_a_page_checks_it_before_the_next_poll(window):
