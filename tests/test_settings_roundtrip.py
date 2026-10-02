@@ -23,11 +23,11 @@ def test_window_registers_every_page(window):
         "General",
         "Rules",
         "Reports",
-        "Orders Mapping",
-        "Stock Mapping",
+        "Orders mapping",
+        "Stock mapping",
         "Sets",
         "Weight",
-        "Tag Categories",
+        "Tag categories",
     ]
 
 
@@ -74,7 +74,7 @@ def test_deleting_a_courier_row_survives_the_save_merge(window, no_modals):
     and refills in place. Hand it a copy instead and this test fails while
     every page-level test stays green.
     """
-    mappings = window._pages[window._page_index_by_name["Orders Mapping"]]
+    mappings = window._pages[window._page_index_by_name["Orders mapping"]]
     for row_refs in list(mappings.courier_mapping_widgets):
         mappings._delete_courier_row(row_refs)
 
@@ -114,20 +114,20 @@ def test_a_key_no_page_renders_survives_a_save(
 def test_a_validation_failure_selects_the_page_and_says_so_inline(
     window, no_modals, started_workers, monkeypatch
 ):
-    mappings = window._pages_by_name["Orders Mapping"]
+    mappings = window._pages_by_name["Orders mapping"]
     monkeypatch.setattr(mappings, "validate", lambda: (False, ["Map the SKU column."]))
 
     window.save_settings()
 
     assert no_modals == []
     assert started_workers == []
-    assert window._settings_nav.currentItem().text() == "Orders Mapping"
+    assert window._settings_nav.currentItem().text() == "Orders mapping"
     assert window._validation_message.text() == "Map the SKU column."
     assert not window._validation_message.isHidden()
 
 
 def test_changing_page_clears_the_validation_message(window, monkeypatch):
-    mappings = window._pages_by_name["Orders Mapping"]
+    mappings = window._pages_by_name["Orders mapping"]
     monkeypatch.setattr(mappings, "validate", lambda: (False, ["Map the SKU column."]))
     window.save_settings()
 

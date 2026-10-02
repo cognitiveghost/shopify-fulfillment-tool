@@ -587,7 +587,7 @@ class WeightPage(SettingsPage):
                 show_error(
                     self,
                     "No SKU column found",
-                    "Check the column mappings under Settings → Stock Mapping, "
+                    "Check the column mappings under Settings → Stock mapping, "
                     "then import again.",
                 )
                 return

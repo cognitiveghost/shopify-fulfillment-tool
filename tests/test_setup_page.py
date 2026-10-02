@@ -219,7 +219,7 @@ def test_a_problem_card_explains_itself_and_links_to_the_fix(qtbot, page):
     assert _style(qtbot, view, card, "borderTopColor") == _rgb(theme.status_danger_border)
     assert _text(qtbot, view, f"{card} .problem-title") == "No SKU column"
     assert "mapped to SKU" in _text(qtbot, view, f"{card} .banner-text")
-    assert _text(qtbot, view, f"{card} [data-act='fix']") == "Open Orders Mapping"
+    assert _text(qtbot, view, f"{card} [data-act='fix']") == "Open Orders mapping"
     with qtbot.waitSignal(bridge.fixRequested, timeout=5000) as caught:
         _click(qtbot, view, f"{card} [data-act='fix']")
     assert caught.args == ["orders"]

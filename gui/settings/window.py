@@ -52,13 +52,13 @@ DIRTY_POLL_MS = 400
 # Page name -> words a person might search for that are not in the name.
 SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
     "General": ["delimiter", "csv", "low stock", "threshold", "repeat"],
-    "Orders Mapping": ["columns", "csv", "headers", "courier", "carrier", "shipping"],
-    "Stock Mapping": ["columns", "csv", "headers", "expiry", "batch", "lot", "fifo"],
+    "Orders mapping": ["columns", "csv", "headers", "courier", "carrier", "shipping"],
+    "Stock mapping": ["columns", "csv", "headers", "expiry", "batch", "lot", "fifo"],
     "Rules": ["conditions", "actions", "tags", "status", "priority", "automation"],
     "Sets": ["bundles", "kits", "components", "decoder"],
     "Weight": ["volumetric", "divisor", "dimensions", "boxes", "packaging", "kg"],
     "Reports": ["packing list", "stock export", "filters", "output", "writeoff"],
-    "Tag Categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
+    "Tag categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
 }
 
 
@@ -96,10 +96,10 @@ class SettingsWindow(QDialog):
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
     SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
-        ("Data", ["General", "Orders Mapping", "Stock Mapping"]),
-        ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
+        ("Data", ["General", "Orders mapping", "Stock mapping"]),
+        ("Fulfilment logic", ["Rules", "Sets", "Weight"]),
         ("Output", ["Reports"]),
-        ("Organization", ["Tag Categories"]),
+        ("Organization", ["Tag categories"]),
     ]
 
     # Stored by *name*, not row index: the nav groups have gained entries
@@ -253,11 +253,11 @@ class SettingsWindow(QDialog):
                 self.config_data.get("courier_mappings", {}),
                 fallback_additional_columns=self._stored_additional_columns(),
             ),
-            "Orders Mapping",
+            "Orders mapping",
         )
         self._add_page(
             StockMappingPage(self.config_data.get("column_mappings", {})),
-            "Stock Mapping",
+            "Stock mapping",
         )
         self._add_page(SetsPage(self.config_data.get("set_decoders", {})), "Sets")
         self._add_page(
@@ -274,7 +274,7 @@ class SettingsWindow(QDialog):
             _TagCategoriesPage(
                 self.config_data.get("tag_categories", {"version": 2, "categories": {}})
             ),
-            "Tag Categories",
+            "Tag categories",
         )
         self._build_settings_nav()
 
@@ -389,7 +389,7 @@ class SettingsWindow(QDialog):
             raise ValueError("; ".join(problems))
 
         for group_name, page_names in self.SETTINGS_NAV_GROUPS:
-            header = QListWidgetItem(group_name.upper())
+            header = QListWidgetItem(group_name)
             header.setFlags(Qt.ItemFlag.NoItemFlags)
             apply_font(header, "caption", bold=True)
             self._settings_nav.addItem(header)

@@ -566,7 +566,7 @@ class UIManager:
         )
         # The KPI strip's hint: straight to the page that maps the price column.
         bridge.columnMappingRequested.connect(
-            lambda: actions().open_settings_window(page="Orders Mapping")
+            lambda: actions().open_settings_window(page="Orders mapping")
         )
 
         # Bundle 14: the selection bar's verbs. The page sends the order list

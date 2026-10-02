@@ -427,7 +427,7 @@ class ActionsHandler(QObject):
         """Opens the settings window for the active client.
 
         Args:
-            page (str, optional): Nav entry to open on, e.g. "Orders Mapping".
+            page (str, optional): Nav entry to open on, e.g. "Orders mapping".
                 Defaults to whichever page was open last.
         """
         if not self.mw.current_client_id:

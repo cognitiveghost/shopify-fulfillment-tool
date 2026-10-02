@@ -69,10 +69,10 @@ def test_group_headers_are_not_selectable(window):
         if not window._settings_nav.item(row).flags() & Qt.ItemFlag.ItemIsSelectable
     ]
     assert [h.text() for h in headers] == [
-        "DATA",
-        "FULFILLMENT LOGIC",
-        "OUTPUT",
-        "ORGANIZATION",
+        "Data",
+        "Fulfilment logic",
+        "Output",
+        "Organization",
     ]
 
 
@@ -116,10 +116,10 @@ def test_search_matches_a_page_name_ignoring_case(window):
 def test_a_group_with_no_match_hides_its_header(window):
     window.filter_nav("box")
     assert _headers(window) == {
-        "DATA": True,
-        "FULFILLMENT LOGIC": False,
-        "OUTPUT": True,
-        "ORGANIZATION": True,
+        "Data": True,
+        "Fulfilment logic": False,
+        "Output": True,
+        "Organization": True,
     }
 
 
@@ -152,7 +152,7 @@ def test_the_search_field_and_the_nav_list_stay_the_same_width(window):
 def test_enter_opens_the_first_match(window):
     window._nav_search.setText("courier")
     window._nav_search.returnPressed.emit()
-    assert window._settings_nav.currentItem().text() == "Orders Mapping"
+    assert window._settings_nav.currentItem().text() == "Orders mapping"
 
 
 def test_enter_in_search_opens_the_match_without_saving(window, started_workers):
@@ -162,7 +162,7 @@ def test_enter_in_search_opens_the_match_without_saving(window, started_workers)
     window._nav_search.setFocus()
     QTest.keyClicks(window._nav_search, "courier")
     QTest.keyClick(window._nav_search, Qt.Key.Key_Return)
-    assert window._settings_nav.currentItem().text() == "Orders Mapping"
+    assert window._settings_nav.currentItem().text() == "Orders mapping"
     assert started_workers == []
     assert window.result() == 0 and not window.isHidden()
 

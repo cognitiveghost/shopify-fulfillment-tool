@@ -73,7 +73,7 @@ def test_a_stock_file_missing_its_quantity_column_puts_the_slot_in_error(
     assert slot.is_valid is False
     assert slot.missing_columns
     assert slot.problem["title"] == "No stock column"
-    assert slot.problem["fix_page"] == "Stock Mapping"
+    assert slot.problem["fix_page"] == "Stock mapping"
     assert "“Наличност”" in slot.problem["text"]
     assert slot.delimiter == ";"
 
@@ -392,7 +392,7 @@ def test_a_folder_with_no_valid_csv_names_the_files_and_the_fix(main_window, tmp
     slot = main_window.orders_slot
     assert slot.problem["title"] == "None of the 1 files can be used"
     assert slot.problem["text"] == "wrong.csv. Each is missing a mapped column."
-    assert slot.problem["fix_page"] == "Orders Mapping"
+    assert slot.problem["fix_page"] == "Orders mapping"
 
 
 def test_a_folder_that_skips_a_file_says_so(main_window, tmp_path, monkeypatch):
@@ -443,7 +443,7 @@ def test_a_loaded_file_counts_its_rows_and_orders(main_window, tmp_path):
 def test_a_mapping_fixed_in_settings_clears_the_problem_on_revalidation(
     main_window, tmp_path
 ):
-    """The card's "Open Orders Mapping" link ends in a settings save, which
+    """The card's "Open Orders mapping" link ends in a settings save, which
     replaces active_profile_config and re-validates. That has to be enough."""
     orders = tmp_path / "orders.csv"
     orders.write_text(

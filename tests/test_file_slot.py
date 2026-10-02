@@ -67,8 +67,8 @@ def test_one_missing_column_names_it_and_what_it_is_mapped_to():
         "title": "No SKU column",
         "text": "The orders file's header row has no “Lineitem sku” column, "
         "which is mapped to SKU.",
-        "fix_page": "Orders Mapping",
-        "fix_label": "Open Orders Mapping",
+        "fix_page": "Orders mapping",
+        "fix_label": "Open Orders mapping",
     }
     assert (slot.rows, slot.keys, slot.delimiter) == (1204, None, ",")
     assert calls == [1]
@@ -86,7 +86,7 @@ def test_several_missing_columns_are_listed():
     assert slot.problem["text"] == (
         "The stock file's header row has none of: “Артикул” (SKU), “Наличност” (stock)."
     )
-    assert slot.problem["fix_page"] == "Stock Mapping"
+    assert slot.problem["fix_page"] == "Stock mapping"
 
 
 def test_a_problem_without_a_fix_has_no_link():
