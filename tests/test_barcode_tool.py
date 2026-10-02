@@ -10,6 +10,7 @@ import os
 import pandas as pd
 import pytest
 from PySide6.QtWidgets import QApplication, QWidget
+from test_reference_tool import Pool
 
 from gui import barcode_tool
 from gui.barcode_tool import BarcodeTool, read_packing_lists
@@ -20,16 +21,6 @@ from shopify_tool.barcode_processor import BarcodeGenerationError
 @pytest.fixture(scope="module", autouse=True)
 def qapp():
     return QApplication.instance() or QApplication([])
-
-
-class Pool:
-    """Captures a worker instead of running it on a thread."""
-
-    def __init__(self):
-        self.started = []
-
-    def start(self, worker):
-        self.started.append(worker)
 
 
 @pytest.fixture
@@ -288,14 +279,34 @@ def test_with_no_analysis_the_facts_say_so(host, session):
     assert [entry.count for entry in facts.lists] == [None, None]
 
 
-def test_a_failed_reload_stops_loading_and_says_so(host, session, errors):
-    tool, _pool, _held = _tool(host, session)
-    tool.reload()
-    tool._on_lists_failed((OSError, OSError("share gone"), "trace"))
+@pytest.fixture
+def share_gone(monkeypatch):
+    def gone(session_path, analysis_df):
+        raise OSError("share gone")
+
+    monkeypatch.setattr(barcode_tool, "read_packing_lists", gone)
+
+
+def test_a_failed_reload_stops_loading_and_says_so(host, session, errors, share_gone):
+    tool, pool, _held = _tool(host, session)
+    _load(tool, pool)
     assert tool.facts().loading is False
     assert errors == [
         ("The packing lists weren't read", "Check the server connection, then Refresh.")
     ]
+
+
+def test_a_failed_reload_for_a_session_left_behind_says_nothing(
+    host, session, tmp_path, errors, share_gone
+):
+    tool, pool, _held = _tool(host, session)
+    tool.reload()
+    tool.set_session(str(tmp_path / "another"))
+    tool.reload()
+    stale = pool.started[0]
+    tool._on_lists(stale.fn(*stale.args, **stale.kwargs))
+    assert tool.facts().loading is True  # the new session's own read is still out
+    assert errors == []
 
 
 def test_choose_selects_a_list_that_exists(host, session):

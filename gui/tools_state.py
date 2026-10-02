@@ -94,7 +94,7 @@ def short_path(path: str) -> str:
     return "…" + os.sep + os.sep.join(parts[-2:])
 
 
-def _count(value: int, noun: str) -> str:
+def counted(value: int, noun: str) -> str:
     return f"{value:,} {noun}{'' if value == 1 else 's'}"
 
 
@@ -104,7 +104,7 @@ def _row(pick: PickedFile | None, noun: str) -> dict:
     if pick.problem is not None:
         title, text = pick.problem
         return {"name": pick.name, "meta": "Problem", "problem": {"title": title, "text": text}}
-    return {"name": pick.name, "meta": _count(pick.count or 0, noun), "problem": {}}
+    return {"name": pick.name, "meta": counted(pick.count or 0, noun), "problem": {}}
 
 
 def _folder(path: str, empty: str) -> dict:
@@ -266,8 +266,8 @@ def _reference(facts: ReferenceFacts, prints: PrintFacts, quiet: bool) -> dict:
             reason = _matched(facts.result)
     else:
         reason = (
-            f"{_count(facts.pdf.count or 0, 'page')}, "
-            f"{_count(facts.csv.count or 0, 'CSV row')}."
+            f"{counted(facts.pdf.count or 0, 'page')}, "
+            f"{counted(facts.csv.count or 0, 'CSV row')}."
         )
 
     block = _print_block(prints, "stamped labels", REFERENCE_SIZE_HINT)
@@ -304,7 +304,11 @@ def _barcode(facts: BarcodeFacts, prints: PrintFacts, quiet: bool) -> dict:
         result = None
 
     if cur is not None:
-        meta = "Unreadable" if cur.count is None else f"{cur.count:,} Fulfillable"
+        # With no analysis nothing was counted: the list itself may be fine.
+        if not facts.analysed:
+            meta = ""
+        else:
+            meta = "Unreadable" if cur.count is None else f"{cur.count:,} Fulfillable"
         shown = {"name": cur.name, "meta": meta, "placeholder": ""}
     elif waiting and not quiet:
         shown = {"name": "", "meta": "", "placeholder": "Reading packing lists…"}
@@ -330,8 +334,8 @@ def _barcode(facts: BarcodeFacts, prints: PrintFacts, quiet: bool) -> dict:
         reason = "No Fulfillable orders in this list."
     elif result is not None and result.get("failed"):
         reason, tone = (
-            f"{_count(result.get('labels', 0), 'label')} written, "
-            f"{_count(result['failed'], 'order number')} couldn't be encoded. "
+            f"{counted(result.get('labels', 0), 'label')} written, "
+            f"{counted(result['failed'], 'order number')} couldn't be encoded. "
             "Details are in Logs."
         ), "warning"
     elif result is not None and result.get("qr_failed"):

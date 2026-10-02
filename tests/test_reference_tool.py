@@ -443,7 +443,7 @@ def test_a_second_run_is_not_cancelled_by_the_first_ones_cancel(host, files, ope
             InvalidCSVError("x"),
             (
                 "The CSV isn't in the expected format. Expected columns: "
-                "PostOne ID (0), Tracking (1), Reference (2), Name (6)."
+                "PostOne ID (1st), Tracking (2nd), Reference (3rd), Name (7th)."
             ),
         ),
         (

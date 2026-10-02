@@ -406,6 +406,11 @@ def test_a_result_for_another_list_says_nothing_about_this_one():
             {"lists": _dhl(count=None)},
             {"name": "DHL", "meta": "Unreadable", "placeholder": ""},
         ),
+        # Nothing was counted, which says nothing about the list.
+        (
+            {"lists": _dhl(count=None), "analysed": False},
+            {"name": "DHL", "meta": "", "placeholder": ""},
+        ),
     ],
 )
 def test_what_the_packing_list_select_shows(facts, shown):

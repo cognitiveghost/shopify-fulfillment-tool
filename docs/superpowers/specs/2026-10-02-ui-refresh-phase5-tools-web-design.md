@@ -477,9 +477,15 @@ action. A new toast replaces the old one.
 
 **Keyboard.** Every control is a real `<button>`, `<input>` or `<label>`, in document order: the banner's
 buttons, then each card top to bottom. Left and Right move focus between the two mode segments; Space and
-Enter choose. Nothing traps focus. The page is redrawn whole on each state, so the focused control is found
-again by its `data-key`, as on Setup. A state can arrive while a field is being typed in (the other card's
-run pushes several a second), so the redraw puts the typed text, and a text field's caret, back.
+Enter choose. Nothing traps focus.
+
+**Redraw.** A reference run pushes a state several times a second, so a state can arrive while a button is
+held down or a field is being typed in. The page builds each state's markup whole, then brings the DOM to
+match it node by node, keeping every node that is still the same control (same tag, same `data-key`). A press
+finds its button still there at the release, so the click lands, Cancel included; a focused field keeps what
+was typed and its caret, because it is the same node. Only where the layout itself changed is a control a new
+node, and focus is then found again by its `data-key`. (Found in review: replacing the DOM whole, as Setup
+does, dropped any click held across a push, and turned "152." in a number field into "152".)
 
 **Dropped files.** The page cancels `dragover` and `drop` on the document, so a file dropped on it does not
 navigate the view. It loads nothing.

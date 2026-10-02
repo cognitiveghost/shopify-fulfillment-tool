@@ -17,7 +17,14 @@ from PySide6.QtWidgets import QWidget
 
 from gui import pdf_printing
 from gui.components import ConfirmDialog, show_error
-from gui.tools_state import PRINT_SCOPE, BarcodeFacts, PackingList, ToolRun, short_path
+from gui.tools_state import (
+    PRINT_SCOPE,
+    BarcodeFacts,
+    PackingList,
+    ToolRun,
+    counted,
+    short_path,
+)
 from gui.worker import Worker
 from shopify_tool.barcode_processor import (
     barcode_pdf_path,
@@ -91,9 +98,14 @@ def read_packing_lists(session_path, analysis_df) -> list[tuple[PackingList, fro
 
 
 def _read(session_path, analysis_df):
-    """The worker's function: the session comes back with its lists, so a
-    result for a session the operator has left can be told apart."""
-    return session_path, read_packing_lists(session_path, analysis_df)
+    """The worker's function: the session comes back with its lists, or with
+    None when they couldn't be read, so either can be told apart from one for
+    a session the operator has left."""
+    try:
+        return session_path, read_packing_lists(session_path, analysis_df)
+    except Exception:
+        logger.exception(f"Reading packing lists failed: {session_path}")
+        return session_path, None
 
 
 class BarcodeTool(QObject):
@@ -175,9 +187,10 @@ class BarcodeTool(QObject):
         frame = self._analysis()
         self._analysed = frame is not None
         self._loading = True
-        worker = Worker(_read, self._session, frame)
+        # Filtered here, on the GUI thread: the worker gets rows of its own,
+        # not the frame the window goes on editing.
+        worker = Worker(_read, self._session, fulfillable_only(frame))
         worker.signals.result.connect(self._on_lists)
-        worker.signals.error.connect(self._on_lists_failed)
         self._list_worker = worker
         self.changed.emit()
         self._start(worker)
@@ -188,6 +201,14 @@ class BarcodeTool(QObject):
             return  # the operator moved to another session while it loaded
         self._loading = False
         self._list_worker = None
+        if found is None:
+            self.changed.emit()
+            show_error(
+                self._host,
+                "The packing lists weren't read",
+                "Check the server connection, then Refresh.",
+            )
+            return
         self._lists = [entry for entry, _orders in found]
         self._orders = {entry.name: orders for entry, orders in found}
         names = [entry.name for entry in self._lists]
@@ -195,18 +216,6 @@ class BarcodeTool(QObject):
             self._selected = names[0] if names else ""
             self._result = None
         self.changed.emit()
-
-    def _on_lists_failed(self, error_info) -> None:
-        _exctype, value, traceback_str = error_info
-        logger.error(f"Reading packing lists failed: {value}\n{traceback_str}")
-        self._loading = False
-        self._list_worker = None
-        self.changed.emit()
-        show_error(
-            self._host,
-            "The packing lists weren't read",
-            "Check the server connection, then Refresh.",
-        )
 
     def choose(self, name: str) -> None:
         if self._run is not None or self._entry(name) is None or name == self._selected:
@@ -294,11 +303,7 @@ class BarcodeTool(QObject):
                 if path:
                     QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         if outcome["pdf"]:
-            labels = outcome["labels"]
-            text = (
-                f"{labels:,} barcode label{'' if labels == 1 else 's'} "
-                f"saved to {short_path(folder)}"
-            )
+            text = f"{counted(outcome['labels'], 'barcode label')} saved to {short_path(folder)}"
             if outcome["qr_pdf"]:
                 text += ". QR labels too."
             self.toast.emit(text, folder)

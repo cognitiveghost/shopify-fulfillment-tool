@@ -323,30 +323,59 @@ function menuStillOpens(s) {
   return false;
 }
 
+function keyOf(node) {
+  return node.dataset ? node.dataset.key : undefined;
+}
+
+// Bring `old` to match `fresh`, keeping every node that is still the same
+// control. A run pushes a state several times a second: a press that began on
+// a button must find that button there at its release, or the click is lost,
+// and a field being typed in must stay the node the caret is in.
+function morph(old, fresh) {
+  const was = Array.from(old.childNodes);
+  const now = Array.from(fresh.childNodes);
+  now.forEach((node, n) => {
+    const at = was[n];
+    if (!at) {
+      old.appendChild(node);
+    } else if (at.nodeName !== node.nodeName || keyOf(at) !== keyOf(node)) {
+      old.replaceChild(node, at);
+    } else if (at.nodeType !== Node.ELEMENT_NODE) {
+      if (at.data !== node.data) at.data = node.data;
+    } else {
+      for (const name of at.getAttributeNames()) {
+        if (!node.hasAttribute(name)) at.removeAttribute(name);
+      }
+      for (const name of node.getAttributeNames()) {
+        const value = node.getAttribute(name);
+        if (at.getAttribute(name) !== value) at.setAttribute(name, value);
+      }
+      if (at.nodeName === "INPUT") {
+        // The attributes are only the defaults once a field has been used.
+        at.checked = node.checked;
+        if (at !== document.activeElement) at.value = node.value;
+      } else {
+        morph(at, node);
+      }
+    }
+  });
+  was.slice(now.length).forEach((node) => node.remove());
+}
+
 function render() {
   const s = page.state;
   if (!s || !s.reference) return;
   if (view.menu !== null && !menuStillOpens(s)) view.menu = null;
-  // The whole page is redrawn, so the control that had focus is found again
-  // by its key, and a field being typed in keeps what was typed: a state can
-  // arrive mid-edit, from the other card's run.
   const active = document.activeElement;
-  const key = active && active.dataset ? active.dataset.key : null;
-  const typing = key && (active.type === "text" || active.type === "number");
-  const typed = typing ? active.value : null;
-  const caret = typing && active.type === "text" ? [active.selectionStart, active.selectionEnd] : null;
-  els.tools.innerHTML =
+  const key = active ? keyOf(active) : null;
+  const fresh = document.createElement("template");
+  fresh.innerHTML =
     head(s) +
     (s.banner ? banner() : "") +
     `<div class="tool-cards">${referenceCard(s)}${barcodeCard(s)}</div>`;
-  if (key) {
-    const again = els.tools.querySelector(`[data-key="${key}"]`);
-    if (again && !again.disabled) {
-      if (typed !== null) again.value = typed;
-      again.focus();
-      if (caret) again.setSelectionRange(caret[0], caret[1]);
-    }
-  }
+  morph(els.tools, fresh.content);
+  // Where the layout itself changed, the focused control is a new node.
+  if (key && keyOf(document.activeElement) !== key) focusKey(key);
   page.renders += 1;
   document.documentElement.dataset.renders = String(page.renders);
 }

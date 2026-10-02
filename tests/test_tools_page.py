@@ -8,6 +8,8 @@ skip.
 import json
 
 import pytest
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from test_results_bridge import _eval, _rgb, _until_js
 from test_tools_state import (
@@ -103,6 +105,33 @@ def _change(qtbot, view, selector, value):
         " el.dispatchEvent(new Event('change', { bubbles: true }));"
         " return true; })()",
     )
+
+
+def _press(qtbot, view, key):
+    """A real mouse press on a control, left held. Returns the release.
+
+    el.click() cannot see a press and a release that land on different nodes.
+    """
+    x, y = _json(
+        qtbot,
+        view,
+        "(function () {"
+        f" const box = document.querySelector({_key(key)!r}).getBoundingClientRect();"
+        " window.pressed = false;"
+        " document.addEventListener('mousedown', () => { window.pressed = true; }, { once: true });"
+        " return [box.left + box.width / 2, box.top + box.height / 2]; })()",
+    )
+    point = QPoint(int(x), int(y))
+    target = view.focusProxy()
+    QTest.mouseMove(target, point)
+    QTest.mousePress(target, Qt.LeftButton, Qt.NoModifier, point)
+    _until_js(qtbot, view, "window.pressed === true")
+    return lambda: QTest.mouseRelease(target, Qt.LeftButton, Qt.NoModifier, point)
+
+
+def _type(qtbot, view, text):
+    """Type into the focused field as keystrokes do: no change event, a dirty value."""
+    _eval(qtbot, view, f"document.execCommand('insertText', false, {json.dumps(text)})")
 
 
 def _caught(signal):
@@ -581,6 +610,39 @@ def test_text_being_typed_survives_a_state_that_arrives_mid_edit(qtbot, page):
     _show(qtbot, view, bridge, make_state(reference=reference(run=ToolRun(STAMPING, 1, 120))))
     assert _eval(qtbot, view, "document.activeElement.dataset.key") == "barcode-target"
     assert _eval(qtbot, view, "document.activeElement.value") == "Zebra ZD4"
+
+
+def test_a_decimal_being_typed_survives_a_state_that_arrives_mid_edit(qtbot, page):
+    """A number field holding "152." reads back as "152": only the node itself keeps the point."""
+    view, bridge = page
+    _show(qtbot, view, bridge, make_state())
+    _click(qtbot, view, _key("barcode-fold"))
+    seen = _caught(bridge.printChanged)
+    _eval(
+        qtbot,
+        view,
+        f"(function () {{ const el = document.querySelector({_key('barcode-width')!r});"
+        " el.focus(); el.select(); return true; })()",
+    )
+    _type(qtbot, view, "152.")
+    _show(qtbot, view, bridge, make_state(reference=reference(run=ToolRun(STAMPING, 1, 120))))
+    _type(qtbot, view, "4")
+    _eval(qtbot, view, "document.activeElement.blur(); true")
+    qtbot.waitUntil(lambda: len(seen) > 0)
+    assert seen == [("barcode", "width", 152.4)]
+
+
+def test_a_click_held_across_a_progress_push_still_lands(qtbot, page):
+    """A reference run pushes a state about every 100 ms, and a click is held about that long."""
+    view, bridge = page
+    _show(qtbot, view, bridge, make_state(reference=reference(run=ToolRun(STAMPING, 1, 120))))
+    cancels = _caught(bridge.cancelRequested)
+    options = _caught(bridge.optionChanged)
+    for at, key in enumerate(("reference-cancel", "barcode-qr"), start=2):
+        release = _press(qtbot, view, key)
+        _show(qtbot, view, bridge, make_state(reference=reference(run=ToolRun(STAMPING, at, 120))))
+        release()
+    qtbot.waitUntil(lambda: cancels == [()] and options == [("barcode", "qr", True)])
 
 
 # --- footer -------------------------------------------------------------------

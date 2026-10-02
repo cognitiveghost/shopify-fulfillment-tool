@@ -97,7 +97,10 @@ def process_reference_labels(
         pdf_path: Path to input PDF
         csv_path: Path to CSV mapping file
         output_dir: Output directory for processed PDF
-        progress_callback: Optional callback(current, total, message)
+        progress_callback: Optional callback(done, total, label), called per
+            page with one of READING, STAMPING or SAVING as the label. It may
+            raise ProcessingCancelled to stop the run: nothing is written
+            before SAVING.
 
     Returns:
         dict: {
@@ -111,6 +114,7 @@ def process_reference_labels(
     Raises:
         InvalidPDFError: If PDF is invalid or cannot be read
         InvalidCSVError: If CSV is invalid or has wrong format
+        ProcessingCancelled: When progress_callback raised it
         PDFProcessorError: For other processing errors
     """
     start_time = time.time()
@@ -309,7 +313,7 @@ def _stamp_reference(out: pikepdf.Pdf, page: pikepdf.Page, ref: str) -> None:
         raise
 
 
-def load_csv_mapping(csv_path: str) -> dict[str, dict]:
+def load_csv_mapping(csv_path: str) -> dict:
     """
     Load CSV mapping file.
 
@@ -323,12 +327,13 @@ def load_csv_mapping(csv_path: str) -> dict[str, dict]:
         csv_path: Path to CSV file
 
     Returns:
-        Dict with four mappings:
+        Dict with four mappings and the row count:
         {
             'by_postone': {postone_id: {ref, name}},
             'by_tracking': {tracking: {ref, name}},
             'by_name': {normalized_name: [{ref, name}, ...]},  # distinct packs
-            'refs': {every non-empty REF in the CSV}
+            'refs': {every non-empty REF in the CSV},
+            'rows': int  # usable rows
         }
 
     Raises:

@@ -18,7 +18,14 @@ from PySide6.QtWidgets import QFileDialog, QWidget
 
 from gui import pdf_printing
 from gui.components import show_error
-from gui.tools_state import PRINT_SCOPE, PickedFile, ReferenceFacts, ToolRun, short_path
+from gui.tools_state import (
+    PRINT_SCOPE,
+    PickedFile,
+    ReferenceFacts,
+    ToolRun,
+    counted,
+    short_path,
+)
 from gui.worker import Worker
 from shopify_tool import pdf_processor
 from shopify_tool.pdf_processor import (
@@ -246,10 +253,9 @@ class ReferenceTool(QObject):
             self._open(output)
         # Duplicate or missing REFs stay on screen, in the footer, not in a toast.
         if reference_run_warning(result) is None:
-            pages = result["pages_processed"]
             folder = str(output.parent)
             self.toast.emit(
-                f"{pages:,} label{'' if pages == 1 else 's'} saved to {short_path(folder)}",
+                f"{counted(result['pages_processed'], 'label')} saved to {short_path(folder)}",
                 folder,
             )
 
@@ -268,7 +274,7 @@ class ReferenceTool(QObject):
         elif isinstance(value, InvalidCSVError):
             what_to_do = (
                 "The CSV isn't in the expected format. Expected columns: "
-                "PostOne ID (0), Tracking (1), Reference (2), Name (6)."
+                "PostOne ID (1st), Tracking (2nd), Reference (3rd), Name (7th)."
             )
         elif isinstance(value, MappingError):
             what_to_do = (

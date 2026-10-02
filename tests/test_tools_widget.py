@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QFileDialog
+from test_reference_tool import Pool
 
 from gui import tools_widget
 from gui.setup_state import SessionFacts
@@ -19,16 +20,6 @@ from gui.tools_widget import ToolsWidget
 @pytest.fixture(scope="module", autouse=True)
 def qapp():
     return QApplication.instance() or QApplication([])
-
-
-class Pool:
-    """Captures a worker instead of running it on a thread."""
-
-    def __init__(self):
-        self.started = []
-
-    def start(self, worker):
-        self.started.append(worker)
 
 
 @pytest.fixture
