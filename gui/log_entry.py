@@ -18,6 +18,8 @@ class LogEntry:
     level: int
     source: str
     message: str
+    # The whole traceback when the record carried an exception, else "".
+    traceback: str = ""
 
     @property
     def level_name(self) -> str:

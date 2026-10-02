@@ -35,19 +35,22 @@ class QtLogHandler(logging.Handler, QObject):
         """Turn a LogRecord into a LogEntry and emit it.
 
         An exception's one-line summary rides on the message: the error banner
-        (9.25) sends the operator here for the cause, and a row per record
-        keeps the viewer one line per entry. The full traceback stays in the
-        JSON file log.
+        (9.25) sends the operator here for the cause, and a row that is not
+        open still names it. The whole traceback rides beside it, and the
+        Logs page shows it under the row (phase 6 spec section 4.1).
         """
         message = record.getMessage()
+        trace = ""
         if record.exc_info and record.exc_info[1] is not None:
             etype, value = record.exc_info[:2]
             summary = traceback.format_exception_only(etype, value)[-1].strip()
             message = f"{message} — {summary}"
+            trace = "".join(traceback.format_exception(*record.exc_info)).rstrip()
         entry = LogEntry(
             timestamp=datetime.fromtimestamp(record.created).astimezone(),
             level=record.levelno,
             source=record.name,
             message=message,
+            traceback=trace,
         )
         self.entry_received.emit(entry)
