@@ -53,6 +53,11 @@
   measurement. No Qt page is left in the shell. Its page keeps the rows it is sent and owns its whole view
   state (source, level, search, wrap, follow, open rows); Python keeps the entries, words every row and
   streams rows in batches, never one message a line.
+- Client settings began moving in phase 7 (2026-10-02) with the sixth bridge, `SettingsBridge`, and a sixth
+  view, which lives only while the dialog is open. Three pages moved: General, Orders mapping and Stock
+  mapping. The dialog's frame stays Qt until its last Qt page has moved, because a Qt page cannot be drawn
+  over a web view (ADR 0007). Python owns every value and every sentence of a page, in a draft; the page
+  owns which menu is open.
 
 ## What would reverse it
 

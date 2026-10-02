@@ -1,7 +1,7 @@
 # UI refresh roadmap: from the approved mockups to the app
 
 The owner approved the Claude Design mockups in [`mockups/`](mockups/) on 2026-09-30 (dev-runner run 35).
-This file turns them into nine phases. Each phase is one task, one branch and one PR, and each gets its own
+This file turns them into ten phases. Each phase is one task, one branch and one PR, and each gets its own
 spec and plan at Stage A. The mockups are the brief for every phase (CLAUDE.md, "UI work: the mockup is the
 brief").
 
@@ -28,7 +28,7 @@ To read exact sizes and colours, unpack the bundle. `mockups/README.md` has the 
 
 The order follows dependency: Phase 1 lays the tokens and the shell that every page sits in. Phase 2 builds
 the web kit (the shared CSS) on the one screen that is already web. Each later phase reuses that kit. After
-Phase 2, phases 3 to 6 are independent and can run in any order. 7 to 9 run in sequence.
+Phase 2, phases 3 to 6 are independent and can run in any order. 7 to 10 run in sequence.
 
 | # | Task title (paste into Todoist) | Mockup | Depends on |
 |---|---|---|---|
@@ -41,6 +41,7 @@ Phase 2, phases 3 to 6 are independent and can run in any order. 7 to 9 run in s
 | 7 | UI refresh phase 7: Client settings on the web tier: frame, General, mappings | `client-settings.html` | 2 |
 | 8 | UI refresh phase 8: Client settings on the web tier: Rules and Test rule | `client-settings.html` | 7 |
 | 9 | UI refresh phase 9: Client settings on the web tier: Sets, Weight, Reports, Tag categories | `client-settings.html` (anatomy only) | 8 |
+| 10 | UI refresh phase 10: Client settings on the web tier: the frame | `client-settings.html` | 9 |
 
 ### 1. Shell sidebar and Polaris palette (built in run 35)
 
@@ -151,7 +152,19 @@ tone. Source shows the last module segment, with the full path on hover. Error r
 traceback. Follow tracks the scroll position: it turns off when the operator scrolls up and counts the entries
 that arrive below. Entries stream through the bridge in batches, never one message per line.
 
-### 7. Client settings on the web tier: frame, General, mappings
+### 7. Client settings on the web tier: frame, General, mappings (built in run 53)
+
+Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase7-settings-web-design.md`.
+Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase7-settings-web.md`.
+
+Built as listed below, with these differences. The frame stays Qt, restyled to the mockup: a Qt page cannot
+be drawn over a web view (ADR 0007), so a web frame could not hold the five pages that are still Qt. One
+web view sits in the page area and draws General and both mappings; the frame moves in phase 10. The native
+title bar stands in for the mockup's header strip. Save is live only when a page is unsaved, and the dialog
+stays open after it ("Saved. Applies from the next analysis."). Columns are picked from the file loaded on
+Setup, or one read in the dialog, never typed. Courier names is one row per pattern, under "Shipping method
+contains". Stock mapping has no Additional columns card. The kit gained the page anatomy: `.card-head`,
+`.card-row`, `.hint`, `.problem`, `.chip`.
 
 The modal becomes a `QDialog` that hosts a web view. Search, the grouped left nav with an unsaved dot per page,
 and a Cancel/Save footer that lists the unsaved pages. Each page has the same anatomy: a title and a subtitle,
@@ -163,12 +176,19 @@ state. The pages not ported yet keep their Qt widgets inside the same dialog unt
 
 The rule list with toggles and reordering. The empty state, which replaces today's "No rules defined". Test
 rule. This is the largest single editor (`gui/settings/rules.py`, about 1,500 lines). Split it again at its
-own Stage A if it does not fit one PR.
+own Stage A if it does not fit one PR. The page joins the settings document phase 7 built
+(`gui/web/settings.*`), with its values in a draft (`gui/settings/page_state.py`).
 
 ### 9. Client settings on the web tier: Sets, Weight, Reports, Tag categories
 
 The mockup has no drawing of these pages. They follow the page anatomy from Phase 7, and the spec names each
 place where it had to decide something the mockup does not show.
+
+### 10. Client settings on the web tier: the frame
+
+The nav, the search, the footer and the close guard move into the settings document, and the Qt frame goes.
+It waits for 9: a Qt page cannot be drawn over a web view (ADR 0007), so the frame can be web only once no
+Qt page is left inside it. The header strip the mockup draws stays out; the native title bar does that job.
 
 ## After the roadmap
 
