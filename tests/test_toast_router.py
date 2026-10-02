@@ -83,15 +83,17 @@ def test_on_tools_the_tools_page_draws_it(main_window):
     assert Toast.for_window(main_window) is None
 
 
-def test_on_a_qt_page_the_qt_toast_shows(main_window):
+def test_on_logs_the_logs_page_draws_it(main_window):
     main_window.main_tabs.setCurrentIndex(3)
-    seen = _raised(main_window.setup_bridge)
+    seen = _raised(main_window.logs_widget.bridge)
+    other = _raised(main_window.setup_bridge)
 
-    shown = toast(main_window, "Saved")
+    shown = toast(main_window, "Settings saved")
 
-    assert shown is Toast.for_window(main_window)
-    assert not shown.isHidden()
-    assert seen == []
+    assert seen == [("Settings saved", False)]
+    assert other == []
+    assert shown is None
+    assert Toast.for_window(main_window) is None
 
 
 def test_a_child_of_the_window_is_routed_like_the_window(main_window):

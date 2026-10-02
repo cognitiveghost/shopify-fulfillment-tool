@@ -27,14 +27,9 @@ from shopify_tool.profile_manager import PROD_SERVER_PATH
 from .theme_manager import get_theme_manager
 
 # The sidebar's collapsed state is this PC's, like the theme -- same QSettings
-# pair theme_manager and log_viewer use. A function so tests can point it at
+# pair theme_manager and logs_widget use. A function so tests can point it at
 # an INI file under tmp_path.
 _COLLAPSED_KEY = "shell/sidebar_collapsed"
-
-# The tabs drawn on the web tier. A web page paints the sunken plane to its
-# own edges, so the page area's 5px inset would show as a white ring around
-# it. Each phase that moves a screen adds its index (phase 2 spec section 5.1).
-_WEB_PAGES = frozenset({0, 1, 2, 4})
 
 
 def _shell_settings() -> QSettings:
@@ -163,12 +158,13 @@ class UIManager:
         # The command bar runs edge to edge; its own border-bottom is the divider.
         right_layout.addWidget(self._create_command_bar())
 
-        # The pages keep the 5px inset they were laid out against (phase 1 §5.1).
+        # Every page is a web page and paints the sunken plane to its own
+        # edges, so the page area has no inset (phase 6 spec section 6.3).
         page_area = QWidget()
         self.mw.page_area = page_area
         page_layout = QVBoxLayout(page_area)
         page_layout.setSpacing(5)
-        page_layout.setContentsMargins(5, 5, 5, 5)
+        page_layout.setContentsMargins(0, 0, 0, 0)
 
         # 9.25: a failure waits here, under the command bar, until dismissed.
         logs_index = self._RAIL_LABELS.index("Logs")
@@ -179,9 +175,6 @@ class UIManager:
 
         self._create_tabs()
         page_layout.addWidget(self.mw.main_tabs, 1)
-        # Setup is a web page and tab 0 is current from the start, so no
-        # currentChanged has told the page area yet.
-        self._apply_page_inset(self.mw.main_tabs.currentIndex())
 
         right_layout.addWidget(page_area, 1)
         main_horizontal.addWidget(right_side, 1)
@@ -320,7 +313,6 @@ class UIManager:
 
         self._setup_tab_shortcuts()
 
-        self.mw.main_tabs.currentChanged.connect(self._apply_page_inset)
         # The session chip on every screen but Setup and Tools, whose page
         # heads show it; the analysis age on Results.
         self.mw.main_tabs.currentChanged.connect(
@@ -370,11 +362,6 @@ class UIManager:
 
     def _refresh_overflow(self) -> None:
         self._open_folder_item.setEnabled(bool(getattr(self.mw, "session_path", None)))
-
-    def _apply_page_inset(self, index: int) -> None:
-        """No inset around a web page, the old 5px around a Qt one."""
-        inset = 0 if index in _WEB_PAGES else 5
-        self.mw.page_area.layout().setContentsMargins(inset, inset, inset, inset)
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog.
@@ -666,15 +653,15 @@ class UIManager:
         return tab
 
     def _create_tab4_logs(self):
-        """Create Tab 4: Logs -- one viewer, two sources, no sub-tabs.
+        """Logs: one QWebEngineView, no Qt inside (phase 6 spec).
 
-        Statistics is deleted (9.20) and the two log widgets are one widget
-        (9.21), so there is nothing left to tab between.
+        LogsWidget hosts the view and keeps the entries; everything drawn on
+        this screen is in gui/web/logs.*.
         """
-        from gui.log_viewer import LogViewer
+        from gui.logs_widget import LogsWidget
 
-        self.mw.log_viewer = LogViewer(self.mw)
-        return self.mw.log_viewer
+        self.mw.logs_widget = LogsWidget(self.mw)
+        return self.mw.logs_widget
 
     def _open_session_folder(self):
         """Open session folder in file explorer."""

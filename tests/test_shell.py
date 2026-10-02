@@ -181,8 +181,7 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
 def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
     """1366x768 minus the 200px sidebar and the 48px command bar; no status bar.
 
-    A Qt page keeps the 5px inset it was laid out against (phase 1 spec section
-    5.1); Setup is a web page now and has none.
+    Every page is a web page and has no inset (phase 6 spec section 6.3).
     """
     from PySide6.QtWidgets import QStatusBar
 
@@ -193,10 +192,10 @@ def test_the_shell_leaves_the_page_the_size_later_screens_assume(main_window):
     assert main_window.nav_rail is main_window.sidebar.rail
     assert main_window.command_bar.height() == 48
     assert main_window.findChild(QStatusBar) is None
-    assert main_window.main_tabs.width() == 1166  # Setup: a web page, no inset
-    main_window.main_tabs.setCurrentIndex(3)  # Logs: a Qt page
+    assert main_window.main_tabs.width() == 1166  # Setup
+    main_window.main_tabs.setCurrentIndex(3)  # Logs
     QApplication.processEvents()
-    assert main_window.main_tabs.width() == 1156
+    assert main_window.main_tabs.width() == 1166
 
 
 def test_the_sidebar_footer_names_the_server(main_window, tmp_path):
@@ -460,8 +459,8 @@ def test_collapsing_is_remembered_on_this_pc(tmp_path, monkeypatch):
 
 
 def test_a_web_page_takes_the_page_area_to_its_edges(main_window):
-    """Phase 2 spec section 5.1: a Qt page keeps its 5px inset, a web page has
-    none, or a white ring would show around the grey page."""
+    """Phase 6 spec section 6.3: every page is a web page, so the page area
+    has no inset on any tab, or a white ring would show around the grey page."""
     main_window.resize(1366, 768)
     main_window.main_tabs.setCurrentIndex(1)
     QApplication.processEvents()
@@ -479,8 +478,8 @@ def test_a_web_page_takes_the_page_area_to_its_edges(main_window):
     assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
     main_window.main_tabs.setCurrentIndex(3)
     QApplication.processEvents()
-    assert main_window.page_area.layout().contentsMargins().left() == 5
-    assert main_window.main_tabs.width() == 1156
+    assert main_window.page_area.layout().contentsMargins().left() == 0
+    assert main_window.main_tabs.width() == 1166
 
 
 def test_browse_is_one_web_view(main_window):
@@ -580,3 +579,28 @@ def test_the_tools_banner_reaches_new_session_and_the_recent_menu(main_window, m
     main_window.tools_widget.bridge.newSession()
     main_window.tools_widget.bridge.openRecent()
     assert calls == ["new", "recent"]
+
+
+def test_logs_is_one_web_view(main_window):
+    """Phase 6 spec section 6.3: tab 3 holds the Logs page and nothing else."""
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+
+    from gui.logs_widget import LogsWidget
+
+    tab = main_window.main_tabs.widget(3)
+    assert isinstance(tab, LogsWidget)
+    assert tab is main_window.logs_widget
+    assert not hasattr(main_window, "log_viewer")
+    assert tab.findChildren(QWebEngineView) == [tab.view]
+    margins = tab.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+
+
+def test_what_the_window_logs_reaches_the_logs_buffer(main_window):
+    main_window.log_activity("Report", "Generated: picklist")
+    row = main_window.logs_widget.buffer.rows()[-1]
+    assert (row["stream"], row["source"], row["message"]) == (
+        "Activity",
+        "Report",
+        "Generated: picklist",
+    )

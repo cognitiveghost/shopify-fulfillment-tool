@@ -18,9 +18,9 @@ from gui.actions_handler import ActionsHandler
 from gui.components import show_error, toast
 from gui.components.commandbar import BarState
 from gui.file_handler import FileHandler
+from gui.log_buffer import ACTIVITY, EXECUTION
 from gui.log_entry import LogEntry
 from gui.log_handler import QtLogHandler
-from gui.log_model import LogBufferModel
 from gui.results_bridge import normalize_column_settings
 from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
@@ -160,6 +160,8 @@ class MainWindow(QMainWindow):
         index = self.main_tabs.currentIndex()
         if index == 2:
             bridge = getattr(getattr(self, "session_browser", None), "bridge", None)
+        elif index == 3:
+            bridge = getattr(getattr(self, "logs_widget", None), "bridge", None)
         elif index == 4:
             bridge = getattr(getattr(self, "tools_widget", None), "bridge", None)
         else:
@@ -291,7 +293,7 @@ class MainWindow(QMainWindow):
 
     def _on_log_entry(self, entry):
         """A record from the root logger reaches the Execution source."""
-        self.log_viewer.append(entry, LogBufferModel.EXECUTION)
+        self.logs_widget.append(entry, EXECUTION)
 
     def connect_signals(self):
         """Connects all UI widget signals to their corresponding slots.
@@ -1087,9 +1089,7 @@ class MainWindow(QMainWindow):
             op_type (str): The type of operation (e.g., "Session", "Analysis").
             desc (str): A description of the activity.
         """
-        self.log_viewer.append(
-            LogEntry.activity(op_type, desc), LogBufferModel.ACTIVITY
-        )
+        self.logs_widget.append(LogEntry.activity(op_type, desc), ACTIVITY)
 
     def closeEvent(self, event):
         """Handles the application window being closed.
