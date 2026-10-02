@@ -419,10 +419,8 @@ class ActionsHandler(QObject):
             error (tuple): A tuple containing the exception type, value, and
                 traceback.
         """
-        _exctype, value, tb = error
-        self.log.error(
-            f"An unexpected error occurred in a background task: {value}\n{tb}",
-        )
+        _exctype, value, _tb = error
+        self.log.error("An unexpected error occurred in a background task", exc_info=value)
         show_error(self.mw, "A background task failed", "Details are in Logs.")
 
     def open_settings_window(self, page: str | None = None):

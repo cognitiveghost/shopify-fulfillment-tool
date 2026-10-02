@@ -77,14 +77,19 @@ class LogBuffer:
 
 
 def save_text(rows) -> str:
-    """Save as text: one line per row, then its traceback, indented."""
+    """Save as text: one line per row, then its traceback, indented.
+
+    A message with line breaks keeps its first line on the row; the rest is
+    indented with the traceback, so only a row starts at the margin.
+    """
     lines = []
     for row in rows:
+        first, *rest = row["message"].splitlines() or [""]
         lines.append(
             f"{row['date']} {row['time']}  {row['level'].upper():<8}  "
-            f"{row['stream']:<9}  {row['source']}  {row['message']}"
+            f"{row['stream']:<9}  {row['source']}  {first}"
         )
-        lines.extend(f"    {line}" for line in row["traceback"].splitlines())
+        lines.extend(f"    {line}" for line in rest + row["traceback"].splitlines())
     return "".join(f"{line}\n" for line in lines)
 
 

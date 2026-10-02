@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog
 from test_results_bridge import _eval, _until_js
 
 from gui import logs_widget
-from gui.log_buffer import ACTIVITY, EXECUTION
+from gui.log_buffer import ACTIVITY, CAPACITY, EXECUTION, LogBuffer
 from gui.log_entry import LogEntry
 from gui.logs_bridge import LogsBridge
 from gui.logs_widget import BATCH_MS, LogsWidget
@@ -53,7 +53,9 @@ def bare(monkeypatch):
     monkeypatch.setattr(
         logs_widget,
         "mount_logs_page",
-        lambda view, wrap=False: LogsBridge(view, wrap=wrap),
+        lambda view, wrap=False, capacity=CAPACITY: LogsBridge(
+            view, wrap=wrap, capacity=capacity
+        ),
     )
 
 
@@ -137,6 +139,35 @@ def test_a_second_start_resends_the_whole_backlog(qtbot, logs):
     assert seen == [["one", "two"]]
     qtbot.wait(BATCH_MS * 2)
     assert seen == [["one", "two"]]  # nothing was left pending
+
+
+def test_a_reload_holds_rows_until_the_page_starts_again(qtbot, logs):
+    """A batch reaching the reloaded page before the backlog would make the
+    page skip the backlog as already seen."""
+    logs.bridge.start()
+    logs.append(entry("one"), EXECUTION)  # pending, its timer running
+    seen = _batches(logs.bridge)
+
+    logs.view.loadStarted.emit()
+    logs.append(entry("two"), EXECUTION)
+    qtbot.wait(BATCH_MS * 2)
+    assert seen == []
+
+    logs.bridge.start()
+    assert seen == [["one", "two"]]
+
+
+def test_the_page_is_told_the_buffers_own_capacity(qtbot, window, store, monkeypatch):
+    told = {}
+
+    def mount(view, wrap=False, capacity=CAPACITY):
+        told["capacity"] = capacity
+        return LogsBridge(view, wrap=wrap, capacity=capacity)
+
+    monkeypatch.setattr(logs_widget, "mount_logs_page", mount)
+    monkeypatch.setattr(logs_widget, "LogBuffer", lambda: LogBuffer(capacity=7))
+    qtbot.addWidget(LogsWidget(window))
+    assert told == {"capacity": 7}
 
 
 def test_append_does_not_log(logs, caplog):

@@ -1,8 +1,10 @@
 import logging
+import threading
 
 import pytest
 
 from gui import logs_widget
+from gui.log_buffer import CAPACITY
 from gui.logs_bridge import LogsBridge
 from gui.logs_widget import LogsWidget
 from gui.main_window_pyside import MainWindow
@@ -67,7 +69,9 @@ def logs(qtbot, monkeypatch):
     monkeypatch.setattr(
         logs_widget,
         "mount_logs_page",
-        lambda view, wrap=False: LogsBridge(view, wrap=wrap),
+        lambda view, wrap=False, capacity=CAPACITY: LogsBridge(
+            view, wrap=wrap, capacity=capacity
+        ),
     )
     widget = LogsWidget(None)
     qtbot.addWidget(widget)
@@ -108,5 +112,55 @@ def test_a_root_logger_record_reaches_the_execution_stream(logs):
         )
         assert row["traceback"].startswith("Traceback (most recent call last):")
         assert row["traceback"].endswith("FileNotFoundError: inventory.csv")
+    finally:
+        logging.getLogger().removeHandler(window.log_handler)
+
+
+def test_a_worker_failure_logged_by_its_exception_carries_the_traceback(logs):
+    """How every Worker error slot logs. The exception crossed a signal, so no
+    except block is live: only the object, and the traceback it carries."""
+    window = _JustTheLogging(logs)
+    window.setup_logging()
+    try:
+        try:
+            raise PermissionError("share gone")
+        except PermissionError as error:
+            value = error
+        logging.getLogger("gui.reference_tool").error(
+            "PDF processing failed", exc_info=value
+        )
+
+        row = logs.buffer.rows()[-1]
+        assert row["message"] == "PDF processing failed — PermissionError: share gone"
+        assert row["traceback"].startswith("Traceback (most recent call last):")
+        assert row["traceback"].endswith("PermissionError: share gone")
+    finally:
+        logging.getLogger().removeHandler(window.log_handler)
+
+
+def test_a_record_logged_off_the_gui_thread_is_appended_on_it(qtbot, logs, monkeypatch):
+    """append() starts a QTimer, which only its own thread may do. The handler
+    emits on the thread that logged, so the signal must carry the entry over."""
+    appended_on = []
+    keep = logs.append
+
+    def append(entry, stream):
+        if entry.message == "from a worker":
+            appended_on.append(threading.current_thread())
+        keep(entry, stream)
+
+    monkeypatch.setattr(logs, "append", append)
+    window = _JustTheLogging(logs)
+    window.setup_logging()
+    try:
+        worker = threading.Thread(
+            target=lambda: logging.getLogger("shopify_tool.core").warning("from a worker")
+        )
+        worker.start()
+        worker.join()
+        assert appended_on == []  # nothing ran on the worker's thread
+
+        qtbot.waitUntil(lambda: appended_on != [], timeout=2000)
+        assert appended_on == [threading.main_thread()]
     finally:
         logging.getLogger().removeHandler(window.log_handler)

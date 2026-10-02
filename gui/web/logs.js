@@ -148,7 +148,7 @@ function counts() {
 
 function atEnd() {
   const list = els.list;
-  return list.scrollHeight - list.scrollTop - list.clientHeight < AT_END_PX;
+  return list.scrollHeight - list.scrollTop - list.clientHeight <= AT_END_PX;
 }
 
 function drawSegments(group, chosen, n) {

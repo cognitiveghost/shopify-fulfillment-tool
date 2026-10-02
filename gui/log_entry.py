@@ -1,8 +1,8 @@
-"""One line in the log viewer, whatever stream produced it.
+"""One line on the Logs page, whatever stream produced it.
 
 Activity (what the operator did) and Execution (what the program logged)
 differ by which value lands in `source`, not by shape. Keeping one dataclass
-is what lets the level filter and the error tint work on both sources.
+is what lets the Level filter and the traceback block work on both streams.
 
 Spec: docs/superpowers/specs/2026-09-07-phase9-bundle7-info-becomes-logs-design.md
 """
@@ -20,10 +20,6 @@ class LogEntry:
     message: str
     # The whole traceback when the record carried an exception, else "".
     traceback: str = ""
-
-    @property
-    def level_name(self) -> str:
-        return logging.getLevelName(self.level)
 
     @classmethod
     def activity(cls, op_type: str, desc: str) -> LogEntry:

@@ -257,7 +257,7 @@ sidebar footer does not (New session, the server connection, the keyboard
 shortcuts); the **screen overflow** holds actions scoped to the screen you are
 on.
 
-**Logs** — the destination holding the log viewer, renamed from **Info** when
+**Logs** — the destination holding the Logs page, renamed from **Info** when
 Statistics was deleted and one page was left. Supersedes "Info", which named a
 folder of three unrelated pages.
 
@@ -265,11 +265,14 @@ folder of three unrelated pages.
 the traceback when the record carried an exception. The same fields whichever
 stream produced it.
 
-**Source** — which stream a log entry came from. **Activity** is what the
+**Stream** — which of the two a log entry came from. **Activity** is what the
 operator did (`log_activity`); **Execution** is what the program logged (the
-root logger, through `QtLogHandler`). On the page the Source control picks the
-stream and the From column names it. The Source column shows where in the
-stream the entry came from: the logger's name, or the kind of action.
+root logger, through `QtLogHandler`). On the page the control labelled Source
+picks the stream and the From column names it.
+
+**Source** — where in its stream a log entry came from: the logger's name, or
+the kind of action. The Source column shows it. Not the stream, though the
+control that picks the stream carries the same word on the page.
 
 **Level band** — the Level segment a log entry counts under: Info, Warning or
 Error. A band, not a floor: Warning shows warnings only. Debug falls in Info

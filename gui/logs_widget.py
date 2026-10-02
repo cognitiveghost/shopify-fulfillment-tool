@@ -55,7 +55,7 @@ class LogsWidget(QWidget):
         layout.setSpacing(0)
         self.view = QWebEngineView(self)
         wrap = bool(_settings().value(WRAP_KEY, False, type=bool))
-        self.bridge = mount_logs_page(self.view, wrap=wrap)
+        self.bridge = mount_logs_page(self.view, wrap=wrap, capacity=self.buffer.capacity)
         layout.addWidget(self.view, 1)
 
         self._timer = QTimer(self)
@@ -63,6 +63,7 @@ class LogsWidget(QWidget):
         self._timer.setInterval(BATCH_MS)
         self._timer.timeout.connect(self._flush)
 
+        self.view.loadStarted.connect(self._on_load_started)
         self.bridge.started.connect(self._on_started)
         self.bridge.saveRequested.connect(self._save)
         self.bridge.copyRequested.connect(self._copy)
@@ -82,6 +83,16 @@ class LogsWidget(QWidget):
     def _flush(self) -> None:
         batch, self._pending = self._pending, []
         self.bridge.send(batch)
+
+    def _on_load_started(self) -> None:
+        """The page is loading again (a reload): hold rows until it starts.
+
+        A batch that reached the new page ahead of the backlog would move its
+        last-seen id past every backlog row, and the page would skip them all.
+        """
+        self._started = False
+        self._timer.stop()
+        self._pending = []
 
     def _on_started(self) -> None:
         """The page is listening: everything held so far, as one batch."""

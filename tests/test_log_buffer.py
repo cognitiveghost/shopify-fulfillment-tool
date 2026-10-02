@@ -151,6 +151,15 @@ def test_save_text_is_a_line_per_row_with_the_traceback_indented():
     )
 
 
+def test_save_text_indents_the_later_lines_of_a_message():
+    """Only a row starts at the margin, so the file can be read back by row."""
+    rows = [to_row(0, entry("line one\nline two", source="a.b"), EXECUTION)]
+    assert save_text(rows) == (
+        "2026-09-30 14:00:53.508  INFO      Execution  a.b  line one\n"
+        "    line two\n"
+    )
+
+
 def test_save_text_of_nothing_is_empty():
     assert save_text([]) == ""
 

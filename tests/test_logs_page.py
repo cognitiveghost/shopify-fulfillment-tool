@@ -155,7 +155,7 @@ def _at_end(qtbot, view):
         qtbot,
         view,
         "(function () { const l = document.querySelector('#list');"
-        " return l.scrollHeight - l.scrollTop - l.clientHeight < 4; })()",
+        " return l.scrollHeight - l.scrollTop - l.clientHeight <= 4; })()",
     )
 
 
@@ -802,6 +802,6 @@ def test_a_smaller_window_keeps_a_following_list_at_its_end(qtbot, page):
         qtbot,
         view,
         "(function () { const l = document.querySelector('#list');"
-        " return l.scrollHeight - l.scrollTop - l.clientHeight < 4; })()",
+        " return l.scrollHeight - l.scrollTop - l.clientHeight <= 4; })()",
     )
     assert _eval(qtbot, view, "document.querySelector('#follow').checked") is True

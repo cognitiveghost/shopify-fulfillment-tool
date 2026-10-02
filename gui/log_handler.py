@@ -3,7 +3,7 @@
 This handler runs on whatever thread logged, so it must only emit a signal --
 never touch a widget. That is the whole reason it exists.
 
-It emits a LogEntry, not a formatted line: the viewer filters by level, and a
+It emits a LogEntry, not a formatted line: the Logs page filters by level, and a
 level parsed back out of a formatted string is a level you can get wrong.
 
 Spec: docs/superpowers/specs/2026-09-07-phase9-bundle7-info-becomes-logs-design.md
