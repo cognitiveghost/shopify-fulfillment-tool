@@ -19,7 +19,7 @@ session: 3190 passed, 0 failed; `ruff check .` clean.
    one rule (§5.4), and Test rule as a dialog drawn in the page (§5.5).
 2. `RulesDraft` (`gui/settings/rules_draft.py`), which holds the rules, takes every edit, and words every
    sentence the page draws (§4).
-3. `run_rule_test` (`gui/settings/rule_test.py`), a pure function that runs one rule against the analysis and
+3. `run_rule_test(rule, df)` (`gui/settings/rule_test.py`), a pure function that runs one rule against the analysis and
    words the result (§6), called on a worker by the web host.
 4. An on/off switch per rule, stored as `"enabled": false` and honoured by the engine (§3.3).
 5. Reordering by drag and by arrows, inside a level (§5.2.3).
@@ -37,6 +37,7 @@ Sets, Weight, Reports and Tag categories keep their Qt widgets.
 | How the list shows that every article rule runs before every order rule | Two titled groups in one card, Article rules then Order rules, numbered within each; moving stays inside the group |
 | Drag to reorder | Built, as well as the up and down arrows |
 | One PR or two | One PR. The plan puts Test rule last |
+| The design (§3 to §14) | Approved as written (2026-10-02) |
 
 **What the code does that the mockup does not know** (the facts behind the design):
 
@@ -80,7 +81,7 @@ settings.js ──► bridge.testRule(id) ──► host: Worker(run_rule_test) 
 | File | What it is |
 |---|---|
 | `gui/settings/rules_draft.py` (new) | `RulesDraft`, the action and operator vocabularies' labels, every sentence of §4.6. No Qt import |
-| `gui/settings/rule_test.py` (new) | `run_rule_test(rule, df, session) -> dict` and the frame alignment moved from the Qt dialog (§6). No Qt import |
+| `gui/settings/rule_test.py` (new) | `run_rule_test(rule, df) -> dict` and the frame alignment moved from the Qt dialog (§6). No Qt import |
 | `gui/settings/vocab.py` (new) | `CONDITION_OPERATORS`, `ACTION_TYPES`, `LEGACY_ACTION_TYPES`, moved from `fields.py`, which re-exports them. No Qt import |
 | `gui/settings/contract.py` | `reveal(key) -> bool`, default False (§4.5) |
 | `gui/settings/bridge.py` | Two slots and one signal (§3.2) |
@@ -289,8 +290,8 @@ Hold the order. Join word: "and" under ALL, "or" under ANY.
 
 `testRequested(id)` from the page: the host checks `draft.can_test(id)` (an analysis exists, the rule has a
 condition and no problem), sets `draft.test = {"id": id, "running": True}`, pushes, and starts the worker on a
-deep copy of the rule as edited (`enabled` removed) and `analysis_df`. The result arrives as
-`draft.set_test(result)`; an error as `draft.set_test_error()`. A result for a test that was closed, or for another
+deep copy of the rule as edited (`draft.test_rule(id)`: as `collect()` stores it, minus `priority` and `enabled`) and `analysis_df`. The result arrives as
+`draft.set_test(id, result)`; an error as `draft.set_test_error(id)`. A result for a test that was closed, or for another
 rule than the one now under test, is dropped (the host keeps a run counter).
 
 ```python
@@ -486,7 +487,7 @@ At the dialog's 1100px minimum the column is about 860px: the condition grid fit
 28), and an action's parameters wrap. The Test dialog is `min(580px, 100% − 32px)` wide and its body scrolls
 inside `max-height: calc(100% − 64px)`.
 
-## 6. `run_rule_test(rule, df, session) -> dict` (`gui/settings/rule_test.py`)
+## 6. `run_rule_test(rule, df) -> dict` (`gui/settings/rule_test.py`)
 
 No Qt. Runs on a worker.
 
@@ -494,7 +495,8 @@ No Qt. Runs on a worker.
    not a sample: the count is of all orders. (The 100-row cut is gone; `_whole_order_sample` is deleted.)
 2. Align the frames as `RuleTestDialog._align_frames` does today (move that docstring's reasoning with it).
 3. Matched orders: the `Order_Number`s of `engine.matched_rows`, in frame order. Total: `before["Order_Number"]
-   .nunique()`. Added lines: `len(after) − len(before)`.
+   .nunique()`. Added lines: `len(after) − len(before)`. With no `Order_Number` column each row counts as one
+   order, labelled `#{row number}` (1-based).
 4. Per matched order, up to 5: **Matched on** is `"{field}: {value}"` for each condition field (all steps, in
    order, deduped) that is a column, read from the order's first matched row and joined with " · "; an
    order-level field is computed with the engine's own method (`getattr(engine,
@@ -504,7 +506,7 @@ No Qt. Runs on a worker.
    ", ", and "No change" when nothing differs.
 5. Returns the `test` dict of §4.7 without `name`, `running` and the intro (the draft adds those).
 
-An exception propagates: the host's worker turns it into `set_test_error()` and logs it.
+An exception propagates: the host's worker turns it into `set_test_error(id)` and logs it.
 
 ## 7. `SettingsWebHost` additions
 
