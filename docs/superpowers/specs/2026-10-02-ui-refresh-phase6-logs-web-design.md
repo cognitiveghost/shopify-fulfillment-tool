@@ -219,9 +219,9 @@ Row height is `calc(var(--row-height) - 2px)`: 26px in the compact density. A `-
 each. Hover is `--surface-raised`. Only the badge carries a tone, except that an error row's message is
 `--status-danger`.
 
-With Wrap off, a message is one line and elides. With Wrap on, the list has the class `wrap`: a row is as
-tall as its message (`white-space: pre-wrap`, `word-break: break-word`, 4px above and below) and the cells
-align to the top.
+With Wrap off, a message is one line and elides, line breaks included. With Wrap on, the list has the class
+`wrap`: a row is as tall as its message (`white-space: pre-wrap`, `word-break: break-word`), never shorter
+than an unwrapped row, and the cells align to the top.
 
 ### 5.5 A row with a traceback
 
@@ -244,7 +244,8 @@ checkbox **Follow the newest entry**, the paused note, a spacer, and the hint
 "Click an Error with ▸ to see its traceback".
 
 **Follow** is on at the start. While it is on, the list is scrolled to its end after every batch, every
-filter change and every wrap change.
+filter change, every wrap change and every window resize. The Logs tab is usually hidden while entries
+arrive, and a window made smaller moves the end of the list without a scroll event.
 
 | What happens | Follow | Unseen count |
 |---|---|---|
@@ -371,7 +372,7 @@ page follows the mockup.
 | `LogBuffer`, `to_row`, `band`, `save_text`, `default_filename` | `tests/test_log_buffer.py` (new, no Qt) | Row keys and wording; bands for Debug and Critical; ids; one stream's capacity leaves the other alone; `rows()` and `pick()` order; the file's text with a traceback; the file name with and without a client |
 | `LogEntry`, `QtLogHandler` | `tests/test_log_entry.py`, `tests/test_log_handler.py` | `traceback` defaults to `""`; a record with `exc_info` carries the whole traceback and keeps its summary; one without carries `""` |
 | `LogsBridge` | `tests/test_logs_bridge.py` (new) | It is a `PageBridge`; `send` emits once and not for `[]`; each slot emits its signal; `saveShown` keeps whole numbers only |
-| The page | `tests/test_logs_page.py` (new, real Chromium) | Kit linked first; rows drawn in order with the right cells; From hidden for one stream; counts follow Source and search; Level filters by band; search matches message and source, not traceback; the three empty states and their buttons; expand, collapse, Copy reaches Python; Follow off on scroll up, the unseen count, Jump to newest; Wrap class and `setWrap`; Save sends the shown ids, is disabled with none, and answers Ctrl+S; the page drops the oldest row of a full stream; a message with markup in it is drawn as text; the toast; both themes |
+| The page | `tests/test_logs_page.py` (new, real Chromium) | Kit linked first; rows drawn in order with the right cells; From hidden for one stream; counts follow Source and search; Level filters by band; search matches message and source, not traceback; the three empty states and their buttons; expand, collapse, Copy reaches Python; Follow off on scroll up, the unseen count, Jump to newest; Wrap class and `setWrap`; Save sends the shown ids, is disabled with none, and answers Ctrl+S; the page drops the oldest row of a full stream; a message with markup in it is drawn as text; a message with a line break; a smaller window keeps a following list at its end; the toast; both themes |
 | `LogsWidget` | `tests/test_logs_widget.py` (new) | Rows before `started` leave as one backlog batch; rows after it leave in one batch per timer tick; Save writes `save_text` of the picked rows and toasts the file name; a cancelled dialog writes nothing; `OSError` shows the dialog and no toast; Copy sets the clipboard; Wrap is read from and written to `logs/wrap` |
 | The shell | `tests/test_logs_destination.py` (rewritten), `tests/test_shell.py` | `log_activity` and a root-logger record reach the buffer in their streams; tab 3 is one web view; the page area has no inset on any tab; a toast on tab 3 goes to the Logs page |
 
