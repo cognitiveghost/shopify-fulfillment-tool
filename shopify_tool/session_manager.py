@@ -578,6 +578,60 @@ class SessionManager:
         logger.info(f"Applied {len(applied)} automatic status updates for CLIENT_{client_id}")
         return len(applied)
 
+    def restore_session_fields(self, session_path: str, fields: dict) -> bool:
+        """Put stored fields back exactly: the Browse page's Undo.
+
+        Each key in `fields` is set to its value; a value of None removes the
+        key. Nothing is stamped, so `last_updated` and `status_updated_at` end
+        up as the caller hands them in -- a session that was Stale before the
+        change is Stale again after the Undo.
+
+        Args:
+            session_path (str): Full path to session directory
+            fields (Dict): The fields to restore; None removes a key
+
+        Returns:
+            bool: True if restored successfully
+
+        Raises:
+            SessionManagerError: If a status is invalid, the session is not
+                found, or the write fails
+        """
+        status = fields.get("status")
+        if status is not None and status not in self.VALID_STATUSES:
+            raise SessionManagerError(
+                f"Invalid status: {status}. Must be one of {self.VALID_STATUSES}"
+            )
+
+        session_path_obj = Path(session_path)
+
+        with self._locked_session_info(session_path_obj):
+            session_info = self.get_session_info(session_path)
+            if not session_info:
+                raise SessionManagerError(f"Session not found: {session_path}")
+
+            for key, value in fields.items():
+                if value is None:
+                    session_info.pop(key, None)
+                else:
+                    session_info[key] = value
+
+            try:
+                # Remove computed fields
+                session_info.pop("session_path", None)
+
+                atomic_write_json(
+                    session_path_obj / "session_info.json", session_info, indent=2
+                )
+                self._upsert_index_entry(session_path_obj, session_info)
+                logger.info(f"Session fields restored: {session_path}")
+                return True
+
+            except Exception as e:
+                logger.exception("Failed to restore session fields")
+                raise SessionManagerError(f"Failed to restore session fields: {e}")
+
+
     def update_session_info(self, session_path: str, updates: dict) -> bool:
         """Update session metadata with arbitrary fields.
 

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Browse</title>
+<!-- gui/web_page.py writes theme_css_vars() over the marker before the page
+     loads, then browse.js keeps it current from the bridge. -->
+<style id="theme-vars">/* theme-vars */</style>
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="browse.css">
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="browse.js" defer></script>
+</head>
+<body>
+<main id="browse" data-view="">
+  <section id="panel" class="card" hidden></section>
+  <section id="card" class="card" hidden>
+    <div class="toolbar">
+      <div id="tabs" class="tabs" role="tablist" aria-label="Session status"></div>
+      <span class="spacer"></span>
+      <label id="search-box" class="input search">
+        <input id="search" type="search" placeholder="Search sessions" aria-label="Search sessions">
+      </label>
+      <span id="count" class="count"></span>
+      <button id="refresh" class="btn secondary" type="button" title="Refresh  F5"></button>
+    </div>
+    <div id="head" class="list-head grid">
+      <span class="cell-check"><input id="head-check" type="checkbox" aria-label="Select every session shown"></span>
+      <span>Session</span>
+      <span class="num">Age</span>
+      <span>Status</span>
+      <span class="num">Orders</span>
+      <span class="num">Items</span>
+      <span class="num">Blocked</span>
+      <span>Packing</span>
+      <span>Comment</span>
+    </div>
+    <div id="selbar" class="selbar" hidden>
+      <span class="cell-check"><input id="sel-check" type="checkbox" aria-label="Clear selection" title="Clear selection"></span>
+      <span id="sel-count" class="sel-count"></span>
+      <button id="sel-open" class="btn secondary compact" type="button">Open</button>
+      <div class="menu-anchor">
+        <button id="status-button" class="btn secondary compact" type="button" aria-haspopup="menu" aria-expanded="false"></button>
+        <div id="status-menu" class="menu status-menu" role="menu" hidden></div>
+      </div>
+      <div class="menu-anchor">
+        <button id="comment-button" class="btn secondary compact" type="button" aria-haspopup="dialog" aria-expanded="false">Comment…</button>
+        <div id="comment-pop" class="popover comment-pop" role="dialog" aria-labelledby="comment-title" hidden>
+          <div class="comment-body">
+            <span id="comment-title" class="comment-title"></span>
+            <textarea id="comment-text" class="comment-text" rows="3" placeholder="Visible to everyone who opens this client"></textarea>
+            <span id="comment-note" class="comment-note"></span>
+          </div>
+          <div class="comment-foot">
+            <button id="comment-cancel" class="btn secondary" type="button">Cancel</button>
+            <button id="comment-save" class="btn primary" type="button">Save</button>
+          </div>
+        </div>
+      </div>
+      <button id="sel-export" class="btn secondary compact" type="button">Export combined stock</button>
+    </div>
+    <div id="list" class="list"></div>
+    <div id="footer" class="footer"></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden>
+  <span id="toast-text"></span>
+  <button id="toast-undo" class="toast-action" type="button" hidden>Undo</button>
+  <button id="toast-dismiss" class="toast-close" type="button" aria-label="Dismiss"></button>
+</div>
+</body>
+</html>

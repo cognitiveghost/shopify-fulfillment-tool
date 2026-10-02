@@ -153,6 +153,15 @@ def test_opening_a_session_without_analysis_drops_the_previous_orders(main_windo
     assert main_window.analysis_results_df is None
 
 
+def test_opening_a_session_without_analysis_lands_on_setup(main_window):
+    path = main_window.session_manager.create_session("acme")
+    main_window.main_tabs.setCurrentIndex(2)
+
+    main_window.load_existing_session(path)
+
+    assert main_window.main_tabs.currentIndex() == 0
+
+
 def test_a_new_session_starts_without_the_previous_orders(main_window):
     first = _session_with_analysis(main_window, _orders("Fulfillable"))
     main_window.load_existing_session(first)
@@ -350,7 +359,13 @@ def test_a_comment_that_fails_to_save_is_reported(qapp, monkeypatch):
     monkeypatch.setattr(browser_module, "show_error", lambda *a, **k: told.append(a))
 
     widget = browser_module.SessionBrowserWidget(manager)
-    widget._on_comments_changed("/share/Sessions/CLIENT_M/2026-07-01_1", "call courier")
+    widget.sessions_data = [
+        {
+            "session_name": "2026-07-01_1",
+            "session_path": "/share/Sessions/CLIENT_M/2026-07-01_1",
+        }
+    ]
+    widget.bridge.setComment(["2026-07-01_1"], "call courier")
 
     assert told
 

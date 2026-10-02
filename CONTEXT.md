@@ -12,10 +12,10 @@ for decisions.
 ## Rendering
 
 **Qt tier** — the part of the UI drawn by PySide6 widgets and styled with QSS.
-Everything except the two heavy views.
+Everything except the screens that have moved to the web tier.
 
 **Web tier** — the part drawn in a `QWebEngineView`, styled with real CSS.
-Analysis Results and Session Setup today; ADR 0016 lets each other screen move
+Analysis Results, Session Setup and Browse today; ADR 0016 lets each other screen move
 in its own task. See ADR 0001 for why Results moved first.
 
 **Renderer** — either tier, when the point is that there are two of them and
@@ -172,7 +172,8 @@ hollow when the system derived it. A painted disc or ring, never a character.
 state. Never a **glyph**, which is a vendored Lucide drawing, and never a
 character. Where a screen shows eight states, shape replaces the **mark**:
 authorship is constant per state and rides in the state table, so nothing is
-lost by not drawing it.
+lost by not drawing it. No screen of this app draws a shape since Browse moved
+to the web tier; a session row's **badge** carries a dot instead.
 
 **Chip** — the one status silhouette: an outlined pill carrying a mark and a
 label. Distinguished from a **filter chip**, which is interactive and
@@ -181,7 +182,9 @@ status of its own.
 
 **Badge** — the web tier's status pill: a tinted fill, no outline and no mark.
 Authorship, which the mark carries on a chip, is said in the pane's verdict
-instead. Not a **chip**, which stays the Qt tier's silhouette.
+instead. A session row's badge adds a dot whose fill says how far the session
+has come: hollow before packing starts, half while it is in flight, solid once
+it is closed. Not a **chip**, which stays the Qt tier's silhouette.
 
 **Selection ring** — the closed rectangle around a selected table row. Its
 horizontal sides come from QSS, its two end caps from a delegate, because
@@ -205,8 +208,7 @@ resolves it.
 **Selection bar** — the bar that exists only while orders are checked. It takes
 the table header's place, counts the checked orders and holds every verb that
 acts on more than one. It never floats over rows. The results document has
-one; the Session Browser has a Qt one of the same composition and no shared
-code.
+one and the Browse page has one; they share the kit's parts and no script.
 
 **Bulk popover** — one surface carrying a whole bulk action: what it will
 affect, the choice it needs, and the verb naming the consequence. It replaces
@@ -346,6 +348,15 @@ file shared with another tool.
 the four stored statuses plus packing progress and idle time. Distinguished
 from **stored status**, the four values `SessionManager.VALID_STATUSES`
 accepts and a person can set.
+
+**Browse state** — the map Python builds for the Browse page: which view
+shows, and one record per session with its age, badge, counts, packing and
+attention reason already worded. The page filters, counts and groups those
+records and decides no fact about a session.
+
+**Needs attention** — the group Browse draws first: sessions that are paused,
+stale or incomplete, and sessions still in flight that carry blocked orders.
+Each row's reason is named in the group's heading.
 
 **Session state** — the session's analysis as saved in
 `analysis/current_state.pkl`. Every edit rewrites it whole, from one PC's copy.

@@ -34,7 +34,7 @@ _COLLAPSED_KEY = "shell/sidebar_collapsed"
 # The tabs drawn on the web tier. A web page paints the sunken plane to its
 # own edges, so the page area's 5px inset would show as a white ring around
 # it. Each phase that moves a screen adds its index (phase 2 spec section 5.1).
-_WEB_PAGES = frozenset({0, 1})
+_WEB_PAGES = frozenset({0, 1, 2})
 
 
 def _shell_settings() -> QSettings:
@@ -638,22 +638,20 @@ class UIManager:
             self.refresh_setup()
 
     def _create_tab3_session_browser(self):
-        """Create Tab 3: Session Browser
+        """Browse: one QWebEngineView, no Qt inside (phase 4 spec).
 
-        Reuses existing SessionBrowserWidget.
+        SessionBrowserWidget hosts the view and does the loading and the
+        writes; everything drawn on this screen is in gui/web/browse.*.
         """
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(5)
-        layout.setContentsMargins(5, 5, 5, 5)
-
-        # REUSE existing SessionBrowserWidget
         from gui.session_browser_widget import SessionBrowserWidget
 
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         self.mw.session_browser = SessionBrowserWidget(self.mw.session_manager, self.mw)
-
-        layout.addWidget(self.mw.session_browser, 1)  # Full stretch
-
+        layout.addWidget(self.mw.session_browser, 1)
         return tab
 
     def _create_tab4_logs(self):

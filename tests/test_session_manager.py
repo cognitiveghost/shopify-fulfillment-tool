@@ -492,3 +492,62 @@ class TestManualStatusFlag:
         session_path = session_manager.create_session("M")
         session_manager.update_session_status(session_path, "completed")
         assert "status_manually_set" not in session_manager.get_session_info(session_path)
+
+
+class TestRestoreSessionFields:
+    """The Browse page's Undo (phase 4 spec section 6.3)."""
+
+    @staticmethod
+    def _stored(session_path):
+        return json.loads((Path(session_path) / "session_info.json").read_text())
+
+    def test_sets_values_and_removes_the_keys_given_as_none(self, session_manager):
+        path = session_manager.create_session("M")
+        session_manager.update_session_status(path, "archived", manual=True)
+
+        session_manager.restore_session_fields(
+            path, {"status": "active", "status_manually_set": None, "comments": "kept"}
+        )
+
+        stored = self._stored(path)
+        assert stored["status"] == "active"
+        assert "status_manually_set" not in stored
+        assert stored["comments"] == "kept"
+
+    def test_it_stamps_nothing_and_leaves_every_other_key_alone(self, session_manager):
+        path = session_manager.create_session("M")
+        session_manager.update_session_info(path, {"comments": "before"})
+        before = self._stored(path)
+
+        session_manager.restore_session_fields(path, {"comments": "after"})
+
+        assert self._stored(path) == {**before, "comments": "after"}
+
+    def test_removing_a_key_that_is_not_there_is_fine(self, session_manager):
+        path = session_manager.create_session("M")
+        before = self._stored(path)
+        session_manager.restore_session_fields(path, {"status_manually_set": None})
+        assert self._stored(path) == before
+
+    def test_the_index_entry_follows(self, session_manager):
+        path = session_manager.create_session("M")
+        session_manager.update_session_status(path, "archived")
+
+        session_manager.restore_session_fields(path, {"status": "active"})
+
+        index_path = Path(path).parent / SessionManager.INDEX_FILENAME
+        entries = json.loads(index_path.read_text())
+        assert entries[0]["status"] == "active"
+
+    def test_an_unknown_status_is_refused_and_nothing_is_written(self, session_manager):
+        path = session_manager.create_session("M")
+        before = self._stored(path)
+        with pytest.raises(SessionManagerError):
+            session_manager.restore_session_fields(path, {"status": "frozen"})
+        assert self._stored(path) == before
+
+    def test_a_folder_that_is_not_a_session_raises(self, session_manager, tmp_path):
+        ghost = tmp_path / "ghost"
+        ghost.mkdir()
+        with pytest.raises(SessionManagerError):
+            session_manager.restore_session_fields(str(ghost), {"comments": "x"})

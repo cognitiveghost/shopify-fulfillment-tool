@@ -481,3 +481,35 @@ def test_a_web_page_takes_the_page_area_to_its_edges(main_window):
     QApplication.processEvents()
     assert main_window.page_area.layout().contentsMargins().left() == 5
     assert main_window.main_tabs.width() == 1156
+
+
+def test_browse_is_one_web_view(main_window):
+    """Phase 4 spec section 7: tab 2 holds the Browse page and nothing else."""
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+
+    tab = main_window.main_tabs.widget(2)
+    assert tab.findChildren(QWebEngineView) == [main_window.session_browser.view]
+    margins = tab.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+
+
+def test_browse_takes_the_page_area_to_its_edges(main_window):
+    main_window.resize(1366, 768)
+    main_window.main_tabs.setCurrentIndex(2)
+    QApplication.processEvents()
+    margins = main_window.page_area.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (0, 0, 0, 0)
+    assert main_window.main_tabs.width() == 1166
+
+
+def test_f5_reloads_the_session_list_on_browse_only(main_window, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        main_window.session_browser, "refresh_sessions", lambda: calls.append("refresh")
+    )
+    main_window.main_tabs.setCurrentIndex(3)
+    main_window._refresh_browse()
+    assert calls == []
+    main_window.main_tabs.setCurrentIndex(2)
+    main_window._refresh_browse()
+    assert calls == ["refresh"]
