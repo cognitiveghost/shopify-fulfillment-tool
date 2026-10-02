@@ -1,0 +1,175 @@
+/* The Logs page (phase 6 spec section 5). Layout, and what only this page
+   draws: the row grid, the traceback block and the footer. Every colour is a
+   token from theme_css_vars(). A divider is --border-subtle, the edge of a
+   control is --border (ADR 0018). */
+
+#logs {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px 20px;
+}
+#logs > .card {
+  flex: 1;
+  min-width: 780px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- toolbar ------------------------------------------------------------- */
+
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.toolbar .segmented { align-self: center; flex: none; }
+.seg-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; }
+.seg-dot.warning { background: var(--status-warning); }
+.seg-dot.error { background: var(--status-danger-dot); }
+.segment-count.alert { color: var(--status-danger); }
+.search { flex: 1 1 200px; min-width: 150px; max-width: 320px; }
+.count {
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* --- the row grid: the header row and every row share it ----------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: 24px 112px 84px 84px 170px minmax(0, 1fr);
+  align-items: center;
+}
+.one-stream .grid { grid-template-columns: 24px 112px 84px 170px minmax(0, 1fr); }
+.one-stream .cell-from { display: none; }
+.grid > * { min-width: 0; padding: 0 8px; }
+.grid > .cell-chev {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text-secondary);
+}
+
+.list-head {
+  flex: none;
+  height: 30px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* --- rows ---------------------------------------------------------------- */
+
+.list { flex: 1; min-height: 0; overflow: auto; }
+.row {
+  height: calc(var(--row-height) - 2px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.row:hover, .row.open { background: var(--surface-raised); }
+.row.open { border-bottom-color: transparent; }
+.row.has-tb { cursor: pointer; }
+.row.has-tb:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.cell-time, .cell-from { color: var(--text-secondary); white-space: nowrap; }
+.cell-from { font-size: var(--type-caption-size); }
+.cell-level { display: flex; }
+/* The line box is taller than the text, so overflow: hidden does not cut an
+   underscore off the mono face. */
+.cell-source, .cell-message {
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row.error .cell-message { color: var(--status-danger); }
+
+.wrap .row {
+  height: auto;
+  min-height: calc(var(--row-height) - 2px);
+  align-items: start;
+  padding: 3px 0 2px;
+}
+.wrap .cell-message { white-space: pre-wrap; word-break: break-word; }
+
+/* --- traceback: indented to the Source column ---------------------------- */
+
+.tb {
+  padding: 0 12px 10px 312px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.one-stream .tb { padding-left: 228px; }
+.tb-box {
+  border: 1px solid var(--border);
+  border-radius: var(--kit-radius);
+  background: var(--surface-sunken);
+}
+.tb-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
+.tb-title { font-weight: 700; color: var(--text); }
+.tb-text {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-size: var(--type-caption-size);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- empty state --------------------------------------------------------- */
+
+#empty { flex: 1; min-height: 0; }
+#empty .state-title { font-size: var(--type-heading-size); }
+.empty-actions { display: flex; gap: 8px; }
+
+/* --- footer -------------------------------------------------------------- */
+
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 36px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.tick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.paused { display: flex; align-items: center; gap: 6px; }
+.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }

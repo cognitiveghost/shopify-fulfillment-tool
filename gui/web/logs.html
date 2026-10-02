@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Logs</title>
+<!-- gui/web_page.py writes theme_css_vars() over the marker before the page
+     loads, then logs.js keeps it current from the bridge. -->
+<style id="theme-vars">/* theme-vars */</style>
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="logs.css">
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="logs.js" defer></script>
+</head>
+<body>
+<main id="logs">
+  <section id="card" class="card">
+    <div class="toolbar">
+      <div id="streams" class="segmented" role="radiogroup" aria-label="Source"></div>
+      <div id="bands" class="segmented" role="radiogroup" aria-label="Level"></div>
+      <label id="search-box" class="input search">
+        <input id="search" type="search" placeholder="Search messages and sources" aria-label="Search messages and sources">
+      </label>
+      <span class="spacer"></span>
+      <span id="count" class="count"></span>
+      <button id="save" class="btn secondary" type="button" title="Save shown entries as text  Ctrl+S"></button>
+    </div>
+    <div class="list-head grid">
+      <span class="cell-chev"></span>
+      <span>Time</span>
+      <span>Level</span>
+      <span class="cell-from">From</span>
+      <span>Source</span>
+      <span>Message</span>
+    </div>
+    <div id="list" class="list"></div>
+    <div id="empty" class="state" hidden>
+      <p id="empty-title" class="state-title"></p>
+      <p id="empty-text" class="state-text"></p>
+      <div class="empty-actions">
+        <button id="clear-search" class="btn secondary" type="button">Clear search</button>
+        <button id="show-all" class="btn secondary" type="button">Show all levels and sources</button>
+      </div>
+    </div>
+    <div class="footer">
+      <label class="tick"><input id="wrap" type="checkbox">Wrap long messages</label>
+      <label class="tick"><input id="follow" type="checkbox" checked>Follow the newest entry</label>
+      <span id="paused" class="paused" hidden>
+        <span id="paused-text"></span>
+        <span>·</span>
+        <button id="jump" class="link" type="button">Jump to newest</button>
+      </span>
+      <span class="spacer"></span>
+      <span>Click an Error with ▸ to see its traceback</span>
+    </div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden>
+  <span id="toast-text"></span>
+  <button id="toast-dismiss" class="toast-close" type="button" aria-label="Dismiss"></button>
+</div>
+</body>
+</html>
