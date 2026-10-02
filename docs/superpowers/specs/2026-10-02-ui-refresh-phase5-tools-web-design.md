@@ -176,8 +176,8 @@ def tools_state(*, client: str, session: SessionFacts | None, reference: Referen
     "folder": {"text": "…\\2026-09-30_1\\reference_labels", "title": "<full path>", "muted": False},
     "open_pdf": True,
     "print": print_block,
-    "run": {} | {"label": "Stamping labels", "done": 40, "total": 120, "percent": 66,
-                 "can_cancel": True, "cancelling": False},
+    "run": {} | {"label": "Stamping labels", "count": "40 of 120", "bar": True, "percent": 66,
+                 "cancel": {"label": "Cancel", "enabled": True, "title": ""}},
     "reason": "120 pages, 120 CSV rows.", "tone": "",                        # "" | "danger" | "warning"
     "can_run": True,
     "print_button": {"label": "Print…", "title": "Process labels first", "enabled": False},
@@ -189,8 +189,8 @@ def tools_state(*, client: str, session: SessionFacts | None, reference: Referen
     "folder": {"text": "…\\barcodes\\DHL", "title": "<full path>", "muted": False},
     "qr": False, "open_pdf": True,
     "print": print_block,
-    "run": {} | {"label": "Writing 120 barcode labels…", "done": 0, "total": 0, "percent": 0,
-                 "can_cancel": False, "cancelling": False},
+    "run": {} | {"label": "Writing 120 barcode labels…", "count": "", "bar": False, "percent": 0,
+                 "cancel": {}},
     "reason": "Saves to …\\barcodes\\DHL.", "tone": "",
     "can_run": True,
     "print_button": {"label": "Print", "title": "Send to Zebra ZD421", "enabled": True},
@@ -239,9 +239,14 @@ one.
 | a result | "{matched} of {pages} labels matched." With unmatched pages: "{matched} of {pages} labels matched, {unmatched} unmatched." With `name_matched`: that sentence, then " {n} matched by name only." | |
 | ready | "{pages} pages, {rows} CSV rows." | |
 
-**Run.** `percent` runs across both counted phases so the bar never goes back: `done` for `READING`,
-`total + done` for `STAMPING`, `2 * total` for `SAVING`, each times 100 and floor-divided by `2 * total`.
-`can_cancel` is true while the label is `READING` or `STAMPING` and `cancelling` is false.
+**Run.** The running footer is worded here, so the page decides nothing. A run with a count
+(`total > 0`): `label` is the phase ("Saving…" for `SAVING`), `count` is "{done} of {total}" ("" while
+saving), `bar` is true, and `percent` runs across both counted phases so the bar never goes back: `done` for
+`READING`, `total + done` for `STAMPING`, `2 * total` for `SAVING`, each times 100 and floor-divided by
+`2 * total`. `cancel` is the button: its label is "Cancel", or "Cancelling…" while cancelling; it is enabled
+while the phase is `READING` or `STAMPING` and the run is not cancelling; its title is "Saving can't be
+cancelled" while saving. A run with no count (Barcode): `label` is the sentence, `count` is "", `bar` is
+false and `cancel` is `{}`.
 
 **Print.** `target_ok` is true in Driver mode, and in Raw ZPL mode when the target is not blank.
 `enabled = has_output and not quiet and not locked and target_ok`.
@@ -260,18 +265,21 @@ one.
 `can_run = not quiet and not locked and analysed and cur is not None and bool(cur.count)`.
 
 `list`: with `cur`, its name and "{count} Fulfillable" ("Unreadable" when the count is `None`). Without:
-`placeholder` is "Reading packing lists…" while loading, else "No packing lists". `lists` carries each list's
-name, its count as text ("—" when `None`) and whether it is the selected one. With no session `lists` is `[]`.
+`placeholder` is "Reading packing lists…" while the first load is running, "Choose a packing list" when
+there are lists and none is selected, else "No packing lists". `lists` carries each list's name, its count as
+text ("—" when `None`) and whether it is the selected one. With no session `lists` is `[]`. A reload while
+lists are on screen changes nothing until its result arrives.
 
 | situation, first match | reason | tone |
 |---|---|---|
 | no session, or running | "" | |
-| loading | "Reading packing lists…" | |
+| loading, with no lists yet | "Reading packing lists…" | |
 | no lists | "No packing lists in this session yet. Generate one on Results, then Refresh." | |
 | not analysed | "This session has no analysis loaded. Run it on Setup." | |
+| no list selected | "Choose a packing list." | |
 | `cur.count is None` | "This packing list couldn't be read. Details are in Logs." | danger |
 | `cur.count == 0` | "No Fulfillable orders in this list." | |
-| a result with `failed` | "{labels} labels written, {failed} order numbers couldn't be encoded. Details are in Logs." | warning |
+| a result with `failed` | "{labels} labels written, {failed} order numbers couldn't be encoded. Details are in Logs." ("1 label", "1 order number") | warning |
 | a result with `qr_failed` | "Barcode labels written. The QR labels failed; details are in Logs." | warning |
 | `cur.has_labels` | "Generating again replaces the labels in {short folder}." | |
 | otherwise | "Saves to {short folder}." With `qr` ticked: "Saves to {short folder}, with QR labels." | |
@@ -423,15 +431,11 @@ fields and its checkboxes are `disabled`.
 
 Each print button carries its `title`. Both cards draw their own primary.
 
-**Running** (`run` is not empty):
-
-- with a count (`total > 0`): a column (flex 1, gap 6) holding "{label} — {done} of {total}" in bold with
-  the two numbers in mono, and a track (4px high, radius 2, `--border-subtle`) whose fill (`--accent-fill`)
-  is `percent` wide; then a secondary **Cancel** → `cancel()`. Cancel is `disabled` unless `can_cancel`, reads
-  "Cancelling…" while `cancelling`, and its title is "Saving can't be cancelled" when the label is "Saving".
-- with no count: the label in bold, alone. No track and no button.
-
-"Saving" draws as "Saving…" with no count.
+**Running** (`run` is not empty): a column (flex 1, gap 6) holding `run.label` in bold, followed by " — "
+and `run.count` in mono when there is a count; under it, when `run.bar`, a track (4px high, radius 2,
+`--border-subtle`) whose fill (`--accent-fill`) is `run.percent` wide. Then, when `run.cancel` is not empty,
+a secondary button with its label, its title and its enabled flag → `cancel()`. A Barcode run is therefore
+its sentence alone: no track and no button.
 
 ### 5.7 What quiet and locked disable
 
@@ -474,8 +478,8 @@ action. A new toast replaces the old one.
 **Keyboard.** Every control is a real `<button>`, `<input>` or `<label>`, in document order: the banner's
 buttons, then each card top to bottom. Left and Right move focus between the two mode segments; Space and
 Enter choose. Nothing traps focus. The page is redrawn whole on each state, so the focused control is found
-again by its `data-key`, as on Setup; a field being typed in keeps its text because a state arrives only
-after its own `change`.
+again by its `data-key`, as on Setup. A state can arrive while a field is being typed in (the other card's
+run pushes several a second), so the redraw puts the typed text, and a text field's caret, back.
 
 **Dropped files.** The page cancels `dragover` and `drop` on the document, so a file dropped on it does not
 navigate the view. It loads nothing.
@@ -488,16 +492,22 @@ Holds the view, the bridge, `ReferenceTool` and `BarcodeTool`.
 
 - `bridge` is public: `MainWindow.web_toast` reads it.
 - Signals `new_session_requested` and `recent_requested` repeat the bridge's two banner requests.
+- `ToolsWidget(main_window, parent=None, pool=None)`: `pool` is handed to both tools (§6.2).
 - `sync()`: reads `mw.session_path`. When it differs from the last one seen, it calls `set_session(path)` on
-  both tools. Then it pushes. It touches no file, so it is safe to call often.
+  both tools, and when the widget is visible and there is a session it calls `barcode.reload()`. Then it
+  pushes. With an unchanged session it touches no file, so it is safe to call often.
 - `_push()`: builds `tools_state` from both tools' `facts()`, the two `PrintFacts`, `mw.current_client_id`,
   and `mw.session_facts` (the session is `None` with no `session_path`, and `SessionFacts(name, None, None)`
   when the facts are for another session), and calls `bridge.set_state`.
-- `showEvent`: reads the installed printers (`installed_printers()`, which is
-  `QPrinterInfo.availablePrinterNames()`), calls `sync()`, and with a session calls `barcode.reload()`.
+- The installed printers (`installed_printers()`, which is `QPrinterInfo.availablePrinterNames()`) and both
+  tools' saved settings are read when the widget is built and again on every `showEvent`, and kept; a push
+  reads neither.
+- `showEvent`: reads those, calls `sync()`, and with a session calls `barcode.reload()`.
 - Each tool's `changed` is connected to `_push`.
-- `printChanged(tool, key, value)`: loads that tool's settings, applies `apply_print_edit`, and when the
-  result is not `None` saves it and pushes.
+- `printChanged(tool, key, value)`: applies `apply_print_edit` to that tool's kept settings, and when the
+  result is not `None` keeps it, saves it and pushes.
+- The widget and both tools call `gui.pdf_printing` through the module (`pdf_printing.print_pdf(...)`), so
+  the `print_settings_store` fixture patches one place.
 - A tool's `toast(text, folder)`: when this widget is visible and `folder` is not empty, the widget keeps
   the folder and calls `bridge.raise_toast(text, True)`. Otherwise it calls `gui.components.toast(self,
   text)`, so the page that is showing draws it.
@@ -576,15 +586,18 @@ class BarcodeTool(QObject):
     def print_labels(self, what: str) -> None              # "labels" | "qr"
 ```
 
-- `read_packing_lists` runs on a worker. It lists `<session>/packing_lists/*.xlsx`, sorted by stem. For each
+- `read_packing_lists` runs on a worker. It lists `<session>/packing_lists/*.xlsx`, sorted by stem, leaving
+  out Excel's lock files (`~$name.xlsx`). For each
   it reads the order numbers with `barcode_processor.packing_list_orders(path)`, through a module cache
   keyed by path and checked against the file's mtime (the pattern in CLAUDE.md, "File caching"). The count
   is the number of distinct `Order_Number`s of `fulfillable_only(analysis_df)` that are in the list; it is
   `None` when the file cannot be read (logged) or there is no analysis frame. `has_labels` and `has_qr` are
   whether `barcode_pdf_path` and `qr_pdf_path` exist. A missing `packing_lists` folder gives `[]`.
-- `reload`: with no session it does nothing. Otherwise it sets `loading`, emits `changed`, and starts the
-  worker. A result that arrives after the session changed is dropped. The selection is kept when a list of
-  that name is still there, else it moves to the first list. `analysed` is whether `analysis()` is not `None`.
+- `reload`: with no session, or while a load is running, it does nothing. Otherwise it sets `loading`,
+  emits `changed`, and starts the worker. A result that arrives after the session changed is dropped. The
+  selection is kept when a list of that name is still there, else it moves to the first list. `analysed` is
+  whether `analysis()` is not `None`. A load that fails outright (the share is gone) clears `loading` and
+  calls `show_error(host, "The packing lists weren't read", "Check the server connection, then Refresh.")`.
 - `choose(name)`: selects a list that exists; drops the last result.
 - `start`: does nothing unless a list with a count above 0 is selected and no run is going. When the list's
   barcode PDF exists it asks first, with today's `ConfirmDialog` ("Replace barcodes for {list}?", "The
@@ -592,11 +605,12 @@ class BarcodeTool(QObject):
   the list's rows (`fulfillable_only(analysis())` filtered to the list's order numbers) on the GUI thread,
   as today, and starts a `Worker` on `generate_list_labels(rows, folder, name, qr=…, progress=…)`. The
   folder and the name are arguments, so a session change during the run cannot redirect it.
-- The `progress(label)` callback emits a signal; the slot stores `ToolRun(label)` and emits `changed`.
-- On a result: stores it for the list it names, updates that list's `has_labels` and `has_qr`, opens the
-  barcode PDF and the QR PDF when `open_pdf` is on, and emits the toast: "{labels} barcode labels saved to
-  {short folder}", ending " QR labels too." when a QR PDF was written. A result with `failed` or `qr_failed`
-  also shows in the footer (§4.4). A result with no PDF and no failure cannot happen (`start` needs a count).
+- The run starts as `ToolRun("Preparing {n} labels…")`. The `progress(label)` callback emits a signal; the
+  slot stores `ToolRun(label)` and emits `changed`.
+- On a result: when it is for the open session, stores it and updates that list's `has_labels` and `has_qr`.
+  It opens the barcode PDF and the QR PDF when `open_pdf` is on, and, when a barcode PDF was written, emits
+  the toast: "{labels} barcode labels saved to {short folder}", followed by ". QR labels too." when a QR PDF
+  was written. A result with `failed` or `qr_failed` also shows in the footer (§4.4).
 - On an error: `show_error(host, "The barcode PDF wasn't created", "Details are in Logs.")`.
 - `print_labels`: `print_pdf(host, path, load_print_settings("barcode_generator"))` with the selected
   list's barcode or QR PDF path.
@@ -649,8 +663,8 @@ file and a run that has begun saving always finishes.
 def packing_list_orders(xlsx_path) -> frozenset
 ```
 
-The `Order_Number` values of a packing list workbook, as `pd.read_excel` gives them. It raises `ValueError`
-when the sheet has no `Order_Number` column.
+The `Order_Number` values of a packing list workbook, as `pd.read_excel` gives them, without blanks. It
+raises `ValueError` when the sheet has no `Order_Number` column.
 
 ```python
 def generate_list_labels(orders_df, folder, list_stem, *, qr=False,
@@ -693,6 +707,7 @@ today run in the completion slot:
 | A reference run fails | The window's error banner, under the command bar: "The PDF wasn't processed" and what to do |
 | A reference run found duplicate or missing REFs | The footer reason, in the warning tone, until an input changes |
 | A packing list cannot be read | The list's count reads "Unreadable"; the reason says so; Generate is disabled |
+| The packing lists cannot be listed at all | The window's error banner: "The packing lists weren't read" |
 | Some order numbers cannot be encoded | The footer reason, in the warning tone; the labels that could be written are |
 | The barcode PDF cannot be rendered | The window's error banner: "The barcode PDF wasn't created" |
 | The QR PDF cannot be rendered | The footer reason, in the warning tone; the barcode PDF stands |
@@ -735,7 +750,7 @@ offer Tools without a client.
 | Seam | File | Asserts |
 |---|---|---|
 | State: session and banner | `test_tools_state.py` (new) | With no session: `banner` true, `session` `{}`, both cards `quiet`, folder "Session folder" muted. With one: the meta before and after analysis |
-| State: reference | `test_tools_state.py` | Each row of §4.3's reason table from the facts that select it, with its tone; `can_run`; the row `meta`s and problems; the short path; `percent` and `can_cancel` for each label |
+| State: reference | `test_tools_state.py` | Each row of §4.3's reason table from the facts that select it, with its tone; `can_run`; the row `meta`s and problems; the short path; the run's label, count, percent and Cancel for each phase |
 | State: barcode | `test_tools_state.py` | Each row of §4.4's reason table; `list` and `lists` for loading, none, one selected, an unreadable one; `can_run`; `qr_button` present and enabled on its rule |
 | State: print | `test_tools_state.py` | Both modes' `printers`, `printer`, `help` and tone; a saved name that is not installed is listed; the four `summary` forms; the print button's label, title and `enabled` for every row of §4.3 |
 | Print edits | `test_tools_state.py` | `apply_print_edit` for every key; `printer` writes the mode's own key; clamping and rounding; a bad key, a bad mode, a bool as a number and a number as a bool give `None`; the input dict is not changed |
@@ -752,7 +767,7 @@ offer Tools without a client.
 | Page: footer | `test_tools_page.py` | The reason and its two tones; the primaries' `disabled` and their slots; the print buttons' label, title and `disabled`; a counted run shows the line, the fill's width and Cancel, with Cancel disabled on "Saving"; an uncounted run shows the label alone; a locked card's controls are disabled and the other card's are not |
 | Page: toast | `test_tools_page.py` | `raise_toast(text, True)` shows the text and Open folder, which calls `openFolder`; with false the action is hidden; `#toast-dismiss` hides it |
 | Kit | `test_web_kit.py` | On the sheet, in both themes: the select's edge, its open edge, its disabled fill and dashed edge, the placeholder's colour; a disabled unchecked segment's colour; a disabled field's fill |
-| Shell | `test_shell.py`, `test_toast_router.py`, `test_commandbar_states.py` | Tab 4 holds a `ToolsWidget` with a web view; the inset is 0 on Tools; the bar's chip is hidden on Tools and shown on Browse; `refresh_setup` reaches `tools_widget.sync`; on Tools a `toast(window, …)` reaches the tools bridge; the banner's requests reach New session and the recent menu |
+| Shell | `test_shell.py`, `test_toast_router.py` | Tab 4 holds a `ToolsWidget` with a web view; the inset is 0 on Tools; the bar's chip is hidden on Tools and shown on Browse; `refresh_setup` reaches `tools_widget.sync`; on Tools a `toast(window, …)` reaches the tools bridge; the banner's requests reach New session and the recent menu |
 | Printing | `test_pdf_printing.py` | The reworded sentence |
 | Lint | `test_style_literals_guard.py` | unchanged: `gui/` scans clean with the three new assets |
 
