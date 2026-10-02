@@ -1,9 +1,12 @@
 import logging
+import threading
 
-from PySide6.QtCore import Qt
+import pytest
 
-from gui.log_model import COL_LEVEL, COL_MESSAGE, COL_SOURCE, LogBufferModel
-from gui.log_viewer import LogViewer
+from gui import logs_widget
+from gui.log_buffer import CAPACITY
+from gui.logs_bridge import LogsBridge
+from gui.logs_widget import LogsWidget
 from gui.main_window_pyside import MainWindow
 from gui.ui_manager import UIManager
 
@@ -27,8 +30,6 @@ def test_no_statistics_page_is_reachable():
 
 
 def test_the_statistics_update_methods_are_gone():
-    from gui.main_window_pyside import MainWindow
-
     for gone in (
         "update_statistics_tab",
         "_clear_statistics_view",
@@ -37,11 +38,20 @@ def test_the_statistics_update_methods_are_gone():
         assert not hasattr(MainWindow, gone), f"{gone} should be deleted"
 
 
+def test_the_qt_log_viewer_is_gone():
+    """Phase 6 spec section 7: the page replaced the widget, its model, proxy and follow state."""
+    import importlib.util
+
+    for gone in ("gui.log_viewer", "gui.log_model", "gui.log_filter", "gui.log_follow"):
+        assert importlib.util.find_spec(gone) is None, f"{gone} should be deleted"
+    assert not hasattr(UIManager, "_apply_page_inset")
+
+
 class _JustTheLogging:
-    """A MainWindow reduced to the two methods that route into the viewer.
+    """A MainWindow reduced to the methods that route into the Logs widget.
 
     Building a real MainWindow drags in the profile manager, the server path
-    and a full UI; these two methods only ever touch `self.log_viewer`, so
+    and a full UI; these methods only ever touch `self.logs_widget`, so
     binding them to a stub tests the routing and nothing else.
     """
 
@@ -49,46 +59,108 @@ class _JustTheLogging:
     _on_log_entry = MainWindow._on_log_entry
     setup_logging = MainWindow.setup_logging
 
-    def __init__(self, viewer):
-        self.log_viewer = viewer
+    def __init__(self, widget):
+        self.logs_widget = widget
 
 
-def test_log_activity_appends_to_the_activity_source(qapp):
-    viewer = LogViewer()
-    _JustTheLogging(viewer).log_activity("Report", "Generated: picklist")
-
-    viewer.set_source(LogBufferModel.ACTIVITY)
-    assert viewer.proxy.rowCount() == 1
-    assert viewer.proxy.index(0, COL_SOURCE).data(Qt.DisplayRole) == "Report"
-    assert viewer.proxy.index(0, COL_MESSAGE).data(Qt.DisplayRole) == (
-        "Generated: picklist"
+@pytest.fixture
+def logs(qtbot, monkeypatch):
+    """A LogsWidget with no page loaded: these tests read its buffer."""
+    monkeypatch.setattr(
+        logs_widget,
+        "mount_logs_page",
+        lambda view, wrap=False, capacity=CAPACITY: LogsBridge(
+            view, wrap=wrap, capacity=capacity
+        ),
     )
+    widget = LogsWidget(None)
+    qtbot.addWidget(widget)
+    return widget
 
 
-def test_a_root_logger_record_reaches_the_execution_source(qapp):
-    """The whole wiring, end to end: logging call -> handler -> viewer.
+def test_log_activity_appends_to_the_activity_stream(logs):
+    _JustTheLogging(logs).log_activity("Report", "Generated: picklist")
+
+    rows = logs.buffer.rows()
+    assert [(row["stream"], row["source"], row["message"]) for row in rows] == [
+        ("Activity", "Report", "Generated: picklist")
+    ]
+
+
+def test_a_root_logger_record_reaches_the_execution_stream(logs):
+    """The whole wiring, end to end: logging call -> handler -> buffer.
 
     test_log_handler covers emit() in isolation and this file covers
     log_activity, but nothing proved the signal is actually connected -- the
     one edge where a rename would fail silently, because a log line that
     never arrives looks exactly like a quiet program.
     """
-    viewer = LogViewer()
-    window = _JustTheLogging(viewer)
+    window = _JustTheLogging(logs)
     window.setup_logging()
     try:
-        logging.getLogger("shopify_tool.engine").error("stock file vanished")
+        try:
+            raise FileNotFoundError("inventory.csv")
+        except FileNotFoundError:
+            logging.getLogger("shopify_tool.engine").exception("stock file vanished")
 
-        assert viewer.model.current_source() == LogBufferModel.EXECUTION
-        assert viewer.proxy.rowCount() >= 1
-        row = 0
-        assert viewer.proxy.index(row, COL_LEVEL).data(Qt.DisplayRole) == "ERROR"
+        row = logs.buffer.rows()[-1]
+        assert row["stream"] == "Execution"
+        assert row["level"] == "Error"
+        assert row["source"] == "shopify_tool.engine"
         assert (
-            viewer.proxy.index(row, COL_SOURCE).data(Qt.DisplayRole)
-            == "shopify_tool.engine"
+            row["message"] == "stock file vanished — FileNotFoundError: inventory.csv"
         )
-        assert viewer.proxy.index(row, COL_MESSAGE).data(Qt.DisplayRole) == (
-            "stock file vanished"
+        assert row["traceback"].startswith("Traceback (most recent call last):")
+        assert row["traceback"].endswith("FileNotFoundError: inventory.csv")
+    finally:
+        logging.getLogger().removeHandler(window.log_handler)
+
+
+def test_a_worker_failure_logged_by_its_exception_carries_the_traceback(logs):
+    """How every Worker error slot logs. The exception crossed a signal, so no
+    except block is live: only the object, and the traceback it carries."""
+    window = _JustTheLogging(logs)
+    window.setup_logging()
+    try:
+        try:
+            raise PermissionError("share gone")
+        except PermissionError as error:
+            value = error
+        logging.getLogger("gui.reference_tool").error(
+            "PDF processing failed", exc_info=value
         )
+
+        row = logs.buffer.rows()[-1]
+        assert row["message"] == "PDF processing failed — PermissionError: share gone"
+        assert row["traceback"].startswith("Traceback (most recent call last):")
+        assert row["traceback"].endswith("PermissionError: share gone")
+    finally:
+        logging.getLogger().removeHandler(window.log_handler)
+
+
+def test_a_record_logged_off_the_gui_thread_is_appended_on_it(qtbot, logs, monkeypatch):
+    """append() starts a QTimer, which only its own thread may do. The handler
+    emits on the thread that logged, so the signal must carry the entry over."""
+    appended_on = []
+    keep = logs.append
+
+    def append(entry, stream):
+        if entry.message == "from a worker":
+            appended_on.append(threading.current_thread())
+        keep(entry, stream)
+
+    monkeypatch.setattr(logs, "append", append)
+    window = _JustTheLogging(logs)
+    window.setup_logging()
+    try:
+        worker = threading.Thread(
+            target=lambda: logging.getLogger("shopify_tool.core").warning("from a worker")
+        )
+        worker.start()
+        worker.join()
+        assert appended_on == []  # nothing ran on the worker's thread
+
+        qtbot.waitUntil(lambda: appended_on != [], timeout=2000)
+        assert appended_on == [threading.main_thread()]
     finally:
         logging.getLogger().removeHandler(window.log_handler)

@@ -635,8 +635,8 @@ class SettingsWindow(QDialog):
             )
 
     def _on_save_settings_error(self, error):
-        _exctype, value, tb = error
-        logger.error(f"Failed to save settings: {value}\n{tb}")
+        _exctype, value, _tb = error
+        logger.error("Failed to save settings", exc_info=value)
         self._is_saving = False
         self.save_button.setEnabled(True)
         self.save_button.setText("Save")

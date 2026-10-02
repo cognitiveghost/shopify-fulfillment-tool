@@ -49,6 +49,10 @@
 - Tools moved in phase 5 (2026-10-02) with the fourth bridge, `ToolsBridge`, and a fourth view, on the same
   measurement. Its page owns only which menu and which Label setup fold is open; Python owns every fact
   about a tool.
+- Logs moved in phase 6 (2026-10-02) with the fifth bridge, `LogsBridge`, and a fifth view, on the same
+  measurement. No Qt page is left in the shell. Its page keeps the rows it is sent and owns its whole view
+  state (source, level, search, wrap, follow, open rows); Python keeps the entries, words every row and
+  streams rows in batches, never one message a line.
 
 ## What would reverse it
 

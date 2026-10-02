@@ -309,8 +309,8 @@ class BarcodeTool(QObject):
             self.toast.emit(text, folder)
 
     def _on_error(self, error_info) -> None:
-        _exctype, value, traceback_str = error_info
-        logger.error(f"Barcode generation failed: {value}\n{traceback_str}")
+        _exctype, value, _traceback_str = error_info
+        logger.error("Barcode generation failed", exc_info=value)
         show_error(self._host, "The barcode PDF wasn't created", "Details are in Logs.")
 
     def _on_finished(self) -> None:

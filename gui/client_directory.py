@@ -87,8 +87,8 @@ class ClientDirectory(QObject):
         QThreadPool.globalInstance().start(worker)
 
     def _on_refresh_error(self, error) -> None:
-        _exctype, value, tb = error
-        logger.error(f"Client directory refresh failed: {value}\n{tb}")
+        _exctype, value, _tb = error
+        logger.error("Client directory refresh failed", exc_info=value)
         show_error(
             self.parent(), "The client list didn't refresh", "Details are in Logs."
         )

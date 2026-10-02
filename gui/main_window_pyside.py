@@ -18,9 +18,9 @@ from gui.actions_handler import ActionsHandler
 from gui.components import show_error, toast
 from gui.components.commandbar import BarState
 from gui.file_handler import FileHandler
+from gui.log_buffer import ACTIVITY, EXECUTION
 from gui.log_entry import LogEntry
 from gui.log_handler import QtLogHandler
-from gui.log_model import LogBufferModel
 from gui.results_bridge import normalize_column_settings
 from gui.selection_helper import SelectionHelper
 from gui.ui_manager import UIManager
@@ -160,6 +160,8 @@ class MainWindow(QMainWindow):
         index = self.main_tabs.currentIndex()
         if index == 2:
             bridge = getattr(getattr(self, "session_browser", None), "bridge", None)
+        elif index == 3:
+            bridge = getattr(getattr(self, "logs_widget", None), "bridge", None)
         elif index == 4:
             bridge = getattr(getattr(self, "tools_widget", None), "bridge", None)
         else:
@@ -279,7 +281,7 @@ class MainWindow(QMainWindow):
 
         Initializes a `QtLogHandler` that emits a `LogEntry` for every record
         the root logger dispatches, routed to the Logs destination's
-        Execution source.
+        Execution stream.
         """
         self.log_handler = QtLogHandler()
         # Root logger level is owned by shared.logger.setup_logging
@@ -290,8 +292,8 @@ class MainWindow(QMainWindow):
         self.log_handler.entry_received.connect(self._on_log_entry)
 
     def _on_log_entry(self, entry):
-        """A record from the root logger reaches the Execution source."""
-        self.log_viewer.append(entry, LogBufferModel.EXECUTION)
+        """A record from the root logger reaches the Execution stream."""
+        self.logs_widget.append(entry, EXECUTION)
 
     def connect_signals(self):
         """Connects all UI widget signals to their corresponding slots.
@@ -628,8 +630,8 @@ class MainWindow(QMainWindow):
             show_error(self, "The client couldn't be switched", "Details are in Logs.")
 
     def _on_client_data_load_error(self, error):
-        _exctype, value, tb = error
-        logger.error(f"Error loading client data: {value}\n{tb}")
+        _exctype, value, _tb = error
+        logger.error("Error loading client data", exc_info=value)
         show_error(self, "The client couldn't be switched", "Details are in Logs.")
 
     def schedule_results_columns_save(self, settings: dict):
@@ -1087,9 +1089,7 @@ class MainWindow(QMainWindow):
             op_type (str): The type of operation (e.g., "Session", "Analysis").
             desc (str): A description of the activity.
         """
-        self.log_viewer.append(
-            LogEntry.activity(op_type, desc), LogBufferModel.ACTIVITY
-        )
+        self.logs_widget.append(LogEntry.activity(op_type, desc), ACTIVITY)
 
     def closeEvent(self, event):
         """Handles the application window being closed.

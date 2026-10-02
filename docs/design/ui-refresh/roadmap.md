@@ -134,7 +134,16 @@ per card, saved per PC, with the printer target shown for Raw ZPL. With no sessi
 and the fields go quiet. While a tool runs, its footer shows the count and Cancel. When it finishes, a toast
 names the folder and offers Open folder. A bad mapping CSV is flagged under its own field.
 
-### 6. Logs to the web tier
+### 6. Logs to the web tier (built in run 50)
+
+Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase6-logs-web-design.md`.
+Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase6-logs-web.md`.
+
+Built as listed below, with these differences. The counts are on Level only, as the mockup draws them. Save
+as text opens a save dialog first, then the toast names the file. The count of entries below is of the
+entries the filter shows. Any row with a traceback expands, whatever its level. The chevron swaps its glyph
+and does not turn. The session chip stays in the bar on Logs, as on Browse: the mockup has no page head. No
+Qt page is left, so the page area's inset rule is deleted.
 
 Two single-select segmented controls, Source (All, Activity, Execution) and Level (All, Info, Warning,
 Error), each with a live count. Search, and Save as text. Dense 26px rows, where only Warning and Error get a

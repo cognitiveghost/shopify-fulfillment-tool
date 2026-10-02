@@ -86,3 +86,48 @@ def test_a_record_without_an_exception_keeps_its_message(qapp):
     handler.emit(_record())
 
     assert received[0].message == "careful now"
+
+
+def _raised(exc_info):
+    return logging.LogRecord(
+        name="gui.actions_handler",
+        level=logging.ERROR,
+        pathname=__file__,
+        lineno=1,
+        msg="Save failed",
+        args=(),
+        exc_info=exc_info,
+    )
+
+
+def test_the_whole_traceback_rides_beside_the_summary(qapp):
+    import sys
+
+    handler = QtLogHandler()
+    received = []
+    handler.entry_received.connect(received.append)
+    try:
+        raise PermissionError("share is read-only")
+    except PermissionError:
+        record = _raised(sys.exc_info())
+
+    handler.emit(record)
+
+    trace = received[0].traceback
+    assert trace.startswith("Traceback (most recent call last):")
+    assert 'raise PermissionError("share is read-only")' in trace
+    assert trace.endswith("PermissionError: share is read-only")
+    # The summary stays on the message: a row that is not open still names the cause.
+    assert received[0].message == "Save failed — PermissionError: share is read-only"
+
+
+def test_a_record_without_an_exception_has_no_traceback(qapp):
+    handler = QtLogHandler()
+    received = []
+    handler.entry_received.connect(received.append)
+
+    handler.emit(_record())
+    handler.emit(_raised((None, None, None)))
+
+    assert [entry.traceback for entry in received] == ["", ""]
+    assert received[1].message == "Save failed"

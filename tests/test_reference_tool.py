@@ -460,11 +460,13 @@ def test_a_second_run_is_not_cancelled_by_the_first_ones_cancel(host, files, ope
         (RuntimeError("boom"), "Details are in Logs."),
     ],
 )
-def test_a_failed_run_says_what_to_do(host, files, errors, error, what):
+def test_a_failed_run_says_what_to_do(host, files, errors, error, what, caplog):
     tool, _pool = _ready(host, files)
     toasts = _caught(tool.toast)
     tool.start()
     tool._on_error((type(error), error, "trace"))
+    # The exception itself is logged, so Logs can show its traceback.
+    assert caplog.records[-1].exc_info[1] is error
     tool._on_finished()
     assert errors == [("The PDF wasn't processed", what)]
     assert toasts == []

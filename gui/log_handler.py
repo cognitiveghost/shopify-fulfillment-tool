@@ -3,7 +3,7 @@
 This handler runs on whatever thread logged, so it must only emit a signal --
 never touch a widget. That is the whole reason it exists.
 
-It emits a LogEntry, not a formatted line: the viewer filters by level, and a
+It emits a LogEntry, not a formatted line: the Logs page filters by level, and a
 level parsed back out of a formatted string is a level you can get wrong.
 
 Spec: docs/superpowers/specs/2026-09-07-phase9-bundle7-info-becomes-logs-design.md
@@ -35,19 +35,22 @@ class QtLogHandler(logging.Handler, QObject):
         """Turn a LogRecord into a LogEntry and emit it.
 
         An exception's one-line summary rides on the message: the error banner
-        (9.25) sends the operator here for the cause, and a row per record
-        keeps the viewer one line per entry. The full traceback stays in the
-        JSON file log.
+        (9.25) sends the operator here for the cause, and a row that is not
+        open still names it. The whole traceback rides beside it, and the
+        Logs page shows it under the row (phase 6 spec section 4.1).
         """
         message = record.getMessage()
+        trace = ""
         if record.exc_info and record.exc_info[1] is not None:
             etype, value = record.exc_info[:2]
             summary = traceback.format_exception_only(etype, value)[-1].strip()
             message = f"{message} — {summary}"
+            trace = "".join(traceback.format_exception(*record.exc_info)).rstrip()
         entry = LogEntry(
             timestamp=datetime.fromtimestamp(record.created).astimezone(),
             level=record.levelno,
             source=record.name,
             message=message,
+            traceback=trace,
         )
         self.entry_received.emit(entry)

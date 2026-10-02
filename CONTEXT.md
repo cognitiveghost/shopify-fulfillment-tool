@@ -15,8 +15,9 @@ for decisions.
 Everything except the screens that have moved to the web tier.
 
 **Web tier** — the part drawn in a `QWebEngineView`, styled with real CSS.
-Analysis Results, Session Setup, Browse and Tools today; ADR 0016 lets each other
-screen move in its own task. See ADR 0001 for why Results moved first.
+Every screen today: Session Setup, Analysis Results, Browse, Logs and Tools. The
+Client settings window is still Qt; ADR 0016 lets it move in its own tasks. See
+ADR 0001 for why Results moved first.
 
 **Renderer** — either tier, when the point is that there are two of them and
 one palette must serve both. Never used for `QSvgRenderer`; say
@@ -256,21 +257,30 @@ sidebar footer does not (New session, the server connection, the keyboard
 shortcuts); the **screen overflow** holds actions scoped to the screen you are
 on.
 
-**Logs** — the destination holding the log viewer, renamed from **Info** when
+**Logs** — the destination holding the Logs page, renamed from **Info** when
 Statistics was deleted and one page was left. Supersedes "Info", which named a
 folder of three unrelated pages.
 
-**Log entry** — one line in the viewer: time, level, source, message. The same
-four fields whichever stream produced it.
+**Log entry** — one line on the Logs page: time, level, source, message, and
+the traceback when the record carried an exception. The same fields whichever
+stream produced it.
 
-**Source** — which stream a log entry came from. **Activity** is what the
-operator did (`log_activity`, ten call sites); **Execution** is what the
-program logged (the root logger, through `QtLogHandler`). One viewer, one
-switch, never two widgets.
+**Stream** — which of the two a log entry came from. **Activity** is what the
+operator did (`log_activity`); **Execution** is what the program logged (the
+root logger, through `QtLogHandler`). On the page the control labelled Source
+picks the stream and the From column names it.
 
-**Follow-tail** — the viewer scrolling itself to the newest entry. On only
-while the user is already at the bottom; it stops the moment they scroll up and
-counts what arrived since.
+**Source** — where in its stream a log entry came from: the logger's name, or
+the kind of action. The Source column shows it. Not the stream, though the
+control that picks the stream carries the same word on the page.
+
+**Level band** — the Level segment a log entry counts under: Info, Warning or
+Error. A band, not a floor: Warning shows warnings only. Debug falls in Info
+and Critical in Error.
+
+**Follow-tail** — the Logs page scrolling itself to the newest entry, which is
+at the bottom. On only while the operator is already at the end; it stops the
+moment they scroll up or open a traceback, and counts what arrived since.
 
 **Connection state** — whether this PC can currently reach the file server.
 One boolean, from `ProfileManager.is_network_available`, carried by one

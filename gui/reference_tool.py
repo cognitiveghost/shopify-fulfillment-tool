@@ -260,12 +260,12 @@ class ReferenceTool(QObject):
             )
 
     def _on_error(self, error_info) -> None:
-        _exctype, value, traceback_str = error_info
+        _exctype, value, _traceback_str = error_info
         if isinstance(value, ProcessingCancelled):
             logger.info("Reference label processing cancelled")
             self.toast.emit("Processing cancelled", "")
             return
-        logger.error(f"PDF processing failed: {value}\n{traceback_str}")
+        logger.error("PDF processing failed", exc_info=value)
         if isinstance(value, InvalidPDFError):
             what_to_do = (
                 "The PDF couldn't be read. Check that it isn't damaged, "
