@@ -133,11 +133,12 @@ def qapp():
 
 @pytest.fixture
 def print_settings_store(monkeypatch):
-    """PrintOptions reads and writes QSettings("ShopifyFulfillmentTool",
-    "Printing") -- the developer's real per-PC printer choice. Tests that build
-    a real PrintOptions, or a widget holding one, get an in-memory store keyed
-    by scope instead."""
-    from gui.components import print_options
+    """The Tools page reads and writes QSettings("ShopifyFulfillmentTool",
+    "Printing") -- the developer's real per-PC printer choice. Tests that edit
+    a print setting through ToolsWidget get an in-memory store keyed by scope
+    instead. ToolsWidget and both tools call gui.pdf_printing through the
+    module, so patching it here reaches them."""
+    from gui import pdf_printing
 
     defaults = {
         "print_mode": "driver",
@@ -150,12 +151,12 @@ def print_settings_store(monkeypatch):
     }
     store = {}
     monkeypatch.setattr(
-        print_options,
+        pdf_printing,
         "load_print_settings",
         lambda scope: dict(store.get(scope, defaults)),
     )
     monkeypatch.setattr(
-        print_options,
+        pdf_printing,
         "save_print_settings",
         lambda scope, settings: store.__setitem__(scope, dict(settings)),
     )

@@ -34,7 +34,7 @@ _COLLAPSED_KEY = "shell/sidebar_collapsed"
 # The tabs drawn on the web tier. A web page paints the sunken plane to its
 # own edges, so the page area's 5px inset would show as a white ring around
 # it. Each phase that moves a screen adds its index (phase 2 spec section 5.1).
-_WEB_PAGES = frozenset({0, 1, 2})
+_WEB_PAGES = frozenset({0, 1, 2, 4})
 
 
 def _shell_settings() -> QSettings:
@@ -321,11 +321,11 @@ class UIManager:
         self._setup_tab_shortcuts()
 
         self.mw.main_tabs.currentChanged.connect(self._apply_page_inset)
-        # The session chip on every screen but Setup, whose page head shows it;
-        # the analysis age on Results.
+        # The session chip on every screen but Setup and Tools, whose page
+        # heads show it; the analysis age on Results.
         self.mw.main_tabs.currentChanged.connect(
             lambda index: self.mw.command_bar.set_screen(
-                chip=index != 0, meta=index == 1
+                chip=index not in (0, 4), meta=index == 1
             )
         )
 
@@ -480,6 +480,17 @@ class UIManager:
         )
         mw.run_analysis_button.setEnabled(state["run"]["enabled"])
         mw.setup_bridge.set_state(state)
+        self.refresh_tools()
+
+    def refresh_tools(self) -> None:
+        """Let the Tools page follow the window's session.
+
+        Called from refresh_setup(): every client, session and connection
+        change already passes through it. ToolsWidget.sync() touches no file.
+        """
+        tools = getattr(self.mw, "tools_widget", None)
+        if tools is not None:
+            tools.sync()
 
     def refresh_recent_sessions(self, client_id: str):
         """Fill the command bar's session picker — call this whenever the
@@ -790,13 +801,10 @@ class UIManager:
         self.mw.results_bridge.raise_toast("Summary copied")
 
     def _create_tab5_tools(self):
-        """Create Tab 5: Tools
+        """Tools: one QWebEngineView, no Qt inside (phase 5 spec).
 
-        Reference labels and Barcode labels as two cards, side by side, that
-        stack when the page is narrow. See gui/tools_widget.py.
-
-        Returns:
-            QWidget: the Tools page
+        ToolsWidget hosts the view and the two tools behind it; everything
+        drawn on this screen is in gui/web/tools.*.
         """
         from gui.tools_widget import ToolsWidget
 

@@ -76,7 +76,7 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
         show_error(
             parent,
             "Nothing was printed",
-            "Choose a Raw ZPL printer under Print options, then print again.",
+            "Choose a printer under Print mode, then print again.",
         )
         return False
     width_mm = settings.get("raw_zpl_label_width_mm", 0.0)

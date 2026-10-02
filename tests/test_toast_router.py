@@ -69,6 +69,20 @@ def test_on_browse_the_browse_page_draws_it(main_window):
     assert Toast.for_window(main_window) is None
 
 
+def test_on_tools_the_tools_page_draws_it(main_window):
+    main_window.main_tabs.setCurrentIndex(4)
+    seen = _raised(main_window.tools_widget.bridge)
+    other = _raised(main_window.setup_bridge)
+
+    shown = toast(main_window, "Settings saved")
+
+    # No action: the router's toast never offers Open folder.
+    assert seen == [("Settings saved", False)]
+    assert other == []
+    assert shown is None
+    assert Toast.for_window(main_window) is None
+
+
 def test_on_a_qt_page_the_qt_toast_shows(main_window):
     main_window.main_tabs.setCurrentIndex(3)
     seen = _raised(main_window.setup_bridge)

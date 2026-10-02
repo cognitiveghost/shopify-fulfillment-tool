@@ -119,7 +119,9 @@ class TestPrintPdfRawZplMode:
 
         assert result is False
         assert warning.called
-        assert "Print options" in warning.call_args.args[2]
+        assert warning.call_args.args[2] == (
+            "Choose a printer under Print mode, then print again."
+        )
         assert not called.called
 
     def test_calls_print_pdf_raw_zpl_with_target_and_rotate(

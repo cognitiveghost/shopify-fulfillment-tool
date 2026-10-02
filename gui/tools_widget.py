@@ -1,127 +1,188 @@
-"""The Tools destination: Reference labels and Barcode labels as two cards.
+"""The Tools screen: Reference labels and Barcode labels (phase 5 spec section 6.1).
 
-Side by side from 1180px of page width -- at 1366 the page is 1310, and two
-637px cards with 12px gaps and margins are exactly that -- and stacked below
-it, by flipping the one row's direction. Never a QStackedLayout: that would
-build each tool twice.
-
-See docs/superpowers/specs/2026-09-10-phase9-bundle8-tools-inner-tabs-design.md.
+A widget that hosts one web view. Everything drawn on this screen is in
+gui/web/tools.*; what it draws is built by gui/tools_state.py from the two
+tools' facts (gui/reference_tool.py, gui/barcode_tool.py). This widget wires
+the page's requests to the tools and pushes the state.
 """
 
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QBoxLayout, QFrame, QScrollArea, QVBoxLayout, QWidget
+import logging
+from datetime import datetime
+from pathlib import Path
 
-from gui.barcode_generator_widget import BarcodeGeneratorWidget
-from gui.components import Card
-from gui.reference_labels_widget import ReferenceLabelsWidget
-from shared.theme import set_button_role
+from PySide6.QtCore import QThreadPool, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtPrintSupport import QPrinterInfo
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-_STACK_BELOW = 1180
+from gui import pdf_printing
+from gui.barcode_tool import BarcodeTool
+from gui.components import toast
+from gui.reference_tool import ReferenceTool
+from gui.setup_state import SessionFacts
+from gui.tools_bridge import TOOLS, mount_tools_page
+from gui.tools_state import PRINT_SCOPE, PrintFacts, apply_print_edit, tools_state
+
+logger = logging.getLogger(__name__)
 
 
-def primary_holder(
-    reference_ready: bool, barcode_ready: bool, current: str | None
-) -> str | None:
-    """Which card's action is the page's one primary, if any.
-
-    Exactly one ready card holds it. With both ready, the current holder keeps
-    it, so a button never changes weight under the cursor because the *other*
-    card became ready. With neither ready there is none: a disabled primary is
-    a primary nobody can press.
-    """
-    if reference_ready and barcode_ready:
-        return current or "reference"
-    if reference_ready:
-        return "reference"
-    if barcode_ready:
-        return "barcode"
-    return None
+def installed_printers() -> tuple[str, ...]:
+    """The printers this PC lists, by name."""
+    return tuple(QPrinterInfo.availablePrinterNames())
 
 
 class ToolsWidget(QWidget):
-    """The Tools page: two tool cards in one row that stacks when narrow."""
+    """The Tools screen's widget: one web view and the two tools behind it.
 
-    def __init__(self, main_window, parent=None):
-        """
-        Initialize Tools widget.
+    Signals:
+        new_session_requested: the no-session banner's New session
+        recent_requested: the no-session banner's Open recent
+    """
 
-        Args:
-            main_window: MainWindow instance for accessing session data
-            parent: Parent widget
-        """
+    new_session_requested = Signal()
+    recent_requested = Signal()
+
+    def __init__(self, main_window, parent=None, pool: QThreadPool | None = None):
+        """main_window: read for session_path, session_facts, current_client_id
+        and analysis_results_df. pool: where the tools' workers start; the
+        global pool when None."""
         super().__init__(parent)
         self.mw = main_window
-        self._init_ui()
+        self._session_path: str | None = None
+        self._printers: tuple[str, ...] = ()
+        self._settings: dict[str, dict] = {}
+        self._toast_folder = ""
 
-        # Readiness is each card's own verdict -- its action button's enabled
-        # state, set by logic this page does not touch. Watching EnabledChange
-        # covers every path that sets it, including disable-while-running.
-        self._primary = None
-        self._action_buttons = {
-            "reference": self.reference_labels_widget.process_btn,
-            "barcode": self.barcode_generator_widget.generate_btn,
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.view = QWebEngineView(self)
+        self.bridge = mount_tools_page(self.view)
+        layout.addWidget(self.view, 1)
+
+        self.reference = ReferenceTool(self, pool)
+        self.barcode = BarcodeTool(
+            self, lambda: getattr(self.mw, "analysis_results_df", None), pool
+        )
+        for tool in (self.reference, self.barcode):
+            tool.changed.connect(self._push)
+            tool.toast.connect(self._on_toast)
+
+        bridge = self.bridge
+        bridge.fileRequested.connect(self.reference.choose)
+        bridge.clearRequested.connect(self.reference.clear)
+        bridge.folderRequested.connect(self.reference.change_folder)
+        bridge.optionChanged.connect(self._on_option)
+        bridge.printChanged.connect(self._on_print_edit)
+        bridge.listChosen.connect(self.barcode.choose)
+        bridge.listsRequested.connect(self.barcode.reload)
+        bridge.runRequested.connect(self._on_run)
+        bridge.cancelRequested.connect(self.reference.cancel)
+        bridge.printRequested.connect(self._on_print)
+        bridge.folderOpenRequested.connect(self._open_toast_folder)
+        bridge.newSessionRequested.connect(self.new_session_requested)
+        bridge.recentRequested.connect(self.recent_requested)
+
+        self._read_this_pc()
+        self.sync()
+        logger.info("ToolsWidget initialized")
+
+    # --- state ---------------------------------------------------------------
+
+    def _read_this_pc(self) -> None:
+        """The installed printers and both tools' saved print settings."""
+        self._printers = installed_printers()
+        self._settings = {
+            tool: pdf_printing.load_print_settings(PRINT_SCOPE[tool]) for tool in TOOLS
         }
-        for button in self._action_buttons.values():
-            button.installEventFilter(self)
-        self._sync_primary()
 
-    def _init_ui(self):
-        """Two cards in one row, inside a vertical-only scroll area."""
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+    def sync(self) -> None:
+        """Follow the window's session, then push. Touches no file, so the
+        shell calls it on every client, session and connection change."""
+        path = getattr(self.mw, "session_path", None)
+        path = str(path) if path else None
+        if path != self._session_path:
+            self._session_path = path
+            self.reference.set_session(path)
+            self.barcode.set_session(path)
+            if path and self.isVisible():
+                self.barcode.reload()
+        self._push()
 
-        self.scroll = QScrollArea(self)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setFrameShape(QFrame.NoFrame)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        outer.addWidget(self.scroll)
-
-        content = QWidget()
-        page = QVBoxLayout(content)
-        page.setContentsMargins(12, 12, 12, 12)
-        page.setSpacing(0)
-
-        self.cards_row = QBoxLayout(QBoxLayout.LeftToRight)
-        self.cards_row.setSpacing(12)
-
-        self.reference_labels_widget = ReferenceLabelsWidget(self.mw)
-        self.barcode_generator_widget = BarcodeGeneratorWidget(self.mw)
-        for widget in (self.reference_labels_widget, self.barcode_generator_widget):
-            card = Card(margins=(16, 16, 16, 16), spacing=12)
-            card.add_widget(widget)
-            self.cards_row.addWidget(card, 1)
-
-        page.addLayout(self.cards_row)
-        # Extra page height goes here, not into the cards: side by side they
-        # already share the taller one's height, and stacked each keeps its own.
-        page.addStretch(1)
-
-        self.scroll.setWidget(content)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._apply_width(self.width())
-
-    def _apply_width(self, width: int) -> None:
-        direction = (
-            QBoxLayout.TopToBottom if width < _STACK_BELOW else QBoxLayout.LeftToRight
+    def _push(self) -> None:
+        """Build the page's state from what the tools hold and send it."""
+        session = None
+        if self._session_path:
+            name = Path(self._session_path).name
+            facts = getattr(self.mw, "session_facts", None)
+            session = (
+                facts
+                if facts is not None and facts.name == name
+                else SessionFacts(name, None, None)
+            )
+        self.bridge.set_state(
+            tools_state(
+                client=getattr(self.mw, "current_client_id", None) or "",
+                session=session,
+                reference=self.reference.facts(),
+                reference_print=PrintFacts(self._settings["reference"], self._printers),
+                barcode=self.barcode.facts(),
+                barcode_print=PrintFacts(self._settings["barcode"], self._printers),
+                now=datetime.now().astimezone(),
+            )
         )
-        if self.cards_row.direction() != direction:
-            self.cards_row.setDirection(direction)
 
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.EnabledChange:
-            self._sync_primary()
-        return super().eventFilter(obj, event)
+    def showEvent(self, event):
+        """Each time Tools is shown: this PC's printers and settings, and the
+        session's packing lists, are read again."""
+        super().showEvent(event)
+        self._read_this_pc()
+        self.sync()
+        if self._session_path:
+            self.barcode.reload()
 
-    def _sync_primary(self) -> None:
-        holder = primary_holder(
-            self._action_buttons["reference"].isEnabled(),
-            self._action_buttons["barcode"].isEnabled(),
-            self._primary,
-        )
-        if holder == self._primary:
+    # --- what the page asks for ----------------------------------------------
+
+    def _on_option(self, tool: str, name: str, on: bool) -> None:
+        if tool == "reference":
+            self.reference.set_open_pdf(on)
+        else:
+            self.barcode.set_option(name, on)
+
+    def _on_print_edit(self, tool: str, key: str, value) -> None:
+        edited = apply_print_edit(self._settings[tool], key, value)
+        if edited is None:
+            logger.warning(f"Dropped a print edit the page should not send: {tool}.{key}")
             return
-        for name, button in self._action_buttons.items():
-            set_button_role(button, "primary" if name == holder else "secondary")
-        self._primary = holder
+        self._settings[tool] = edited
+        pdf_printing.save_print_settings(PRINT_SCOPE[tool], edited)
+        self._push()
+
+    def _on_run(self, tool: str) -> None:
+        if tool == "reference":
+            self.reference.start()
+        else:
+            self.barcode.start()
+
+    def _on_print(self, tool: str, what: str) -> None:
+        if tool == "reference":
+            self.reference.print_output()
+        else:
+            self.barcode.print_labels(what)
+
+    # --- toasts --------------------------------------------------------------
+
+    def _on_toast(self, text: str, folder: str) -> None:
+        """A run finished. While this screen shows, its page draws the toast
+        with Open folder; otherwise the router sends it to the page that is
+        showing (ADR 0007), with no action."""
+        if folder and self.isVisible():
+            self._toast_folder = folder
+            self.bridge.raise_toast(text, True)
+        else:
+            toast(self, text)
+
+    def _open_toast_folder(self) -> None:
+        if self._toast_folder:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self._toast_folder))
