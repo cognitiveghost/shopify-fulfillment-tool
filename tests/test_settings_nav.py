@@ -13,6 +13,7 @@ from unittest.mock import Mock
 import pytest
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QStyleOptionViewItem
 
 from gui.settings.window import SETTINGS_SEARCH_KEYWORDS, SettingsWindow
 
@@ -126,6 +127,7 @@ def test_a_group_with_no_match_hides_its_header(window):
 def test_no_match_says_so_and_clearing_restores_every_page(window):
     assert window.filter_nav("zzz") == []
     assert not window._no_match_label.isHidden()
+    assert window._no_match_label.text() == "No settings match “zzz”."
     assert len(window.filter_nav("")) == 8
     assert window._no_match_label.isHidden()
 
@@ -227,3 +229,118 @@ def test_a_keyword_table_that_misses_a_page_fails_construction(
         SettingsWindow(
             client_id="M", client_config=make_settings_config(), profile_manager=Mock()
         )
+
+
+# --- the frame, to the mockup (phase 7 spec section 6) ------------------------
+
+
+def _page_row(win, name):
+    nav = win._settings_nav
+    return next(r for r in range(nav.count()) if nav.item(r).text() == name)
+
+
+def test_the_title_bar_names_the_window_and_the_client(window):
+    assert window.windowTitle() == "Client settings · M"
+
+
+def test_the_nav_is_a_232px_column_of_30px_rows(window):
+    from gui.settings.window import NAV_MARGIN_PX
+
+    nav = window._settings_nav
+    assert nav.width() + 2 * NAV_MARGIN_PX >= 232
+    assert nav.item(_page_row(window, "General")).sizeHint().height() == 30
+    assert nav.item(_page_row(window, "Data")).sizeHint().height() == 28
+    assert window._nav_panel.objectName() == "settingsNavPanel"
+    assert nav.parentWidget() is window._nav_panel
+
+
+def test_only_the_open_page_reads_bold(window):
+    nav = window._settings_nav
+    window._select_page("Sets")
+    bold = [
+        nav.item(r).text()
+        for r in range(nav.count())
+        if nav.item(r).font().bold()
+        and nav.item(r).data(Qt.ItemDataRole.UserRole) is not None
+    ]
+    assert bold == ["Sets"]
+
+
+def test_a_rows_marks_are_drawn_at_its_right_edge(window):
+    nav = window._settings_nav
+    option = QStyleOptionViewItem()
+    nav.itemDelegate().initStyleOption(
+        option, nav.model().index(_page_row(window, "General"), 0)
+    )
+    assert option.decorationPosition == QStyleOptionViewItem.Position.Right
+
+
+def _mark_pixel(win, name, x):
+    from gui.settings.window import NAV_MARK_PX, NAV_MARKS_WIDTH_PX
+
+    item = win._settings_nav.item(_page_row(win, name))
+    image = item.icon().pixmap(NAV_MARKS_WIDTH_PX, NAV_MARK_PX).toImage()
+    return image.pixelColor(x, NAV_MARK_PX // 2)
+
+
+def test_the_unsaved_dot_is_the_text_colour(window):
+    from gui.settings.window import NAV_MARKS_WIDTH_PX
+    from gui.theme_manager import get_theme_manager
+
+    assert _mark_pixel(window, "General", NAV_MARKS_WIDTH_PX - 4).alpha() == 0
+    window._select_page("General")
+    window._web_host.bridge.edit("threshold", ["9"])
+    dot = _mark_pixel(window, "General", NAV_MARKS_WIDTH_PX - 4)
+    assert dot.name() == get_theme_manager().get_current_theme().text.lower()
+    # The alert's place stays empty.
+    assert _mark_pixel(window, "General", 1).alpha() == 0
+
+
+def test_a_page_that_blocks_the_save_carries_the_alert(window):
+    from PySide6.QtGui import QColor
+
+    from gui.theme_manager import get_theme_manager
+
+    window._select_page("General")
+    window._web_host.bridge.edit("threshold", ["x"])
+    item = window._settings_nav.item(_page_row(window, "General"))
+    assert item.toolTip() == "Needs attention, Unsaved changes"
+    assert item.data(Qt.ItemDataRole.AccessibleTextRole) == (
+        "General, needs attention, unsaved changes"
+    )
+    danger = QColor(get_theme_manager().get_current_theme().status_danger)
+    edge = _mark_pixel(window, "General", 1)
+    assert edge.alpha() > 0
+    assert abs(edge.red() - danger.red()) < 40
+
+    window._web_host.bridge.edit("threshold", ["5"])
+    assert item.toolTip() == ""
+    assert _mark_pixel(window, "General", 1).alpha() == 0
+
+
+def test_a_profile_that_opens_with_a_required_column_unmapped_is_marked(
+    qapp, no_modals, started_workers, make_settings_config
+):
+    config = make_settings_config()
+    del config["column_mappings"]["orders"]["Shipping Method"]
+    win = SettingsWindow(client_id="M", client_config=config, profile_manager=Mock())
+    assert win._blocked == {"Orders mapping": "Map Shipping method"}
+    item = win._settings_nav.item(_page_row(win, "Orders mapping"))
+    assert item.toolTip() == "Needs attention"
+    assert win.refresh_dirty() == []
+    win.deleteLater()
+
+
+def test_the_dialog_has_no_margins_and_a_qt_page_keeps_its_own(window):
+    from gui.settings.window import FOOTER_HEIGHT_PX, PAGE_MARGIN_PX
+
+    margins = window.layout().contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+        0,
+        0,
+        0,
+        0,
+    )
+    assert window._pages_by_name["Sets"].contentsMargins().left() == PAGE_MARGIN_PX
+    assert window._web_host.contentsMargins().left() == 0
+    assert window._footer.height() == FOOTER_HEIGHT_PX == 60

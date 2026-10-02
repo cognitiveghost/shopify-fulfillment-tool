@@ -3,12 +3,13 @@ import logging
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import QRectF, QSettings, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QRect, QRectF, QSettings, QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -16,6 +17,8 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
@@ -38,17 +41,29 @@ from gui.settings.web_host import SettingsWebHost, read_file_columns
 from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
+from shared.icons import icon
 from shared.theme import font_css, on_theme_changed
 from shopify_tool.core import effective_additional_columns
 
 logger = logging.getLogger(__name__)
 
-NAV_ICON_PX = 12
-NAV_MIN_WIDTH_PX = 170
+# The mockup's nav (phase 7 spec section 6.2): a 232px column, 12px of air
+# around a list of 30px rows.
+NAV_MARGIN_PX = 12
+NAV_MIN_WIDTH_PX = 208
+NAV_ROW_PX = 30
+NAV_GROUP_PX = 28
 NAV_SEARCH_PLACEHOLDER = "Search settings"
 # Clear button, frame and text margins the placeholder has to share the field with.
 NAV_SEARCH_CHROME_PX = 44
-UNSAVED_DOT_PX = 8
+# A row's marks sit at its right edge: the alert, then the unsaved dot.
+NAV_MARK_PX = 14
+NAV_MARKS_WIDTH_PX = 28
+UNSAVED_DOT_PX = 7
+FOOTER_HEIGHT_PX = 60
+FOOTER_MARGIN_PX = 16
+# The air around a Qt page. The web host sits flush: its page has its own.
+PAGE_MARGIN_PX = 12
 DIRTY_POLL_MS = 400
 
 # Page name -> words a person might search for that are not in the name.
@@ -70,6 +85,18 @@ WEB_PAGE_KEYS: dict[str, str] = {
     "Orders mapping": "orders",
     "Stock mapping": "stock",
 }
+
+
+class _NavDelegate(QStyledItemDelegate):
+    """Puts a nav row's marks at its right edge: the item's icon is drawn
+    after the text, where the mockup has the unsaved dot."""
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        option.decorationPosition = QStyleOptionViewItem.Position.Right
+        option.decorationAlignment = (
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
 
 
 def unsaved_summary(names: list[str]) -> str:
@@ -184,27 +211,41 @@ class SettingsWindow(QDialog):
         if "set_decoders" not in self.config_data:
             self.config_data["set_decoders"] = {}
 
-        self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
+        self.setWindowTitle(f"Client settings · {self.client_id}")
         self.setMinimumSize(1100, 600)
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
+        # No margins of the dialog's own: the nav panel, the web host and the
+        # footer each run to its edges, as the mockup's do.
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         content_layout = QHBoxLayout()
-        main_layout.addLayout(content_layout)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        main_layout.addLayout(content_layout, 1)
 
         self._settings_nav = QListWidget()
         self._settings_nav.setObjectName("settingsNav")
         self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._settings_nav.setIconSize(QSize(NAV_ICON_PX, NAV_ICON_PX))
+        self._settings_nav.setIconSize(QSize(NAV_MARKS_WIDTH_PX, NAV_MARK_PX))
+        self._settings_nav.setItemDelegate(_NavDelegate(self._settings_nav))
+        self._blocked: dict[str, str] = {}
 
-        nav_column = QVBoxLayout()
+        self._nav_panel = QFrame()
+        self._nav_panel.setObjectName("settingsNavPanel")
+        nav_column = QVBoxLayout(self._nav_panel)
+        nav_column.setContentsMargins(
+            NAV_MARGIN_PX, NAV_MARGIN_PX, NAV_MARGIN_PX, NAV_MARGIN_PX
+        )
+        nav_column.setSpacing(NAV_MARGIN_PX)
         self._nav_search = QLineEdit()
         self._nav_search.setPlaceholderText(NAV_SEARCH_PLACEHOLDER)
         self._nav_search.setClearButtonEnabled(True)
 
         # The column is as wide as the placeholder needs, never narrower than
-        # the Phase 9 width. A hard 170 clipped "Search settings" under Segoe
+        # the mockup's. A hard 170 once clipped "Search settings" under Segoe
         # UI, which is wider than the Linux dev font -- so measure, don't guess.
         nav_width = max(
             NAV_MIN_WIDTH_PX,
@@ -216,23 +257,30 @@ class SettingsWindow(QDialog):
         self._nav_search.textChanged.connect(self.filter_nav)
         self._nav_search.returnPressed.connect(self._select_first_visible_page)
         nav_column.addWidget(self._nav_search)
-        self._no_match_label = QLabel("No page matches")
+        self._no_match_label = QLabel("")
+        self._no_match_label.setWordWrap(True)
+        self._no_match_label.setFixedWidth(nav_width)
         on_theme_changed(
             self._no_match_label,
             lambda tokens: self._no_match_label.setStyleSheet(
-                f"{font_css('caption')} color: {tokens.text_secondary};"
+                f"{font_css('body')} color: {tokens.text_secondary};"
             ),
         )
         self._no_match_label.hide()
         nav_column.addWidget(self._no_match_label)
         nav_column.addWidget(self._settings_nav, 1)
-        content_layout.addLayout(nav_column)
+        content_layout.addWidget(self._nav_panel)
         QShortcut(QKeySequence(QKeySequence.StandardKey.Find), self).activated.connect(
             self._nav_search.setFocus
         )
 
         page_column = QVBoxLayout()
+        page_column.setContentsMargins(0, 0, 0, 0)
+        page_column.setSpacing(0)
         self._validation_message = InlineMessage()
+        self._validation_message.setContentsMargins(
+            PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX, 0
+        )
         page_column.addWidget(self._validation_message)
         self.tab_widget = QStackedWidget()
         page_column.addWidget(self.tab_widget, 1)
@@ -316,9 +364,20 @@ class SettingsWindow(QDialog):
                 f"{font_css('body')} color: {tokens.text_secondary};"
             ),
         )
+        footer_rule = QFrame()
+        footer_rule.setFixedHeight(1)
+        on_theme_changed(
+            footer_rule,
+            lambda tokens: footer_rule.setStyleSheet(
+                f"background-color: {tokens.border_subtle};"
+            ),
+        )
+        main_layout.addWidget(footer_rule)
+
         self._footer = QWidget()
+        self._footer.setFixedHeight(FOOTER_HEIGHT_PX)
         footer_row = QHBoxLayout(self._footer)
-        footer_row.setContentsMargins(0, 0, 0, 0)
+        footer_row.setContentsMargins(FOOTER_MARGIN_PX, 0, FOOTER_MARGIN_PX, 0)
         footer_row.addWidget(self._unsaved_label, 1)
         footer_row.addWidget(button_box)
         main_layout.addWidget(self._footer)
@@ -326,8 +385,9 @@ class SettingsWindow(QDialog):
         # The close guard replaces the footer in place: the pages it names are
         # on screen beside it, so it is not a message box.
         self._close_guard = QWidget()
+        self._close_guard.setFixedHeight(FOOTER_HEIGHT_PX)
         guard_row = QHBoxLayout(self._close_guard)
-        guard_row.setContentsMargins(0, 0, 0, 0)
+        guard_row.setContentsMargins(FOOTER_MARGIN_PX, 0, FOOTER_MARGIN_PX, 0)
         self._close_guard_label = QLabel("")
         self._close_guard_label.setWordWrap(True)
         guard_row.addWidget(self._close_guard_label, 1)
@@ -357,6 +417,8 @@ class SettingsWindow(QDialog):
         for page in self._pages:
             page.mark_clean()
         on_theme_changed(self._settings_nav, self._rebuild_nav_marks)
+        # A profile can open with a required column already unmapped.
+        self._refresh_status()
         # ponytail: polls the visible page's snapshot (one collect() plus one
         # json.dumps) every 400ms. Ceiling: a page whose snapshot costs tens of
         # milliseconds makes the dialog stutter; upgrade to a per-page
@@ -374,7 +436,11 @@ class SettingsWindow(QDialog):
         Qt page, the web host when it is a draft. The grouped left-nav
         (_build_settings_nav) looks pages up by this same name.
         """
-        widget = page if widget is None else widget
+        if widget is None:
+            widget = page
+            widget.setContentsMargins(
+                PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX
+            )
         self._pages.append(page)
         self._pages_by_name[name] = page
         if self.tab_widget.indexOf(widget) < 0:
@@ -398,14 +464,21 @@ class SettingsWindow(QDialog):
             return None
 
     def _on_web_edit(self) -> None:
-        """A draft changed: its unsaved mark follows at once, with no poll."""
-        changed = False
+        """A draft changed: its marks follow at once, with no poll."""
+        self._refresh_status()
+
+    def _refresh_status(self) -> None:
+        """Re-check what an edit on a web page can change: the drafts' unsaved
+        state, and what blocks the save. Both are cheap, so every edit runs it."""
         for name in WEB_PAGE_KEYS:
             if self._pages_by_name[name].is_dirty() != (name in self._unsaved):
                 self._unsaved ^= {name}
-                changed = True
-        if changed:
-            self._render_unsaved()
+        self._blocked = {
+            name: blocker
+            for name in self._nav_page_names()
+            if (blocker := self._pages_by_name[name].blocker())
+        }
+        self._render_unsaved()
 
     def _stored_additional_columns(self):
         """The list's pre-Bundle-13 home, read only as a fallback (ADR 0006).
@@ -443,10 +516,15 @@ class SettingsWindow(QDialog):
         for group_name, page_names in self.SETTINGS_NAV_GROUPS:
             header = QListWidgetItem(group_name)
             header.setFlags(Qt.ItemFlag.NoItemFlags)
+            header.setSizeHint(QSize(0, NAV_GROUP_PX))
+            header.setTextAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom
+            )
             apply_font(header, "caption", bold=True)
             self._settings_nav.addItem(header)
             for page_name in page_names:
                 item = QListWidgetItem(page_name)
+                item.setSizeHint(QSize(0, NAV_ROW_PX))
                 item.setData(
                     Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name]
                 )
@@ -494,6 +572,7 @@ class SettingsWindow(QDialog):
                 header_has_rows = True
         if header is not None:
             header.setHidden(not header_has_rows)
+        self._no_match_label.setText(f"No settings match “{text.strip()}”.")
         self._no_match_label.setHidden(not query or bool(visible))
         return visible
 
@@ -508,6 +587,12 @@ class SettingsWindow(QDialog):
         # The page being left may hold an edit the 400ms poll hasn't seen.
         if previous is not None:
             self._poll_page(previous.text())
+        # The row that is open reads bold; a QSS ::item rule cannot set a weight.
+        for item in (previous, current):
+            if item is not None:
+                font = item.font()
+                font.setBold(item is current)
+                item.setFont(font)
         if current is None:
             return
         index = current.data(Qt.ItemDataRole.UserRole)
@@ -563,30 +648,57 @@ class SettingsWindow(QDialog):
         self._apply_nav_marks()
 
     def _rebuild_nav_marks(self, tokens) -> None:
-        dot = QPixmap(NAV_ICON_PX, NAV_ICON_PX)
-        dot.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(dot)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        # accent_fill: the colour of the Save button the page is waiting for.
-        painter.setBrush(QColor(tokens.accent_fill))
-        inset = (NAV_ICON_PX - UNSAVED_DOT_PX) / 2
-        painter.drawEllipse(QRectF(inset, inset, UNSAVED_DOT_PX, UNSAVED_DOT_PX))
-        painter.end()
-        blank = QPixmap(NAV_ICON_PX, NAV_ICON_PX)
-        blank.fill(Qt.GlobalColor.transparent)
-        self._unsaved_icon = QIcon(dot)
-        self._clean_icon = QIcon(blank)
+        """One icon per combination of marks: (unsaved, blocked)."""
+        alert = icon("circle-alert", tokens.status_danger)
+
+        def marks(unsaved: bool, blocked: bool) -> QIcon:
+            pixmap = QPixmap(NAV_MARKS_WIDTH_PX, NAV_MARK_PX)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            if blocked:
+                alert.paint(painter, QRect(0, 0, NAV_MARK_PX, NAV_MARK_PX))
+            if unsaved:
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(tokens.text))
+                painter.drawEllipse(
+                    QRectF(
+                        NAV_MARKS_WIDTH_PX - UNSAVED_DOT_PX,
+                        (NAV_MARK_PX - UNSAVED_DOT_PX) / 2,
+                        UNSAVED_DOT_PX,
+                        UNSAVED_DOT_PX,
+                    )
+                )
+            painter.end()
+            result = QIcon(pixmap)
+            # The same pixmap for a selected row: Qt would tint a missing one.
+            result.addPixmap(pixmap, QIcon.Mode.Selected)
+            return result
+
+        self._marks = {
+            (unsaved, blocked): marks(unsaved, blocked)
+            for unsaved in (False, True)
+            for blocked in (False, True)
+        }
         self._apply_nav_marks()
 
     def _apply_nav_marks(self) -> None:
         for item in self._page_items():
             unsaved = item.text() in self._unsaved
-            item.setIcon(self._unsaved_icon if unsaved else self._clean_icon)
-            item.setToolTip("Unsaved changes" if unsaved else "")
+            blocked = item.text() in self._blocked
+            item.setIcon(self._marks[(unsaved, blocked)])
+            notes = [
+                note
+                for note, on in (
+                    ("Needs attention", blocked),
+                    ("Unsaved changes", unsaved),
+                )
+                if on
+            ]
+            item.setToolTip(", ".join(notes))
             item.setData(
                 Qt.ItemDataRole.AccessibleTextRole,
-                f"{item.text()}, unsaved changes" if unsaved else item.text(),
+                ", ".join([item.text(), *(note.lower() for note in notes)]),
             )
 
     def keyPressEvent(self, event):
