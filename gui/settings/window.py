@@ -1,3 +1,4 @@
+import html
 import json
 import logging
 from typing import ClassVar
@@ -23,7 +24,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.components import toast
 from gui.components.error_banner import show_error
 from gui.components.inline_message import InlineMessage
 from gui.settings.base import SettingsPage
@@ -42,7 +42,7 @@ from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
 from shared.icons import icon
-from shared.theme import font_css, on_theme_changed
+from shared.theme import current_tokens, font_css, on_theme_changed
 from shopify_tool.core import effective_additional_columns
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,8 @@ NAV_MARKS_WIDTH_PX = 28
 UNSAVED_DOT_PX = 7
 FOOTER_HEIGHT_PX = 60
 FOOTER_MARGIN_PX = 16
+FOOTER_ICON_PX = 16
+SAVED_LINE = "Saved. Applies from the next analysis."
 # The air around a Qt page. The web host sits flush: its page has its own.
 PAGE_MARGIN_PX = 12
 DIRTY_POLL_MS = 400
@@ -101,13 +103,7 @@ class _NavDelegate(QStyledItemDelegate):
 
 def unsaved_summary(names: list[str]) -> str:
     """Footer copy for the unsaved pages, given in nav order."""
-    if not names:
-        return ""
-    if len(names) == 1:
-        return f"Unsaved changes on {names[0]}"
-    if len(names) == 2:
-        return f"Unsaved changes on {names[0]} and {names[1]}"
-    return f"Unsaved changes on {len(names)} pages"
+    return f"Unsaved changes in {', '.join(names)}" if names else ""
 
 
 class SettingsWindow(QDialog):
@@ -180,6 +176,10 @@ class SettingsWindow(QDialog):
         self.analysis_df = analysis_df if analysis_df is not None else pd.DataFrame()
         self._save_worker = None  # keeps the in-flight save Worker alive
         self._is_saving = False
+        self._saved = False  # the last save's line is still what the footer says
+        self._saved_once = False  # decides the dialog's result when it closes
+        self._close_after_save = False
+        self._written_snapshots: list[tuple[PageContract, str]] = []
 
         # Ensure config structure exists
         if not isinstance(self.config_data.get("column_mappings"), dict):
@@ -352,18 +352,24 @@ class SettingsWindow(QDialog):
 
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = button_box.button(QDialogButtonBox.Save)
+        self.save_button.setToolTip("Ctrl+S")
+        self.cancel_button = button_box.button(QDialogButtonBox.Cancel)
         apply_dialog_button_roles(button_box)
-        set_button_role(button_box.button(QDialogButtonBox.Cancel), "secondary")
+        set_button_role(self.cancel_button, "secondary")
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
 
+        # The footer's one status line (phase 7 spec section 6.3): what blocks
+        # the save, else the unsaved pages, else the last save. A glyph before it.
+        self._status_icon = QLabel()
+        self._status_icon.setFixedSize(FOOTER_ICON_PX, FOOTER_ICON_PX)
         self._unsaved_label = QLabel("")
-        on_theme_changed(
-            self._unsaved_label,
-            lambda tokens: self._unsaved_label.setStyleSheet(
-                f"{font_css('body')} color: {tokens.text_secondary};"
-            ),
+        self._unsaved_label.setTextFormat(Qt.TextFormat.RichText)
+        self._unsaved_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
+        self._unsaved_label.linkActivated.connect(self._open_blocker)
         footer_rule = QFrame()
         footer_rule.setFixedHeight(1)
         on_theme_changed(
@@ -378,6 +384,7 @@ class SettingsWindow(QDialog):
         self._footer.setFixedHeight(FOOTER_HEIGHT_PX)
         footer_row = QHBoxLayout(self._footer)
         footer_row.setContentsMargins(FOOTER_MARGIN_PX, 0, FOOTER_MARGIN_PX, 0)
+        footer_row.addWidget(self._status_icon)
         footer_row.addWidget(self._unsaved_label, 1)
         footer_row.addWidget(button_box)
         main_layout.addWidget(self._footer)
@@ -400,7 +407,9 @@ class SettingsWindow(QDialog):
         # "&&": a single "&" is a Qt mnemonic and would underline the "c".
         self.save_and_close_button = QPushButton("Save && close")
         set_button_role(self.save_and_close_button, "primary")
-        self.save_and_close_button.clicked.connect(self.save_settings)
+        self.save_and_close_button.clicked.connect(
+            lambda: self.save_settings(then_close=True)
+        )
         for button in (
             self.keep_editing_button,
             self.discard_button,
@@ -417,6 +426,10 @@ class SettingsWindow(QDialog):
         for page in self._pages:
             page.mark_clean()
         on_theme_changed(self._settings_nav, self._rebuild_nav_marks)
+        on_theme_changed(self._unsaved_label, lambda _tokens: self._render_footer())
+        QShortcut(QKeySequence(QKeySequence.StandardKey.Save), self).activated.connect(
+            self._save_shortcut
+        )
         # A profile can open with a required column already unmapped.
         self._refresh_status()
         # ponytail: polls the visible page's snapshot (one collect() plus one
@@ -473,12 +486,15 @@ class SettingsWindow(QDialog):
         for name in WEB_PAGE_KEYS:
             if self._pages_by_name[name].is_dirty() != (name in self._unsaved):
                 self._unsaved ^= {name}
+        self._check_blockers()
+        self._render_unsaved()
+
+    def _check_blockers(self) -> None:
         self._blocked = {
             name: blocker
             for name in self._nav_page_names()
             if (blocker := self._pages_by_name[name].blocker())
         }
-        self._render_unsaved()
 
     def _stored_additional_columns(self):
         """The list's pre-Bundle-13 home, read only as a fallback (ADR 0006).
@@ -621,6 +637,7 @@ class SettingsWindow(QDialog):
         self._unsaved = {
             name for name, page in self._pages_by_name.items() if page.is_dirty()
         }
+        self._check_blockers()
         self._render_unsaved()
         return self._unsaved_names()
 
@@ -640,12 +657,81 @@ class SettingsWindow(QDialog):
 
     def _render_unsaved(self) -> None:
         names = self._unsaved_names()
+        if names:
+            # An edit after a save: the footer goes back to naming it.
+            self._saved = False
         summary = unsaved_summary(names)
-        self._unsaved_label.setText(summary)
         self._close_guard_label.setText(
             f"{summary}. Closing now discards them." if names else ""
         )
         self._apply_nav_marks()
+        self._render_footer()
+
+    def _render_footer(self) -> None:
+        """The status line, its glyph, and which buttons are live.
+
+        The first that applies: a blocker, the unsaved pages, the last save.
+        Save is live only with unsaved pages and no blocker.
+        """
+        tokens = current_tokens()
+        names = self._unsaved_names()
+        size = FOOTER_ICON_PX
+        pixmap, bold = None, False
+        if self._blocked:
+            name = next(n for n in self._nav_page_names() if n in self._blocked)
+            link = (
+                f'<a href="{html.escape(name)}" style="color: {tokens.status_danger};'
+                f' font-weight: bold;">{html.escape(name)}</a>'
+            )
+            text = f"{html.escape(self._blocked[name])} in {link} to save."
+            color = tokens.status_danger
+            pixmap = icon("circle-alert", tokens.status_danger).pixmap(size, size)
+        elif names:
+            text = html.escape(unsaved_summary(names))
+            color = tokens.text_secondary
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(tokens.text))
+            inset = (size - UNSAVED_DOT_PX) / 2
+            painter.drawEllipse(QRectF(inset, inset, UNSAVED_DOT_PX, UNSAVED_DOT_PX))
+            painter.end()
+        elif self._saved:
+            text, color, bold = SAVED_LINE, tokens.status_success, True
+            pixmap = icon("check", tokens.status_success).pixmap(size, size)
+        else:
+            text, color = "", tokens.text_secondary
+        self._unsaved_label.setText(text)
+        self._unsaved_label.setStyleSheet(
+            f"{font_css('body', bold=bold)} color: {color};"
+        )
+        self._status_icon.setVisible(pixmap is not None)
+        if pixmap is not None:
+            self._status_icon.setPixmap(pixmap)
+
+        can_save = bool(names) and not self._blocked and not self._is_saving
+        self.save_button.setEnabled(can_save)
+        self.save_and_close_button.setEnabled(not self._blocked)
+        self.cancel_button.setText("Close" if self._saved and not names else "Cancel")
+
+    def _open_blocker(self, name: str) -> None:
+        """The status line's link: the page that blocks the save, and on a web
+        page the control itself."""
+        page = self._pages_by_name.get(name)
+        if page is None:
+            return
+        self._select_page(name)
+        if name in WEB_PAGE_KEYS and page.blocker_key():
+            self._web_host.focus_problem(page.blocker_key())
+
+    def _save_shortcut(self) -> None:
+        # The visible Qt page is polled every 400ms: check every page now, so
+        # Ctrl+S cannot outrun the poll.
+        self.refresh_dirty()
+        if self.save_button.isEnabled():
+            self.save_settings()
 
     def _rebuild_nav_marks(self, tokens) -> None:
         """One icon per combination of marks: (unsaved, blocked)."""
@@ -723,7 +809,16 @@ class SettingsWindow(QDialog):
         if self.refresh_dirty():
             self._show_close_guard()
             return
-        super().reject()
+        self._finish()
+
+    def _finish(self) -> None:
+        """Close. The result says whether anything was saved while the dialog
+        was open, which is what the main window reloads the profile on."""
+        self.done(
+            QDialog.DialogCode.Accepted
+            if self._saved_once
+            else QDialog.DialogCode.Rejected
+        )
 
     def _show_close_guard(self) -> None:
         self._footer.hide()
@@ -736,19 +831,21 @@ class SettingsWindow(QDialog):
 
     def _discard(self) -> None:
         self._hide_close_guard()
-        super().reject()
+        self._finish()
 
     def done(self, result):
         self._dirty_poll.stop()
         super().done(result)
 
-    def save_settings(self):
+    def save_settings(self, then_close: bool = False):
         """Validate every page, collect them all, and write the profile once.
 
-        Save always writes, even when no page reads unsaved: the unsaved state
-        drives warnings only, so a snapshot that misses a field costs a
-        warning, never an edit.
+        Every page is written, whichever of them reads unsaved: the unsaved
+        state decides whether Save is live, never what a save contains. The
+        dialog stays open afterwards, unless `then_close` (the close guard's
+        Save & close).
         """
+        self._close_after_save = False
         self._hide_close_guard()
         self._validation_message.clear()
         for name in self._nav_page_names():
@@ -762,6 +859,9 @@ class SettingsWindow(QDialog):
             for page in self._pages:
                 for key, value in page.collect().items():
                     self.config_data[key] = value
+            # A copy: the dialog stays usable while the write runs, and an
+            # edit made meanwhile must not change what is written.
+            written = json.loads(json.dumps(self.config_data))
         except Exception:
             logger.exception("Failed to collect settings")
             show_error(
@@ -771,14 +871,21 @@ class SettingsWindow(QDialog):
             )
             return
 
+        # What is clean once this write succeeds: the values it carries, not
+        # the ones on screen when it ends.
+        self._written_snapshots = [
+            (page, page.current_snapshot()) for page in self._pages
+        ]
+        self._close_after_save = then_close
+
         # Save to server via ProfileManager (background -- avoids blocking the
         # GUI thread on the lock-contention retry sleep)
-        self.save_button.setEnabled(False)
-        self.save_button.setText("Saving...")
         self._is_saving = True
+        self.save_button.setText("Saving…")
+        self._render_footer()
 
         worker = Worker(
-            self.profile_manager.save_shopify_config, self.client_id, self.config_data
+            self.profile_manager.save_shopify_config, self.client_id, written
         )
         worker.signals.result.connect(self._on_save_settings_result)
         worker.signals.error.connect(self._on_save_settings_error)
@@ -792,13 +899,19 @@ class SettingsWindow(QDialog):
 
     def _on_save_settings_result(self, success: bool):
         self._is_saving = False
-        self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         if success:
-            # Raised on the parent: this dialog is about to close.
-            toast(self.parentWidget() or self, "Settings saved")
-            self.accept()
+            for page, snapshot in self._written_snapshots:
+                page.mark_clean(snapshot)
+            self._saved = True
+            self._saved_once = True
+            # Re-reads every page: one edited while the write ran is unsaved.
+            self.refresh_dirty()
+            if self._close_after_save:
+                self._finish()
         else:
+            self._close_after_save = False
+            self._render_footer()
             show_error(
                 self,
                 "Settings weren't saved",
@@ -810,8 +923,9 @@ class SettingsWindow(QDialog):
         _exctype, value, _tb = error
         logger.error("Failed to save settings", exc_info=value)
         self._is_saving = False
-        self.save_button.setEnabled(True)
+        self._close_after_save = False
         self.save_button.setText("Save")
+        self._render_footer()
         show_error(self, "Settings weren't saved", "Details are in Logs.")
 
 

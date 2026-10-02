@@ -136,18 +136,15 @@ def test_changing_page_clears_the_validation_message(window, monkeypatch):
     assert window._validation_message.isHidden()
 
 
-def test_a_successful_save_toasts_on_the_parent_and_closes(window, monkeypatch):
-    toasts = []
-    monkeypatch.setattr(
-        "gui.settings.window.toast", lambda source, text, **k: toasts.append(text)
-    )
-    accepted = []
-    window.accepted.connect(lambda: accepted.append(True))
+def test_a_successful_save_says_so_in_the_footer_and_stays_open(window):
+    closed = []
+    window.finished.connect(closed.append)
 
+    window.save_settings()
     window._on_save_settings_result(True)
 
-    assert toasts == ["Settings saved"]
-    assert accepted == [True]
+    assert closed == []
+    assert window._unsaved_label.text() == "Saved. Applies from the next analysis."
 
 
 def test_a_failed_write_shows_a_banner_and_stays_open(window, monkeypatch):
@@ -171,7 +168,7 @@ def test_a_failed_write_shows_a_banner_and_stays_open(window, monkeypatch):
         )
     ]
     assert accepted == []
-    assert window.save_button.isEnabled()
+    assert window.save_button.text() == "Save"
 
 
 def test_a_crashed_write_points_to_logs(window, monkeypatch):

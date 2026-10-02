@@ -62,9 +62,17 @@ class PageContract:
         """
         return json.dumps(self.collect(), sort_keys=True, default=str)
 
-    def mark_clean(self) -> None:
-        """Take the current values as the ones the page opened with."""
-        self._clean_snapshot = self._safe_snapshot()
+    def mark_clean(self, snapshot: str | None = None) -> None:
+        """Take the current values as the ones the page opened with.
+
+        After a save the window passes the snapshot it took when the write
+        began, so an edit made while the write ran still reads unsaved.
+        """
+        self._clean_snapshot = self._safe_snapshot() if snapshot is None else snapshot
+
+    def current_snapshot(self) -> str:
+        """The values right now, for mark_clean() to take later."""
+        return self._safe_snapshot()
 
     def is_dirty(self) -> bool:
         """Whether the values differ from the ones taken at mark_clean()."""

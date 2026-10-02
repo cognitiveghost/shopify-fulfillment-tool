@@ -80,3 +80,16 @@ def test_a_qt_page_is_a_contract_and_a_widget():
 
     assert issubclass(SettingsPage, PageContract)
     assert issubclass(SettingsPage, QWidget)
+
+
+def test_mark_clean_can_take_an_earlier_snapshot():
+    """What a save wrote is what is clean, not what is on screen when it ends."""
+    draft = _OneValueDraft()
+    draft.mark_clean()
+    draft.value = 2
+    written = draft.current_snapshot()
+    draft.value = 3
+    draft.mark_clean(written)
+    assert draft.is_dirty() is True
+    draft.value = 2
+    assert draft.is_dirty() is False

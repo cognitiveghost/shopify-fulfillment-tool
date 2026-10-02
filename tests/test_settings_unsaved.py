@@ -20,12 +20,11 @@ def _edit_sets(win):
     win._pages_by_name["Sets"].set_decoders["SET-NEW"] = [{"sku": "A", "quantity": 1}]
 
 
-def test_unsaved_summary_names_up_to_two_pages():
+def test_unsaved_summary_names_every_page():
     assert unsaved_summary([]) == ""
-    assert unsaved_summary(["Sets"]) == "Unsaved changes on Sets"
-    assert unsaved_summary(["Sets", "Reports"]) == "Unsaved changes on Sets and Reports"
-    assert (
-        unsaved_summary(["General", "Sets", "Reports"]) == "Unsaved changes on 3 pages"
+    assert unsaved_summary(["Sets"]) == "Unsaved changes in Sets"
+    assert unsaved_summary(["General", "Sets", "Reports"]) == (
+        "Unsaved changes in General, Sets, Reports"
     )
 
 
@@ -39,7 +38,7 @@ def test_an_edit_marks_its_nav_row_and_the_footer(window):
     assert window.refresh_dirty() == ["Sets"]
     assert _nav_item(window, "Sets").toolTip() == "Unsaved changes"
     assert _nav_item(window, "General").toolTip() == ""
-    assert window._unsaved_label.text() == "Unsaved changes on Sets"
+    assert window._unsaved_label.text() == "Unsaved changes in Sets"
 
 
 def test_reverting_an_edit_clears_the_mark(window):
@@ -55,7 +54,7 @@ def test_the_poll_checks_the_page_on_screen(window):
     window._select_page("Sets")
     _edit_sets(window)
     window._poll_current_page()
-    assert window._unsaved_label.text() == "Unsaved changes on Sets"
+    assert window._unsaved_label.text() == "Unsaved changes in Sets"
 
 
 def test_leaving_a_page_checks_it_before_the_next_poll(window):
@@ -81,7 +80,7 @@ def test_cancel_with_unsaved_pages_shows_the_close_guard_instead(window):
     assert not window._close_guard.isHidden()
     assert window._footer.isHidden()
     assert window._close_guard_label.text() == (
-        "Unsaved changes on Sets. Closing now discards them."
+        "Unsaved changes in Sets. Closing now discards them."
     )
     assert window.save_and_close_button.text() == "Save && close"
 

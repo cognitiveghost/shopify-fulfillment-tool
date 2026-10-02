@@ -464,7 +464,7 @@ class ActionsHandler(QObject):
         )
 
         if settings_win.exec():
-            # The window has already toasted "Settings saved".
+            # It saved at least once while it was open; its footer said so.
             try:
                 self.mw.active_profile_config = (
                     self.mw.profile_manager.load_shopify_config(
