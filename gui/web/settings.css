@@ -1,0 +1,114 @@
+/* The Client settings pages the web tier draws: General, Orders mapping and
+   Stock mapping (phase 7 spec section 5). Layout only: every component is the
+   kit's. Every colour is a token from theme_css_vars(). */
+
+#settings {
+  height: 100%;
+  overflow: auto;
+}
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 20px 24px 32px;
+}
+.settings-page > .card { display: flex; flex-direction: column; }
+
+/* --- General ------------------------------------------------------------- */
+
+.control-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-height);
+}
+.other-char { width: 36px; padding: 0; font-weight: 700; text-align: center; }
+.threshold { width: 72px; text-align: right; }
+
+/* --- the Fields card ----------------------------------------------------- */
+
+.field-row,
+.courier-row {
+  display: grid;
+  column-gap: 12px;
+  row-gap: 6px;
+  align-items: center;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.field-row { grid-template-columns: 180px 16px 240px minmax(0, 1fr); }
+.courier-row { grid-template-columns: 280px 16px 160px minmax(0, 1fr); }
+
+.field-heads,
+.courier-heads {
+  padding: 6px 16px;
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.field-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.field-label { font-weight: 700; }
+.field-required { font-size: var(--type-caption-size); color: var(--text-secondary); }
+.arrow { color: var(--text-secondary); stroke-width: 1.5; }
+
+.field-row .select { width: 240px; }
+.field-row .select-value { font-weight: 400; }
+.select-value.danger { color: var(--status-danger); }
+.field-menu { width: 240px; min-width: 0; max-height: 240px; }
+.field-menu .menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field-sample {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.field-sample.missing { font-family: var(--font-family); }
+.field-below { grid-column: 3 / 5; }
+
+/* --- Courier names ------------------------------------------------------- */
+
+.courier-row .field { width: 100%; }
+.courier-row .select { width: 160px; }
+.courier-row .btn.icon { justify-self: end; color: var(--text-secondary); }
+.courier-menu { min-width: 160px; }
+.new-courier { width: 100%; }
+
+.card-empty {
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+/* --- Additional columns -------------------------------------------------- */
+
+.card-notice { padding: 0 16px 12px; color: var(--text-secondary); }
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.chips-empty { color: var(--text-secondary); }
+.chip-anchor { display: inline-flex; }
+.chip-name { padding: 0; border: 0; background: transparent; cursor: pointer; }
+.chip-name:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.chip-note {
+  padding-left: 4px;
+  font-size: var(--type-caption-size);
+  color: var(--text-secondary);
+}
+/* The button sits at the card's right edge: its menu opens leftwards. */
+.add-menu { left: auto; right: 0; }

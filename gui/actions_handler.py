@@ -427,7 +427,7 @@ class ActionsHandler(QObject):
         """Opens the settings window for the active client.
 
         Args:
-            page (str, optional): Nav entry to open on, e.g. "Orders Mapping".
+            page (str, optional): Nav entry to open on, e.g. "Orders mapping".
                 Defaults to whichever page was open last.
         """
         if not self.mw.current_client_id:
@@ -457,10 +457,18 @@ class ActionsHandler(QObject):
             analysis_df=self.mw.analysis_results_df,
             parent=self.mw,
             initial_page=page,
+            loaded_files={
+                "orders": self.mw.orders_file_path,
+                "stock": self.mw.stock_file_path,
+            },
         )
 
-        if settings_win.exec():
-            # The window has already toasted "Settings saved".
+        saved = settings_win.exec()
+        # The main window is its parent, so nothing else ever deletes it, and
+        # it holds a web view (ADR 0016: the view lives while the dialog is open).
+        settings_win.deleteLater()
+        if saved:
+            # It saved at least once while it was open; its footer said so.
             try:
                 self.mw.active_profile_config = (
                     self.mw.profile_manager.load_shopify_config(

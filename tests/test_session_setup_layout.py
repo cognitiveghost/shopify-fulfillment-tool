@@ -235,7 +235,7 @@ def test_the_fix_link_opens_the_page_the_problem_names(client_window, monkeypatc
     client_window.setup_bridge.fixProblem("orders")
     client_window.setup_bridge.fixProblem("stock")  # no problem there: nothing opens
 
-    assert opened == ["Orders Mapping"]
+    assert opened == ["Orders mapping"]
 
 
 def test_open_recent_from_the_page_opens_the_bars_menu(client_window, monkeypatch):

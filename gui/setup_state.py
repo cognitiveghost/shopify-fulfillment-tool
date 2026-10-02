@@ -15,7 +15,7 @@ from pathlib import Path
 from shopify_tool.core import ANALYSIS_STEPS
 
 FILE_NOUN = {"orders": "orders file", "stock": "stock file"}
-MAPPING_PAGE = {"orders": "Orders Mapping", "stock": "Stock Mapping"}
+MAPPING_PAGE = {"orders": "Orders mapping", "stock": "Stock mapping"}
 # How an internal column name reads in a sentence.
 _INTERNAL = {
     "Order_Number": "order number",

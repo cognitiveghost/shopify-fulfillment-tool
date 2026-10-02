@@ -227,33 +227,39 @@ def role_stylesheet(theme: ThemeTokens) -> str:
     definition. What is left is genuinely shopify-only chrome.
     """
     return f"""
-        QListWidget#settingsNav {{
+        /* The settings nav, to the mockup (phase 7 spec section 6.2): a
+           surface panel with a hairline on its right, and rows that mark
+           position with a sunken fill and no bar. */
+        QFrame#settingsNavPanel {{
             background-color: {theme.surface};
             border: none;
             border-right: 1px solid {theme.border_subtle};
+        }}
+        QListWidget#settingsNav {{
+            background-color: transparent;
+            border: none;
             outline: none;
         }}
         QListWidget#settingsNav::item {{
-            padding: 6px 10px;
-            border-radius: {theme.radius}px;
+            padding: 0px 8px;
+            border-radius: 8px;
+            color: {theme.text_secondary};
             /* The generic QListWidget::item:selected ring is a `border`
                shorthand, so it wins on all four sides unless this rule
-               restates them. This nav marks position, not data selection:
-               the bar is left-only, and transparent here so selecting does
-               not shift the text. */
+               restates them. Transparent here and when selected, so
+               selecting does not shift the text. */
             border: 2px solid transparent;
-            border-left: 2px solid transparent;
         }}
         QListWidget#settingsNav::item:hover {{ background-color: {theme.hover}; }}
         QListWidget#settingsNav::item:selected {{
-            background-color: {theme.selection_bg};
+            background-color: {theme.surface_sunken};
             color: {theme.text};
             border: 2px solid transparent;
-            border-left: 2px solid {theme.accent_fill};
         }}
         QListWidget#settingsNav::item:disabled {{
+            background-color: transparent;
             color: {theme.text_secondary};
-            padding-top: 10px;
+            padding: 0px 8px 4px 8px;
         }}
     """
 

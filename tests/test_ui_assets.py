@@ -15,6 +15,7 @@ EXPECTED_ICONS = [
     "plus", "ellipsis-vertical", "check", "chevron-up", "chevron-down",
     "toggle-off", "toggle-on",
     "panel-left-close", "panel-left-open", "sun", "moon", "server",
+    "circle-alert",
 ]
 
 

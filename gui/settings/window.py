@@ -1,14 +1,16 @@
+import html
 import json
 import logging
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import QRectF, QSettings, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QRect, QRectF, QSettings, QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -16,61 +18,94 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
 
-from gui.components import toast
 from gui.components.error_banner import show_error
 from gui.components.inline_message import InlineMessage
 from gui.settings.base import SettingsPage
-from gui.settings.general import GeneralPage
-from gui.settings.mappings import (
+from gui.settings.contract import PageContract
+from gui.settings.page_state import (
     ADDITIONAL_COLUMNS_UNREADABLE,
-    OrdersMappingPage,
-    StockMappingPage,
+    GeneralDraft,
+    OrdersDraft,
+    StockDraft,
+    read_file_columns,
 )
 from gui.settings.reports import ReportsPage
 from gui.settings.rules import RulesPage
 from gui.settings.sets import SetsPage
+from gui.settings.web_host import SettingsWebHost
 from gui.settings.weight import WeightPage
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
-from shared.theme import font_css, on_theme_changed
+from shared.icons import icon
+from shared.theme import current_tokens, font_css, on_theme_changed
 from shopify_tool.core import effective_additional_columns
+from shopify_tool.csv_utils import resolve_delimiter
 
 logger = logging.getLogger(__name__)
 
-NAV_ICON_PX = 12
-NAV_MIN_WIDTH_PX = 170
+# The mockup's nav (phase 7 spec section 6.2): a 232px column, 12px of air
+# around a list of 30px rows.
+NAV_MARGIN_PX = 12
+NAV_MIN_WIDTH_PX = 208
+NAV_ROW_PX = 30
+NAV_GROUP_PX = 26
 NAV_SEARCH_PLACEHOLDER = "Search settings"
 # Clear button, frame and text margins the placeholder has to share the field with.
 NAV_SEARCH_CHROME_PX = 44
-UNSAVED_DOT_PX = 8
+# A row's marks sit at its right edge: the alert, then the unsaved dot.
+NAV_MARK_PX = 14
+NAV_MARKS_WIDTH_PX = 28
+UNSAVED_DOT_PX = 7
+FOOTER_HEIGHT_PX = 60
+FOOTER_MARGIN_PX = 16
+FOOTER_ICON_PX = 16
+SAVED_LINE = "Saved. Applies from the next analysis."
+# The air around a Qt page. The web host sits flush: its page has its own.
+PAGE_MARGIN_PX = 12
 DIRTY_POLL_MS = 400
 
 # Page name -> words a person might search for that are not in the name.
 SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
     "General": ["delimiter", "csv", "low stock", "threshold", "repeat"],
-    "Orders Mapping": ["columns", "csv", "headers", "courier", "carrier", "shipping"],
-    "Stock Mapping": ["columns", "csv", "headers", "expiry", "batch", "lot", "fifo"],
+    "Orders mapping": ["columns", "csv", "headers", "courier", "carrier", "shipping"],
+    "Stock mapping": ["columns", "csv", "headers", "expiry", "batch", "lot", "fifo"],
     "Rules": ["conditions", "actions", "tags", "status", "priority", "automation"],
     "Sets": ["bundles", "kits", "components", "decoder"],
     "Weight": ["volumetric", "divisor", "dimensions", "boxes", "packaging", "kg"],
     "Reports": ["packing list", "stock export", "filters", "output", "writeoff"],
-    "Tag Categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
+    "Tag categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
 }
+
+# Nav name -> the key SettingsWebHost draws that page under (phase 7). Every
+# other page is a Qt widget.
+WEB_PAGE_KEYS: dict[str, str] = {
+    "General": "general",
+    "Orders mapping": "orders",
+    "Stock mapping": "stock",
+}
+
+
+class _NavDelegate(QStyledItemDelegate):
+    """Puts a nav row's marks at its right edge: the item's icon is drawn
+    after the text, where the mockup has the unsaved dot."""
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        option.decorationPosition = QStyleOptionViewItem.Position.Right
+        option.decorationAlignment = (
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
 
 
 def unsaved_summary(names: list[str]) -> str:
     """Footer copy for the unsaved pages, given in nav order."""
-    if not names:
-        return ""
-    if len(names) == 1:
-        return f"Unsaved changes on {names[0]}"
-    if len(names) == 2:
-        return f"Unsaved changes on {names[0]} and {names[1]}"
-    return f"Unsaved changes on {len(names)} pages"
+    return f"Unsaved changes in {', '.join(names)}" if names else ""
 
 
 class SettingsWindow(QDialog):
@@ -96,10 +131,10 @@ class SettingsWindow(QDialog):
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
     SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
-        ("Data", ["General", "Orders Mapping", "Stock Mapping"]),
-        ("Fulfillment Logic", ["Rules", "Sets", "Weight"]),
+        ("Data", ["General", "Orders mapping", "Stock mapping"]),
+        ("Fulfilment logic", ["Rules", "Sets", "Weight"]),
         ("Output", ["Reports"]),
-        ("Organization", ["Tag Categories"]),
+        ("Organization", ["Tag categories"]),
     ]
 
     # Stored by *name*, not row index: the nav groups have gained entries
@@ -114,6 +149,7 @@ class SettingsWindow(QDialog):
         analysis_df=None,
         parent=None,
         initial_page=None,
+        loaded_files=None,
     ):
         """Initializes the SettingsWindow.
 
@@ -130,6 +166,9 @@ class SettingsWindow(QDialog):
                 name SETTINGS_NAV_GROUPS uses. A caller that already knows
                 which page answers the user's problem says so; everyone else
                 gets the last page they were on. Defaults to None.
+            loaded_files (dict, optional): {"orders": path, "stock": path} for
+                the files loaded on Setup. A mapping page opens with that
+                file's columns. Defaults to None.
         """
         super().__init__(parent)
         self._initial_page = initial_page
@@ -139,6 +178,10 @@ class SettingsWindow(QDialog):
         self.analysis_df = analysis_df if analysis_df is not None else pd.DataFrame()
         self._save_worker = None  # keeps the in-flight save Worker alive
         self._is_saving = False
+        self._saved = False  # the last save's line is still what the footer says
+        self._saved_once = False  # decides the dialog's result when it closes
+        self._close_after_save = False
+        self._written_snapshots: list[tuple[PageContract, str]] = []
 
         # Ensure config structure exists
         if not isinstance(self.config_data.get("column_mappings"), dict):
@@ -170,27 +213,41 @@ class SettingsWindow(QDialog):
         if "set_decoders" not in self.config_data:
             self.config_data["set_decoders"] = {}
 
-        self.setWindowTitle(f"Settings - CLIENT_{self.client_id}")
+        self.setWindowTitle(f"Client settings · {self.client_id}")
         self.setMinimumSize(1100, 600)
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
+        # No margins of the dialog's own: the nav panel, the web host and the
+        # footer each run to its edges, as the mockup's do.
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         content_layout = QHBoxLayout()
-        main_layout.addLayout(content_layout)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        main_layout.addLayout(content_layout, 1)
 
         self._settings_nav = QListWidget()
         self._settings_nav.setObjectName("settingsNav")
         self._settings_nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._settings_nav.setIconSize(QSize(NAV_ICON_PX, NAV_ICON_PX))
+        self._settings_nav.setIconSize(QSize(NAV_MARKS_WIDTH_PX, NAV_MARK_PX))
+        self._settings_nav.setItemDelegate(_NavDelegate(self._settings_nav))
+        self._blocked: dict[str, str] = {}
 
-        nav_column = QVBoxLayout()
+        self._nav_panel = QFrame()
+        self._nav_panel.setObjectName("settingsNavPanel")
+        nav_column = QVBoxLayout(self._nav_panel)
+        nav_column.setContentsMargins(
+            NAV_MARGIN_PX, NAV_MARGIN_PX, NAV_MARGIN_PX, NAV_MARGIN_PX
+        )
+        nav_column.setSpacing(NAV_MARGIN_PX)
         self._nav_search = QLineEdit()
         self._nav_search.setPlaceholderText(NAV_SEARCH_PLACEHOLDER)
         self._nav_search.setClearButtonEnabled(True)
 
         # The column is as wide as the placeholder needs, never narrower than
-        # the Phase 9 width. A hard 170 clipped "Search settings" under Segoe
+        # the mockup's. A hard 170 once clipped "Search settings" under Segoe
         # UI, which is wider than the Linux dev font -- so measure, don't guess.
         nav_width = max(
             NAV_MIN_WIDTH_PX,
@@ -202,35 +259,62 @@ class SettingsWindow(QDialog):
         self._nav_search.textChanged.connect(self.filter_nav)
         self._nav_search.returnPressed.connect(self._select_first_visible_page)
         nav_column.addWidget(self._nav_search)
-        self._no_match_label = QLabel("No page matches")
+        self._no_match_label = QLabel("")
+        self._no_match_label.setWordWrap(True)
+        self._no_match_label.setFixedWidth(nav_width)
         on_theme_changed(
             self._no_match_label,
             lambda tokens: self._no_match_label.setStyleSheet(
-                f"{font_css('caption')} color: {tokens.text_secondary};"
+                f"{font_css('body')} color: {tokens.text_secondary};"
             ),
         )
         self._no_match_label.hide()
         nav_column.addWidget(self._no_match_label)
         nav_column.addWidget(self._settings_nav, 1)
-        content_layout.addLayout(nav_column)
+        content_layout.addWidget(self._nav_panel)
         QShortcut(QKeySequence(QKeySequence.StandardKey.Find), self).activated.connect(
             self._nav_search.setFocus
         )
 
         page_column = QVBoxLayout()
+        page_column.setContentsMargins(0, 0, 0, 0)
+        page_column.setSpacing(0)
         self._validation_message = InlineMessage()
+        self._validation_message.setContentsMargins(
+            PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX, 0
+        )
         page_column.addWidget(self._validation_message)
         self.tab_widget = QStackedWidget()
         page_column.addWidget(self.tab_widget, 1)
         content_layout.addLayout(page_column, 1)
 
         self._page_index_by_name = {}
-        self._pages: list[SettingsPage] = []
-        self._pages_by_name: dict[str, SettingsPage] = {}
+        self._pages: list[PageContract] = []
+        self._pages_by_name: dict[str, PageContract] = {}
         self._unsaved: set[str] = set()
 
+        # The three pages the web tier draws are drafts: pages with no widget.
+        # One host widget shows whichever of them the nav selects.
+        client = str(self.client_id)
+        column_mappings = self.config_data.get("column_mappings", {})
+        drafts = {
+            "general": GeneralDraft(self.config_data.get("settings", {}), client),
+            "orders": OrdersDraft(
+                column_mappings,
+                self.config_data.get("courier_mappings", {}),
+                client,
+                fallback_additional_columns=self._stored_additional_columns(),
+                file=self._loaded_file(loaded_files, "orders"),
+            ),
+            "stock": StockDraft(
+                column_mappings, client, file=self._loaded_file(loaded_files, "stock")
+            ),
+        }
+        self._web_host = SettingsWebHost(drafts)
+        self._web_host.edited.connect(self._on_web_edit)
+
         # Create all tabs (unchanged call order/method names)
-        self._add_page(GeneralPage(self.config_data.get("settings", {})), "General")
+        self._add_page(drafts["general"], "General", self._web_host)
         self._add_page(
             RulesPage(
                 self.config_data.get("rules", []),
@@ -247,18 +331,8 @@ class SettingsWindow(QDialog):
             ),
             "Reports",
         )
-        self._add_page(
-            OrdersMappingPage(
-                self.config_data.get("column_mappings", {}),
-                self.config_data.get("courier_mappings", {}),
-                fallback_additional_columns=self._stored_additional_columns(),
-            ),
-            "Orders Mapping",
-        )
-        self._add_page(
-            StockMappingPage(self.config_data.get("column_mappings", {})),
-            "Stock Mapping",
-        )
+        self._add_page(drafts["orders"], "Orders mapping", self._web_host)
+        self._add_page(drafts["stock"], "Stock mapping", self._web_host)
         self._add_page(SetsPage(self.config_data.get("set_decoders", {})), "Sets")
         self._add_page(
             WeightPage(
@@ -274,36 +348,58 @@ class SettingsWindow(QDialog):
             _TagCategoriesPage(
                 self.config_data.get("tag_categories", {"version": 2, "categories": {}})
             ),
-            "Tag Categories",
+            "Tag categories",
         )
         self._build_settings_nav()
 
+        # The platform's order (Save first on Windows), not the mockup's Cancel
+        # then Save: every dialog's footer is a QDialogButtonBox
+        # (tests/test_dialog_button_guard.py).
         button_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_button = button_box.button(QDialogButtonBox.Save)
+        self.save_button.setToolTip("Ctrl+S")
+        self.cancel_button = button_box.button(QDialogButtonBox.Cancel)
         apply_dialog_button_roles(button_box)
-        set_button_role(button_box.button(QDialogButtonBox.Cancel), "secondary")
+        set_button_role(self.cancel_button, "secondary")
         button_box.accepted.connect(self.save_settings)
         button_box.rejected.connect(self.reject)
 
-        self._unsaved_label = QLabel("")
+        # The footer's one status line (phase 7 spec section 6.3): what blocks
+        # the save, else the unsaved pages, else the last save. A glyph before it.
+        self._status_icon = QLabel()
+        self._status_icon.setFixedSize(FOOTER_ICON_PX, FOOTER_ICON_PX)
+        self._status_label = QLabel("")
+        self._status_label.setTextFormat(Qt.TextFormat.RichText)
+        self._status_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._status_label.linkActivated.connect(self._open_blocker)
+        footer_rule = QFrame()
+        footer_rule.setFixedHeight(1)
         on_theme_changed(
-            self._unsaved_label,
-            lambda tokens: self._unsaved_label.setStyleSheet(
-                f"{font_css('body')} color: {tokens.text_secondary};"
+            footer_rule,
+            lambda tokens: footer_rule.setStyleSheet(
+                f"background-color: {tokens.border_subtle};"
             ),
         )
+        main_layout.addWidget(footer_rule)
+
         self._footer = QWidget()
+        self._footer.setFixedHeight(FOOTER_HEIGHT_PX)
         footer_row = QHBoxLayout(self._footer)
-        footer_row.setContentsMargins(0, 0, 0, 0)
-        footer_row.addWidget(self._unsaved_label, 1)
+        footer_row.setContentsMargins(FOOTER_MARGIN_PX, 0, FOOTER_MARGIN_PX, 0)
+        footer_row.addWidget(self._status_icon)
+        footer_row.addWidget(self._status_label, 1)
         footer_row.addWidget(button_box)
         main_layout.addWidget(self._footer)
 
         # The close guard replaces the footer in place: the pages it names are
         # on screen beside it, so it is not a message box.
         self._close_guard = QWidget()
+        self._close_guard.setFixedHeight(FOOTER_HEIGHT_PX)
         guard_row = QHBoxLayout(self._close_guard)
-        guard_row.setContentsMargins(0, 0, 0, 0)
+        guard_row.setContentsMargins(FOOTER_MARGIN_PX, 0, FOOTER_MARGIN_PX, 0)
         self._close_guard_label = QLabel("")
         self._close_guard_label.setWordWrap(True)
         guard_row.addWidget(self._close_guard_label, 1)
@@ -316,7 +412,9 @@ class SettingsWindow(QDialog):
         # "&&": a single "&" is a Qt mnemonic and would underline the "c".
         self.save_and_close_button = QPushButton("Save && close")
         set_button_role(self.save_and_close_button, "primary")
-        self.save_and_close_button.clicked.connect(self.save_settings)
+        self.save_and_close_button.clicked.connect(
+            lambda: self.save_settings(then_close=True)
+        )
         for button in (
             self.keep_editing_button,
             self.discard_button,
@@ -333,6 +431,12 @@ class SettingsWindow(QDialog):
         for page in self._pages:
             page.mark_clean()
         on_theme_changed(self._settings_nav, self._rebuild_nav_marks)
+        on_theme_changed(self._status_label, lambda _tokens: self._render_footer())
+        QShortcut(QKeySequence(QKeySequence.StandardKey.Save), self).activated.connect(
+            self._save_shortcut
+        )
+        # A profile can open with a required column already unmapped.
+        self._refresh_status()
         # ponytail: polls the visible page's snapshot (one collect() plus one
         # json.dumps) every 400ms. Ceiling: a page whose snapshot costs tens of
         # milliseconds makes the dialog stutter; upgrade to a per-page
@@ -342,18 +446,70 @@ class SettingsWindow(QDialog):
         self._dirty_poll.timeout.connect(self._poll_current_page)
         self._dirty_poll.start()
 
-    def _add_page(self, page: SettingsPage, name: str) -> None:
+    def _add_page(self, page: PageContract, name: str, widget=None) -> None:
         """Register a settings page under `name`. Tracked in _pages so
         save_settings validates and collects from it.
 
-        Replaces the old `self.tab_widget.addTab(page, name)` calls — the
-        10-tab horizontal strip is replaced by a grouped left-nav
-        (_build_settings_nav) that looks up pages by this same name.
+        `widget` is what the stack shows for it: the page itself when it is a
+        Qt page, the web host when it is a draft. The grouped left-nav
+        (_build_settings_nav) looks pages up by this same name.
         """
+        if widget is None:
+            widget = page
+            widget.setContentsMargins(
+                PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX
+            )
         self._pages.append(page)
         self._pages_by_name[name] = page
-        self.tab_widget.addWidget(page)
-        self._page_index_by_name[name] = self.tab_widget.count() - 1
+        if self.tab_widget.indexOf(widget) < 0:
+            self.tab_widget.addWidget(widget)
+        self._page_index_by_name[name] = self.tab_widget.indexOf(widget)
+
+    def _loaded_file(self, loaded_files, kind: str):
+        """The columns of the file loaded on Setup, or None.
+
+        Split on the delimiter Setup read it with: the client's saved setting,
+        an override included. A file that cannot be read is no file: the
+        mapping page then says no CSV has been read, and the operator can pick
+        one.
+        """
+        path = (loaded_files or {}).get(kind)
+        if not path:
+            return None
+        setting = self.config_data.get("settings", {}).get(f"{kind}_csv_delimiter")
+        try:
+            return read_file_columns(
+                path, loaded=True, delimiter=resolve_delimiter(path, setting, kind)
+            )
+        except Exception:
+            logger.exception(f"The loaded {kind} file's columns couldn't be read")
+            return None
+
+    def _on_web_edit(self) -> None:
+        """A draft changed: its marks follow at once, with no poll."""
+        self._refresh_status()
+
+    def _refresh_status(self) -> None:
+        """Re-check what an edit on a web page can change: the drafts' unsaved
+        state, and what blocks the save. Both are cheap, so every edit runs it."""
+        for name in WEB_PAGE_KEYS:
+            self._sync_unsaved(name)
+        self._check_blockers()
+        self._render_status()
+
+    def _sync_unsaved(self, name: str) -> bool:
+        """Re-check one page's unsaved state; whether it changed."""
+        changed = self._pages_by_name[name].is_dirty() != (name in self._unsaved)
+        if changed:
+            self._unsaved ^= {name}
+        return changed
+
+    def _check_blockers(self) -> None:
+        self._blocked = {
+            name: blocker
+            for name in self._nav_page_names()
+            if (blocker := self._pages_by_name[name].blocker())
+        }
 
     def _stored_additional_columns(self):
         """The list's pre-Bundle-13 home, read only as a fallback (ADR 0006).
@@ -389,12 +545,17 @@ class SettingsWindow(QDialog):
             raise ValueError("; ".join(problems))
 
         for group_name, page_names in self.SETTINGS_NAV_GROUPS:
-            header = QListWidgetItem(group_name.upper())
+            header = QListWidgetItem(group_name)
             header.setFlags(Qt.ItemFlag.NoItemFlags)
+            header.setSizeHint(QSize(0, NAV_GROUP_PX))
+            header.setTextAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom
+            )
             apply_font(header, "caption", bold=True)
             self._settings_nav.addItem(header)
             for page_name in page_names:
                 item = QListWidgetItem(page_name)
+                item.setSizeHint(QSize(0, NAV_ROW_PX))
                 item.setData(
                     Qt.ItemDataRole.UserRole, self._page_index_by_name[page_name]
                 )
@@ -442,6 +603,7 @@ class SettingsWindow(QDialog):
                 header_has_rows = True
         if header is not None:
             header.setHidden(not header_has_rows)
+        self._no_match_label.setText(f"No settings match “{text.strip()}”.")
         self._no_match_label.setHidden(not query or bool(visible))
         return visible
 
@@ -451,14 +613,23 @@ class SettingsWindow(QDialog):
                 self._settings_nav.setCurrentItem(item)
                 return
 
-    def _on_settings_nav_changed(self, current, _previous):
+    def _on_settings_nav_changed(self, current, previous):
         self._validation_message.clear()
         # The page being left may hold an edit the 400ms poll hasn't seen.
-        self._poll_current_page()
+        if previous is not None:
+            self._poll_page(previous.text())
+        # The row that is open reads bold; a QSS ::item rule cannot set a weight.
+        for item in (previous, current):
+            if item is not None:
+                font = item.font()
+                font.setBold(item is current)
+                item.setFont(font)
         if current is None:
             return
         index = current.data(Qt.ItemDataRole.UserRole)
         if index is not None:
+            if current.text() in WEB_PAGE_KEYS:
+                self._web_host.show_page(WEB_PAGE_KEYS[current.text()])
             self.tab_widget.setCurrentIndex(index)
             QSettings("ShopifyFulfillmentTool", "FulfillmentApp").setValue(
                 self.NAV_SETTINGS_KEY, current.text()
@@ -481,52 +652,155 @@ class SettingsWindow(QDialog):
         self._unsaved = {
             name for name, page in self._pages_by_name.items() if page.is_dirty()
         }
-        self._render_unsaved()
+        self._check_blockers()
+        self._render_status()
         return self._unsaved_names()
 
     def _poll_current_page(self) -> None:
-        page = self.tab_widget.currentWidget()
-        name = next((n for n, p in self._pages_by_name.items() if p is page), None)
-        if name is None:
-            return
-        if page.is_dirty() != (name in self._unsaved):
-            self._unsaved ^= {name}
-            self._render_unsaved()
+        item = self._settings_nav.currentItem()
+        if item is not None:
+            self._poll_page(item.text())
 
-    def _render_unsaved(self) -> None:
+    def _poll_page(self, name: str) -> None:
+        # By the nav's name, not the stack's widget: three pages share one.
+        if name in self._pages_by_name and self._sync_unsaved(name):
+            self._render_status()
+
+    def _render_status(self) -> None:
         names = self._unsaved_names()
+        if names:
+            # An edit after a save: the footer goes back to naming it.
+            self._saved = False
         summary = unsaved_summary(names)
-        self._unsaved_label.setText(summary)
         self._close_guard_label.setText(
             f"{summary}. Closing now discards them." if names else ""
         )
         self._apply_nav_marks()
+        self._render_footer()
+
+    def _render_footer(self) -> None:
+        """The status line, its glyph, and which buttons are live.
+
+        The first that applies: a blocker, the unsaved pages, the last save.
+        Save is live only with unsaved pages and no blocker.
+        """
+        tokens = current_tokens()
+        names = self._unsaved_names()
+        size = FOOTER_ICON_PX
+        pixmap, bold = None, False
+        if self._blocked:
+            name = next(n for n in self._nav_page_names() if n in self._blocked)
+            link = (
+                f'<a href="{html.escape(name)}" style="color: {tokens.status_danger};'
+                f' font-weight: bold;">{html.escape(name)}</a>'
+            )
+            text = f"{html.escape(self._blocked[name])} in {link} to save."
+            color = tokens.status_danger
+            pixmap = icon("circle-alert", tokens.status_danger).pixmap(size, size)
+        elif names:
+            text = html.escape(unsaved_summary(names))
+            color = tokens.text_secondary
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(tokens.text))
+            inset = (size - UNSAVED_DOT_PX) / 2
+            painter.drawEllipse(QRectF(inset, inset, UNSAVED_DOT_PX, UNSAVED_DOT_PX))
+            painter.end()
+        elif self._saved:
+            text, color, bold = SAVED_LINE, tokens.status_success, True
+            pixmap = icon("check", tokens.status_success).pixmap(size, size)
+        else:
+            text, color = "", tokens.text_secondary
+        self._status_label.setText(text)
+        self._status_label.setStyleSheet(
+            f"{font_css('body', bold=bold)} color: {color};"
+        )
+        self._status_icon.setVisible(pixmap is not None)
+        if pixmap is not None:
+            self._status_icon.setPixmap(pixmap)
+
+        can_save = bool(names) and not self._blocked and not self._is_saving
+        self.save_button.setEnabled(can_save)
+        self.save_and_close_button.setEnabled(not self._blocked)
+        # The close guard hides the status line: a disabled Save & close says
+        # why itself.
+        self.save_and_close_button.setToolTip(
+            f"{self._blocked[name]} in {name} to save." if self._blocked else ""
+        )
+        self.cancel_button.setText("Close" if self._saved and not names else "Cancel")
+
+    def _open_blocker(self, name: str) -> None:
+        """The status line's link: the page that blocks the save, and on a web
+        page the control itself."""
+        page = self._pages_by_name.get(name)
+        if page is None:
+            return
+        self._select_page(name)
+        if name in WEB_PAGE_KEYS and page.blocker_key():
+            self._web_host.focus_problem(page.blocker_key())
+
+    def _save_shortcut(self) -> None:
+        # The visible Qt page is polled every 400ms: check every page now, so
+        # Ctrl+S cannot outrun the poll.
+        self.refresh_dirty()
+        if self.save_button.isEnabled():
+            self.save_settings()
 
     def _rebuild_nav_marks(self, tokens) -> None:
-        dot = QPixmap(NAV_ICON_PX, NAV_ICON_PX)
-        dot.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(dot)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        # accent_fill: the colour of the Save button the page is waiting for.
-        painter.setBrush(QColor(tokens.accent_fill))
-        inset = (NAV_ICON_PX - UNSAVED_DOT_PX) / 2
-        painter.drawEllipse(QRectF(inset, inset, UNSAVED_DOT_PX, UNSAVED_DOT_PX))
-        painter.end()
-        blank = QPixmap(NAV_ICON_PX, NAV_ICON_PX)
-        blank.fill(Qt.GlobalColor.transparent)
-        self._unsaved_icon = QIcon(dot)
-        self._clean_icon = QIcon(blank)
+        """One icon per combination of marks: (unsaved, blocked)."""
+        alert = icon("circle-alert", tokens.status_danger)
+
+        def marks(unsaved: bool, blocked: bool) -> QIcon:
+            pixmap = QPixmap(NAV_MARKS_WIDTH_PX, NAV_MARK_PX)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            if blocked:
+                alert.paint(painter, QRect(0, 0, NAV_MARK_PX, NAV_MARK_PX))
+            if unsaved:
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(tokens.text))
+                painter.drawEllipse(
+                    QRectF(
+                        NAV_MARKS_WIDTH_PX - UNSAVED_DOT_PX,
+                        (NAV_MARK_PX - UNSAVED_DOT_PX) / 2,
+                        UNSAVED_DOT_PX,
+                        UNSAVED_DOT_PX,
+                    )
+                )
+            painter.end()
+            result = QIcon(pixmap)
+            # The same pixmap for a selected row: Qt would tint a missing one.
+            result.addPixmap(pixmap, QIcon.Mode.Selected)
+            return result
+
+        self._marks = {
+            (unsaved, blocked): marks(unsaved, blocked)
+            for unsaved in (False, True)
+            for blocked in (False, True)
+        }
         self._apply_nav_marks()
 
     def _apply_nav_marks(self) -> None:
         for item in self._page_items():
             unsaved = item.text() in self._unsaved
-            item.setIcon(self._unsaved_icon if unsaved else self._clean_icon)
-            item.setToolTip("Unsaved changes" if unsaved else "")
+            blocked = item.text() in self._blocked
+            item.setIcon(self._marks[(unsaved, blocked)])
+            notes = [
+                note
+                for note, on in (
+                    ("Needs attention", blocked),
+                    ("Unsaved changes", unsaved),
+                )
+                if on
+            ]
+            item.setToolTip(", ".join(notes))
             item.setData(
                 Qt.ItemDataRole.AccessibleTextRole,
-                f"{item.text()}, unsaved changes" if unsaved else item.text(),
+                ", ".join([item.text(), *(note.lower() for note in notes)]),
             )
 
     def keyPressEvent(self, event):
@@ -551,7 +825,16 @@ class SettingsWindow(QDialog):
         if self.refresh_dirty():
             self._show_close_guard()
             return
-        super().reject()
+        self._finish()
+
+    def _finish(self) -> None:
+        """Close. The result says whether anything was saved while the dialog
+        was open, which is what the main window reloads the profile on."""
+        self.done(
+            QDialog.DialogCode.Accepted
+            if self._saved_once
+            else QDialog.DialogCode.Rejected
+        )
 
     def _show_close_guard(self) -> None:
         self._footer.hide()
@@ -564,19 +847,21 @@ class SettingsWindow(QDialog):
 
     def _discard(self) -> None:
         self._hide_close_guard()
-        super().reject()
+        self._finish()
 
     def done(self, result):
         self._dirty_poll.stop()
         super().done(result)
 
-    def save_settings(self):
+    def save_settings(self, then_close: bool = False):
         """Validate every page, collect them all, and write the profile once.
 
-        Save always writes, even when no page reads unsaved: the unsaved state
-        drives warnings only, so a snapshot that misses a field costs a
-        warning, never an edit.
+        Every page is written, whichever of them reads unsaved: the unsaved
+        state decides whether Save is live, never what a save contains. The
+        dialog stays open afterwards, unless `then_close` (the close guard's
+        Save & close).
         """
+        self._close_after_save = False
         self._hide_close_guard()
         self._validation_message.clear()
         for name in self._nav_page_names():
@@ -590,6 +875,9 @@ class SettingsWindow(QDialog):
             for page in self._pages:
                 for key, value in page.collect().items():
                     self.config_data[key] = value
+            # A copy: the dialog stays usable while the write runs, and an
+            # edit made meanwhile must not change what is written.
+            written = json.loads(json.dumps(self.config_data))
         except Exception:
             logger.exception("Failed to collect settings")
             show_error(
@@ -599,14 +887,21 @@ class SettingsWindow(QDialog):
             )
             return
 
+        # What is clean once this write succeeds: the values it carries, not
+        # the ones on screen when it ends.
+        self._written_snapshots = [
+            (page, page.current_snapshot()) for page in self._pages
+        ]
+        self._close_after_save = then_close
+
         # Save to server via ProfileManager (background -- avoids blocking the
         # GUI thread on the lock-contention retry sleep)
-        self.save_button.setEnabled(False)
-        self.save_button.setText("Saving...")
         self._is_saving = True
+        self.save_button.setText("Saving…")
+        self._render_footer()
 
         worker = Worker(
-            self.profile_manager.save_shopify_config, self.client_id, self.config_data
+            self.profile_manager.save_shopify_config, self.client_id, written
         )
         worker.signals.result.connect(self._on_save_settings_result)
         worker.signals.error.connect(self._on_save_settings_error)
@@ -620,13 +915,24 @@ class SettingsWindow(QDialog):
 
     def _on_save_settings_result(self, success: bool):
         self._is_saving = False
-        self.save_button.setEnabled(True)
         self.save_button.setText("Save")
         if success:
-            # Raised on the parent: this dialog is about to close.
-            toast(self.parentWidget() or self, "Settings saved")
-            self.accept()
+            for page, snapshot in self._written_snapshots:
+                page.mark_clean(snapshot)
+            self._saved = True
+            self._saved_once = True
+            # Re-reads every page: one edited while the write ran is unsaved.
+            unsaved = self.refresh_dirty()
+            if self._close_after_save:
+                self._close_after_save = False
+                # That edit was not in the write: ask again, do not drop it.
+                if unsaved:
+                    self._show_close_guard()
+                else:
+                    self._finish()
         else:
+            self._close_after_save = False
+            self._render_footer()
             show_error(
                 self,
                 "Settings weren't saved",
@@ -638,8 +944,9 @@ class SettingsWindow(QDialog):
         _exctype, value, _tb = error
         logger.error("Failed to save settings", exc_info=value)
         self._is_saving = False
-        self.save_button.setEnabled(True)
+        self._close_after_save = False
         self.save_button.setText("Save")
+        self._render_footer()
         show_error(self, "Settings weren't saved", "Details are in Logs.")
 
 

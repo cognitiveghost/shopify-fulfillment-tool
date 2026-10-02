@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QApplication
 
 from gui.settings.base import SettingsPage
+from gui.settings.contract import PageContract
 
 
 def test_settings_page_defaults_are_inert():
@@ -47,3 +48,48 @@ def test_a_collect_that_raises_reads_unsaved(monkeypatch):
 
     monkeypatch.setattr(page, "collect", boom)
     assert page.is_dirty() is True
+
+
+def test_a_page_blocks_nothing_by_default():
+    QApplication.instance() or QApplication([])
+    page = SettingsPage()
+    assert page.blocker() is None
+    assert page.blocker_key() == ""
+
+
+class _OneValueDraft(PageContract):
+    def __init__(self):
+        self.value = 1
+
+    def collect(self):
+        return {"key": self.value}
+
+
+def test_the_contract_needs_no_widget():
+    """A draft is a page with no QWidget: the same unsaved check, no QApplication."""
+    draft = _OneValueDraft()
+    assert draft.is_dirty() is False
+    draft.mark_clean()
+    draft.value = 2
+    assert draft.is_dirty() is True
+    assert draft.validate() == (True, [])
+
+
+def test_a_qt_page_is_a_contract_and_a_widget():
+    from PySide6.QtWidgets import QWidget
+
+    assert issubclass(SettingsPage, PageContract)
+    assert issubclass(SettingsPage, QWidget)
+
+
+def test_mark_clean_can_take_an_earlier_snapshot():
+    """What a save wrote is what is clean, not what is on screen when it ends."""
+    draft = _OneValueDraft()
+    draft.mark_clean()
+    draft.value = 2
+    written = draft.current_snapshot()
+    draft.value = 3
+    draft.mark_clean(written)
+    assert draft.is_dirty() is True
+    draft.value = 2
+    assert draft.is_dirty() is False

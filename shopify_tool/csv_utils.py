@@ -136,25 +136,36 @@ def resolve_delimiter(path: str, setting: str | None, kind: str) -> str:
     return FALLBACK_DELIMITERS[kind] if method == "default" else detected
 
 
-def read_csv_headers(file_path: str, encoding: str = 'utf-8-sig') -> list[str]:
-    """Return a CSV's column names without loading any of its rows.
+def read_csv_preview(
+    file_path: str, delimiter: str | None = None, encoding: str = 'utf-8-sig'
+) -> tuple[list[str], dict[str, str]]:
+    """A CSV's column names and its first data row, as text.
 
-    Delimiter comes from detect_csv_delimiter's fallback chain rather than a
-    configured value, so the settings pages that call this need no delimiter
-    plumbing. nrows=0 reads the header line only, which matters on a large
-    stock export sitting on a network share.
-
-    Args:
-        file_path: Path to the CSV file.
-        encoding: File encoding (default: utf-8-sig).
+    For the settings pages that show which column holds what. With no
+    `delimiter` it is detected. Two rows are all it reads, which matters on a
+    large stock export sitting on a network share. A file with a header and
+    no rows gives an empty dict.
 
     Returns:
-        List of column names, in file order.
+        (column names in file order, {column: the first row's value}); an
+        empty cell is "".
     """
-    delimiter, _method = detect_csv_delimiter(file_path, encoding)
-    return list(
-        pd.read_csv(file_path, sep=delimiter, encoding=encoding, nrows=0).columns
+    if delimiter is None:
+        delimiter, _method = detect_csv_delimiter(file_path, encoding)
+    frame = pd.read_csv(
+        file_path,
+        sep=delimiter,
+        encoding=encoding,
+        nrows=1,
+        dtype=str,
+        keep_default_na=False,
     )
+    headers = [str(column) for column in frame.columns]
+    if frame.empty:
+        return headers, {}
+    return headers, {
+        column: str(value) for column, value in zip(headers, frame.iloc[0], strict=True)
+    }
 
 
 def validate_delimiter(file_path: str, delimiter: str, encoding: str = 'utf-8-sig') -> bool:

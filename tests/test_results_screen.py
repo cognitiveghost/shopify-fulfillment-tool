@@ -404,4 +404,4 @@ def test_map_columns_opens_the_orders_mapping_page(main_window, monkeypatch):
         lambda page=None: opened.append(page),
     )
     main_window.results_bridge.openColumnMapping()
-    assert opened == ["Orders Mapping"]
+    assert opened == ["Orders mapping"]

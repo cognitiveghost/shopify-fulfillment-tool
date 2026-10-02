@@ -194,7 +194,7 @@ def test_a_problem_card_keeps_what_is_known_and_mutes_the_rest():
         "title": "No SKU column",
         "text": "The orders file's header row has no “Lineitem sku” column, "
         "which is mapped to SKU.",
-        "fix_label": "Open Orders Mapping",
+        "fix_label": "Open Orders mapping",
     }
 
 

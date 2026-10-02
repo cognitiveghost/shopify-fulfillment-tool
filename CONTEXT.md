@@ -15,9 +15,10 @@ for decisions.
 Everything except the screens that have moved to the web tier.
 
 **Web tier** — the part drawn in a `QWebEngineView`, styled with real CSS.
-Every screen today: Session Setup, Analysis Results, Browse, Logs and Tools. The
-Client settings window is still Qt; ADR 0016 lets it move in its own tasks. See
-ADR 0001 for why Results moved first.
+Every screen today: Session Setup, Analysis Results, Browse, Logs and Tools. In
+the Client settings window three pages are web (General, Orders mapping, Stock
+mapping); its frame and its other pages are still Qt, and move in their own
+tasks (ADR 0016). See ADR 0001 for why Results moved first.
 
 **Renderer** — either tier, when the point is that there are two of them and
 one palette must serve both. Never used for `QSvgRenderer`; say
@@ -436,14 +437,26 @@ an **overflow**, which holds actions rather than values.
 ## Settings
 
 **Unsaved page** — a settings page whose values differ from the ones it
-opened with. The nav marks it, the footer names it, and closing guards it.
-Saving writes every page regardless; unsaved is what the operator is warned
-about, not what decides the write.
+opened with, or from the ones last saved. The nav marks it, the footer names
+it, and closing guards it. Save is live only while a page is unsaved and
+nothing blocks; a save still writes every page.
+
+**Blocker** — what stops a save right now: a required column with no mapping,
+a threshold that is not a number. The page's nav row carries an alert, the
+footer names it with a link to the page, and Save is disabled until it is
+fixed. Distinguished from a page's **validation**, which runs when Save is
+pressed and is the only check a Qt page gets.
+
+**Draft** — a settings page with no widget: the values of a page the web tier
+draws, the edits it takes, and every sentence it shows
+(`gui/settings/page_state.py`). The window saves and marks a draft exactly as
+it does a Qt page.
 
 **Close guard** — the row that replaces Save and Cancel when closing Settings
-would discard unsaved pages: Keep editing, Discard, Save & close.
-Distinguished from a **confirm**, which is a separate dialog; the guard is
-inline because the pages it names are on screen beside it.
+would discard unsaved pages: Keep editing, Discard, Save & close. Save & close
+is disabled while a blocker stands. Distinguished from a **confirm**, which is
+a separate dialog; the guard is inline because the pages it names are on
+screen beside it.
 
 **Match count** — how many orders and rows a report's filters select from
 the current analysis, counted over fulfillable orders exactly as the generated
