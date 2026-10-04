@@ -310,9 +310,9 @@ class RulesDraft(PageContract):
 
     def __init__(self, rules: list, analysis_df=None, tag_categories: dict | None = None):
         self.analysis_df = analysis_df
-        # ponytail: a snapshot taken when the dialog opens. The Tag categories
-        # page can add a tag while this page is open and the suggestions will
-        # not see it; the field takes any text, so the tag is still typeable.
+        # ponytail: the stored dict, which the Tag categories page writes only
+        # when it is collected. A tag added there may not be among the
+        # suggestions yet; the field takes any text, so it is still typeable.
         self._tag_categories = tag_categories or {}
         self._next_uid = 0
         self.rules = [

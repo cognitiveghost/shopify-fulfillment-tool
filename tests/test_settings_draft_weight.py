@@ -324,3 +324,31 @@ def test_an_unknown_kind_is_refused():
         d.import_csv("sets-merge", "x.csv")
     with pytest.raises(ValueError):
         d.export_csv("sets", "x.csv")
+
+
+def test_a_product_being_typed_stays_listed_when_it_stops_matching_the_filter():
+    d = draft()
+    d.apply("product_filter", ["gadg"])
+    d.apply("product_add", [])
+    new = products(d)[0]["uid"]
+    assert d.apply("product_text", [new, "sku", "TEE-09"])
+    assert [p["sku"] for p in products(d)] == ["TEE-09", "SKU2"]
+    d.apply("product_text", ["2", "name", "Renamed"])
+    assert [p["sku"] for p in products(d)] == ["SKU2"]
+
+
+def test_a_row_with_no_name_is_called_the_new_one():
+    d = draft({"volumetric_divisor": 6000, "products": {}, "boxes": []})
+    d.apply("product_add", [])
+    d.apply("box_add", [])
+    d.apply("product_text", [products(d)[0]["uid"], "l", "x"])
+    d.apply("box_text", [boxes(d)[0]["uid"], "l", "x"])
+    assert d.validate() == (
+        False,
+        [f"The new product: {NUMBER_PROBLEM}", f"The new box: {NUMBER_PROBLEM}"],
+    )
+
+
+def test_a_stored_number_is_shown_whole():
+    assert number_text(12.34567) == "12.34567"
+    assert number_text(0.1 + 0.2) == "0.3"

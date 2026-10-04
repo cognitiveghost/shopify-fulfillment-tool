@@ -264,3 +264,11 @@ def test_an_unknown_kind_is_refused():
         d.import_csv("boxes", "x.csv")
     with pytest.raises(ValueError):
         d.export_csv("boxes", "x.csv")
+
+
+def test_the_open_set_is_drawn_past_the_limit():
+    d = draft({f"S{n}": [{"sku": "A", "quantity": 1}] for n in range(LIST_LIMIT + 2)})
+    last = str(LIST_LIMIT + 2)
+    assert d.apply("open", [last])
+    assert len(rows(d)) == LIST_LIMIT + 1
+    assert rows(d)[-1]["uid"] == last

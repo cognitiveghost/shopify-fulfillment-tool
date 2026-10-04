@@ -370,6 +370,9 @@ class SetsDraft(PageContract):
         more = ""
         if len(listed) > LIST_LIMIT:
             more = f"Showing {LIST_LIMIT} of {len(listed)}. Filter to find the rest."
+        shown = listed[:LIST_LIMIT]
+        # The open set is drawn even past the limit: the footer's link opens it.
+        shown += [entry for entry in listed[LIST_LIMIT:] if entry["uid"] == self.open_uid]
         return {
             "page": "sets",
             "title": "Sets",
@@ -384,6 +387,6 @@ class SetsDraft(PageContract):
                 "more": more,
                 "can_export": bool(self.stored()),
                 "import_hint": IMPORT_HINT,
-                "rows": [self._row(entry, duplicates) for entry in listed[:LIST_LIMIT]],
+                "rows": [self._row(entry, duplicates) for entry in shown],
             },
         }

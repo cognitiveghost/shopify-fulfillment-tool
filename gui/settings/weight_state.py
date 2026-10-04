@@ -58,12 +58,13 @@ _KEY_UID = re.compile(r"product-(\d+)-")
 
 def number_text(value) -> str:
     """A stored dimension as a field shows it: "" for none or zero, else the
-    number without a trailing ".0"."""
+    number without a trailing ".0". Twelve digits, so a stored value is not
+    rounded by being shown."""
     try:
         number = float(value or 0)
     except (TypeError, ValueError):
         return _text(value)
-    return f"{number:g}" if number else ""
+    return f"{number:.12g}" if number else ""
 
 
 def parse_number(text: str) -> float | None:
@@ -210,6 +211,8 @@ class WeightDraft(PageContract):
         if action == "product_add" and _shaped(args):
             # First, so it is in view whatever the list's length.
             self.products.insert(0, self._product("", {}))
+            # Listed whatever the filter, or it would go at the first letter.
+            self.revealed = self.products[0]["uid"]
             return True
         if action == "box_add" and _shaped(args):
             self.boxes.append(self._box({}))
@@ -228,6 +231,9 @@ class WeightDraft(PageContract):
             if row is None or args[1] not in names or row[args[1]] == args[2]:
                 return False
             row[args[1]] = args[2]
+            if products:
+                # The row being typed in stays listed when it stops matching.
+                self.revealed = row["uid"]
             return True
         if action == "product_no_packaging" and _shaped(args, str, bool):
             row = self._find(self.products, args[0])
@@ -274,13 +280,15 @@ class WeightDraft(PageContract):
             if sentence:
                 sku = product["sku"].strip()
                 blocker = f"Fix product “{sku}”" if sku else "Fix the new product"
-                found.append((blocker, key, f"Product “{sku}”: {sentence}"))
+                who = f"Product “{sku}”" if sku else "The new product"
+                found.append((blocker, key, f"{who}: {sentence}"))
         for box in self.boxes:
             sentence, key, _fields = self._row_problem("box", box, False)
             if sentence:
                 name = box["name"].strip()
                 blocker = f"Fix box “{name}”" if name else "Fix the new box"
-                found.append((blocker, key, f"Box “{name}”: {sentence}"))
+                who = f"Box “{name}”" if name else "The new box"
+                found.append((blocker, key, f"{who}: {sentence}"))
         return found
 
     def blocker(self) -> str | None:
@@ -543,6 +551,7 @@ class WeightDraft(PageContract):
             for product in self.products
             if not needle
             or not product["sku"].strip()
+            or product["uid"] == self.revealed
             or needle in product["sku"].casefold()
             or needle in product["name"].casefold()
         ]

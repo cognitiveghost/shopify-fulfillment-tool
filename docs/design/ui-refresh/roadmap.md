@@ -209,7 +209,9 @@ are chips and print in the order they were added. CSV import and export go throu
 a native file dialog, and the page has a toast. Several quiet data losses are now blocked and said: a set
 renamed onto another set's SKU, a dimension that is not a number, a product SKU typed twice. The unsaved
 poll is gone: every page reports its own edits. The standalone Tag Categories dialog, which had no caller,
-is deleted. Renders: `renders/phase9/`.
+is deleted. Also gone or changed (the spec's section 12 has the table): deleting a tag category asks nothing
+(Cancel undoes it), Weight's Quick Add and Delete Selected are gone, a new set or product goes first in its
+list, and Boxes has no search. Renders: `renders/phase9/`.
 
 The mockup has no drawing of these pages. They follow the page anatomy from Phase 7, and the spec names each
 place where it had to decide something the mockup does not show.

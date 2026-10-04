@@ -399,6 +399,8 @@ function render() {
   if (s.page !== view.shown) {
     view.shown = s.page;
     els.root.scrollTop = 0;
+    // Its "Update them" belongs to the page just left.
+    dismissToast();
   } else if (key && keyOf(document.activeElement) !== key) {
     // Where the layout itself changed, the focused control is a new node.
     focusKey(key);

@@ -37,7 +37,7 @@ class PageContract:
     Returning a freshly built dict silently drops them.
 
     collect() runs at any time, not only during a save: the window's
-    unsaved check calls it every few hundred milliseconds. A page mutating
+    unsaved check calls it after every edit. A page mutating
     its live dict mid-edit is fine -- config_data is a deep copy that only
     reaches disk through Save, which re-collects every page after all of
     them validate -- but collect() must have no other side effects.

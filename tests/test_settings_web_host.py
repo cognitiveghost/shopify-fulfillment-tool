@@ -477,10 +477,12 @@ def test_any_other_import_failure_points_to_logs(files_host, monkeypatch, tmp_pa
     path.write_text("a,b\n1,2\n", encoding="utf-8")
     _pick(monkeypatch, path)
     errors = _errors(monkeypatch)
-    toasts = _toasts(files_host)
+    seen, toasts = _edits(files_host), _toasts(files_host)
     files_host.bridge.importFile("sets-merge")
     assert errors == [("The sets weren't imported", "Details are in Logs.")]
     assert toasts == []
+    # It may have added rows before it failed, so the page is redrawn.
+    assert seen == [True]
     assert "The sets-merge import failed" in caplog.text
 
 
