@@ -99,3 +99,12 @@ def test_the_css_value_tokens_reach_the_web_tier_verbatim(theme, density):
     assert decls["--card-border"] == theme.card_border
     assert decls["--card-shadow"] == theme.card_shadow
     assert decls["--overlay-shadow"] == theme.overlay_shadow
+    assert decls["--scrim"] == theme.scrim
+
+
+@pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=lambda t: t.name)
+def test_the_theme_names_its_colour_scheme(theme, density):
+    """A page that opts in (color-scheme: var(--color-scheme)) gets Chromium's
+    own popups, the date picker and the suggestion list, in the theme."""
+    density("desk")
+    assert _parse(theme_css_vars(theme))["--color-scheme"] == theme.name

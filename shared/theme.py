@@ -90,6 +90,9 @@ class ThemeTokens:
     card_border: str
     card_shadow: str
     overlay_shadow: str
+    # Phase 8 (spec 2026-10-02 section 8): the backdrop behind a panel that
+    # takes a web page over. A CSS value too.
+    scrim: str
 
     # --- Solid accent fill; on_accent is the text that sits on it (spec 3.4a) ---
     # hover and active are per theme: dark fills lighten toward white.
@@ -165,6 +168,7 @@ LIGHT_THEME = ThemeTokens(
     card_border="transparent",
     card_shadow="0 1px 0 rgba(26,26,26,0.07), 0 1px 3px rgba(26,26,26,0.12)",
     overlay_shadow="0 4px 12px rgba(26,26,26,0.2)",
+    scrim="rgba(0,0,0,0.35)",
     accent_fill="#303030",
     accent_fill_hover="#1A1A1A",
     accent_fill_active="#000000",
@@ -218,6 +222,7 @@ DARK_THEME = ThemeTokens(
     card_border="#2E2F34",
     card_shadow="none",
     overlay_shadow="none",
+    scrim="rgba(0,0,0,0.35)",
     accent_fill="#E3E3E3",
     accent_fill_hover="#FFFFFF",
     accent_fill_active="#C4C4C8",
@@ -576,9 +581,10 @@ _INVERSE_PAIRS = (
 )
 
 # Tokens the web tier reads that are CSS values rather than colours: an edge
-# that is `transparent` in one theme, and shadows. Not hex-checked; checked
-# instead for the characters that would close the :root block they land in.
-_CSS_VALUE_FIELDS = ("card_border", "card_shadow", "overlay_shadow")
+# that is `transparent` in one theme, shadows, and the translucent backdrop.
+# Not hex-checked; checked instead for the characters that would close the
+# :root block they land in.
+_CSS_VALUE_FIELDS = ("card_border", "card_shadow", "overlay_shadow", "scrim")
 
 # Legacy name -> canonical token. Each pair carries the same literal in both
 # theme constructors; validate_theme asserts they stay equal so the
@@ -1163,6 +1169,11 @@ def theme_css_vars(theme: ThemeTokens) -> str:
     for f in fields(profile):
         if f.name != "type_overrides":
             derived[_css_name(f.name)] = _css_value(getattr(profile, f.name))
+
+    # For a page that opts in with `color-scheme: var(--color-scheme)`:
+    # Chromium then draws its own popups (a date picker, a suggestion list)
+    # in the theme.
+    derived["--color-scheme"] = "dark" if theme.name == "dark" else "light"
 
     # A token named like a derived value would be overwritten without a sound.
     clash = derived.keys() & decls.keys()
