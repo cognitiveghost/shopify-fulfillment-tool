@@ -238,7 +238,9 @@ def main() -> int:
         window.show()
         spin(0.3)
         for view in window.findChildren(QWebEngineView):
-            js(view, ERROR_HOOK)
+            errors = js(view, "window.__errors || []")
+            if errors:
+                FAILURES.append(f"JS errors in Settings: {errors}")
         window.close()
         window.deleteLater()
         # deleteLater() posted from inside a nested loop is only delivered

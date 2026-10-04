@@ -563,7 +563,9 @@ class MainWindow(QMainWindow):
         worker.signals.result.connect(
             lambda result, cid=client_id: self._on_client_data_loaded(cid, result)
         )
-        worker.signals.error.connect(self._on_client_data_load_error)
+        worker.signals.error.connect(
+            lambda error, cid=client_id: self._on_client_data_load_error(cid, error)
+        )
         # Keep a strong reference until the worker finishes: a bare local var
         # gets garbage-collected the instant this method returns, which -- in
         # this PySide6 build -- destroys the QRunnable's unparented
@@ -596,6 +598,7 @@ class MainWindow(QMainWindow):
                 f"CLIENT_{client_id}'s configuration couldn't be loaded",
                 "Details are in Logs.",
             )
+            self.command_bar.forget_announced()
             return
 
         try:
@@ -628,11 +631,16 @@ class MainWindow(QMainWindow):
         except Exception:
             logger.exception("Error applying loaded client data")
             show_error(self, "The client couldn't be switched", "Details are in Logs.")
+            self.command_bar.forget_announced()
 
-    def _on_client_data_load_error(self, error):
+    def _on_client_data_load_error(self, client_id: str, error):
         _exctype, value, _tb = error
         logger.error("Error loading client data", exc_info=value)
         show_error(self, "The client couldn't be switched", "Details are in Logs.")
+        # A stale failure must not make the bar re-announce -- and so reset the
+        # session of -- the client that did load.
+        if client_id == self.current_client_id:
+            self.command_bar.forget_announced()
 
     def schedule_results_columns_save(self, settings: dict):
         """Debounced: a drag sends a burst of layouts, the share gets one write."""

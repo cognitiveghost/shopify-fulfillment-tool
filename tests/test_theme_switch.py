@@ -91,7 +91,7 @@ def test_a_second_switch_wins(qtbot, qapp, monkeypatch):
     bridge.blockSignals(False)
     qtbot.wait(web_page.THEME_ACK_TIMEOUT_MS + 150)
     assert manager.get_current_theme_name() == "light"
-    assert calls == ["dark", "light"] or calls == ["dark"]  # dark finished early, then back
+    assert calls == ["dark", "light"]  # the second click finishes the first, then switches back
     assert bridge.themeCss == theme_css_vars(manager.tokens_for("light"))
 
 

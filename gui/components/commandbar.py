@@ -408,6 +408,11 @@ class CommandBar(QWidget):
         self._announced = client_id
         self.clientChanged.emit(client_id)
 
+    def forget_announced(self) -> None:
+        """The announced client did not load: the next refresh or action row
+        announces it again, which is the retry."""
+        self._announced = ""
+
     def _on_row_activated(self, index: int) -> None:
         """activated() is user-initiated only, and _ClientCombo keeps the
         wheel and the arrow keys from ever reaching these rows."""

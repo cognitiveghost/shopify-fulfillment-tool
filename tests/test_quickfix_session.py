@@ -97,3 +97,30 @@ def test_an_open_session_survives_the_client_menu(main_window, qtbot, monkeypatc
 
     assert resets == []
     assert win.session_path == "/tmp/session-under-test"
+
+
+def test_a_client_that_failed_to_load_is_retried_by_a_refresh(main_window, qtbot, monkeypatch):
+    win = main_window
+    monkeypatch.setattr("gui.main_window_pyside.show_error", lambda *a, **k: None)
+    loads = []
+    monkeypatch.setattr(
+        win, "_load_client_data", lambda cid: (loads.append(cid), (None, None))[1]
+    )
+    win.command_bar.set_clients(["M"])
+    win.command_bar.set_current_client("M")
+    qtbot.waitUntil(lambda: loads == ["M"] and not win._client_load_workers, timeout=5000)
+    QApplication.processEvents()
+
+    win.command_bar.set_clients(["M"])  # "Refresh list"
+    qtbot.waitUntil(lambda: loads == ["M", "M"], timeout=5000)
+
+
+def test_the_sidebar_theme_button_takes_the_synchronised_path(main_window, qtbot):
+    from gui.theme_manager import get_theme_manager
+
+    manager = get_theme_manager()
+    assert manager.get_current_theme_name() == "light"
+    main_window.sidebar.dark_button.click()
+    # set_theme directly would already be dark: the chrome waits for the page.
+    assert manager.get_current_theme_name() == "light"
+    qtbot.waitUntil(lambda: manager.get_current_theme_name() == "dark", timeout=2000)
