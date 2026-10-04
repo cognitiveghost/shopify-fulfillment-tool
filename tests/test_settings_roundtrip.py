@@ -181,20 +181,18 @@ def test_a_crashed_write_points_to_logs(window, monkeypatch):
     assert errors == [("Settings weren't saved", "Details are in Logs.")]
 
 
-def test_the_three_web_pages_share_one_widget_in_the_stack(window):
-    """General and both mappings are drafts: the stack shows one host for all
-    three, and the nav tells the host which to draw."""
+def test_every_page_shares_one_widget_in_the_stack(window):
+    """Every page is a draft: the stack shows one host for all of them, and
+    the nav tells the host which to draw."""
+    from gui.settings.window import WEB_PAGE_KEYS
+
     host = window._web_host
-    for name, key in (
-        ("General", "general"),
-        ("Orders mapping", "orders"),
-        ("Stock mapping", "stock"),
-    ):
+    assert window.tab_widget.count() == 1
+    assert sorted(WEB_PAGE_KEYS) == sorted(window._pages_by_name)
+    for name, key in WEB_PAGE_KEYS.items():
         window._select_page(name)
         assert window.tab_widget.currentWidget() is host
         assert host.bridge.state["page"] == key
-    window._select_page("Sets")
-    assert window.tab_widget.currentWidget() is window._pages_by_name["Sets"]
 
 
 def test_an_edit_on_a_web_page_marks_it_unsaved_at_once(window):

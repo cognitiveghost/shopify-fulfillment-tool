@@ -1,8 +1,8 @@
 """What SettingsWindow asks of a settings page, with no widget attached.
 
-A Qt page is a QWidget that meets this (gui/settings/base.py). A draft meets
-it with no widget at all (gui/settings/page_state.py): its values are drawn
-by the web page. The window saves and marks both the same way. No Qt import.
+Every page is a draft: it meets this with no widget (gui/settings/
+page_state.py and the *_state.py modules beside it), and its values are drawn
+by the web page. No Qt import.
 """
 
 import json

@@ -331,8 +331,8 @@ def test_a_profile_that_opens_with_a_required_column_unmapped_is_marked(
     win.deleteLater()
 
 
-def test_the_dialog_has_no_margins_and_a_qt_page_keeps_its_own(window):
-    from gui.settings.window import FOOTER_HEIGHT_PX, PAGE_MARGIN_PX
+def test_the_dialog_and_the_web_host_have_no_margins(window):
+    from gui.settings.window import FOOTER_HEIGHT_PX
 
     margins = window.layout().contentsMargins()
     assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
@@ -341,6 +341,5 @@ def test_the_dialog_has_no_margins_and_a_qt_page_keeps_its_own(window):
         0,
         0,
     )
-    assert window._pages_by_name["Sets"].contentsMargins().left() == PAGE_MARGIN_PX
     assert window._web_host.contentsMargins().left() == 0
     assert window._footer.height() == FOOTER_HEIGHT_PX == 60
