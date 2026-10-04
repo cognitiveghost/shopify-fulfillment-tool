@@ -278,6 +278,7 @@ def test_settings_that_save_but_fail_to_reload_say_so(monkeypatch):
         analysis_results_df=None,
         orders_file_path=None,
         stock_file_path=None,
+        session_path=None,
     )
 
     ActionsHandler(mw).open_settings_window()
@@ -304,15 +305,42 @@ def test_the_settings_window_is_told_which_files_are_loaded(monkeypatch):
         analysis_results_df=None,
         orders_file_path="/data/orders.csv",
         stock_file_path=None,
+        session_path="/server/Sessions/CLIENT_M/2026-09-30_1",
     )
 
     ActionsHandler(mw).open_settings_window(page="Orders mapping")
 
     assert seen["loaded_files"] == {"orders": "/data/orders.csv", "stock": None}
     assert seen["initial_page"] == "Orders mapping"
+    # Test rule names the analysis it ran against by the session's folder.
+    assert seen["session_name"] == "2026-09-30_1"
     # The main window is the dialog's parent: left alone, every open would
     # leave a dialog and its web view alive (ADR 0016).
     assert deleted == [True]
+
+
+def test_with_no_session_the_settings_window_gets_no_session_name(monkeypatch):
+    seen = {}
+
+    def window(**kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(exec=lambda: False, deleteLater=lambda: None)
+
+    monkeypatch.setattr("gui.actions_handler.SettingsWindow", window)
+    profile_manager = Mock()
+    profile_manager.load_shopify_config.return_value = {"settings": {}}
+    mw = SimpleNamespace(
+        current_client_id="M",
+        profile_manager=profile_manager,
+        analysis_results_df=None,
+        orders_file_path=None,
+        stock_file_path=None,
+        session_path=None,
+    )
+
+    ActionsHandler(mw).open_settings_window()
+
+    assert seen["session_name"] is None
 
 
 def test_the_writeoff_bypass_is_gone():

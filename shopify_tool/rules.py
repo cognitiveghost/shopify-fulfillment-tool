@@ -735,16 +735,25 @@ class RuleEngine:
                 dictionary represents a single rule. A rule consists of
                 conditions and actions. Optional 'priority' field controls
                 execution order (lower number = higher priority = executes first).
+                A rule stored with 'enabled': False is off and never runs;
+                a rule with no such key is on.
         """
         import logging
         logger = logging.getLogger(__name__)
 
-        if not rules_config:
+        # Deep-copy so we never mutate the caller's config in-place
+        rules_working = [
+            copy.deepcopy(rule)
+            for rule in rules_config or []
+            if rule.get("enabled", True) is not False
+        ]
+        skipped = len(rules_config or []) - len(rules_working)
+        if skipped:
+            logger.info(f"[RULE ENGINE] Skipped {skipped} rules that are off")
+
+        if not rules_working:
             self.rules = []
             return
-
-        # Deep-copy so we never mutate the caller's config in-place
-        rules_working = copy.deepcopy(rules_config)
 
         # Normalize: add default priority to rules without it
         self.rules = self._normalize_priorities(rules_working)
@@ -901,7 +910,7 @@ class RuleEngine:
                             step.get("match", "ALL"),
                         )
                         if not matched:
-                            logger.info(
+                            logger.debug(
                                 f"[RULE ENGINE] Order {order_number} rule "
                                 f"'{rule_name}' step {step_idx+1}: no match, stopping"
                             )

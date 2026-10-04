@@ -52,6 +52,9 @@ PALETTE = {
         "none",
     ),
     "overlay_shadow": ("0 4px 12px rgba(26,26,26,0.2)", "none"),
+    # New in phase 8 (spec 2026-10-02 section 8): the backdrop behind a panel
+    # that takes the page over. The mockup's value, in both themes.
+    "scrim": ("rgba(0,0,0,0.35)", "rgba(0,0,0,0.35)"),
 }
 
 THEMES = pytest.mark.parametrize("theme", [LIGHT_THEME, DARK_THEME], ids=["light", "dark"])

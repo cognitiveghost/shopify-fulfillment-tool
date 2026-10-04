@@ -523,3 +523,41 @@ def test_regex_with_groups_matches_without_warning():
         result = _op_matches_regex(pd.Series(["01-A", "03-B", "05-C"]), "^(01|05)")
     assert result.tolist() == [True, False, True]
     assert not [w for w in caught if issubclass(w.category, UserWarning)]
+
+
+def _tagging(name, **extra):
+    """An article rule that tags every order holding SKU A with its own name."""
+    return {"name": name, "level": "article", **extra, "steps": [{
+        "conditions": [{"field": "SKU", "operator": "equals", "value": "A"}],
+        "match": "ALL", "actions": [{"type": "ADD_INTERNAL_TAG", "value": name}]}]}
+
+
+def _all_tags(df):
+    return {tag for value in df["Internal_Tags"] for tag in parse_tags(value)}
+
+
+def test_a_rule_that_is_off_is_skipped():
+    out = RuleEngine([_tagging("OFF", enabled=False), _tagging("ON")]).apply(_status_frame())
+    assert _all_tags(out) == {"ON"}
+
+
+@pytest.mark.parametrize("extra", [{}, {"enabled": True}], ids=["no flag", "on"])
+def test_a_rule_runs_unless_it_is_stored_off(extra):
+    out = RuleEngine([_tagging("T", **extra)]).apply(_status_frame())
+    assert _all_tags(out) == {"T"}
+
+
+def test_an_engine_of_off_rules_changes_nothing():
+    df = _status_frame()
+    engine = RuleEngine([_tagging("OFF", enabled=False)])
+    out = engine.apply(df)
+    assert engine.rules == []
+    assert _all_tags(out) == set()
+    assert not engine.matched_rows.any()
+
+
+def test_execution_order_still_lists_a_rule_that_is_off():
+    """The Rules page orders every rule with it, off or not."""
+    off = _tagging("off", enabled=False, priority=1)
+    on = _tagging("on", priority=2)
+    assert [r["name"] for r in RuleEngine.execution_order([on, off])] == ["off", "on"]

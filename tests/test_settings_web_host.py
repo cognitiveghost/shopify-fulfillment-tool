@@ -1,10 +1,14 @@
-"""SettingsWebHost: one web view, three drafts (phase 7 spec section 6.5).
+"""SettingsWebHost: one web view and its drafts (phase 7 spec section 6.5,
+phase 8 spec section 6.2).
 
 Nothing here waits for Chromium: the bridge's state is read on the Python
 side, and the page's requests are made by calling the bridge's slots.
 """
 
+import pandas as pd
 import pytest
+import shiboken6
+from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtWidgets import QFileDialog
 
 from gui.settings.page_state import (
@@ -14,6 +18,7 @@ from gui.settings.page_state import (
     StockDraft,
     read_file_columns,
 )
+from gui.settings.rules_state import RulesDraft
 from gui.settings.web_host import SettingsWebHost
 
 
@@ -190,3 +195,189 @@ def test_read_file_columns_names_the_file_and_marks_where_it_came_from(tmp_path)
         {"Артикул": "ABC", "Наличност": "4"},
         True,
     )
+
+
+# --- Rules: Test rule, and the footer's link (phase 8) ------------------------
+
+
+def _analysis():
+    return pd.DataFrame(
+        {
+            "Order_Number": ["#1", "#1", "#2", "#3"],
+            "SKU": ["A", "B", "B", "A"],
+            "Quantity": [4, 3, 1, 1],
+            "Internal_Tags": ["[]"] * 4,
+        }
+    )
+
+
+def _rule(name, operator="equals", value="A"):
+    return {
+        "name": name,
+        "level": "article",
+        "steps": [
+            {
+                "conditions": [{"field": "SKU", "operator": operator, "value": value}],
+                "match": "ALL",
+                "actions": [{"type": "ADD_INTERNAL_TAG", "value": "T"}],
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def test_workers(monkeypatch):
+    """Catch the worker a test starts instead of letting a thread run it:
+    the test then delivers its result when it chooses, by calling run()."""
+    started = []
+    monkeypatch.setattr(
+        "gui.settings.web_host.QThreadPool",
+        type(
+            "Pool",
+            (),
+            {
+                "globalInstance": staticmethod(
+                    lambda: type("P", (), {"start": staticmethod(started.append)})()
+                )
+            },
+        ),
+    )
+    return started
+
+
+@pytest.fixture
+def rules_host(qtbot, test_workers):
+    drafts = {
+        "general": GeneralDraft({"low_stock_threshold": 5}, "ACME"),
+        "rules": RulesDraft([_rule("VIP"), _rule("bad", "matches regex", "(")], _analysis()),
+    }
+    widget = SettingsWebHost(drafts, analysis_df=_analysis(), session="2026-09-30_1")
+    qtbot.addWidget(widget)
+    widget.show_page("rules")
+    return widget
+
+
+def test_a_rule_edit_reaches_the_rules_draft(rules_host):
+    seen = _edits(rules_host)
+    rules_host.bridge.edit("rule_name", ["1", "VIP first"])
+    assert rules_host.drafts["rules"].rules[0]["name"] == "VIP first"
+    assert rules_host.bridge.state["rules"]["groups"][0]["rows"][0]["name"] == "VIP first"
+    assert seen == [True]
+
+
+def test_a_test_shows_the_panel_running_then_its_result(rules_host, test_workers):
+    rules_host.bridge.testRule("1")
+    test = rules_host.bridge.state["test"]
+    assert (test["status"], test["uid"], test["message"]) == ("running", "1", "Testing 3 orders…")
+    assert test["intro"]["session"] == "2026-09-30_1"
+    assert len(test_workers) == 1
+
+    test_workers[0].run()
+    test = rules_host.bridge.state["test"]
+    assert (test["status"], test["uid"]) == ("done", "1")
+    assert (test["matched"], test["total"]) == ("2", "of 3 orders match")
+    assert [row["order"] for row in test["rows"]] == ["#1", "#3"]
+    # The page is still the Rules page under the panel.
+    assert rules_host.bridge.state["page"] == "rules"
+
+
+def test_a_test_runs_the_rule_as_edited(rules_host, test_workers):
+    rules_host.bridge.edit("cond_value", ["1", "0", "0", "B"])
+    rules_host.bridge.testRule("1")
+    test_workers[0].run()
+    assert [row["order"] for row in rules_host.bridge.state["test"]["rows"]] == ["#1", "#2"]
+
+
+def test_a_test_does_not_mark_the_page_unsaved(rules_host, test_workers):
+    seen = _edits(rules_host)
+    rules_host.bridge.testRule("1")
+    test_workers[0].run()
+    rules_host.bridge.closeTest()
+    assert seen == []
+
+
+def test_close_takes_the_panel_away(rules_host, test_workers):
+    rules_host.bridge.testRule("1")
+    test_workers[0].run()
+    rules_host.bridge.closeTest()
+    assert "test" not in rules_host.bridge.state
+    rules_host.bridge.closeTest()
+    assert "test" not in rules_host.bridge.state
+
+
+def test_a_result_that_arrives_after_close_is_dropped(rules_host, test_workers):
+    rules_host.bridge.testRule("1")
+    rules_host.bridge.closeTest()
+    test_workers[0].run()
+    assert "test" not in rules_host.bridge.state
+
+
+def test_a_result_from_a_test_that_was_replaced_is_dropped(rules_host, test_workers):
+    rules_host.bridge.testRule("1")
+    rules_host.bridge.closeTest()
+    rules_host.bridge.edit("cond_value", ["1", "0", "0", "B"])
+    rules_host.bridge.testRule("1")
+    test_workers[0].run()
+    assert rules_host.bridge.state["test"]["status"] == "running"
+    test_workers[1].run()
+    assert [row["order"] for row in rules_host.bridge.state["test"]["rows"]] == ["#1", "#2"]
+
+
+def test_showing_another_page_closes_the_panel(rules_host, test_workers):
+    rules_host.bridge.testRule("1")
+    rules_host.show_page("general")
+    assert "test" not in rules_host.bridge.state
+    test_workers[0].run()
+    assert "test" not in rules_host.bridge.state
+    assert rules_host.bridge.state["page"] == "general"
+
+
+def test_a_rule_that_cannot_be_tested_starts_nothing(rules_host, test_workers):
+    rules_host.bridge.testRule("2")  # its regex is marked
+    rules_host.bridge.testRule("9")  # no such rule
+    rules_host.show_page("general")
+    rules_host.bridge.testRule("1")  # not on Rules
+    assert test_workers == []
+    assert "test" not in rules_host.bridge.state
+
+
+def test_a_test_that_raises_shows_the_failed_panel_and_is_logged(
+    rules_host, test_workers, monkeypatch, caplog
+):
+    def boom(rule, analysis_df, session):
+        raise RuntimeError("engine fell over")
+
+    monkeypatch.setattr("gui.settings.web_host.run_rule_test", boom)
+    rules_host.bridge.testRule("1")
+    test_workers[0].run()
+    test = rules_host.bridge.state["test"]
+    assert (test["status"], test["uid"]) == ("failed", "1")
+    assert test["message"] == "The rule test didn’t finish. Details are in Logs."
+    assert "engine fell over" in caplog.text
+
+
+def test_focus_problem_opens_the_rule_before_it_asks_for_the_control(rules_host):
+    key = rules_host.drafts["rules"].blocker_key()
+    assert key == "rule-2-s0-c0-value"
+    asked = []
+
+    def on_focus(wanted):
+        rows = rules_host.bridge.state["rules"]["groups"][0]["rows"]
+        asked.append((wanted, [row["open"] for row in rows]))
+
+    rules_host.bridge.problemFocusRequested.connect(on_focus)
+    rules_host.focus_problem(key)
+    # By the time the page is asked, the state that draws the control is out.
+    assert asked == [(key, [False, True])]
+
+
+def test_a_result_that_arrives_after_the_host_is_gone_raises_nothing(qtbot, test_workers):
+    """The dialog closed while its test was still running."""
+    drafts = {"rules": RulesDraft([_rule("VIP")], _analysis())}
+    widget = SettingsWebHost(drafts, analysis_df=_analysis())
+    widget.bridge.testRule("1")
+    widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(widget)
+
+    test_workers[0].run()

@@ -461,6 +461,10 @@ class ActionsHandler(QObject):
                 "orders": self.mw.orders_file_path,
                 "stock": self.mw.stock_file_path,
             },
+            # Test rule names the analysis it ran against.
+            session_name=os.path.basename(self.mw.session_path)
+            if self.mw.session_path
+            else None,
         )
 
         saved = settings_win.exec()

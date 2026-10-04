@@ -1,8 +1,10 @@
-"""The settings pages' bridge (phase 7 spec section 3.3).
+"""The settings pages' bridge (phase 7 spec section 3.3, phase 8 spec
+section 3.2).
 
 Python pushes one `state` map, built by a draft's view() (gui/settings/
-page_state.py); the page draws it and reports each edit through edit(). The
-catalogue is the spec's section 3.3: add a member there before adding it here.
+page_state.py, rules_state.py); the page draws it and reports each edit
+through edit(). The catalogue is those two sections: add a member there
+before adding it here.
 
 Nothing the page sends is used as a path.
 """
@@ -26,6 +28,8 @@ class SettingsBridge(PageBridge):
     # these, so nothing it sends can echo back into the page.
     editRequested = Signal(str, list)
     readColumnsRequested = Signal()
+    testRequested = Signal(str)
+    testClosed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -56,6 +60,15 @@ class SettingsBridge(PageBridge):
     @Slot()
     def readColumns(self) -> None:
         self.readColumnsRequested.emit()
+
+    @Slot(str)
+    def testRule(self, uid) -> None:
+        """Test... on the rule with this uid (phase 8 spec section 6)."""
+        self.testRequested.emit(str(uid))
+
+    @Slot()
+    def closeTest(self) -> None:
+        self.testClosed.emit()
 
 
 def mount_settings_page(view: QWebEngineView) -> SettingsBridge:
