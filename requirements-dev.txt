@@ -9,7 +9,7 @@
 # -----------------
 pytest>=9.1.1          # Unit testing framework
 pytest-qt>=4.5.0       # Pytest plugin for testing PySide6/Qt applications
-pytest-mock>=3.15.1    # Mocking and monkey-patching for pytest
+pytest-mock>=3.16.0    # Mocking and monkey-patching for pytest
 pytest-cov>=7.1.0      # Code coverage reporting for pytest
 
 # Code Quality Tools
