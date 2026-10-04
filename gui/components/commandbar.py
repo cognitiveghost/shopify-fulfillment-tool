@@ -233,7 +233,14 @@ class CommandBar(QWidget):
         re-applied on a theme change.
         """
         theme = theme or get_theme_manager().get_current_theme()
-        self.session_button.setStyleSheet(font_css("caption"))
+        # The sidebar's tool-button recipe: the app sheet would paint this on
+        # `surface`, a white box on the sunken bar.
+        self.session_button.setStyleSheet(
+            f"QToolButton {{ {font_css('caption')} background-color: transparent;"
+            " border: 1px solid transparent;"
+            f" border-radius: {theme.radius_md}px; padding: 0px 8px; }}"
+            f"QToolButton:hover {{ background-color: {theme.hover}; }}"
+        )
         self.session_chip.setStyleSheet(
             f"QLabel {{ {font_css('caption')}"
             f" font-family: {theme.font_family_mono};"

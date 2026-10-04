@@ -280,6 +280,10 @@ class UIManager:
         self.mw.main_tabs.setTabPosition(QTabWidget.North)
         self.mw.main_tabs.setMovable(False)
         self.mw.main_tabs.tabBar().hide()
+        # With the tab bar hidden this is a page stack, and the app sheet's
+        # QTabWidget::pane border would frame every page in a 1px strip.
+        self.mw.main_tabs.setObjectName("PageStack")
+        self.mw.main_tabs.setStyleSheet("#PageStack::pane { border: 0; }")
 
         pages = (
             self._create_tab1_session_setup(),
