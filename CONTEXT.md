@@ -463,8 +463,16 @@ the current analysis, counted over fulfillable orders exactly as the generated
 file is. Shown while the filter is being written.
 
 **Generate order** — the order reports are listed in Settings › Reports,
-which is the order they are offered and generated in. Set by dragging within
-one kind; packing lists and stock exports never mix.
+which is the order they are offered and generated in. Set by the up and down
+buttons within one kind; packing lists and stock exports never mix.
+
+**Set** / **Component** — a set is a SKU on an order that the analysis
+replaces with other SKUs before stock is allocated; a component is one of
+those SKUs and how many of it one set holds. Stored under `set_decoders`.
+
+**Tag category** — a named group of internal tags. A tag belongs to one
+category. Its place in Settings › Tag categories is the order Results' "+ Tag"
+menu lists it in. Its colour and its ID are stored and drawn nowhere.
 
 **Packaging write-off** — the packaging material SKUs a run consumes, derived
 from the orders' internal tags. A stock export either carries them among its
