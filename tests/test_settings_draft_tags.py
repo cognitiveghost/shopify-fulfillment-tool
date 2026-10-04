@@ -1,0 +1,296 @@
+"""TagsDraft: the Tag categories page's values, with no widget (phase 9 spec section 7)."""
+
+import copy
+
+import pytest
+
+from gui.settings.tags_state import (
+    ADD_TAG_FIRST,
+    DEFAULT_TAG_COLOR,
+    NO_NAME,
+    NO_WRITEOFF_SKU,
+    QUANTITY_PROBLEM,
+    TagsDraft,
+)
+from shopify_tool.tag_manager import DEFAULT_TAG_CATEGORIES, validate_tag_categories_v2
+
+CATEGORIES = {
+    "version": 2,
+    "categories": {
+        "priority": {"label": "Priority", "color": "#FF0000", "order": 2, "tags": ["VIP", "URGENT"]},
+        "packaging": {
+            "label": "Packaging",
+            "color": "#00FF00",
+            "order": 1,
+            "tags": ["BOX", "BAG"],
+            "legacy_key": 7,
+            "sku_writeoff": {
+                "enabled": True,
+                "mappings": {
+                    "BOX": [{"sku": "PKG-BOX-S", "quantity": 1.0}, {"sku": "TAPE", "quantity": 0.5, "note": "kept"}],
+                    "BAG": ["junk", {"sku": "no quantity"}],
+                },
+            },
+        },
+    },
+    "top_level_key": True,
+}
+
+
+def draft(stored=None):
+    return TagsDraft(copy.deepcopy(CATEGORIES if stored is None else stored))
+
+
+def rows(d):
+    return d.view()["tags"]["rows"]
+
+
+def editor(d, uid):
+    d.apply("open", [uid])
+    return next(row for row in rows(d) if row["uid"] == uid)["editor"]
+
+
+def test_it_loads_the_categories_sorted_by_their_order():
+    d = draft()
+    assert [(r["uid"], r["label"], r["chips"], r["badge"]) for r in rows(d)] == [
+        ("1", "Packaging", ["BOX", "BAG"], "Write-off"),
+        ("2", "Priority", ["VIP", "URGENT"], ""),
+    ]
+    assert [(r["can_up"], r["can_down"]) for r in rows(d)] == [(False, True), (True, False)]
+    assert d.view()["tags"]["count"] == "2 categories, 4 tags"
+    assert d.view()["action"] == "Add category"
+    # A malformed write-off is dropped, as the old editor did.
+    assert editor(d, "1")["writeoff"]["rows"] == [
+        {"tag": "BOX", "sku": "PKG-BOX-S", "quantity": "1", "problem": "", "invalid": ""},
+        {"tag": "BOX", "sku": "TAPE", "quantity": "0.5", "problem": "", "invalid": ""},
+    ]
+
+
+def test_the_old_format_loads_and_is_saved_as_version_two():
+    live = {"a": {"label": "A", "color": "#111111", "order": 1, "tags": ["X"]}}
+    d = TagsDraft(live)
+    assert [r["label"] for r in rows(d)] == ["A"]
+    saved = d.collect()["tag_categories"]
+    assert saved is live
+    assert saved == {"version": 2, "categories": {"a": {"label": "A", "color": "#111111", "order": 1, "tags": ["X"]}}}
+
+
+def test_an_unedited_draft_is_clean_and_writes_order_as_the_place():
+    live = copy.deepcopy(CATEGORIES)
+    d = TagsDraft(live)
+    d.mark_clean()
+    saved = d.collect()["tag_categories"]
+    assert saved is live
+    assert saved["top_level_key"] is True
+    assert list(saved["categories"]) == ["packaging", "priority"]
+    assert saved["categories"]["packaging"]["order"] == 1
+    assert saved["categories"]["priority"] == {"label": "Priority", "color": "#FF0000", "order": 2, "tags": ["VIP", "URGENT"]}
+    packaging = saved["categories"]["packaging"]
+    assert packaging["legacy_key"] == 7
+    assert packaging["color"] == "#00FF00"
+    assert packaging["sku_writeoff"] == {
+        "enabled": True,
+        "mappings": {"BOX": [{"sku": "PKG-BOX-S", "quantity": 1.0}, {"sku": "TAPE", "quantity": 0.5, "note": "kept"}]},
+    }
+    assert not d.is_dirty()
+    assert d.validate() == (True, [])
+
+
+def test_the_default_categories_round_trip_but_for_the_order_number():
+    d = draft(copy.deepcopy(DEFAULT_TAG_CATEGORIES))
+    saved = d.collect()["tag_categories"]["categories"]
+    stored = DEFAULT_TAG_CATEGORIES["categories"]
+    assert list(saved) == sorted(stored, key=lambda cid: stored[cid]["order"])
+    for place, (category_id, category) in enumerate(saved.items(), 1):
+        assert category == {**stored[category_id], "order": place}
+    assert validate_tag_categories_v2(d.collect()["tag_categories"]) == (True, [])
+
+
+def test_open_close_and_reveal_save_nothing():
+    d = draft()
+    d.mark_clean()
+    assert d.apply("open", ["2"])
+    assert not d.apply("open", ["2"])
+    assert not d.apply("open", ["9"])
+    assert d.apply("reveal", ["cat-1-m0-sku"])
+    assert rows(d)[0]["open"]
+    assert d.apply("close", [])
+    assert not d.is_dirty()
+
+
+def test_a_new_category_is_last_open_and_gets_the_default_colour():
+    d = draft()
+    assert d.apply("cat_add", [])
+    new = rows(d)[-1]
+    assert (new["uid"], new["label"], new["open"], new["no_tags"]) == ("3", "New category", True, "No tags yet.")
+    assert new["editor"]["writeoff"]["can_add"] is False
+    assert new["editor"]["writeoff"]["add_title"] == ADD_TAG_FIRST
+    saved = d.collect()["tag_categories"]["categories"]
+    assert saved["new_category"] == {"label": "New category", "color": DEFAULT_TAG_COLOR, "order": 3, "tags": []}
+    assert validate_tag_categories_v2(d.collect()["tag_categories"]) == (True, [])
+
+
+@pytest.mark.parametrize(
+    ("label", "category_id"),
+    [("Gift wrap", "gift_wrap"), ("  VIP / 2nd-day!  ", "vip_2nd_day"), ("Пакування", "category"), ("Priority", "priority_2")],
+)
+def test_a_new_categorys_id_is_made_from_its_name(label, category_id):
+    d = draft()
+    d.apply("cat_add", [])
+    d.apply("cat_label", ["3", label])
+    assert list(d.collect()["tag_categories"]["categories"])[-1] == category_id
+
+
+def test_a_save_fixes_a_new_categorys_id():
+    d = draft()
+    d.apply("cat_add", [])
+    d.apply("cat_label", ["3", "Gifts"])
+    d.mark_clean(d.current_snapshot())
+    assert not d.is_dirty()
+    d.apply("cat_label", ["3", "Presents"])
+    saved = d.collect()["tag_categories"]["categories"]
+    assert saved["gifts"]["label"] == "Presents"
+    assert "presents" not in saved
+
+
+def test_rename_move_and_delete():
+    d = draft()
+    assert d.apply("cat_label", ["1", "Boxes"])
+    assert not d.apply("cat_label", ["1", "Boxes"])
+    assert not d.apply("cat_move", ["1", "up"])
+    assert d.apply("cat_move", ["1", "down"])
+    assert not d.apply("cat_move", ["1", "sideways"])
+    saved = d.collect()["tag_categories"]["categories"]
+    assert [(cid, c["order"]) for cid, c in saved.items()] == [("priority", 1), ("packaging", 2)]
+    assert saved["packaging"]["label"] == "Boxes"
+    assert d.apply("cat_delete", ["2"])
+    assert list(d.collect()["tag_categories"]["categories"]) == ["packaging"]
+
+
+def test_a_tag_is_added_in_capitals_and_removed_with_its_write_offs():
+    d = draft()
+    assert d.apply("tag_add", ["1", " fragile "])
+    assert rows(d)[0]["chips"] == ["BOX", "BAG", "FRAGILE"]
+    assert not d.apply("tag_add", ["1", "   "])
+    assert d.apply("tag_remove", ["1", "BOX"])
+    assert not d.apply("tag_remove", ["1", "BOX"])
+    assert rows(d)[0]["chips"] == ["BAG", "FRAGILE"]
+    assert d.collect()["tag_categories"]["categories"]["packaging"]["sku_writeoff"]["mappings"] == {}
+
+
+def test_a_tag_this_category_or_another_has_is_refused_with_a_sentence():
+    d = draft()
+    d.mark_clean()
+    assert d.apply("tag_add", ["1", "box"])
+    assert editor(d, "1")["tag_problem"] == "BOX is already in this category."
+    assert d.apply("tag_add", ["1", "vip"])
+    assert editor(d, "1")["tag_problem"] == "VIP is already in Priority. A tag belongs to one category."
+    assert not d.is_dirty()
+    assert d.blocker() is None
+    # The next edit to the category clears it, even one that changes nothing.
+    assert d.apply("cat_label", ["1", "Packaging"])
+    assert editor(d, "1")["tag_problem"] == ""
+    assert not d.apply("cat_label", ["1", "Packaging"])
+
+
+def test_the_write_off_edits():
+    d = draft()
+    assert d.apply("writeoff", ["2", True])
+    assert not d.apply("writeoff", ["2", True])
+    assert d.apply("map_add", ["2"])
+    assert editor(d, "2")["writeoff"]["rows"] == [
+        {"tag": "VIP", "sku": "", "quantity": "1", "problem": NO_WRITEOFF_SKU, "invalid": "sku"}
+    ]
+    assert d.apply("map_tag", ["2", "0", "URGENT"])
+    assert not d.apply("map_tag", ["2", "0", "BOX"])
+    assert d.apply("map_sku", ["2", "0", " CARD "])
+    assert d.apply("map_quantity", ["2", "0", "2,5"])
+    assert d.collect()["tag_categories"]["categories"]["priority"]["sku_writeoff"] == {
+        "enabled": True,
+        "mappings": {"URGENT": [{"sku": "CARD", "quantity": 2.5}]},
+    }
+    assert d.apply("map_remove", ["2", "0"])
+    assert not d.apply("map_remove", ["2", "0"])
+    d.apply("cat_add", [])
+    assert not d.apply("map_add", ["3"])
+
+
+def test_a_category_with_no_name_blocks_by_its_place():
+    d = draft()
+    d.apply("cat_label", ["2", "  "])
+    assert d.blocker() == "Name category 2"
+    assert d.blocker_key() == "cat-2-label"
+    assert rows(d)[1]["label"] == "Unnamed category"
+    assert rows(d)[1]["problem"] == NO_NAME
+    assert editor(d, "2")["label_problem"] == NO_NAME
+    assert d.validate() == (False, [f"Category “Unnamed category”: {NO_NAME}"])
+
+
+@pytest.mark.parametrize("text", ["0", "1000", "abc", "", "-1"])
+def test_a_write_off_quantity_out_of_range_blocks(text):
+    d = draft()
+    d.apply("map_quantity", ["1", "1", text])
+    assert d.blocker() == "Fix category “Packaging”"
+    assert d.blocker_key() == "cat-1-m1-quantity"
+    row = editor(d, "1")["writeoff"]["rows"][1]
+    assert (row["problem"], row["invalid"]) == (QUANTITY_PROBLEM, "quantity")
+    # collect() does not raise: the value is written as typed.
+    written = d.collect()["tag_categories"]["categories"]["packaging"]["sku_writeoff"]["mappings"]["BOX"][1]
+    assert written["quantity"] == text
+
+
+def test_the_same_tag_and_sku_twice_blocks_the_later_row():
+    d = draft()
+    d.apply("map_sku", ["1", "1", "PKG-BOX-S"])
+    assert d.blocker_key() == "cat-1-m1-sku"
+    assert rows(d)[0]["problem"] == "PKG-BOX-S is mapped to BOX twice."
+
+
+def test_a_profile_with_one_tag_in_two_categories_blocks_on_the_later_one():
+    stored = copy.deepcopy(CATEGORIES)
+    stored["categories"]["priority"]["tags"].append("BOX")
+    d = draft(stored)
+    assert d.blocker() == "Fix category “Priority”"
+    assert d.blocker_key() == "cat-2-tag-input"
+    assert rows(d)[0]["problem"] == ""
+    assert editor(d, "2")["tag_problem"] == "BOX is also in Packaging. Remove it from one."
+    d.apply("tag_remove", ["2", "BOX"])
+    assert d.blocker() is None
+
+
+def test_with_no_category_the_page_shows_the_empty_state():
+    d = draft({"version": 2, "categories": {}})
+    view = d.view()
+    assert view["action"] == ""
+    assert view["tags"]["empty"]["title"] == "No tag categories yet"
+    assert view["tags"]["count"] == "0 categories, 0 tags"
+    assert d.collect() == {"tag_categories": {"version": 2, "categories": {}}}
+
+
+@pytest.mark.parametrize(
+    ("action", "args"),
+    [
+        ("cat_label", ["9", "x"]),
+        ("cat_label", ["1", 5]),
+        ("tag_add", ["9", "x"]),
+        ("writeoff", ["1", "yes"]),
+        ("map_sku", ["1", "9", "x"]),
+        ("map_sku", ["1", "x", "x"]),
+        ("nonsense", ["1"]),
+        ("cat_delete", []),
+        ("cat_add", "x"),
+    ],
+)
+def test_an_edit_it_cannot_apply_is_dropped(action, args):
+    d = draft()
+    d.mark_clean()
+    assert not d.apply(action, args)
+    assert not d.is_dirty()
+
+
+def test_odd_stored_values_load_without_raising():
+    d = draft({"version": 2, "categories": {"a": "junk", "b": {"tags": "X", "order": "first", "sku_writeoff": "on"}}})
+    assert [(r["label"], r["chips"]) for r in rows(d)] == [("b", [])]
+    assert d.collect()["tag_categories"]["categories"]["b"]["label"] == "b"
+    d = draft({"version": 2, "categories": "junk"})
+    assert rows(d) == []
