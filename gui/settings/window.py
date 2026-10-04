@@ -36,7 +36,7 @@ from gui.settings.page_state import (
     read_file_columns,
 )
 from gui.settings.reports import ReportsPage
-from gui.settings.rules import RulesPage
+from gui.settings.rules_state import RulesDraft
 from gui.settings.sets import SetsPage
 from gui.settings.web_host import SettingsWebHost
 from gui.settings.weight import WeightPage
@@ -82,12 +82,13 @@ SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
     "Tag categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
 }
 
-# Nav name -> the key SettingsWebHost draws that page under (phase 7). Every
-# other page is a Qt widget.
+# Nav name -> the key SettingsWebHost draws that page under (phases 7 and 8).
+# Every other page is a Qt widget.
 WEB_PAGE_KEYS: dict[str, str] = {
     "General": "general",
     "Orders mapping": "orders",
     "Stock mapping": "stock",
+    "Rules": "rules",
 }
 
 
@@ -150,6 +151,7 @@ class SettingsWindow(QDialog):
         parent=None,
         initial_page=None,
         loaded_files=None,
+        session_name=None,
     ):
         """Initializes the SettingsWindow.
 
@@ -169,6 +171,9 @@ class SettingsWindow(QDialog):
             loaded_files (dict, optional): {"orders": path, "stock": path} for
                 the files loaded on Setup. A mapping page opens with that
                 file's columns. Defaults to None.
+            session_name (str, optional): The open session's folder name.
+                Test rule says which analysis it ran against. Defaults to
+                None.
         """
         super().__init__(parent)
         self._initial_page = initial_page
@@ -293,8 +298,8 @@ class SettingsWindow(QDialog):
         self._pages_by_name: dict[str, PageContract] = {}
         self._unsaved: set[str] = set()
 
-        # The three pages the web tier draws are drafts: pages with no widget.
-        # One host widget shows whichever of them the nav selects.
+        # The pages the web tier draws are drafts: pages with no widget. One
+        # host widget shows whichever of them the nav selects.
         client = str(self.client_id)
         column_mappings = self.config_data.get("column_mappings", {})
         drafts = {
@@ -309,20 +314,20 @@ class SettingsWindow(QDialog):
             "stock": StockDraft(
                 column_mappings, client, file=self._loaded_file(loaded_files, "stock")
             ),
-        }
-        self._web_host = SettingsWebHost(drafts)
-        self._web_host.edited.connect(self._on_web_edit)
-
-        # Create all tabs (unchanged call order/method names)
-        self._add_page(drafts["general"], "General", self._web_host)
-        self._add_page(
-            RulesPage(
+            "rules": RulesDraft(
                 self.config_data.get("rules", []),
                 self.analysis_df,
                 tag_categories=self.config_data.get("tag_categories", {}),
             ),
-            "Rules",
+        }
+        self._web_host = SettingsWebHost(
+            drafts, analysis_df=self.analysis_df, session=session_name or ""
         )
+        self._web_host.edited.connect(self._on_web_edit)
+
+        # Create all tabs (unchanged call order/method names)
+        self._add_page(drafts["general"], "General", self._web_host)
+        self._add_page(drafts["rules"], "Rules", self._web_host)
         self._add_page(
             ReportsPage(
                 self.config_data.get("packing_list_configs", []),

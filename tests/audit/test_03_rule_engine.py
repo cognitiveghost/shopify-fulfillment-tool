@@ -9,9 +9,9 @@ synthetic and only reproduce the shape of the production configs.
 import pandas as pd
 import pytest
 
-from gui.rule_test_dialog import RuleTestDialog
 from gui.rule_validator import validate_range
-from gui.settings.rules import RulesPage
+from gui.settings.rule_test import run_rule_test
+from gui.settings.rules_state import RulesDraft
 from shopify_tool import core
 from shopify_tool.report_filters import fulfillable_only
 from shopify_tool.rules import (
@@ -132,10 +132,9 @@ def test_invalid_negative_regex_matches_nothing():
     assert not result.any()
 
 
-def test_rules_page_refuses_to_save_an_invalid_rule(qtbot):
+def test_rules_page_refuses_to_save_an_invalid_rule():
     bad = rule([cond("SKU", "matches regex", "(")], [tag("X")], level="article")
-    page = RulesPage([bad], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
-    qtbot.addWidget(page)
+    page = RulesDraft([bad], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
 
     ok, _errors = page.validate()
     assert not ok
@@ -156,14 +155,12 @@ def test_negative_operator_means_the_same_on_sku_and_has_sku():
     assert a == b
 
 
-def test_rule_test_dialog_reports_rows_the_saved_rule_already_tagged(qtbot, no_modals):
+def test_rule_test_reports_orders_the_saved_rule_already_tagged():
     r = rule([cond("SKU", "equals", "A")], [tag("T")], level="article")
-    # What the dialog is given: the results of a run that already applied r.
+    # What the test is given: the results of a run that already applied r.
     analysed = RuleEngine([r]).apply(frame([("#1", "A", 1), ("#2", "B", 1)]))
 
-    dialog = RuleTestDialog(r, analysed)
-    qtbot.addWidget(dialog)
-    assert dialog.matched_count == 1
+    assert run_rule_test(r, analysed)["matched"] == "1"
 
 
 @pytest.mark.parametrize("value", ["100-10", "-10-0"])
@@ -171,13 +168,12 @@ def test_range_validator_agrees_with_engine(value):
     assert validate_range(value)[0] is (_parse_range(value) is not None)
 
 
-def test_rule_test_config_keeps_add_product_quantity(qtbot):
+def test_rule_test_config_keeps_add_product_quantity():
     r = rule([cond("SKU", "equals", "A")],
              [{"type": "ADD_PRODUCT", "sku": "GIFT", "quantity": 3}], level="article")
-    page = RulesPage([r], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
-    qtbot.addWidget(page)
+    page = RulesDraft([r], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
 
-    tested = page._build_rule_config_from_widgets(page.rule_widgets[0])
+    tested = page.test_config("1")
     assert tested["steps"][0]["actions"][0].get("quantity") == 3
 
 
@@ -188,14 +184,13 @@ def test_lowercase_match_all_is_all_on_order_rules():
     assert tags_by_order(RuleEngine([r]).apply(df)) == {"#1": []}
 
 
-def test_rules_page_shows_rules_in_execution_order(qtbot):
+def test_rules_page_shows_rules_in_execution_order():
     second = rule([cond("SKU", "equals", "A")], [tag("X")], level="article", name="runs second", priority=2)
     first = rule([cond("SKU", "equals", "A")], [tag("Y")], level="article", name="runs first", priority=1)
-    page = RulesPage([second, first], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
-    qtbot.addWidget(page)
+    page = RulesDraft([second, first], pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"]}))
 
     engine_order = [r["name"] for r in RuleEngine([second, first]).rules]
-    shown = [w["name_edit"].text() for w in page.rule_widgets]
+    shown = [row["name"] for group in page.view()["rules"]["groups"] for row in group["rows"]]
     assert shown == engine_order
 
 
