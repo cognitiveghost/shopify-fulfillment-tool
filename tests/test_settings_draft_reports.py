@@ -1,0 +1,294 @@
+"""ReportsDraft: the Reports page's values, with no widget (phase 9 spec section 6)."""
+
+import copy
+
+import pandas as pd
+import pytest
+
+from gui.settings.reports_state import (
+    ALL_COLUMNS,
+    CANT_COUNT,
+    NO_FILENAME,
+    NO_FILTER,
+    ReportsDraft,
+    match_text,
+)
+
+PACKING = [
+    {
+        "name": "DHL",
+        "output_filename": "DHL.xlsx",
+        "filters": [{"field": "Shipping_Provider", "operator": "equals", "value": "DHL"}],
+        "exclude_skus": ["X1", "X2"],
+        "legacy_key": 7,
+    },
+    {"name": "DPD", "output_filename": "DPD.xlsx", "filters": [], "exclude_skus": [], "columns": ["SKU", "Quantity"]},
+]
+STOCK = [
+    {"name": "Daily", "output_filename": "daily.xls", "filters": [{"field": "SKU", "operator": "!=", "value": "A"}]}
+]
+
+
+def frame():
+    return pd.DataFrame(
+        {
+            "Order_Number": ["#1", "#1", "#2", "#3"],
+            "SKU": ["A", "B", "B", "A"],
+            "Shipping_Provider": ["DHL", "DHL", "DPD", "DHL"],
+            "Order_Fulfillment_Status": ["Fulfillable", "Fulfillable", "Fulfillable", "Not Fulfillable"],
+            "Internal_Tags": ["[]"] * 4,
+        }
+    )
+
+
+def draft(packing=None, stock=None, analysis=True):
+    return ReportsDraft(
+        copy.deepcopy(PACKING if packing is None else packing),
+        copy.deepcopy(STOCK if stock is None else stock),
+        frame() if analysis else None,
+    )
+
+
+def groups(d):
+    return d.view()["reports"]["groups"]
+
+
+def rows(d, kind="packing"):
+    return next(g for g in groups(d) if g["kind"] == kind)["rows"]
+
+
+def test_match_text_has_four_sentences():
+    assert match_text(None) == "Run an analysis to see how many orders this report matches."
+    assert match_text((0, 0)) == "Matches no orders. Check the filters."
+    assert match_text((1, 1)) == "Matches 1 order · 1 row"
+    assert match_text((14, 31)) == "Matches 14 orders · 31 rows"
+
+
+def test_it_loads_two_groups_in_stored_order():
+    d = draft()
+    assert [(g["kind"], g["title"], g["add"]) for g in groups(d)] == [
+        ("packing", "Packing lists", "Add packing list"),
+        ("stock", "Stock exports", "Add stock export"),
+    ]
+    assert [(r["uid"], r["name"], r["filename"]) for r in rows(d)] == [("1", "DHL", "DHL.xlsx"), ("2", "DPD", "DPD.xlsx")]
+    assert [(r["can_up"], r["can_down"]) for r in rows(d)] == [(False, True), (True, False)]
+    assert [(r["uid"], r["can_up"], r["can_down"]) for r in rows(d, "stock")] == [("3", False, False)]
+    assert d.view()["action"] == ""
+
+
+def test_the_summary_and_the_match_count():
+    d = draft()
+    first, second = rows(d)
+    assert first["summary"] == [
+        {"t": "bold", "v": "Shipping_Provider"},
+        {"t": "text", "v": "equals"},
+        {"t": "chip", "v": "DHL"},
+    ]
+    # Counted over fulfillable orders only: #3 is not.
+    assert first["match"] == {"text": "Matches 1 order · 2 rows", "warn": False}
+    assert second["summary"] == [{"t": "muted", "v": NO_FILTER}]
+    assert second["match"]["text"] == "Matches 2 orders · 3 rows"
+
+
+def test_a_filter_that_matches_nothing_warns_and_one_that_raises_says_so(monkeypatch):
+    d = draft()
+    d.apply("filter_value", ["1", "0", "FEDEX"])
+    assert rows(d)[0]["match"] == {"text": "Matches no orders. Check the filters.", "warn": True}
+
+    def boom(df, filters):
+        raise ValueError("bad regex")
+
+    monkeypatch.setattr("gui.settings.reports_state.count_matches", boom)
+    d.apply("filter_value", ["1", "0", "("])
+    assert rows(d)[0]["match"] == {"text": CANT_COUNT, "warn": False}
+
+
+def test_with_no_analysis_the_count_asks_for_one_and_a_count_is_made_once(monkeypatch):
+    d = draft(analysis=False)
+    assert rows(d)[0]["match"]["text"] == "Run an analysis to see how many orders this report matches."
+    calls = []
+    monkeypatch.setattr(
+        "gui.settings.reports_state.count_matches", lambda df, filters: calls.append(1) or (1, 1)
+    )
+    d = draft()
+    d.view()
+    d.view()
+    assert len(calls) == 3  # one per distinct filter list, not per view
+
+
+def test_a_legacy_operator_and_a_list_value_load_as_text():
+    d = draft(stock=[{"name": "S", "output_filename": "s.xls", "filters": [{"field": "SKU", "operator": "in", "value": ["A", "B"]}, "junk"]}])
+    d.apply("open", ["3"])
+    only = rows(d, "stock")[0]["editor"]["filters"]
+    assert [(f["operator"], f["value"]["text"]) for f in only] == [("in list", "A, B")]
+
+
+def test_an_unedited_draft_is_clean_and_keeps_keys_it_does_not_draw():
+    d = draft()
+    d.mark_clean()
+    saved = d.collect()
+    assert saved["packing_list_configs"][0] == PACKING[0]
+    assert saved["packing_list_configs"][1] == PACKING[1]
+    # The legacy "!=" is written under its name.
+    assert saved["stock_export_configs"] == [
+        {"name": "Daily", "output_filename": "daily.xls", "filters": [{"field": "SKU", "operator": "does not equal", "value": "A"}]}
+    ]
+    assert "exclude_skus" not in saved["stock_export_configs"][0]
+    assert not d.is_dirty()
+
+
+def test_open_close_and_reveal_save_nothing():
+    d = draft()
+    d.mark_clean()
+    assert d.apply("open", ["2"])
+    assert rows(d)[1]["editor"]["columns"]["chips"] == ["SKU", "Quantity"]
+    assert rows(d)[0]["editor"] is None
+    assert d.apply("reveal", ["report-3-f0-value"])
+    assert rows(d, "stock")[0]["open"]
+    assert rows(d, "stock")[0]["editor"]["exclude"] is None
+    assert rows(d, "stock")[0]["editor"]["columns"] is None
+    assert d.apply("close", [])
+    assert not d.is_dirty()
+
+
+def test_add_appends_to_its_kind_and_opens_it():
+    d = draft()
+    assert d.apply("report_add", ["stock"])
+    new = rows(d, "stock")[-1]
+    assert (new["uid"], new["label"], new["open"], new["note"]) == ("4", "Untitled report", True, NO_FILENAME)
+    assert not d.apply("report_add", ["other"])
+    assert d.collect()["stock_export_configs"][-1] == {"name": "", "output_filename": "", "filters": []}
+    d.apply("report_add", ["packing"])
+    assert d.collect()["packing_list_configs"][-1] == {"name": "", "output_filename": "", "filters": [], "exclude_skus": []}
+
+
+def test_the_text_edits_and_delete():
+    d = draft()
+    assert d.apply("report_name", ["1", "DHL Express"])
+    assert d.apply("report_filename", ["1", "dhl.xlsx"])
+    assert d.apply("report_exclude", ["1", " A1 ,, B2 "])
+    assert not d.apply("report_exclude", ["3", "A1"])
+    saved = d.collect()["packing_list_configs"][0]
+    assert (saved["name"], saved["output_filename"], saved["exclude_skus"]) == ("DHL Express", "dhl.xlsx", ["A1", "B2"])
+    assert d.apply("report_delete", ["1"])
+    assert [r["name"] for r in rows(d)] == ["DPD"]
+
+
+def test_a_move_stays_inside_its_kind():
+    d = draft()
+    assert not d.apply("report_move", ["1", "up"])
+    assert d.apply("report_move", ["1", "down"])
+    assert [r["name"] for r in rows(d)] == ["DPD", "DHL"]
+    assert not d.apply("report_move", ["1", "down"])
+    assert not d.apply("report_move", ["3", "up"])
+    assert not d.apply("report_move", ["1", "sideways"])
+    assert [c["name"] for c in d.collect()["packing_list_configs"]] == ["DPD", "DHL"]
+
+
+def test_filters_are_added_edited_and_removed():
+    d = draft()
+    d.apply("open", ["2"])
+    assert d.apply("filter_add", ["2"])
+    editor = rows(d)[1]["editor"]
+    # The first offered field: the analysis's columns, sorted.
+    assert editor["field_groups"] == [{"label": "", "fields": ["Internal_Tags", "Order_Fulfillment_Status", "Order_Number", "SKU", "Shipping_Provider"]}]
+    assert editor["filters"][0]["field"] == "Internal_Tags"
+    assert d.apply("filter_field", ["2", "0", "SKU"])
+    assert d.apply("filter_value", ["2", "0", "A"])
+    # The value's kind does not change: it is kept.
+    assert d.apply("filter_operator", ["2", "0", "contains"])
+    assert d.collect()["packing_list_configs"][1]["filters"] == [{"field": "SKU", "operator": "contains", "value": "A"}]
+    # Another kind of value: it is cleared.
+    assert d.apply("filter_operator", ["2", "0", "is empty"])
+    assert d.collect()["packing_list_configs"][1]["filters"][0]["value"] == ""
+    assert not d.apply("filter_operator", ["2", "0", "nonsense"])
+    assert d.apply("filter_remove", ["2", "0"])
+    assert not d.apply("filter_remove", ["2", "0"])
+
+
+def test_an_equals_filter_on_a_column_suggests_its_values():
+    d = draft()
+    d.apply("open", ["1"])
+    value = rows(d)[0]["editor"]["filters"][0]["value"]
+    assert (value["kind"], value["text"], value["suggestions"]) == ("text", "DHL", ["DHL", "DPD"])
+
+
+def test_a_field_and_an_operator_that_are_not_offered_are_kept_and_marked():
+    d = draft(packing=[{"name": "P", "output_filename": "p.xlsx", "filters": [{"field": "Gone", "operator": "roughly", "value": "x"}]}])
+    d.mark_clean()
+    d.apply("open", ["1"])
+    f = rows(d)[0]["editor"]["filters"][0]
+    assert f["extra_field"] == {"value": "Gone", "note": "Not available"}
+    assert f["field_invalid"] is True
+    assert f["extra_operator"] == "roughly"
+    assert not d.is_dirty()
+    # With no analysis the offered list is only a guess: no mark.
+    d = draft(packing=[{"name": "P", "output_filename": "p.xlsx", "filters": [{"field": "Gone", "operator": "equals", "value": "x"}]}], analysis=False)
+    d.apply("open", ["1"])
+    f = rows(d)[0]["editor"]["filters"][0]
+    assert f["extra_field"] == {"value": "Gone", "note": ""}
+    assert f["field_invalid"] is False
+
+
+def test_columns_are_added_in_order_and_removed():
+    d = draft()
+    d.apply("open", ["1"])
+    columns = rows(d)[0]["editor"]["columns"]
+    assert columns["chips"] == []
+    assert "Repeat" in columns["candidates"]
+    assert d.apply("column_add", ["1", "SKU"])
+    assert d.apply("column_add", ["1", "Order_Number"])
+    assert not d.apply("column_add", ["1", "SKU"])
+    assert not d.apply("column_add", ["1", "Nope"])
+    assert not d.apply("column_add", ["3", "SKU"])
+    assert d.collect()["packing_list_configs"][0]["columns"] == ["SKU", "Order_Number"]
+    assert d.apply("column_remove", ["1", "SKU"])
+    assert d.apply("column_remove", ["1", "Order_Number"])
+    assert "columns" not in d.collect()["packing_list_configs"][0]
+
+
+def test_with_every_column_chosen_the_add_button_says_so():
+    d = draft(packing=[{"name": "P", "output_filename": "p.xlsx", "filters": [], "columns": ["A", "Repeat"]}], analysis=False)
+    d.apply("open", ["1"])
+    for name in list(rows(d)[0]["editor"]["columns"]["candidates"]):
+        d.apply("column_add", ["1", name])
+    columns = rows(d)[0]["editor"]["columns"]
+    assert (columns["candidates"], columns["add_title"]) == ([], ALL_COLUMNS)
+    # A stored column that is not offered stays a chip.
+    assert columns["chips"][:2] == ["A", "Repeat"]
+
+
+def test_nothing_on_this_page_blocks_a_save():
+    d = draft()
+    d.apply("report_add", ["packing"])
+    assert d.blocker() is None
+    assert d.blocker_key() == ""
+    assert d.validate() == (True, [])
+
+
+@pytest.mark.parametrize(
+    ("action", "args"),
+    [
+        ("open", ["9"]),
+        ("report_name", ["9", "x"]),
+        ("report_name", ["1", 5]),
+        ("filter_value", ["1", "9", "x"]),
+        ("filter_value", ["1", "x", "x"]),
+        ("column_remove", ["1", "Nope"]),
+        ("nonsense", ["1"]),
+        ("report_delete", []),
+        ("report_delete", "1"),
+    ],
+)
+def test_an_edit_it_cannot_apply_is_dropped(action, args):
+    d = draft()
+    d.mark_clean()
+    assert not d.apply(action, args)
+    assert not d.is_dirty()
+
+
+def test_odd_stored_values_load_without_raising():
+    d = ReportsDraft(["junk", {"name": None, "filters": "x", "columns": "SKU", "exclude_skus": "A, B"}], None, None)
+    assert [r["label"] for r in rows(d)] == ["Untitled report", "Untitled report"]
+    assert d.collect()["packing_list_configs"][1]["exclude_skus"] == ["A", "B"]
+    assert d.collect()["stock_export_configs"] == []
