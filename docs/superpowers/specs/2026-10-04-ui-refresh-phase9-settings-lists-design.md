@@ -14,7 +14,7 @@ spec had to decide something the mockup does not show is in §11.
 
 1. Sets, Weight, Reports and Tag categories as pages of the settings document (`gui/web/settings.*`), each
    with a draft that holds its values, takes every edit and words everything the page draws (§4 to §7).
-2. CSV import and export from a web page: three bridge members, one signal, and a toast (§3.2, §8).
+2. CSV import and export from a web page: three bridge members and a toast (§3.2, §8).
 3. The Rules condition row made reusable, so a report's filters use the same control (§3.3).
 4. The unsaved poll is deleted: every page now reports its own edits (§9).
 5. Docs: `roadmap.md` (phase 9 as built), `CONTEXT.md` (§14).
@@ -90,7 +90,7 @@ settings_<page>.js ──► bridge.importFile(kind) ──► host: file dialog
 | `gui/settings/tags_state.py` (new) | `TagsDraft(PageContract)`, `DEFAULT_TAG_COLOR`. No Qt import |
 | `gui/settings/contract.py` | `FileProblem(Exception)`: a failed import the operator can act on |
 | `gui/settings/rules_state.py` | `iso_date(text)` becomes a module function (it was `RulesDraft._iso_date`), so `ReportsDraft` can use it |
-| `gui/settings/bridge.py` | `importFile`, `exportFile`, `toastAction`, `toastRaised` |
+| `gui/settings/bridge.py` | `importFile`, `exportFile`, `toastAction` |
 | `gui/settings/web_host.py` | Runs imports and exports; raises the toast |
 | `gui/settings/window.py` | Builds the four drafts; every nav name is in `WEB_PAGE_KEYS`; the poll and `_TagCategoriesPage` go |
 | `gui/settings/fields.py` | Keeps the vocabularies and `report_filter_fields`. The Qt helpers and every Qt import go |
@@ -110,7 +110,7 @@ settings_<page>.js ──► bridge.importFile(kind) ──► host: file dialog
 | `importFile(kind)` → `importRequested(str)` | JS → Python | Pick a CSV and import it into the page that is showing |
 | `exportFile(kind)` → `exportRequested(str)` | JS → Python | Pick where to save, and export |
 | `toastAction()` → `toastActionRequested()` | JS → Python | The toast's action was pressed |
-| `toastRaised(text, action)` | Python → JS | Show a toast. `action` is its button's label, or `""` |
+| `toastRaised(text, flag)` | Python → JS | `PageBridge`'s own, unchanged: show a toast. On this page the flag puts "Update them" on it |
 
 Nothing the page sends is used as a path: `kind` only picks one of the draft's own imports or exports.
 
@@ -138,8 +138,10 @@ bridge)`, as Rules does. `settings.js`:
 - `HEAD_ACTION` gains `sets: ["set-add", "set-add"]` and `tags: ["cat-add", "cat-add"]`;
 - `menuStillOpens` returns true on these four pages: a menu whose opener the new state no longer draws is
   closed by the check after the morph, which exists;
-- Enter in a field that has `data-enter` reports `bridge.edit(data.enter, [...])` through the page's input
-  handler and clears the field (the tag field, §7.3).
+- Enter in a field that has `data-enter` reports `bridge.edit(data.enter, [data.uid, text])` and clears
+  the field (the tag field, §7.3);
+- `view.pending` takes three more requests, for a control whose key the page cannot know when it asks:
+  `@css:<selector>`, `@css-select:<selector>` and `@keys:<key>|<key>`.
 
 ## 4. Sets (`gui/settings/sets_state.py`, `gui/web/settings_sets.js`)
 
@@ -612,7 +614,7 @@ mappings, stored}`.
 ### 7.3 A refused tag
 
 `tag_add` that is refused changes no value, sets the category's `tag_problem`, and returns true so the
-page redraws. The next edit to that category clears it.
+page redraws. The next edit to that category clears it. Opening the row is not an edit.
 
 | | Text |
 |---|---|
@@ -643,7 +645,8 @@ order is the list's. Other top-level keys stay. (A dict in the old format is cle
 keys were the categories.) Each category is `{**stored, "label", "color": the stored colour or
 DEFAULT_TAG_COLOR, "order": its place from 1, "tags", "sku_writeoff": {**stored sku_writeoff, "enabled",
 "mappings": {tag: [{**stored, "sku": stripped, "quantity": float}]}}}`. A quantity that blocks Save is
-written as typed.
+written as typed. A category that had no `sku_writeoff` stored, and has no write-off and the switch off,
+gets no such key: an untouched profile is written back as it was, but for `order`.
 
 A category that loaded keeps its ID. A new one's ID is made by `collect()` from its name: lower-cased,
 every run of characters outside `a-z0-9` turned into one `_`, the `_` at either end removed; `category`
@@ -734,7 +737,7 @@ Keys: `cat-add`, `cat-{uid}-label`, `-up`, `-down`, `-delete`, `-tag-input`, `-t
 `SetsDraft` and `WeightDraft` have:
 
 - `imports: dict[kind, title]` and `exports: dict[kind, (title, default name)]`;
-- `failed: dict[kind, headline]`, for a failure that is not a `FileProblem`;
+- `import_failed` and `export_failed`: `dict[kind, headline]`, for a failure that is not a `FileProblem`;
 - `import_csv(kind, path, update=False) -> (text, can_update)`;
 - `export_csv(kind, path) -> text`.
 
@@ -745,20 +748,22 @@ Keys: `cat-add`, `cat-{uid}-label`, `-up`, `-down`, `-delete`, `-tag-input`, `-t
 - `importRequested(kind)`: ignored unless the current draft's `imports` has `kind`. `QFileDialog
   .getOpenFileName(self, title, "", "CSV Files (*.csv);;All Files (*)")`; nothing chosen ends it. Then
   `import_csv`. A `FileProblem` goes to `show_error(self, headline, detail)`. Any other exception is logged
-  with its traceback and goes to `show_error(self, failed[kind], "Details are in Logs.")`. On success:
-  push, `edited`, and `toastRaised(text, "Update them" if can_update else "")`.
+  with its traceback and goes to `show_error(self, import_failed[kind], "Details are in Logs.")`; the page
+  is pushed and `edited` is emitted all the same, since the import may have added rows before it failed. On
+  success:
+  push, `edited`, and `bridge.raise_toast(text, can_update)`.
 - The host remembers `(kind, path)` of the last import that could update. `toastActionRequested` runs it
   again with `update=True`. `show_page` and any new import forget it.
 - `exportRequested(kind)`: ignored unless `exports` has `kind`. `QFileDialog.getSaveFileName(self, title,
-  default name, the same filter)`. Then `export_csv`; failures as above; on success `toastRaised(text,
-  "")`.
+  default name, the same filter)`. Then `export_csv`; failures as above; on success `bridge.raise_toast(text)`.
 
 ### 8.3 The page
 
 `settings.html` gains the toast after `#settings`: a `.toast` (`role="status"`, `aria-live="polite"`,
-hidden) holding the text, a `.toast-action` button and a `.toast-close` button with the ✕ glyph.
-`settings.js` shows it on `toastRaised`, for 4 s, or 8 s when it has an action. The action button calls
-`bridge.toastAction()` and dismisses it. A new toast replaces the one showing.
+hidden) holding the text, a `.toast-action` button that reads "Update them" and a `.toast-close` button
+with the ✕ glyph. `settings.js` shows it on `toastRaised`, for 4 s, or 8 s when the flag is set, which also
+shows the action button. That button calls `bridge.toastAction()` and dismisses the toast. A new toast
+replaces the one showing.
 
 ## 9. The window (`gui/settings/window.py`)
 
@@ -833,7 +838,7 @@ capitals; that removing a tag removes its write-offs.
 | `tests/test_settings_lists_page.py` (new) | The four pages in a real Chromium, fed views built by the drafts | Per page: the row's DOM and grid; opening a row; every control sends its action; typing keeps focus; the empty state; the problem line; focus after add and remove; the menus (Import, Add column, a write-off's tag); Enter adds a tag; the toast shows, its action calls the bridge, it dismisses; both themes read from tokens |
 | `tests/test_settings_rules_page.py` | The Rules page | Passes unchanged: the shared condition row draws the same DOM |
 | `tests/test_settings_lists_window.py` (new) | The window | Each of the four is a draft the host draws; an edit marks its page unsaved at once; a blocker from each of Sets, Weight and Tag categories reaches the footer and its link reveals the control; Save writes each page's keys; no poll timer exists |
-| Existing window tests | | `test_settings_footer.py`, `test_settings_roundtrip.py`, `test_settings_unsaved.py`, `test_settings_nav.py`, `test_settings_entry_points.py`, `test_settings_button_roles.py`, `test_settings_page_contract.py`: updated where they reach into a Qt page or the poll, same assertions |
+| Existing window tests | | `test_settings_footer.py`, `test_settings_roundtrip.py`, `test_settings_unsaved.py`, `test_settings_nav.py`, `test_settings_page_contract.py`: updated where they reach into a Qt page or the poll, same assertions. `test_icon_usage_guard.py`: its known call sites, since the Qt filter row was the only user of `trash-2` |
 | Deleted | | `test_settings_page_sets.py`, `test_settings_page_weight.py`, `test_settings_window_weight_quick_add.py`, `test_settings_page_reports.py`, `test_settings_report_editor.py`, `test_tag_categories_dialog.py`: their cases move to the draft tests |
 
 Renders, saved under `docs/design/ui-refresh/renders/phase9/` and looked at before the PR, each the whole

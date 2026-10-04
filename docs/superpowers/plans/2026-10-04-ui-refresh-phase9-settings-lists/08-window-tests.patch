@@ -1,0 +1,395 @@
+diff --git a/tests/test_icon_usage_guard.py b/tests/test_icon_usage_guard.py
+index 956332b..3fe19e2 100644
+--- a/tests/test_icon_usage_guard.py
++++ b/tests/test_icon_usage_guard.py
+@@ -63,4 +63,4 @@ def test_the_guard_can_actually_see_icon_calls():
+     found = set()
+     for path in _PY_FILES:
+         found.update(_ICON_CALL.findall(path.read_text(encoding="utf-8")))
+-    assert {"plus", "trash-2"} <= found
++    assert {"plus", "circle-alert"} <= found
+diff --git a/tests/test_settings_footer.py b/tests/test_settings_footer.py
+index 1aafbb3..2efee8a 100644
+--- a/tests/test_settings_footer.py
++++ b/tests/test_settings_footer.py
+@@ -12,7 +12,13 @@ from gui.settings.window import SAVED_LINE, SettingsWindow
+ 
+ 
+ def _edit_sets(win):
+-    win._pages_by_name["Sets"].set_decoders["SET-NEW"] = [{"sku": "A", "quantity": 1}]
++    """Add a set the way the page does."""
++    win._select_page("Sets")
++    bridge = win._web_host.bridge
++    bridge.edit("set_add", [])
++    uid = bridge.state["sets"]["rows"][0]["uid"]
++    bridge.edit("set_sku", [uid, "SET-NEW"])
++    bridge.edit("comp_sku", [uid, "0", "A"])
+ 
+ 
+ def _edit_general(win, text="9"):
+@@ -210,9 +216,10 @@ def test_a_crashed_write_leaves_save_live(window, monkeypatch):
+     assert window.save_button.text() == "Save"
+ 
+ 
+-def test_ctrl_s_saves_an_edit_the_poll_has_not_seen(window, started_workers):
++def test_ctrl_s_saves_an_edit(window, started_workers):
+     _edit_sets(window)
+-    assert not window.save_button.isEnabled()
++    # Every page reports its own edits: Save is live at once.
++    assert window.save_button.isEnabled()
+     window._save_shortcut()
+     assert len(started_workers) == 1
+ 
+diff --git a/tests/test_settings_lists_window.py b/tests/test_settings_lists_window.py
+new file mode 100644
+index 0000000..b475ddf
+--- /dev/null
++++ b/tests/test_settings_lists_window.py
+@@ -0,0 +1,135 @@
++"""Sets, Weight, Reports and Tag categories inside the settings window (phase 9
++spec sections 8 and 9).
++
++Fixtures (window, started_workers, no_modals) come from conftest.py. The pages
++are edited through the host's bridge, as the pages do. The fixture config has
++one product (uid "1"), one box (uid "2"), one packing list (uid "1"), one stock
++export (uid "2"), no set and no tag category.
++"""
++
++import pytest
++from PySide6.QtCore import QTimer
++
++from gui.settings.reports_state import ReportsDraft
++from gui.settings.sets_state import SetsDraft
++from gui.settings.tags_state import TagsDraft
++from gui.settings.weight_state import WeightDraft
++from gui.settings.window import WEB_PAGE_KEYS
++
++
++def _on(win, name):
++    win._select_page(name)
++    return win._web_host.bridge
++
++
++@pytest.mark.parametrize(
++    ("name", "kind"),
++    [("Sets", SetsDraft), ("Weight", WeightDraft), ("Reports", ReportsDraft), ("Tag categories", TagsDraft)],
++)
++def test_each_page_is_a_draft_the_web_host_draws(window, name, kind):
++    assert isinstance(window._pages_by_name[name], kind)
++    bridge = _on(window, name)
++    assert window.tab_widget.currentWidget() is window._web_host
++    assert bridge.state["page"] == WEB_PAGE_KEYS[name]
++
++
++def test_no_page_is_a_widget_and_nothing_polls(window):
++    assert window.tab_widget.count() == 1
++    assert window.findChildren(QTimer) == []
++
++
++def test_an_edit_on_each_page_marks_it_unsaved_at_once(window):
++    _on(window, "Weight").edit("divisor", ["6000"])
++    assert window._status_label.text() == "Unsaved changes in Weight"
++    _on(window, "Reports").edit("report_name", ["1", "Renamed"])
++    _on(window, "Tag categories").edit("cat_add", [])
++    _on(window, "Sets").edit("set_add", [])
++    # The new set has no SKU yet: that blocks, and the footer says so first.
++    assert window._blocked == {"Sets": "Fix the new set"}
++    _on(window, "Sets").edit("set_delete", ["1"])
++    assert window._status_label.text() == "Unsaved changes in Weight, Reports, Tag categories"
++    assert window.save_button.isEnabled()
++
++
++def test_opening_and_filtering_mark_nothing(window):
++    _on(window, "Reports").edit("open", ["1"])
++    _on(window, "Weight").edit("product_filter", ["sku"])
++    assert window._status_label.text() == ""
++    assert not window.save_button.isEnabled()
++
++
++def test_a_weight_blocker_reaches_the_footer_and_its_link_asks_for_the_field(window):
++    _on(window, "Weight").edit("product_text", ["1", "w", "wide"])
++    text = window._status_label.text()
++    assert text.startswith('Fix product “SKU1” in <a href="Weight"')
++    assert not window.save_button.isEnabled()
++
++    window._select_page("General")
++    asked = []
++    window._web_host.bridge.problemFocusRequested.connect(asked.append)
++    window._open_blocker("Weight")
++    assert window._settings_nav.currentItem().text() == "Weight"
++    assert asked == ["product-1-w"]
++
++
++def test_a_sets_blocker_opens_the_set_before_it_asks_for_the_field(window):
++    bridge = _on(window, "Sets")
++    bridge.edit("set_add", [])
++    bridge.edit("set_sku", ["1", "SET-A"])
++    bridge.edit("comp_sku", ["1", "0", "HAT"])
++    bridge.edit("comp_quantity", ["1", "0", "x"])
++    bridge.edit("close", [])
++    assert window._blocked == {"Sets": "Fix set “SET-A”"}
++
++    window._select_page("General")
++    asked = []
++    window._web_host.bridge.problemFocusRequested.connect(asked.append)
++    window._open_blocker("Sets")
++    assert window._web_host.bridge.state["sets"]["rows"][0]["open"] is True
++    assert asked == ["set-1-c0-quantity"]
++
++
++def test_a_tag_category_blocker_names_the_category_by_its_place(window):
++    bridge = _on(window, "Tag categories")
++    bridge.edit("cat_add", [])
++    bridge.edit("cat_label", ["1", ""])
++    assert window._blocked == {"Tag categories": "Name category 1"}
++    assert window._status_label.text().startswith("Name category 1 in <a")
++
++
++def test_save_writes_each_pages_keys(window, started_workers):
++    bridge = _on(window, "Sets")
++    bridge.edit("set_add", [])
++    bridge.edit("set_sku", ["1", "SET-A"])
++    bridge.edit("comp_sku", ["1", "0", "HAT"])
++    _on(window, "Weight").edit("product_text", ["1", "l", "12,5"])
++    bridge = _on(window, "Reports")
++    bridge.edit("report_add", ["stock"])
++    bridge.edit("report_name", ["3", "Weekly"])
++    bridge = _on(window, "Tag categories")
++    bridge.edit("cat_add", [])
++    bridge.edit("cat_label", ["1", "Gift wrap"])
++    bridge.edit("tag_add", ["1", "gift"])
++
++    window.save_settings()
++
++    assert len(started_workers) == 1
++    written = started_workers[0].args[1]
++    assert written["set_decoders"] == {"SET-A": [{"sku": "HAT", "quantity": 1}]}
++    assert written["weight_config"]["products"]["SKU1"]["length_cm"] == 12.5
++    assert [c["name"] for c in written["stock_export_configs"]] == ["Daily", "Weekly"]
++    assert written["packing_list_configs"][0]["exclude_skus"] == ["X1", "X2"]
++    category = written["tag_categories"]["categories"]["gift_wrap"]
++    assert (category["label"], category["tags"], category["order"]) == ("Gift wrap", ["GIFT"], 1)
++
++
++def test_a_save_fixes_a_new_tag_categorys_id(window, started_workers):
++    bridge = _on(window, "Tag categories")
++    bridge.edit("cat_add", [])
++    bridge.edit("cat_label", ["1", "Gifts"])
++    window.save_settings()
++    window._on_save_settings_result(True)
++    bridge.edit("cat_label", ["1", "Presents"])
++    saved = window._pages_by_name["Tag categories"].collect()["tag_categories"]["categories"]
++    assert list(saved) == ["gifts"]
++    assert saved["gifts"]["label"] == "Presents"
+diff --git a/tests/test_settings_nav.py b/tests/test_settings_nav.py
+index 4656440..423c37f 100644
+--- a/tests/test_settings_nav.py
++++ b/tests/test_settings_nav.py
+@@ -331,8 +331,8 @@ def test_a_profile_that_opens_with_a_required_column_unmapped_is_marked(
+     win.deleteLater()
+ 
+ 
+-def test_the_dialog_has_no_margins_and_a_qt_page_keeps_its_own(window):
+-    from gui.settings.window import FOOTER_HEIGHT_PX, PAGE_MARGIN_PX
++def test_the_dialog_and_the_web_host_have_no_margins(window):
++    from gui.settings.window import FOOTER_HEIGHT_PX
+ 
+     margins = window.layout().contentsMargins()
+     assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+@@ -341,6 +341,5 @@ def test_the_dialog_has_no_margins_and_a_qt_page_keeps_its_own(window):
+         0,
+         0,
+     )
+-    assert window._pages_by_name["Sets"].contentsMargins().left() == PAGE_MARGIN_PX
+     assert window._web_host.contentsMargins().left() == 0
+     assert window._footer.height() == FOOTER_HEIGHT_PX == 60
+diff --git a/tests/test_settings_page_contract.py b/tests/test_settings_page_contract.py
+index 00ed387..ebc1b15 100644
+--- a/tests/test_settings_page_contract.py
++++ b/tests/test_settings_page_contract.py
+@@ -1,18 +1,14 @@
+-from PySide6.QtWidgets import QApplication
+-
+-from gui.settings.base import SettingsPage
+ from gui.settings.contract import PageContract
+ 
+ 
+ def test_settings_page_defaults_are_inert():
+     """A page that owns no config contributes nothing and blocks nothing."""
+-    QApplication.instance() or QApplication([])
+-    page = SettingsPage()
++    page = PageContract()
+     assert page.collect() == {}
+     assert page.validate() == (True, [])
+ 
+ 
+-class _OneValuePage(SettingsPage):
++class _OneValuePage(PageContract):
+     def __init__(self):
+         super().__init__()
+         self.value = 1
+@@ -22,14 +18,12 @@ class _OneValuePage(SettingsPage):
+ 
+ 
+ def test_a_page_is_never_unsaved_before_mark_clean():
+-    QApplication.instance() or QApplication([])
+     page = _OneValuePage()
+     page.value = 2
+     assert page.is_dirty() is False
+ 
+ 
+ def test_an_edit_reads_unsaved_and_reverting_it_reads_clean():
+-    QApplication.instance() or QApplication([])
+     page = _OneValuePage()
+     page.mark_clean()
+     page.value = 2
+@@ -39,7 +33,6 @@ def test_an_edit_reads_unsaved_and_reverting_it_reads_clean():
+ 
+ 
+ def test_a_collect_that_raises_reads_unsaved(monkeypatch):
+-    QApplication.instance() or QApplication([])
+     page = _OneValuePage()
+     page.mark_clean()
+ 
+@@ -51,8 +44,7 @@ def test_a_collect_that_raises_reads_unsaved(monkeypatch):
+ 
+ 
+ def test_a_page_blocks_nothing_by_default():
+-    QApplication.instance() or QApplication([])
+-    page = SettingsPage()
++    page = PageContract()
+     assert page.blocker() is None
+     assert page.blocker_key() == ""
+ 
+@@ -75,13 +67,6 @@ def test_the_contract_needs_no_widget():
+     assert draft.validate() == (True, [])
+ 
+ 
+-def test_a_qt_page_is_a_contract_and_a_widget():
+-    from PySide6.QtWidgets import QWidget
+-
+-    assert issubclass(SettingsPage, PageContract)
+-    assert issubclass(SettingsPage, QWidget)
+-
+-
+ def test_mark_clean_can_take_an_earlier_snapshot():
+     """What a save wrote is what is clean, not what is on screen when it ends."""
+     draft = _OneValueDraft()
+diff --git a/tests/test_settings_roundtrip.py b/tests/test_settings_roundtrip.py
+index 679dd1e..f877a55 100644
+--- a/tests/test_settings_roundtrip.py
++++ b/tests/test_settings_roundtrip.py
+@@ -181,20 +181,18 @@ def test_a_crashed_write_points_to_logs(window, monkeypatch):
+     assert errors == [("Settings weren't saved", "Details are in Logs.")]
+ 
+ 
+-def test_the_three_web_pages_share_one_widget_in_the_stack(window):
+-    """General and both mappings are drafts: the stack shows one host for all
+-    three, and the nav tells the host which to draw."""
++def test_every_page_shares_one_widget_in_the_stack(window):
++    """Every page is a draft: the stack shows one host for all of them, and
++    the nav tells the host which to draw."""
++    from gui.settings.window import WEB_PAGE_KEYS
++
+     host = window._web_host
+-    for name, key in (
+-        ("General", "general"),
+-        ("Orders mapping", "orders"),
+-        ("Stock mapping", "stock"),
+-    ):
++    assert window.tab_widget.count() == 1
++    assert sorted(WEB_PAGE_KEYS) == sorted(window._pages_by_name)
++    for name, key in WEB_PAGE_KEYS.items():
+         window._select_page(name)
+         assert window.tab_widget.currentWidget() is host
+         assert host.bridge.state["page"] == key
+-    window._select_page("Sets")
+-    assert window.tab_widget.currentWidget() is window._pages_by_name["Sets"]
+ 
+ 
+ def test_an_edit_on_a_web_page_marks_it_unsaved_at_once(window):
+diff --git a/tests/test_settings_unsaved.py b/tests/test_settings_unsaved.py
+index 4c1454b..9ed0fca 100644
+--- a/tests/test_settings_unsaved.py
++++ b/tests/test_settings_unsaved.py
+@@ -17,7 +17,14 @@ def _nav_item(win, name):
+ 
+ 
+ def _edit_sets(win):
+-    win._pages_by_name["Sets"].set_decoders["SET-NEW"] = [{"sku": "A", "quantity": 1}]
++    """Add a set the way the page does; its uid, to undo it with."""
++    win._select_page("Sets")
++    bridge = win._web_host.bridge
++    bridge.edit("set_add", [])
++    uid = bridge.state["sets"]["rows"][0]["uid"]
++    bridge.edit("set_sku", [uid, "SET-NEW"])
++    bridge.edit("comp_sku", [uid, "0", "A"])
++    return uid
+ 
+ 
+ def test_unsaved_summary_names_every_page():
+@@ -42,24 +49,17 @@ def test_an_edit_marks_its_nav_row_and_the_footer(window):
+ 
+ 
+ def test_reverting_an_edit_clears_the_mark(window):
+-    _edit_sets(window)
++    uid = _edit_sets(window)
+     window.refresh_dirty()
+-    del window._pages_by_name["Sets"].set_decoders["SET-NEW"]
++    window._web_host.bridge.edit("set_delete", [uid])
+     assert window.refresh_dirty() == []
+     assert _nav_item(window, "Sets").toolTip() == ""
+ 
+ 
+-def test_the_poll_checks_the_page_on_screen(window):
+-    assert window._dirty_poll.isActive()
+-    window._select_page("Sets")
++def test_an_edit_is_marked_at_once_with_no_poll(window):
++    assert not hasattr(window, "_dirty_poll")
+     _edit_sets(window)
+-    window._poll_current_page()
+     assert window._status_label.text() == "Unsaved changes in Sets"
+-
+-
+-def test_leaving_a_page_checks_it_before_the_next_poll(window):
+-    window._select_page("Sets")
+-    _edit_sets(window)
+     window._select_page("General")
+     assert _nav_item(window, "Sets").toolTip() == "Unsaved changes"
+ 
+@@ -101,20 +101,17 @@ def test_cancel_then_discard_leaves_the_profile_unwritten(
+     window, started_workers, monkeypatch, tmp_path
+ ):
+     """9.23 done-when: import sets, Cancel, Discard -> nothing written."""
++    path = tmp_path / "sets.csv"
++    path.write_text("Set_SKU,Component_SKU,Component_Quantity\nSET-X,A,2\n", encoding="utf-8")
+     monkeypatch.setattr(
+-        QFileDialog,
+-        "getOpenFileName",
+-        staticmethod(lambda *a, **k: (str(tmp_path / "sets.csv"), "")),
++        QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(path), ""))
+     )
+-    monkeypatch.setattr(
+-        "gui.settings.sets.import_sets_from_csv",
+-        lambda path: {"SET-X": [{"sku": "A", "quantity": 2}]},
+-    )
+-    monkeypatch.setattr("gui.settings.sets.toast", lambda *a, **k: None)
+     closed = []
+     window.rejected.connect(lambda: closed.append(True))
+ 
+-    window._pages_by_name["Sets"]._import_sets_from_csv(replace=True)
++    window._select_page("Sets")
++    window._web_host.bridge.importFile("sets-replace")
++    assert window._status_label.text() == "Unsaved changes in Sets"
+     window.reject()
+     window.discard_button.click()
+ 
+@@ -129,8 +126,3 @@ def test_save_and_close_saves(window, started_workers):
+     window.save_and_close_button.click()
+     assert len(started_workers) == 1
+     assert window._close_guard.isHidden()
+-
+-
+-def test_closing_stops_the_poll(window):
+-    window.done(0)
+-    assert not window._dirty_poll.isActive()
