@@ -430,7 +430,11 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   page.capacity = bridge.capacity;
   view.wrap = bridge.wrap;
   els.themeVars.textContent = bridge.themeCss;
-  bridge.themeCssChanged.connect(() => { els.themeVars.textContent = bridge.themeCss; });
+  bridge.themeCssChanged.connect(() => {
+    els.themeVars.textContent = bridge.themeCss;
+    // Two frames: the first callback runs before this frame is painted.
+    requestAnimationFrame(() => requestAnimationFrame(() => bridge.themeApplied()));
+  });
   bridge.toastRaised.connect((text) => raiseToast(text));
   bridge.entriesAdded.connect(onEntries);
   draw();

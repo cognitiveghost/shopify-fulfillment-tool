@@ -24,7 +24,7 @@ from shared.server_connection import ConnectionSettingsDialog
 from shared.theme import on_theme_changed
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
-from .theme_manager import get_theme_manager
+from .web_page import switch_theme
 
 # The sidebar's collapsed state is this PC's, like the theme -- same QSettings
 # pair theme_manager and logs_widget use. A function so tests can point it at
@@ -197,9 +197,7 @@ class UIManager:
         sidebar.settingsRequested.connect(
             lambda: self.mw.actions_handler.open_settings_window()
         )
-        sidebar.themeRequested.connect(
-            lambda name: get_theme_manager().set_theme(name)
-        )
+        sidebar.themeRequested.connect(switch_theme)
         sidebar.retryRequested.connect(self.mw.recheck_connection)
         sidebar.expandedChanged.connect(
             lambda expanded: _shell_settings().setValue(_COLLAPSED_KEY, not expanded)

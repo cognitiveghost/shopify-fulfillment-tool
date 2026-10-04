@@ -762,6 +762,8 @@ function onTheme() {
   // Density moves the type scale and the row height: re-measure, re-lay.
   measureColumns();
   render();
+  // Two frames: the first callback runs before this frame is painted.
+  requestAnimationFrame(() => requestAnimationFrame(() => state.bridge.themeApplied()));
 }
 
 function bind() {
