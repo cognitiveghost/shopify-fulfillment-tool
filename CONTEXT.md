@@ -476,6 +476,15 @@ Supersedes "SKU writeoff", which names the config key rather than the thing.
 **Article rule** / **Order rule** — a rule whose conditions test one order
 line at a time, or the whole order. Article rules run before order rules.
 
+**Off rule** — a rule kept in the profile that the analysis skips: its
+`enabled` is false. A rule with no such key is on. A rule test still runs an
+off rule.
+
+**Rule test** — one rule, as edited, run on a copy of the open session's
+analysis. It counts the orders that match and says what the rule would change
+on the first few. It changes nothing. The analysis it runs on already has the
+saved rules applied, so an order they changed reads "No change".
+
 **Negative operator** — `does not equal`, `does not contain`, `not in list`,
 `not between`, `does not match regex`. On an order rule it means *no line*
 matches the positive form, whatever the field.

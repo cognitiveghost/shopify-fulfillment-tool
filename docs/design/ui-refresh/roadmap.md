@@ -172,12 +172,26 @@ then cards made of label/control rows with a hint under each control. General ge
 choices and the low-stock threshold. Orders mapping and Stock mapping follow the mockup's "Orders mapping"
 state. The pages not ported yet keep their Qt widgets inside the same dialog until 8 and 9 land.
 
-### 8. Client settings on the web tier: Rules and Test rule
+### 8. Client settings on the web tier: Rules and Test rule (built in run 56)
 
-The rule list with toggles and reordering. The empty state, which replaces today's "No rules defined". Test
-rule. This is the largest single editor (`gui/settings/rules.py`, about 1,500 lines). Split it again at its
-own Stage A if it does not fit one PR. The page joins the settings document phase 7 built
-(`gui/web/settings.*`), with its values in a draft (`gui/settings/page_state.py`).
+Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase8-rules-web-design.md`.
+Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase8-rules-web.md`.
+
+Built as listed below, with these differences. It fitted one PR. The mockup stops at "Edit": a rule's row
+opens in place into an editor that is its summary with the words turned into controls. Article rules always
+run before order rules, so a client with both sees two labelled groups, and up, down and the grip stop at a
+group's edge. All three are off while a filter is on. A rule gained `enabled` (written only when it is off);
+the analysis skips a rule that is off and Test still runs it. A row that is off is drawn in secondary text,
+not at 60% opacity (ADR 0001). Fields keep the analysis's own names, and the seven real actions get plain
+labels; the status action is "Hold the order". Test runs on a worker over the whole analysis, dims the page
+area only until phase 10, and says "No change" for an order the saved rules already changed. The date picker
+and the suggestion lists are Chromium's own. `shared/theme.py` gained the `scrim` token and the
+`--color-scheme` variable. The page has its own script, `gui/web/settings_rules.js`, and its values are in
+`gui/settings/rules_state.py`.
+
+The rule list with toggles and reordering. The empty state, which replaces "No rules defined". Test rule.
+The Qt editor (`gui/settings/rules.py`, about 1,500 lines) and its Test dialog are deleted. The page joins
+the settings document phase 7 built (`gui/web/settings.*`).
 
 ### 9. Client settings on the web tier: Sets, Weight, Reports, Tag categories
 
