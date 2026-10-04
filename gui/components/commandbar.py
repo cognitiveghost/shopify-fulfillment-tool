@@ -127,6 +127,7 @@ class CommandBar(QWidget):
 
         self._repopulating = False
         self._restore_client = ""
+        self._announced = ""  # the last client clientChanged carried
         self._show_chip = False
         self._show_meta = False
         self._analysed_text = ""
@@ -232,7 +233,14 @@ class CommandBar(QWidget):
         re-applied on a theme change.
         """
         theme = theme or get_theme_manager().get_current_theme()
-        self.session_button.setStyleSheet(font_css("caption"))
+        # The sidebar's tool-button recipe: the app sheet would paint this on
+        # `surface`, a white box on the sunken bar.
+        self.session_button.setStyleSheet(
+            f"QToolButton {{ {font_css('caption')} background-color: transparent;"
+            " border: 1px solid transparent;"
+            f" border-radius: {theme.radius_md}px; padding: 0px 8px; }}"
+            f"QToolButton:hover {{ background-color: {theme.hover}; }}"
+        )
         self.session_chip.setStyleSheet(
             f"QLabel {{ {font_css('caption')}"
             f" font-family: {theme.font_family_mono};"
@@ -392,7 +400,18 @@ class CommandBar(QWidget):
         if not client_id:
             return
         self._restore_client = client_id
+        # Putting the box back on the client it already showed -- after an
+        # action row, or after a refresh rebuilt the rows -- is not a change.
+        # The window resets the open session on every clientChanged.
+        if client_id == self._announced:
+            return
+        self._announced = client_id
         self.clientChanged.emit(client_id)
+
+    def forget_announced(self) -> None:
+        """The announced client did not load: the next refresh or action row
+        announces it again, which is the retry."""
+        self._announced = ""
 
     def _on_row_activated(self, index: int) -> None:
         """activated() is user-initiated only, and _ClientCombo keeps the

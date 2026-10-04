@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components.commandbar import BAR_HEIGHT
 from shared.icons import icon
 from shared.navrail import RAIL_WIDTH, NavRail
 from shared.theme import current_tokens, font_css, on_theme_changed
@@ -55,7 +56,8 @@ class Sidebar(QWidget):
         # Header: mark, name, collapse -- or only the expand button.
         self.header = QFrame(self)
         self.header.setObjectName("SidebarHeader")
-        self.header.setFixedHeight(44)
+        # The bar's height, so the two rules under them are one line.
+        self.header.setFixedHeight(BAR_HEIGHT)
         header = QHBoxLayout(self.header)
         header.setContentsMargins(8, 0, 8, 0)
         header.setSpacing(8)

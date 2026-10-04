@@ -69,8 +69,12 @@ class ThemeManager(QObject):
             f"density: {get_density()}"
         )
 
+    def tokens_for(self, theme_name: str) -> ThemeTokens:
+        """A theme's tokens with this app's bundled font family layered on."""
+        return themed_tokens(theme_name, load_bundled_fonts())
+
     def get_current_theme(self) -> ThemeTokens:
-        return themed_tokens(self._current_theme_name, load_bundled_fonts())
+        return self.tokens_for(self._current_theme_name)
 
     def is_dark_theme(self) -> bool:
         return self._current_theme_name == "dark"

@@ -435,3 +435,54 @@ def test_a_click_outside_closes_the_manager_and_one_inside_does_not(qtbot, doc):
         "new MouseEvent('mousedown', {bubbles: true})); true",
     )
     assert _eval(qtbot, view, "document.getElementById('columns-panel').hidden") is True
+
+
+# --- quickfix: cell classes are namespaced (2026-10-04 spec §4.3) -------------
+
+_SELECT_CELL = "document.querySelector('#rows .row .cell.col-select')"
+
+
+def test_the_select_cell_is_not_styled_as_a_kit_dropdown(qtbot, doc):
+    view, _bridge = doc
+    style = f"getComputedStyle({_SELECT_CELL})"
+    assert _eval(qtbot, view, f"{style}.borderTopWidth") == "0px"
+    assert _eval(qtbot, view, f"{style}.display") != "flex"
+    assert _eval(qtbot, view, "document.querySelector('#rows .cell.select') === null") is True
+    assert _eval(qtbot, view, "document.querySelector('#header .cell.select') === null") is True
+
+
+def test_an_extra_column_gets_one_safe_class(qtbot, doc):
+    view, bridge = doc
+    df = results_lines()
+    df["Tracking code"] = "T"
+    df["VAT: card"] = "V"
+    bridge.set_orders(df)
+    bridge.set_column_settings({"visible": ["extra:Tracking code", "extra:VAT: card"]})
+    _until_js(qtbot, view, _has_header("Tracking code"))
+    classes = _eval(
+        qtbot,
+        view,
+        "Array.from(document.querySelectorAll('#header .cell'))"
+        ".map((c) => c.className).join('|')",
+    )
+    assert "col-extra-Tracking-code" in classes
+    assert "col-extra-VAT--card" in classes
+    for cell in classes.split("|"):
+        tokens = cell.split()
+        if "filler" in tokens:
+            continue  # the trailing spacer is no column
+        assert "code" not in tokens and "card" not in tokens
+        assert sum(t.startswith("col-") for t in tokens) == 1
+
+
+def test_no_cell_class_is_a_kit_class():
+    """A page's cell class named like a kit class takes the kit's box."""
+    import re
+    from pathlib import Path
+
+    web = Path(__file__).resolve().parent.parent / "gui" / "web"
+    kit = set(re.findall(r"(?m)^\.([a-z][a-z0-9-]*)", (web / "kit.css").read_text("utf-8")))
+    css = (web / "results.css").read_text("utf-8")
+    local = set(re.findall(r"\.(?:cell|head)\.([a-z][a-z0-9_-]*)", css))
+    # `.mono` is the kit's own font utility, and a cell wants exactly that.
+    assert (local & kit) - {"mono"} == set()

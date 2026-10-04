@@ -541,7 +541,11 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.tools;
   page.bridge = bridge;
   els.themeVars.textContent = bridge.themeCss;
-  bridge.themeCssChanged.connect(() => { els.themeVars.textContent = bridge.themeCss; });
+  bridge.themeCssChanged.connect(() => {
+    els.themeVars.textContent = bridge.themeCss;
+    // Two frames: the first callback runs before this frame is painted.
+    requestAnimationFrame(() => requestAnimationFrame(() => bridge.themeApplied()));
+  });
   bridge.stateChanged.connect(() => { page.state = bridge.state; render(); });
   bridge.toastRaised.connect((text, action) => raiseToast(text, action));
   page.state = bridge.state;

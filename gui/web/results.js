@@ -33,6 +33,10 @@ const INFO = "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0zM12 16v-4M12 8h.01";
 // Widths are the canvas's (W3); a column grows to its widest real value but
 // never reflows after that. Only Customer stretches (9.15). The registry
 // (columns.js) replaces the fixed list.
+// A column's CSS class. Never the bare key: `select` is a kit class, and an
+// additional column's key carries the profile's own field name.
+function colClass(key) { return "col-" + String(key).replace(/[^A-Za-z0-9_-]/g, "-"); }
+
 const SELECT_COLUMN = { key: "select", title: "", width: 36 };
 const SLOT_NARROW_PX = TABLE_MIN_PX + PANE_PX; // below this the pane folds to its rail
 
@@ -438,7 +442,7 @@ function renderHeader() {
   const all = picked > 0 && picked === state.view.length;
   for (const col of state.tableCols) {
     const cell = document.createElement("div");
-    cell.className = "cell head " + col.key + (col.numeric ? " num" : "");
+    cell.className = "cell head " + colClass(col.key) + (col.numeric ? " num" : "");
     cell.setAttribute("role", "columnheader");
     if (col.key === "select") {
       const box = document.createElement("input");
@@ -611,7 +615,7 @@ function statusBadge(o) {
 
 function cellElement(col, record, selected) {
   const cell = document.createElement("div");
-  cell.className = "cell " + col.key + (col.numeric ? " num" : "") + (col.mono ? " mono" : "");
+  cell.className = "cell " + colClass(col.key) + (col.numeric ? " num" : "") + (col.mono ? " mono" : "");
   cell.setAttribute("role", "gridcell");
   if (col.key === "select") {
     const box = document.createElement("input");
@@ -676,7 +680,7 @@ function onRowClick(event) {
     selectRange(state.anchorKey, key, ctrl);
     state.cursorKey = key; // the range's moving end, so Shift+arrow carries on from it
     state.paneHidden = false;
-  } else if (ctrl || event.target.closest(".cell.select")) {
+  } else if (ctrl || event.target.closest(".cell.col-select")) {
     // The whole select cell, not just its 16px box: a near miss must not move the cursor.
     if (state.selected.has(key)) state.selected.delete(key);
     else state.selected.add(key);
@@ -758,6 +762,8 @@ function onTheme() {
   // Density moves the type scale and the row height: re-measure, re-lay.
   measureColumns();
   render();
+  // Two frames: the first callback runs before this frame is painted.
+  requestAnimationFrame(() => requestAnimationFrame(() => state.bridge.themeApplied()));
 }
 
 function bind() {

@@ -299,7 +299,7 @@
   user-select: none;
 }
 .head.sorted { color: var(--text); }
-.head.select { cursor: default; }
+.head.col-select { cursor: default; }
 /* The Value column while no price column is mapped. */
 .head.unmapped { color: var(--text-disabled); }
 
@@ -317,14 +317,14 @@
 
 .num { text-align: right; }
 .cell.mono { font-family: var(--font-family-mono); }
-.cell.order { font-weight: 700; }
+.cell.col-order { font-weight: 700; }
 .cell.missing { color: var(--text-disabled); }
 
 /* Pinned when the table scrolls sideways. No z-index, so what the row draws
    over itself still paints over them. */
-.cell.select, .cell.status { position: sticky; background: inherit; }
-.cell.select { left: 0; padding: 0; text-align: center; }
-.cell.status { left: 36px; }
+.cell.col-select, .cell.col-status { position: sticky; background: inherit; }
+.cell.col-select { left: 0; padding: 0; text-align: center; }
+.cell.col-status { left: 36px; }
 
 /* --- states -------------------------------------------------------------------- */
 
