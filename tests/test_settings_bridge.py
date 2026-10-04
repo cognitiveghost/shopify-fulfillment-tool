@@ -1,4 +1,4 @@
-"""The settings pages' bridge (phase 7 spec section 3.3)."""
+"""The settings pages' bridge (phase 7 spec section 3.3, phase 8 spec section 3.2)."""
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -58,3 +58,13 @@ def test_read_columns_emits_its_signal():
     seen = _caught(bridge.readColumnsRequested)
     bridge.readColumns()
     assert seen == [()]
+
+
+def test_test_rule_names_the_rule_and_close_test_says_so():
+    bridge = SettingsBridge()
+    asked = _caught(bridge.testRequested)
+    closed = _caught(bridge.testClosed)
+    bridge.testRule("4")
+    bridge.closeTest()
+    assert asked == [("4",)]
+    assert closed == [()]

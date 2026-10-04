@@ -1,7 +1,8 @@
-// The Client settings pages the web tier draws: General, Orders mapping and
-// Stock mapping (phase 7 spec section 5). Python holds every value and words
-// every sentence (gui/settings/page_state.py) and sends one page's view as
-// bridge.state; this file renders it and reports each edit through
+// The Client settings pages the web tier draws: General, Orders mapping,
+// Stock mapping (phase 7 spec section 5) and Rules (phase 8 spec section 5,
+// drawn by settings_rules.js). Python holds every value and words every
+// sentence (gui/settings/page_state.py, rules_state.py) and sends one page's
+// view as bridge.state; this file renders it and reports each edit through
 // bridge.edit(action, args). Nothing is validated or computed here. The page's
 // own state is which menu is open.
 "use strict";
@@ -20,9 +21,11 @@ const GLYPH = {
 const els = {};
 const page = { bridge: null, state: null, renders: 0 };
 // menu: "field-<internal name>", "courier-code-<row>", "column-add",
-// "chip:<column>", or null. shown: the page the last render drew. pending: a
-// data-key to focus once the state that creates it arrives. problem: the key
-// the footer's link asked for while another page was still showing.
+// "chip:<column>", a Rules menu ("rule-<uid>-..."), or null: always the
+// data-key of the control that opens it. shown: the page the last render drew.
+// pending: a data-key to focus once the state that creates it arrives, or one
+// of the Rules page's own requests ("@..."). problem: the key the footer's
+// link asked for while another page was still showing.
 const view = { menu: null, shown: null, pending: null, problem: null };
 
 // A carriage return too: the parser would turn a bare one into a line feed,
@@ -50,9 +53,13 @@ function own(map, key) {
 
 // --- what every page shares --------------------------------------------------
 
+// The page head's action: what it does, and its data-key.
+const HEAD_ACTION = { rules: ["rule-add", "rule-add"] };
+
 function head(s) {
+  const [act, key] = HEAD_ACTION[s.page] || ["read", "read-columns"];
   const action = s.action
-    ? `<button class="btn secondary" type="button" data-act="read" data-key="read-columns">${svg(GLYPH.plus, "glyph")}${esc(s.action)}</button>`
+    ? `<button class="btn secondary" type="button" data-act="${act}" data-key="${key}">${svg(GLYPH.plus, "glyph")}${esc(s.action)}</button>`
     : "";
   return `<div class="page-head split">
     <div class="page-head-text"><span class="page-title">${esc(s.title)}</span><span class="page-sub">${esc(s.subtitle)}</span></div>
@@ -269,6 +276,7 @@ function mappingPage(m) {
 // A menu whose opener a new state removed or disabled must not stay open.
 function menuStillOpens(s) {
   const name = view.menu;
+  if (s.rules) return rulesMenuStillOpens(s.rules, name);
   const m = s.mapping;
   if (!m) return false;
   if (name.startsWith("field-")) {
@@ -346,16 +354,23 @@ function render() {
     view.pending = null;
   }
   if (view.menu !== null && !menuStillOpens(s)) view.menu = null;
+  // A new state under a drag: the rows it was measuring may be gone.
+  endDrag();
   const active = document.activeElement;
   const key = active ? keyOf(active) : null;
   const fresh = document.createElement("template");
+  // The Test panel takes the page over: what is under it cannot be reached.
   fresh.innerHTML =
-    `<div class="settings-page" data-page="${esc(s.page)}">` +
+    `<div class="settings-page" data-page="${esc(s.page)}"${s.test ? " inert" : ""}>` +
     head(s) +
     (s.general ? generalPage(s.general) : "") +
     (s.mapping ? mappingPage(s.mapping) : "") +
-    "</div>";
+    (s.rules ? rulesPage(s.rules) : "") +
+    "</div>" +
+    (s.test ? testPanel(s.test) : "");
   morph(els.root, fresh.content);
+  // A menu whose opener this state no longer draws (a removed row).
+  if (view.menu !== null && !byKey(view.menu)) view.menu = null;
   if (s.page !== view.shown) {
     view.shown = s.page;
     els.root.scrollTop = 0;
@@ -364,6 +379,7 @@ function render() {
     focusKey(key);
   }
   if (view.pending !== null && focusKey(view.pending)) view.pending = null;
+  rulesRendered(s);
   if (view.problem !== null) {
     const problem = view.problem;
     view.problem = null;
@@ -388,6 +404,7 @@ function onClick(event) {
   const bridge = page.bridge;
   if (!el || el.disabled || !bridge) return;
   const data = el.dataset;
+  if (rulesClick(data, el, bridge)) return;
   switch (data.act) {
     case "read": bridge.readColumns(); break;
     case "delimiter": bridge.edit("delimiter", [data.kind, data.value]); break;
@@ -428,6 +445,7 @@ function onInput(event) {
   const bridge = page.bridge;
   if (!bridge || !el.dataset || !el.dataset.input) return;
   const data = el.dataset;
+  if (rulesInput(data, el, bridge)) return;
   if (data.input === "threshold") bridge.edit("threshold", [el.value]);
   else if (data.input === "delimiter_char") bridge.edit("delimiter_char", [data.kind, el.value]);
   else if (data.input === "courier_pattern") bridge.edit("courier_pattern", [data.index, el.value]);
@@ -436,10 +454,14 @@ function onInput(event) {
 function onKey(event) {
   const target = event.target;
   if (event.key === "Escape") {
-    // With no menu open the page leaves Escape alone, and the dialog takes it.
-    if (view.menu === null) return;
-    event.preventDefault();
-    closeMenu();
+    // With no menu open, no drag and no Test panel, the page leaves Escape
+    // alone, and the dialog takes it.
+    if (view.menu !== null) {
+      event.preventDefault();
+      closeMenu();
+    } else if (rulesEscape()) {
+      event.preventDefault();
+    }
     return;
   }
   if (event.key === "Enter" && target.dataset && target.dataset.newCourier !== undefined) {
@@ -501,6 +523,7 @@ function bind() {
   // A file dropped on the page must not navigate the view. It loads nothing.
   document.addEventListener("dragover", (event) => event.preventDefault());
   document.addEventListener("drop", (event) => event.preventDefault());
+  bindRules();
 }
 
 bind();
