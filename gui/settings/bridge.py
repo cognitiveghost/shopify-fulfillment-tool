@@ -30,6 +30,9 @@ class SettingsBridge(PageBridge):
     readColumnsRequested = Signal()
     testRequested = Signal(str)
     testClosed = Signal()
+    importRequested = Signal(str)
+    exportRequested = Signal(str)
+    toastActionRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -69,6 +72,21 @@ class SettingsBridge(PageBridge):
     @Slot()
     def closeTest(self) -> None:
         self.testClosed.emit()
+
+    @Slot(str)
+    def importFile(self, kind) -> None:
+        """Pick a CSV and import it (phase 9 spec section 8). `kind` names one
+        of the showing draft's own imports; it is never a path."""
+        self.importRequested.emit(str(kind))
+
+    @Slot(str)
+    def exportFile(self, kind) -> None:
+        self.exportRequested.emit(str(kind))
+
+    @Slot()
+    def toastAction(self) -> None:
+        """The toast's button was pressed."""
+        self.toastActionRequested.emit()
 
 
 def mount_settings_page(view: QWebEngineView) -> SettingsBridge:

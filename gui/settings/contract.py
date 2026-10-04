@@ -10,6 +10,19 @@ import json
 UNCOLLECTABLE = "<uncollectable>"
 
 
+class FileProblem(Exception):
+    """An import or export that failed in a way the operator can act on.
+
+    The host shows `headline` and `detail` as they are. Any other exception
+    is logged and shown as "Details are in Logs."
+    """
+
+    def __init__(self, headline: str, detail: str):
+        super().__init__(headline)
+        self.headline = headline
+        self.detail = detail
+
+
 class PageContract:
     """One page in the settings window.
 
