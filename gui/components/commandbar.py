@@ -127,6 +127,7 @@ class CommandBar(QWidget):
 
         self._repopulating = False
         self._restore_client = ""
+        self._announced = ""  # the last client clientChanged carried
         self._show_chip = False
         self._show_meta = False
         self._analysed_text = ""
@@ -392,6 +393,12 @@ class CommandBar(QWidget):
         if not client_id:
             return
         self._restore_client = client_id
+        # Putting the box back on the client it already showed -- after an
+        # action row, or after a refresh rebuilt the rows -- is not a change.
+        # The window resets the open session on every clientChanged.
+        if client_id == self._announced:
+            return
+        self._announced = client_id
         self.clientChanged.emit(client_id)
 
     def _on_row_activated(self, index: int) -> None:
