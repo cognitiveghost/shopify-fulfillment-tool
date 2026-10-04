@@ -370,11 +370,11 @@ function rulesMenuStillOpens(r, name) {
 // After every render: the focus an edit asked for, and the panel's.
 function rulesRendered(s) {
   const pending = view.pending;
-  if (pending === "@open-name") {
+  if (pending === "@open-name" || pending === "@new-name") {
     const field = els.root.querySelector(".rule.open .rule-name-field");
     if (field) {
       field.focus();
-      field.select();
+      if (pending === "@new-name") field.select();
       view.pending = null;
     }
   } else if (typeof pending === "string" && pending.startsWith("@move:")) {
@@ -398,7 +398,7 @@ function rulesClick(data, el, bridge) {
   const uid = data.uid;
   switch (data.act) {
     case "rule-add":
-      view.pending = "@open-name";
+      view.pending = "@new-name";
       bridge.edit("rule_add", []);
       return true;
     case "rule-open":

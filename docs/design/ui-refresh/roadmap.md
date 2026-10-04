@@ -181,7 +181,9 @@ Built as listed below, with these differences. It fitted one PR. The mockup stop
 opens in place into an editor that is its summary with the words turned into controls. Article rules always
 run before order rules, so a client with both sees two labelled groups, and up, down and the grip stop at a
 group's edge. All three are off while a filter is on. A rule gained `enabled` (written only when it is off);
-the analysis skips a rule that is off and Test still runs it. A row that is off is drawn in secondary text,
+the analysis skips a rule that is off and Test still runs it. A PC still on an older version runs an off
+rule, and any Settings save from it drops `enabled` and turns the rule back on for every PC: update every
+PC before anyone uses the switch. A row that is off is drawn in secondary text,
 not at 60% opacity (ADR 0001). Fields keep the analysis's own names, and the seven real actions get plain
 labels; the status action is "Hold the order". Test runs on a worker over the whole analysis, dims the page
 area only until phase 10, and says "No change" for an order the saved rules already changed. The date picker

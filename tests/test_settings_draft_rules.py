@@ -218,9 +218,9 @@ def test_a_profile_edited_into_odd_shapes_still_loads_and_saves(analysis_df):
     assert saved[2]["steps"][0]["conditions"] == [
         cond("Quantity", "equals", 5),
         cond("SKU", "in list", ["A", "B"]),
-        cond("", "equals", ""),
+        cond("", "", ""),
     ]
-    assert saved[2]["steps"][0]["actions"] == [{"type": "ADD_INTERNAL_TAG"}, {"type": ""}]
+    assert saved[2]["steps"][0]["actions"] == [{"type": ""}, {"type": ""}]
     assert draft.blocker() is None
     assert draft.snapshot()
 

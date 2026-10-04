@@ -76,6 +76,7 @@ QUANTITY_PROBLEM = f"Type a whole number from 1 to {MAX_QUANTITY}."
 HOLD_HINT = "Holds every line of the order and returns its stock."
 RETIRED_ONE = "Writes the Status_Note text, not a tag. Use Add internal tag for a real tag."
 RETIRED_MANY = "Writes the Status_Note text, not tags. Use one Add internal tag per tag."
+NO_OPERATOR = "This condition has no operator, so it never matches."
 UNKNOWN_ACTION = "This version does not know this action, so it does nothing."
 
 ACTION_LABELS = {
@@ -212,14 +213,14 @@ def _empty_step() -> dict:
 def _loaded_condition(stored: dict) -> dict:
     condition = dict(stored)
     condition["field"] = _text(stored.get("field"))
-    condition["operator"] = _text(stored.get("operator", CONDITION_OPERATORS[0]))
+    condition["operator"] = _text(stored.get("operator"))
     condition["value"] = stored.get("value", "")
     return condition
 
 
 def _loaded_action(stored: dict) -> dict:
     action = dict(stored)
-    action["type"] = _text(stored.get("type", ACTION_TYPES[0]))
+    action["type"] = _text(stored.get("type"))
     kind = _kind(action)
     if kind == "SET_STATUS":
         # A rule can only hold an order (spec 2026-09-26 D3): a stale value
@@ -481,7 +482,7 @@ class RulesDraft(PageContract):
             return False
         twin = copy.deepcopy(rule)
         twin["uid"] = self._uid()
-        twin["name"] = f"{rule['name']} copy"
+        twin["name"] = f"{rule['name']} copy".strip()
         self.rules.insert(self.rules.index(rule) + 1, twin)
         return True
 
@@ -698,6 +699,8 @@ class RulesDraft(PageContract):
             )
             return unread, "", False
         if operator not in CONDITION_OPERATORS:
+            if not operator:
+                return NO_OPERATOR, "", False
             unknown = (
                 f"“{operator}” is not an operator this version knows, "
                 "so this condition never matches."
@@ -764,8 +767,9 @@ class RulesDraft(PageContract):
     def validate(self) -> tuple[bool, list[str]]:
         """Refuse to save a rule the page marks red (AUDIT-03-5)."""
         errors = [
-            f"Rule “{rule['name']}”, step {s}, {row} {n}: {message}"
-            for rule in self.rules
+            f"{called}, step {s}, {row} {n}: {message}"
+            for position, rule in enumerate(self.rules)
+            for called in [f"Rule “{rule['name']}”" if rule["name"] else f"Rule {position + 1:02d}"]
             for s, row, n, message, _key in self._blocking(rule)
         ]
         return not errors, errors

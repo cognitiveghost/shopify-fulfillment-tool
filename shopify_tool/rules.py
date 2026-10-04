@@ -910,7 +910,7 @@ class RuleEngine:
                             step.get("match", "ALL"),
                         )
                         if not matched:
-                            logger.info(
+                            logger.debug(
                                 f"[RULE ENGINE] Order {order_number} rule "
                                 f"'{rule_name}' step {step_idx+1}: no match, stopping"
                             )

@@ -478,7 +478,8 @@ line at a time, or the whole order. Article rules run before order rules.
 
 **Off rule** — a rule kept in the profile that the analysis skips: its
 `enabled` is false. A rule with no such key is on. A rule test still runs an
-off rule.
+off rule. A version from before the flag runs an off rule, and its Settings
+save drops the key, which turns the rule back on for every PC.
 
 **Rule test** — one rule, as edited, run on a copy of the open session's
 analysis. It counts the orders that match and says what the rule would change
