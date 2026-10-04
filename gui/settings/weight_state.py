@@ -1,0 +1,608 @@
+"""The values behind the Weight page (phase 9 spec section 5).
+
+Product and box sizes, and the divisor that turns a volume into a weight.
+WeightDraft holds config_data["weight_config"], takes the page's edits through
+apply(), runs the CSV imports and exports, and words everything the page
+draws. No Qt import.
+"""
+
+import math
+import re
+from typing import ClassVar
+
+import pandas as pd
+
+from gui.settings.contract import FileProblem, PageContract
+from gui.settings.page_state import _shaped
+from gui.settings.sets_state import _plural, _text, whole_text
+from shopify_tool.csv_utils import detect_csv_delimiter, resolve_delimiter
+
+MAX_DIVISOR = 100000
+PRODUCT_LIMIT = 200
+# (the entry's key, the stored key)
+DIMENSIONS = (("l", "length_cm"), ("w", "width_cm"), ("h", "height_cm"))
+PRODUCT_TEXTS = ("sku", "name", "l", "w", "h")
+BOX_TEXTS = ("name", "l", "w", "h")
+
+SUBTITLE = "Product and box sizes, for volumetric weight and the box an order needs."
+DIVISOR_UNIT = "cm³ per kg"
+DIVISOR_HINT = (
+    "Volumetric weight is L × W × H ÷ divisor. 6000 is DPD and Speedy; 5000 is DHL and FedEx."
+)
+DIVISOR_PROBLEM = f"Type a whole number from 1 to {MAX_DIVISOR}."
+NUMBER_PROBLEM = "Type a number, 0 or more."
+NO_SKU_HINT = "Type a SKU, or this row isn't saved."
+NO_NAME_HINT = "Type a name, or this row isn't saved."
+PRODUCTS_TEXT = "Each SKU's size in cm. No packaging: the SKU ships as it is and needs no box."
+PRODUCTS_EMPTY = "No products yet. Add one, or import them from a CSV."
+PRODUCT_FILTER = "Filter by SKU or name"
+PRODUCT_HEADS = ["SKU", "Name", "L", "W", "H", "Vol. weight", "No packaging"]
+BOXES_TEXT = "The boxes orders are packed in. The analysis picks the smallest one an order fits."
+BOXES_NOTE = "order_min_box holds the box's name, or NO_BOX_NEEDED, NO_BOX_FITS or UNKNOWN_DIMS."
+BOXES_EMPTY = "No boxes yet."
+BOX_HEADS = ["Name", "L", "W", "H", "Vol. weight"]
+
+# The columns an import looks for, lower-cased, in order of preference.
+STOCK_SKU_COLUMNS = ("SKU", "Артикул", "sku", "Article")
+SKU_COLUMNS = ("sku", "артикул", "article", "код", "article_no")
+NAME_COLUMNS = ("name", "назва", "product_name", "наименование", "title")
+BOX_NAME_COLUMNS = ("box name", "box_name", "name", "назва", "size", "box", "коробка")
+L_COLUMNS = ("l (cm)", "l(cm)", "length_cm", "length", "l", "довжина", "длина")
+W_COLUMNS = ("w (cm)", "w(cm)", "width_cm", "width", "w", "ширина")
+H_COLUMNS = ("h (cm)", "h(cm)", "height_cm", "height", "h", "висота", "высота")
+NO_PACKAGING_COLUMNS = ("no_packaging", "no packaging", "без упаковки", "nopackaging")
+TRUE_WORDS = ("true", "1", "yes", "так", "да")
+
+_KEY_UID = re.compile(r"product-(\d+)-")
+
+
+def number_text(value) -> str:
+    """A stored dimension as a field shows it: "" for none or zero, else the
+    number without a trailing ".0". Twelve digits, so a stored value is not
+    rounded by being shown."""
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        return _text(value)
+    return f"{number:.12g}" if number else ""
+
+
+def parse_number(text: str) -> float | None:
+    """A dimension as typed, with a comma or a point; empty is 0. None when it
+    is not a finite number, 0 or more."""
+    text = text.strip().replace(",", ".")
+    if not text:
+        return 0.0
+    try:
+        number = float(text)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) and number >= 0 else None
+
+
+def _divisor(text: str) -> int | None:
+    text = text.strip()
+    if not text.isdecimal():
+        return None
+    number = int(text)
+    return number if 1 <= number <= MAX_DIVISOR else None
+
+
+def _find_column(columns, candidates):
+    """The first of `candidates` among `columns`, ignoring case and outer spaces."""
+    lowered = {str(column).lower().strip(): column for column in columns}
+    return next((lowered[name] for name in candidates if name in lowered), None)
+
+
+def _cell(row, column) -> str:
+    """A cell as text; "" for no such column, an empty cell, or "nan"."""
+    if column is None or pd.isna(row.get(column)):
+        return ""
+    text = str(row[column]).strip()
+    return "" if text == "nan" else text
+
+
+def _dimension(row, column) -> str:
+    number = parse_number(_cell(row, column))
+    return "" if number is None else number_text(number)
+
+
+def _import_text(added: int, updated: int, skipped: int) -> str:
+    text = f"Added {added}."
+    if updated:
+        text += f" Updated {updated}."
+    if skipped:
+        text += f" Skipped {skipped} already in the table."
+    return text
+
+
+class WeightDraft(PageContract):
+    """Volumetric weight config, stored under config_data["weight_config"]."""
+
+    imports: ClassVar[dict[str, str]] = {
+        "products-stock": "Import SKUs from Stock CSV",
+        "products-dims": "Import Product Dimensions from CSV",
+        "boxes": "Import Boxes from CSV",
+    }
+    exports: ClassVar[dict[str, tuple[str, str]]] = {
+        "products": ("Export Product Dimensions to CSV", "weight_products.csv"),
+        "boxes": ("Export Boxes to CSV", "weight_boxes.csv"),
+    }
+    # kind -> the headline of a failure that is not a FileProblem
+    import_failed: ClassVar[dict[str, str]] = {
+        "products-stock": "The SKUs weren't imported",
+        "products-dims": "The dimensions weren't imported",
+        "boxes": "The boxes weren't imported",
+    }
+    export_failed: ClassVar[dict[str, str]] = {
+        "products": "The products weren't exported",
+        "boxes": "The boxes weren't exported",
+    }
+
+    def __init__(self, weight_config: dict, column_mappings: dict, stock_csv_delimiter: str):
+        # The live dict: collect() updates it in place, so a key this page
+        # does not draw survives the save (PageContract).
+        self._config = weight_config
+        self.column_mappings = column_mappings
+        self.stock_csv_delimiter = stock_csv_delimiter
+        self._next = 0
+        self.filter = ""
+        self.revealed: str | None = None
+        self.divisor = whole_text(weight_config.get("volumetric_divisor", 6000))
+        products = weight_config.get("products")
+        boxes = weight_config.get("boxes")
+        self.products = [
+            self._product(sku, stored)
+            for sku, stored in (products if isinstance(products, dict) else {}).items()
+        ]
+        self.boxes = [
+            self._box(stored) for stored in (boxes if isinstance(boxes, list) else [])
+        ]
+
+    def _uid(self) -> str:
+        self._next += 1
+        return str(self._next)
+
+    def _product(self, sku, stored) -> dict:
+        stored = stored if isinstance(stored, dict) else {}
+        return {
+            "uid": self._uid(),
+            "sku": _text(sku),
+            "name": _text(stored.get("name")),
+            **{short: number_text(stored.get(key)) for short, key in DIMENSIONS},
+            "no_packaging": bool(stored.get("no_packaging", False)),
+            "stored": dict(stored),
+        }
+
+    def _box(self, stored) -> dict:
+        stored = stored if isinstance(stored, dict) else {}
+        return {
+            "uid": self._uid(),
+            "name": _text(stored.get("name")),
+            **{short: number_text(stored.get(key)) for short, key in DIMENSIONS},
+            "stored": dict(stored),
+        }
+
+    @staticmethod
+    def _find(rows: list, uid: str) -> dict | None:
+        return next((row for row in rows if row["uid"] == uid), None)
+
+    # --- the edits ---------------------------------------------------------
+
+    def apply(self, action: str, args) -> bool:
+        if action == "divisor" and _shaped(args, str):
+            if self.divisor == args[0]:
+                return False
+            self.divisor = args[0]
+            return True
+        if action == "product_filter" and _shaped(args, str):
+            if self.filter == args[0]:
+                return False
+            self.filter = args[0]
+            return True
+        if action == "reveal" and _shaped(args, str):
+            found = _KEY_UID.match(args[0])
+            if not found or self._find(self.products, found.group(1)) is None:
+                return False
+            if self.revealed == found.group(1):
+                return False
+            self.revealed = found.group(1)
+            return True
+        if action == "product_add" and _shaped(args):
+            # First, so it is in view whatever the list's length.
+            self.products.insert(0, self._product("", {}))
+            # Listed whatever the filter, or it would go at the first letter.
+            self.revealed = self.products[0]["uid"]
+            return True
+        if action == "box_add" and _shaped(args):
+            self.boxes.append(self._box({}))
+            return True
+        if action in ("product_remove", "box_remove") and _shaped(args, str):
+            rows = self.products if action == "product_remove" else self.boxes
+            row = self._find(rows, args[0])
+            if row is None:
+                return False
+            rows.remove(row)
+            return True
+        if action in ("product_text", "box_text") and _shaped(args, str, str, str):
+            products = action == "product_text"
+            row = self._find(self.products if products else self.boxes, args[0])
+            names = PRODUCT_TEXTS if products else BOX_TEXTS
+            if row is None or args[1] not in names or row[args[1]] == args[2]:
+                return False
+            row[args[1]] = args[2]
+            if products:
+                # The row being typed in stays listed when it stops matching.
+                self.revealed = row["uid"]
+            return True
+        if action == "product_no_packaging" and _shaped(args, str, bool):
+            row = self._find(self.products, args[0])
+            if row is None or row["no_packaging"] == args[1]:
+                return False
+            row["no_packaging"] = args[1]
+            return True
+        return False
+
+    # --- what blocks a save ------------------------------------------------
+
+    def _duplicates(self) -> set[str]:
+        """The uids of the products whose SKU an earlier product has."""
+        seen, found = set(), set()
+        for product in self.products:
+            sku = product["sku"].strip()
+            if sku and sku in seen:
+                found.add(product["uid"])
+            seen.add(sku)
+        return found
+
+    @staticmethod
+    def _row_problem(kind: str, row: dict, duplicate: bool) -> tuple[str, str, list[str]]:
+        """(sentence, data-key, the fields to mark); ("", "", []) when the row
+        blocks nothing."""
+        key = f"{kind}-{row['uid']}"
+        invalid = [short for short, _stored in DIMENSIONS if parse_number(row[short]) is None]
+        if invalid:
+            return NUMBER_PROBLEM, f"{key}-{invalid[0]}", invalid
+        if duplicate:
+            return f"{row['sku'].strip()} is in the list twice.", f"{key}-sku", ["sku"]
+        return "", "", []
+
+    def _blocking(self) -> list[tuple[str, str, str]]:
+        """(blocker, data-key, validate()'s line) for everything that blocks."""
+        found = []
+        if _divisor(self.divisor) is None:
+            found.append(("Set Divisor", "divisor", f"Divisor: {DIVISOR_PROBLEM}"))
+        duplicates = self._duplicates()
+        for product in self.products:
+            sentence, key, _fields = self._row_problem(
+                "product", product, product["uid"] in duplicates
+            )
+            if sentence:
+                sku = product["sku"].strip()
+                blocker = f"Fix product “{sku}”" if sku else "Fix the new product"
+                who = f"Product “{sku}”" if sku else "The new product"
+                found.append((blocker, key, f"{who}: {sentence}"))
+        for box in self.boxes:
+            sentence, key, _fields = self._row_problem("box", box, False)
+            if sentence:
+                name = box["name"].strip()
+                blocker = f"Fix box “{name}”" if name else "Fix the new box"
+                who = f"Box “{name}”" if name else "The new box"
+                found.append((blocker, key, f"{who}: {sentence}"))
+        return found
+
+    def blocker(self) -> str | None:
+        blocking = self._blocking()
+        return blocking[0][0] if blocking else None
+
+    def blocker_key(self) -> str:
+        blocking = self._blocking()
+        return blocking[0][1] if blocking else ""
+
+    def validate(self) -> tuple[bool, list[str]]:
+        lines = [line for _blocker, _key, line in self._blocking()]
+        return not lines, lines
+
+    # --- what is saved -----------------------------------------------------
+
+    @staticmethod
+    def _stored_dimensions(row: dict) -> dict:
+        """The three dimensions as floats; one that blocks the save, as typed."""
+        result = {}
+        for short, key in DIMENSIONS:
+            number = parse_number(row[short])
+            result[key] = row[short] if number is None else number
+        return result
+
+    def collect(self) -> dict:
+        divisor = _divisor(self.divisor)
+        products = {}
+        for product in self.products:
+            sku = product["sku"].strip()
+            if sku:
+                products[sku] = {
+                    **product["stored"],
+                    "name": product["name"].strip(),
+                    **self._stored_dimensions(product),
+                    "no_packaging": product["no_packaging"],
+                }
+        boxes = [
+            {**box["stored"], "name": box["name"].strip(), **self._stored_dimensions(box)}
+            for box in self.boxes
+            if box["name"].strip()
+        ]
+        self._config.update(
+            {
+                "volumetric_divisor": self.divisor if divisor is None else divisor,
+                "products": products,
+                "boxes": boxes,
+            }
+        )
+        return {"weight_config": self._config}
+
+    # --- files -------------------------------------------------------------
+
+    def import_csv(self, kind: str, path, update: bool = False) -> tuple[str, bool]:
+        """Import a CSV. (the toast's text, whether "Update them" applies)."""
+        if kind not in self.imports:
+            raise ValueError(f"Unknown import: {kind}")
+        path = str(path)
+        if kind == "products-stock":
+            delimiter = resolve_delimiter(path, self.stock_csv_delimiter, "stock")
+            return self._import_stock(pd.read_csv(path, sep=delimiter, dtype=str))
+        delimiter, _method = detect_csv_delimiter(path)
+        df = pd.read_csv(path, sep=delimiter, dtype=str)
+        if kind == "products-dims":
+            return self._import_dimensions(df, update)
+        return self._import_boxes(df, update)
+
+    def _import_stock(self, df) -> tuple[str, bool]:
+        """Every SKU of a stock CSV that is not listed yet, with its name."""
+        mapping = self.column_mappings.get("stock")
+        by_internal = {
+            internal: column
+            for column, internal in (mapping if isinstance(mapping, dict) else {}).items()
+        }
+        sku_column = by_internal.get("SKU")
+        if sku_column not in df.columns:
+            sku_column = next((c for c in STOCK_SKU_COLUMNS if c in df.columns), None)
+        if sku_column is None:
+            raise FileProblem(
+                "No SKU column found", "Check the Stock mapping page, then import again."
+            )
+        name_column = by_internal.get("Product_Name")
+        if name_column not in df.columns:
+            name_column = None
+        listed = {product["sku"].strip() for product in self.products}
+        seen: set[str] = set()
+        added = skipped = 0
+        for _index, row in df.iterrows():
+            sku = _cell(row, sku_column)
+            if not sku or sku in seen:
+                continue
+            seen.add(sku)
+            if sku in listed:
+                skipped += 1
+                continue
+            self.products.append(self._product(sku, {"name": _cell(row, name_column)}))
+            added += 1
+        return f"Added {added}. Skipped {skipped} already existing.", False
+
+    def _import_dimensions(self, df, update: bool) -> tuple[str, bool]:
+        sku_column = _find_column(df.columns, SKU_COLUMNS)
+        if sku_column is None:
+            raise FileProblem(
+                "No SKU column found",
+                f"Available columns: {', '.join(map(str, df.columns))}. "
+                "Expected one of: SKU, Артикул, Article, Код.",
+            )
+        columns = {
+            "name": _find_column(df.columns, NAME_COLUMNS),
+            "l": _find_column(df.columns, L_COLUMNS),
+            "w": _find_column(df.columns, W_COLUMNS),
+            "h": _find_column(df.columns, H_COLUMNS),
+        }
+        flag_column = _find_column(df.columns, NO_PACKAGING_COLUMNS)
+        listed = {product["sku"].strip(): product for product in self.products}
+        added = updated = skipped = 0
+        for _index, row in df.iterrows():
+            sku = _cell(row, sku_column)
+            if not sku:
+                continue
+            values = {"name": _cell(row, columns["name"])}
+            values.update({short: _dimension(row, columns[short]) for short in "lwh"})
+            no_packaging = _cell(row, flag_column).lower() in TRUE_WORDS
+            product = listed.get(sku)
+            if product is None:
+                product = self._product(sku, {})
+                product.update(values, no_packaging=no_packaging)
+                self.products.append(product)
+                listed[sku] = product
+                added += 1
+            elif not update:
+                skipped += 1
+            else:
+                # Only what the file has a column for.
+                for name, column in columns.items():
+                    if column is not None:
+                        product[name] = values[name]
+                product["no_packaging"] = no_packaging
+                updated += 1
+        return _import_text(added, updated, skipped), skipped > 0
+
+    def _import_boxes(self, df, update: bool) -> tuple[str, bool]:
+        name_column = _find_column(df.columns, BOX_NAME_COLUMNS)
+        if name_column is None:
+            raise FileProblem(
+                "No box name column found",
+                f"Available columns: {', '.join(map(str, df.columns))}. "
+                "Expected one of: Name, Box Name, Size, Box.",
+            )
+        columns = {
+            "l": _find_column(df.columns, L_COLUMNS),
+            "w": _find_column(df.columns, W_COLUMNS),
+            "h": _find_column(df.columns, H_COLUMNS),
+        }
+        listed = {box["name"].strip(): box for box in self.boxes}
+        added = updated = skipped = 0
+        for _index, row in df.iterrows():
+            name = _cell(row, name_column)
+            if not name:
+                continue
+            values = {short: _dimension(row, columns[short]) for short in "lwh"}
+            box = listed.get(name)
+            if box is None:
+                box = self._box({"name": name})
+                box.update(values)
+                self.boxes.append(box)
+                listed[name] = box
+                added += 1
+            elif not update:
+                skipped += 1
+            else:
+                for short, column in columns.items():
+                    if column is not None:
+                        box[short] = values[short]
+                updated += 1
+        return _import_text(added, updated, skipped), skipped > 0
+
+    def export_csv(self, kind: str, path) -> str:
+        if kind not in self.exports:
+            raise ValueError(f"Unknown export: {kind}")
+        if kind == "products":
+            rows = [
+                {
+                    "SKU": product["sku"].strip(),
+                    "Name": product["name"].strip(),
+                    "L (cm)": product["l"].strip(),
+                    "W (cm)": product["w"].strip(),
+                    "H (cm)": product["h"].strip(),
+                    "No Packaging": str(product["no_packaging"]),
+                }
+                for product in self.products
+            ]
+        else:
+            rows = [
+                {
+                    "Name": box["name"].strip(),
+                    "L (cm)": box["l"].strip(),
+                    "W (cm)": box["w"].strip(),
+                    "H (cm)": box["h"].strip(),
+                }
+                for box in self.boxes
+            ]
+        pd.DataFrame(rows).to_csv(str(path), sep=";", index=False, encoding="utf-8-sig")
+        return f"Exported {len(rows)} {kind}."
+
+    # --- what the page draws -----------------------------------------------
+
+    def _weight(self, row: dict) -> str:
+        """L x W x H / divisor, as text; "" when a dimension is 0 or missing."""
+        divisor = _divisor(self.divisor)
+        sizes = [parse_number(row[short]) for short, _stored in DIMENSIONS]
+        if divisor is None or not all(sizes):
+            return ""
+        return f"{round(sizes[0] * sizes[1] * sizes[2] / divisor, 4):g} kg"
+
+    @staticmethod
+    def _sized(row: dict) -> bool:
+        return all(parse_number(row[short]) for short, _stored in DIMENSIONS)
+
+    def _product_row(self, product: dict, duplicates: set[str]) -> dict:
+        problem, _key, invalid = self._row_problem(
+            "product", product, product["uid"] in duplicates
+        )
+        other = any(product[name].strip() for name in ("name", "l", "w", "h"))
+        return {
+            "uid": product["uid"],
+            "sku": product["sku"],
+            "name": product["name"],
+            "l": product["l"],
+            "w": product["w"],
+            "h": product["h"],
+            "weight": self._weight(product),
+            "no_packaging": product["no_packaging"],
+            "invalid": invalid,
+            "problem": problem,
+            "hint": NO_SKU_HINT
+            if not problem and not product["sku"].strip() and (other or product["no_packaging"])
+            else "",
+        }
+
+    def _box_row(self, box: dict) -> dict:
+        problem, _key, invalid = self._row_problem("box", box, False)
+        sized = any(box[short].strip() for short in "lwh")
+        return {
+            "uid": box["uid"],
+            "name": box["name"],
+            "l": box["l"],
+            "w": box["w"],
+            "h": box["h"],
+            "weight": self._weight(box),
+            "invalid": invalid,
+            "problem": problem,
+            "hint": NO_NAME_HINT if not problem and not box["name"].strip() and sized else "",
+        }
+
+    def _products_view(self) -> dict:
+        needle = self.filter.strip().casefold()
+        listed = [
+            product
+            for product in self.products
+            if not needle
+            or not product["sku"].strip()
+            or product["uid"] == self.revealed
+            or needle in product["sku"].casefold()
+            or needle in product["name"].casefold()
+        ]
+        shown = listed[:PRODUCT_LIMIT]
+        revealed = self._find(self.products, self.revealed) if self.revealed else None
+        if revealed is not None and revealed not in shown:
+            shown.append(revealed)
+        count = _plural(len(self.products), "product")
+        unsized = sum(1 for product in self.products if not self._sized(product))
+        if unsized:
+            count += f", {unsized} with no size"
+        duplicates = self._duplicates()
+        return {
+            "text": PRODUCTS_TEXT,
+            "filter": self.filter,
+            "filter_placeholder": PRODUCT_FILTER,
+            "count": count,
+            "no_hits": f"No product matches “{self.filter.strip()}”."
+            if self.products and not shown
+            else "",
+            "more": f"Showing {PRODUCT_LIMIT} of {len(listed)}. Filter to find the rest."
+            if len(listed) > PRODUCT_LIMIT
+            else "",
+            "empty": "" if self.products else PRODUCTS_EMPTY,
+            "can_export": bool(self.products),
+            "heads": PRODUCT_HEADS,
+            "rows": [self._product_row(product, duplicates) for product in shown],
+        }
+
+    def view(self) -> dict:
+        divisor_ok = _divisor(self.divisor) is not None
+        return {
+            "page": "weight",
+            "title": "Weight",
+            "subtitle": SUBTITLE,
+            "action": "",
+            "weight": {
+                "divisor": {
+                    "value": self.divisor,
+                    "unit": DIVISOR_UNIT,
+                    "hint": DIVISOR_HINT,
+                    "problem": "" if divisor_ok else DIVISOR_PROBLEM,
+                },
+                "products": self._products_view(),
+                "boxes": {
+                    "text": BOXES_TEXT,
+                    "note": BOXES_NOTE,
+                    "empty": "" if self.boxes else BOXES_EMPTY,
+                    "can_export": bool(self.boxes),
+                    "heads": BOX_HEADS,
+                    "rows": [self._box_row(box) for box in self.boxes],
+                },
+            },
+        }

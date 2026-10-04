@@ -1,10 +1,11 @@
-// The Client settings pages the web tier draws: General, Orders mapping,
-// Stock mapping (phase 7 spec section 5) and Rules (phase 8 spec section 5,
-// drawn by settings_rules.js). Python holds every value and words every
-// sentence (gui/settings/page_state.py, rules_state.py) and sends one page's
-// view as bridge.state; this file renders it and reports each edit through
-// bridge.edit(action, args). Nothing is validated or computed here. The page's
-// own state is which menu is open.
+// The Client settings pages: General, Orders mapping and Stock mapping (phase
+// 7 spec section 5), drawn here; Rules (phase 8 spec section 5), drawn by
+// settings_rules.js; Sets, Weight, Reports and Tag categories (phase 9 spec
+// sections 4 to 7), each drawn by its own settings_<page>.js. Python holds
+// every value and words every sentence (gui/settings/*_state.py) and sends
+// one page's view as bridge.state; this file renders it and reports each
+// edit through bridge.edit(action, args). Nothing is validated or computed
+// here. The page's own state is which menu is open.
 "use strict";
 
 // Lucide glyphs, each as one path.
@@ -24,8 +25,10 @@ const page = { bridge: null, state: null, renders: 0 };
 // "chip:<column>", a Rules menu ("rule-<uid>-..."), or null: always the
 // data-key of the control that opens it. shown: the page the last render drew.
 // pending: a data-key to focus once the state that creates it arrives, or one
-// of the Rules page's own requests ("@..."). problem: the key the footer's
-// link asked for while another page was still showing.
+// of the requests that start with "@": the Rules page's own, "@css:<selector>"
+// (focus the first match), "@css-select:<selector>" (and select its text) and
+// "@keys:<key>|<key>" (the first of these keys that can take focus). problem:
+// the key the footer's link asked for while another page was still showing.
 const view = { menu: null, shown: null, pending: null, problem: null };
 
 // A carriage return too: the parser would turn a bare one into a line feed,
@@ -54,7 +57,25 @@ function own(map, key) {
 // --- what every page shares --------------------------------------------------
 
 // The page head's action: what it does, and its data-key.
-const HEAD_ACTION = { rules: ["rule-add", "rule-add"] };
+const HEAD_ACTION = {
+  rules: ["rule-add", "rule-add"],
+  sets: ["set-add", "set-add"],
+  tags: ["cat-add", "cat-add"],
+};
+
+// state key -> [draw, click, input]: the pages phase 9 moved. Each one's
+// script is loaded before this file.
+const LIST_PAGES = {
+  sets: [setsPage, setsClick, setsInput],
+  weight: [weightPage, weightClick, weightInput],
+  reports: [reportsPage, reportsClick, reportsInput],
+  tags: [tagsPage, tagsClick, tagsInput],
+};
+
+// The LIST_PAGES key this state holds, or undefined.
+function listPageOf(s) {
+  return Object.keys(LIST_PAGES).find((name) => s[name]);
+}
 
 function head(s) {
   const [act, key] = HEAD_ACTION[s.page] || ["read", "read-columns"];
@@ -277,6 +298,8 @@ function mappingPage(m) {
 function menuStillOpens(s) {
   const name = view.menu;
   if (s.rules) return rulesMenuStillOpens(s.rules, name);
+  // A list page's menu whose opener is gone is dropped after the morph.
+  if (listPageOf(s)) return true;
   const m = s.mapping;
   if (!m) return false;
   if (name.startsWith("field-")) {
@@ -358,6 +381,7 @@ function render() {
   endDrag();
   const active = document.activeElement;
   const key = active ? keyOf(active) : null;
+  const listPage = listPageOf(s);
   const fresh = document.createElement("template");
   // The Test panel takes the page over: what is under it cannot be reached.
   fresh.innerHTML =
@@ -366,6 +390,7 @@ function render() {
     (s.general ? generalPage(s.general) : "") +
     (s.mapping ? mappingPage(s.mapping) : "") +
     (s.rules ? rulesPage(s.rules) : "") +
+    (listPage ? LIST_PAGES[listPage][0](s[listPage]) : "") +
     "</div>" +
     (s.test ? testPanel(s.test) : "");
   morph(els.root, fresh.content);
@@ -374,11 +399,14 @@ function render() {
   if (s.page !== view.shown) {
     view.shown = s.page;
     els.root.scrollTop = 0;
+    // Its "Update them" belongs to the page just left.
+    dismissToast();
   } else if (key && keyOf(document.activeElement) !== key) {
     // Where the layout itself changed, the focused control is a new node.
     focusKey(key);
   }
   if (view.pending !== null && focusKey(view.pending)) view.pending = null;
+  focusPending();
   rulesRendered(s);
   if (view.problem !== null) {
     const problem = view.problem;
@@ -387,6 +415,44 @@ function render() {
   }
   page.renders += 1;
   document.documentElement.dataset.renders = String(page.renders);
+}
+
+// The "@css:", "@css-select:" and "@keys:" requests (see `view`): focus for
+// a control whose key the page could not know when it asked.
+function focusPending() {
+  const pending = view.pending;
+  if (typeof pending !== "string") return;
+  if (pending.startsWith("@css:") || pending.startsWith("@css-select:")) {
+    const el = els.root.querySelector(pending.slice(pending.indexOf(":") + 1));
+    if (!el) return;
+    el.focus();
+    if (pending.startsWith("@css-select:")) el.select();
+    view.pending = null;
+  } else if (pending.startsWith("@keys:")) {
+    if (pending.slice("@keys:".length).split("|").some((key) => focusKey(key))) view.pending = null;
+  }
+}
+
+// --- the toast (phase 9 spec section 8.3) --------------------------------------
+
+const TOAST_MS = 4000;
+const TOAST_ACTION_MS = 8000;
+let toastTimer = null;
+
+function dismissToast() {
+  if (toastTimer !== null) clearTimeout(toastTimer);
+  toastTimer = null;
+  els.toast.hidden = true;
+}
+
+// A new toast replaces the one showing. `update` puts "Update them" on it,
+// and such a toast stays longer.
+function raiseToast(text, update) {
+  els.toastText.textContent = text;
+  els.toastAction.hidden = !update;
+  els.toast.hidden = false;
+  if (toastTimer !== null) clearTimeout(toastTimer);
+  toastTimer = setTimeout(dismissToast, update ? TOAST_ACTION_MS : TOAST_MS);
 }
 
 // --- input -------------------------------------------------------------------
@@ -405,6 +471,7 @@ function onClick(event) {
   if (!el || el.disabled || !bridge) return;
   const data = el.dataset;
   if (rulesClick(data, el, bridge)) return;
+  if (Object.values(LIST_PAGES).some((fns) => fns[1](data, el, bridge))) return;
   switch (data.act) {
     case "read": bridge.readColumns(); break;
     case "delimiter": bridge.edit("delimiter", [data.kind, data.value]); break;
@@ -446,6 +513,7 @@ function onInput(event) {
   if (!bridge || !el.dataset || !el.dataset.input) return;
   const data = el.dataset;
   if (rulesInput(data, el, bridge)) return;
+  if (Object.values(LIST_PAGES).some((fns) => fns[2](data, el, bridge))) return;
   if (data.input === "threshold") bridge.edit("threshold", [el.value]);
   else if (data.input === "delimiter_char") bridge.edit("delimiter_char", [data.kind, el.value]);
   else if (data.input === "courier_pattern") bridge.edit("courier_pattern", [data.index, el.value]);
@@ -468,6 +536,13 @@ function onKey(event) {
     event.preventDefault();
     if (page.bridge) page.bridge.edit("courier_code", [target.dataset.newCourier, target.value]);
     closeMenu();
+    return;
+  }
+  // A field that adds on Enter (a category's tag): report it and empty it.
+  if (event.key === "Enter" && target.dataset && target.dataset.enter) {
+    event.preventDefault();
+    if (page.bridge) page.bridge.edit(target.dataset.enter, [target.dataset.uid, target.value]);
+    target.value = "";
     return;
   }
   const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
@@ -510,6 +585,16 @@ function focusProblem(key, drawn) {
 function bind() {
   els.root = document.getElementById("settings");
   els.themeVars = document.getElementById("theme-vars");
+  els.toast = document.getElementById("toast");
+  els.toastText = document.getElementById("toast-text");
+  els.toastAction = document.getElementById("toast-action");
+  const toastClose = document.getElementById("toast-dismiss");
+  toastClose.innerHTML = svg(GLYPH.x, "glyph");
+  toastClose.addEventListener("click", dismissToast);
+  els.toastAction.addEventListener("click", () => {
+    dismissToast();
+    if (page.bridge) page.bridge.toastAction();
+  });
   els.root.addEventListener("click", onClick);
   els.root.addEventListener("input", onInput);
   document.addEventListener("keydown", onKey);
@@ -535,6 +620,7 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   bridge.themeCssChanged.connect(() => { els.themeVars.textContent = bridge.themeCss; });
   bridge.stateChanged.connect(() => { page.state = bridge.state; render(); });
   bridge.problemFocusRequested.connect((key) => focusProblem(key));
+  bridge.toastRaised.connect(raiseToast);
   page.state = bridge.state;
   render();
   window.settingsBridge = bridge;

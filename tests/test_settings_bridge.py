@@ -68,3 +68,16 @@ def test_test_rule_names_the_rule_and_close_test_says_so():
     bridge.closeTest()
     assert asked == [("4",)]
     assert closed == [()]
+
+
+def test_import_export_and_the_toasts_action_reach_python():
+    bridge = SettingsBridge()
+    imports = _caught(bridge.importRequested)
+    exports = _caught(bridge.exportRequested)
+    actions = _caught(bridge.toastActionRequested)
+    bridge.importFile("sets-merge")
+    bridge.exportFile("sets")
+    bridge.toastAction()
+    assert imports == [("sets-merge",)]
+    assert exports == [("sets",)]
+    assert actions == [()]

@@ -10,9 +10,18 @@
 <link rel="stylesheet" href="settings.css">
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <script src="settings_rules.js" defer></script>
+<script src="settings_sets.js" defer></script>
+<script src="settings_weight.js" defer></script>
+<script src="settings_reports.js" defer></script>
+<script src="settings_tags.js" defer></script>
 <script src="settings.js" defer></script>
 </head>
 <body>
 <main id="settings"></main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden>
+  <span id="toast-text"></span>
+  <button id="toast-action" class="toast-action" type="button" hidden>Update them</button>
+  <button id="toast-dismiss" class="toast-close" type="button" aria-label="Dismiss" title="Dismiss"></button>
+</div>
 </body>
 </html>

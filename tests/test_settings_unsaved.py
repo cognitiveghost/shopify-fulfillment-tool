@@ -17,7 +17,14 @@ def _nav_item(win, name):
 
 
 def _edit_sets(win):
-    win._pages_by_name["Sets"].set_decoders["SET-NEW"] = [{"sku": "A", "quantity": 1}]
+    """Add a set the way the page does; its uid, to undo it with."""
+    win._select_page("Sets")
+    bridge = win._web_host.bridge
+    bridge.edit("set_add", [])
+    uid = bridge.state["sets"]["rows"][0]["uid"]
+    bridge.edit("set_sku", [uid, "SET-NEW"])
+    bridge.edit("comp_sku", [uid, "0", "A"])
+    return uid
 
 
 def test_unsaved_summary_names_every_page():
@@ -42,24 +49,17 @@ def test_an_edit_marks_its_nav_row_and_the_footer(window):
 
 
 def test_reverting_an_edit_clears_the_mark(window):
-    _edit_sets(window)
+    uid = _edit_sets(window)
     window.refresh_dirty()
-    del window._pages_by_name["Sets"].set_decoders["SET-NEW"]
+    window._web_host.bridge.edit("set_delete", [uid])
     assert window.refresh_dirty() == []
     assert _nav_item(window, "Sets").toolTip() == ""
 
 
-def test_the_poll_checks_the_page_on_screen(window):
-    assert window._dirty_poll.isActive()
-    window._select_page("Sets")
+def test_an_edit_is_marked_at_once_with_no_poll(window):
+    assert not hasattr(window, "_dirty_poll")
     _edit_sets(window)
-    window._poll_current_page()
     assert window._status_label.text() == "Unsaved changes in Sets"
-
-
-def test_leaving_a_page_checks_it_before_the_next_poll(window):
-    window._select_page("Sets")
-    _edit_sets(window)
     window._select_page("General")
     assert _nav_item(window, "Sets").toolTip() == "Unsaved changes"
 
@@ -101,20 +101,17 @@ def test_cancel_then_discard_leaves_the_profile_unwritten(
     window, started_workers, monkeypatch, tmp_path
 ):
     """9.23 done-when: import sets, Cancel, Discard -> nothing written."""
+    path = tmp_path / "sets.csv"
+    path.write_text("Set_SKU,Component_SKU,Component_Quantity\nSET-X,A,2\n", encoding="utf-8")
     monkeypatch.setattr(
-        QFileDialog,
-        "getOpenFileName",
-        staticmethod(lambda *a, **k: (str(tmp_path / "sets.csv"), "")),
+        QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(path), ""))
     )
-    monkeypatch.setattr(
-        "gui.settings.sets.import_sets_from_csv",
-        lambda path: {"SET-X": [{"sku": "A", "quantity": 2}]},
-    )
-    monkeypatch.setattr("gui.settings.sets.toast", lambda *a, **k: None)
     closed = []
     window.rejected.connect(lambda: closed.append(True))
 
-    window._pages_by_name["Sets"]._import_sets_from_csv(replace=True)
+    window._select_page("Sets")
+    window._web_host.bridge.importFile("sets-replace")
+    assert window._status_label.text() == "Unsaved changes in Sets"
     window.reject()
     window.discard_button.click()
 
@@ -129,8 +126,3 @@ def test_save_and_close_saves(window, started_workers):
     window.save_and_close_button.click()
     assert len(started_workers) == 1
     assert window._close_guard.isHidden()
-
-
-def test_closing_stops_the_poll(window):
-    window.done(0)
-    assert not window._dirty_poll.isActive()

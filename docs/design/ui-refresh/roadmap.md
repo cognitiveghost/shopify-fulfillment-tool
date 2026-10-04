@@ -195,7 +195,23 @@ The rule list with toggles and reordering. The empty state, which replaces "No r
 The Qt editor (`gui/settings/rules.py`, about 1,500 lines) and its Test dialog are deleted. The page joins
 the settings document phase 7 built (`gui/web/settings.*`).
 
-### 9. Client settings on the web tier: Sets, Weight, Reports, Tag categories
+### 9. Client settings on the web tier: Sets, Weight, Reports, Tag categories (built in run 59)
+
+Spec: `docs/superpowers/specs/2026-10-04-ui-refresh-phase9-settings-lists-design.md`.
+Plan: `docs/superpowers/plans/2026-10-04-ui-refresh-phase9-settings-lists.md`.
+
+Built as listed below, with these differences. It fitted one PR. Sets, Reports and Tag categories are
+lists whose row opens in place, as Rules is; Weight is three cards, with products edited in the table, 200
+rows at a time. A tag category's colour, order number and ID are no longer drawn: the colour is kept as
+stored, the order is the list's (set by up and down, and Results' "+ Tag" menu now follows it), and a new
+category's ID is made from its name. Reports reorder by up and down, not by dragging. Packing-list columns
+are chips and print in the order they were added. CSV import and export go through the settings bridge to
+a native file dialog, and the page has a toast. Several quiet data losses are now blocked and said: a set
+renamed onto another set's SKU, a dimension that is not a number, a product SKU typed twice. The unsaved
+poll is gone: every page reports its own edits. The standalone Tag Categories dialog, which had no caller,
+is deleted. Also gone or changed (the spec's section 12 has the table): deleting a tag category asks nothing
+(Cancel undoes it), Weight's Quick Add and Delete Selected are gone, a new set or product goes first in its
+list, and Boxes has no search. Renders: `renders/phase9/`.
 
 The mockup has no drawing of these pages. They follow the page anatomy from Phase 7, and the spec names each
 place where it had to decide something the mockup does not show.

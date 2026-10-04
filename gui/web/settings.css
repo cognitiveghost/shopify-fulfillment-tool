@@ -1,7 +1,8 @@
-/* The Client settings pages the web tier draws: General, Orders mapping,
-   Stock mapping (phase 7 spec section 5) and Rules with its Test panel
-   (phase 8 spec sections 5 and 6). Layout only: every component is the
-   kit's. Every colour is a token from theme_css_vars(). */
+/* The Client settings pages: General, Orders mapping, Stock mapping (phase 7
+   spec section 5), Rules with its Test panel (phase 8 spec sections 5 and 6),
+   and Sets, Weight, Reports and Tag categories (phase 9 spec sections 4 to
+   7). Layout only: every component is the kit's. Every colour is a token
+   from theme_css_vars(). */
 
 #settings {
   height: 100%;
@@ -407,3 +408,128 @@
   padding: 12px 16px;
   border-top: 1px solid var(--border-subtle);
 }
+
+/* --- lists (phase 9 spec): Sets, Reports, Tag categories ------------------ */
+
+/* The toast sits over the page, whatever it has scrolled to. */
+#toast { position: fixed; }
+
+.list-bar { display: flex; align-items: center; gap: 12px; min-height: 28px; padding: 12px 16px; }
+.list-filter { width: 260px; }
+.list-count,
+.list-none,
+.list-more,
+.list-muted { color: var(--text-secondary); }
+.list-none,
+.list-more { padding: 12px 16px; border-top: 1px solid var(--border-subtle); }
+.card-actions { display: flex; align-items: center; gap: 8px; }
+.card-note { padding: 10px 16px 12px; border-top: 1px solid var(--border-subtle); }
+.state-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.state-actions .btn { margin-top: 0; }
+
+/* A row: its text, then its actions. Open, the editor takes a second line. */
+.list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 10px;
+  align-items: start;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.list-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.list-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; min-height: 22px; }
+.list-name {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.list-name:hover { text-decoration: underline; }
+.list-name:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.list-name-field { width: 260px; max-width: 100%; font-weight: 700; }
+.list-actions { display: flex; align-items: center; gap: 2px; }
+.list-actions .btn { color: var(--text-secondary); }
+/* At the list's edge a move button only greys, as on Rules. */
+.list-actions .btn:disabled,
+.list-actions .btn:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.list-editor {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+/* These labels are longer than Rules' "When" and "Then". */
+.list-editor .editor-line { grid-template-columns: 120px minmax(0, 1fr); }
+.list-part { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.list-part .btn.icon { color: var(--text-secondary); }
+.times { color: var(--text-secondary); text-align: center; }
+.amount { text-align: right; }
+
+/* --- Sets (phase 9 spec section 4.7) -------------------------------------- */
+
+.comp-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 260px) 16px 72px 28px;
+  column-gap: 8px;
+  align-items: center;
+}
+.comp-row .field { width: 100%; }
+
+/* --- Weight (phase 9 spec section 5.8) ------------------------------------ */
+
+.divisor { width: 96px; text-align: right; }
+.weight-row {
+  display: grid;
+  column-gap: 8px;
+  row-gap: 4px;
+  align-items: center;
+  padding: 4px 16px;
+}
+.product-row { grid-template-columns: minmax(120px, 1fr) minmax(120px, 1.4fr) 64px 64px 64px 96px 96px 28px; }
+.box-row { grid-template-columns: minmax(120px, 1fr) 64px 64px 64px 96px 28px; }
+.weight-row .field { width: 100%; min-width: 0; }
+.weight-heads {
+  padding: 6px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.weight-value { color: var(--text-secondary); }
+.weight-row .btn.icon { color: var(--text-secondary); }
+.weight-below { grid-column: 1 / -1; }
+.product-rows,
+.box-rows { padding-bottom: 8px; }
+
+/* --- Reports (phase 9 spec section 6.8) ----------------------------------- */
+
+.report-match { color: var(--text-secondary); }
+.report-match.warn { color: var(--status-warning); }
+.report-filename { width: 260px; }
+.report-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* --- Tag categories (phase 9 spec section 7.7) ---------------------------- */
+
+.tag-input { width: 140px; }
+.map-row {
+  display: grid;
+  grid-template-columns: 160px minmax(140px, 260px) 16px 72px 28px;
+  column-gap: 8px;
+  align-items: center;
+}
+.map-row .select,
+.map-row .field { width: 100%; }

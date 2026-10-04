@@ -161,17 +161,30 @@ function under(problem, hint) {
   return hint ? `<span class="hint">${esc(hint)}</span>` : "";
 }
 
-function conditionRow(e, uid, s, c, cond) {
-  const key = `rule-${uid}-s${s}-c${c}`;
-  const at = { uid, s, c };
+// What a rule's condition row sends. A report's filter row sends its own
+// (settings_reports.js): the row is the same control.
+const RULE_CONDITION = {
+  field: "cond-field",
+  op: "cond-op",
+  value: "cond_value",
+  remove: "cond-remove",
+  removeLabel: "Remove condition",
+};
+
+// A field, an operator and a value. `key` is the row's key prefix, `at` the
+// data every control of the row carries, `acts` the names it reports under.
+function conditionRow(e, key, at, acts, cond) {
+  const data = Object.keys(at)
+    .map((name) => ` data-${name}="${esc(at[name])}"`)
+    .join("");
   const fieldMenu = () => {
     const items = [];
     let n = 0;
     const item = (field, note) =>
-      menuItem("cond-field", { ...at, value: field }, field, note, field === cond.field, `${key}-field-item-${n++}`, false);
+      menuItem(acts.field, { ...at, value: field }, field, note, field === cond.field, `${key}-field-item-${n++}`, false);
     if (cond.extra_field) items.push(item(cond.extra_field.value, cond.extra_field.note));
     e.field_groups.forEach((group) => {
-      items.push(`<div class="menu-group">${esc(group.label)}</div>`);
+      if (group.label) items.push(`<div class="menu-group">${esc(group.label)}</div>`);
       group.fields.forEach((field) => items.push(item(field, "")));
     });
     return items.join("");
@@ -180,12 +193,12 @@ function conditionRow(e, uid, s, c, cond) {
     const listed = cond.extra_operator ? [cond.extra_operator].concat(e.operators) : e.operators;
     return listed
       .map((operator, n) =>
-        menuItem("cond-op", { ...at, value: operator }, operator, n === 0 && cond.extra_operator ? "Not available" : "", operator === cond.operator, `${key}-op-item-${n}`, false),
+        menuItem(acts.op, { ...at, value: operator }, operator, n === 0 && cond.extra_operator ? "Not available" : "", operator === cond.operator, `${key}-op-item-${n}`, false),
       )
       .join("");
   };
   const v = cond.value;
-  const input = `data-input="cond_value" data-uid="${uid}" data-s="${s}" data-c="${c}" data-key="${key}-value" aria-label="Value"`;
+  const input = `data-input="${acts.value}"${data} data-key="${key}-value" aria-label="Value"`;
   let value = `<span class="cond-none"></span>`;
   if (v.kind === "date") {
     value = `<input class="field${cond.invalid ? " invalid" : ""}" type="date" value="${esc(v.text)}" ${input}>`;
@@ -193,12 +206,12 @@ function conditionRow(e, uid, s, c, cond) {
     const [list, datalist] = suggestions(key, v.suggestions);
     value = `<input class="field${cond.invalid ? " invalid" : ""}" type="text" value="${esc(v.text)}" placeholder="${esc(v.placeholder)}"${list} ${input}>${datalist}`;
   }
-  return `<div class="cond" data-cond="${c}">
+  return `<div class="cond">
     <div class="cond-row">
       ${ruleSelect(`${key}-field`, "Field", cond.field, cond.field_invalid, fieldMenu, "cond-field")}
       ${ruleSelect(`${key}-op`, "Operator", cond.operator, Boolean(cond.extra_operator), operatorMenu, "cond-op")}
       <div class="cond-value">${value}</div>
-      <button class="btn ghost compact icon" type="button" title="Remove condition" aria-label="Remove condition" data-act="cond-remove" data-uid="${uid}" data-s="${s}" data-c="${c}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
+      <button class="btn ghost compact icon" type="button" title="${acts.removeLabel}" aria-label="${acts.removeLabel}" data-act="${acts.remove}"${data} data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
     </div>
     ${under(cond.problem, cond.hint)}
   </div>`;
@@ -275,7 +288,7 @@ function editorStep(e, uid, s, step) {
       <span class="editor-label">When</span>
       <div class="editor-content">
         ${match}
-        ${step.conditions.map((cond, c) => conditionRow(e, uid, s, c, cond)).join("")}
+        ${step.conditions.map((cond, c) => conditionRow(e, `rule-${uid}-s${s}-c${c}`, { uid, s, c }, RULE_CONDITION, cond)).join("")}
         ${addRow("cond-add", "Add condition", uid, s, step.conditions.length, `${key}-cond-add`)}
       </div>
     </div>

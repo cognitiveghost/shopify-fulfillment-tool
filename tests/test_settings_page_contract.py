@@ -1,18 +1,14 @@
-from PySide6.QtWidgets import QApplication
-
-from gui.settings.base import SettingsPage
 from gui.settings.contract import PageContract
 
 
 def test_settings_page_defaults_are_inert():
     """A page that owns no config contributes nothing and blocks nothing."""
-    QApplication.instance() or QApplication([])
-    page = SettingsPage()
+    page = PageContract()
     assert page.collect() == {}
     assert page.validate() == (True, [])
 
 
-class _OneValuePage(SettingsPage):
+class _OneValuePage(PageContract):
     def __init__(self):
         super().__init__()
         self.value = 1
@@ -22,14 +18,12 @@ class _OneValuePage(SettingsPage):
 
 
 def test_a_page_is_never_unsaved_before_mark_clean():
-    QApplication.instance() or QApplication([])
     page = _OneValuePage()
     page.value = 2
     assert page.is_dirty() is False
 
 
 def test_an_edit_reads_unsaved_and_reverting_it_reads_clean():
-    QApplication.instance() or QApplication([])
     page = _OneValuePage()
     page.mark_clean()
     page.value = 2
@@ -39,7 +33,6 @@ def test_an_edit_reads_unsaved_and_reverting_it_reads_clean():
 
 
 def test_a_collect_that_raises_reads_unsaved(monkeypatch):
-    QApplication.instance() or QApplication([])
     page = _OneValuePage()
     page.mark_clean()
 
@@ -51,8 +44,7 @@ def test_a_collect_that_raises_reads_unsaved(monkeypatch):
 
 
 def test_a_page_blocks_nothing_by_default():
-    QApplication.instance() or QApplication([])
-    page = SettingsPage()
+    page = PageContract()
     assert page.blocker() is None
     assert page.blocker_key() == ""
 
@@ -73,13 +65,6 @@ def test_the_contract_needs_no_widget():
     draft.value = 2
     assert draft.is_dirty() is True
     assert draft.validate() == (True, [])
-
-
-def test_a_qt_page_is_a_contract_and_a_widget():
-    from PySide6.QtWidgets import QWidget
-
-    assert issubclass(SettingsPage, PageContract)
-    assert issubclass(SettingsPage, QWidget)
 
 
 def test_mark_clean_can_take_an_earlier_snapshot():

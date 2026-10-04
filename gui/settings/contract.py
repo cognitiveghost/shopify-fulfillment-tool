@@ -1,13 +1,26 @@
 """What SettingsWindow asks of a settings page, with no widget attached.
 
-A Qt page is a QWidget that meets this (gui/settings/base.py). A draft meets
-it with no widget at all (gui/settings/page_state.py): its values are drawn
-by the web page. The window saves and marks both the same way. No Qt import.
+Every page is a draft: it meets this with no widget (gui/settings/
+page_state.py and the *_state.py modules beside it), and its values are drawn
+by the web page. No Qt import.
 """
 
 import json
 
 UNCOLLECTABLE = "<uncollectable>"
+
+
+class FileProblem(Exception):
+    """An import or export that failed in a way the operator can act on.
+
+    The host shows `headline` and `detail` as they are. Any other exception
+    is logged and shown as "Details are in Logs."
+    """
+
+    def __init__(self, headline: str, detail: str):
+        super().__init__(headline)
+        self.headline = headline
+        self.detail = detail
 
 
 class PageContract:
@@ -24,7 +37,7 @@ class PageContract:
     Returning a freshly built dict silently drops them.
 
     collect() runs at any time, not only during a save: the window's
-    unsaved check calls it every few hundred milliseconds. A page mutating
+    unsaved check calls it after every edit. A page mutating
     its live dict mid-edit is fine -- config_data is a deep copy that only
     reaches disk through Save, which re-collects every page after all of
     them validate -- but collect() must have no other side effects.

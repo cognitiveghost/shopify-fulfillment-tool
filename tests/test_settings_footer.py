@@ -12,7 +12,13 @@ from gui.settings.window import SAVED_LINE, SettingsWindow
 
 
 def _edit_sets(win):
-    win._pages_by_name["Sets"].set_decoders["SET-NEW"] = [{"sku": "A", "quantity": 1}]
+    """Add a set the way the page does."""
+    win._select_page("Sets")
+    bridge = win._web_host.bridge
+    bridge.edit("set_add", [])
+    uid = bridge.state["sets"]["rows"][0]["uid"]
+    bridge.edit("set_sku", [uid, "SET-NEW"])
+    bridge.edit("comp_sku", [uid, "0", "A"])
 
 
 def _edit_general(win, text="9"):
@@ -210,9 +216,10 @@ def test_a_crashed_write_leaves_save_live(window, monkeypatch):
     assert window.save_button.text() == "Save"
 
 
-def test_ctrl_s_saves_an_edit_the_poll_has_not_seen(window, started_workers):
+def test_ctrl_s_saves_an_edit(window, started_workers):
     _edit_sets(window)
-    assert not window.save_button.isEnabled()
+    # Every page reports its own edits: Save is live at once.
+    assert window.save_button.isEnabled()
     window._save_shortcut()
     assert len(started_workers) == 1
 

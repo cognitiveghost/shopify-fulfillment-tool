@@ -4,7 +4,7 @@ import logging
 from typing import ClassVar
 
 import pandas as pd
-from PySide6.QtCore import QRect, QRectF, QSettings, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QRect, QRectF, QSettings, QSize, Qt, QThreadPool
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
 
 from gui.components.error_banner import show_error
 from gui.components.inline_message import InlineMessage
-from gui.settings.base import SettingsPage
 from gui.settings.contract import PageContract
 from gui.settings.page_state import (
     ADDITIONAL_COLUMNS_UNREADABLE,
@@ -35,11 +34,12 @@ from gui.settings.page_state import (
     StockDraft,
     read_file_columns,
 )
-from gui.settings.reports import ReportsPage
+from gui.settings.reports_state import ReportsDraft
 from gui.settings.rules_state import RulesDraft
-from gui.settings.sets import SetsPage
+from gui.settings.sets_state import SetsDraft
+from gui.settings.tags_state import TagsDraft
 from gui.settings.web_host import SettingsWebHost
-from gui.settings.weight import WeightPage
+from gui.settings.weight_state import WeightDraft
 from gui.theme_manager import apply_dialog_button_roles, apply_font, set_button_role
 from gui.worker import Worker
 from shared.icons import icon
@@ -66,9 +66,6 @@ FOOTER_HEIGHT_PX = 60
 FOOTER_MARGIN_PX = 16
 FOOTER_ICON_PX = 16
 SAVED_LINE = "Saved. Applies from the next analysis."
-# The air around a Qt page. The web host sits flush: its page has its own.
-PAGE_MARGIN_PX = 12
-DIRTY_POLL_MS = 400
 
 # Page name -> words a person might search for that are not in the name.
 SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
@@ -82,13 +79,17 @@ SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
     "Tag categories": ["tags", "labels", "colours", "colors", "writeoff", "sku"],
 }
 
-# Nav name -> the key SettingsWebHost draws that page under (phases 7 and 8).
-# Every other page is a Qt widget.
+# Nav name -> the key SettingsWebHost draws that page under. Every page is a
+# draft the web tier draws (phases 7 to 9); the frame around them is still Qt.
 WEB_PAGE_KEYS: dict[str, str] = {
     "General": "general",
     "Orders mapping": "orders",
     "Stock mapping": "stock",
     "Rules": "rules",
+    "Sets": "sets",
+    "Weight": "weight",
+    "Reports": "reports",
+    "Tag categories": "tags",
 }
 
 
@@ -285,9 +286,7 @@ class SettingsWindow(QDialog):
         page_column.setContentsMargins(0, 0, 0, 0)
         page_column.setSpacing(0)
         self._validation_message = InlineMessage()
-        self._validation_message.setContentsMargins(
-            PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX, 0
-        )
+        self._validation_message.setContentsMargins(12, 12, 12, 0)
         page_column.addWidget(self._validation_message)
         self.tab_widget = QStackedWidget()
         page_column.addWidget(self.tab_widget, 1)
@@ -298,8 +297,8 @@ class SettingsWindow(QDialog):
         self._pages_by_name: dict[str, PageContract] = {}
         self._unsaved: set[str] = set()
 
-        # The pages the web tier draws are drafts: pages with no widget. One
-        # host widget shows whichever of them the nav selects.
+        # Every page is a draft: a page with no widget. One host widget shows
+        # whichever of them the nav selects.
         client = str(self.client_id)
         column_mappings = self.config_data.get("column_mappings", {})
         drafts = {
@@ -319,42 +318,38 @@ class SettingsWindow(QDialog):
                 self.analysis_df,
                 tag_categories=self.config_data.get("tag_categories", {}),
             ),
+            "sets": SetsDraft(self.config_data.get("set_decoders", {})),
+            "weight": WeightDraft(
+                self.config_data.get("weight_config", {}),
+                column_mappings,
+                self.config_data.get("settings", {}).get("stock_csv_delimiter", "auto"),
+            ),
+            "reports": ReportsDraft(
+                self.config_data.get("packing_list_configs", []),
+                self.config_data.get("stock_export_configs", []),
+                self.analysis_df,
+            ),
+            "tags": TagsDraft(
+                self.config_data.get("tag_categories", {"version": 2, "categories": {}})
+            ),
         }
         self._web_host = SettingsWebHost(
             drafts, analysis_df=self.analysis_df, session=session_name or ""
         )
         self._web_host.edited.connect(self._on_web_edit)
 
-        # Create all tabs (unchanged call order/method names)
-        self._add_page(drafts["general"], "General", self._web_host)
-        self._add_page(drafts["rules"], "Rules", self._web_host)
-        self._add_page(
-            ReportsPage(
-                self.config_data.get("packing_list_configs", []),
-                self.config_data.get("stock_export_configs", []),
-                self.analysis_df,
-            ),
+        # In the order a save collects them.
+        for name in (
+            "General",
+            "Rules",
             "Reports",
-        )
-        self._add_page(drafts["orders"], "Orders mapping", self._web_host)
-        self._add_page(drafts["stock"], "Stock mapping", self._web_host)
-        self._add_page(SetsPage(self.config_data.get("set_decoders", {})), "Sets")
-        self._add_page(
-            WeightPage(
-                self.config_data.get("weight_config", {}),
-                self.config_data.get("column_mappings", {}),
-                self.config_data.get("settings", {}).get(
-                    "stock_csv_delimiter", "auto"
-                ),
-            ),
+            "Orders mapping",
+            "Stock mapping",
+            "Sets",
             "Weight",
-        )
-        self._add_page(
-            _TagCategoriesPage(
-                self.config_data.get("tag_categories", {"version": 2, "categories": {}})
-            ),
             "Tag categories",
-        )
+        ):
+            self._add_page(drafts[WEB_PAGE_KEYS[name]], name)
         self._build_settings_nav()
 
         # The platform's order (Save first on Windows), not the mockup's Cancel
@@ -442,33 +437,19 @@ class SettingsWindow(QDialog):
         )
         # A profile can open with a required column already unmapped.
         self._refresh_status()
-        # ponytail: polls the visible page's snapshot (one collect() plus one
-        # json.dumps) every 400ms. Ceiling: a page whose snapshot costs tens of
-        # milliseconds makes the dialog stutter; upgrade to a per-page
-        # `edited` signal then.
-        self._dirty_poll = QTimer(self)
-        self._dirty_poll.setInterval(DIRTY_POLL_MS)
-        self._dirty_poll.timeout.connect(self._poll_current_page)
-        self._dirty_poll.start()
 
-    def _add_page(self, page: PageContract, name: str, widget=None) -> None:
+    def _add_page(self, page: PageContract, name: str) -> None:
         """Register a settings page under `name`. Tracked in _pages so
         save_settings validates and collects from it.
 
-        `widget` is what the stack shows for it: the page itself when it is a
-        Qt page, the web host when it is a draft. The grouped left-nav
+        The stack shows the web host for every page: the grouped left-nav
         (_build_settings_nav) looks pages up by this same name.
         """
-        if widget is None:
-            widget = page
-            widget.setContentsMargins(
-                PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX, PAGE_MARGIN_PX
-            )
         self._pages.append(page)
         self._pages_by_name[name] = page
-        if self.tab_widget.indexOf(widget) < 0:
-            self.tab_widget.addWidget(widget)
-        self._page_index_by_name[name] = self.tab_widget.indexOf(widget)
+        if self.tab_widget.indexOf(self._web_host) < 0:
+            self.tab_widget.addWidget(self._web_host)
+        self._page_index_by_name[name] = self.tab_widget.indexOf(self._web_host)
 
     def _loaded_file(self, loaded_files, kind: str):
         """The columns of the file loaded on Setup, or None.
@@ -620,9 +601,6 @@ class SettingsWindow(QDialog):
 
     def _on_settings_nav_changed(self, current, previous):
         self._validation_message.clear()
-        # The page being left may hold an edit the 400ms poll hasn't seen.
-        if previous is not None:
-            self._poll_page(previous.text())
         # The row that is open reads bold; a QSS ::item rule cannot set a weight.
         for item in (previous, current):
             if item is not None:
@@ -633,8 +611,7 @@ class SettingsWindow(QDialog):
             return
         index = current.data(Qt.ItemDataRole.UserRole)
         if index is not None:
-            if current.text() in WEB_PAGE_KEYS:
-                self._web_host.show_page(WEB_PAGE_KEYS[current.text()])
+            self._web_host.show_page(WEB_PAGE_KEYS[current.text()])
             self.tab_widget.setCurrentIndex(index)
             QSettings("ShopifyFulfillmentTool", "FulfillmentApp").setValue(
                 self.NAV_SETTINGS_KEY, current.text()
@@ -660,16 +637,6 @@ class SettingsWindow(QDialog):
         self._check_blockers()
         self._render_status()
         return self._unsaved_names()
-
-    def _poll_current_page(self) -> None:
-        item = self._settings_nav.currentItem()
-        if item is not None:
-            self._poll_page(item.text())
-
-    def _poll_page(self, name: str) -> None:
-        # By the nav's name, not the stack's widget: three pages share one.
-        if name in self._pages_by_name and self._sync_unsaved(name):
-            self._render_status()
 
     def _render_status(self) -> None:
         names = self._unsaved_names()
@@ -744,12 +711,10 @@ class SettingsWindow(QDialog):
         if page is None:
             return
         self._select_page(name)
-        if name in WEB_PAGE_KEYS and page.blocker_key():
+        if page.blocker_key():
             self._web_host.focus_problem(page.blocker_key())
 
     def _save_shortcut(self) -> None:
-        # The visible Qt page is polled every 400ms: check every page now, so
-        # Ctrl+S cannot outrun the poll.
         self.refresh_dirty()
         if self.save_button.isEnabled():
             self.save_settings()
@@ -854,10 +819,6 @@ class SettingsWindow(QDialog):
         self._hide_close_guard()
         self._finish()
 
-    def done(self, result):
-        self._dirty_poll.stop()
-        super().done(result)
-
     def save_settings(self, then_close: bool = False):
         """Validate every page, collect them all, and write the profile once.
 
@@ -953,37 +914,3 @@ class SettingsWindow(QDialog):
         self.save_button.setText("Save")
         self._render_footer()
         show_error(self, "Settings weren't saved", "Details are in Logs.")
-
-
-class _TagCategoriesPage(SettingsPage):
-    """Adapter: TagCategoriesPanel already has the right shape under
-    different method names, and is used standalone elsewhere -- so wrap it
-    rather than rename its public API."""
-
-    def __init__(self, tag_categories: dict, parent=None):
-        super().__init__(parent)
-        from gui.tag_categories_dialog import TagCategoriesPanel
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(0)
-        self.panel = TagCategoriesPanel(tag_categories, parent=self)
-        layout.addWidget(self.panel)
-
-        # TagCategoriesPanel is also used standalone (its own dialog, outside
-        # the Hub) -- mark roles on this wrapped instance only, not in
-        # tag_categories_dialog.py itself, so the standalone dialog keeps its
-        # current appearance. findChildren rather than a list of attribute
-        # names: a rename over there would otherwise raise AttributeError in
-        # here, and a new button would fail the role guard in the wrong file.
-        for button in self.panel.findChildren(QPushButton):
-            set_button_role(button, "secondary")
-
-    def collect(self) -> dict:
-        return {"tag_categories": self.panel.get_categories()}
-
-    def validate(self) -> tuple[bool, list[str]]:
-        ok, errors = self.panel.validate_categories()
-        if ok:
-            return True, []
-        return False, ["Tag Categories validation errors:", *[f"- {e}" for e in errors]]

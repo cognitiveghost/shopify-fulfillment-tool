@@ -12,7 +12,6 @@ from gui.components import show_error, toast
 from gui.components.commandbar import BarState
 from gui.selection_helper import order_number_mask
 from gui.settings import SettingsWindow
-from gui.tag_categories_dialog import TagCategoriesDialog
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
 from shopify_tool import (
@@ -496,57 +495,6 @@ class ActionsHandler(QObject):
                     "Settings were saved but didn't reload",
                     "Restart the app to use them. Details are in Logs.",
                 )
-
-    def open_tag_categories_dialog(self):
-        """Opens the tag categories management dialog."""
-        if not self.mw.current_client_id:
-            self.log.warning(
-                "open_tag_categories_dialog called with no client selected"
-            )
-            return
-
-        if not self.mw.active_profile_config:
-            self.log.warning(
-                "open_tag_categories_dialog called with no configuration loaded"
-            )
-            return
-
-        # Get current tag_categories
-        tag_categories = self.mw.active_profile_config.get("tag_categories", {})
-
-        # Open dialog
-        dialog = TagCategoriesDialog(tag_categories, parent=self.mw)
-
-        # Connect signal to save changes
-        def on_categories_updated(updated_categories):
-            """Handle categories update."""
-            try:
-                # Update config
-                self.mw.active_profile_config["tag_categories"] = updated_categories
-                self.mw.push_tag_categories()
-
-                # Save to file
-                self.mw.profile_manager.save_shopify_config(
-                    self.mw.current_client_id, self.mw.active_profile_config
-                )
-
-                self.log.info(
-                    f"Tag categories updated for CLIENT_{self.mw.current_client_id}"
-                )
-
-            except Exception:
-                self.log.exception("Error saving tag categories")
-                # Still unsaved: the dialog neither toasts nor closes.
-                dialog.panel.modified = True
-                show_error(
-                    dialog,
-                    "Tag categories weren't saved",
-                    "Check that the server share is reachable, then save again. "
-                    "Details are in Logs.",
-                )
-
-        dialog.categories_updated.connect(on_categories_updated)
-        dialog.exec()
 
     def _refuse_stale_export(self) -> bool:
         """True, after telling the operator, when this PC's copy is stale.

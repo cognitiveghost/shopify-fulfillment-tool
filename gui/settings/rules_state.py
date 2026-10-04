@@ -13,6 +13,7 @@ there before adding it here.
 """
 
 import copy
+import functools
 import re
 from typing import ClassVar
 
@@ -172,6 +173,14 @@ def rule_fields(level: str, analysis_df) -> list[tuple[str, list[str]]]:
     return groups
 
 
+@functools.lru_cache(maxsize=512)
+def iso_date(text: str) -> str:
+    """A stored date as YYYY-MM-DD; "" when the engine cannot read it.
+    Remembered: the parser logs every value it cannot read."""
+    parsed = _parse_date_safe(text)
+    return "" if parsed is None else parsed.strftime("%Y-%m-%d")
+
+
 def value_kind(operator: str) -> str:
     """The control a condition's value takes: "none", "date" or "text"."""
     if operator in VALUELESS_OPERATORS:
@@ -301,12 +310,11 @@ class RulesDraft(PageContract):
 
     def __init__(self, rules: list, analysis_df=None, tag_categories: dict | None = None):
         self.analysis_df = analysis_df
-        # ponytail: a snapshot taken when the dialog opens. The Tag categories
-        # page can add a tag while this page is open and the suggestions will
-        # not see it; the field takes any text, so the tag is still typeable.
+        # ponytail: the stored dict, which the Tag categories page writes only
+        # when it is collected. A tag added there may not be among the
+        # suggestions yet; the field takes any text, so it is still typeable.
         self._tag_categories = tag_categories or {}
         self._next_uid = 0
-        self._dates: dict[str, str] = {}
         self.rules = [
             self._loaded(rule)
             for rule in RuleEngine.execution_order(
@@ -397,13 +405,7 @@ class RulesDraft(PageContract):
         return False
 
     def _iso_date(self, value) -> str:
-        """A stored date as YYYY-MM-DD; "" when the engine cannot read it.
-        Remembered: the parser logs every value it cannot read."""
-        text = _text(value)
-        if text not in self._dates:
-            parsed = _parse_date_safe(text)
-            self._dates[text] = "" if parsed is None else parsed.strftime("%Y-%m-%d")
-        return self._dates[text]
+        return iso_date(_text(value))
 
     # --- the edits ---------------------------------------------------------
 
