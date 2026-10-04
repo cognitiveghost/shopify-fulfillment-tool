@@ -100,7 +100,7 @@ def _click_order(qtbot, view, order, **modifiers):
     _eval(
         qtbot,
         view,
-        f"document.querySelector('#rows .row[data-order=\"{order}\"] .order')"
+        f"document.querySelector('#rows .row[data-order=\"{order}\"] .col-order')"
         f".dispatchEvent(new MouseEvent('click', {init})); true",
     )
 
@@ -193,8 +193,8 @@ def test_the_table_and_the_pane_share_one_card(qtbot, doc):
 
 def test_the_status_is_a_badge(qtbot, doc):
     view, _ = doc
-    blocked = "document.querySelector('#rows .row[data-order=\"#10004\"] .status .badge')"
-    ready = "document.querySelector('#rows .row[data-order=\"#10001\"] .status .badge')"
+    blocked = "document.querySelector('#rows .row[data-order=\"#10004\"] .col-status .badge')"
+    ready = "document.querySelector('#rows .row[data-order=\"#10001\"] .col-status .badge')"
     assert _eval(qtbot, view, f"{blocked}.className") == "badge danger"
     assert _eval(qtbot, view, f"{ready}.className") == "badge success"
     # A repeat order wears an info badge in its Repeat cell.
@@ -217,25 +217,25 @@ def test_the_order_is_bold_mono_and_a_missing_value_is_quiet(qtbot, doc):
             _eval(
                 qtbot,
                 view,
-                f"document.querySelector('{row} .{cell}').classList.contains('mono')",
+                f"document.querySelector('{row} .col-{cell}').classList.contains('mono')",
             )
             is True
         ), cell
     assert (
         _eval(
-            qtbot, view, f"getComputedStyle(document.querySelector('{row} .order')).fontWeight"
+            qtbot, view, f"getComputedStyle(document.querySelector('{row} .col-order')).fontWeight"
         )
         == "700"
     )
     # i=3 ships with no courier: the dash is in the disabled text colour.
     assert _eval(
-        qtbot, view, f"getComputedStyle(document.querySelector('{row} .courier')).color"
+        qtbot, view, f"getComputedStyle(document.querySelector('{row} .col-courier')).color"
     ) == _rgb(LIGHT_THEME.text_disabled)
 
 
 def test_the_value_header_is_quiet_until_a_price_column_is_mapped(qtbot, doc):
     view, bridge = doc
-    head = "document.querySelector('#header .head.value')"
+    head = "document.querySelector('#header .head.col-value')"
     assert _eval(qtbot, view, f"{head}.classList.contains('unmapped')") is False
     bridge.set_orders(results_lines().drop(columns=["Total_Price"]))
     _until_js(qtbot, view, f"{head}.classList.contains('unmapped')")
@@ -286,13 +286,13 @@ def test_the_default_columns_in_order(qtbot, doc):
 def test_a_row_reads_as_the_order(qtbot, doc):
     view, _ = doc
     row = '#rows .row[data-order="#10004"]'
-    assert _text(qtbot, view, row + " .status") == "Blocked"
-    assert _text(qtbot, view, row + " .customer") == "Customer 003"
-    assert _text(qtbot, view, row + " .lines") == "4"
-    assert _text(qtbot, view, row + " .units") == "10"
-    assert _text(qtbot, view, row + " .value") == "13.00"
+    assert _text(qtbot, view, row + " .col-status") == "Blocked"
+    assert _text(qtbot, view, row + " .col-customer") == "Customer 003"
+    assert _text(qtbot, view, row + " .col-lines") == "4"
+    assert _text(qtbot, view, row + " .col-units") == "10"
+    assert _text(qtbot, view, row + " .col-value") == "13.00"
     # i=3 ships with no courier: a missing value is a dash, not an empty cell.
-    assert _text(qtbot, view, row + " .courier") == "—"
+    assert _text(qtbot, view, row + " .col-courier") == "—"
 
 
 def test_the_kpis_count_the_session(qtbot, doc):
@@ -511,7 +511,7 @@ def test_escape_clears_the_checked_orders_and_then_the_cursor(qtbot, doc):
 
 def test_the_header_box_checks_everything_or_clears(qtbot, doc):
     view, bridge = doc
-    box = "document.querySelector('#header .select input')"
+    box = "document.querySelector('#header .col-select input')"
     _choose_filter(qtbot, view, "Blocked")
     _count_is(qtbot, view, "31 of 312 orders")
     _eval(qtbot, view, f"{box}.click(); true")
@@ -568,7 +568,7 @@ def test_a_near_miss_beside_the_checkbox_still_checks(qtbot, doc):
     _eval(
         qtbot,
         view,
-        "document.querySelector('#rows .row[data-order=\"#10002\"] .cell.select')"
+        "document.querySelector('#rows .row[data-order=\"#10002\"] .cell.col-select')"
         ".dispatchEvent(new MouseEvent('click', {bubbles: true})); true",
     )
     qtbot.waitUntil(lambda: bridge.selection() == ["#10002"])
@@ -691,7 +691,7 @@ def test_the_lines_column_cells_are_not_boxed_like_the_panes_line_list(qtbot, do
     """The pane's `.lines` list and the table's Lines column share a word; the
     pane's border once leaked onto every cell of the column."""
     view, _ = doc
-    cell = "document.querySelector('#rows .row .cell.lines')"
+    cell = "document.querySelector('#rows .row .cell.col-lines')"
     assert _eval(qtbot, view, f"getComputedStyle({cell}).borderTopWidth") == "0px"
 
 

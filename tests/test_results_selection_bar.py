@@ -134,7 +134,7 @@ def test_export_stays_the_screens_primary_while_the_bar_is_up(qtbot, page):
 def test_the_header_box_clears_the_checked_orders_and_hides_the_bar(qtbot, page):
     view, _ = page
     _select(qtbot, view, ["10443"])
-    _eval(qtbot, view, "document.querySelector('#header .select input').click(); true")
+    _eval(qtbot, view, "document.querySelector('#header .col-select input').click(); true")
     assert _eval(qtbot, view, "document.getElementById('selection-bar').hidden") is True
     assert _eval(qtbot, view, "state.selected.size") == 0
     assert _eval(qtbot, view, "document.getElementById('selection-clear')") in (None, "")
