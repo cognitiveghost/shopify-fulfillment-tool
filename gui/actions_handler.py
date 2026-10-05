@@ -15,12 +15,9 @@ from gui.settings import SettingsWindow
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
 from shopify_tool import (
-    barcode_processor,
     core,
-    packing_lists,
-    report_filters,
+    report_jobs,
     session_state,
-    stock_export,
     stock_ledger,
 )
 from shopify_tool.analysis import toggle_order_fulfillment
@@ -70,6 +67,9 @@ class ActionsHandler(QObject):
         self.mw = main_window
         self.log = logging.getLogger(__name__)
         self._stats_workers = set()  # keeps in-flight stats-recording Workers alive
+        # The report batch in flight; also the strong reference that keeps
+        # its Worker's signals alive until it finishes.
+        self._reports_worker = None
         # Set by Cancel on the UI thread, read by the run at each step.
         self._cancel = threading.Event()
         self.analysis_progress.connect(self._on_analysis_progress)
@@ -608,31 +608,82 @@ class ActionsHandler(QObject):
         dialog.exec()
 
     def _generate_reports(self, batch, session_path):
-        """Generate every report the dialog emitted.
+        """Generate every report the dialog emitted, on a Worker.
 
         One report failing must not cost the user the others -- that is the
-        whole point of generating them in one pass.
+        whole point of generating them in one pass. The files are written
+        from a snapshot taken here, so an edit made while they generate
+        never reaches them half-way (AUDIT-09-O2).
         """
         # Again here: another PC may have held an order while the dialog was open.
         if self._refuse_stale_export():
             return
-        failures = []
-        for report_config in batch:
-            report_type = report_config.get("report_type")
-            try:
-                self._generate_single_report(report_type, report_config, session_path)
-            except Exception:
-                self.log.exception(f"Failed to generate {report_config.get('name')}")
-                failures.append(report_config.get("name", "Unknown"))
+        if self._reports_worker is not None:
+            self._results_toast("Reports are still being generated")
+            return
 
-        if failures:
-            show_error(
-                self.mw,
-                "1 report wasn't generated"
-                if len(failures) == 1
-                else f"{len(failures)} reports weren't generated",
-                ", ".join(failures) + ". Details are in Logs.",
-            )
+        batch = [dict(report_config) for report_config in batch]
+        for report_config in batch:
+            self._log_report_start(report_config)
+        # Looked up now, not imported by name, so a test can replace it.
+        worker = Worker(report_jobs.generate_reports, batch, session_path, *self._report_snapshot(batch))
+        worker.signals.result.connect(self._on_reports_generated)
+        worker.signals.error.connect(self.on_task_error)
+        worker.signals.finished.connect(self._on_reports_finished)
+        self._reports_worker = worker
+        self.mw.threadpool.start(worker)
+
+    def _report_snapshot(self, batch) -> tuple:
+        """(frame, tag categories, session id, session manager), taken on the GUI thread."""
+        tag_categories = {}
+        if any(c.get("report_type") == "stock_exports" for c in batch):
+            tag_categories = dict(self.mw.active_profile_config.get("tag_categories", {}))
+        session_id = (
+            os.path.basename(str(self.mw.session_path)) if self.mw.session_path else "unknown"
+        )
+        session_manager = self.mw.session_manager if self.mw.session_path else None
+        return self.mw.analysis_results_df.copy(), tag_categories, session_id, session_manager
+
+    def _log_report_start(self, report_config) -> None:
+        report_name = report_config.get("name", "Unknown")
+        self.log.info(f"Generating {report_config.get('report_type')}: {report_name}")
+        self.mw.log_activity("Report", f"Generating report: {report_name}")
+
+    def _on_reports_generated(self, outcomes) -> None:
+        """Announce a batch's results, on the GUI thread."""
+        wrote_packing_list = False
+        for outcome in outcomes:
+            if outcome.failed:
+                detail = (
+                    f"{outcome.locked_file} is open in another program. Close it, then generate again."
+                    if outcome.locked_file
+                    else "Details are in Logs."
+                )
+                show_error(self.mw, f"{outcome.name!r} wasn't generated", detail)
+                continue
+            # Reports are generated from Results, where the toast lives (ADR 0007).
+            if outcome.removed_empty:
+                self._results_toast(
+                    f"No orders matched {outcome.name}; its old files were removed"
+                )
+            else:
+                saved = os.path.basename(outcome.output_file)
+                if outcome.packaging_file:
+                    saved += f" + {os.path.basename(outcome.packaging_file)}"
+                self._results_toast(f"Report saved: {saved}")
+            self.mw.log_activity("Report", f"Generated: {outcome.name}")
+            wrote_packing_list |= outcome.report_type == "packing_lists"
+
+        if (
+            wrote_packing_list
+            and getattr(self.mw, "session_path", None)
+            and getattr(self.mw, "session_manager", None)
+            and hasattr(self.mw, "session_browser")
+        ):
+            self.mw.session_browser.mark_dirty()
+
+    def _on_reports_finished(self) -> None:
+        self._reports_worker = None
 
     def _apply_filters(self, df, filters):
         """Apply a report config's filters to a DataFrame.
@@ -659,252 +710,19 @@ class ActionsHandler(QObject):
 
         return apply_report_filters(fulfillable_only(df), filters)
 
-    def _create_analysis_json(self, df):
-        """Convert DataFrame to packing list JSON format for Packing Tool.
-
-        Uses build_packing_order_data() from core to ensure canonical field
-        names match analysis_data.json — both files always have identical
-        order metadata structure.
-
-        Args:
-            df: Filtered DataFrame with orders data
-
-        Returns:
-            dict: JSON structure for Packing Tool
-        """
-        from datetime import datetime
-
-        from shopify_tool.core import build_packing_order_data
-
-        orders_data = []
-        for order_num, group in df.groupby("Order_Number"):
-            orders_data.append(build_packing_order_data(str(order_num), group))
-
-        session_id = (
-            os.path.basename(str(self.mw.session_path))
-            if self.mw.session_path
-            else "unknown"
-        )
-
-        return {
-            "session_id": session_id,
-            "created_at": datetime.now().astimezone().isoformat(),
-            "total_orders": len(orders_data),
-            "total_items": int(df["Quantity"].sum())
-            if "Quantity" in df.columns
-            else len(df),
-            "orders": orders_data,
-        }
-
     def _generate_single_report(self, report_type, report_config, session_path):
-        """Generates a single report (XLSX + JSON for packing lists).
+        """Generate one report now, on this thread (XLSX + JSON for packing lists).
 
         Args:
             report_type (str): "packing_lists" or "stock_exports"
             report_config (dict): Report configuration with name, filters, etc.
             session_path (Path): Current session directory
         """
-        import json
-
-        report_name = report_config.get("name", "Unknown")
-        self.log.info(f"Generating {report_type}: {report_name}")
-        self.mw.log_activity("Report", f"Generating report: {report_name}")
-
-        try:
-            # Create output directory
-            if report_type == "packing_lists":
-                output_dir = Path(session_path) / "packing_lists"
-            elif report_type == "stock_exports":
-                output_dir = Path(session_path) / "stock_exports"
-            else:
-                raise ValueError(f"Unknown report type: {report_type}")
-
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            # ========================================
-            # GET FILTERS AND CONFIG
-            # ========================================
-            filters = report_config.get("filters", [])
-
-            # ========================================
-            # DETERMINE OUTPUT FILENAME
-            # ========================================
-            base_filename = report_config.get("output_filename", "")
-
-            if not base_filename:
-                # Generate default filename
-                if report_type == "packing_lists":
-                    base_filename = f"{report_name}.xlsx"
-                else:
-                    base_filename = f"{report_name}.xls"
-
-            # Ensure correct extension
-            if report_type == "packing_lists":
-                if not base_filename.endswith(".xlsx"):
-                    base_filename = base_filename.replace(".xls", ".xlsx")
-            else:  # stock_exports or writeoff_reports
-                if not base_filename.endswith(".xls"):
-                    base_filename = base_filename + ".xls"
-
-            output_file = str(output_dir / base_filename)
-            if report_type == "stock_exports":
-                # Stamps the name, moving earlier versions to old/
-                output_file = stock_export.prepare_export_path(output_file)
-
-            # ========================================
-            # GENERATE REPORT USING PROPER MODULES
-            # ========================================
-            # Set by a "separate" packaging write-off, which saves a second
-            # file the status message below has to name.
-            packaging_file = None
-            removed_empty = False
-
-            if report_type == "packing_lists":
-                self.log.info("Creating packing list using packing_lists module")
-
-                # Label PDFs from before could label orders this list no
-                # longer holds (AUDIT-04-12). First, so a PDF held open in a
-                # viewer stops the run before the XLSX and JSON can diverge.
-                barcode_processor.invalidate_label_pdfs(
-                    session_path, Path(base_filename).stem
-                )
-
-                # Use the proper packing_lists module
-                # Pass UNFILTERED DataFrame - the module will apply filters itself
-                written = packing_lists.create_packing_list(
-                    analysis_df=self.mw.analysis_results_df,
-                    output_file=output_file,
-                    report_name=report_name,
-                    filters=filters,
-                    exclude_skus=report_config.get("exclude_skus"),
-                    columns=report_config.get("columns"),
-                )
-
-                # ========================================
-                # CREATE JSON COPY FOR PACKING TOOL
-                # ========================================
-                json_filename = base_filename.replace(".xlsx", ".json")
-                json_path = str(output_dir / json_filename)
-
-                if not written:
-                    # An empty list must not leave the last run's files
-                    # behind for the packers to pick up (AUDIT-04-3)
-                    Path(output_file).unlink(missing_ok=True)
-                    Path(json_path).unlink(missing_ok=True)
-                    removed_empty = True
-                else:
-                    self.log.info(f"Packing list XLSX created: {output_file}")
-                    try:
-                        filtered_df = self._apply_filters(
-                            self.mw.analysis_results_df, filters
-                        )
-
-                        # Same exclusion as the XLSX (AUDIT-04-4)
-                        json_df = report_filters.exclude_skus(
-                            filtered_df, report_config.get("exclude_skus")
-                        )
-
-                        analysis_json = self._create_analysis_json(json_df)
-
-                        with open(json_path, "w", encoding="utf-8") as f:
-                            json.dump(analysis_json, f, ensure_ascii=False, indent=2)
-
-                        self.log.info(f"Packing list JSON created: {json_path}")
-
-                    except Exception:
-                        self.log.exception("Failed to create JSON")
-                        # Don't fail the whole report if JSON fails
-
-            elif report_type == "stock_exports":
-                self.log.info("Creating stock export using stock_export module")
-
-                # Get writeoff setting from report_config
-                writeoff_mode = report_config.get("writeoff_mode", "off")
-                tag_categories = self.mw.active_profile_config.get("tag_categories", {})
-
-                # Use the proper stock_export module
-                # Pass UNFILTERED DataFrame - the module will apply filters itself
-                packaging_file = stock_export.create_stock_export(
-                    analysis_df=self.mw.analysis_results_df,
-                    output_file=output_file,
-                    report_name=report_name,
-                    filters=filters,
-                    writeoff_mode=writeoff_mode,
-                    tag_categories=tag_categories,
-                )
-
-                self.log.info(f"Stock export created: {output_file}")
-
-            # Reports are generated from Results, where the toast lives (ADR 0007).
-            if removed_empty:
-                self._results_toast(
-                    f"No orders matched {report_name}; its old files were removed"
-                )
-            else:
-                saved = os.path.basename(output_file)
-                if packaging_file:
-                    saved += f" + {os.path.basename(packaging_file)}"
-                self._results_toast(f"Report saved: {saved}")
-            self.log.info(f"Report generated: {output_file}")
-
-            self.mw.log_activity("Report", f"Generated: {report_name}")
-
-            # ========================================
-            # UPDATE SESSION STATISTICS (packing lists count)
-            # ========================================
-            if (
-                report_type == "packing_lists"
-                and self.mw.session_path
-                and self.mw.session_manager
-            ):
-                try:
-                    # Count existing packing lists in session
-                    packing_lists_dir = Path(session_path) / "packing_lists"
-                    if packing_lists_dir.exists():
-                        packing_lists_files = [
-                            f.stem for f in packing_lists_dir.glob("*.json")
-                        ]
-
-                        # Get current statistics
-                        session_info = self.mw.session_manager.get_session_info(
-                            str(session_path)
-                        )
-                        if session_info:
-                            current_stats = session_info.get("statistics", {})
-
-                            # Update packing lists count and list
-                            current_stats["packing_lists_count"] = len(
-                                packing_lists_files
-                            )
-                            current_stats["packing_lists"] = sorted(packing_lists_files)
-
-                            # Save updated statistics
-                            self.mw.session_manager.update_session_info(
-                                str(session_path), {"statistics": current_stats}
-                            )
-                            if hasattr(self.mw, "session_browser"):
-                                self.mw.session_browser.mark_dirty()
-
-                            self.log.info(
-                                f"Updated session statistics: {len(packing_lists_files)} packing lists"
-                            )
-                except Exception as e:
-                    self.log.warning(f"Failed to update session statistics: {e}")
-                    # Don't fail the report if statistics update fails
-
-        except PermissionError as e:
-            self.log.exception(f"Failed to generate report '{report_name}'")
-            locked = Path(e.filename).name if e.filename else "The file"
-            show_error(
-                self.mw,
-                f"{report_name!r} wasn't generated",
-                f"{locked} is open in another program. Close it, then generate again.",
-            )
-        except Exception:
-            self.log.exception(f"Failed to generate report '{report_name}'")
-            show_error(
-                self.mw, f"{report_name!r} wasn't generated", "Details are in Logs."
-            )
+        batch = [dict(report_config, report_type=report_type)]
+        self._log_report_start(batch[0])
+        self._on_reports_generated(
+            report_jobs.generate_reports(batch, session_path, *self._report_snapshot(batch))
+        )
 
     def toggle_fulfillment_status_for_order(self, order_number):
         """Toggles the fulfillment status of all items in a given order.
@@ -1843,7 +1661,6 @@ class ActionsHandler(QObject):
         Args:
             session_paths: List of session directory path strings.
         """
-        from pathlib import Path
 
         from shopify_tool.stock_export import merge_session_stock_exports
 
@@ -1921,7 +1738,6 @@ class ActionsHandler(QObject):
 
     def bulk_export_selection(self, order_numbers, format_type: str):
         """Export the given orders' rows to a file the user names."""
-        from pathlib import Path
 
         self._set_selection(order_numbers)
         selected_df = self.mw.selection_helper.get_selected_orders_data()

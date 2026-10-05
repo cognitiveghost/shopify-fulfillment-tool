@@ -37,7 +37,6 @@ NO_HISTORY = pd.DataFrame({"Order_Number": []})
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O1: iterrows and row.copy() over every line")
 def test_AUDIT_09_O1_decoding_15000_lines_takes_under_a_second():
     """Audit: 17.7 s. 15,000 lines, 18 columns, a set in a third of them."""
     n = 15000
@@ -58,7 +57,6 @@ def test_AUDIT_09_O1_decoding_15000_lines_takes_under_a_second():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O2: is_fulfillable and iterrows per order")
 def test_AUDIT_09_O2_the_packing_json_for_5000_orders_builds_in_seconds(benchmark_frame):
     """Audit: 12.7 s, in every run's save step and per packing list on the
     GUI thread."""
@@ -200,10 +198,10 @@ def test_AUDIT_09_O5_a_failed_packing_build_does_not_empty_the_session(
     data_json = Path(path) / "analysis" / "analysis_data.json"
     assert len(json.loads(data_json.read_text(encoding="utf-8"))["orders"]) == 2
 
-    def broken(_order_number, _group):
+    def broken(_df):
         raise ValueError("a row Packing Tool's builder cannot read")
 
-    monkeypatch.setattr(core, "build_packing_order_data", broken)
+    monkeypatch.setattr(core, "build_packing_orders", broken)
     ok, _msg, _df, stats = analysis_run(path)  # the operator re-runs
 
     failure_reported = not ok or any(

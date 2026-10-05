@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from shopify_tool.set_decoder import (
+    _components,
     decode_sets_in_orders,
     export_sets_to_csv,
     import_sets_from_csv,
@@ -136,3 +137,92 @@ class TestImportExportSetsRoundTrip:
     def test_export_empty_raises(self, tmp_path):
         with pytest.raises(ValueError):
             export_sets_to_csv({}, str(tmp_path / "out.csv"))
+
+
+# the pre-D implementation, frozen to pin behaviour
+def _decode_reference(orders_df, set_decoders):
+    if orders_df.empty:
+        orders_df["Original_SKU"] = orders_df["SKU"] if "SKU" in orders_df.columns else None
+        orders_df["Original_Quantity"] = orders_df["Quantity"] if "Quantity" in orders_df.columns else None
+        orders_df["Is_Set_Component"] = False
+        return orders_df
+
+    if not set_decoders:
+        orders_df["Original_SKU"] = orders_df["SKU"]
+        orders_df["Original_Quantity"] = orders_df["Quantity"]
+        orders_df["Is_Set_Component"] = False
+        return orders_df
+
+    expanded_rows = []
+    for _idx, row in orders_df.iterrows():
+        sku = row["SKU"]
+        quantity = row["Quantity"]
+        if sku in set_decoders:
+            components = set_decoders[sku]
+            if not components:
+                new_row = row.copy()
+                new_row["Original_SKU"] = sku
+                new_row["Original_Quantity"] = quantity
+                new_row["Is_Set_Component"] = False
+                expanded_rows.append(new_row)
+                continue
+            valid_components_added = 0
+            for component_sku, component_total in _components(sku, quantity, set_decoders, {sku}):
+                new_row = row.copy()
+                new_row["SKU"] = component_sku
+                new_row["Quantity"] = component_total
+                new_row["Original_SKU"] = sku
+                new_row["Original_Quantity"] = quantity
+                new_row["Is_Set_Component"] = True
+                expanded_rows.append(new_row)
+                valid_components_added += 1
+            if valid_components_added == 0:
+                new_row = row.copy()
+                new_row["Original_SKU"] = sku
+                new_row["Original_Quantity"] = quantity
+                new_row["Is_Set_Component"] = False
+                expanded_rows.append(new_row)
+        else:
+            new_row = row.copy()
+            new_row["Original_SKU"] = sku
+            new_row["Original_Quantity"] = quantity
+            new_row["Is_Set_Component"] = False
+            expanded_rows.append(new_row)
+
+    if not expanded_rows:
+        result_df = orders_df.copy()
+        result_df["Original_SKU"] = None
+        result_df["Original_Quantity"] = None
+        result_df["Is_Set_Component"] = False
+        return result_df.iloc[0:0]
+
+    return pd.DataFrame(expanded_rows)
+
+
+SETS_MIXED = {
+    "S2": [{"sku": "A", "quantity": 1}, {"sku": "B", "quantity": 2}],
+    "SN": [{"sku": "S2", "quantity": 3}, {"sku": "C", "quantity": 1}],  # nested
+    "NECTAR": [{"sku": "NECTAR", "quantity": 1}, {"sku": "EXTRA", "quantity": 1}],  # lists itself
+    "PARENT": [{"sku": "NECTAR", "quantity": 2}, {"sku": "EXTRA", "quantity": 1}],
+    "X": [{"sku": "Y", "quantity": 1}],  # X -> Y -> X
+    "Y": [{"sku": "X", "quantity": 1}, {"sku": "D", "quantity": 2}],
+    "EMPTY": [],
+    "BAD": [{"sku": "", "quantity": 1}, {"sku": "Z", "quantity": 0}],
+}
+
+ORDERS = pd.DataFrame(
+    {
+        "Order_Number": ["#1", "#1", "#2", "#2", "#2", "#3", "#3", "#3", "#4", "#4", "#4", "#4"],
+        "SKU": ["P1", "S2", "SN", "NECTAR", "PARENT", "X", "EMPTY", "BAD", None, "S2", "S2", "P2"],
+        "Quantity": [1, 2, 1, 1, 1, 1, 1, 1, 1, 2.0, float("nan"), 3],
+        "Product_Name": [f"name {i}" for i in range(12)],
+    },
+    index=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+)
+
+
+@pytest.mark.parametrize("sets", [SETS_MIXED, {}], ids=["sets", "no-sets"])
+def test_decoding_matches_the_reference(sets):
+    out = decode_sets_in_orders(ORDERS.copy(), sets)
+    ref = _decode_reference(ORDERS.copy(), sets)
+    pd.testing.assert_frame_equal(out, ref, check_dtype=False)  # index labels and row order included

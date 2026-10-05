@@ -112,7 +112,6 @@ def _apply(df, rule):
     return seconds, out
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-R1: orders x rules x steps in Python")
 @pytest.mark.parametrize(
     "condition, tagged",
     [
@@ -139,7 +138,6 @@ def test_AUDIT_08_R1_an_order_rule_runs_in_well_under_a_second(
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-R2: six to_datetime calls per cell")
 def test_AUDIT_08_R2_a_date_condition_runs_in_well_under_a_second(benchmark_frame):
     """Audit: 3.45 s for one condition on a Shopify `Created at` column."""
     df = benchmark_frame[0].assign(Created_At="2026-10-01 10:00:00 +0200")
@@ -153,7 +151,6 @@ def test_AUDIT_08_R2_a_date_condition_runs_in_well_under_a_second(benchmark_fram
     assert seconds < 0.5
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-R2: one WARNING per unparseable cell")
 def test_AUDIT_08_R2_a_bad_date_column_logs_one_line(benchmark_frame, caplog):
     df = benchmark_frame[0].head(1000).copy()
     df["Created_At"] = [f"not a date {i}" for i in range(len(df))]
