@@ -27,6 +27,20 @@ Benchmark frame for the timings: 5,000 orders × 3 lines = 15,000 rows, built th
 | U5 | Low | undo | The "Cleared N future operations" log always says 0 |
 | T1 | Low | tooling | `scripts/setup_venv.sh` accepts a Python too old for `requirements.txt` |
 
+## Verification, 2026-10-05
+
+Re-checked on `origin/main` at `afd2397`. Every finding above still holds; T1 too (this container's
+`python3` is 3.11, so the `.venv` was again built with `uv venv --python 3.14`). Each High and Medium finding
+except U3 has a strict-xfail test in `tests/audit/test_08_rules_undo.py`, confirmed to fail on its own assertion.
+
+| # | Evidence now | What the test shows |
+|---|---|---|
+| U1 | confirmed-run | Through the real `ActionsHandler.on_analysis_complete`: undo after a re-run leaves order #2 twice |
+| R1 | confirmed-run | `item_count > 1`: 6.3–7.2 s; `has_sku equals Z`: 2.2 s. Ceiling in the test: 0.5 s per rule |
+| R2 | confirmed-run | One `date before` condition: 3.3–3.8 s. A column of 1,000 unparseable cells logs 1,000 WARNING lines |
+| U2 | confirmed-run (was confirmed-read for the write path) | Through the real `bulk_change_status`: `operations_history.json` is **10.0 MB** on disk for 6,000 lines × 44 columns. Ceiling: 2 MB |
+| U3 | confirmed-run | No xfail test: it is a coverage gap, not one failing behaviour. The closing coverage PR answers it |
+
 ---
 
 ## High

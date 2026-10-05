@@ -29,6 +29,29 @@ suite was not run in this pass (no `.venv` in the review container).
 | M7 | Med | config | A migration whose save fails makes `load_*_config` return `None` for a readable file |
 | L1–L5 | Low | misc | See bottom |
 
+## Verification, 2026-10-05
+
+Re-checked on `origin/main` at `afd2397` (Python 3.14, offscreen). Every finding above still holds. Each High
+and Medium finding has a strict-xfail test in `tests/audit/test_07_core_io.py`, named `AUDIT-07-<id>`, and each
+was confirmed to fail on its own assertion (`--runxfail`), not on a setup error.
+
+| # | Evidence now | What the test shows |
+|---|---|---|
+| H1 | confirmed-run | Both the memory switch and the strategy cards drop a rule PC-B saved after PC-A opened the client |
+| H2 | confirmed-run (local disk) | One edit on the benchmark frame (15,000 lines) takes **2.7–3.3 s** in `save_session_state` before any share latency, mostly the `current_state.xlsx` mirror. Ceiling in the test: 1 s |
+| H3 | confirmed-run | 5 full rescans over 5 listings with one stray folder; 1 without (pinned unmarked) |
+| H4 | confirmed-run | One session rewritten by Packing Tool: the next listing rereads all 3 `session_info.json` files |
+| M1 | confirmed-run | No lots: `Not Fulfillable, 7, 7`; with a lot column: `Fulfillable, 7, 1` |
+| M2 | confirmed-run | `current_state.pkl`, `analysis_stats.json` and `analysis_data.json` are all opened for writing in place |
+| M3 | confirmed-run | A pickle write that fails for real (`IsADirectoryError`) still returns `True` with no warning |
+| M4 | confirmed-run (simulated) | `os.replace` refused for 1 s: all three writers give up. Windows sharing behaviour itself is still [unconfirmed] |
+| M5 | confirmed-run | After 12 memory saves no backup holds the config from before a Settings change |
+| M6 | confirmed-run | The caller's `column_mappings` gains `set_decoders` and `additional_columns`. The bug also mutated a shared constant in the new test fixtures, which now deep-copy it |
+| M7 | confirmed-run | Both `load_shopify_config` and `load_client_config` return `None` when the migration save hits a locked file |
+
+New, Low, **L6** [confirmed-read]: `_create_backup` names backups to the second, so two saves in the same second
+write the same backup name and the second overwrites the first. With M5 this shortens the history further.
+
 ---
 
 ## High
@@ -192,5 +215,5 @@ the migrated in-memory config and log the failed save.
    thread, and an incremental index refresh.
 5. M2, M3, M4, M5, M7, then the low items.
 
-Each fix should land with an `xfail(strict=True)` test in `tests/audit/test_07_*.py`, following
-audits 01–06.
+Each fix removes the marker from its `xfail(strict=True)` test in `tests/audit/test_07_core_io.py`
+(added in the verification pass above).
