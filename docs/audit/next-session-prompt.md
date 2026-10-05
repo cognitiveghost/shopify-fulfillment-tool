@@ -1,26 +1,81 @@
-# Next session: plan and fix audits 07–09
+# Next session: plan groups B, D, E, F and G of audits 07–09
 
-Paste everything below the line into a new Claude Code session on this repo. Step 1 is done (PR #368); merge
-it first, because the fix groups remove the markers from its tests.
+Paste everything below the line into a new Claude Code session on this repo. Merge PR #369 first: it holds the
+overview plan this session builds on, and the group A fixes.
 
 ---
 
-You are fixing the findings of three report-only audits of this repo (Fulfilment Tool, PySide6, Windows
-production on a slow SMB file server, multi-PC). Read `CLAUDE.md` first and follow it, including the
-gate, the git rules (PR-only, branch from `origin/main`) and the token budget note: this account runs on
-a limited budget, so keep each session to one fix group and avoid subagents unless asked.
+You are writing the implementation plan for the remaining fixes from three audits of this repo (Fulfilment Tool,
+PySide6, Windows production on a slow SMB file server, multi-PC). **This session writes the plan only: no product
+code and no test changes.** The owner will execute the plan later and review each group's PR.
+
+Read `CLAUDE.md` first and follow it: the git rules (PR-only, branch from `origin/main`) and the token budget note.
+This account runs on a limited budget, so avoid subagents unless asked, and read code in targeted slices.
 
 ## Where things stand
 
-- **Step 1 is done** (PR #368): every repro reproduces, and each High and Medium finding has its strict-xfail
-  test in `tests/audit/test_07_core_io.py`, `test_08_rules_undo.py` and `test_09_outputs_sets_ledger.py`.
-  Shared fixtures are in `tests/audit/audit_support.py`. Do not add a `tests/audit/conftest.py`: it shadows
-  `tests/conftest.py`. Read each report's "Verification, 2026-10-05" section. The 09-O4 BOM claim did not
-  reproduce, and there is a new Low, 07-L6.
-- **The owner decisions are made** (2026-10-05, below). Do not ask them again. Copy them into the plan.
-- **This session:** Step 2 (the plan), then fix group A. Stop there.
+- **Step 1 is done** (PR #368). Every High and Medium finding has a strict-xfail test in
+  `tests/audit/test_07_core_io.py`, `test_08_rules_undo.py` and `test_09_outputs_sets_ledger.py`. Shared fixtures
+  live in `tests/audit/audit_support.py`. Do not add a `tests/audit/conftest.py`: it shadows `tests/conftest.py`.
+- **Step 2 and group A are done** (PR #369). The overview plan is
+  `docs/superpowers/plans/2026-10-05-audit-07-09-fixes.md`. It holds the owner decisions, each group's findings,
+  files, tests and risk, and the Step 4 coverage targets. Group A fixed 07-H1, 07-M6, 08-U1 and 07-M7.
+- **Group C is deferred** to issue #370 (07-M2, M3, M4, 09-O5). Do not plan it. Where another group touches the
+  same files (`core.py`, `fulfillment_history.py`), leave its fixes to #370.
+- Baseline after #369: 3,588 passed, 22 xfailed, ruff clean.
 
-## Owner decisions
+## This session
+
+Write **one combined plan**: `docs/superpowers/plans/<today>-audit-07-09-groups-b-d-g.md`. Use the
+`superpowers:writing-plans` skill and its header, Global Constraints and Review Focus sections. Then open one PR
+with that file and stop.
+
+| Group | Findings | What the plan must settle |
+|---|---|---|
+| B, session index | 07-H3, 07-H4 | How staleness is detected without counting stray folders, and how one changed entry is refreshed without rereading every `session_info.json` |
+| D, speed in the run | 09-O1, 09-O2, 08-R1, 08-R2 | The vectorised shape of set decoding, the packing JSON builder, order-level rules and date parsing; moving report generation to a `Worker` with no UI calls from it |
+| E, per-edit I/O | 07-H2, 08-U2, 07-M5, 07-L1 | **Opens with a short design note** (below), then the tasks |
+| F, allocation rules | 07-M1, 09-O3, 09-O4, 08-R3, 08-R4 | Apply the owner decisions exactly. Tighten the 07-M1 and 09-O3 xfail tests to assert the chosen rule. Include the ADR 0015 update and the test that no stock export holds a negative quantity |
+| G, low items | 07-L2–L6; 08-R5, U4, U5, T1; 09-O6, O7, O8 | One task per item, each with its own test where it has behaviour. Confirm 07-L3 has no caller before deleting it |
+
+### What the plan contains
+
+- One section per group. **Each group is one PR**, branched from `origin/main`, that passes the gate on its own.
+- Bite-sized TDD tasks. For an existing finding: run its xfail test with `--runxfail` and see it fail on its own
+  assertion, fix, see it pass, remove the marker. For new behaviour: the new test's name and assertions, as code,
+  with exact values.
+- For each code step: the exact file, function and signature. Check every path, name and line reference against
+  `origin/main` as it is after #369. The audits' line numbers have drifted.
+- An **execution order** for the five PRs, with reasons, and the **file overlaps** between them (for example,
+  `rules.py` in D and F, `core.py` in D and E, `actions_handler.py` in D, E and F), so that PRs merged one after
+  another don't conflict.
+- Per-group **risk**, and what the PR description must warn the owner about. F changes which lots ship first, and
+  R4 makes rules that never matched start matching.
+- Coverage: each group adds tests for the code it touches (Step 4 in the overview plan). The closing coverage PR
+  is not part of this plan.
+- Proportion: signatures, test names and assertions, not function bodies. A body appears only for an algorithm the
+  signature and tests do not determine, such as the 07-M1 lot netting or the E coalescing queue.
+
+### Group E design note (the first part of the E section)
+
+Apply the 07-H2 owner decision and settle:
+
+1. What stays on the click: only `current_state.pkl`, through `session_state.save_state`.
+2. The per-session coalescing background queue for history, inventory memory, `analysis_stats.json` and
+   `session_info`. Cover the thread it runs on, how a newer write replaces a pending one, the order between
+   sessions, the flush on session switch and on app close, and how a failure reaches the person (a signal to the
+   GUI thread, never a UI call from the worker).
+3. Removing `current_state.xlsx` from edits and from the run, and the open-session fallback to
+   `fulfillment_analysis.xlsx`.
+4. 08-U2: the new undo record format (changed columns plus positions for status, tag and quantity edits; whole rows
+   only for removals), and how history files in the old format still load.
+5. 07-M5: no backup for inventory-memory-only saves, or a separate rotation. Pick one and say why.
+6. 07-L1: prune or append `fulfillment_history.csv` instead of rewriting it whole. Leave the retry-backoff part of
+   07-M4 to #370.
+
+## Owner decisions (2026-10-05)
+
+Already recorded in the overview plan. Do not ask them again.
 
 | Finding | Decision |
 |---|---|
@@ -29,100 +84,28 @@ a limited budget, so keep each session to one fix group and avoid subagents unle
 | 08-R4 | Every text operator (`equals`, `does not equal`, `starts with`, `ends with`, `contains`, `in list`) ignores case and trims whitespace on both sides. |
 | 07-H2 | Only `current_state.pkl` is written on the click. History, inventory memory, `analysis_stats.json` and `session_info` move to a per-session coalescing background queue, never touching the UI from the worker thread. **Stop writing `current_state.xlsx`** on edits and in the run: the pickle is the state. Opening a session falls back to `fulfillment_analysis.xlsx`. |
 
+08-R3 has no owner decision because the report already states the fix: the Rules page shows the order the engine
+runs. If the plan needs any new decision, ask the owner before writing that part, rather than choosing yourself.
+
 ## Inputs
 
-- `docs/audit/07-core-io-review.md`: analysis run, per-edit save path, config, session index, `shared/` writes
-- `docs/audit/08-rules-undo-review.md`: rule engine, undo
-- `docs/audit/09-outputs-sets-ledger-review.md`: set decoding, Packing Tool JSON, stock ledger, exports
-- `docs/audit/repro/*.py`: one script per reproduced finding. Run with `.venv/bin/python docs/audit/repro/<file>.py`.
-- Convention from audits 01–06 (`tests/audit/test_01_*.py` … `test_06_*.py`): every finding gets a test
-  named for it (`AUDIT-07-H1`, `AUDIT-08-U1`, …), marked `xfail(strict=True)` until the fix lands; the
-  fix removes the marker. Tests that pin verified-correct behaviour stay unmarked.
+- Reports: `docs/audit/07-core-io-review.md`, `08-rules-undo-review.md`, `09-outputs-sets-ledger-review.md`. Read
+  each "Verification, 2026-10-05" section.
+- Repro scripts: `docs/audit/repro/*.py`. Run with `.venv/bin/python docs/audit/repro/<file>.py`.
+- The xfail tests named in the overview plan, per group.
+- `docs/adr/` (0008 last-writer-wins, 0010 stock left, 0011 stale check, 0015 lots) and `CONTEXT.md`.
 
 ## Environment
 
-- If `.venv` is missing or `./scripts/setup_venv.sh` fails on an old system Python (audit 08 T1), build
-  it with `uv venv --python 3.14 .venv` and
+- If `.venv` is missing or `./scripts/setup_venv.sh` fails on an old system Python (audit 08 T1), build it with
+  `uv venv --python 3.14 .venv` and
   `uv pip install --python .venv/bin/python -r requirements.txt -r requirements-dev.txt`.
-- Gate: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q` and `.venv/bin/ruff check .`
-  (baseline after Step 1: 3,574 passed, 28 xfailed, ruff clean).
-- Coverage: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q --cov=shopify_tool --cov=shared --cov-report=term-missing`.
-
-## Step 1: verify (DONE in PR #368, kept for reference)
-
-1. Run every script in `docs/audit/repro/` and confirm the output still matches the report.
-2. For each High and Medium finding, write its `xfail(strict=True)` test in
-   `tests/audit/test_07_core_io.py`, `test_08_rules_undo.py` and `test_09_outputs_sets_ledger.py`.
-   Timing findings (07-H2, 08-R1, 08-R2, 08-U2, 09-O1, 09-O2) get a test with a generous ceiling on the
-   benchmark frame from the repro scripts (for example, set decoding of 15,000 lines under 1 s), not a
-   tight micro-benchmark.
-3. Mark any finding that no longer reproduces as such in its report, with the evidence.
-4. One PR: the tests plus report updates. The suite must stay green (xfails count as expected).
-
-## Step 2: plan
-
-Write `docs/superpowers/plans/<date>-audit-07-09-fixes.md` with the fix groups below, each with its
-tests, files and risk. Record the owner decisions above in it. The 07-M1 and 09-O3 xfail tests were written
-to pass under either rule. Tighten them in groups E and F so they assert the chosen rule.
-
-## Step 3: fix, one PR per group (TDD: the xfail test goes green, then remove the marker)
-
-| Group | Findings | Notes |
-|---|---|---|
-| A, data safety | 07-H1, 07-M6, 08-U1, 07-M7 | small; stop config loss and undo duplication first |
-| B, session index | 07-H3, 07-H4 | count only real sessions; refresh changed entries only |
-| C, atomic and honest saves | 07-M2, 07-M3, 07-M4, 09-O5 | reuse `shared/atomic_write.py` and `session_state.save_state` |
-| D, speed in the run | 09-O1, 09-O2, 08-R1, 08-R2 | vectorise; the existing tests pin behaviour |
-| E, per-edit I/O | 07-H2, 08-U2, 07-M5, 07-L1 | needs the Step 2 decision; design note first |
-| F, allocation rules | 07-M1, 09-O3, 09-O4, 08-R3, 08-R4 | owner decisions from Step 2 |
-| G, low items | everything marked Low | batch into one or two PRs |
-
-`shared/` changes (07-M4) reach packing-tool at its next sync; say so in the PR (see `CLAUDE.md`).
-
-## Step 4: coverage (part of every group, and a final pass)
-
-Raise coverage where the audits found untested paths. Each PR adds tests for the code it touches. Then
-one closing PR reaches at least:
-
-- `shopify_tool/undo_manager.py`: 90% (55% at audit time). Cover every `_undo_*` handler, the
-  wrong-client and wrong-session guard, a corrupt history file, and undo across an analysis re-run.
-- `shopify_tool/rules.py`: 90% (77% at audit time). Cover `date after`, every `CALCULATE` branch,
-  `ADD_PRODUCT` with a known SKU, and the order fields `total_quantity`, `unique_sku_count`,
-  `max_quantity`, `order_volumetric_weight`, `all_no_packaging`, `has_product`.
-- The modules listed under "Coverage at audit time" below that sit under 80% and hold allocation,
-  saving or export logic.
-
-Assert on outcomes (frame contents, files on disk, returned values), not on mocks being called. Use the
-synthetic fixtures style from `tests/audit/` and never production data.
-
-## Coverage at audit time
-
-Full suite, 3,571 tests, line coverage over `shopify_tool`, `shared` and `gui`: 83% overall. Modules
-below 80% that hold backend logic, lowest first (statements in brackets):
-
-| Module | Cover | Why it matters |
-|---|---|---|
-| `shared/server_connection.py` (127) | 24% | opening without a reachable server (ADR 0004) |
-| `shared/metadata_utils.py` (51) | 33% | session metadata both apps read |
-| `shopify_tool/sku_writeoff.py` (125) | 54% | packaging write-off quantities sent to the ERP |
-| `shopify_tool/undo_manager.py` (366) | 55% | audit 08 U1, U3 |
-| `shopify_tool/groups_manager.py` (192) | 57% | client groups |
-| `shared/file_lock.py` (61) | 57% | history and state locks on the share (07-M4) |
-| `shopify_tool/core.py` (779) | 59% | run orchestration and save step (07-M2, M3) |
-| `shopify_tool/profile_migrations.py` (141) | 63% | config migrations (07-M7) |
-| `shopify_tool/tag_manager.py` (142) | 68% | Internal_Tags used by write-off and rules |
-| `shopify_tool/profile_manager.py` (462) | 71% | config cache, save, backups (07-H1, M5, M7) |
-| `shared/atomic_write.py` (38) | 76% | every atomic JSON write (07-M4) |
-| `shopify_tool/rules.py` (661) | 77% | audit 08 |
-| `shared/stats_manager.py` (235) | 78% | shared stats file, locking |
-| `gui/actions_handler.py` (885) | 72% | every edit verb and report generation (09-O2) |
-
-Targets for the closing coverage PR: 90% for `undo_manager.py`, `rules.py` and `sku_writeoff.py`; 80%
-for `core.py`, `profile_manager.py`, `profile_migrations.py`, `tag_manager.py`, `shared/atomic_write.py`
-and `shared/file_lock.py`. Skip the GUI-only parts of `shared/theme.py`.
+- Gate for code PRs: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q` and `.venv/bin/ruff check .`.
+  This session changes docs only, so run `ruff check .`. The suite needn't run.
 
 ## Done means
 
-Every High and Medium finding is fixed or carries a recorded owner decision. Its test is unmarked and
-green. The coverage targets above are met. Every PR passed the gate, and `graphify update .` was run
-after code changes (see `CLAUDE.md`).
+- The combined plan is in `docs/superpowers/plans/`, and one PR holds it.
+- It covers B, D, E (with its design note), F and G, each as its own PR-sized section, with an execution order.
+- Every finding in those groups maps to a task with a named test.
+- The owner can execute it group by group and review each PR.
