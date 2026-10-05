@@ -368,7 +368,6 @@ def test_AUDIT_07_M5_a_settings_backup_survives_a_day_of_edits(profiles, monkeyp
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M6: set_decoders written into the caller's mappings")
 def test_AUDIT_07_M6_a_run_leaves_the_callers_column_mappings_alone(tmp_path):
     mappings = copy.deepcopy(MAPPINGS)
     config = {

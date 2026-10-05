@@ -895,9 +895,11 @@ def _run_analysis_and_rules(
 
     # Get column mappings from config and pass to analysis
     column_mappings = config.get("column_mappings", {})
+    # A copy: the caller's mappings are the GUI's active_profile_config, and
+    # this runs on the worker thread (AUDIT-07-M6). Only top-level keys are
+    # added, so a shallow copy is enough.
+    column_mappings = dict(column_mappings) if isinstance(column_mappings, dict) else {}
     # Add set_decoders to column_mappings for set expansion
-    if not isinstance(column_mappings, dict):
-        column_mappings = {}
     column_mappings["set_decoders"] = config.get("set_decoders", {})
 
     # Additional columns: the mappings' own list, else the pre-Bundle-13
