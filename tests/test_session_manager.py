@@ -405,6 +405,20 @@ class TestIndexRefresh:
         os.utime(stray, (t, t))
         assert {s["session_name"] for s in session_manager.list_client_sessions("M")} == {real.name, "archive"}
 
+    def test_a_session_whose_info_could_not_be_read_is_tried_again(self, session_manager, monkeypatch):
+        """A read that fails (the share blinks) must not hide a real session
+        until its folder changes again; only a missing file is remembered."""
+        path = Path(session_manager.create_session("M"))
+        session_manager.list_client_sessions("M")
+        t = path.stat().st_mtime + 5
+        os.utime(path, (t, t))  # another tool wrote it
+        real = session_manager.get_session_info
+        failures = [None]
+        monkeypatch.setattr(session_manager, "get_session_info",
+                            lambda p: failures.pop() if failures else real(p))
+        session_manager.list_client_sessions("M")  # the read fails here
+        assert [s["session_name"] for s in session_manager.list_client_sessions("M")] == [path.name]
+
     def test_private_index_keys_never_reach_callers(self, session_manager):
         path = Path(session_manager.create_session("M"))
         (path.parent / "stray").mkdir()

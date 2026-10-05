@@ -391,14 +391,24 @@ class SessionManager:
         the next listing. The entry is keyed by the folder's name, which is
         what list_client_sessions builds the session path from.
 
-        A folder whose session_info.json is missing or unreadable (a manual
-        archive, a half-deleted session) gets a marker entry instead, so it
-        is read again only when its mtime changes. list_client_sessions
-        never returns markers.
+        A folder with no session_info.json (a manual archive, a half-deleted
+        session) gets a marker entry instead, so it is read again only when
+        its mtime changes. A session_info.json that is there but could not be
+        read (the share blinked, a torn file) gets a marker with no mtime, so
+        the next listing tries again rather than hiding a real session until
+        it next changes. list_client_sessions never returns markers.
         """
         info = self.get_session_info(str(session_dir))
         if not info:
-            return {"session_name": session_dir.name, "_dir_mtime": dir_mtime, "_no_session_info": True}
+            try:
+                missing = not (session_dir / "session_info.json").exists()
+            except OSError:
+                missing = False
+            return {
+                "session_name": session_dir.name,
+                "_dir_mtime": dir_mtime if missing else None,
+                "_no_session_info": True,
+            }
         info.pop("session_path", None)
         info["session_name"] = session_dir.name
         info["_dir_mtime"] = dir_mtime
