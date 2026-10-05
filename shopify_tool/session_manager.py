@@ -239,6 +239,8 @@ class SessionManager:
 
         Reads the per-client session_index.json cache instead of opening every
         session's session_info.json (see docs/superpowers/specs/2026-07-27-ui-responsiveness-design.md).
+        Folders whose mtime no longer matches their entry are reread first
+        (see _refresh_index).
 
         Args:
             client_id (str): Client ID
@@ -255,12 +257,16 @@ class SessionManager:
             return []
 
         entries = self._read_index(client_sessions_dir)
-        if entries is None or self._index_is_stale(client_sessions_dir, entries):
+        if entries is None:
             entries = self._rebuild_index(client_sessions_dir)
+        else:
+            entries = self._refresh_index(client_sessions_dir, entries)
 
         sessions = []
         for entry in entries:
-            session_info = dict(entry)
+            if entry.get("_no_session_info"):
+                continue
+            session_info = {k: v for k, v in entry.items() if not k.startswith("_")}
             session_info["session_path"] = str(client_sessions_dir / session_info["session_name"])
             if status_filter and session_info.get("status") != status_filter:
                 continue
@@ -348,54 +354,95 @@ class SessionManager:
             return None
         try:
             with open(index_path, encoding="utf-8") as f:
-                return json.load(f)
+                entries = json.load(f)
         except Exception:
             logger.exception("Failed to read session index, treating as missing")
             return None
+        if not isinstance(entries, list):
+            logger.warning("Session index is not a list, treating as missing")
+            return None
+        return [e for e in entries if isinstance(e, dict)]
 
-    def _index_is_stale(self, client_sessions_dir: Path, entries: list[dict]) -> bool:
-        """True if the index no longer reflects the session directories.
+    def _listing(self, client_sessions_dir: Path) -> dict[str, float]:
+        """{folder name: st_mtime} for every session folder, from one listing.
 
-        Comparing counts alone only notices sessions appearing or
-        disappearing. It misses every change made inside an existing
-        session -- including the ones another tool makes: Packing Tool
-        writes `completed_orders` into a session's session_info.json, which
-        leaves the count identical, so a count-only check would serve that
-        session's stale entry forever.
-
-        Packing Tool writes session_info.json as temp-file + rename (see
-        shared.atomic_write), so its writes bump the session directory's
-        mtime. This class's own writers update the index *afterwards* --
-        including apply_status_updates, which writes every session file
-        before its single index rewrite -- so the index stays newer than
-        the directory it describes and never triggers a rebuild of our own
-        making.
-
-        ponytail: mtime comparison assumes the PCs writing to the share
-        agree on the clock. Skew only costs extra rebuilds (the pre-index
-        behaviour), never wrong data, and clears itself once the stamps
-        pass; record a per-entry mtime in the index if that ever shows up
-        on the UNC share.
+        scandir, not iterdir: on Windows the directory listing already
+        carries the timestamps, so DirEntry.stat() costs no extra network
+        round trip on the share.
         """
-        try:
-            index_mtime = (client_sessions_dir / self.INDEX_FILENAME).stat().st_mtime
-        except OSError:
-            return True
-
-        count = 0
-        newest_session_mtime = 0.0
-        # scandir, not iterdir: on Windows the directory listing already
-        # carries the timestamps, so DirEntry.stat() costs no extra network
-        # round trip on the share.
+        listing = {}
         with os.scandir(client_sessions_dir) as it:
             for item in it:
-                if not item.is_dir():
+                try:
+                    if item.is_dir():
+                        listing[item.name] = item.stat().st_mtime
+                except OSError:
                     continue
-                count += 1
-                with contextlib.suppress(OSError):
-                    newest_session_mtime = max(newest_session_mtime, item.stat().st_mtime)
+        return listing
 
-        return count != len(entries) or newest_session_mtime > index_mtime
+    def _index_entry(self, session_dir: Path, dir_mtime: float) -> dict:
+        """One index entry, read from the folder's session_info.json.
+
+        `_dir_mtime` is the folder's mtime from the listing taken before the
+        read, so a write that lands during the read shows up as a change on
+        the next listing. The entry is keyed by the folder's name, which is
+        what list_client_sessions builds the session path from.
+
+        A folder whose session_info.json is missing or unreadable (a manual
+        archive, a half-deleted session) gets a marker entry instead, so it
+        is read again only when its mtime changes. list_client_sessions
+        never returns markers.
+        """
+        info = self.get_session_info(str(session_dir))
+        if not info:
+            return {"session_name": session_dir.name, "_dir_mtime": dir_mtime, "_no_session_info": True}
+        info.pop("session_path", None)
+        info["session_name"] = session_dir.name
+        info["_dir_mtime"] = dir_mtime
+        return info
+
+    @staticmethod
+    def _index_matches(listing: dict[str, float], entries: list[dict]) -> bool:
+        """True if every folder has exactly one entry with its current mtime."""
+        if len(entries) != len(listing):
+            return False
+        for entry in entries:
+            name = entry.get("session_name")
+            if name not in listing or entry.get("_dir_mtime") != listing[name]:
+                return False
+        return True
+
+    def _refresh_index(self, client_sessions_dir: Path, entries: list[dict]) -> list[dict]:
+        """Reread only the session folders that changed since the index saw them.
+
+        Each entry records its folder's mtime (`_dir_mtime`). Packing Tool
+        writes session_info.json as temp-file + rename (see
+        shared.atomic_write), which bumps the folder's mtime, so its writes
+        show up here as a changed entry. This class's own writers record the
+        folder's mtime after the write they mirror, so they never cause a
+        reread. The comparison is per entry and by equality: clocks that
+        disagree between PCs no longer matter, and a mismatch costs one
+        reread, never wrong data. A legacy entry without `_dir_mtime` counts
+        as changed, so the first listing after the upgrade rereads each
+        session once.
+
+        Nothing changed means no lock and no write.
+        """
+        if self._index_matches(self._listing(client_sessions_dir), entries):
+            return entries
+
+        with self._exclusive_lock(self._index_lock_path(client_sessions_dir)):
+            current = self._read_index(client_sessions_dir) or []
+            listing = self._listing(client_sessions_dir)
+            by_name = {e.get("session_name"): e for e in current}
+            refreshed = []
+            for name, dir_mtime in listing.items():
+                entry = by_name.get(name)
+                if entry is None or entry.get("_dir_mtime") != dir_mtime:
+                    entry = self._index_entry(client_sessions_dir / name, dir_mtime)
+                refreshed.append(entry)
+            self._write_index(client_sessions_dir, refreshed)
+        return refreshed
 
     def _write_index(self, client_sessions_dir: Path, entries: list[dict]) -> None:
         index_path = client_sessions_dir / self.INDEX_FILENAME
@@ -403,20 +450,16 @@ class SessionManager:
 
     def _scan_sessions(self, client_sessions_dir: Path) -> list[dict]:
         """Full folder scan (the old list_client_sessions behavior) -- used only
-        to build/rebuild the index, never on the normal read path."""
-        entries = []
-        for item in client_sessions_dir.iterdir():
-            if not item.is_dir():
-                continue
-            info = self.get_session_info(str(item))
-            if info:
-                info.pop("session_path", None)
-                entries.append(info)
-        return entries
+        by _rebuild_index, never on the normal read path."""
+        return [
+            self._index_entry(client_sessions_dir / name, dir_mtime)
+            for name, dir_mtime in self._listing(client_sessions_dir).items()
+        ]
 
     def _rebuild_index(self, client_sessions_dir: Path) -> list[dict]:
-        """Full scan + persist. Called when no index exists yet, or the index
-        no longer reflects the session directories (see _index_is_stale).
+        """Full scan + persist. Called when no index exists yet, or it is
+        unreadable; a readable index is refreshed entry by entry instead
+        (see _refresh_index).
 
         Scan and write both happen under the index lock: an unlocked scan
         could read a stale snapshot, then overwrite a concurrent
@@ -434,12 +477,18 @@ class SessionManager:
         Best-effort: index-write failures are logged, not raised, since the
         index is a read-side cache and must never block the session_info.json
         write it mirrors.
+
+        Called after that write, so the folder's mtime recorded here already
+        includes it and the next listing sees no change.
         """
         try:
             client_sessions_dir = session_path_obj.parent
             entry = dict(session_info)
             entry.pop("session_path", None)
             session_name = session_path_obj.name
+            entry["session_name"] = session_name
+            with contextlib.suppress(OSError):
+                entry["_dir_mtime"] = os.stat(session_path_obj).st_mtime
             with self._exclusive_lock(self._index_lock_path(client_sessions_dir)):
                 entries = self._read_index(client_sessions_dir) or []
                 entries = [e for e in entries if e.get("session_name") != session_name]
@@ -550,6 +599,9 @@ class SessionManager:
                     # out of the browser entirely and breaks Packing Tool's
                     # read of the same file.
                     atomic_write_json(session_path_obj / "session_info.json", session_info, indent=2)
+                    session_info["session_name"] = session_name
+                    with contextlib.suppress(OSError):
+                        session_info["_dir_mtime"] = os.stat(session_path_obj).st_mtime
                 applied[session_name] = session_info
             except Exception:
                 logger.exception(f"Failed to apply status to {session_path_obj}")
@@ -570,8 +622,8 @@ class SessionManager:
             # this the derive pass stops being self-limiting: the session
             # files say "archived" while the stale index keeps serving
             # "active", so every refresh re-derives and rewrites the same N
-            # sessions forever. _index_is_stale cannot catch it -- these
-            # writes bump session mtimes but the index still looks newer.
+            # sessions forever, and a full rebuild is the one way back that
+            # does not depend on this failing write path.
             with contextlib.suppress(OSError):
                 (client_sessions_dir / self.INDEX_FILENAME).unlink()
 

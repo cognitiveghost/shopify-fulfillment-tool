@@ -178,7 +178,6 @@ def _count_calls(monkeypatch, obj, name):
     return calls
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-H3: a folder without session_info.json")
 def test_AUDIT_07_H3_a_stray_folder_does_not_force_rescans(sessions, monkeypatch):
     client_dir = _client_with_sessions(sessions)
     (client_dir / "stray_folder").mkdir()  # half-deleted session, manual archive
@@ -199,7 +198,6 @@ def test_without_a_stray_folder_the_index_is_scanned_once(sessions, monkeypatch)
     assert len(scans) <= 1
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-H4: one changed session rereads them all")
 def test_AUDIT_07_H4_a_packing_tool_write_refreshes_one_entry(sessions, monkeypatch):
     client_dir = _client_with_sessions(sessions)
     sessions.list_client_sessions("A")  # builds the index
