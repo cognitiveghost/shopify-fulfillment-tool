@@ -26,6 +26,7 @@ from audit_support import (  # noqa: F401  pytest fixtures, used by name
     timed,
 )
 
+import gui.main_window_pyside as main_window_module
 import shopify_tool.profile_manager as profile_manager_module
 from gui.main_window_pyside import MainWindow
 from shared.atomic_write import atomic_write_json
@@ -76,17 +77,16 @@ def _another_pc_adds_a_rule(base_path):
     pm_b.save_shopify_config("X", config)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-H1: the toggle saves this PC's stale config")
-@pytest.mark.parametrize(
-    "toggle, applied",
-    [
-        (lambda pc: MainWindow._on_inventory_memory_toggled(pc, True),
-         lambda cfg: cfg["inventory_memory"]["enabled"] is True),
-        (lambda pc: MainWindow._on_analysis_mode_changed(pc, "fifo"),
-         lambda cfg: cfg["analysis_mode"] == "fifo"),
-    ],
-    ids=["inventory-memory-switch", "analysis-mode"],
-)
+_SETUP_TOGGLES = [
+    (lambda pc: MainWindow._on_inventory_memory_toggled(pc, True),
+     lambda cfg: cfg["inventory_memory"]["enabled"] is True),
+    (lambda pc: MainWindow._on_analysis_mode_changed(pc, "fifo"),
+     lambda cfg: cfg["analysis_mode"] == "fifo"),
+]
+_SETUP_TOGGLE_IDS = ["inventory-memory-switch", "analysis-mode"]
+
+
+@pytest.mark.parametrize("toggle, applied", _SETUP_TOGGLES, ids=_SETUP_TOGGLE_IDS)
 def test_AUDIT_07_H1_a_setup_toggle_keeps_another_pcs_settings(profiles, toggle, applied):
     pc_a = _pc_opening_client(profiles)  # 08:00
     _another_pc_adds_a_rule(str(profiles.base_path))  # 10:00, PC-B
@@ -96,6 +96,35 @@ def test_AUDIT_07_H1_a_setup_toggle_keeps_another_pcs_settings(profiles, toggle,
     on_disk = ProfileManager(base_path=str(profiles.base_path)).load_shopify_config("X")
     assert applied(on_disk)
     assert {"name": "added on PC-B"} in on_disk.get("rules", [])
+
+
+@pytest.mark.parametrize("toggle, applied", _SETUP_TOGGLES, ids=_SETUP_TOGGLE_IDS)
+def test_a_setup_toggle_refreshes_this_pcs_config(profiles, toggle, applied):
+    """PC-A's own copy holds PC-B's rule too, so its next save keeps it."""
+    pc_a = _pc_opening_client(profiles)
+    _another_pc_adds_a_rule(str(profiles.base_path))
+
+    toggle(pc_a)
+
+    assert applied(pc_a.active_profile_config)
+    assert {"name": "added on PC-B"} in pc_a.active_profile_config.get("rules", [])
+
+
+@pytest.mark.parametrize("toggle, applied", _SETUP_TOGGLES, ids=_SETUP_TOGGLE_IDS)
+def test_a_failed_toggle_leaves_this_pcs_config_alone(profiles, monkeypatch, toggle, applied):
+    """The Setup page redraws from this copy: it must show what is on disk."""
+    pc_a = _pc_opening_client(profiles)
+
+    def locked_by_another_pc(path, *_args, **_kwargs):
+        raise PermissionError(13, "being used by another process", str(path))
+
+    monkeypatch.setattr(profile_manager_module, "atomic_write_json", locked_by_another_pc)
+    monkeypatch.setattr(main_window_module, "toast", Mock())
+
+    toggle(pc_a)
+
+    assert not applied(pc_a.active_profile_config)
+    main_window_module.toast.assert_called_once()
 
 
 # --------------------------------------------------------------------------
@@ -339,7 +368,6 @@ def test_AUDIT_07_M5_a_settings_backup_survives_a_day_of_edits(profiles, monkeyp
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M6: set_decoders written into the caller's mappings")
 def test_AUDIT_07_M6_a_run_leaves_the_callers_column_mappings_alone(tmp_path):
     mappings = copy.deepcopy(MAPPINGS)
     config = {
@@ -365,7 +393,6 @@ def test_AUDIT_07_M6_a_run_leaves_the_callers_column_mappings_alone(tmp_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M7: the save error turns a good read into None")
 @pytest.mark.parametrize(
     "file_name, dropped_key, load",
     [

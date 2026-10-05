@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -462,6 +463,27 @@ class ProfileManager:
             },
         }
 
+    @staticmethod
+    def _save_migrated(
+        save: Callable[[str, dict], bool], client_id: str, config: dict, what: str
+    ) -> bool:
+        """Save a just-migrated config; False when the save failed.
+
+        The file was read fine, so a failed save (another PC holding it, say)
+        must not turn the load into None (AUDIT-07-M7). The caller returns the
+        migrated config uncached, so the next load migrates and retries.
+        """
+        try:
+            save(client_id, config)
+        except ProfileManagerError:
+            logger.warning(
+                f"Migrated {what} for CLIENT_{client_id} in memory but could not "
+                "save it; the next load retries"
+            )
+            return False
+        logger.info(f"Config migrations completed for CLIENT_{client_id}")
+        return True
+
     def load_client_config(self, client_id: str) -> dict | None:
         """Load general configuration for a client, with mtime-based caching.
 
@@ -505,8 +527,10 @@ class ProfileManager:
 
             if migrated:
                 # If config was migrated, save it immediately
-                self.save_client_config(client_id, config)
-                logger.info(f"Config migrations completed for CLIENT_{client_id}")
+                if not self._save_migrated(
+                    self.save_client_config, client_id, config, "client config"
+                ):
+                    return config
                 # save_client_config() invalidates cache_key; re-stat so this
                 # call still populates the cache with the post-migration mtime.
                 try:
@@ -593,8 +617,10 @@ class ProfileManager:
                 or migrated_weight
                 or migrated_inv_memory
             ):
-                self.save_shopify_config(client_id, config)
-                logger.info(f"Config migrations completed for CLIENT_{client_id}")
+                if not self._save_migrated(
+                    self.save_shopify_config, client_id, config, "shopify config"
+                ):
+                    return config
                 # save_shopify_config() invalidates cache_key; re-stat so this
                 # call still populates the cache with the post-migration mtime.
                 try:
@@ -670,6 +696,33 @@ class ProfileManager:
             size = f"{config_path.stat().st_size:,} bytes, "
         logger.info(f"Config saved for CLIENT_{client_id}: {size}{elapsed_ms:.0f}ms")
         return True
+
+    def update_shopify_config(
+        self, client_id: str, apply: Callable[[dict], None]
+    ) -> dict:
+        """Save one change over the config as it is on disk now.
+
+        A PC's in-memory config is a snapshot from when it opened the client;
+        saving that snapshot whole reverts every other PC's changes since
+        (AUDIT-07-H1). This loads the current file, lets ``apply`` change it,
+        and saves that instead.
+
+        Args:
+            client_id: Client ID
+            apply: Mutates the freshly loaded config in place
+
+        Returns:
+            dict: The config as saved; callers keep it as their copy.
+
+        Raises:
+            ProfileManagerError: If the config can't be loaded or saved
+        """
+        config = self.load_shopify_config(client_id)
+        if config is None:
+            raise ProfileManagerError(f"Shopify config not found: CLIENT_{client_id}")
+        apply(config)
+        self.save_shopify_config(client_id, config)
+        return config
 
     # --- Set/Bundle Management Methods ---
 

@@ -487,8 +487,7 @@ class MainWindow(QMainWindow):
 
         A run and every edit write memory through a freshly loaded config,
         past this copy. Without this the Setup page states the memory of the
-        last client load, and saving this config (the switch, the strategy)
-        would write that older stock back over the newer one.
+        last client load.
         """
         try:
             config = self.profile_manager.load_shopify_config(self.current_client_id)
@@ -503,13 +502,14 @@ class MainWindow(QMainWindow):
         if not self.current_client_id or not self.active_profile_config:
             return
         try:
-            self.sync_inventory_memory()
             enabled = bool(enabled)
-            inv_mem = self.active_profile_config.get("inventory_memory", {})
-            inv_mem["enabled"] = enabled
-            self.active_profile_config["inventory_memory"] = inv_mem
-            self.profile_manager.save_shopify_config(
-                self.current_client_id, self.active_profile_config
+
+            def set_enabled(config):
+                config.setdefault("inventory_memory", {})["enabled"] = enabled
+
+            # Over the file as it is now, not this PC's copy (AUDIT-07-H1).
+            self.active_profile_config = self.profile_manager.update_shopify_config(
+                self.current_client_id, set_enabled
             )
             logger.info(
                 f"Inventory memory {'enabled' if enabled else 'disabled'} for CLIENT_{self.current_client_id}"
@@ -1069,11 +1069,10 @@ class MainWindow(QMainWindow):
         if not self.current_client_id:
             return
         mode = "fifo" if name == "fifo" else "multi_first"
-        self.sync_inventory_memory()
-        self.active_profile_config["analysis_mode"] = mode
         try:
-            self.profile_manager.save_shopify_config(
-                self.current_client_id, self.active_profile_config
+            # Over the file as it is now, not this PC's copy (AUDIT-07-H1).
+            self.active_profile_config = self.profile_manager.update_shopify_config(
+                self.current_client_id, lambda config: config.update(analysis_mode=mode)
             )
             logger.debug(
                 f"Saved analysis_mode={mode!r} for CLIENT_{self.current_client_id}"
