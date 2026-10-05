@@ -659,7 +659,7 @@ def _simulate_stock_allocation(
         - lot_allocations: {order_number: {sku: [{expiry, batch, qty_allocated}]}}
                            Empty dict when fifo_lots is None.
         - final_stock_dict: {sku: remaining_qty} after all fulfillments applied.
-                            Eliminates the need for a separate _calculate_final_stock replay pass.
+                            No separate replay pass recomputes it.
     """
     logger.debug("Phase 3/7: Simulating stock allocation...")
 
@@ -862,53 +862,6 @@ def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") ->
     return df
 
 
-def _calculate_final_stock(
-    stock_df: pd.DataFrame, fulfillment_results: dict[str, str], orders_df: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    Calculate final stock levels after fulfillment simulation.
-
-    Recalculates stock by replaying the fulfillment decisions to determine
-    remaining stock for each SKU.
-
-    Args:
-        stock_df: Initial stock DataFrame
-        fulfillment_results: Dict of order_number -> status from simulation
-        orders_df: Orders DataFrame
-
-    Returns:
-        DataFrame with columns ["SKU", "Final_Stock"]
-
-    Note:
-        This recreates the stock calculation based on fulfillment results.
-    """
-    logger.debug("Phase 4/7: Calculating final stock levels...")
-
-    # Initialize final stock from initial stock
-    live_stock = pd.Series(stock_df.Stock.values, index=stock_df.SKU).to_dict()
-
-    # Replay fulfillment to calculate final stock
-    for order_number, result in fulfillment_results.items():
-        if result.get("fulfillable", False):
-            # Get items for this order
-            order_items = orders_df[orders_df["Order_Number"] == order_number]
-            # Deduct stock - VECTORIZED groupby
-            # Skip NO_SKU items (they don't consume stock)
-            for sku, qty in order_items.groupby("SKU")["Quantity"].sum().items():
-                if sku in live_stock:  # Only deduct if SKU exists in stock
-                    live_stock[sku] -= qty
-
-    # Convert to DataFrame
-    final_stock_levels = (
-        pd.Series(live_stock, name="Final_Stock")
-        .reset_index()
-        .rename(columns={"index": "SKU"})
-    )
-
-    logger.debug(f"Calculated final stock for {len(final_stock_levels)} SKUs")
-    return final_stock_levels
-
-
 def _detect_repeated_orders(
     final_df: pd.DataFrame, history_df: pd.DataFrame, current_session: str | None = None
 ) -> pd.Series:
@@ -993,6 +946,30 @@ def _migrate_packaging_tags(final_df: pd.DataFrame) -> pd.DataFrame:
         logger.info("Packaging_Tags migration completed")
 
     return final_df
+
+
+def _with_fulfillment_reasons(
+    notes: pd.Series, order_numbers: pd.Series, fulfillment_results: dict
+) -> pd.Series:
+    """`notes` with "Cannot fulfill: <reason>" added for each held order's rows.
+
+    The reason joins an existing note with "; ". Vectorised: one dict of the
+    held orders' texts, then a map (AUDIT-07-L5).
+    """
+    reasons = {
+        order: f"Cannot fulfill: {result.get('reason', 'Unknown reason')}"
+        for order, result in fulfillment_results.items()
+        if isinstance(result, dict) and not result.get("fulfillable", True)
+    }
+    reason = order_numbers.map(reasons).to_numpy(dtype=object)
+    held = pd.notna(reason)
+    note = notes.to_numpy(dtype=object)
+    has_note = pd.notna(note) & (note.astype(str) != "")
+    out = note.copy()
+    both = held & has_note
+    out[both] = note[both].astype(str) + "; " + reason[both]
+    out[held & ~has_note] = reason[held & ~has_note]
+    return pd.Series(out, index=notes.index, name=notes.name)
 
 
 def _merge_results_to_dataframe(
@@ -1137,23 +1114,9 @@ def _merge_results_to_dataframe(
     )
 
     # Add unfulfillable reasons to System_note
-    def add_fulfillment_reason(row):
-        order_number = row["Order_Number"]
-        result = fulfillment_results.get(order_number, {})
-
-        if isinstance(result, dict) and not result.get("fulfillable", True):
-            reason = result.get("reason", "Unknown reason")
-            existing_note = row["System_note"]
-
-            # Append reason to existing note
-            if pd.notna(existing_note) and existing_note != "":
-                return f"{existing_note}; Cannot fulfill: {reason}"
-            else:
-                return f"Cannot fulfill: {reason}"
-
-        return row["System_note"]
-
-    final_df["System_note"] = final_df.apply(add_fulfillment_reason, axis=1)
+    final_df["System_note"] = _with_fulfillment_reasons(
+        final_df["System_note"], final_df["Order_Number"], fulfillment_results
+    )
 
     # Mark NO_SKU orders as Not Fulfillable with explanation
     if "Has_SKU" in final_df.columns:

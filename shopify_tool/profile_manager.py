@@ -936,8 +936,15 @@ class ProfileManager:
             backup_dir = self.clients_dir / f"CLIENT_{client_id}" / "backups"
             backup_dir.mkdir(exist_ok=True)
 
-            timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+            # Microseconds, then a counter: two saves in one tick each keep
+            # their backup (AUDIT-07-L6). Sorting stays oldest first, as "."
+            # sorts before "_".
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
             backup_path = backup_dir / f"{file_type}_{timestamp}.json"
+            n = 0
+            while backup_path.exists():
+                n += 1
+                backup_path = backup_dir / f"{file_type}_{timestamp}_{n}.json"
 
             shutil.copy2(file_path, backup_path)
 

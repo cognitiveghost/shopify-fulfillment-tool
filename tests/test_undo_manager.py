@@ -230,7 +230,7 @@ def test_a_whole_row_record_from_an_older_build_still_undoes(tmp_path):
 def test_the_undo_file_is_written_by_the_queue(tmp_path, qapp):
     mw = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
     mw.write_queue = SessionWriteQueue()
-    history = tmp_path / "analysis" / "operations_history.json"
+    history = mw.undo_manager._get_history_path()
     gate = gated(mw.write_queue)
     try:
         mw.undo_manager.record_operation("toggle_status", "t", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
@@ -239,3 +239,54 @@ def test_the_undo_file_is_written_by_the_queue(tmp_path, qapp):
         gate.set()
     assert mw.write_queue.flush(timeout=5)
     assert json.loads(history.read_text(encoding="utf-8"))["current_position"] == 1
+
+
+# --- Undo history per PC (AUDIT-08-U4) ---
+
+
+def test_two_pcs_keep_their_own_undo_history(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMPUTERNAME", "PC-A")
+    a = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    a.undo_manager.record_operation("toggle_status", "by A", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
+    monkeypatch.setenv("COMPUTERNAME", "PC-B")
+    b = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    b.undo_manager.record_operation("toggle_status", "by B", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
+    monkeypatch.setenv("COMPUTERNAME", "PC-A")
+    a.undo_manager.reload_session_history()
+    assert [op["description"] for op in a.undo_manager.operations] == ["by A"]
+    assert a.undo_manager._get_history_path().name == "operations_history_PC-A.json"
+
+
+def test_a_legacy_shared_history_still_loads(tmp_path, monkeypatch):
+    monkeypatch.setenv("COMPUTERNAME", "PC-A")
+    (tmp_path / "analysis").mkdir()
+    op = {"id": 1, "timestamp": "2026-10-01T10:00:00+03:00", "type": "toggle_status", "description": "legacy",
+          "params": {"order_number": "#1"}, "affected_rows_before": [], "row_positions": [],
+          "stats_before": None, "client_id": "TEST", "session_path": str(tmp_path)}
+    legacy = tmp_path / "analysis" / "operations_history.json"
+    legacy.write_text(json.dumps({"operations": [op], "current_position": 1, "max_history": 20}), encoding="utf-8")
+    mw = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    assert [op["description"] for op in mw.undo_manager.operations] == ["legacy"]
+    mw.undo_manager.record_operation("toggle_status", "new", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
+    assert json.loads(legacy.read_text(encoding="utf-8"))["current_position"] == 1  # never written
+
+
+def test_a_pc_name_becomes_a_safe_file_name(monkeypatch):
+    from shopify_tool import undo_manager
+
+    monkeypatch.setenv("COMPUTERNAME", "WH PC/2:ä")
+    assert undo_manager._pc_name() == "WH_PC_2__"
+
+
+def test_recording_after_undo_logs_how_many_steps_it_cleared(tmp_path, caplog):
+    """AUDIT-08-U5: the count was taken after the slice, so it always said 0."""
+    import logging
+
+    mw = _window(UNDO_FRAME.copy())
+    for n in range(3):
+        mw.undo_manager.record_operation("toggle_status", f"op {n}", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
+    mw.undo_manager.undo()
+    mw.undo_manager.undo()
+    with caplog.at_level(logging.INFO, logger="shopify_tool.undo_manager"):
+        mw.undo_manager.record_operation("toggle_status", "op 3", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
+    assert "Cleared 2 future operations" in caplog.text

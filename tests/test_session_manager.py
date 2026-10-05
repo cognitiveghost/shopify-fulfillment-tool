@@ -631,3 +631,20 @@ class TestRestoreSessionFields:
         ghost.mkdir()
         with pytest.raises(SessionManagerError):
             session_manager.restore_session_fields(str(ghost), {"comments": "x"})
+
+
+def test_a_lock_that_was_never_taken_is_not_released(session_manager, tmp_path, monkeypatch):
+    """AUDIT-07-L4: unlocking a lock this call never took is not ours to do."""
+    import fcntl
+
+    calls = []
+
+    def flock(fd, op):
+        calls.append(op)
+        if op == fcntl.LOCK_EX:
+            raise OSError("lock refused")
+
+    monkeypatch.setattr(fcntl, "flock", flock)
+    with pytest.raises(OSError, match="lock refused"), session_manager._exclusive_lock(tmp_path / "x.lock"):
+        pass
+    assert calls == [fcntl.LOCK_EX]

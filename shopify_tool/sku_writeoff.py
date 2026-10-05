@@ -166,7 +166,9 @@ def calculate_writeoff_quantities(
     # breakdown. Accumulating per row multiplies every writeoff by the order's
     # line count.
     if "Order_Number" in rows_df.columns:
-        order_col = rows_df["Order_Number"].astype(str)
+        # Stripped, as the ledger keys orders: "1001" and "1001 " are one
+        # order and write off once (AUDIT-09-O6).
+        order_col = rows_df["Order_Number"].astype(str).str.strip()
     else:
         logger.warning(
             "Order_Number column missing - writeoff cannot deduplicate per order; "

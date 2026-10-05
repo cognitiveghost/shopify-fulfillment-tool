@@ -95,7 +95,7 @@ def test_a_rerun_empties_the_saved_undo_history(tmp_path):
     """Reopening the session must not bring the old run's operations back."""
     mw = _order_removed_then_rerun(tmp_path)
 
-    history_file = tmp_path / "analysis" / "operations_history.json"
+    history_file = mw.undo_manager._get_history_path()
     assert json.loads(history_file.read_text(encoding="utf-8"))["operations"] == []
     assert mw.undo_manager.can_undo() is False
     mw.results_bridge.set_undo_available.assert_called_with(False)
@@ -181,7 +181,7 @@ def test_AUDIT_08_U2_one_bulk_status_change_keeps_the_history_small(benchmark_fr
 
     ActionsHandler(mw).bulk_change_status(df["Order_Number"].unique().tolist(), False)
 
-    history = tmp_path / "analysis" / "operations_history.json"
+    history = mw.undo_manager._get_history_path()
     assert (mw.analysis_results_df["Order_Fulfillment_Status"] == "Not Fulfillable").all()
     assert mw.undo_manager.can_undo()
     assert history.stat().st_size < 2_000_000

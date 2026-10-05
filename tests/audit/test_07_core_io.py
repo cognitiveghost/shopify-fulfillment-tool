@@ -174,6 +174,14 @@ def test_a_run_drops_history_rows_of_deleted_sessions(sessions, analysis_run):
     assert set(rows["Session"]) == {kept.name, "", Path(path).name}
 
 
+def test_the_session_names_the_report_it_wrote(sessions, analysis_run):
+    """AUDIT-07-L2."""
+    path = sessions.create_session("M")
+    assert analysis_run(path)[0]
+    info = json.loads((Path(path) / "session_info.json").read_text(encoding="utf-8"))
+    assert (Path(path) / info["analysis_report_path"]).exists()
+
+
 def test_a_run_writes_no_excel_mirror(sessions, analysis_run):
     path = sessions.create_session("M")
     ok, msg, _df, _stats = analysis_run(path)

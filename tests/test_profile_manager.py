@@ -349,3 +349,24 @@ class TestConfigBackups:
         profile_manager.create_client_profile("M", "Client")
         profile_manager.save_inventory_memory("M", {"A": 1}, session="S")
         assert list((profile_manager.clients_dir / "CLIENT_M" / "backups").glob("shopify_config_*.json")) == []
+
+    def test_two_backups_in_the_same_instant_both_survive(self, profile_manager, monkeypatch):
+        """AUDIT-07-L6: a second backup in the same second overwrote the first."""
+        from datetime import UTC
+        from datetime import datetime as real_datetime
+
+        import shopify_tool.profile_manager as profile_manager_module
+
+        class Frozen(real_datetime):
+            @classmethod
+            def now(cls, tz=None):
+                instant = real_datetime(2026, 10, 5, 8, 0, 0, 123456, tzinfo=UTC)
+                return instant if tz is None else instant.astimezone(tz)
+
+        profile_manager.create_client_profile("M", "Client")
+        monkeypatch.setattr(profile_manager_module, "datetime", Frozen)
+        cfg = profile_manager.load_shopify_config("M")
+        profile_manager.save_shopify_config("M", cfg)
+        profile_manager.save_shopify_config("M", cfg)
+        backups = list((profile_manager.clients_dir / "CLIENT_M" / "backups").glob("shopify_config_*.json"))
+        assert len(backups) == 2

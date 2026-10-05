@@ -208,9 +208,23 @@ def prepare_export_path(base_path, now=None):
             old = base.parent / "old"
             old.mkdir(exist_ok=True)
             for p in versions:
-                os.replace(p, old / p.name)
+                os.replace(p, _free_name(old / p.name))
                 logger.info(f"Moved earlier export {p.name} to old/")
     return str(base.with_name(f"{stem}_{stamp}.xls"))
+
+
+def _free_name(target: Path) -> Path:
+    """`target`, or <stem>_2.xls, _3, ... when a copy of that name is already there.
+
+    A same-minute re-export would otherwise overwrite the copy already in old/
+    (AUDIT-09-O8). The stamp stays as it is, so the ERP sees the same names.
+    """
+    n = 1
+    candidate = target
+    while candidate.exists():
+        n += 1
+        candidate = target.with_name(f"{target.stem}_{n}{target.suffix}")
+    return candidate
 
 
 def _packaging_path(output_file):
@@ -307,8 +321,13 @@ def create_stock_export(
                     f"Found {len(export_df)} lot rows to write for report '{report_name}'."
                 )
         else:
-            # Summarize quantities by SKU
-            sku_summary = filtered_items.groupby("SKU")["Quantity"].sum().reset_index()
+            # Summarize quantities by SKU, stripped: the key _check_totals
+            # uses, so "A" and "A " are one row (AUDIT-09-O7).
+            sku_summary = (
+                filtered_items.groupby(filtered_items["SKU"].astype(str).str.strip())["Quantity"]
+                .sum()
+                .reset_index()
+            )
             sku_summary = sku_summary[sku_summary["Quantity"] > 0]
 
             if sku_summary.empty:

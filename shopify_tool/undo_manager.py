@@ -4,12 +4,15 @@ Undo Manager for DataFrame Operations
 Manages undo history for DataFrame modifications:
 - Records operations after execution (stores affected rows before modification)
 - Restores previous DataFrame state
-- Persists history to operations_history.json
+- Persists history to operations_history_<PC>.json, one file per PC (AUDIT-08-U4)
 - Clears "future" operations after new action following undo
 """
 
 import json
 import logging
+import os
+import platform
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -18,6 +21,14 @@ import pandas as pd
 
 from shared.atomic_write import atomic_write_json
 from shopify_tool.stock_ledger import with_stock_left
+
+LEGACY_HISTORY_FILE = "operations_history.json"
+
+
+def _pc_name() -> str:
+    """This PC's name, safe in a file name: anything but [A-Za-z0-9_-] becomes _."""
+    name = os.environ.get("COMPUTERNAME") or platform.node() or "unknown"
+    return re.sub(r"[^A-Za-z0-9_-]", "_", name)
 
 
 class UndoManager:
@@ -79,8 +90,9 @@ class UndoManager:
         try:
             # Clear any "future" operations (redo history) when new operation is recorded
             if self.current_position < len(self.operations):
+                cleared = len(self.operations) - self.current_position  # before the slice (AUDIT-08-U5)
                 self.operations = self.operations[:self.current_position]
-                self.log.info(f"Cleared {len(self.operations) - self.current_position} future operations")
+                self.log.info(f"Cleared {cleared} future operations")
 
             # Convert DataFrame to serializable format
             if operation_type in self.RESTORED_COLUMNS:
@@ -457,7 +469,10 @@ class UndoManager:
         )
 
     def _get_history_path(self) -> Path | None:
-        """Get path to operations_history.json.
+        """Get path to this PC's undo history, operations_history_<PC>.json.
+
+        One file per PC (AUDIT-08-U4): a session reopened on another PC does
+        not offer the first PC's undo steps, whose rows it may not hold.
 
         Returns:
             Path object or None if no active session
@@ -465,10 +480,10 @@ class UndoManager:
         if not self.main_window.session_path:
             return None
 
-        return Path(self.main_window.session_path) / "analysis" / "operations_history.json"
+        return Path(self.main_window.session_path) / "analysis" / f"operations_history_{_pc_name()}.json"
 
     def _save_history(self):
-        """Save history to operations_history.json, through the window's write queue.
+        """Save this PC's history file, through the window's write queue.
 
         The job writes a snapshot taken now, so a later edit never changes
         what it writes (AUDIT-07-H2). Without a queue it is written now. The
@@ -501,9 +516,15 @@ class UndoManager:
             self.log.exception("Failed to save history")
 
     def _load_history(self):
-        """Load history from operations_history.json."""
+        """Load this PC's history; the shared file of an older build is the fallback.
+
+        The legacy operations_history.json is read only when this PC has no
+        file yet, and is never written.
+        """
         try:
             history_path = self._get_history_path()
+            if history_path and not history_path.exists():
+                history_path = history_path.with_name(LEGACY_HISTORY_FILE)
 
             if not history_path or not history_path.exists():
                 self.log.debug("No history file found")

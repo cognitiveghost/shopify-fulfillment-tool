@@ -684,3 +684,13 @@ TEXT = pd.Series([" DHL ", "dhl", "Dhl-Express", None, "UPS"])
 ])
 def test_text_operators_ignore_case_and_spaces(op, value, want):
     assert getattr(rules, rules.OPERATOR_MAP[op])(TEXT, value).tolist() == want
+
+
+def test_a_product_added_from_a_set_line_is_not_a_component():
+    """AUDIT-08-R5: the added row copied the set line's tracking fields."""
+    df = pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [2], "Original_SKU": ["SET-1"],
+                       "Original_Quantity": [1], "Is_Set_Component": [True]})
+    rule = {"name": "gift", "level": "article", "conditions": [{"field": "SKU", "operator": "equals", "value": "A"}],
+            "actions": [{"type": "ADD_PRODUCT", "sku": "GIFT", "quantity": 1}]}
+    added = RuleEngine([rule]).apply(df).iloc[-1]
+    assert (added["Original_SKU"], added["Original_Quantity"], added["Is_Set_Component"]) == ("GIFT", 1, False)

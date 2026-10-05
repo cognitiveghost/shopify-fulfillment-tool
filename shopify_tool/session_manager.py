@@ -284,6 +284,7 @@ class SessionManager:
         either writes back, and one update silently loses the other's change.
         """
         with open(lock_path, "a+") as lock_file:
+            locked = False
             try:
                 if os.name == "nt":
                     import msvcrt
@@ -291,13 +292,15 @@ class SessionManager:
                 else:
                     import fcntl
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                locked = True
                 yield
             finally:
-                if os.name == "nt":
+                # Release only a lock this call took (AUDIT-07-L4).
+                if locked and os.name == "nt":
                     import msvcrt
                     lock_file.seek(0)
                     msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
+                elif locked:
                     import fcntl
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 

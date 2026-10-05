@@ -30,9 +30,13 @@ else
     # /usr/local/bin/python3 shadows the system one and its ensurepip fails, so
     # `python3 -m venv` leaves a directory behind with no pip in it — which is
     # exactly what made this script fail before. Probe for one that works.
+    # 3.12 is the floor: numpy>=2.5.3 in requirements.txt needs it (AUDIT-08-T1).
+    # SETUP_VENV_PYTHONS overrides the candidates (the test uses it).
+    CANDIDATES=${SETUP_VENV_PYTHONS:-/usr/bin/python3 python3 python3.14 python3.13 python3.12}
     PY=""
-    for c in /usr/bin/python3 python3 python3.14 python3.13 python3.12; do
+    for c in $CANDIDATES; do
         p=$(command -v "$c" 2>/dev/null) || continue
+        "$p" -c 'import sys; sys.exit(sys.version_info < (3, 12))' >/dev/null 2>&1 || continue
         probe=$(mktemp -d)
         if "$p" -m venv "$probe" >/dev/null 2>&1 && "$probe/bin/python" -m pip --version >/dev/null 2>&1; then
             rm -rf "$probe"; PY="$p"; break
@@ -40,8 +44,8 @@ else
         rm -rf "$probe"
     done
     if [ -z "$PY" ]; then
-        echo "No python3 on this machine can create a venv with pip." >&2
-        echo "Tried: /usr/bin/python3 python3 python3.14 python3.13 python3.12" >&2
+        echo "No Python 3.12 or newer on this machine can create a venv with pip." >&2
+        echo "Tried: $CANDIDATES" >&2
         echo "On Debian/Ubuntu: sudo apt install python3-venv" >&2
         exit 1
     fi

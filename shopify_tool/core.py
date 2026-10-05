@@ -1416,7 +1416,8 @@ def _save_results_and_reports(
                     "total_orders": analysis_data["total_orders"],
                     "fulfillable_orders": analysis_data["fulfillable_orders"],
                     "not_fulfillable_orders": analysis_data["not_fulfillable_orders"],
-                    "analysis_report_path": "analysis/analysis_report.xlsx",
+                    # The file the run writes (AUDIT-07-L2).
+                    "analysis_report_path": "analysis/fulfillment_analysis.xlsx",
                     "statistics": {
                         "total_orders": len(final_df["Order_Number"].unique()),
                         "total_items": len(final_df),

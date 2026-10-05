@@ -767,3 +767,17 @@ def test_a_merge_reads_the_run_report_when_the_pickle_is_unreadable(tmp_path):
         session / "analysis" / "fulfillment_analysis.xlsx", index=False)
     out = stock_export.merge_session_stock_exports([session])
     assert out.loc[out["Артикул"] == "A", stock_export.QTY_COL].tolist() == [2]
+
+
+def test_a_sku_with_a_trailing_space_is_one_export_row(tmp_path, monkeypatch):
+    """AUDIT-09-O7: the non-lot export grouped "A" and "A " apart."""
+    from shopify_tool import stock_export
+
+    written = []
+    monkeypatch.setattr(stock_export, "_write_xls", lambda df, path: written.append(df))
+    frame = _analysis_df([{"Order_Number": "#1", "SKU": "A", "Quantity": 1},
+                          {"Order_Number": "#2", "SKU": "A ", "Quantity": 2}])
+    stock_export.create_stock_export(analysis_df=frame, output_file=str(tmp_path / "e.xls"), report_name="ERP")
+    rows = written[0]
+    assert rows["Артикул"].tolist() == ["A"]
+    assert rows[stock_export.QTY_COL].tolist() == [3]

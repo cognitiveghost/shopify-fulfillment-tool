@@ -1349,6 +1349,15 @@ class RuleEngine:
                     if "Status_Note" in new_row:
                         new_row["Status_Note"] = ""
 
+                    # The added product is not part of the line's set
+                    # (AUDIT-08-R5): it tracks as itself.
+                    if "Original_SKU" in new_row:
+                        new_row["Original_SKU"] = sku
+                    if "Original_Quantity" in new_row:
+                        new_row["Original_Quantity"] = quantity
+                    if "Is_Set_Component" in new_row:
+                        new_row["Is_Set_Component"] = False
+
                     # Позначити як додано правилом
                     if "Internal_Tags" in new_row:
                         from shopify_tool.tag_manager import add_tag
