@@ -1,6 +1,7 @@
 # 0015 — Lot allocation is derived from the frame, like Stock left
 
 **Status:** Accepted, 2026-09-28
+Amended 2026-10-05 (AUDIT-07-M1): draw order and netting of negative stock rows.
 **Context:** `docs/audit/06-second-pass.md` AUDIT-06-1,
 `docs/superpowers/specs/2026-09-28-data-layer-second-review-design.md` §2.
 Extends ADR 0010. Supersedes the rejected alternative of ADR 0014 (owner,
@@ -23,15 +24,18 @@ quantity.
 ## Decision
 
 **R3: every SKU line of a fulfillable order owns its lots, derived from the
-session's opening lots.** `analysis.with_lots(df, lots, mode)` allocates FIFO
-(earliest expiry first) to the fulfillable orders. It takes them in the run's
+session's opening lots.** `analysis.with_lots(df, lots, mode)` draws undated,
+unbatched lots first, then dated or batched lots, earliest expiry first, for the
+fulfillable orders. It takes them in the run's
 priority order (`_prioritize_orders`, the client's `analysis_mode`) and the
 lines of each order in row order. Each line gets its own list, which sums to its
 `Quantity`. Units the lots can't cover get one entry with expiry `"1"`, the
 existing "no lot" marker. Held orders and no-SKU lines get `None`.
 
 The opening lots are rebuilt from the session's own `input/inventory.csv`
-(`core.session_lot_table`). The run reads the same file.
+(`core.session_lot_table`). The run reads the same file. The opening lots net
+negative stock rows: each against the lot with the same expiry and batch first,
+any remainder in draw order, so a SKU's lots sum to its stock total.
 
 Lots are derived:
 - at the end of the run, after rules settle (`core._run_analysis_and_rules`);
@@ -50,6 +54,11 @@ never dedupe. A Manual line's lots are derived like any other line's.
   sequence, only on the total demand per SKU.
 - A session whose `input/inventory.csv` is gone, or a memory-mode session, has
   no lots. It exports with blank expiry/batch, and quantities stay right.
+- The 2026-10-05 amendment moved which lots ship first: undated, unbatched
+  stock used to ship last and now ships first, so for every client with lot
+  columns the lot labels on packing lists and stock exports changed. Lots never
+  promise more than the SKU total, so a lot column no longer changes which
+  orders are fulfillable.
 - `expiry_dt` is stored as an ISO string, so rows stay JSON-serialisable
   (undo history, AUDIT-01-12).
 - Do not attach `Lot_Details` in a new verb, or share one list between rows.

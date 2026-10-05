@@ -96,6 +96,24 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
         key = (filtered_items.at[label, "SKU"], expiry, batch)
         totals[key] = totals.get(key, 0) + qty
 
+    # A negative line (a manual correction) nets against its own lot, then
+    # against the SKU's other lot rows in the order they were drawn. The
+    # export never holds a negative quantity, and each SKU still sums to its
+    # lines (AUDIT-07-M1).
+    for key, qty in totals.items():
+        debt = -qty
+        if debt <= 0:
+            continue
+        totals[key] = 0
+        for other, available in totals.items():
+            if other[0] != key[0] or available <= 0:
+                continue
+            take = min(available, debt)
+            totals[other] = available - take
+            debt -= take
+            if debt <= 0:
+                break
+
     records = [
         {"Артикул": sku, QTY_COL: qty, "Годност": expiry, "Партида": batch}
         for (sku, expiry, batch), qty in totals.items()

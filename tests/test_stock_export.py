@@ -720,3 +720,37 @@ class TestTotalsGuard:
         create_stock_export(df, str(out), writeoff_mode="merged", tag_categories=tag_categories)
         skus = set(_read(out).iloc[:, COL_SKU].astype(str))
         assert {"A1", "PKG-1"} <= skus
+
+
+def _negative_stock_frame(with_lots_column):
+    """A run where the stock file holds negative rows (AUDIT-07-M1).
+
+    Stock: A +10 and -3; B +5; C -2 only. Orders: #1 needs 4 x A; #2 needs
+    2 x B, plus a manual line of -2 x B; #3 needs 1 x C.
+    """
+    from shopify_tool.analysis import lot_table, run_analysis, with_lots
+
+    stock = pd.DataFrame({"Артикул": ["A", "A", "B", "C"], "Име": ["a", "a", "b", "c"],
+                          "Наличност": [10, -3, 5, -2]})
+    if with_lots_column:
+        stock["Годност"] = ["2027-01-01", "2027-02-01", "2027-03-01", "2027-04-01"]
+    orders = pd.DataFrame({"Name": ["#1", "#2", "#3"], "Lineitem sku": ["A", "B", "C"],
+                           "Lineitem quantity": [4, 2, 1], "Shipping Method": ["DHL"] * 3,
+                           "Shipping Country": ["BG"] * 3})
+    df = run_analysis(stock, orders, pd.DataFrame({"Order_Number": []}))[0]
+    manual = df[df["Order_Number"] == "#2"].iloc[[0]].assign(Quantity=-2)
+    df = pd.concat([df, manual], ignore_index=True)
+    internal = stock.rename(columns={"Артикул": "SKU", "Наличност": "Stock", "Годност": "Expiry_Date"})
+    return with_lots(df, lot_table(internal))
+
+
+@pytest.mark.parametrize("with_lots_column", [True, False])
+def test_the_stock_export_never_holds_a_negative_quantity(tmp_path, monkeypatch, with_lots_column):
+    from shopify_tool import stock_export
+
+    frame = _negative_stock_frame(with_lots_column)
+    written = []
+    monkeypatch.setattr(stock_export, "_write_xls", lambda df, path: written.append(df))
+    stock_export.create_stock_export(analysis_df=frame, output_file=str(tmp_path / "e.xls"),
+                                     report_name="ERP", filters=[], writeoff_mode="off", tag_categories={})
+    assert (written[0][stock_export.QTY_COL] > 0).all()

@@ -774,6 +774,11 @@ class ActionsHandler(QObject):
                 "Manual Edit", f"Order {order_number} status changed to '{new_status}'."
             )
             self.log.info(f"Order {order_number} status changed to '{new_status}'.")
+            if result:
+                # Allowed, but said: a SKU the stock file doesn't list (AUDIT-09-O3).
+                self._results_toast(
+                    f"Order {order_number} marked fulfillable · {result[0].lower() + result[1:]}"
+                )
         else:
             self.log.warning(
                 f"Failed to toggle status for order {order_number}: {result}"
@@ -1436,6 +1441,12 @@ class ActionsHandler(QObject):
             text = f"{count} marked fulfillable · {len(skipped)} skipped: not enough stock"
         else:
             text = f"{count} marked fulfillable"
+        unlisted = (
+            stock_ledger.unlisted_skus(self.mw.analysis_results_df, covered) if is_fulfillable else []
+        )
+        if unlisted:
+            # Allowed, but said (AUDIT-09-O3). The toast has no warning style.
+            text += f" · not in the stock file: {', '.join(unlisted)}"
         self._results_toast(text, undoable=True)
 
     def bulk_add_tag(self, order_numbers, tag):

@@ -226,3 +226,22 @@ def test_decoding_matches_the_reference(sets):
     out = decode_sets_in_orders(ORDERS.copy(), sets)
     ref = _decode_reference(ORDERS.copy(), sets)
     pd.testing.assert_frame_equal(out, ref, check_dtype=False)  # index labels and row order included
+
+
+def test_a_saved_set_with_spaces_still_expands():
+    out = decode_sets_in_orders(pd.DataFrame({"Order_Number": ["#1"], "SKU": ["SET-1"], "Quantity": [1]}),
+                                {"SET-1 ": [{"sku": "A ", "quantity": 2}]})
+    assert out["SKU"].tolist() == ["A"] and out["Quantity"].tolist() == [2]
+
+
+def test_import_trims_set_and_component_skus(tmp_path):
+    csv = tmp_path / "s.csv"
+    csv.write_text("Set_SKU,Component_SKU,Component_Quantity\n SET-1 , A ,2\n", encoding="utf-8")
+    assert import_sets_from_csv(str(csv)) == {"SET-1": [{"sku": "A", "quantity": 2}]}
+
+
+def test_two_keys_that_trim_to_one_sku_keep_the_last(caplog):
+    sets = {"SET-1": [{"sku": "A", "quantity": 1}], " SET-1": [{"sku": "B", "quantity": 1}]}
+    out = decode_sets_in_orders(pd.DataFrame({"Order_Number": ["#1"], "SKU": ["SET-1"], "Quantity": [1]}), sets)
+    assert out["SKU"].tolist() == ["B"]
+    assert any("SET-1" in r.getMessage() for r in caplog.records if r.levelname == "WARNING")

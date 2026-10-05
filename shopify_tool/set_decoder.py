@@ -13,6 +13,8 @@ from typing import Any
 
 import pandas as pd
 
+from .csv_utils import normalize_sku
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,6 +99,7 @@ def decode_sets_in_orders(
         orders_df["Is_Set_Component"] = False
         return orders_df
 
+    set_decoders = _normalized_decoders(set_decoders)
     work = orders_df.reset_index(drop=True)
     ordered_sets = [sku for sku in work["SKU"].unique() if _is_set(sku, set_decoders)]
     table = _set_table(set_decoders, ordered_sets)
@@ -160,6 +163,24 @@ def _with_tracking(lines: pd.DataFrame, is_component: bool) -> pd.DataFrame:
         lines[_POS] = lines.index.to_numpy()
         lines[_SEQ] = 0
     return lines
+
+
+def _normalized_decoders(set_decoders: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    """Set and component SKUs trimmed as order SKUs are (normalize_sku, AUDIT-09-O4).
+
+    A set saved before imports trimmed its SKUs still expands. Two keys that
+    trim to one SKU: the last one wins, with a warning.
+    """
+    normalized: dict[str, list[dict[str, Any]]] = {}
+    for set_sku, components in set_decoders.items():
+        key = normalize_sku(set_sku)
+        if key in normalized:
+            logger.warning(f"Sets '{key}' are defined twice (spaces aside); using the last one")
+        normalized[key] = [
+            {**component, "sku": normalize_sku(component.get("sku"))}
+            for component in components or []
+        ]
+    return normalized
 
 
 def _set_table(set_decoders: dict[str, list[dict[str, Any]]], skus: Iterable | None = None) -> pd.DataFrame:
@@ -234,6 +255,10 @@ def import_sets_from_csv(csv_path: str) -> dict[str, list[dict[str, Any]]]:
     if df.empty:
         logger.warning("CSV file is empty")
         return {}
+
+    # Trimmed as order SKUs are, before the checks below (AUDIT-09-O4)
+    df["Set_SKU"] = df["Set_SKU"].map(normalize_sku)
+    df["Component_SKU"] = df["Component_SKU"].map(normalize_sku)
 
     # Check for empty SKUs
     if df["Set_SKU"].isna().any() or (df["Set_SKU"] == "").any():

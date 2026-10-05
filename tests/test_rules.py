@@ -644,3 +644,43 @@ class TestParseDates:
     def test_mixed_offsets_parse_to_the_date_as_written(self):
         s = pd.Series(["2026-03-28 23:30:00 +0200", "2026-03-30 00:30:00 +0300"], name="Created_At")
         assert rules._parse_dates(s).tolist() == [pd.Timestamp("2026-03-28 23:30"), pd.Timestamp("2026-03-30 00:30")]
+
+
+def test_the_page_order_is_the_run_order():
+    rules_list = [{"name": "A", "enabled": False}, {"name": "B"}, {"name": "C", "priority": 1000}]
+    assert [r["name"] for r in RuleEngine.execution_order(rules_list)] == ["B", "C", "A"]
+    assert [r["name"] for r in RuleEngine(rules_list).rules] == ["B", "C"]
+
+
+RULE_LISTS = [
+    [{"name": "a1"}, {"name": "o1", "level": "order"}, {"name": "a2", "priority": 5}],
+    [{"name": "x", "enabled": False}, {"name": "y"}, {"name": "z", "priority": 1001},
+     {"name": "w", "level": "order", "priority": 1}],
+    [{"name": "p", "priority": 1000}, {"name": "q"}, {"name": "r", "enabled": False, "priority": 2},
+     {"name": "s"}],
+    [{"name": "n1", "enabled": False}, {"name": "n2", "enabled": False}, {"name": "n3"},
+     {"name": "o2", "level": "order"}, {"name": "o3", "level": "order", "enabled": False}],
+]
+
+
+@pytest.mark.parametrize("rules_list", RULE_LISTS)
+def test_enabled_rules_list_in_the_order_the_engine_runs_them(rules_list):
+    page = [r["name"] for r in RuleEngine.execution_order(rules_list) if r.get("enabled", True) is not False]
+    assert page == [r["name"] for r in RuleEngine(rules_list).rules]
+
+
+TEXT = pd.Series([" DHL ", "dhl", "Dhl-Express", None, "UPS"])
+
+
+@pytest.mark.parametrize("op, value, want", [
+    ("equals", "dhl ", [True, True, False, False, False]),
+    ("does not equal", " DHL", [False, False, True, True, True]),
+    ("starts with", " dhl", [True, True, True, False, False]),
+    ("ends with", "HL ", [True, True, False, False, False]),
+    ("contains", " Express", [False, False, True, False, False]),
+    ("does not contain", "dhl", [False, False, False, True, True]),
+    ("in list", "dhl , ups", [True, True, False, False, True]),
+    ("not in list", "DHL", [False, False, True, True, True]),
+])
+def test_text_operators_ignore_case_and_spaces(op, value, want):
+    assert getattr(rules, rules.OPERATOR_MAP[op])(TEXT, value).tolist() == want

@@ -73,60 +73,46 @@ def _append_to_note(note: str, value: str) -> str:
 # --- Operator Implementations ---
 
 
+def _fold(values: pd.Series) -> pd.Series:
+    """Text as the text operators compare it: trimmed, case folded (AUDIT-08-R4)."""
+    return values.astype(str).str.strip().str.casefold()
+
+
+def _fold_value(value) -> str:
+    """A rule's text value as the text operators compare it."""
+    return str(value).strip().casefold()
+
+
 def _op_equals(series_val, rule_val):
     """Returns True where the series value equals the rule value.
 
-    Handles numeric comparisons by converting rule_val to numeric if series is numeric.
+    Text ignores case and surrounding spaces on both sides. A numeric
+    column with a numeric rule value compares as numbers.
     """
-    # If series is numeric, try to convert rule_val to numeric for comparison
     if pd.api.types.is_numeric_dtype(series_val):
         try:
             rule_val_numeric = pd.to_numeric(rule_val, errors='raise')
             return series_val == rule_val_numeric
         except (ValueError, TypeError):
-            # If conversion fails, use string comparison
-            return series_val.astype(str) == str(rule_val)
-    else:
-        # For non-numeric series, use direct comparison
-        return series_val == rule_val
+            pass  # a text value: compared as text below
+    return series_val.notna() & (_fold(series_val) == _fold_value(rule_val))
 
 
 def _op_not_equals(series_val, rule_val):
     """Returns True where the series value does not equal the rule value.
 
-    Handles numeric comparisons by converting rule_val to numeric if series is numeric.
+    The negation of `equals`, so a blank cell does not equal anything.
     """
-    # If series is numeric, try to convert rule_val to numeric for comparison
-    if pd.api.types.is_numeric_dtype(series_val):
-        try:
-            rule_val_numeric = pd.to_numeric(rule_val, errors='raise')
-            return series_val != rule_val_numeric
-        except (ValueError, TypeError):
-            # If conversion fails, use string comparison
-            return series_val.astype(str) != str(rule_val)
-    else:
-        # For non-numeric series, use direct comparison
-        return series_val != rule_val
-
-
-def _as_str_series(series_val):
-    """Coerce a numeric-dtype Series to string so .str accessors don't crash.
-
-    Non-numeric (object/string) Series are returned unchanged to preserve
-    their existing NaN handling via each operator's na=False.
-    """
-    if pd.api.types.is_numeric_dtype(series_val):
-        return series_val.astype(str)
-    return series_val
+    return ~_op_equals(series_val, rule_val)
 
 
 def _op_contains(series_val, rule_val):
-    """Returns True where the series string contains the rule string (case-insensitive, literal)."""
-    return _as_str_series(series_val).str.contains(rule_val, case=False, na=False, regex=False)
+    """Returns True where the series text contains the rule text (case and spaces ignored, literal)."""
+    return _fold(series_val).str.contains(_fold_value(rule_val), regex=False, na=False)
 
 
 def _op_not_contains(series_val, rule_val):
-    """Returns True where the series string does not contain the rule string (case-insensitive, literal)."""
+    """Returns True where the series text does not contain the rule text (case and spaces ignored, literal)."""
     return ~_op_contains(series_val, rule_val)
 
 
@@ -171,13 +157,13 @@ def _op_less_than_or_equal(series_val, rule_val):
 
 
 def _op_starts_with(series_val, rule_val):
-    """Returns True where the series string starts with the rule string."""
-    return _as_str_series(series_val).str.startswith(rule_val, na=False)
+    """Returns True where the series text starts with the rule text (case and spaces ignored)."""
+    return _fold(series_val).str.startswith(_fold_value(rule_val), na=False)
 
 
 def _op_ends_with(series_val, rule_val):
-    """Returns True where the series string ends with the rule string."""
-    return _as_str_series(series_val).str.endswith(rule_val, na=False)
+    """Returns True where the series text ends with the rule text (case and spaces ignored)."""
+    return _fold(series_val).str.endswith(_fold_value(rule_val), na=False)
 
 
 def _op_is_empty(series_val, rule_val):
@@ -427,15 +413,13 @@ def _op_in_list(series_val, rule_val):
         logger.warning("[RULE ENGINE] Empty list value for 'in list' operator")
         return pd.Series([False] * len(series_val), index=series_val.index)
 
-    # Parse: split, strip, lowercase
-    list_values = [v.strip().lower() for v in str(rule_val).split(",") if v.strip()]
+    # Parse: split, then fold each item as the text operators do
+    list_values = [_fold_value(v) for v in str(rule_val).split(",") if v.strip()]
 
     if not list_values:
         return pd.Series([False] * len(series_val), index=series_val.index)
 
-    # Case-insensitive comparison
-    series_lower = series_val.astype(str).str.strip().str.lower()
-    return series_lower.isin(list_values)
+    return _fold(series_val).isin(list_values)
 
 
 def _op_not_in_list(series_val, rule_val):
@@ -465,8 +449,7 @@ def _op_not_in_list(series_val, rule_val):
         logger.warning("[RULE ENGINE] Empty list value for 'not in list' operator")
         return pd.Series([False] * len(series_val), index=series_val.index)
 
-    list_values = [v.strip().lower() for v in str(rule_val).split(",") if v.strip()]
-    if not list_values:
+    if not any(v.strip() for v in str(rule_val).split(",")):
         return pd.Series([False] * len(series_val), index=series_val.index)
 
     return ~_op_in_list(series_val, rule_val)
@@ -723,11 +706,19 @@ class RuleEngine:
         priority first; a rule with no priority runs after every prioritised
         one below 1000, in list order (1000, 1001, ...). Stable. The Rules
         page lists rules with this, so what it shows is what runs.
+
+        The default priorities go to the rules that are on first, in list
+        order, and only then to the rules that are off -- as the engine,
+        which drops the off rules before numbering, gives them. Otherwise an
+        off rule would take 1000 and push an on rule past one stored at 1000
+        (AUDIT-08-R3).
         """
-        defaults = iter(range(1000, 1000 + len(rules)))
+        unprioritised = [i for i, r in enumerate(rules) if "priority" not in r]
+        on_first = sorted(unprioritised, key=lambda i: rules[i].get("enabled", True) is False)
+        defaults = {i: 1000 + n for n, i in enumerate(on_first)}
         keys = [
-            (r.get("level") == "order", r["priority"] if "priority" in r else next(defaults))
-            for r in rules
+            (r.get("level") == "order", r["priority"] if "priority" in r else defaults[i])
+            for i, r in enumerate(rules)
         ]
         return [r for _, r in sorted(zip(keys, rules), key=lambda kr: kr[0])]
 

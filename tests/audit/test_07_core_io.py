@@ -31,7 +31,7 @@ import shopify_tool.profile_manager as profile_manager_module
 from gui.main_window_pyside import MainWindow
 from shared.atomic_write import atomic_write_json
 from shopify_tool import core, fulfillment_history, session_state
-from shopify_tool.analysis import run_analysis
+from shopify_tool.analysis import lot_table, run_analysis
 from shopify_tool.profile_manager import ProfileManager
 
 NO_HISTORY = pd.DataFrame({"Order_Number": []})
@@ -223,7 +223,6 @@ def test_AUDIT_07_H4_a_packing_tool_write_refreshes_one_entry(sessions, monkeypa
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M1: lots skip qty <= 0, the total nets it")
 def test_AUDIT_07_M1_a_lot_column_does_not_change_the_answer():
     """Either owner rule (net negatives against the oldest lots, or cap lot
     availability at the SKU total) gives both paths the same answer."""
@@ -240,6 +239,10 @@ def test_AUDIT_07_M1_a_lot_column_does_not_change_the_answer():
 
     assert outcome(no_lots) == ("Not Fulfillable", 7.0, 7.0)
     assert outcome(lots) == outcome(no_lots)
+
+    table = lot_table(pd.DataFrame({"SKU": ["A", "A"], "Stock": [10, -3],
+                                    "Expiry_Date": ["2027-01-01", "2027-02-01"]}))
+    assert [(lot["expiry"], lot["qty"]) for lot in table["A"]] == [("2027-01-01", 7.0)]
 
 
 # --------------------------------------------------------------------------

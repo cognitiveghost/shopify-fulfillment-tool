@@ -115,3 +115,47 @@ def test_an_order_under_two_raw_keys_draws_once():
     df = frame([(1001, "A", 1, FF), ("1001 ", "A", 1, FF), ("1002", "A", 1, FF)])
     out = analysis.with_lots(df, lots)
     assert [shares(d) for d in out["Lot_Details"]] == [[("E", 1.0)]] * 3
+
+
+def _stock(rows):
+    """(sku, stock, expiry, batch) rows; None is a blank cell."""
+    return pd.DataFrame(rows, columns=["SKU", "Stock", "Expiry_Date", "Batch"])
+
+
+def _lots(table, sku="A"):
+    return [(lot["expiry"], lot["batch"], lot["qty"]) for lot in table[sku]]
+
+
+def test_a_negative_row_nets_its_own_lot_first():
+    t = analysis.lot_table(_stock([("A", 5, "2027-01-01", "B1"), ("A", 10, "2027-03-01", "B2"),
+                                   ("A", -4, "2027-03-01", "B2")]))
+    assert _lots(t) == [("2027-01-01", "B1", 5.0), ("2027-03-01", "B2", 6.0)]
+
+
+def test_a_negative_remainder_nets_in_draw_order():
+    t = analysis.lot_table(_stock([("A", 5, None, None), ("A", 10, "2027-01-01", None),
+                                   ("A", -7, "2027-05-01", None)]))
+    assert _lots(t) == [("2027-01-01", None, 8.0)]
+
+
+def test_undated_unbatched_lots_are_drawn_first():
+    t = analysis.lot_table(_stock([("A", 3, "2027-01-01", None), ("A", 2, None, None), ("A", 4, None, "B9")]))
+    assert _lots(t) == [("1", None, 2.0), ("2027-01-01", None, 3.0), ("1", "B9", 4.0)]
+
+
+def test_lot_totals_equal_the_sku_total():
+    rows = [("A", 4, "2027-01-01", None), ("A", -1, None, None), ("B", 2, "2027-01-01", None), ("B", -5, None, None)]
+    t = analysis.lot_table(_stock(rows))
+    assert sum(lot["qty"] for lot in t["A"]) == 3.0
+    assert "B" not in t
+
+
+def test_an_order_ships_the_undated_lot_first():
+    orders = pd.DataFrame({"Name": ["#1"], "Lineitem sku": ["A"], "Lineitem quantity": [3],
+                           "Shipping Method": ["DHL"], "Shipping Country": ["BG"]})
+    stock = pd.DataFrame({"Артикул": ["A", "A"], "Име": ["x", "x"], "Наличност": [5, 5],
+                          "Годност": ["2027-01-01", None]})
+    df = analysis.run_analysis(stock, orders, pd.DataFrame({"Order_Number": []}))[0]
+    internal = pd.DataFrame({"SKU": ["A", "A"], "Stock": [5, 5], "Expiry_Date": ["2027-01-01", None]})
+    line = analysis.with_lots(df, analysis.lot_table(internal)).iloc[0]
+    assert [e["expiry"] for e in line["Lot_Details"]] == ["1"]

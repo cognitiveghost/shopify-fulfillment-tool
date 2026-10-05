@@ -265,3 +265,9 @@ def test_count_matches_counts_fulfillable_orders_and_rows():
 
 def test_match_counts_of_an_empty_frame_is_zero():
     assert match_counts(pd.DataFrame()) == (0, 0)
+
+
+def test_a_report_filter_ignores_case_and_spaces():
+    df = pd.DataFrame({"Order_Number": ["#1", "#2"], "Shipping_Provider": ["DHL", "UPS"]})
+    out = apply_report_filters(df, [{"field": "Shipping_Provider", "operator": "equals", "value": " dhl"}])
+    assert out["Order_Number"].tolist() == ["#1"]

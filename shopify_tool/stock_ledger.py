@@ -91,6 +91,19 @@ def is_fulfillable(df, order_number) -> bool:
     return _key(order_number) in fulfillable_orders(df)
 
 
+def unlisted_skus(df, order_numbers) -> list[str]:
+    """The SKUs on these orders' SKU lines that the stock file doesn't list.
+
+    A SKU is unlisted when no row of it has a Final_Stock (AUDIT-09-O3).
+    Sorted; [] when the frame has no ledger columns.
+    """
+    if not _has_ledger(df):
+        return []
+    listed = df["Final_Stock"].notna().groupby(df["SKU"]).any()
+    wanted = _keys(df).isin({_key(o) for o in order_numbers}) & _sku_lines(df)
+    return sorted({str(sku) for sku in df.loc[wanted, "SKU"] if not listed.get(sku, False)})
+
+
 def drawing_rows(df) -> pd.Series:
     """Row mask: the SKU lines of fulfillable orders, the rows R2 draws from."""
     if df is None or df.empty or "Order_Fulfillment_Status" not in df.columns:
