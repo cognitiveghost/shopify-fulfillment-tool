@@ -33,6 +33,20 @@ pandas.
 | O5 | Med | multi-PC | Packing-list JSON is written non-atomically, and a failed `analysis_data.json` build writes an empty session |
 | O6–O8 | Low | exports | See bottom |
 
+## Verification, 2026-10-05
+
+Re-checked on `origin/main` at `afd2397`. Every finding holds except one part of O4 (below). Each High and
+Medium finding has a strict-xfail test in `tests/audit/test_09_outputs_sets_ledger.py`, confirmed to fail on its
+own assertion.
+
+| # | Evidence now | What the test shows |
+|---|---|---|
+| O1 | confirmed-run | 14.5–17.0 s to decode 15,000 lines. Ceiling in the test: 1 s |
+| O2 | confirmed-run | 9.6–11.2 s for 5,000 orders. Ceiling: 2 s. The GUI-thread part (report generation) has no test yet; it depends on the Group D design |
+| O3 | confirmed-run | The toggle force-fulfils `X` with no message; bulk "mark fulfillable" toasts "1 order marked fulfillable". The tests accept either owner rule: refuse, or allow and warn |
+| O4 | confirmed-run, **BOM part not reproduced** | `SET-1 ` / `A ` stay unexpanded. The BOM claim does not hold: pandas' C parser strips a UTF-8 BOM, and a BOM CSV imports correctly (pinned by an unmarked test) |
+| O5 | confirmed-run | The packing-list JSON is opened in place; a build error re-saves `analysis_data.json` with 0 orders over a good one, and the run reports success |
+
 ---
 
 ## High
@@ -102,9 +116,9 @@ order SET-1 expanded: False
 ```
 
 The set line then goes to allocation as an unknown SKU and the order is held for no visible reason. The
-component `A ` would not match stock `A` either. The import also reads without `utf-8-sig`, so an Excel
-CSV with a BOM fails with "missing required columns". **Fix direction:** `normalize_sku` both keys on
-import and when building the decoder lookup.
+component `A ` would not match stock `A` either. ~~The import also reads without `utf-8-sig`, so an Excel
+CSV with a BOM fails with "missing required columns".~~ **Not reproduced** (verification above): pandas
+strips the BOM. **Fix direction:** `normalize_sku` both keys on import and when building the decoder lookup.
 
 ### O5. Packing Tool files written non-atomically [confirmed-read]
 
