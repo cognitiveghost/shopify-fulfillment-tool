@@ -9,6 +9,7 @@ U3 (untested undo and rule paths) is a coverage finding with no single
 failing behaviour; the closing coverage PR (plan step 4) answers it.
 """
 
+import json
 import logging
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -52,15 +53,19 @@ def _window(df, session_path=None):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-U1: on_analysis_complete keeps the old history")
-def test_AUDIT_08_U1_undo_after_a_rerun_does_not_duplicate_an_order(tmp_path):
-    orders = pd.DataFrame(
-        {"Name": ["#1", "#2", "#3"], "Lineitem sku": ["A", "B", "A"],
-         "Lineitem quantity": [1, 1, 1], "Shipping Method": ["DHL"] * 3,
-         "Shipping Country": ["BG"] * 3}
+_U1_ORDERS = pd.DataFrame(
+    {"Name": ["#1", "#2", "#3"], "Lineitem sku": ["A", "B", "A"],
+     "Lineitem quantity": [1, 1, 1], "Shipping Method": ["DHL"] * 3,
+     "Shipping Country": ["BG"] * 3}
+)
+_U1_STOCK = pd.DataFrame({"Артикул": ["A", "B"], "Име": ["a", "b"], "Наличност": [5, 5]})
+
+
+def _order_removed_then_rerun(tmp_path):
+    """Remove order #2, then re-run the analysis in the same session."""
+    mw = _window(
+        run_analysis(_U1_STOCK, _U1_ORDERS, NO_HISTORY)[0], session_path=str(tmp_path)
     )
-    stock = pd.DataFrame({"Артикул": ["A", "B"], "Име": ["a", "b"], "Наличност": [5, 5]})
-    mw = _window(run_analysis(stock, orders, NO_HISTORY)[0], session_path=str(tmp_path))
     handler = ActionsHandler(mw)
     handler._record_analysis_stats_async = Mock()  # the server stats file
 
@@ -73,12 +78,27 @@ def test_AUDIT_08_U1_undo_after_a_rerun_does_not_duplicate_an_order(tmp_path):
     mw.analysis_results_df = mw.analysis_results_df[~mask].reset_index(drop=True)
 
     # Then re-runs the analysis on the same orders file, in the same session.
-    rerun_df, rerun_stats = run_analysis(stock, orders, NO_HISTORY)
+    rerun_df, rerun_stats = run_analysis(_U1_STOCK, _U1_ORDERS, NO_HISTORY)
     handler.on_analysis_complete((True, str(tmp_path), rerun_df, rerun_stats))
+    return mw
+
+
+def test_AUDIT_08_U1_undo_after_a_rerun_does_not_duplicate_an_order(tmp_path):
+    mw = _order_removed_then_rerun(tmp_path)
     if mw.undo_manager.can_undo():
         mw.undo_manager.undo()
 
     assert int((mw.analysis_results_df["Order_Number"] == "#2").sum()) == 1
+
+
+def test_a_rerun_empties_the_saved_undo_history(tmp_path):
+    """Reopening the session must not bring the old run's operations back."""
+    mw = _order_removed_then_rerun(tmp_path)
+
+    history_file = tmp_path / "analysis" / "operations_history.json"
+    assert json.loads(history_file.read_text(encoding="utf-8"))["operations"] == []
+    assert mw.undo_manager.can_undo() is False
+    mw.results_bridge.set_undo_available.assert_called_with(False)
 
 
 # --------------------------------------------------------------------------

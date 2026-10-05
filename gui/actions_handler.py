@@ -273,6 +273,13 @@ class ActionsHandler(QObject):
                 self.mw.session_path, self.mw.active_profile_config
             )
             self.mw.analysis_stats = stats
+            # Every recorded operation points at the previous run's frame:
+            # undoing a removal then put the order in twice (AUDIT-08-U1).
+            # clear_history() also saves the empty history, so reopening the
+            # session can't bring the old operations back.
+            if hasattr(self.mw, "undo_manager"):
+                self.mw.undo_manager.clear_history()
+                self._update_undo_button()
             # run_full_analysis just rewrote current_state.pkl; without this
             # the first edit after every analysis is refused as stale.
             if self.mw.session_path:
