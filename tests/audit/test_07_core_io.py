@@ -393,7 +393,6 @@ def test_AUDIT_07_M6_a_run_leaves_the_callers_column_mappings_alone(tmp_path):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M7: the save error turns a good read into None")
 @pytest.mark.parametrize(
     "file_name, dropped_key, load",
     [

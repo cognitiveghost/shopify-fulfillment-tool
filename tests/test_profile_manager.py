@@ -281,6 +281,35 @@ class TestSaveIsAtomic:
         assert "shutil.move" not in src
 
 
+class TestMigrationThatCannotSave:
+    """AUDIT-07-M7: a locked file on the share must not hide a readable config."""
+
+    def test_a_failed_migration_save_is_retried_on_the_next_load(
+        self, profile_manager, monkeypatch
+    ):
+        profile_manager.create_client_profile("M", "Client")
+        config_path = profile_manager.get_client_directory("M") / "shopify_config.json"
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        del data["weight_config"]  # an older file: migrate_add_weight_config fires
+        config_path.write_text(json.dumps(data), encoding="utf-8")
+        ProfileManager._config_cache.clear()
+
+        def locked_by_another_pc(path, *_args, **_kwargs):
+            raise PermissionError(13, "being used by another process", str(path))
+
+        monkeypatch.setattr(
+            "shopify_tool.profile_manager.atomic_write_json", locked_by_another_pc
+        )
+        first = profile_manager.load_shopify_config("M")
+        assert "weight_config" in first  # migrated in memory
+        assert "weight_config" not in json.loads(config_path.read_text(encoding="utf-8"))
+
+        monkeypatch.undo()  # the other PC lets go
+        profile_manager.load_shopify_config("M")
+
+        assert "weight_config" in json.loads(config_path.read_text(encoding="utf-8"))
+
+
 class TestUpdateShopifyConfig:
     """AUDIT-07-H1: one change saved over the config as it is on disk now."""
 
