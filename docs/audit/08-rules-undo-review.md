@@ -19,7 +19,7 @@ Benchmark frame for the timings: 5,000 orders × 3 lines = 15,000 rows, built th
 | R1 | High | speed | Order-level rules run as a Python loop per order: one rule takes 8.0 s on 5,000 orders |
 | R2 | Med | speed | Date operators parse cell by cell, trying up to 6 formats: 3.45 s per condition on 15,000 rows, plus a log line per bad cell |
 | U2 | Med | speed | Each undo record stores whole rows; one bulk edit of 6,000 lines writes about 9.9 MB, rewritten on every edit and undo |
-| U3 | Med | tests | Most undo handlers have no test; `undo_manager.py` is 51% covered |
+| U3 | Med | tests | Most undo handlers have no test; `undo_manager.py` is 55% covered |
 | R3 | Low | rules | The Rules page order differs from the run order when a disabled rule has no priority |
 | R4 | Low | rules | Text operators disagree on case and whitespace (`equals` is exact, `in list` is not) |
 | R5 | Low | rules | `ADD_PRODUCT` copies set-tracking fields from the line it was triggered on |
@@ -99,15 +99,13 @@ store only the changed columns plus positions. Keep whole rows only for removals
 
 ### U3. Most undo handlers are untested [confirmed-run]
 
-I measured coverage over the rules and undo test files (`test_rules`, `test_rule_settle`, `test_rule_test`,
-`test_undo_manager`, `test_actions_handler`, `test_actions_handler_bulk`, `tests/audit`). That is 270
-tests, all passing: `rules.py` is **76%** covered and `undo_manager.py` **51%**.
+Across the full suite (3,571 tests), `rules.py` is **77%** covered and `undo_manager.py` **55%**.
 
 These undo paths never run under test:
 
 - the wrong-client and wrong-session guard (`:153-165`)
 - the toggle-status fallback when the recorded positions no longer match (`:285-308`)
-- the single-order `add_tag` and `add_internal_tag` undos (`:320-384`)
+- the single-order `add_tag` undo (`:320-346`)
 - `remove_item` (`:396-407`)
 - loading a corrupt history file (`:492-499`)
 - `bulk_remove_tag`, `bulk_remove_sku` and `bulk_remove_orders_with_sku` (`:634-714`)
@@ -147,8 +145,9 @@ and `has_product` (`:1450-1579`).
 
 ## Test suite
 
-`ruff check .` passes. The full-suite run with coverage was still going when this report was first
-committed; its result is added here when it finishes.
+Full suite on the repo's `.venv` (Python 3.14, offscreen): **3,571 passed, 0 failed** in 9 min 9 s.
+`ruff check .` passes. The suite is green, but per U3 a green run does not cover the undo paths
+most likely to break.
 
 ## Suggested order
 
