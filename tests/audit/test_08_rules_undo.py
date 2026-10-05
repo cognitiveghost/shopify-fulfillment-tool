@@ -170,7 +170,6 @@ def test_AUDIT_08_R2_a_bad_date_column_logs_one_line(benchmark_frame, caplog):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-U2: every column of every affected row")
 def test_AUDIT_08_U2_one_bulk_status_change_keeps_the_history_small(benchmark_frame, tmp_path):
     """Audit: about 9.9 MB for 6,000 lines x 44 columns, rewritten on every
     edit and undo. Changed columns plus positions fit in well under 2 MB."""

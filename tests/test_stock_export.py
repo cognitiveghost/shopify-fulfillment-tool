@@ -754,3 +754,16 @@ def test_the_stock_export_never_holds_a_negative_quantity(tmp_path, monkeypatch,
     stock_export.create_stock_export(analysis_df=frame, output_file=str(tmp_path / "e.xls"),
                                      report_name="ERP", filters=[], writeoff_mode="off", tag_categories={})
     assert (written[0][stock_export.QTY_COL] > 0).all()
+
+
+def test_a_merge_reads_the_run_report_when_the_pickle_is_unreadable(tmp_path):
+    from shopify_tool import stock_export
+
+    session = tmp_path / "2026-10-05_1"
+    (session / "analysis").mkdir(parents=True)
+    (session / "analysis" / "current_state.pkl").write_bytes(b"not a pickle")
+    pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [2],
+                  "Order_Fulfillment_Status": ["Fulfillable"]}).to_excel(
+        session / "analysis" / "fulfillment_analysis.xlsx", index=False)
+    out = stock_export.merge_session_stock_exports([session])
+    assert out.loc[out["Артикул"] == "A", stock_export.QTY_COL].tolist() == [2]

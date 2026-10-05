@@ -637,17 +637,19 @@ class ProfileManager:
             logger.exception("Failed to load shopify config")
             return None
 
-    def save_shopify_config(self, client_id: str, config: dict) -> bool:
+    def save_shopify_config(self, client_id: str, config: dict, backup: bool = True) -> bool:
         """Save Shopify configuration atomically, with a backup.
 
         The write goes through shared/atomic_write.py, so a reader sees either
         the whole old document or the whole new one. Concurrent writers are
         last-writer-wins, not serialised -- see ADR 0008.
-        Creates automatic backup before saving.
+        Creates automatic backup before saving, unless `backup` is False.
 
         Args:
             client_id (str): Client ID
             config (Dict): Configuration to save
+            backup (bool): Copy the current file to backups/ first. Inventory
+                memory passes False (see save_inventory_memory).
 
         Returns:
             bool: True if saved successfully
@@ -665,7 +667,7 @@ class ProfileManager:
             )
 
         # Create backup before saving
-        if config_path.exists():
+        if backup and config_path.exists():
             self._create_backup(client_id, config_path, "shopify_config")
 
         # Update timestamp
@@ -736,6 +738,13 @@ class ProfileManager:
     ) -> bool:
         """Persist final stock snapshot to shopify_config inventory_memory section.
 
+        Makes no config backup (AUDIT-07-M5). Memory is derived data, rebuilt
+        from the session's state on its next save or by the next run, so a
+        backup of it restores nothing the session doesn't already hold, and
+        memory follows every edit: with backups on, a day of edits rotated the
+        last Settings change out of the 10 backup slots. Those slots now hold
+        Settings changes only.
+
         Args:
             session: Name of the session whose state this snapshot is. Only
                 that session may later rewrite memory from its edits.
@@ -771,7 +780,7 @@ class ProfileManager:
         if names_dict is not None:
             updates["names"] = {str(k): str(v) for k, v in names_dict.items()}
         config["inventory_memory"].update(updates)
-        return self.save_shopify_config(client_id, config)
+        return self.save_shopify_config(client_id, config, backup=False)
 
     def get_inventory_memory(self, client_id: str) -> dict:
         """Return inventory_memory dict; empty dict if not set."""

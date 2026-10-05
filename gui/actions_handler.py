@@ -166,6 +166,18 @@ class ActionsHandler(QObject):
             )
             return
 
+        # Repeat detection reads history, and inventory memory feeds the run:
+        # the last edit's background writes must land first (AUDIT-07-H2).
+        queue = getattr(self.mw, "write_queue", None)
+        if queue is not None and not queue.flush(timeout=30):
+            self.log.warning(f"Analysis not started: writes still pending {queue.pending()}")
+            toast(
+                self.mw,
+                "Your last changes are still being saved. Run the analysis again in a moment.",
+                role="info",
+            )
+            return
+
         self.mw._analysis_running = True
         self.mw._analysis_step = 0
         self.mw._analysis_cancelling = False

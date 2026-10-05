@@ -333,3 +333,19 @@ class TestUpdateShopifyConfig:
     def test_raises_for_a_missing_client(self, profile_manager):
         with pytest.raises(ProfileManagerError):
             profile_manager.update_shopify_config("NOPE", lambda cfg: None)
+
+
+class TestConfigBackups:
+    """Settings saves keep a backup; inventory-memory saves don't (AUDIT-07-M5)."""
+
+    def test_a_settings_save_still_makes_a_backup(self, profile_manager):
+        profile_manager.create_client_profile("M", "Client")
+        cfg = profile_manager.load_shopify_config("M")
+        profile_manager.save_shopify_config("M", cfg)
+        backups = list((profile_manager.clients_dir / "CLIENT_M" / "backups").glob("shopify_config_*.json"))
+        assert len(backups) == 1
+
+    def test_a_memory_save_makes_no_backup(self, profile_manager):
+        profile_manager.create_client_profile("M", "Client")
+        profile_manager.save_inventory_memory("M", {"A": 1}, session="S")
+        assert list((profile_manager.clients_dir / "CLIENT_M" / "backups").glob("shopify_config_*.json")) == []

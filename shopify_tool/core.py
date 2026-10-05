@@ -1347,28 +1347,33 @@ def _save_results_and_reports(
     # file is written, so it carries any warning.
     if history_readable:
         history_file = fulfillment_history.history_path(profile_manager, client_id)
-        if not fulfillment_history.record_session(history_file, current_session, final_df):
+        # Only the run prunes rows of deleted session folders (AUDIT-07-L1).
+        existing_sessions = (
+            fulfillment_history.session_folders(Path(session_path).parent, current_session)
+            if session_path
+            else None
+        )
+        if not fulfillment_history.record_session(
+            history_file, current_session, final_df, existing_sessions=existing_sessions
+        ):
             stats["history_warning"] = HISTORY_WARNING
     else:
         stats["history_warning"] = HISTORY_WARNING
 
-    # Save initial state files (current_state.pkl, current_state.xlsx, analysis_stats.json)
+    # Save initial state files (current_state.pkl, analysis_stats.json). No
+    # current_state.xlsx: fulfillment_analysis.xlsx above is the readable copy
+    # of the run, and an edit no longer mirrors its state to Excel (AUDIT-07-H2).
     if use_session_mode:
         try:
             logger.info("Saving initial session state files...")
 
             # Define file paths
             current_state_pkl = Path(analysis_dir) / "current_state.pkl"
-            current_state_xlsx = Path(analysis_dir) / "current_state.xlsx"
             stats_json = Path(analysis_dir) / "analysis_stats.json"
 
             # Save DataFrame to pickle (fast loading)
             logger.info(f"Saving current_state.pkl: {current_state_pkl}")
             final_df.to_pickle(current_state_pkl)
-
-            # Save DataFrame to Excel (backup, human-readable)
-            logger.info(f"Saving current_state.xlsx: {current_state_xlsx}")
-            final_df.to_excel(current_state_xlsx, index=False)
 
             # Save statistics to JSON
             logger.info(f"Saving analysis_stats.json: {stats_json}")

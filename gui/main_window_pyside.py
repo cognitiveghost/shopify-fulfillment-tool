@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gui.actions_handler import ActionsHandler
-from gui.components import show_error, toast
+from gui.components import ConfirmDialog, show_error, toast
 from gui.components.commandbar import BarState
 from gui.file_handler import FileHandler
 from gui.log_buffer import ACTIVITY, EXECUTION
@@ -23,6 +23,14 @@ from gui.log_entry import LogEntry
 from gui.log_handler import QtLogHandler
 from gui.results_bridge import normalize_column_settings
 from gui.selection_helper import SelectionHelper
+from gui.session_write_queue import (
+    ANALYSIS_STATS,
+    HISTORY,
+    INVENTORY_MEMORY,
+    SESSION_INFO,
+    SessionWriteQueue,
+    submit_or_run,
+)
 from gui.ui_manager import UIManager
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
@@ -38,27 +46,26 @@ from shopify_tool.undo_manager import UndoManager
 logger = logging.getLogger(__name__)
 
 
-def follow_inventory_memory(mw):
+def follow_inventory_memory(profile_manager, client_id: str, session_path: str, df: pd.DataFrame) -> None:
     """Memory follows this session's state only while this session owns it.
 
     Module-level, not a method, so the save-path tests can call
-    MainWindow.save_session_state on a plain namespace.
+    MainWindow.save_session_state on a plain namespace. Takes its inputs, not
+    the window, because it runs on the write queue's thread (AUDIT-07-H2).
     """
-    this = Path(mw.session_path).name
-    memory = mw.profile_manager.get_inventory_memory(mw.current_client_id) or {}
+    this = Path(session_path).name
+    memory = profile_manager.get_inventory_memory(client_id) or {}
     if memory.get("session") != this:
         logger.info(
             f"Inventory memory belongs to {memory.get('session')!r}; not rewriting it from {this}"
         )
         return
-    baseline = core.read_memory_baseline(mw.session_path)
+    baseline = core.read_memory_baseline(session_path)
     if baseline is None:
         return
-    snapshot = core.build_inventory_snapshot(
-        mw.analysis_results_df, core.baseline_stock_df(baseline)
-    )
-    mw.profile_manager.save_inventory_memory(
-        mw.current_client_id, snapshot, names_dict=baseline.get("names") or None, session=this
+    snapshot = core.build_inventory_snapshot(df, core.baseline_stock_df(baseline))
+    profile_manager.save_inventory_memory(
+        client_id, snapshot, names_dict=baseline.get("names") or None, session=this
     )
 
 
@@ -118,6 +125,9 @@ class MainWindow(QMainWindow):
         # current_state.pkl as this PC last loaded or saved it (ADR 0011).
         self._state_stamp = None
         self.threadpool = QThreadPool()
+        # Every file derived from a save is written here, off the click (AUDIT-07-H2).
+        self.write_queue = SessionWriteQueue(self)
+        self.write_queue.failed.connect(self._on_session_write_failed)
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
         self._analysis_running = False  # Guard against duplicate analysis runs
         self._analysis_step = 0  # index into core.ANALYSIS_STEPS while a run is going
@@ -705,10 +715,13 @@ class MainWindow(QMainWindow):
         self.load_existing_session(session_path)
 
     def save_session_state(self):
-        """Save current analysis state to session directory.
+        """Save the current analysis state to the session directory.
 
-        Saves both pickle (fast) and Excel (backup) formats.
-        Only saves if session exists and analysis data is present.
+        Only `current_state.pkl` is written before this returns. The files
+        derived from it -- fulfilment history, inventory memory,
+        `analysis_stats.json` and the session's order counts -- go to the
+        write queue, from a snapshot taken here (AUDIT-07-H2). Without a
+        queue (a plain namespace in a test) they are written now.
 
         This method is called after every DataFrame modification to ensure
         state persistence across session reloads. A save another PC has made
@@ -748,56 +761,65 @@ class MainWindow(QMainWindow):
             )
             return
 
+        # One snapshot for every job: they run later, on the queue's thread,
+        # and never read the window.
+        queue = getattr(self, "write_queue", None)
+        session_path = str(self.session_path)
+        df = self.analysis_results_df.copy()
+        profile_manager = getattr(self, "profile_manager", None)
+        client_id = getattr(self, "current_client_id", None)
+
         # History follows the saved state, not the run (ADR 0012). A failure
         # heals on the next save, which rewrites this session's rows whole.
-        # ponytail: history write (and memory follow below) on the GUI thread; move to the threadpool with a
-        # per-session coalescing queue if saves feel slow on the share
-        try:
-            fulfillment_history.record_session(
-                fulfillment_history.history_path(
-                    self.profile_manager, self.current_client_id
-                ),
-                Path(self.session_path).name,
-                self.analysis_results_df,
+        if profile_manager is not None and client_id:
+            history_path = fulfillment_history.history_path(profile_manager, client_id)
+            session_name = Path(session_path).name
+            submit_or_run(
+                queue, session_path, HISTORY,
+                lambda: fulfillment_history.record_session(history_path, session_name, df),
             )
-        except Exception:
-            logger.exception("Failed to record fulfillment history")
+        else:
+            logger.warning("No client to record fulfillment history for; not recorded")
 
         profile = getattr(self, "active_profile_config", None) or {}
         inv = profile.get("inventory_memory") or {}
         if inv.get("enabled"):
-            try:
-                follow_inventory_memory(self)
-            except Exception:
-                logger.exception("Failed to update inventory memory from the session")
+            submit_or_run(
+                queue, session_path, INVENTORY_MEMORY,
+                lambda: follow_inventory_memory(profile_manager, client_id, session_path, df),
+            )
 
-        # current_state.pkl above is the state; these only mirror it, so a
-        # failure here is logged, not shown.
-        analysis_dir = Path(self.session_path) / "analysis"
-        try:
-            self.analysis_results_df.to_excel(analysis_dir / "current_state.xlsx", index=False)
-            if self.analysis_stats:
-                atomic_write_json(analysis_dir / "analysis_stats.json", self.analysis_stats)
-        except Exception:
-            logger.exception("Failed to write the session state backups")
+        # current_state.pkl above is the state; this only mirrors it.
+        if self.analysis_stats:
+            stats = dict(self.analysis_stats)
+            stats_path = Path(session_path) / "analysis" / "analysis_stats.json"
+            submit_or_run(queue, session_path, ANALYSIS_STATS, lambda: atomic_write_json(stats_path, stats))
 
         # The browser's Blocked column reads these counts (AUDIT-05-6).
         session_manager = getattr(self, "session_manager", None)
         if session_manager is not None:
-            try:
-                session_manager.update_session_info(
-                    self.session_path, session_state.order_counts(self.analysis_results_df)
-                )
-            except Exception:
-                logger.exception("Failed to update the session's order counts")
+            submit_or_run(
+                queue, session_path, SESSION_INFO,
+                lambda: session_manager.update_session_info(session_path, session_state.order_counts(df)),
+            )
+
+    def _on_session_write_failed(self, session_path: str, kind: str) -> None:
+        """A background write failed (logged by the queue). On the GUI thread."""
+        texts = {
+            HISTORY: "Fulfilment history wasn't saved. It's saved again with your next change.",
+            INVENTORY_MEMORY: "Inventory memory wasn't updated. It's updated again with your next change.",
+        }
+        if kind in texts:
+            toast(self, texts[kind], role="info")
 
     def _load_session_analysis(self, session_path):
         """Load analysis data from session directory.
 
         Priority order:
-        1. current_state.pkl (fastest, reflects latest modifications)
-        2. current_state.xlsx (backup if pickle corrupted)
-        3. analysis_report.xlsx (original analysis output)
+        1. current_state.pkl (reflects the latest modifications)
+        2. fulfillment_analysis.xlsx, then the legacy analysis_report.xlsx:
+           the run's report, without later edits. Gated on analysis_data.json.
+           current_state.xlsx is never read (AUDIT-07-H2).
 
         Args:
             session_path: Path to session directory (can be str or Path)
@@ -839,38 +861,13 @@ class MainWindow(QMainWindow):
                     return True
 
                 except Exception as e:
-                    logger.warning(f"Failed to load pickle, trying Excel fallback: {e}")
+                    logger.warning(f"Failed to load pickle, trying the run's report: {e}")
                     # Continue to fallback options
 
-            # Priority 2: Try loading from current_state.xlsx
-            xlsx_path = analysis_dir / "current_state.xlsx"
-            if xlsx_path.exists():
-                try:
-                    logger.info(f"Loading session state from Excel: {xlsx_path}")
-                    self.analysis_results_df = pd.read_excel(xlsx_path)
-
-                    # Load or recalculate statistics
-                    stats_path = analysis_dir / "analysis_stats.json"
-                    if stats_path.exists():
-                        with open(stats_path, "r", encoding="utf-8") as f:
-                            self.analysis_stats = json.load(f)
-                    else:
-                        self.analysis_stats = recalculate_statistics(
-                            self.analysis_results_df
-                        )
-
-                    logger.info(
-                        f"Loaded {len(self.analysis_results_df)} rows from current_state.xlsx"
-                    )
-                    return True
-
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to load current_state.xlsx, trying original report: {e}"
-                    )
-                    # Continue to fallback
-
-            # Priority 3: Fallback to original analysis_report.xlsx
+            # Priority 2: the run's report, fulfillment_analysis.xlsx (or the
+            # legacy analysis_report.xlsx): the run's results, without later
+            # edits. Not current_state.xlsx: it is no longer written, and an
+            # old one can be older than the session's latest run (AUDIT-07-H2).
             # Check for analysis_data.json first (indicates analysis was completed)
             analysis_data_file = analysis_dir / "analysis_data.json"
 
@@ -946,7 +943,15 @@ class MainWindow(QMainWindow):
         previous session's orders stayed loaded and exportable, and the next
         edit saved them into the new session. Leaves session_path to the
         caller.
+
+        Waits up to 10 s for the background writes first, so the session
+        being left has its history and memory on disk before another opens
+        (AUDIT-07-H2). On timeout it carries on: the jobs still land, each on
+        its own session.
         """
+        queue = getattr(self, "write_queue", None)
+        if queue is not None and not queue.flush(timeout=10):
+            logger.warning(f"Background writes still pending while switching sessions: {queue.pending()}")
         self.analysis_results_df = None
         self.analysis_stats = None
         self.lot_table = None
@@ -1098,6 +1103,25 @@ class MainWindow(QMainWindow):
         """
         self.logs_widget.append(LogEntry.activity(op_type, desc), ACTIVITY)
 
+    def _flush_writes_before_close(self) -> None:
+        """Wait for the background writes; ask if the server is slow (AUDIT-07-H2)."""
+        queue = getattr(self, "write_queue", None)
+        if queue is None:
+            return
+        while not queue.flush(timeout=10):
+            confirm = ConfirmDialog(
+                self,
+                title="Still saving this session",
+                body="History and stock memory are still being written to the server. If you "
+                "close now, they're written the next time this session is saved.",
+                verb="Close anyway",
+            )
+            # Cancel waits: say so on the button.
+            confirm.cancel_button.setText("Keep waiting")
+            if confirm.exec():
+                logger.error(f"Closed with background writes pending: {queue.pending()}")
+                return
+
     def closeEvent(self, event):
         """Handles the application window being closed.
 
@@ -1115,6 +1139,7 @@ class MainWindow(QMainWindow):
             logger.warning(f"Failed to save window geometry: {e}")
         # Session data is now managed by SessionManager on the server
         # No need to save local session files
+        self._flush_writes_before_close()
         # Give background workers (e.g. stats recording) a bounded window to
         # finish their network I/O so closing right after an analysis run
         # doesn't kill a write mid-flight -- bounded so a hung write can't

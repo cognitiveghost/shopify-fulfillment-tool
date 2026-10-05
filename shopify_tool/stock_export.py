@@ -400,8 +400,10 @@ def merge_session_stock_exports(
 ) -> pd.DataFrame:
     """Merge fulfillable order quantities from multiple sessions.
 
-    Reads analysis/current_state.pkl from each session directory and extracts
-    quantities from orders with Order_Fulfillment_Status == 'Fulfillable', grouped by SKU.
+    Reads analysis/current_state.pkl from each session directory, or the run's
+    fulfillment_analysis.xlsx when the pickle is missing or unreadable, and
+    extracts quantities from orders with Order_Fulfillment_Status ==
+    'Fulfillable', grouped by SKU.
 
     Args:
         session_paths: List of path-like objects, each pointing to a session directory.
@@ -418,7 +420,9 @@ def merge_session_stock_exports(
         session_path = Path(session_path)
         analysis_dir = session_path / "analysis"
         pkl_file = analysis_dir / "current_state.pkl"
-        xlsx_file = analysis_dir / "current_state.xlsx"
+        # Not current_state.xlsx: it is no longer written, and an old one can
+        # be older than the session's run (AUDIT-07-H2).
+        xlsx_file = analysis_dir / "fulfillment_analysis.xlsx"
 
         df = None
         if pkl_file.exists():

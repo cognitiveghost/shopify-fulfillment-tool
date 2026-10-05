@@ -120,7 +120,7 @@ from gui.actions_handler import ActionsHandler
 from gui.selection_helper import SelectionHelper
 
 
-def _window(df):
+def _window(df, session_path=None):
     window = SimpleNamespace(
         analysis_results_df=df,
         analysis_stats=None,
@@ -129,7 +129,7 @@ def _window(df):
         _update_all_views=Mock(),
         results_bridge=Mock(),
         ui_manager=Mock(),
-        session_path=None,
+        session_path=session_path,
         current_client_id="TEST",
         active_profile_config={"settings": {}},
     )
@@ -181,3 +181,61 @@ def test_undo_of_bulk_delete_restores_row_order():
     ActionsHandler(mw).bulk_delete_orders(["#1", "#3"])
     assert mw.undo_manager.undo()[0]
     assert mw.analysis_results_df["Order_Number"].tolist() == ["#1", "#2", "#3"]
+
+
+# --- Undo records hold the changed columns; the file goes through the queue (AUDIT-08-U2) ---
+
+import json
+
+from session_queue_support import gated
+
+from gui.session_write_queue import SessionWriteQueue
+
+UNDO_FRAME = pd.DataFrame({
+    "Order_Number": ["#1", "#2"], "SKU": ["A", "B"], "Quantity": [1, 1],
+    "Order_Fulfillment_Status": ["Fulfillable"] * 2, "Stock": [5, 5], "Final_Stock": [4.0, 4.0],
+    "Product_Name": ["a", "b"], "Internal_Tags": ["[]", "[]"], "Status_Note": ["", ""],
+})
+
+
+def test_an_edit_record_holds_only_the_order_and_changed_columns(tmp_path):
+    mw = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    ActionsHandler(mw).bulk_change_status(["#1"], False)
+    op = mw.undo_manager.operations[-1]
+    assert set(op["affected_rows_before"][0]) == {"Order_Number", "Order_Fulfillment_Status"}
+
+
+def test_a_removal_record_keeps_whole_rows(tmp_path):
+    mw = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    ActionsHandler(mw).remove_entire_order("#1")
+    op = mw.undo_manager.operations[-1]
+    assert set(op["affected_rows_before"][0]) == set(UNDO_FRAME.columns)
+
+
+def test_a_whole_row_record_from_an_older_build_still_undoes(tmp_path):
+    (tmp_path / "analysis").mkdir()
+    whole_row = {"Order_Number": "#1", "SKU": "A", "Quantity": 1, "Order_Fulfillment_Status": "Fulfillable",
+                 "Stock": 5, "Final_Stock": 4.0, "Product_Name": "a", "Internal_Tags": "[]", "Status_Note": ""}
+    op = {"id": 1, "timestamp": "2026-10-01T10:00:00+03:00", "type": "toggle_status", "description": "t",
+          "params": {"order_number": "#1"}, "affected_rows_before": [whole_row], "row_positions": [0],
+          "stats_before": None, "client_id": "TEST", "session_path": str(tmp_path)}
+    (tmp_path / "analysis" / "operations_history.json").write_text(
+        json.dumps({"operations": [op], "current_position": 1, "max_history": 20}), encoding="utf-8")
+    mw = _window(UNDO_FRAME.iloc[:1].assign(Order_Fulfillment_Status="Not Fulfillable"), session_path=str(tmp_path))
+    mw.undo_manager.reload_session_history()
+    ok, _ = mw.undo_manager.undo()
+    assert ok and mw.analysis_results_df["Order_Fulfillment_Status"].tolist() == ["Fulfillable"]
+
+
+def test_the_undo_file_is_written_by_the_queue(tmp_path, qapp):
+    mw = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    mw.write_queue = SessionWriteQueue()
+    history = tmp_path / "analysis" / "operations_history.json"
+    gate = gated(mw.write_queue)
+    try:
+        mw.undo_manager.record_operation("toggle_status", "t", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
+        assert not history.exists()
+    finally:
+        gate.set()
+    assert mw.write_queue.flush(timeout=5)
+    assert json.loads(history.read_text(encoding="utf-8"))["current_position"] == 1
