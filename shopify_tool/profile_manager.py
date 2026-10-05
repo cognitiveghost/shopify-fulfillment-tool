@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -670,6 +671,33 @@ class ProfileManager:
             size = f"{config_path.stat().st_size:,} bytes, "
         logger.info(f"Config saved for CLIENT_{client_id}: {size}{elapsed_ms:.0f}ms")
         return True
+
+    def update_shopify_config(
+        self, client_id: str, apply: Callable[[dict], None]
+    ) -> dict:
+        """Save one change over the config as it is on disk now.
+
+        A PC's in-memory config is a snapshot from when it opened the client;
+        saving that snapshot whole reverts every other PC's changes since
+        (AUDIT-07-H1). This loads the current file, lets ``apply`` change it,
+        and saves that instead.
+
+        Args:
+            client_id: Client ID
+            apply: Mutates the freshly loaded config in place
+
+        Returns:
+            dict: The config as saved; callers keep it as their copy.
+
+        Raises:
+            ProfileManagerError: If the config can't be loaded or saved
+        """
+        config = self.load_shopify_config(client_id)
+        if config is None:
+            raise ProfileManagerError(f"Shopify config not found: CLIENT_{client_id}")
+        apply(config)
+        self.save_shopify_config(client_id, config)
+        return config
 
     # --- Set/Bundle Management Methods ---
 

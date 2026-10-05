@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from shopify_tool.profile_manager import ProfileManager
+from shopify_tool.profile_manager import ProfileManager, ProfileManagerError
 
 
 class TestValidateClientId:
@@ -279,3 +279,28 @@ class TestSaveIsAtomic:
         assert 'with_suffix(".tmp")' not in src
         assert "msvcrt" not in src
         assert "shutil.move" not in src
+
+
+class TestUpdateShopifyConfig:
+    """AUDIT-07-H1: one change saved over the config as it is on disk now."""
+
+    def test_applies_one_change_over_the_config_on_disk(self, profile_manager):
+        profile_manager.create_client_profile("M", "Client")
+        profile_manager.load_shopify_config("M")  # this PC, before PC-B
+        other_pc = ProfileManager(base_path=str(profile_manager.base_path))
+        fresh = other_pc.load_shopify_config("M")
+        fresh["rules"] = [{"name": "from PC-B"}]
+        other_pc.save_shopify_config("M", fresh)
+
+        saved = profile_manager.update_shopify_config(
+            "M", lambda cfg: cfg.update(analysis_mode="fifo")
+        )
+
+        on_disk = profile_manager.load_shopify_config("M")
+        assert on_disk["analysis_mode"] == "fifo"
+        assert on_disk["rules"] == [{"name": "from PC-B"}]
+        assert saved["rules"] == [{"name": "from PC-B"}]
+
+    def test_raises_for_a_missing_client(self, profile_manager):
+        with pytest.raises(ProfileManagerError):
+            profile_manager.update_shopify_config("NOPE", lambda cfg: None)
