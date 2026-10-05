@@ -81,7 +81,29 @@ synthetic fixtures style from `tests/audit/` and never production data.
 
 ## Coverage at audit time
 
-COVERAGE_TABLE
+Full suite, 3,571 tests, line coverage over `shopify_tool`, `shared` and `gui`: 83% overall. Modules
+below 80% that hold backend logic, lowest first (statements in brackets):
+
+| Module | Cover | Why it matters |
+|---|---|---|
+| `shared/server_connection.py` (127) | 24% | opening without a reachable server (ADR 0004) |
+| `shared/metadata_utils.py` (51) | 33% | session metadata both apps read |
+| `shopify_tool/sku_writeoff.py` (125) | 54% | packaging write-off quantities sent to the ERP |
+| `shopify_tool/undo_manager.py` (366) | 55% | audit 08 U1, U3 |
+| `shopify_tool/groups_manager.py` (192) | 57% | client groups |
+| `shared/file_lock.py` (61) | 57% | history and state locks on the share (07-M4) |
+| `shopify_tool/core.py` (779) | 59% | run orchestration and save step (07-M2, M3) |
+| `shopify_tool/profile_migrations.py` (141) | 63% | config migrations (07-M7) |
+| `shopify_tool/tag_manager.py` (142) | 68% | Internal_Tags used by write-off and rules |
+| `shopify_tool/profile_manager.py` (462) | 71% | config cache, save, backups (07-H1, M5, M7) |
+| `shared/atomic_write.py` (38) | 76% | every atomic JSON write (07-M4) |
+| `shopify_tool/rules.py` (661) | 77% | audit 08 |
+| `shared/stats_manager.py` (235) | 78% | shared stats file, locking |
+| `gui/actions_handler.py` (885) | 72% | every edit verb and report generation (09-O2) |
+
+Targets for the closing coverage PR: 90% for `undo_manager.py`, `rules.py` and `sku_writeoff.py`; 80%
+for `core.py`, `profile_manager.py`, `profile_migrations.py`, `tag_manager.py`, `shared/atomic_write.py`
+and `shared/file_lock.py`. Skip the GUI-only parts of `shared/theme.py`.
 
 ## Done means
 
