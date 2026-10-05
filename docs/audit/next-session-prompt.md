@@ -1,6 +1,7 @@
-# Next session: verify, plan and fix audits 07–09
+# Next session: plan and fix audits 07–09
 
-Paste everything below the line into a new Claude Code session on this repo.
+Paste everything below the line into a new Claude Code session on this repo. Step 1 is done (PR #368); merge
+it first, because the fix groups remove the markers from its tests.
 
 ---
 
@@ -8,6 +9,25 @@ You are fixing the findings of three report-only audits of this repo (Fulfilment
 production on a slow SMB file server, multi-PC). Read `CLAUDE.md` first and follow it, including the
 gate, the git rules (PR-only, branch from `origin/main`) and the token budget note: this account runs on
 a limited budget, so keep each session to one fix group and avoid subagents unless asked.
+
+## Where things stand
+
+- **Step 1 is done** (PR #368): every repro reproduces, and each High and Medium finding has its strict-xfail
+  test in `tests/audit/test_07_core_io.py`, `test_08_rules_undo.py` and `test_09_outputs_sets_ledger.py`.
+  Shared fixtures are in `tests/audit/audit_support.py`. Do not add a `tests/audit/conftest.py`: it shadows
+  `tests/conftest.py`. Read each report's "Verification, 2026-10-05" section. The 09-O4 BOM claim did not
+  reproduce, and there is a new Low, 07-L6.
+- **The owner decisions are made** (2026-10-05, below). Do not ask them again. Copy them into the plan.
+- **This session:** Step 2 (the plan), then fix group A. Stop there.
+
+## Owner decisions
+
+| Finding | Decision |
+|---|---|
+| 07-M1 | A negative stock row is subtracted from the lot with the same expiry and batch first, and any remainder from the oldest lots. Lot totals always equal the SKU total. **Also:** rows with no expiry and no batch are drawn **first**, and the dated or batched lots only after them, earliest expiry first. Today `_build_fifo_lots` sorts no-expiry rows **last**, so this changes existing allocation: update ADR 0015 and say so in the PR. **The stock export must never contain a negative quantity**; add a test for that. |
+| 09-O3 | Allow force-fulfil and bulk "mark fulfillable" on a SKU missing from the stock file, with a warning toast that names the SKU. Do not refuse. |
+| 08-R4 | Every text operator (`equals`, `does not equal`, `starts with`, `ends with`, `contains`, `in list`) ignores case and trims whitespace on both sides. |
+| 07-H2 | Only `current_state.pkl` is written on the click. History, inventory memory, `analysis_stats.json` and `session_info` move to a per-session coalescing background queue, never touching the UI from the worker thread. **Stop writing `current_state.xlsx`** on edits and in the run: the pickle is the state. Opening a session falls back to `fulfillment_analysis.xlsx`. |
 
 ## Inputs
 
@@ -25,10 +45,10 @@ a limited budget, so keep each session to one fix group and avoid subagents unle
   it with `uv venv --python 3.14 .venv` and
   `uv pip install --python .venv/bin/python -r requirements.txt -r requirements-dev.txt`.
 - Gate: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q` and `.venv/bin/ruff check .`
-  (baseline when the audits were written: 3,571 passed, ruff clean).
+  (baseline after Step 1: 3,574 passed, 28 xfailed, ruff clean).
 - Coverage: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q --cov=shopify_tool --cov=shared --cov-report=term-missing`.
 
-## Step 1: verify (one session, no product code)
+## Step 1: verify (DONE in PR #368, kept for reference)
 
 1. Run every script in `docs/audit/repro/` and confirm the output still matches the report.
 2. For each High and Medium finding, write its `xfail(strict=True)` test in
@@ -42,12 +62,8 @@ a limited budget, so keep each session to one fix group and avoid subagents unle
 ## Step 2: plan
 
 Write `docs/superpowers/plans/<date>-audit-07-09-fixes.md` with the fix groups below, each with its
-tests, files and risk. Ask the owner the open decisions first and record the answers in the plan:
-
-- 07-M1: how negative stock rows count when the stock file has lot columns
-- 09-O3: whether force-fulfil may mark an order whose SKU is missing from the stock file
-- 08-R4: one case and whitespace rule for all text operators
-- 07-H2: what may move off the GUI thread after a save, and whether `current_state.xlsx` is still needed
+tests, files and risk. Record the owner decisions above in it. The 07-M1 and 09-O3 xfail tests were written
+to pass under either rule. Tighten them in groups E and F so they assert the chosen rule.
 
 ## Step 3: fix, one PR per group (TDD: the xfail test goes green, then remove the marker)
 
