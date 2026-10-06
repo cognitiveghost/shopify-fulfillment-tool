@@ -454,7 +454,10 @@ class SessionManager:
                 if entry is None or entry.get("_dir_mtime") != dir_mtime:
                     entry = self._index_entry(client_sessions_dir / name, dir_mtime)
                 refreshed.append(entry)
-            self._write_index(client_sessions_dir, refreshed)
+            # A session_info.json that still can't be read is retried on every
+            # listing and rereads the same marker: no write for that.
+            if refreshed != current:
+                self._write_index(client_sessions_dir, refreshed)
         return refreshed
 
     def _write_index(self, client_sessions_dir: Path, entries: list[dict]) -> None:

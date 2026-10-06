@@ -166,6 +166,17 @@ class ActionsHandler(QObject):
             )
             return
 
+        # A report batch writes into this session from the frame it was given
+        # (AUDIT-09-O2): a run now would leave the old run's lists beside the
+        # new one's analysis.
+        if self._reports_worker is not None:
+            toast(
+                self.mw,
+                "Reports are still being generated. Run the analysis again when they're done.",
+                role="info",
+            )
+            return
+
         # Repeat detection reads history, and inventory memory feeds the run:
         # the last edit's background writes must land first (AUDIT-07-H2).
         queue = getattr(self.mw, "write_queue", None)

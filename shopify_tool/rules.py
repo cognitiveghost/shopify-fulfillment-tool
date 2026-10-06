@@ -895,7 +895,7 @@ class RuleEngine:
                 for step_idx, step in enumerate(steps):
                     # Evaluated after the step before it acted, so a later
                     # step's conditions see what an earlier step wrote.
-                    matched = alive & self._order_step_rows(df, keys, step)
+                    matched = alive & self._order_step_rows(df, codes, step)
                     if not matched.any():
                         logger.debug(
                             f"[RULE ENGINE] Order rule '{rule_name}' step "
@@ -1369,11 +1369,12 @@ class RuleEngine:
 
         return new_rows
 
-    def _order_step_rows(self, df: pd.DataFrame, keys: pd.Series, step: dict) -> pd.Series:
+    def _order_step_rows(self, df: pd.DataFrame, codes: np.ndarray, step: dict) -> pd.Series:
         """One bool per row: the step's conditions, combined by its ALL/ANY.
 
-        Every row of an order gets the same answer, and a row whose order
-        number is NaN never matches. A condition the engine cannot evaluate
+        `codes` numbers each row's order (pd.factorize of Order_Number, -1
+        for NaN). Every row of an order gets the same answer, and a row whose
+        order number is NaN never matches. A condition the engine cannot evaluate
         is no match, with one warning for the step.
         """
         import logging
@@ -1393,7 +1394,7 @@ class RuleEngine:
                 results.append(np.zeros(len(df), dtype=bool))
                 continue
             results.append(self._order_condition_rows(
-                df, keys, {"field": field, "operator": operator, "value": value}
+                df, codes, {"field": field, "operator": operator, "value": value}
             ).to_numpy(dtype=bool))
         if errors:
             logger.warning(
@@ -1405,9 +1406,9 @@ class RuleEngine:
             combined = np.logical_and.reduce(results)
         else:
             combined = np.logical_or.reduce(results)
-        return pd.Series(combined & keys.notna().to_numpy(), index=df.index)
+        return pd.Series(combined & (codes >= 0), index=df.index)
 
-    def _order_condition_rows(self, df: pd.DataFrame, keys: pd.Series, condition: dict) -> pd.Series:
+    def _order_condition_rows(self, df: pd.DataFrame, codes: np.ndarray, condition: dict) -> pd.Series:
         """One bool per row for one usable condition on an order rule.
 
         The answer is worked out per order and given to each of its rows;
@@ -1423,7 +1424,6 @@ class RuleEngine:
         operator = condition["operator"]
         value = condition.get("value")
         n = len(df)
-        codes, _ = pd.factorize(keys)
         alive = codes >= 0
         n_orders = int(codes.max()) + 1 if n else 0
         out = np.zeros(n, dtype=bool)

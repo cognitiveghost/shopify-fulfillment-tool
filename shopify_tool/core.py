@@ -122,7 +122,9 @@ def build_packing_orders(df: pd.DataFrame) -> list[dict[str, Any]]:
         list[dict[str, Any]]: Canonical order metadata, with the fields
             Packing Tool reads
     """
-    group_of = df.groupby("Order_Number", sort=True).ngroup().to_numpy()
+    # A row with no order number is in no group: ngroup gives it NaN, which
+    # makes the whole column float; -1 keeps it an integer array for bincount.
+    group_of = df.groupby("Order_Number", sort=True).ngroup().fillna(-1).to_numpy(dtype=np.int64)
     listed = np.flatnonzero(group_of >= 0)
     if len(listed) == 0:
         return []

@@ -781,3 +781,19 @@ def test_a_sku_with_a_trailing_space_is_one_export_row(tmp_path, monkeypatch):
     rows = written[0]
     assert rows["Артикул"].tolist() == ["A"]
     assert rows[stock_export.QTY_COL].tolist() == [3]
+
+
+def test_a_sku_with_a_trailing_space_is_one_lot_export_row(tmp_path, monkeypatch):
+    """AUDIT-09-O7 on the lot path too: "A" and "A " are one article, so a
+    negative "A " line nets against "A"'s lot instead of failing the totals."""
+    from shopify_tool import stock_export
+
+    written = []
+    monkeypatch.setattr(stock_export, "_write_xls", lambda df, path: written.append(df))
+    lot = [{"expiry": "2027-01-01", "batch": None, "qty_allocated": 3}]
+    frame = _analysis_df([{"Order_Number": "#1", "SKU": "A", "Quantity": 3, "Lot_Details": lot},
+                          {"Order_Number": "#2", "SKU": "A ", "Quantity": -1}])
+    stock_export.create_stock_export(analysis_df=frame, output_file=str(tmp_path / "e.xls"), report_name="ERP")
+    rows = written[0]
+    assert rows["Артикул"].tolist() == ["A"]
+    assert rows[stock_export.QTY_COL].tolist() == [2]

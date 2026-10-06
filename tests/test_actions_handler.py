@@ -544,3 +544,16 @@ def test_a_run_is_refused_while_writes_are_still_pending(monkeypatch):
     assert toasts == ["Your last changes are still being saved. Run the analysis again in a moment."]
     assert captured == {}  # no Worker built
     assert mw._analysis_running is False
+
+
+def test_a_run_is_refused_while_reports_are_being_generated(monkeypatch):
+    """A batch in flight writes the old frame's lists into this session."""
+    captured = {}
+    monkeypatch.setattr("gui.actions_handler.Worker", lambda *a, **k: captured.setdefault("worker", Mock()))
+    toasts = []
+    monkeypatch.setattr("gui.actions_handler.toast", lambda src, text, **k: toasts.append(text))
+    handler = ActionsHandler(_run_window())
+    handler._reports_worker = Mock()
+    handler.run_analysis()
+    assert toasts == ["Reports are still being generated. Run the analysis again when they're done."]
+    assert captured == {}

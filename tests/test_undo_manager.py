@@ -275,7 +275,16 @@ def test_a_pc_name_becomes_a_safe_file_name(monkeypatch):
     from shopify_tool import undo_manager
 
     monkeypatch.setenv("COMPUTERNAME", "WH PC/2:ä")
-    assert undo_manager._pc_name() == "WH_PC_2__"
+    assert undo_manager._pc_name() == "WH_PC_2_ä"
+
+
+def test_non_latin_pc_names_of_one_length_get_their_own_undo_files(monkeypatch):
+    from shopify_tool import undo_manager
+
+    monkeypatch.setenv("COMPUTERNAME", "СКЛАД")
+    first = undo_manager._pc_name()
+    monkeypatch.setenv("COMPUTERNAME", "ОФИСИ")
+    assert undo_manager._pc_name() != first
 
 
 def test_recording_after_undo_logs_how_many_steps_it_cleared(tmp_path, caplog):
@@ -290,3 +299,32 @@ def test_recording_after_undo_logs_how_many_steps_it_cleared(tmp_path, caplog):
     with caplog.at_level(logging.INFO, logger="shopify_tool.undo_manager"):
         mw.undo_manager.record_operation("toggle_status", "op 3", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
     assert "Cleared 2 future operations" in caplog.text
+
+
+def test_a_rerun_clears_every_pcs_undo_history(tmp_path, monkeypatch):
+    """AUDIT-08-U1 across PCs: every PC's steps point at the previous run's frame."""
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    stale = {"operations": [{"id": 1}], "current_position": 1, "max_history": 20}
+    for name in ("operations_history_PC-B.json", "operations_history.json"):
+        (analysis / name).write_text(json.dumps(stale), encoding="utf-8")
+    monkeypatch.setenv("COMPUTERNAME", "PC-A")
+    mw = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    mw.undo_manager.clear_history()
+    assert sorted(p.name for p in analysis.iterdir()) == ["operations_history_PC-A.json"]
+
+
+def test_an_edit_right_after_a_rerun_does_not_cancel_the_clear(tmp_path, monkeypatch, qapp):
+    monkeypatch.setenv("COMPUTERNAME", "PC-A")
+    (tmp_path / "analysis").mkdir()
+    (tmp_path / "analysis" / "operations_history_PC-B.json").write_text("{}", encoding="utf-8")
+    mw = _window(UNDO_FRAME.copy(), session_path=str(tmp_path))
+    mw.write_queue = SessionWriteQueue()
+    gate = gated(mw.write_queue)
+    try:
+        mw.undo_manager.clear_history()
+        mw.undo_manager.record_operation("toggle_status", "t", {"order_number": "#1"}, UNDO_FRAME.iloc[:1])
+    finally:
+        gate.set()
+    assert mw.write_queue.flush(timeout=5)
+    assert not (tmp_path / "analysis" / "operations_history_PC-B.json").exists()

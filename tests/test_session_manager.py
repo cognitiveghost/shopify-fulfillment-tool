@@ -419,6 +419,20 @@ class TestIndexRefresh:
         session_manager.list_client_sessions("M")  # the read fails here
         assert [s["session_name"] for s in session_manager.list_client_sessions("M")] == [path.name]
 
+    def test_an_unreadable_session_info_is_retried_without_rewriting_the_index(
+        self, session_manager, monkeypatch
+    ):
+        path = Path(session_manager.create_session("M"))
+        session_manager.list_client_sessions("M")
+        (path / "session_info.json").write_text("{torn", encoding="utf-8")
+        t = path.stat().st_mtime + 5
+        os.utime(path, (t, t))
+        session_manager.list_client_sessions("M")  # records the retry marker
+        reads = _spy(monkeypatch, session_manager, "get_session_info")
+        writes = _spy(monkeypatch, session_manager, "_write_index")
+        session_manager.list_client_sessions("M")
+        assert len(reads) == 1 and writes == []
+
     def test_private_index_keys_never_reach_callers(self, session_manager):
         path = Path(session_manager.create_session("M"))
         (path.parent / "stray").mkdir()

@@ -122,3 +122,11 @@ def test_without_a_status_column_the_status_is_unknown():
     expected = [_order_reference(str(n), g) for n, g in frame.groupby("Order_Number")]
     assert core.build_packing_orders(frame) == expected
     assert {o["status"] for o in expected} == {"Unknown"}
+
+
+def test_a_row_without_an_order_number_is_left_out_not_a_crash():
+    """ngroup gives such a row NaN, which made the group numbers float."""
+    frame = FRAME.astype({"Order_Number": object})
+    frame.loc[9, "Order_Number"] = NAN
+    expected = [_order_reference(str(n), g) for n, g in frame.groupby("Order_Number")]
+    assert core.build_packing_orders(frame) == expected

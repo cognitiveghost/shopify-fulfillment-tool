@@ -93,7 +93,11 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
         qty = pd.to_numeric(qty, errors="coerce")
         if pd.isna(qty):
             continue
-        key = (filtered_items.at[label, "SKU"], expiry, batch)
+        # Stripped, as the product summary and _check_totals key SKUs: "A"
+        # and "A " are one article, and a negative "A " line nets against
+        # "A"'s lots (AUDIT-09-O7).
+        sku = filtered_items.at[label, "SKU"]
+        key = (str(sku).strip() if pd.notna(sku) else sku, expiry, batch)
         totals[key] = totals.get(key, 0) + qty
 
     # A negative line (a manual correction) nets against its own lot, then

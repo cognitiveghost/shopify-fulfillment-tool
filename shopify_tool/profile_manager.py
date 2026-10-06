@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import shutil
+import threading
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -83,6 +84,13 @@ class ProfileManager:
     # correct than TTL — no stale reads after a write, no unnecessary re-reads within a window.
     # Key includes base_path so multiple instances with different roots don't collide.
     _config_cache: ClassVar[dict[str, tuple[dict, float]]] = {}
+
+    # This process's writes of shopify_config.json, one at a time, each
+    # read-modify-write held whole. Inventory memory follows an edit on the
+    # session write queue's thread (AUDIT-07-H2): without this its load-then-
+    # save could revert a Setup-page or Settings save landing in between.
+    # Other PCs stay last-writer-wins (ADR 0008).
+    _config_write_lock = threading.RLock()
 
     # Class-level constants for metadata cache
     METADATA_CACHE_TIMEOUT_SECONDS = 300  # 5 minutes
@@ -666,29 +674,30 @@ class ProfileManager:
                 f"Client profile does not exist: CLIENT_{client_id}"
             )
 
-        # Create backup before saving
-        if backup and config_path.exists():
-            self._create_backup(client_id, config_path, "shopify_config")
+        with self._config_write_lock:
+            # Create backup before saving
+            if backup and config_path.exists():
+                self._create_backup(client_id, config_path, "shopify_config")
 
-        # Update timestamp
-        config["last_updated"] = datetime.now().astimezone().isoformat()
-        config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
+            # Update timestamp
+            config["last_updated"] = datetime.now().astimezone().isoformat()
+            config["updated_by"] = os.environ.get("COMPUTERNAME", "Unknown")
 
-        start_time = time.perf_counter()
-        num_sets = len(config.get("set_decoders", {}))
-        logger.info(f"Saving config for CLIENT_{client_id}: {num_sets} sets")
+            start_time = time.perf_counter()
+            num_sets = len(config.get("set_decoders", {}))
+            logger.info(f"Saving config for CLIENT_{client_id}: {num_sets} sets")
 
-        try:
-            atomic_write_json(config_path, config)
-        # Not just OSError: atomic_write_json re-raises whatever failed, so a
-        # non-serialisable value arrives as TypeError. The declared contract
-        # here is ProfileManagerError -- keep it true for every failure.
-        except Exception as e:
-            error_msg = f"Failed to save config for CLIENT_{client_id}: {e}"
-            logger.exception(error_msg)
-            raise ProfileManagerError(error_msg) from e
+            try:
+                atomic_write_json(config_path, config)
+            # Not just OSError: atomic_write_json re-raises whatever failed, so a
+            # non-serialisable value arrives as TypeError. The declared contract
+            # here is ProfileManagerError -- keep it true for every failure.
+            except Exception as e:
+                error_msg = f"Failed to save config for CLIENT_{client_id}: {e}"
+                logger.exception(error_msg)
+                raise ProfileManagerError(error_msg) from e
 
-        self._config_cache.pop(f"{self.base_path}::shopify_{client_id}", None)
+            self._config_cache.pop(f"{self.base_path}::shopify_{client_id}", None)
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         # Size from the file, not a second json.dumps of the whole config --
         # this is the save path the share makes slow. A stat that fails here
@@ -719,11 +728,12 @@ class ProfileManager:
         Raises:
             ProfileManagerError: If the config can't be loaded or saved
         """
-        config = self.load_shopify_config(client_id)
-        if config is None:
-            raise ProfileManagerError(f"Shopify config not found: CLIENT_{client_id}")
-        apply(config)
-        self.save_shopify_config(client_id, config)
+        with self._config_write_lock:
+            config = self.load_shopify_config(client_id)
+            if config is None:
+                raise ProfileManagerError(f"Shopify config not found: CLIENT_{client_id}")
+            apply(config)
+            self.save_shopify_config(client_id, config)
         return config
 
     # --- Set/Bundle Management Methods ---
@@ -763,24 +773,28 @@ class ProfileManager:
         # ponytail: read-modify-write; ceiling is concurrent PC writes can still clobber
         # enabled between load and save. Upgrade: hold file lock across load+save.
         # Pass config to skip the extra disk read when the caller already holds it.
-        if config is None:
-            config = self.load_shopify_config(client_id) or {}
-        # Use update() so enabled (and any future keys) come from the freshly loaded config
-        config.setdefault("inventory_memory", {})
-        from .csv_utils import normalize_sku
+        # Under the write lock: this runs on the session write queue's thread, and
+        # a Settings or Setup-page save landing between its load and its save
+        # would otherwise be reverted by it (AUDIT-07-H2).
+        with self._config_write_lock:
+            if config is None:
+                config = self.load_shopify_config(client_id) or {}
+            # Use update() so enabled (and any future keys) come from the freshly loaded config
+            config.setdefault("inventory_memory", {})
+            from .csv_utils import normalize_sku
 
-        updates = {
-            # Keep zero-qty SKUs: dropping them shrinks old_skus overlap ratio and can
-            # trigger a false 'Wrong client file?' anomaly on the next stock load.
-            "skus": {normalize_sku(k): float(v) for k, v in stock_dict.items()},
-            "last_updated": datetime.now().astimezone().isoformat(timespec="seconds"),
-            "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
-            "session": session,
-        }
-        if names_dict is not None:
-            updates["names"] = {str(k): str(v) for k, v in names_dict.items()}
-        config["inventory_memory"].update(updates)
-        return self.save_shopify_config(client_id, config, backup=False)
+            updates = {
+                # Keep zero-qty SKUs: dropping them shrinks old_skus overlap ratio and can
+                # trigger a false 'Wrong client file?' anomaly on the next stock load.
+                "skus": {normalize_sku(k): float(v) for k, v in stock_dict.items()},
+                "last_updated": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "total_units": int(sum(v for v in stock_dict.values() if v > 0)),
+                "session": session,
+            }
+            if names_dict is not None:
+                updates["names"] = {str(k): str(v) for k, v in names_dict.items()}
+            config["inventory_memory"].update(updates)
+            return self.save_shopify_config(client_id, config, backup=False)
 
     def get_inventory_memory(self, client_id: str) -> dict:
         """Return inventory_memory dict; empty dict if not set."""

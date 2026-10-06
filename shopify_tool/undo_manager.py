@@ -26,9 +26,14 @@ LEGACY_HISTORY_FILE = "operations_history.json"
 
 
 def _pc_name() -> str:
-    """This PC's name, safe in a file name: anything but [A-Za-z0-9_-] becomes _."""
+    """This PC's name, safe in a file name: anything but a letter, digit, _ or - becomes _.
+
+    Letters include non-Latin ones: Windows allows a Cyrillic computer name,
+    and two such names of one length would otherwise share an undo file
+    (AUDIT-08-U4).
+    """
     name = os.environ.get("COMPUTERNAME") or platform.node() or "unknown"
-    return re.sub(r"[^A-Za-z0-9_-]", "_", name)
+    return re.sub(r"[^\w-]", "_", name)
 
 
 class UndoManager:
@@ -482,6 +487,17 @@ class UndoManager:
 
         return Path(self.main_window.session_path) / "analysis" / f"operations_history_{_pc_name()}.json"
 
+    def _submit(self, kind: str, job) -> None:
+        """Run `job` on the window's write queue, or now when there is none."""
+        queue = getattr(self.main_window, "write_queue", None)
+        if queue is not None:
+            queue.submit(str(self.main_window.session_path), kind, job)
+            return
+        try:
+            job()
+        except Exception:
+            self.log.exception(f"Failed to write {kind}")
+
     def _save_history(self):
         """Save this PC's history file, through the window's write queue.
 
@@ -506,14 +522,24 @@ class UndoManager:
             atomic_write_json(history_path, history_data, indent=2)
             self.log.debug(f"Saved history to {history_path}")
 
-        queue = getattr(self.main_window, "write_queue", None)
-        if queue is not None:
-            queue.submit(str(self.main_window.session_path), "undo_history", write)
+        self._submit("undo_history", write)
+
+    def _delete_other_histories(self):
+        """Delete the session's undo files other than this PC's, on the queue.
+
+        A job of its own kind: the queue replaces a pending job of the same
+        kind, so on "undo_history" the next edit's save would cancel it.
+        """
+        history_path = self._get_history_path()
+        if not history_path:
             return
-        try:
-            write()
-        except Exception:
-            self.log.exception("Failed to save history")
+
+        def delete():
+            for other in history_path.parent.glob("operations_history*.json"):
+                if other != history_path:
+                    other.unlink(missing_ok=True)
+
+        self._submit("undo_history_others", delete)
 
     def _load_history(self):
         """Load this PC's history; the shared file of an older build is the fallback.
@@ -549,10 +575,17 @@ class UndoManager:
             self.current_position = 0
 
     def clear_history(self):
-        """Clear all undo history."""
+        """Clear all undo history: this PC's, and every other PC's for the session.
+
+        Called after a run. Every PC's steps point at the previous run's
+        frame, and undoing a removal from them puts orders in twice
+        (AUDIT-08-U1), so the other PCs' files and the legacy shared one go
+        too -- not only this PC's (AUDIT-08-U4).
+        """
         self.operations = []
         self.current_position = 0
         self._save_history()
+        self._delete_other_histories()
         self.log.info("Cleared undo history")
 
     def reset_for_session(self):
