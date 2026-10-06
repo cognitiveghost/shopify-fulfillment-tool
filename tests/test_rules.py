@@ -8,6 +8,7 @@ import warnings
 import pandas as pd
 import pytest
 
+from shopify_tool import rules
 from shopify_tool.rules import RuleEngine, _op_matches_regex
 from shopify_tool.tag_manager import parse_tags
 
@@ -561,3 +562,135 @@ def test_execution_order_still_lists_a_rule_that_is_off():
     off = _tagging("off", enabled=False, priority=1)
     on = _tagging("on", priority=2)
     assert [r["name"] for r in RuleEngine.execution_order([on, off])] == ["off", "on"]
+
+
+class TestOrderRulesVectorised:
+    """Pins the order-level path's results across its vectorisation (AUDIT-08-R1)."""
+
+    FRAME = pd.DataFrame({
+        "Order_Number": ["#1", "#1", "#2", "#3", "#3", "#3", None],
+        "SKU": ["A", "B", "A", "C", "C", None, "A"],
+        "Product_Name": ["Apple", "Box", "Apple", "Cup", "Cup", "Lid", "Apple"],
+        "Quantity": [1, 4, 2, 1, 1, 3, 9],
+        "Order_Volumetric_Weight": [1.5, 1.5, 0.2, float("nan"), 9.0, 9.0, 9.0],
+        "All_No_Packaging": [True, True, False, "true", "true", "true", True],
+        "Order_Min_Box": ["S", "S", "M", "L", "L", "L", "S"],
+    })
+
+    @pytest.mark.parametrize("condition, tagged", [
+        ({"field": "item_count", "operator": "is greater than", "value": "1"}, {"#1", "#3"}),
+        ({"field": "total_quantity", "operator": "is greater than or equal", "value": "5"}, {"#1", "#3"}),
+        ({"field": "unique_sku_count", "operator": "equals", "value": "2"}, {"#1", "#3"}),  # NaN counts
+        ({"field": "max_quantity", "operator": "is greater than", "value": "3"}, {"#1"}),
+        ({"field": "order_volumetric_weight", "operator": "is greater than", "value": "1"}, {"#1"}),  # first row
+        ({"field": "all_no_packaging", "operator": "equals", "value": "true"}, {"#1", "#3"}),
+        ({"field": "order_min_box", "operator": "equals", "value": "M"}, {"#2"}),
+        ({"field": "has_sku", "operator": "equals", "value": "A"}, {"#1", "#2"}),
+        ({"field": "has_sku", "operator": "does not equal", "value": "A"}, {"#3"}),
+        ({"field": "has_product", "operator": "contains", "value": "pp"}, {"#1", "#2"}),
+        ({"field": "SKU", "operator": "equals", "value": "C"}, {"#3"}),
+        ({"field": "SKU", "operator": "does not equal", "value": "C"}, {"#1", "#2"}),
+        ({"field": "no_such_column", "operator": "equals", "value": "x"}, set()),
+    ])
+    def test_order_rule_matches_the_orders_it_names(self, condition, tagged):
+        rule = {"name": "o", "level": "order", "conditions": [condition],
+                "actions": [{"type": "ADD_TAG", "value": "hit"}]}
+        out = RuleEngine([rule]).apply(self.FRAME.copy())
+        assert set(out.loc[out["Status_Note"].fillna("").str.contains("hit"), "Order_Number"]) == tagged
+
+    def test_order_steps_gate_on_the_step_before(self):
+        rule = {"name": "g", "level": "order", "steps": [
+            {"conditions": [{"field": "item_count", "operator": "is greater than", "value": "1"}],
+             "match": "ALL", "actions": [{"type": "ADD_TAG", "value": "s1"}]},
+            {"conditions": [{"field": "has_sku", "operator": "equals", "value": "B"}],
+             "match": "ALL", "actions": [{"type": "ADD_TAG", "value": "s2"}]}]}
+        out = RuleEngine([rule]).apply(self.FRAME.copy())
+        notes = out.groupby("Order_Number")["Status_Note"].first()
+        assert notes.to_dict() == {"#1": "s1, s2", "#2": "", "#3": "s1"}
+
+    def test_added_products_keep_order_then_rule_order(self):
+        rules = [{"name": n, "level": "order", "priority": p,
+                  "conditions": [{"field": "has_sku", "operator": "equals", "value": "A"}],
+                  "actions": [{"type": "ADD_PRODUCT", "sku": g, "quantity": 1}]}
+                 for n, p, g in [("r1", 1, "G1"), ("r2", 2, "G2")]]
+        out = RuleEngine(rules).apply(self.FRAME.copy())
+        added = out.iloc[len(self.FRAME):]
+        assert list(zip(added["Order_Number"], added["SKU"])) == [
+            ("#1", "G1"), ("#1", "G2"), ("#2", "G1"), ("#2", "G2")]
+
+    def test_matched_rows_cover_every_line_of_a_matched_order(self):
+        rule = {"name": "o", "level": "order",
+                "conditions": [{"field": "has_sku", "operator": "equals", "value": "B"}],
+                "actions": [{"type": "ADD_TAG", "value": "hit"}]}
+        engine = RuleEngine([rule])
+        engine.apply(self.FRAME.copy())
+        assert engine.matched_rows.tolist() == [True, True, False, False, False, False, False]
+
+
+class TestParseDates:
+    """One parse per format over the column, same answers as the per-value parser (AUDIT-08-R2)."""
+
+    VALUES = ("2024-01-30", "30/01/2024", "30.01.2024", "2026-10-01 10:00:00", "2026-10-01 10:00:00 +0200",
+              "2026-10-01T10:00:00+02:00", "2026-10-01T10:00:00Z", " 2024-01-30 ", "2026-10-01T10:00:00",
+              "2026-10-01 10:00:00+0200", "2024-02-30", "1/2/2024", "", None, float("nan"), "not a date",
+              pd.Timestamp("2024-01-30 08:00"))
+
+    @pytest.mark.parametrize("value", VALUES)
+    def test_parse_dates_matches_the_single_value_parser(self, value):
+        got = rules._parse_dates(pd.Series([value], dtype=object)).iloc[0]
+        want = rules._parse_date_safe(value)
+        assert (pd.isna(got) and want is None) or got == want
+
+    def test_mixed_offsets_parse_to_the_date_as_written(self):
+        s = pd.Series(["2026-03-28 23:30:00 +0200", "2026-03-30 00:30:00 +0300"], name="Created_At")
+        assert rules._parse_dates(s).tolist() == [pd.Timestamp("2026-03-28 23:30"), pd.Timestamp("2026-03-30 00:30")]
+
+
+def test_the_page_order_is_the_run_order():
+    rules_list = [{"name": "A", "enabled": False}, {"name": "B"}, {"name": "C", "priority": 1000}]
+    assert [r["name"] for r in RuleEngine.execution_order(rules_list)] == ["B", "C", "A"]
+    assert [r["name"] for r in RuleEngine(rules_list).rules] == ["B", "C"]
+
+
+RULE_LISTS = [
+    [{"name": "a1"}, {"name": "o1", "level": "order"}, {"name": "a2", "priority": 5}],
+    [{"name": "x", "enabled": False}, {"name": "y"}, {"name": "z", "priority": 1001},
+     {"name": "w", "level": "order", "priority": 1}],
+    [{"name": "p", "priority": 1000}, {"name": "q"}, {"name": "r", "enabled": False, "priority": 2},
+     {"name": "s"}],
+    [{"name": "n1", "enabled": False}, {"name": "n2", "enabled": False}, {"name": "n3"},
+     {"name": "o2", "level": "order"}, {"name": "o3", "level": "order", "enabled": False}],
+]
+
+
+@pytest.mark.parametrize("rules_list", RULE_LISTS)
+def test_enabled_rules_list_in_the_order_the_engine_runs_them(rules_list):
+    page = [r["name"] for r in RuleEngine.execution_order(rules_list) if r.get("enabled", True) is not False]
+    assert page == [r["name"] for r in RuleEngine(rules_list).rules]
+
+
+TEXT = pd.Series([" DHL ", "dhl", "Dhl-Express", None, "UPS"])
+
+
+@pytest.mark.parametrize("op, value, want", [
+    ("equals", "dhl ", [True, True, False, False, False]),
+    ("does not equal", " DHL", [False, False, True, True, True]),
+    ("starts with", " dhl", [True, True, True, False, False]),
+    ("ends with", "HL ", [True, True, False, False, False]),
+    ("contains", " Express", [False, False, True, False, False]),
+    ("does not contain", "dhl", [False, False, False, True, True]),
+    ("in list", "dhl , ups", [True, True, False, False, True]),
+    ("not in list", "DHL", [False, False, True, True, True]),
+])
+def test_text_operators_ignore_case_and_spaces(op, value, want):
+    assert getattr(rules, rules.OPERATOR_MAP[op])(TEXT, value).tolist() == want
+
+
+def test_a_product_added_from_a_set_line_is_not_a_component():
+    """AUDIT-08-R5: the added row copied the set line's tracking fields."""
+    df = pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [2], "Original_SKU": ["SET-1"],
+                       "Original_Quantity": [1], "Is_Set_Component": [True]})
+    rule = {"name": "gift", "level": "article", "conditions": [{"field": "SKU", "operator": "equals", "value": "A"}],
+            "actions": [{"type": "ADD_PRODUCT", "sku": "GIFT", "quantity": 1}]}
+    added = RuleEngine([rule]).apply(df).iloc[-1]
+    assert (added["Original_SKU"], added["Original_Quantity"], added["Is_Set_Component"]) == ("GIFT", 1, False)

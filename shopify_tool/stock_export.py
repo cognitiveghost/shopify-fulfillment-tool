@@ -93,8 +93,30 @@ def _expand_lot_summary(filtered_items: pd.DataFrame) -> pd.DataFrame:
         qty = pd.to_numeric(qty, errors="coerce")
         if pd.isna(qty):
             continue
-        key = (filtered_items.at[label, "SKU"], expiry, batch)
+        # Stripped, as the product summary and _check_totals key SKUs: "A"
+        # and "A " are one article, and a negative "A " line nets against
+        # "A"'s lots (AUDIT-09-O7).
+        sku = filtered_items.at[label, "SKU"]
+        key = (str(sku).strip() if pd.notna(sku) else sku, expiry, batch)
         totals[key] = totals.get(key, 0) + qty
+
+    # A negative line (a manual correction) nets against its own lot, then
+    # against the SKU's other lot rows in the order they were drawn. The
+    # export never holds a negative quantity, and each SKU still sums to its
+    # lines (AUDIT-07-M1).
+    for key, qty in totals.items():
+        debt = -qty
+        if debt <= 0:
+            continue
+        totals[key] = 0
+        for other, available in totals.items():
+            if other[0] != key[0] or available <= 0:
+                continue
+            take = min(available, debt)
+            totals[other] = available - take
+            debt -= take
+            if debt <= 0:
+                break
 
     records = [
         {"Артикул": sku, QTY_COL: qty, "Годност": expiry, "Партида": batch}
@@ -190,9 +212,23 @@ def prepare_export_path(base_path, now=None):
             old = base.parent / "old"
             old.mkdir(exist_ok=True)
             for p in versions:
-                os.replace(p, old / p.name)
+                os.replace(p, _free_name(old / p.name))
                 logger.info(f"Moved earlier export {p.name} to old/")
     return str(base.with_name(f"{stem}_{stamp}.xls"))
+
+
+def _free_name(target: Path) -> Path:
+    """`target`, or <stem>_2.xls, _3, ... when a copy of that name is already there.
+
+    A same-minute re-export would otherwise overwrite the copy already in old/
+    (AUDIT-09-O8). The stamp stays as it is, so the ERP sees the same names.
+    """
+    n = 1
+    candidate = target
+    while candidate.exists():
+        n += 1
+        candidate = target.with_name(f"{target.stem}_{n}{target.suffix}")
+    return candidate
 
 
 def _packaging_path(output_file):
@@ -289,8 +325,13 @@ def create_stock_export(
                     f"Found {len(export_df)} lot rows to write for report '{report_name}'."
                 )
         else:
-            # Summarize quantities by SKU
-            sku_summary = filtered_items.groupby("SKU")["Quantity"].sum().reset_index()
+            # Summarize quantities by SKU, stripped: the key _check_totals
+            # uses, so "A" and "A " are one row (AUDIT-09-O7).
+            sku_summary = (
+                filtered_items.groupby(filtered_items["SKU"].astype(str).str.strip())["Quantity"]
+                .sum()
+                .reset_index()
+            )
             sku_summary = sku_summary[sku_summary["Quantity"] > 0]
 
             if sku_summary.empty:
@@ -382,8 +423,10 @@ def merge_session_stock_exports(
 ) -> pd.DataFrame:
     """Merge fulfillable order quantities from multiple sessions.
 
-    Reads analysis/current_state.pkl from each session directory and extracts
-    quantities from orders with Order_Fulfillment_Status == 'Fulfillable', grouped by SKU.
+    Reads analysis/current_state.pkl from each session directory, or the run's
+    fulfillment_analysis.xlsx when the pickle is missing or unreadable, and
+    extracts quantities from orders with Order_Fulfillment_Status ==
+    'Fulfillable', grouped by SKU.
 
     Args:
         session_paths: List of path-like objects, each pointing to a session directory.
@@ -400,7 +443,9 @@ def merge_session_stock_exports(
         session_path = Path(session_path)
         analysis_dir = session_path / "analysis"
         pkl_file = analysis_dir / "current_state.pkl"
-        xlsx_file = analysis_dir / "current_state.xlsx"
+        # Not current_state.xlsx: it is no longer written, and an old one can
+        # be older than the session's run (AUDIT-07-H2).
+        xlsx_file = analysis_dir / "fulfillment_analysis.xlsx"
 
         df = None
         if pkl_file.exists():

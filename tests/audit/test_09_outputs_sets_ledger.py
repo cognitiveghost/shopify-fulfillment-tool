@@ -37,7 +37,6 @@ NO_HISTORY = pd.DataFrame({"Order_Number": []})
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O1: iterrows and row.copy() over every line")
 def test_AUDIT_09_O1_decoding_15000_lines_takes_under_a_second():
     """Audit: 17.7 s. 15,000 lines, 18 columns, a set in a third of them."""
     n = 15000
@@ -58,7 +57,6 @@ def test_AUDIT_09_O1_decoding_15000_lines_takes_under_a_second():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O2: is_fulfillable and iterrows per order")
 def test_AUDIT_09_O2_the_packing_json_for_5000_orders_builds_in_seconds(benchmark_frame):
     """Audit: 12.7 s, in every run's save step and per packing list on the
     GUI thread."""
@@ -86,16 +84,16 @@ def unlisted_sku_order():
     return df
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O3: _short skips SKUs not in the stock file")
 def test_AUDIT_09_O3_force_fulfilling_an_unlisted_sku_is_not_silent(unlisted_sku_order):
     """Holds under either owner rule: refuse (treat unlisted as 0) or allow
     and warn. Both tell the person."""
-    ok, message, _df = toggle_order_fulfillment(unlisted_sku_order.copy(), "#1")
+    ok, message, out = toggle_order_fulfillment(unlisted_sku_order.copy(), "#1")
 
-    assert not ok or message
+    assert ok is True
+    assert message == "Not in the stock file: X"
+    assert out["Order_Fulfillment_Status"].tolist() == ["Fulfillable"]
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O3: claim covers SKUs not in the stock file")
 def test_AUDIT_09_O3_bulk_mark_fulfillable_on_an_unlisted_sku_is_not_silent(unlisted_sku_order):
     mw = SimpleNamespace(
         analysis_results_df=unlisted_sku_order.copy(),
@@ -114,9 +112,17 @@ def test_AUDIT_09_O3_bulk_mark_fulfillable_on_an_unlisted_sku_is_not_silent(unli
 
     ActionsHandler(mw).bulk_change_status(["#1"], True)
 
-    held = mw.analysis_results_df["Order_Fulfillment_Status"].tolist() == ["Not Fulfillable"]
-    toasts = " ".join(str(c.args[0]) for c in mw.results_bridge.raise_toast.call_args_list)
-    assert held or "stock" in toasts
+    assert mw.analysis_results_df["Order_Fulfillment_Status"].tolist() == ["Fulfillable"]
+    assert [c.args[0] for c in mw.results_bridge.raise_toast.call_args_list] == [
+        "1 order marked fulfillable · not in the stock file: X"]
+
+
+def test_force_fulfilling_an_unlisted_sku_from_the_pane_names_it(unlisted_sku_order):
+    mw = Mock()
+    mw.analysis_results_df = unlisted_sku_order.copy()
+    ActionsHandler(mw).toggle_fulfillment_status_for_order("#1")
+    assert mw.results_bridge.raise_toast.call_args.args[0] == (
+        "Order #1 marked fulfillable · not in the stock file: X")
 
 
 def test_a_listed_sku_short_of_stock_is_refused(unlisted_sku_order):
@@ -134,7 +140,6 @@ def test_a_listed_sku_short_of_stock_is_refused(unlisted_sku_order):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O4: Set_SKU and Component_SKU stored as written")
 def test_AUDIT_09_O4_an_imported_set_with_spaces_still_expands(tmp_path):
     csv = tmp_path / "sets.csv"
     csv.write_text("Set_SKU,Component_SKU,Component_Quantity\nSET-1 ,A ,2\n", encoding="utf-8")
@@ -200,10 +205,10 @@ def test_AUDIT_09_O5_a_failed_packing_build_does_not_empty_the_session(
     data_json = Path(path) / "analysis" / "analysis_data.json"
     assert len(json.loads(data_json.read_text(encoding="utf-8"))["orders"]) == 2
 
-    def broken(_order_number, _group):
+    def broken(_df):
         raise ValueError("a row Packing Tool's builder cannot read")
 
-    monkeypatch.setattr(core, "build_packing_order_data", broken)
+    monkeypatch.setattr(core, "build_packing_orders", broken)
     ok, _msg, _df, stats = analysis_run(path)  # the operator re-runs
 
     failure_reported = not ok or any(

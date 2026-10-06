@@ -106,8 +106,33 @@ def _write_atomic(path: Path, df: pd.DataFrame) -> None:
         raise
 
 
-def record_session(path, session, df, today=None) -> bool:
-    """Replace `session`'s rows with the orders df ships. False = not written."""
+def session_folders(sessions_dir: Path, current: str | None) -> set[str] | None:
+    """The names of the session folders in `sessions_dir`, from one listing.
+
+    None when the folder can't be listed, or when `current` is given and is
+    not among them: a listing that misses the session being saved is of the
+    wrong or an unreachable folder, and must not prune anything.
+    """
+    try:
+        with os.scandir(sessions_dir) as it:
+            names = {entry.name for entry in it if entry.is_dir()}
+    except OSError:
+        logger.warning(f"Could not list session folders in {sessions_dir}", exc_info=True)
+        return None
+    if current is not None and current not in names:
+        logger.warning(f"Session folder listing of {sessions_dir} lacks {current!r}; not pruning history")
+        return None
+    return names
+
+
+def record_session(path, session, df, today=None, existing_sessions: set[str] | None = None) -> bool:
+    """Replace `session`'s rows with the orders df ships. False = not written.
+
+    `existing_sessions`, given by the run only: rows of a session whose folder
+    is gone are dropped (AUDIT-07-L1). Rows without a session, and rows of
+    sessions that still exist (abandoned ones too), stay. ADR 0012 rule 5:
+    nothing is pruned by age.
+    """
     path = Path(path)
     today = today or datetime.now().astimezone().strftime("%Y-%m-%d")
     try:
@@ -118,6 +143,11 @@ def record_session(path, session, df, today=None) -> bool:
             except HistoryUnreadable:
                 logger.warning(f"Fulfillment history unreadable; not writing over it: {path}", exc_info=True)
                 return False
+            if existing_sessions is not None:
+                gone = (history["Session"] != "") & ~history["Session"].isin(existing_sessions)
+                if gone.any():
+                    logger.info(f"Dropping {int(gone.sum())} history rows of deleted sessions")
+                history = history[~gone]
             ships = stock_ledger.fulfillable_orders(df)
             _write_atomic(path, _replace(history, session, ships, today))
             return True

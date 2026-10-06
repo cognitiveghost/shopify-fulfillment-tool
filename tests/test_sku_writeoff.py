@@ -105,3 +105,14 @@ def test_degenerate_inputs_return_empty_with_correct_columns(df):
     assert list(result.columns) == [
         "SKU", "Writeoff_Quantity", "Tags_Applied", "Order_Count",
     ]
+
+
+def test_an_order_number_with_a_trailing_space_is_one_order():
+    """AUDIT-09-O6: "1001" and "1001 " wrote the box off twice."""
+    df = pd.DataFrame({
+        "Order_Number": ["1001", "1001 "],
+        "Order_Fulfillment_Status": ["Fulfillable", "Fulfillable"],
+        "Internal_Tags": ['["BOX"]', '["BOX"]'],
+    })
+    result = calculate_writeoff_quantities(df, BOX_ONLY)
+    assert result.loc[result["SKU"] == "PKG-BOX", "Writeoff_Quantity"].sum() == 1.0

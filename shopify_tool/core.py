@@ -26,7 +26,6 @@ from .stock_ledger import (
     append_blocker,
     claim_detail,
     fulfillable_orders,
-    is_fulfillable,
     with_stock_left,
 )
 from .tag_manager import parse_tags
@@ -86,110 +85,145 @@ def _get_sku_dtype_dict(column_mappings: dict, file_type: str) -> dict:
     return dtype_dict
 
 
-def build_packing_order_data(order_number: str, group: pd.DataFrame) -> dict[str, Any]:
-    """Build canonical order metadata dict for Packer-tool JSON integration.
+def _text_or_blank(value) -> str:
+    """str(value or ""): what each JSON text field has always held (NaN gives "nan")."""
+    return str(value or "")
 
-    Used by both analysis_data.json and packing list JSON generators
-    to ensure consistent metadata across both communication files.
-    Backwards-compat aliases (courier, status, shipping_country) are
-    always included so both JSON files are structurally identical.
+
+def _item_quantity(value) -> int:
+    try:
+        return int(value) if value is not None and not pd.isna(value) else 0
+    except (ValueError, TypeError):
+        return 0
+
+
+def _first_or(df: pd.DataFrame, column: str, positions, default) -> list:
+    if column not in df.columns:
+        return [default] * len(positions)
+    return df[column].to_numpy(dtype=object)[positions].tolist()
+
+
+def build_packing_orders(df: pd.DataFrame) -> list[dict[str, Any]]:
+    """The Packing Tool order list for `df`, one dict per order.
+
+    Used by both analysis_data.json and the packing list JSON, so both files
+    carry identical order metadata. Backwards-compat aliases (courier,
+    status, shipping_country) are always included.
+
+    Orders are sorted by Order_Number, as groupby sorts them. The per-item
+    fields are worked out once over the whole frame, and R1 (which orders
+    are fulfillable) once for all orders (AUDIT-09-O2). The status is
+    "Unknown" when the frame has no Order_Fulfillment_Status.
 
     Args:
-        order_number: The order number string
-        group: DataFrame group containing all rows for this order
+        df: The rows to list, every line of each order
 
     Returns:
-        Dict[str, Any]: Canonical order metadata including all required fields for Packer-tool
+        list[dict[str, Any]]: Canonical order metadata, with the fields
+            Packing Tool reads
     """
-    first_row = group.iloc[0]
+    # A row with no order number is in no group: ngroup gives it NaN, which
+    # makes the whole column float; -1 keeps it an integer array for bincount.
+    group_of = df.groupby("Order_Number", sort=True).ngroup().fillna(-1).to_numpy(dtype=np.int64)
+    listed = np.flatnonzero(group_of >= 0)
+    if len(listed) == 0:
+        return []
+    by_order = listed[np.argsort(group_of[listed], kind="stable")]
+    bounds = np.concatenate([[0], np.cumsum(np.bincount(group_of[listed]))])
 
-    # Parse Internal_Tags: "[]" JSON string → Python list
-    tags_raw = first_row.get("Internal_Tags", "[]") or "[]"
-    try:
-        internal_tags: list[str] = (
-            json.loads(tags_raw) if isinstance(tags_raw, str) else []
+    # Per-item fields, once over the whole frame.
+    n = len(df)
+    warehouse = _first_or(df, "Warehouse_Name", np.arange(n), "")
+    product = _first_or(df, "Product_Name", np.arange(n), "")
+    items = [
+        {
+            "sku": str(sku),
+            "product_name": str(p if not w or w == "N/A" else w),
+            "quantity": _item_quantity(qty),
+            "order_fulfillment_status": _text_or_blank(status),
+            "status_note": _text_or_blank(note),
+            "system_note": _text_or_blank(system),
+        }
+        for sku, w, p, qty, status, note, system in zip(
+            _first_or(df, "SKU", np.arange(n), ""),
+            warehouse,
+            product,
+            _first_or(df, "Quantity", np.arange(n), 0),
+            _first_or(df, "Order_Fulfillment_Status", np.arange(n), ""),
+            _first_or(df, "Status_Note", np.arange(n), ""),
+            _first_or(df, "System_note", np.arange(n), ""),
+            strict=True,
         )
-    except (json.JSONDecodeError, TypeError):
-        internal_tags = []
+    ]
 
-    # Parse Tags: "tag1, tag2" CSV string → list
-    tags_value = first_row.get("Tags", "") or ""
-    tags_list: list[str] = (
-        [t.strip() for t in str(tags_value).split(",") if t.strip()]
-        if str(tags_value).strip()
-        else []
-    )
-
-    # Optional Order_Min_Box (only present if weight config is active)
-    # pd.isna() handles None, float('nan'), pd.NaT from pandas mixed-type columns
-    min_box_raw = first_row.get("Order_Min_Box", None)
-    order_min_box: str | None = (
-        str(min_box_raw)
-        if min_box_raw is not None
-        and not pd.isna(min_box_raw)
-        and str(min_box_raw) != ""
-        else None
-    )
-
-    shipping_provider: str = str(first_row.get("Shipping_Provider", "") or "")
-    if "Order_Fulfillment_Status" in group.columns and "Order_Number" in group.columns:
-        fulfillment_status: str = (
-            FULFILLABLE
-            if is_fulfillable(group, first_row["Order_Number"])
-            else NOT_FULFILLABLE
-        )
-    else:
-        fulfillment_status = "Unknown"
-    destination_country: str = str(first_row.get("Destination_Country", "") or "")
-
-    # Build items list with safe Quantity conversion (guards against NaN / non-numeric)
-    items: list[dict[str, Any]] = []
-    for _, row in group.iterrows():
-        warehouse_name = row.get("Warehouse_Name", "")
-        if not warehouse_name or warehouse_name == "N/A":
-            warehouse_name = row.get("Product_Name", "")
-
-        qty_raw = row.get("Quantity", 0)
-        try:
-            quantity: int = (
-                int(qty_raw) if qty_raw is not None and not pd.isna(qty_raw) else 0
-            )
-        except (ValueError, TypeError):
-            quantity = 0
-
-        items.append(
-            {
-                "sku": str(row.get("SKU", "")),
-                "product_name": str(warehouse_name),
-                "quantity": quantity,
-                "order_fulfillment_status": str(
-                    row.get("Order_Fulfillment_Status", "") or ""
-                ),
-                "status_note": str(row.get("Status_Note", "") or ""),
-                "system_note": str(row.get("System_note", "") or ""),
-            }
-        )
-
-    return {
-        "order_number": str(order_number),
-        "order_type": str(first_row.get("Order_Type", "") or ""),
-        # Canonical fields
-        "shipping_provider": shipping_provider,
-        "order_fulfillment_status": fulfillment_status,
-        "destination_country": destination_country,
-        # Backwards-compat aliases — always present so both JSON files are
-        # structurally identical regardless of which generator produced them
-        "courier": shipping_provider,
-        "status": fulfillment_status,
-        "shipping_country": destination_country,
-        # Metadata fields
-        "tags": tags_list,
-        "notes": str(first_row.get("Notes", "") or ""),
-        "system_note": str(first_row.get("System_note", "") or ""),
-        "internal_tags": internal_tags,
-        "order_min_box": order_min_box,
-        "items": items,
+    # Order fields, from each order's first row.
+    firsts = by_order[bounds[:-1]]
+    first = {
+        column: _first_or(df, column, firsts, default)
+        for column, default in [
+            ("Order_Number", None), ("Internal_Tags", "[]"), ("Tags", ""), ("Order_Min_Box", None),
+            ("Shipping_Provider", ""), ("Destination_Country", ""), ("Order_Type", ""),
+            ("Notes", ""), ("System_note", ""),
+        ]
     }
+    fulfillable = (
+        fulfillable_orders(df) if "Order_Fulfillment_Status" in df.columns else None
+    )
+
+    orders = []
+    for g, start in enumerate(bounds[:-1]):
+        tags_raw = first["Internal_Tags"][g] or "[]"
+        try:
+            internal_tags = json.loads(tags_raw) if isinstance(tags_raw, str) else []
+        except (json.JSONDecodeError, TypeError):
+            internal_tags = []
+
+        tags_value = first["Tags"][g] or ""
+        tags_list = (
+            [t.strip() for t in str(tags_value).split(",") if t.strip()]
+            if str(tags_value).strip()
+            else []
+        )
+
+        # pd.isna() handles None, float('nan'), pd.NaT from mixed-type columns
+        min_box_raw = first["Order_Min_Box"][g]
+        order_min_box = (
+            str(min_box_raw)
+            if min_box_raw is not None and not pd.isna(min_box_raw) and str(min_box_raw) != ""
+            else None
+        )
+
+        order_number = first["Order_Number"][g]
+        if fulfillable is None:
+            fulfillment_status = "Unknown"
+        elif str(order_number).strip() in fulfillable:
+            fulfillment_status = FULFILLABLE
+        else:
+            fulfillment_status = NOT_FULFILLABLE
+        shipping_provider = _text_or_blank(first["Shipping_Provider"][g])
+        destination_country = _text_or_blank(first["Destination_Country"][g])
+
+        orders.append({
+            "order_number": str(order_number),
+            "order_type": _text_or_blank(first["Order_Type"][g]),
+            # Canonical fields
+            "shipping_provider": shipping_provider,
+            "order_fulfillment_status": fulfillment_status,
+            "destination_country": destination_country,
+            # Backwards-compat aliases — always present so both JSON files are
+            # structurally identical regardless of which generator produced them
+            "courier": shipping_provider,
+            "status": fulfillment_status,
+            "shipping_country": destination_country,
+            # Metadata fields
+            "tags": tags_list,
+            "notes": _text_or_blank(first["Notes"][g]),
+            "system_note": _text_or_blank(first["System_note"][g]),
+            "internal_tags": internal_tags,
+            "order_min_box": order_min_box,
+            "items": [items[i] for i in by_order[start:bounds[g + 1]]],
+        })
+    return orders
 
 
 def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
@@ -205,12 +239,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
         Dict[str, Any]: Dictionary containing analysis data in Packing Tool format
     """
     try:
-        # Group by Order_Number to get order-level data
-        orders_data = []
-        grouped = final_df.groupby("Order_Number")
-
-        for order_number, group in grouped:
-            orders_data.append(build_packing_order_data(str(order_number), group))
+        orders_data = build_packing_orders(final_df)
 
         # Calculate statistics
         total_orders = len(orders_data)
@@ -1320,28 +1349,33 @@ def _save_results_and_reports(
     # file is written, so it carries any warning.
     if history_readable:
         history_file = fulfillment_history.history_path(profile_manager, client_id)
-        if not fulfillment_history.record_session(history_file, current_session, final_df):
+        # Only the run prunes rows of deleted session folders (AUDIT-07-L1).
+        existing_sessions = (
+            fulfillment_history.session_folders(Path(session_path).parent, current_session)
+            if session_path
+            else None
+        )
+        if not fulfillment_history.record_session(
+            history_file, current_session, final_df, existing_sessions=existing_sessions
+        ):
             stats["history_warning"] = HISTORY_WARNING
     else:
         stats["history_warning"] = HISTORY_WARNING
 
-    # Save initial state files (current_state.pkl, current_state.xlsx, analysis_stats.json)
+    # Save initial state files (current_state.pkl, analysis_stats.json). No
+    # current_state.xlsx: fulfillment_analysis.xlsx above is the readable copy
+    # of the run, and an edit no longer mirrors its state to Excel (AUDIT-07-H2).
     if use_session_mode:
         try:
             logger.info("Saving initial session state files...")
 
             # Define file paths
             current_state_pkl = Path(analysis_dir) / "current_state.pkl"
-            current_state_xlsx = Path(analysis_dir) / "current_state.xlsx"
             stats_json = Path(analysis_dir) / "analysis_stats.json"
 
             # Save DataFrame to pickle (fast loading)
             logger.info(f"Saving current_state.pkl: {current_state_pkl}")
             final_df.to_pickle(current_state_pkl)
-
-            # Save DataFrame to Excel (backup, human-readable)
-            logger.info(f"Saving current_state.xlsx: {current_state_xlsx}")
-            final_df.to_excel(current_state_xlsx, index=False)
 
             # Save statistics to JSON
             logger.info(f"Saving analysis_stats.json: {stats_json}")
@@ -1384,7 +1418,8 @@ def _save_results_and_reports(
                     "total_orders": analysis_data["total_orders"],
                     "fulfillable_orders": analysis_data["fulfillable_orders"],
                     "not_fulfillable_orders": analysis_data["not_fulfillable_orders"],
-                    "analysis_report_path": "analysis/analysis_report.xlsx",
+                    # The file the run writes (AUDIT-07-L2).
+                    "analysis_report_path": "analysis/fulfillment_analysis.xlsx",
                     "statistics": {
                         "total_orders": len(final_df["Order_Number"].unique()),
                         "total_items": len(final_df),

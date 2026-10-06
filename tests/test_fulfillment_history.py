@@ -107,3 +107,35 @@ def test_lock_timeout_returns_false_and_writes_nothing(tmp_path, monkeypatch):
     p = tmp_path / "h.csv"
     assert fh.record_session(p, "S1", frame({"#1": "Fulfillable"})) is False
     assert not p.exists()
+
+
+# --- The run drops rows of deleted session folders (AUDIT-07-L1) ---
+
+SHIPS_4 = frame({"#4": "Fulfillable"})
+
+
+def _write(path, rows_):
+    pd.DataFrame(rows_, columns=fh.COLUMNS).to_csv(path, index=False)
+
+
+def test_the_run_drops_rows_of_deleted_sessions(tmp_path):
+    path = tmp_path / fh.FILE_NAME
+    _write(path, [("#1", "2026-01-01", "gone"), ("#2", "2026-01-01", "kept"), ("#3", "2026-01-01", "")])
+    assert fh.record_session(path, "now", SHIPS_4, existing_sessions={"kept", "now"})
+    loaded = fh.load(path)
+    assert set(zip(loaded["Order_Number"], loaded["Session"])) == {("#2", "kept"), ("#3", ""), ("#4", "now")}
+
+
+def test_without_a_listing_nothing_is_pruned(tmp_path):
+    path = tmp_path / fh.FILE_NAME
+    _write(path, [("#1", "2026-01-01", "gone"), ("#2", "2026-01-01", "kept"), ("#3", "2026-01-01", "")])
+    assert fh.record_session(path, "now", SHIPS_4, existing_sessions=None)
+    assert "gone" in set(fh.load(path)["Session"])
+
+
+def test_session_folders_refuses_a_listing_without_the_current_session(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "file.txt").write_text("x", encoding="utf-8")
+    assert fh.session_folders(tmp_path, "a") == {"a"}
+    assert fh.session_folders(tmp_path, "b") is None
+    assert fh.session_folders(tmp_path / "missing", None) is None

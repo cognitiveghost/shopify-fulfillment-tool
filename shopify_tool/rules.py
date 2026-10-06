@@ -4,6 +4,7 @@ import warnings
 from functools import lru_cache
 from typing import ClassVar
 
+import numpy as np
 import pandas as pd
 
 """Implements a configurable rule engine to process and modify order data.
@@ -72,60 +73,46 @@ def _append_to_note(note: str, value: str) -> str:
 # --- Operator Implementations ---
 
 
+def _fold(values: pd.Series) -> pd.Series:
+    """Text as the text operators compare it: trimmed, case folded (AUDIT-08-R4)."""
+    return values.astype(str).str.strip().str.casefold()
+
+
+def _fold_value(value) -> str:
+    """A rule's text value as the text operators compare it."""
+    return str(value).strip().casefold()
+
+
 def _op_equals(series_val, rule_val):
     """Returns True where the series value equals the rule value.
 
-    Handles numeric comparisons by converting rule_val to numeric if series is numeric.
+    Text ignores case and surrounding spaces on both sides. A numeric
+    column with a numeric rule value compares as numbers.
     """
-    # If series is numeric, try to convert rule_val to numeric for comparison
     if pd.api.types.is_numeric_dtype(series_val):
         try:
             rule_val_numeric = pd.to_numeric(rule_val, errors='raise')
             return series_val == rule_val_numeric
         except (ValueError, TypeError):
-            # If conversion fails, use string comparison
-            return series_val.astype(str) == str(rule_val)
-    else:
-        # For non-numeric series, use direct comparison
-        return series_val == rule_val
+            pass  # a text value: compared as text below
+    return series_val.notna() & (_fold(series_val) == _fold_value(rule_val))
 
 
 def _op_not_equals(series_val, rule_val):
     """Returns True where the series value does not equal the rule value.
 
-    Handles numeric comparisons by converting rule_val to numeric if series is numeric.
+    The negation of `equals`, so a blank cell does not equal anything.
     """
-    # If series is numeric, try to convert rule_val to numeric for comparison
-    if pd.api.types.is_numeric_dtype(series_val):
-        try:
-            rule_val_numeric = pd.to_numeric(rule_val, errors='raise')
-            return series_val != rule_val_numeric
-        except (ValueError, TypeError):
-            # If conversion fails, use string comparison
-            return series_val.astype(str) != str(rule_val)
-    else:
-        # For non-numeric series, use direct comparison
-        return series_val != rule_val
-
-
-def _as_str_series(series_val):
-    """Coerce a numeric-dtype Series to string so .str accessors don't crash.
-
-    Non-numeric (object/string) Series are returned unchanged to preserve
-    their existing NaN handling via each operator's na=False.
-    """
-    if pd.api.types.is_numeric_dtype(series_val):
-        return series_val.astype(str)
-    return series_val
+    return ~_op_equals(series_val, rule_val)
 
 
 def _op_contains(series_val, rule_val):
-    """Returns True where the series string contains the rule string (case-insensitive, literal)."""
-    return _as_str_series(series_val).str.contains(rule_val, case=False, na=False, regex=False)
+    """Returns True where the series text contains the rule text (case and spaces ignored, literal)."""
+    return _fold(series_val).str.contains(_fold_value(rule_val), regex=False, na=False)
 
 
 def _op_not_contains(series_val, rule_val):
-    """Returns True where the series string does not contain the rule string (case-insensitive, literal)."""
+    """Returns True where the series text does not contain the rule text (case and spaces ignored, literal)."""
     return ~_op_contains(series_val, rule_val)
 
 
@@ -170,13 +157,13 @@ def _op_less_than_or_equal(series_val, rule_val):
 
 
 def _op_starts_with(series_val, rule_val):
-    """Returns True where the series string starts with the rule string."""
-    return _as_str_series(series_val).str.startswith(rule_val, na=False)
+    """Returns True where the series text starts with the rule text (case and spaces ignored)."""
+    return _fold(series_val).str.startswith(_fold_value(rule_val), na=False)
 
 
 def _op_ends_with(series_val, rule_val):
-    """Returns True where the series string ends with the rule string."""
-    return _as_str_series(series_val).str.endswith(rule_val, na=False)
+    """Returns True where the series text ends with the rule text (case and spaces ignored)."""
+    return _fold(series_val).str.endswith(_fold_value(rule_val), na=False)
 
 
 def _op_is_empty(series_val, rule_val):
@@ -190,6 +177,22 @@ def _op_is_not_empty(series_val, rule_val):
 
 
 # --- Helper Functions for New Operators ---
+
+
+# The formats a date condition accepts, tried in this order. The last two
+# carry the offset of a Shopify "Created at" value.
+DATE_FORMATS = (
+    "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y",
+    "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z",
+)
+
+# What %z accepts at the end of a value: +0200, +02:00, Z (and seconds).
+_OFFSET_FORMATS = {
+    "%Y-%m-%d %H:%M:%S %z": ("%Y-%m-%d %H:%M:%S", re.compile(
+        r"^(?P<rest>.*?)\s+(?P<offset>Z|[+-]\d\d:?[0-5]\d(?::?[0-5]\d(?:\.\d{1,6})?)?)$")),
+    "%Y-%m-%dT%H:%M:%S%z": ("%Y-%m-%dT%H:%M:%S", re.compile(
+        r"^(?P<rest>.*?)(?P<offset>Z|[+-]\d\d:?[0-5]\d(?::?[0-5]\d(?:\.\d{1,6})?)?)$")),
+}
 
 
 def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
@@ -226,12 +229,7 @@ def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
 
     # A timestamp is compared by the date as written -- the shop's local
     # date -- so the offset is dropped, not converted (spec 2026-09-26 D9).
-    formats = [
-        "%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y",
-        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z",
-    ]
-
-    for fmt in formats:
+    for fmt in DATE_FORMATS:
         try:
             parsed = pd.to_datetime(date_str, format=fmt)
         except (ValueError, TypeError):
@@ -240,6 +238,70 @@ def _parse_date_safe(date_str: str) -> pd.Timestamp | None:
 
     logger.warning(f"[RULE ENGINE] Invalid rule date format: '{date_str}'")
     return None
+
+
+def _parse_dates(series: pd.Series) -> pd.Series:
+    """Parse a whole column of dates: one pandas call per format.
+
+    Accepts exactly what _parse_date_safe accepts, with the same results:
+    naive datetimes, the offset of a timestamp dropped (the date as
+    written, spec 2026-09-26 D9), NaT where a value is blank or matches no
+    format. The offset is cut from the text before parsing, so a column
+    whose offsets differ (a DST change) parses instead of raising.
+
+    One WARNING, not one per cell, when some non-blank values are not dates.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Positional throughout: the caller's index labels need not be unique.
+    values = pd.Series(series.to_numpy(dtype=object))
+    blank = values.map(lambda v: True if _is_na_scalar(v) else not v).astype(bool)
+    texts = values[~blank].map(lambda v: str(v).strip())
+    parsed = pd.Series(pd.NaT, index=texts.index, dtype="datetime64[ns]")
+
+    for fmt in DATE_FORMATS:
+        todo = parsed.isna()
+        if not todo.any():
+            break
+        candidates = texts[todo]
+        if fmt in _OFFSET_FORMATS:
+            naive_fmt, pattern = _OFFSET_FORMATS[fmt]
+            candidates = candidates.str.extract(pattern)["rest"].dropna()
+            fmt = naive_fmt
+        if candidates.empty:
+            continue
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            got = pd.to_datetime(candidates, format=fmt, errors="coerce")
+        parsed[got.index] = got.astype("datetime64[ns]")
+
+    unparsed = parsed.isna() & texts.ne("")
+    if unparsed.any():
+        logger.warning(
+            f"[RULE ENGINE] {int(unparsed.sum())} values in {series.name!r} are not dates, "
+            f"e.g. {values[unparsed.idxmax()]!r}"
+        )
+
+    result = pd.Series(pd.NaT, index=values.index, dtype="datetime64[ns]")
+    result[parsed.index] = parsed
+    return pd.Series(result.to_numpy(), index=series.index, name=series.name)
+
+
+def _is_na_scalar(value) -> bool:
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):  # a list-like cell
+        return False
+
+
+def _date_compare(series_val, rule_val, compare) -> pd.Series:
+    """`compare(column dates, rule date)` by date only; an unparseable cell is False."""
+    rule_date = _parse_date_safe(rule_val)
+    if rule_date is None:
+        return pd.Series(False, index=series_val.index, dtype=bool)
+    dates = _parse_dates(series_val).dt.normalize()
+    return (compare(dates, rule_date.normalize()) & dates.notna()).astype(bool)
 
 
 @lru_cache(maxsize=128)
@@ -351,15 +413,13 @@ def _op_in_list(series_val, rule_val):
         logger.warning("[RULE ENGINE] Empty list value for 'in list' operator")
         return pd.Series([False] * len(series_val), index=series_val.index)
 
-    # Parse: split, strip, lowercase
-    list_values = [v.strip().lower() for v in str(rule_val).split(",") if v.strip()]
+    # Parse: split, then fold each item as the text operators do
+    list_values = [_fold_value(v) for v in str(rule_val).split(",") if v.strip()]
 
     if not list_values:
         return pd.Series([False] * len(series_val), index=series_val.index)
 
-    # Case-insensitive comparison
-    series_lower = series_val.astype(str).str.strip().str.lower()
-    return series_lower.isin(list_values)
+    return _fold(series_val).isin(list_values)
 
 
 def _op_not_in_list(series_val, rule_val):
@@ -389,8 +449,7 @@ def _op_not_in_list(series_val, rule_val):
         logger.warning("[RULE ENGINE] Empty list value for 'not in list' operator")
         return pd.Series([False] * len(series_val), index=series_val.index)
 
-    list_values = [v.strip().lower() for v in str(rule_val).split(",") if v.strip()]
-    if not list_values:
+    if not any(v.strip() for v in str(rule_val).split(",")):
         return pd.Series([False] * len(series_val), index=series_val.index)
 
     return ~_op_in_list(series_val, rule_val)
@@ -483,32 +542,7 @@ def _op_date_before(series_val, rule_val):
         1    False
         dtype: bool
     """
-    import logging
-    logging.getLogger(__name__)
-
-    rule_date = _parse_date_safe(rule_val)
-    if rule_date is None:
-        return pd.Series([False] * len(series_val), index=series_val.index, dtype=bool)
-
-    # Normalize to ignore time
-    rule_date = rule_date.normalize()
-
-    # Parse series dates with multiple format attempts
-    series_dates = pd.Series([None] * len(series_val), index=series_val.index)
-    for idx, val in series_val.items():
-        parsed = _parse_date_safe(val)
-        if parsed is not None:
-            series_dates[idx] = parsed
-
-    # Create boolean result
-    result = pd.Series([False] * len(series_val), index=series_val.index, dtype=bool)
-    valid_mask = series_dates.notna()
-
-    if valid_mask.any():
-        valid_dates = pd.to_datetime(series_dates[valid_mask])
-        result.loc[valid_mask] = valid_dates.dt.normalize() < rule_date
-
-    return result
+    return _date_compare(series_val, rule_val, lambda dates, day: dates < day)
 
 
 def _op_date_after(series_val, rule_val):
@@ -530,32 +564,7 @@ def _op_date_after(series_val, rule_val):
         1     True
         dtype: bool
     """
-    import logging
-    logging.getLogger(__name__)
-
-    rule_date = _parse_date_safe(rule_val)
-    if rule_date is None:
-        return pd.Series([False] * len(series_val), index=series_val.index, dtype=bool)
-
-    # Normalize to ignore time
-    rule_date = rule_date.normalize()
-
-    # Parse series dates with multiple format attempts
-    series_dates = pd.Series([None] * len(series_val), index=series_val.index)
-    for idx, val in series_val.items():
-        parsed = _parse_date_safe(val)
-        if parsed is not None:
-            series_dates[idx] = parsed
-
-    # Create boolean result
-    result = pd.Series([False] * len(series_val), index=series_val.index, dtype=bool)
-    valid_mask = series_dates.notna()
-
-    if valid_mask.any():
-        valid_dates = pd.to_datetime(series_dates[valid_mask])
-        result.loc[valid_mask] = valid_dates.dt.normalize() > rule_date
-
-    return result
+    return _date_compare(series_val, rule_val, lambda dates, day: dates > day)
 
 
 def _op_date_equals(series_val, rule_val):
@@ -577,32 +586,7 @@ def _op_date_equals(series_val, rule_val):
         1    False
         dtype: bool
     """
-    import logging
-    logging.getLogger(__name__)
-
-    rule_date = _parse_date_safe(rule_val)
-    if rule_date is None:
-        return pd.Series([False] * len(series_val), index=series_val.index, dtype=bool)
-
-    # Normalize to ignore time
-    rule_date = rule_date.normalize()
-
-    # Parse series dates with multiple format attempts
-    series_dates = pd.Series([None] * len(series_val), index=series_val.index)
-    for idx, val in series_val.items():
-        parsed = _parse_date_safe(val)
-        if parsed is not None:
-            series_dates[idx] = parsed
-
-    # Create boolean result
-    result = pd.Series([False] * len(series_val), index=series_val.index, dtype=bool)
-    valid_mask = series_dates.notna()
-
-    if valid_mask.any():
-        valid_dates = pd.to_datetime(series_dates[valid_mask])
-        result.loc[valid_mask] = valid_dates.dt.normalize() == rule_date
-
-    return result
+    return _date_compare(series_val, rule_val, lambda dates, day: dates == day)
 
 
 def _op_matches_regex(series_val, rule_val):
@@ -658,17 +642,20 @@ def _op_does_not_match_regex(series_val, rule_val):
 class RuleEngine:
     """Applies a set of configured rules to a DataFrame of order data."""
 
-    # Define order-level fields and their calculation methods
-    ORDER_LEVEL_FIELDS: ClassVar[dict[str, str]] = {
+    # The order-level fields. A numeric field names the method that works out
+    # its value for one order (the Rules page's test panel shows it); the
+    # yes/no fields have none. A rule evaluates them all over the whole frame
+    # in _order_condition_rows.
+    ORDER_LEVEL_FIELDS: ClassVar[dict[str, str | None]] = {
         "item_count": "_calculate_item_count",
         "total_quantity": "_calculate_total_quantity",
         "unique_sku_count": "_calculate_unique_sku_count",
         "max_quantity": "_calculate_max_quantity",
-        "has_sku": "_check_has_sku",
-        "has_product": "_check_has_product",
+        "has_sku": None,
+        "has_product": None,
         "order_volumetric_weight": "_calculate_order_volumetric_weight",
-        "all_no_packaging": "_calculate_all_no_packaging",
-        "order_min_box": "_get_order_min_box",
+        "all_no_packaging": None,
+        "order_min_box": None,
     }
 
     def _normalize_priorities(self, rules):
@@ -719,11 +706,19 @@ class RuleEngine:
         priority first; a rule with no priority runs after every prioritised
         one below 1000, in list order (1000, 1001, ...). Stable. The Rules
         page lists rules with this, so what it shows is what runs.
+
+        The default priorities go to the rules that are on first, in list
+        order, and only then to the rules that are off -- as the engine,
+        which drops the off rules before numbering, gives them. Otherwise an
+        off rule would take 1000 and push an on rule past one stored at 1000
+        (AUDIT-08-R3).
         """
-        defaults = iter(range(1000, 1000 + len(rules)))
+        unprioritised = [i for i, r in enumerate(rules) if "priority" not in r]
+        on_first = sorted(unprioritised, key=lambda i: rules[i].get("enabled", True) is False)
+        defaults = {i: 1000 + n for n, i in enumerate(on_first)}
         keys = [
-            (r.get("level") == "order", r["priority"] if "priority" in r else next(defaults))
-            for r in rules
+            (r.get("level") == "order", r["priority"] if "priority" in r else defaults[i])
+            for i, r in enumerate(rules)
         ]
         return [r for _, r in sorted(zip(keys, rules), key=lambda kr: kr[0])]
 
@@ -876,73 +871,66 @@ class RuleEngine:
                     logger.info(f"[RULE ENGINE] Step {step_idx+1}: No matches, stopping")
                     break
 
-        # Apply order-level rules with multi-step support
+        # Apply order-level rules with multi-step support. Each step is
+        # evaluated once over the whole frame: a condition gives one bool per
+        # row, the same for every row of an order (_order_step_rows).
         if order_rules and "Order_Number" in df.columns:
-            # Group once. .indices gives positional arrays, so every slice and
-            # mask below is positional -- index labels are not guaranteed unique
-            # (apply() itself concatenates with ignore_index at the end).
-            positions_by_order = df.groupby("Order_Number", sort=False).indices
+            keys = df["Order_Number"]
+            codes, uniques = pd.factorize(keys)  # first appearance; NaN is -1
+            first_rows = pd.Series(~pd.Series(codes).duplicated().to_numpy(), index=df.index)
+            rank = {key: i for i, key in enumerate(uniques)}
+            order_rows = []  # (order, rule, step, action, row): today's per-order order
 
-            # Audit trail, hoisted above the order loop -- one line per rule,
-            # not one per rule per order.
-            for idx, rule in enumerate(order_rules):
+            for rule_idx, rule in enumerate(order_rules):
+                rule_name = rule.get("name", "Unnamed")
+                steps = rule.get("steps", [])
                 logger.info(
-                    f"[RULE ENGINE] Applying order rule #{idx+1}: "
-                    f"{rule.get('name', 'Unnamed')} "
+                    f"[RULE ENGINE] Applying order rule #{rule_idx+1}: "
+                    f"{rule_name} "
                     f"(Priority: {rule.get('priority', 1000)}, "
-                    f"Steps: {len(rule.get('steps', []))})"
+                    f"Steps: {len(steps)})"
                 )
 
-            for order_number, positions in positions_by_order.items():
-                for rule in order_rules:
-                    rule_name = rule.get("name", "Unnamed")
-                    steps = rule.get("steps", [])
-
-                    for step_idx, step in enumerate(steps):
-                        # Re-taken every step on purpose: a later step's
-                        # conditions must see what an earlier step's actions
-                        # wrote. O(len(order)), not O(len(df)).
-                        order_df = df.iloc[positions]
-
-                        matched = self._evaluate_order_conditions(
-                            order_df,
-                            step.get("conditions", []),
-                            step.get("match", "ALL"),
+                alive = pd.Series(codes >= 0, index=df.index)
+                for step_idx, step in enumerate(steps):
+                    # Evaluated after the step before it acted, so a later
+                    # step's conditions see what an earlier step wrote.
+                    matched = alive & self._order_step_rows(df, codes, step)
+                    if not matched.any():
+                        logger.debug(
+                            f"[RULE ENGINE] Order rule '{rule_name}' step "
+                            f"{step_idx+1}: no order matched, stopping"
                         )
-                        if not matched:
-                            logger.debug(
-                                f"[RULE ENGINE] Order {order_number} rule "
-                                f"'{rule_name}' step {step_idx+1}: no match, stopping"
-                            )
-                            break
+                        break
 
-                        self.matched_rows.iloc[positions] = True
-                        actions = step.get("actions", [])
-                        apply_to_all = [
-                            a for a in actions
-                            if a.get("type", "").upper() in ("ADD_TAG", "ADD_ORDER_TAG")
-                        ]
-                        apply_to_first = [
-                            a for a in actions
-                            if a.get("type", "").upper() not in ("ADD_TAG", "ADD_ORDER_TAG")
-                        ]
+                    self.matched_rows |= matched
+                    actions = step.get("actions", [])
+                    apply_to_all = [
+                        a for a in actions
+                        if a.get("type", "").upper() in ("ADD_TAG", "ADD_ORDER_TAG")
+                    ]
+                    apply_to_first = [
+                        a for a in actions
+                        if a.get("type", "").upper() not in ("ADD_TAG", "ADD_ORDER_TAG")
+                    ]
 
-                        # Masks are built only once a step has matched and has
-                        # actions, so the O(len(df)) allocation stays off the
-                        # hot path.
-                        if apply_to_all:
-                            mask = pd.Series(False, index=df.index)
-                            mask.iloc[positions] = True
-                            all_new_rows.extend(
-                                self._execute_actions(df, mask, apply_to_all, rule_name)
-                            )
+                    if apply_to_all:
+                        all_new_rows.extend(
+                            self._execute_actions(df, matched, apply_to_all, rule_name)
+                        )
+                    # The other actions run once per order, on its first row.
+                    for action_idx, action in enumerate(apply_to_first):
+                        for row in self._execute_actions(
+                            df, matched & first_rows, [action], rule_name
+                        ):
+                            order = rank.get(row.get("Order_Number"), len(rank))
+                            order_rows.append(((order, rule_idx, step_idx, action_idx), row))
+                    alive = matched
 
-                        if apply_to_first:
-                            mask = pd.Series(False, index=df.index)
-                            mask.iloc[positions[0]] = True
-                            all_new_rows.extend(
-                                self._execute_actions(df, mask, apply_to_first, rule_name)
-                            )
+            # Added rows go by order (first appearance), then rule, step and
+            # action, as when each order ran its rules in turn. Stable.
+            order_rows.sort(key=lambda key_row: key_row[0])
+            all_new_rows.extend(row for _, row in order_rows)
 
         # Append the rows ADD_PRODUCT actions created.
         if all_new_rows:
@@ -1361,6 +1349,15 @@ class RuleEngine:
                     if "Status_Note" in new_row:
                         new_row["Status_Note"] = ""
 
+                    # The added product is not part of the line's set
+                    # (AUDIT-08-R5): it tracks as itself.
+                    if "Original_SKU" in new_row:
+                        new_row["Original_SKU"] = sku
+                    if "Original_Quantity" in new_row:
+                        new_row["Original_Quantity"] = quantity
+                    if "Is_Set_Component" in new_row:
+                        new_row["Is_Set_Component"] = False
+
                     # Позначити як додано правилом
                     if "Internal_Tags" in new_row:
                         from shopify_tool.tag_manager import add_tag
@@ -1372,72 +1369,132 @@ class RuleEngine:
 
         return new_rows
 
-    def _evaluate_order_conditions(self, order_df, conditions, match_type):
-        """
-        Evaluate conditions on order-level (entire order group).
+    def _order_step_rows(self, df: pd.DataFrame, codes: np.ndarray, step: dict) -> pd.Series:
+        """One bool per row: the step's conditions, combined by its ALL/ANY.
 
-        Args:
-            order_df: DataFrame rows for single order
-            conditions: List of condition dicts
-            match_type: "ALL" or "ANY"
-
-        Returns:
-            bool: True if conditions met
+        `codes` numbers each row's order (pd.factorize of Order_Number, -1
+        for NaN). Every row of an order gets the same answer, and a row whose
+        order number is NaN never matches. A condition the engine cannot evaluate
+        is no match, with one warning for the step.
         """
         import logging
         logger = logging.getLogger(__name__)
 
-        results = []
+        conditions = step.get("conditions", [])
+        if not conditions:
+            return pd.Series(False, index=df.index)
 
+        results, errors = [], []
         for condition in conditions:
             field, operator, value, error = self._resolve_condition(
-                condition, order_df.columns, allow_order_fields=True
+                condition, df.columns, allow_order_fields=True
             )
             if error:
-                logger.warning(
-                    f"[RULE ENGINE] Order condition cannot be evaluated and is "
-                    f"treated as no-match: {error}"
-                )
-                results.append(False)
+                errors.append(error)
+                results.append(np.zeros(len(df), dtype=bool))
                 continue
+            results.append(self._order_condition_rows(
+                df, codes, {"field": field, "operator": operator, "value": value}
+            ).to_numpy(dtype=bool))
+        if errors:
+            logger.warning(
+                f"[RULE ENGINE] Order condition cannot be evaluated and is "
+                f"treated as no-match: {'; '.join(errors)}"
+            )
 
-            # Check if this is an order-level field
-            if field in self.ORDER_LEVEL_FIELDS:
-                # Calculate order-level metric
-                calc_method_name = self.ORDER_LEVEL_FIELDS[field]
-                calc_method = getattr(self, calc_method_name)
+        if str(step.get("match", "ALL")).upper() == "ALL":
+            combined = np.logical_and.reduce(results)
+        else:
+            combined = np.logical_or.reduce(results)
+        return pd.Series(combined & (codes >= 0), index=df.index)
 
-                # Methods that apply operator internally and return bool directly
-                if field in ("has_sku", "has_product", "all_no_packaging", "order_min_box"):
-                    field_value = calc_method(order_df, value, operator)
-                    result = field_value
-                else:
-                    # For numeric fields: wrap in Series, use global operator
-                    field_value = calc_method(order_df, None)
-                    scalar_series = pd.Series([field_value])
-                    op_func = globals()[OPERATOR_MAP[operator]]
-                    result = bool(op_func(scalar_series, value).iloc[0])
+    def _order_condition_rows(self, df: pd.DataFrame, codes: np.ndarray, condition: dict) -> pd.Series:
+        """One bool per row for one usable condition on an order rule.
 
-            else:
-                # A line field: positive operators need one matching line,
-                # negative ones need every line to satisfy the negation.
-                op_func = globals()[OPERATOR_MAP[operator]]
-                series_result = op_func(order_df[field], value)
-                result = bool(
-                    series_result.all() if operator in NEGATIVE_OPERATORS
-                    else series_result.any()
-                )
+        The answer is worked out per order and given to each of its rows;
+        rows whose order number is NaN get False.
+        - Numeric order fields (item_count, total_quantity, unique_sku_count,
+          max_quantity) are aggregated per order, then compared.
+        - order_volumetric_weight, all_no_packaging and order_min_box read
+          the order's first row, NaN included.
+        - A line field, has_sku and has_product: a positive operator needs
+          one matching line, a negative one needs every line to satisfy it.
+        """
+        field = condition["field"]
+        operator = condition["operator"]
+        value = condition.get("value")
+        n = len(df)
+        alive = codes >= 0
+        n_orders = int(codes.max()) + 1 if n else 0
+        out = np.zeros(n, dtype=bool)
+        if n_orders == 0:
+            return pd.Series(out, index=df.index)
 
-            results.append(result)
+        def per_order(answers) -> pd.Series:
+            out[alive] = np.asarray(answers, dtype=bool)[codes[alive]]
+            return pd.Series(out, index=df.index)
 
-        if not results:
-            return False
+        def first_values(column) -> pd.Series:
+            uniq, first = np.unique(codes, return_index=True)
+            return pd.Series(df[column].to_numpy()[first[uniq >= 0]])
 
-        # Combine results based on match type
-        if str(match_type).upper() == "ALL":
-            return all(results)
-        else:  # ANY
-            return any(results)
+        def compare(values: pd.Series, rule_value):
+            result = globals()[OPERATOR_MAP[operator]](values, rule_value)
+            return result.fillna(False).to_numpy(dtype=bool)
+
+        grouped = None
+        if field in ("total_quantity", "max_quantity", "unique_sku_count"):
+            column = "SKU" if field == "unique_sku_count" else "Quantity"
+            if column not in df.columns:
+                return per_order(compare(pd.Series(np.zeros(n_orders, dtype=np.int64)), value))
+            grouped = pd.Series(df[column].to_numpy()).groupby(codes)
+
+        if field == "item_count":
+            sizes = np.bincount(codes[alive], minlength=n_orders)
+            return per_order(compare(pd.Series(sizes.astype(np.int64)), value))
+        if field == "total_quantity":
+            return per_order(compare(grouped.sum().reindex(range(n_orders)), value))
+        if field == "max_quantity":
+            return per_order(compare(grouped.max().reindex(range(n_orders)), value))
+        if field == "unique_sku_count":
+            # dropna=False: a line without a SKU counts as one more SKU
+            counts = grouped.nunique(dropna=False).reindex(range(n_orders))
+            return per_order(compare(counts, value))
+        if field == "order_volumetric_weight":
+            if "Order_Volumetric_Weight" not in df.columns:
+                return per_order(compare(pd.Series(np.zeros(n_orders)), value))
+            return per_order(compare(first_values("Order_Volumetric_Weight").astype(float), value))
+        if field == "all_no_packaging":
+            if "All_No_Packaging" not in df.columns:
+                return pd.Series(out, index=df.index)
+            texts = first_values("All_No_Packaging").map(
+                lambda raw: "true" if (
+                    raw if isinstance(raw, bool) else str(raw).lower() in ("true", "1", "yes")
+                ) else "false"
+            ).astype(object)
+            return per_order(compare(texts, str(value).lower().strip()))
+        if field == "order_min_box":
+            if "Order_Min_Box" not in df.columns:
+                return pd.Series(out, index=df.index)
+            return per_order(compare(first_values("Order_Min_Box").map(str).astype(object), value))
+
+        # A line field: the operator runs once over the column.
+        if field in ("has_sku", "has_product"):
+            column = "SKU" if field == "has_sku" else "Product_Name"
+            if column not in df.columns or not value:
+                return pd.Series(out, index=df.index)
+        else:
+            column = field
+        if operator not in OPERATOR_MAP:
+            operator = "equals"
+        line_result = globals()[OPERATOR_MAP[operator]](df[column], value)
+        lines = codes[alive]
+        sizes = np.bincount(lines, minlength=n_orders)
+        if operator in NEGATIVE_OPERATORS:
+            hits = line_result.fillna(True).to_numpy(dtype=bool)[alive]
+            return per_order(np.bincount(lines, weights=hits, minlength=n_orders) == sizes)
+        hits = line_result.fillna(False).to_numpy(dtype=bool)[alive]
+        return per_order(np.bincount(lines, weights=hits, minlength=n_orders) > 0)
 
     def _calculate_item_count(self, order_df, sku_value=None):
         """Count unique items (rows) in order."""
@@ -1470,110 +1527,3 @@ class RuleEngine:
         if "Order_Volumetric_Weight" in order_df.columns:
             return float(order_df["Order_Volumetric_Weight"].iloc[0])
         return 0.0
-
-    def _calculate_all_no_packaging(self, order_df, rule_value, operator="equals"):
-        """Evaluate all_no_packaging against rule value + operator.
-
-        Reads the pre-computed All_No_Packaging column and applies the operator
-        so rules can test both True and False explicitly.
-        E.g. {"field": "all_no_packaging", "operator": "equals", "value": "true"}
-             {"field": "all_no_packaging", "operator": "equals", "value": "false"}
-
-        Requires enrich_dataframe_with_weights() to have been called before apply().
-        Returns False if the column is not present.
-        """
-        if "All_No_Packaging" not in order_df.columns:
-            return False
-        raw = order_df["All_No_Packaging"].iloc[0]
-        bool_val = raw if isinstance(raw, bool) else str(raw).lower() in ("true", "1", "yes")
-        # Represent as string for operator comparison ("true"/"false")
-        col_str = "true" if bool_val else "false"
-        if operator not in OPERATOR_MAP:
-            return False
-        op_func = globals()[OPERATOR_MAP[operator]]
-        result_series = op_func(pd.Series([col_str]), str(rule_value).lower().strip())
-        return bool(result_series.iloc[0])
-
-    def _get_order_min_box(self, order_df, rule_value, operator="equals"):
-        """Return bool: True if Order_Min_Box matches the condition.
-
-        Reads the pre-computed Order_Min_Box column (populated by
-        enrich_dataframe_with_weights). Applies operator internally
-        like has_sku/has_product since it returns a bool directly.
-        """
-        if "Order_Min_Box" not in order_df.columns:
-            return False
-        box_value = str(order_df["Order_Min_Box"].iloc[0])
-        if operator not in OPERATOR_MAP:
-            return False
-        op_func = globals()[OPERATOR_MAP[operator]]
-        result_series = op_func(pd.Series([box_value]), rule_value)
-        return bool(result_series.iloc[0])
-
-    def _check_has_sku(self, order_df, sku_value, operator="equals"):
-        """Check if order contains SKU matching the condition.
-
-        Uses all operators from the global OPERATOR_MAP.
-
-        Args:
-            order_df: DataFrame rows for single order
-            sku_value: Value to match against
-            operator: String operator (any from OPERATOR_MAP)
-
-        Returns:
-            bool: True if condition matches
-                  - For positive operators: True if ANY SKU matches
-                  - For negative operators: True if ALL SKUs match (i.e., NONE have the value)
-        """
-        if "SKU" not in order_df.columns or not sku_value:
-            return False
-
-        sku_series = order_df["SKU"]
-
-        if operator not in OPERATOR_MAP:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"[RULE ENGINE] Unknown operator '{operator}' for has_sku, using 'equals'")
-            operator = "equals"
-
-        op_func = globals()[OPERATOR_MAP[operator]]
-        result_series = op_func(sku_series, sku_value)
-
-        # For negative operators, ALL SKUs must match (i.e., NONE have the unwanted value)
-        # For positive operators, ANY SKU can match
-        if operator in NEGATIVE_OPERATORS:
-            return result_series.all()
-        else:
-            return result_series.any()
-
-    def _check_has_product(self, order_df, product_value, operator="equals"):
-        """Check if order contains Product_Name matching the condition.
-
-        Same logic as _check_has_sku but operates on Product_Name column.
-
-        Args:
-            order_df: DataFrame rows for single order
-            product_value: Value to match against
-            operator: String operator (any from OPERATOR_MAP)
-
-        Returns:
-            bool: True if condition matches
-        """
-        if "Product_Name" not in order_df.columns or not product_value:
-            return False
-
-        product_series = order_df["Product_Name"]
-
-        if operator not in OPERATOR_MAP:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"[RULE ENGINE] Unknown operator '{operator}' for has_product, using 'equals'")
-            operator = "equals"
-
-        op_func = globals()[OPERATOR_MAP[operator]]
-        result_series = op_func(product_series, product_value)
-
-        if operator in NEGATIVE_OPERATORS:
-            return result_series.all()
-        else:
-            return result_series.any()

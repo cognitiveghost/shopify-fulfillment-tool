@@ -582,3 +582,15 @@ class TestRepeatRule:
         final = pd.DataFrame({"Order_Number": ["#1"]})
         hist = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": [_YESTERDAY]})
         assert list(analysis._detect_repeated_orders(final, hist) == "Repeat") == [True]
+
+
+def test_fulfillment_reasons_join_the_existing_note():
+    """AUDIT-07-L5: the "Cannot fulfill" notes, without apply(axis=1)."""
+    from shopify_tool.analysis import _with_fulfillment_reasons
+
+    results = {"#1": {"fulfillable": False, "reason": "A short"}, "#2": {"fulfillable": True},
+               "#3": {"fulfillable": False}, "#4": "Fulfillable"}
+    notes = pd.Series(["Repeat", "", float("nan"), "x", "y"])
+    orders = pd.Series(["#1", "#2", "#3", "#4", "#5"])
+    assert _with_fulfillment_reasons(notes, orders, results).tolist() == [
+        "Repeat; Cannot fulfill: A short", "", "Cannot fulfill: Unknown reason", "x", "y"]

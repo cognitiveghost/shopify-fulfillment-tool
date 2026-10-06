@@ -504,3 +504,56 @@ def test_run_analysis_hands_the_run_its_progress_callback(monkeypatch):
     assert mw._analysis_cancelling is False
     mw.command_bar.set_step.assert_called_once_with(0, 4, "Reading orders and stock")
     mw.threadpool.start.assert_called_once()
+
+
+def _run_window(**extra):
+    return SimpleNamespace(
+        session_path="/sessions/2026-09-30_1",
+        current_client_id="acme",
+        _analysis_running=False,
+        _analysis_step=0,
+        _analysis_cancelling=False,
+        active_profile_config={},
+        stock_file_path="/d/stock.csv",
+        orders_file_path="/d/orders.csv",
+        session_manager=Mock(),
+        profile_manager=Mock(),
+        threadpool=Mock(),
+        command_bar=Mock(),
+        ui_manager=Mock(),
+        **extra,
+    )
+
+
+def test_a_run_waits_for_pending_writes(monkeypatch):
+    """Repeat detection reads history, and memory feeds the run (AUDIT-07-H2)."""
+    events = []
+    monkeypatch.setattr("gui.actions_handler.Worker", lambda *a, **k: events.append(("worker",)) or Mock())
+    mw = _run_window(write_queue=Mock(flush=Mock(side_effect=lambda **k: events.append(("flush", k)) or True)))
+    ActionsHandler(mw).run_analysis()
+    assert events == [("flush", {"timeout": 30}), ("worker",)]
+
+
+def test_a_run_is_refused_while_writes_are_still_pending(monkeypatch):
+    captured = {}
+    monkeypatch.setattr("gui.actions_handler.Worker", lambda *a, **k: captured.setdefault("worker", Mock()))
+    toasts = []
+    monkeypatch.setattr("gui.actions_handler.toast", lambda src, text, **k: toasts.append(text))
+    mw = _run_window(write_queue=Mock(flush=Mock(return_value=False)))
+    ActionsHandler(mw).run_analysis()
+    assert toasts == ["Your last changes are still being saved. Run the analysis again in a moment."]
+    assert captured == {}  # no Worker built
+    assert mw._analysis_running is False
+
+
+def test_a_run_is_refused_while_reports_are_being_generated(monkeypatch):
+    """A batch in flight writes the old frame's lists into this session."""
+    captured = {}
+    monkeypatch.setattr("gui.actions_handler.Worker", lambda *a, **k: captured.setdefault("worker", Mock()))
+    toasts = []
+    monkeypatch.setattr("gui.actions_handler.toast", lambda src, text, **k: toasts.append(text))
+    handler = ActionsHandler(_run_window())
+    handler._reports_worker = Mock()
+    handler.run_analysis()
+    assert toasts == ["Reports are still being generated. Run the analysis again when they're done."]
+    assert captured == {}

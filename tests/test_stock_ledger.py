@@ -6,6 +6,7 @@ Spec: docs/superpowers/specs/2026-09-25-phase14-bundle1-stock-ledger-design.md Â
 import pandas as pd
 import pytest
 
+from shopify_tool import stock_ledger
 from shopify_tool.analysis import run_analysis
 from shopify_tool.stock_ledger import (
     FULFILLABLE as FF,
@@ -216,3 +217,12 @@ def test_lines_come_out_in_row_order():
 def test_no_lot_details_column_at_all():
     df = pd.DataFrame({"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [2]})
     assert lot_parts(df) == [(0, 2, "", "")]
+
+
+def test_unlisted_skus_names_skus_without_a_stock_row():
+    df = pd.DataFrame({"Order_Number": ["#1", "#1", "#2"], "SKU": ["A", "X", "Y"], "Quantity": [1, 1, 1],
+                       "Stock": [5, 0, 0], "Final_Stock": [5, None, None],
+                       "Order_Fulfillment_Status": ["Not Fulfillable"] * 3})
+    assert stock_ledger.unlisted_skus(df, ["#1"]) == ["X"]
+    assert stock_ledger.unlisted_skus(df, ["#1", "#2"]) == ["X", "Y"]
+    assert stock_ledger.unlisted_skus(df.drop(columns=["Final_Stock"]), ["#1"]) == []

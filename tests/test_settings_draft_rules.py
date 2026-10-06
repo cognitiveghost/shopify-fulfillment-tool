@@ -262,9 +262,10 @@ def test_priority_is_the_place_in_the_list():
 
 
 def test_enabled_is_written_only_when_a_rule_is_off():
+    # The page lists rules in run order, so the off rule lists last (AUDIT-08-R3).
     draft = RulesDraft([rule("on", enabled=True), rule("off", enabled=False), rule("plain")])
-    assert ["enabled" in r for r in stored(draft)] == [False, True, False]
-    assert stored(draft)[1]["enabled"] is False
+    assert ["enabled" in r for r in stored(draft)] == [False, False, True]
+    assert stored(draft)[2]["enabled"] is False
 
 
 def test_turning_a_rule_off_and_on_again_leaves_no_trace():
@@ -410,7 +411,9 @@ def test_add_rule_appends_an_article_rule_and_opens_it():
 
 
 def test_duplicate_puts_a_copy_right_after():
-    draft = RulesDraft([rule("a", enabled=False, note="n"), rule("b")])
+    # Both off: the page lists rules in run order, which puts off rules after
+    # on ones (AUDIT-08-R3), and this test is about where the copy goes.
+    draft = RulesDraft([rule("a", enabled=False, note="n"), rule("b", enabled=False)])
     assert draft.apply("rule_duplicate", ["1"])
     assert names(draft) == ["a", "a copy", "b"]
     twin = stored(draft)[1]

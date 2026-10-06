@@ -8,9 +8,10 @@ of the session tree.
 
 Going through that method rather than reading the index file directly is
 load-bearing, not stylistic: it is the only path that runs
-`SessionManager._index_is_stale()`, which rebuilds the index when a session
-directory is newer than it. Packing Tool's writes are exactly that case, so
-a raw index read would report the packed orders as empty forever.
+`SessionManager._refresh_index()`, which rereads a session whose folder
+mtime no longer matches its index entry. Packing Tool's writes are exactly
+that case, so a raw index read would report the packed orders as empty
+forever.
 
 Everything here is best-effort by contract: a missing file, malformed JSON
 or an old-format entry yields an empty result and a log line. Repeat

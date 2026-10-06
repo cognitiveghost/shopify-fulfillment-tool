@@ -62,3 +62,13 @@ def test_a_locked_earlier_version_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "replace", locked)
     with pytest.raises(PermissionError):
         prepare_export_path(str(tmp_path / "ALL.xls"), NOW)
+
+
+def test_a_same_minute_re_export_keeps_both_archived_copies(tmp_path):
+    """AUDIT-09-O8: the second move to old/ overwrote the first copy."""
+    base = str(tmp_path / "ALL.xls")
+    for content in (b"first", b"second", b"third"):
+        Path(prepare_export_path(base, NOW)).write_bytes(content)
+    old = sorted((tmp_path / "old").iterdir())
+    assert sorted(p.read_bytes() for p in old) == [b"first", b"second"]
+    assert [p.read_bytes() for p in tmp_path.glob("*.xls")] == [b"third"]

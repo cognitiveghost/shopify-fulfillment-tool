@@ -8,9 +8,12 @@ This module provides functionality to:
 """
 
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 import pandas as pd
+
+from .csv_utils import normalize_sku
 
 logger = logging.getLogger(__name__)
 
@@ -96,73 +99,36 @@ def decode_sets_in_orders(
         orders_df["Is_Set_Component"] = False
         return orders_df
 
-    expanded_rows = []
-    set_orders_count = 0
+    set_decoders = _normalized_decoders(set_decoders)
+    work = orders_df.reset_index(drop=True)
+    ordered_sets = [sku for sku in work["SKU"].unique() if _is_set(sku, set_decoders)]
+    table = _set_table(set_decoders, ordered_sets)
+    set_orders_count = int(work["SKU"].isin([s for s in ordered_sets if set_decoders[s]]).sum())
 
-    for idx, row in orders_df.iterrows():
-        sku = row["SKU"]
-        quantity = row["Quantity"]
+    # A set whose expansion is empty is absent from the table, so its line
+    # stays as it is, like a plain line.
+    is_set = work["SKU"].isin(table["Original_SKU"].unique()).to_numpy()
+    plain = _with_tracking(work[~is_set], is_component=False)
 
-        # Check if this SKU is a set
-        if sku in set_decoders:
-            components = set_decoders[sku]
+    if is_set.any():
+        lines = work[is_set]
+        expanded = lines.assign(**{_POS: lines.index.to_numpy()}).merge(
+            table.rename(columns={"Original_SKU": "__set", "SKU": "__component",
+                                  "_per_unit": "__per_unit", "_seq": _SEQ}).astype({"__set": object}),
+            left_on=lines["SKU"].astype(object).to_numpy(), right_on="__set", how="inner",
+        )
+        expanded = _with_tracking(expanded, is_component=True)
+        expanded["SKU"] = expanded["__component"]
+        expanded["Quantity"] = expanded["Quantity"] * expanded["__per_unit"]
+        expanded = expanded[list(plain.columns)]
+        result_df = pd.concat([plain, expanded], ignore_index=True) if len(plain) else expanded
+        # Input order, each set's components in definition order.
+        result_df = result_df.sort_values([_POS, _SEQ], kind="stable")
+    else:
+        result_df = plain
 
-            # Validate set has components
-            if not components:
-                logger.warning(f"Set '{sku}' has no components defined, skipping")
-                # Keep original row but add tracking columns
-                new_row = row.copy()
-                new_row["Original_SKU"] = sku
-                new_row["Original_Quantity"] = quantity
-                new_row["Is_Set_Component"] = False
-                expanded_rows.append(new_row)
-                continue
-
-            logger.debug(f"Decoding set {sku} (qty: {quantity}) → {len(components)} components")
-            set_orders_count += 1
-
-            # Expand into components
-            valid_components_added = 0
-            for component_sku, component_total in _components(sku, quantity, set_decoders, {sku}):
-                new_row = row.copy()
-                new_row["SKU"] = component_sku
-                new_row["Quantity"] = component_total
-                new_row["Original_SKU"] = sku
-                new_row["Original_Quantity"] = quantity
-                new_row["Is_Set_Component"] = True
-                expanded_rows.append(new_row)
-                valid_components_added += 1
-
-            if valid_components_added == 0:
-                # Every component failed validation -- keep the original order
-                # line instead of letting it vanish with only a debug log.
-                logger.warning(
-                    f"Set '{sku}' has no valid components after validation, keeping original row"
-                )
-                new_row = row.copy()
-                new_row["Original_SKU"] = sku
-                new_row["Original_Quantity"] = quantity
-                new_row["Is_Set_Component"] = False
-                expanded_rows.append(new_row)
-
-        else:
-            # Regular SKU - keep as-is with tracking columns
-            new_row = row.copy()
-            new_row["Original_SKU"] = sku
-            new_row["Original_Quantity"] = quantity
-            new_row["Is_Set_Component"] = False
-            expanded_rows.append(new_row)
-
-    if not expanded_rows:
-        logger.warning("No rows after set expansion")
-        # Return empty DataFrame with correct columns
-        result_df = orders_df.copy()
-        result_df["Original_SKU"] = None
-        result_df["Original_Quantity"] = None
-        result_df["Is_Set_Component"] = False
-        return result_df.iloc[0:0]  # Empty with columns
-
-    result_df = pd.DataFrame(expanded_rows)
+    result_df.index = orders_df.index[result_df[_POS].to_numpy()]
+    result_df = result_df.drop(columns=[_POS, _SEQ])
 
     logger.info(
         f"Decoded {set_orders_count} set orders into components. "
@@ -170,6 +136,79 @@ def decode_sets_in_orders(
     )
 
     return result_df
+
+
+_POS = "__set_decoder_pos"
+_SEQ = "__set_decoder_seq"
+
+
+def _is_set(sku, set_decoders) -> bool:
+    try:
+        return sku in set_decoders
+    except TypeError:  # an unhashable cell is never a set
+        return False
+
+
+def _with_tracking(lines: pd.DataFrame, is_component: bool) -> pd.DataFrame:
+    """`lines` with the three tracking columns set from its own SKU and Quantity.
+
+    Existing tracking columns keep their place; new ones go after the
+    input's columns, as the per-row expansion did.
+    """
+    lines = lines.copy()
+    lines["Original_SKU"] = lines["SKU"]
+    lines["Original_Quantity"] = lines["Quantity"]
+    lines["Is_Set_Component"] = is_component
+    if _POS not in lines.columns:
+        lines[_POS] = lines.index.to_numpy()
+        lines[_SEQ] = 0
+    return lines
+
+
+def _normalized_decoders(set_decoders: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    """Set and component SKUs trimmed as order SKUs are (normalize_sku, AUDIT-09-O4).
+
+    A set saved before imports trimmed its SKUs still expands. Two keys that
+    trim to one SKU: the last one wins, with a warning.
+    """
+    normalized: dict[str, list[dict[str, Any]]] = {}
+    for set_sku, components in set_decoders.items():
+        key = normalize_sku(set_sku)
+        if key in normalized:
+            logger.warning(f"Sets '{key}' are defined twice (spaces aside); using the last one")
+        normalized[key] = [
+            {**component, "sku": normalize_sku(component.get("sku"))}
+            for component in components or []
+        ]
+    return normalized
+
+
+def _set_table(set_decoders: dict[str, list[dict[str, Any]]], skus: Iterable | None = None) -> pd.DataFrame:
+    """One row per (set, component): Original_SKU, SKU, _per_unit, _seq.
+
+    `_per_unit` is the component quantity in one unit of the set, nested sets
+    expanded by the same rules as `_components` (a self-listing set or a
+    cycle is not expanded). `_seq` is the component's place in the
+    expansion. A set whose expansion is empty is absent; its warning is
+    logged here, once per set. `skus` limits the table to those sets
+    (default: every set).
+    """
+    rows = []
+    for set_sku in set_decoders if skus is None else skus:
+        if not set_decoders[set_sku]:
+            logger.warning(f"Set '{set_sku}' has no components defined, skipping")
+            continue
+        expansion = _components(set_sku, 1, set_decoders, {set_sku})
+        if not expansion:
+            logger.warning(
+                f"Set '{set_sku}' has no valid components after validation, keeping original row"
+            )
+            continue
+        rows.extend(
+            (set_sku, component_sku, per_unit, seq)
+            for seq, (component_sku, per_unit) in enumerate(expansion)
+        )
+    return pd.DataFrame(rows, columns=["Original_SKU", "SKU", "_per_unit", "_seq"])
 
 
 def import_sets_from_csv(csv_path: str) -> dict[str, list[dict[str, Any]]]:
@@ -216,6 +255,10 @@ def import_sets_from_csv(csv_path: str) -> dict[str, list[dict[str, Any]]]:
     if df.empty:
         logger.warning("CSV file is empty")
         return {}
+
+    # Trimmed as order SKUs are, before the checks below (AUDIT-09-O4)
+    df["Set_SKU"] = df["Set_SKU"].map(normalize_sku)
+    df["Component_SKU"] = df["Component_SKU"].map(normalize_sku)
 
     # Check for empty SKUs
     if df["Set_SKU"].isna().any() or (df["Set_SKU"] == "").any():

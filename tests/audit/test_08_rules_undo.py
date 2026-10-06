@@ -95,7 +95,7 @@ def test_a_rerun_empties_the_saved_undo_history(tmp_path):
     """Reopening the session must not bring the old run's operations back."""
     mw = _order_removed_then_rerun(tmp_path)
 
-    history_file = tmp_path / "analysis" / "operations_history.json"
+    history_file = mw.undo_manager._get_history_path()
     assert json.loads(history_file.read_text(encoding="utf-8"))["operations"] == []
     assert mw.undo_manager.can_undo() is False
     mw.results_bridge.set_undo_available.assert_called_with(False)
@@ -112,7 +112,6 @@ def _apply(df, rule):
     return seconds, out
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-R1: orders x rules x steps in Python")
 @pytest.mark.parametrize(
     "condition, tagged",
     [
@@ -139,7 +138,6 @@ def test_AUDIT_08_R1_an_order_rule_runs_in_well_under_a_second(
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-R2: six to_datetime calls per cell")
 def test_AUDIT_08_R2_a_date_condition_runs_in_well_under_a_second(benchmark_frame):
     """Audit: 3.45 s for one condition on a Shopify `Created at` column."""
     df = benchmark_frame[0].assign(Created_At="2026-10-01 10:00:00 +0200")
@@ -153,7 +151,6 @@ def test_AUDIT_08_R2_a_date_condition_runs_in_well_under_a_second(benchmark_fram
     assert seconds < 0.5
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-R2: one WARNING per unparseable cell")
 def test_AUDIT_08_R2_a_bad_date_column_logs_one_line(benchmark_frame, caplog):
     df = benchmark_frame[0].head(1000).copy()
     df["Created_At"] = [f"not a date {i}" for i in range(len(df))]
@@ -173,7 +170,6 @@ def test_AUDIT_08_R2_a_bad_date_column_logs_one_line(benchmark_frame, caplog):
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-08-U2: every column of every affected row")
 def test_AUDIT_08_U2_one_bulk_status_change_keeps_the_history_small(benchmark_frame, tmp_path):
     """Audit: about 9.9 MB for 6,000 lines x 44 columns, rewritten on every
     edit and undo. Changed columns plus positions fit in well under 2 MB."""
@@ -185,7 +181,7 @@ def test_AUDIT_08_U2_one_bulk_status_change_keeps_the_history_small(benchmark_fr
 
     ActionsHandler(mw).bulk_change_status(df["Order_Number"].unique().tolist(), False)
 
-    history = tmp_path / "analysis" / "operations_history.json"
+    history = mw.undo_manager._get_history_path()
     assert (mw.analysis_results_df["Order_Fulfillment_Status"] == "Not Fulfillable").all()
     assert mw.undo_manager.can_undo()
     assert history.stat().st_size < 2_000_000

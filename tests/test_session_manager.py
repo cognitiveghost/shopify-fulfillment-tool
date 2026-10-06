@@ -1,6 +1,7 @@
 """Session lifecycle & session_info.json accuracy (part of priority 6: app config)."""
 import json
 import os
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -186,6 +187,18 @@ class TestConfirmedBugs:
         assert outside_dir.exists()
 
 
+def _spy(monkeypatch, obj, name):
+    calls = []
+    real = getattr(obj, name)
+
+    def counting(*args, **kwargs):
+        calls.append(args)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(obj, name, counting)
+    return calls
+
+
 class TestSessionIndex:
     def test_create_session_adds_index_entry(self, session_manager):
         session_path = Path(session_manager.create_session("M"))
@@ -230,16 +243,15 @@ class TestSessionIndex:
         is unchanged, so a count-only staleness check served the stale entry
         forever -- silently."""
         session_path = Path(session_manager.create_session("M"))
-        client_sessions_dir = session_path.parent
+        session_manager.list_client_sessions("M")
 
         info = json.loads((session_path / "session_info.json").read_text())
         info["packing_progress"] = {"ALL": {"completed_orders": ["#A"]}}
         atomic_write_json(session_path / "session_info.json", info)
-        # The index was written before that; pin the ordering so the test
+        # The index remembers the folder's mtime; push it forward so the test
         # doesn't depend on filesystem timestamp granularity.
-        index_path = client_sessions_dir / SessionManager.INDEX_FILENAME
-        stamp = session_path.stat().st_mtime - 10
-        os.utime(index_path, (stamp, stamp))
+        t = session_path.stat().st_mtime
+        os.utime(session_path, (t + 5, t + 5))
 
         sessions = session_manager.list_client_sessions("M")
         assert sessions[0]["packing_progress"] == {"ALL": {"completed_orders": ["#A"]}}
@@ -330,6 +342,102 @@ class TestSessionIndex:
         assert session_manager.update_session_status(session_path, "completed") is True
         info = session_manager.get_session_info(session_path)
         assert info["status"] == "completed"
+
+
+class TestIndexRefresh:
+    """The index remembers each session folder's mtime and rereads only the
+    folders whose mtime changed (AUDIT-07-H3, AUDIT-07-H4)."""
+
+    def test_a_new_session_folder_is_added_without_a_full_scan(self, session_manager, monkeypatch):
+        first = Path(session_manager.create_session("M"))
+        session_manager.list_client_sessions("M")
+        other = first.parent / "2099-01-01_1"  # written by another tool
+        other.mkdir()
+        atomic_write_json(other / "session_info.json", {"session_name": other.name, "status": "active"})
+        scans = _spy(monkeypatch, session_manager, "_scan_sessions")
+        reads = _spy(monkeypatch, session_manager, "get_session_info")
+        names = {s["session_name"] for s in session_manager.list_client_sessions("M")}
+        assert names == {first.name, other.name}
+        assert scans == [] and len(reads) == 1
+
+    def test_a_deleted_session_is_dropped_without_a_read(self, session_manager, monkeypatch):
+        keep = Path(session_manager.create_session("M"))
+        gone = Path(session_manager.create_session("M"))
+        session_manager.list_client_sessions("M")
+        shutil.rmtree(gone)
+        reads = _spy(monkeypatch, session_manager, "get_session_info")
+        assert [s["session_name"] for s in session_manager.list_client_sessions("M")] == [keep.name]
+        assert reads == []
+        index = json.loads((keep.parent / SessionManager.INDEX_FILENAME).read_text())
+        assert gone.name not in {e["session_name"] for e in index}
+
+    def test_own_writes_reread_nothing(self, session_manager, monkeypatch):  # pins today's behaviour
+        session_manager.create_session("M")
+        path = session_manager.create_session("M")
+        session_manager.update_session_status(path, "completed")
+        session_manager.update_session_info(path, {"comments": "hi"})
+        session_manager.apply_status_updates("M", {Path(path).name: "archived"})
+        reads = _spy(monkeypatch, session_manager, "get_session_info")
+        for _ in range(3):
+            session_manager.list_client_sessions("M")
+        assert reads == []
+
+    def test_a_legacy_index_without_mtimes_is_refreshed_once(self, session_manager, monkeypatch):
+        a, b = (Path(session_manager.create_session("M")) for _ in range(2))
+        (a.parent / SessionManager.INDEX_FILENAME).write_text(json.dumps(
+            [{"session_name": a.name, "status": "active"}, {"session_name": b.name, "status": "active"}]))
+        reads = _spy(monkeypatch, session_manager, "get_session_info")
+        session_manager.list_client_sessions("M")
+        session_manager.list_client_sessions("M")
+        assert len(reads) == 2
+
+    def test_a_stray_folder_is_read_once_until_it_changes(self, session_manager, monkeypatch):
+        real = Path(session_manager.create_session("M"))
+        stray = real.parent / "archive"
+        stray.mkdir()
+        reads = _spy(monkeypatch, session_manager, "get_session_info")
+        for _ in range(3):
+            listed = session_manager.list_client_sessions("M")
+        assert [s["session_name"] for s in listed] == [real.name]
+        assert len(reads) == 1
+        atomic_write_json(stray / "session_info.json", {"session_name": "archive", "status": "active"})
+        t = stray.stat().st_mtime + 5
+        os.utime(stray, (t, t))
+        assert {s["session_name"] for s in session_manager.list_client_sessions("M")} == {real.name, "archive"}
+
+    def test_a_session_whose_info_could_not_be_read_is_tried_again(self, session_manager, monkeypatch):
+        """A read that fails (the share blinks) must not hide a real session
+        until its folder changes again; only a missing file is remembered."""
+        path = Path(session_manager.create_session("M"))
+        session_manager.list_client_sessions("M")
+        t = path.stat().st_mtime + 5
+        os.utime(path, (t, t))  # another tool wrote it
+        real = session_manager.get_session_info
+        failures = [None]
+        monkeypatch.setattr(session_manager, "get_session_info",
+                            lambda p: failures.pop() if failures else real(p))
+        session_manager.list_client_sessions("M")  # the read fails here
+        assert [s["session_name"] for s in session_manager.list_client_sessions("M")] == [path.name]
+
+    def test_an_unreadable_session_info_is_retried_without_rewriting_the_index(
+        self, session_manager, monkeypatch
+    ):
+        path = Path(session_manager.create_session("M"))
+        session_manager.list_client_sessions("M")
+        (path / "session_info.json").write_text("{torn", encoding="utf-8")
+        t = path.stat().st_mtime + 5
+        os.utime(path, (t, t))
+        session_manager.list_client_sessions("M")  # records the retry marker
+        reads = _spy(monkeypatch, session_manager, "get_session_info")
+        writes = _spy(monkeypatch, session_manager, "_write_index")
+        session_manager.list_client_sessions("M")
+        assert len(reads) == 1 and writes == []
+
+    def test_private_index_keys_never_reach_callers(self, session_manager):
+        path = Path(session_manager.create_session("M"))
+        (path.parent / "stray").mkdir()
+        listed = session_manager.list_client_sessions("M")
+        assert all(not k.startswith("_") for s in listed for k in s)
 
 
 class TestListClientSessionsUsesIndex:
@@ -551,3 +659,20 @@ class TestRestoreSessionFields:
         ghost.mkdir()
         with pytest.raises(SessionManagerError):
             session_manager.restore_session_fields(str(ghost), {"comments": "x"})
+
+
+def test_a_lock_that_was_never_taken_is_not_released(session_manager, tmp_path, monkeypatch):
+    """AUDIT-07-L4: unlocking a lock this call never took is not ours to do."""
+    import fcntl
+
+    calls = []
+
+    def flock(fd, op):
+        calls.append(op)
+        if op == fcntl.LOCK_EX:
+            raise OSError("lock refused")
+
+    monkeypatch.setattr(fcntl, "flock", flock)
+    with pytest.raises(OSError, match="lock refused"), session_manager._exclusive_lock(tmp_path / "x.lock"):
+        pass
+    assert calls == [fcntl.LOCK_EX]

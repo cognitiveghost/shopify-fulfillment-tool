@@ -4,20 +4,36 @@ Undo Manager for DataFrame Operations
 Manages undo history for DataFrame modifications:
 - Records operations after execution (stores affected rows before modification)
 - Restores previous DataFrame state
-- Persists history to operations_history.json
+- Persists history to operations_history_<PC>.json, one file per PC (AUDIT-08-U4)
 - Clears "future" operations after new action following undo
 """
 
 import json
 import logging
+import os
+import platform
+import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pandas as pd
 
 from shared.atomic_write import atomic_write_json
 from shopify_tool.stock_ledger import with_stock_left
+
+LEGACY_HISTORY_FILE = "operations_history.json"
+
+
+def _pc_name() -> str:
+    """This PC's name, safe in a file name: anything but a letter, digit, _ or - becomes _.
+
+    Letters include non-Latin ones: Windows allows a Cyrillic computer name,
+    and two such names of one length would otherwise share an undo file
+    (AUDIT-08-U4).
+    """
+    name = os.environ.get("COMPUTERNAME") or platform.node() or "unknown"
+    return re.sub(r"[^\w-]", "_", name)
 
 
 class UndoManager:
@@ -27,6 +43,22 @@ class UndoManager:
     Supports multi-level undo (up to max_history operations back), not just
     the last operation.
     """
+
+    # The columns each edit's undo handler puts back. A record of one of
+    # these types keeps Order_Number and these columns only (AUDIT-08-U2);
+    # every other type -- the removals, which _reinsert puts back whole --
+    # keeps whole rows. Handlers read columns by name, so a whole-row record
+    # from an older build still undoes.
+    RESTORED_COLUMNS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "toggle_status": ("Order_Fulfillment_Status",),
+        "bulk_change_status": ("Order_Fulfillment_Status",),
+        "add_tag": ("Status_Note",),
+        "add_internal_tag": ("Internal_Tags",),
+        "remove_internal_tag": ("Internal_Tags",),
+        "bulk_add_tag": ("Internal_Tags",),
+        "bulk_remove_tag": ("Internal_Tags",),
+        "change_quantity": ("Quantity", "Order_Fulfillment_Status"),
+    }
 
     def __init__(self, main_window):
         """Initialize with reference to MainWindow.
@@ -63,10 +95,17 @@ class UndoManager:
         try:
             # Clear any "future" operations (redo history) when new operation is recorded
             if self.current_position < len(self.operations):
+                cleared = len(self.operations) - self.current_position  # before the slice (AUDIT-08-U5)
                 self.operations = self.operations[:self.current_position]
-                self.log.info(f"Cleared {len(self.operations) - self.current_position} future operations")
+                self.log.info(f"Cleared {cleared} future operations")
 
             # Convert DataFrame to serializable format
+            if operation_type in self.RESTORED_COLUMNS:
+                kept = [
+                    c for c in ("Order_Number", *self.RESTORED_COLUMNS[operation_type])
+                    if c in affected_rows_before.columns
+                ]
+                affected_rows_before = affected_rows_before[kept]
             affected_rows_serialized = affected_rows_before.to_dict('records') if not affected_rows_before.empty else []
 
             # Get current stats for reference
@@ -435,7 +474,10 @@ class UndoManager:
         )
 
     def _get_history_path(self) -> Path | None:
-        """Get path to operations_history.json.
+        """Get path to this PC's undo history, operations_history_<PC>.json.
+
+        One file per PC (AUDIT-08-U4): a session reopened on another PC does
+        not offer the first PC's undo steps, whose rows it may not hold.
 
         Returns:
             Path object or None if no active session
@@ -443,38 +485,72 @@ class UndoManager:
         if not self.main_window.session_path:
             return None
 
-        session_path = Path(self.main_window.session_path)
-        analysis_dir = session_path / "analysis"
-        analysis_dir.mkdir(parents=True, exist_ok=True)
+        return Path(self.main_window.session_path) / "analysis" / f"operations_history_{_pc_name()}.json"
 
-        return analysis_dir / "operations_history.json"
+    def _submit(self, kind: str, job) -> None:
+        """Run `job` on the window's write queue, or now when there is none."""
+        queue = getattr(self.main_window, "write_queue", None)
+        if queue is not None:
+            queue.submit(str(self.main_window.session_path), kind, job)
+            return
+        try:
+            job()
+        except Exception:
+            self.log.exception(f"Failed to write {kind}")
 
     def _save_history(self):
-        """Save history to operations_history.json."""
-        try:
-            history_path = self._get_history_path()
+        """Save this PC's history file, through the window's write queue.
 
-            if not history_path:
-                self.log.debug("No active session, skipping history save")
-                return
+        The job writes a snapshot taken now, so a later edit never changes
+        what it writes (AUDIT-07-H2). Without a queue it is written now. The
+        queue is duck-typed (gui.session_write_queue.SessionWriteQueue), so
+        this module needs no Qt.
+        """
+        history_path = self._get_history_path()
+        if not history_path:
+            self.log.debug("No active session, skipping history save")
+            return
 
-            history_data = {
-                "operations": self.operations,
-                "current_position": self.current_position,
-                "max_history": self.max_history
-            }
+        history_data = {
+            "operations": list(self.operations),
+            "current_position": self.current_position,
+            "max_history": self.max_history,
+        }
 
+        def write():
+            history_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_json(history_path, history_data, indent=2)
-
             self.log.debug(f"Saved history to {history_path}")
 
-        except Exception:
-            self.log.exception("Failed to save history")
+        self._submit("undo_history", write)
+
+    def _delete_other_histories(self):
+        """Delete the session's undo files other than this PC's, on the queue.
+
+        A job of its own kind: the queue replaces a pending job of the same
+        kind, so on "undo_history" the next edit's save would cancel it.
+        """
+        history_path = self._get_history_path()
+        if not history_path:
+            return
+
+        def delete():
+            for other in history_path.parent.glob("operations_history*.json"):
+                if other != history_path:
+                    other.unlink(missing_ok=True)
+
+        self._submit("undo_history_others", delete)
 
     def _load_history(self):
-        """Load history from operations_history.json."""
+        """Load this PC's history; the shared file of an older build is the fallback.
+
+        The legacy operations_history.json is read only when this PC has no
+        file yet, and is never written.
+        """
         try:
             history_path = self._get_history_path()
+            if history_path and not history_path.exists():
+                history_path = history_path.with_name(LEGACY_HISTORY_FILE)
 
             if not history_path or not history_path.exists():
                 self.log.debug("No history file found")
@@ -499,10 +575,17 @@ class UndoManager:
             self.current_position = 0
 
     def clear_history(self):
-        """Clear all undo history."""
+        """Clear all undo history: this PC's, and every other PC's for the session.
+
+        Called after a run. Every PC's steps point at the previous run's
+        frame, and undoing a removal from them puts orders in twice
+        (AUDIT-08-U1), so the other PCs' files and the legacy shared one go
+        too -- not only this PC's (AUDIT-08-U4).
+        """
         self.operations = []
         self.current_position = 0
         self._save_history()
+        self._delete_other_histories()
         self.log.info("Cleared undo history")
 
     def reset_for_session(self):

@@ -29,9 +29,10 @@ from audit_support import (  # noqa: F401  pytest fixtures, used by name
 import gui.main_window_pyside as main_window_module
 import shopify_tool.profile_manager as profile_manager_module
 from gui.main_window_pyside import MainWindow
+from gui.session_write_queue import SessionWriteQueue
 from shared.atomic_write import atomic_write_json
 from shopify_tool import core, fulfillment_history, session_state
-from shopify_tool.analysis import run_analysis
+from shopify_tool.analysis import lot_table, run_analysis
 from shopify_tool.profile_manager import ProfileManager
 
 NO_HISTORY = pd.DataFrame({"Order_Number": []})
@@ -132,8 +133,7 @@ def test_a_failed_toggle_leaves_this_pcs_config_alone(profiles, monkeypatch, tog
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-H2: history, Excel mirror and index on the click")
-def test_AUDIT_07_H2_an_edit_returns_to_the_person_quickly(benchmark_frame, tmp_path, sessions):
+def test_AUDIT_07_H2_an_edit_returns_to_the_person_quickly(benchmark_frame, tmp_path, sessions, qapp):
     """Measured on local disk at 2.7-3.3 s per edit for the benchmark frame,
     before any share latency. Only current_state.pkl needs to be on the
     click (the report's fix direction; the owner decides the rest)."""
@@ -146,6 +146,7 @@ def test_AUDIT_07_H2_an_edit_returns_to_the_person_quickly(benchmark_frame, tmp_
         profile_manager=sessions.profile_manager,
         current_client_id="M",
         active_profile_config={},
+        write_queue=SessionWriteQueue(),
     )
     MainWindow.save_session_state(pc)  # the run's own save; not timed
     pc.analysis_results_df.loc[0, "Order_Fulfillment_Status"] = "Not Fulfillable"
@@ -153,6 +154,39 @@ def test_AUDIT_07_H2_an_edit_returns_to_the_person_quickly(benchmark_frame, tmp_
     seconds, _ = timed(lambda: MainWindow.save_session_state(pc))
 
     assert seconds < 1.0
+    assert pc.write_queue.flush(timeout=30)
+    history = fulfillment_history.load(fulfillment_history.history_path(pc.profile_manager, "M"))
+    assert (history["Session"] == Path(pc.session_path).name).any()
+    info = json.loads((Path(pc.session_path) / "session_info.json").read_text(encoding="utf-8"))
+    assert session_state.order_counts(pc.analysis_results_df).items() <= info.items()
+
+
+def test_a_run_drops_history_rows_of_deleted_sessions(sessions, analysis_run):
+    """AUDIT-07-L1: only the run prunes, and only folders that are gone."""
+    kept = Path(sessions.create_session("M"))
+    path = sessions.create_session("M")
+    history = fulfillment_history.history_path(sessions.profile_manager, "M")
+    pd.DataFrame({"Order_Number": ["#8", "#9", "#7"], "Execution_Date": ["2026-01-01"] * 3,
+                  "Session": ["gone", kept.name, ""]}).to_csv(history, index=False)
+    ok, msg, _df, _stats = analysis_run(path)
+    assert ok, msg
+    rows = fulfillment_history.load(history)
+    assert set(rows["Session"]) == {kept.name, "", Path(path).name}
+
+
+def test_the_session_names_the_report_it_wrote(sessions, analysis_run):
+    """AUDIT-07-L2."""
+    path = sessions.create_session("M")
+    assert analysis_run(path)[0]
+    info = json.loads((Path(path) / "session_info.json").read_text(encoding="utf-8"))
+    assert (Path(path) / info["analysis_report_path"]).exists()
+
+
+def test_a_run_writes_no_excel_mirror(sessions, analysis_run):
+    path = sessions.create_session("M")
+    ok, msg, _df, _stats = analysis_run(path)
+    assert ok, msg
+    assert not (Path(path) / "analysis" / "current_state.xlsx").exists()
 
 
 # --------------------------------------------------------------------------
@@ -178,7 +212,6 @@ def _count_calls(monkeypatch, obj, name):
     return calls
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-H3: a folder without session_info.json")
 def test_AUDIT_07_H3_a_stray_folder_does_not_force_rescans(sessions, monkeypatch):
     client_dir = _client_with_sessions(sessions)
     (client_dir / "stray_folder").mkdir()  # half-deleted session, manual archive
@@ -199,7 +232,6 @@ def test_without_a_stray_folder_the_index_is_scanned_once(sessions, monkeypatch)
     assert len(scans) <= 1
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-H4: one changed session rereads them all")
 def test_AUDIT_07_H4_a_packing_tool_write_refreshes_one_entry(sessions, monkeypatch):
     client_dir = _client_with_sessions(sessions)
     sessions.list_client_sessions("A")  # builds the index
@@ -225,7 +257,6 @@ def test_AUDIT_07_H4_a_packing_tool_write_refreshes_one_entry(sessions, monkeypa
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M1: lots skip qty <= 0, the total nets it")
 def test_AUDIT_07_M1_a_lot_column_does_not_change_the_answer():
     """Either owner rule (net negatives against the oldest lots, or cap lot
     availability at the SKU total) gives both paths the same answer."""
@@ -242,6 +273,10 @@ def test_AUDIT_07_M1_a_lot_column_does_not_change_the_answer():
 
     assert outcome(no_lots) == ("Not Fulfillable", 7.0, 7.0)
     assert outcome(lots) == outcome(no_lots)
+
+    table = lot_table(pd.DataFrame({"SKU": ["A", "A"], "Stock": [10, -3],
+                                    "Expiry_Date": ["2027-01-01", "2027-02-01"]}))
+    assert [(lot["expiry"], lot["qty"]) for lot in table["A"]] == [("2027-01-01", 7.0)]
 
 
 # --------------------------------------------------------------------------
@@ -345,7 +380,6 @@ class _TickingClock(datetime):
         return cls.current if tz is None else cls.current.astimezone(tz)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M5: memory saves fill the 10 backup slots")
 def test_AUDIT_07_M5_a_settings_backup_survives_a_day_of_edits(profiles, monkeypatch):
     monkeypatch.setattr(profile_manager_module, "datetime", _TickingClock)
     config = profiles.load_shopify_config("X")

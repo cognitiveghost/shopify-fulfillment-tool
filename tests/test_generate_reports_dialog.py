@@ -97,39 +97,31 @@ def test_the_checkbox_indicator_is_themed_not_native():
 def test_one_failing_report_does_not_cost_the_user_the_others(monkeypatch):
     """The whole point of generating a batch in one pass.
 
-    Without the per-report try/except, the first bad config aborts the loop
-    and the user loses every report after it -- which is worse than the two
-    single-select dialogs this replaced.
+    The batch runs on a Worker and one failure never stops the others
+    (tests/test_report_jobs.py). Back on the GUI thread, the reports that
+    were written are announced and the one that failed is named, once.
     """
     from unittest.mock import Mock
 
     from gui import actions_handler
     from gui.actions_handler import ActionsHandler
+    from shopify_tool.report_jobs import ReportOutcome
 
     errors = Mock()
     monkeypatch.setattr(actions_handler, "show_error", errors)
-
-    generated = []
-
-    def fake_single(report_type, config, session_path):
-        if config["name"] == "DPD":
-            raise ValueError("no such column")
-        generated.append(config["name"])
-
+    toasts = []
     handler = SimpleNamespace(
         log=logging.getLogger(__name__),
-        mw=None,
-        _generate_single_report=fake_single,
-        _refuse_stale_export=lambda: False,
+        mw=SimpleNamespace(log_activity=lambda *a: None, session_browser=Mock()),
+        _results_toast=lambda text, **k: toasts.append(text),
     )
 
-    batch = [
-        {"name": "DHL", "report_type": "packing_lists"},
-        {"name": "DPD", "report_type": "packing_lists"},
-        {"name": "Daily ERP", "report_type": "stock_exports"},
-    ]
-    ActionsHandler._generate_reports(handler, batch, "/tmp/session")
+    ActionsHandler._on_reports_generated(handler, [
+        ReportOutcome("DHL", "packing_lists", output_file="/s/packing_lists/DHL.xlsx"),
+        ReportOutcome("DPD", "packing_lists", failed=True),
+        ReportOutcome("Daily ERP", "stock_exports", output_file="/s/stock_exports/ERP_0101_1200.xls"),
+    ])
 
-    assert generated == ["DHL", "Daily ERP"]
+    assert toasts == ["Report saved: DHL.xlsx", "Report saved: ERP_0101_1200.xls"]
     errors.assert_called_once()
-    assert "DPD" in errors.call_args.args[2]
+    assert "DPD" in errors.call_args.args[1]

@@ -13,6 +13,7 @@ from shopify_tool.stock_ledger import (
     drawing_rows,
     is_fulfillable,
     shortfall,
+    unlisted_skus,
     with_stock_left,
 )
 
@@ -169,31 +170,67 @@ def _normalized_stock(stock_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def lot_table(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
-    """The opening lots per SKU, FIFO-sorted, from a stock frame with internal
+    """The opening lots per SKU, in draw order, from a stock frame with internal
     column names. None without lot columns (R3, ADR 0015)."""
     return _build_fifo_lots(_normalized_stock(stock_df))
 
 
+_NO_EXPIRY_SENTINEL = date(9999, 12, 31)  # sorts after all real dates
+
+
+def _lot_fields(row, has_expiry: bool, has_batch: bool) -> tuple[str, date | None, str | None]:
+    """(expiry, expiry_dt, batch) of one stock row; expiry "1" means none."""
+    raw_e = row.Expiry_Date if has_expiry and pd.notna(row.Expiry_Date) else None
+    if raw_e is None:
+        expiry_raw = "1"
+    elif isinstance(raw_e, float):
+        expiry_raw = str(int(raw_e))
+    else:
+        expiry_raw = str(raw_e).strip()
+
+    raw_b = row.Batch if has_batch and pd.notna(row.Batch) else None
+    if raw_b is None:
+        batch_raw = None
+    elif isinstance(raw_b, float):
+        batch_raw = str(int(raw_b))
+    else:
+        batch_raw = str(raw_b).strip()
+
+    if batch_raw == "1":
+        batch_raw = None
+    return expiry_raw, _parse_expiry_date(expiry_raw), batch_raw
+
+
+def _draw_key(lot: dict) -> tuple:
+    """Draw order: undated, unbatched stock first, then the rest by expiry (ADR 0015)."""
+    undated = lot["expiry"] == "1" and lot["batch"] is None
+    return (0 if undated else 1, lot["expiry_dt"] or _NO_EXPIRY_SENTINEL, lot["batch"] or "")
+
+
 def _build_fifo_lots(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
-    """Build a FIFO-sorted lot inventory from a multi-row stock DataFrame.
+    """Build the opening lots per SKU, in draw order, from a multi-row stock DataFrame.
 
     Returns None when neither Expiry_Date nor Batch column is present
     (backward-compatibility gate — no lot tracking needed).
 
-    Each SKU maps to a list of lot dicts sorted for FIFO consumption:
+    Each SKU maps to a list of lot dicts in the order orders draw them:
         {"expiry": str, "expiry_dt": Optional[date], "batch": Optional[str], "qty": float}
 
-    Sort order: expiry_dt ASC (earliest first), None (no-expiry) sorts last.
-    SKUs where every row has no expiry AND no batch are represented as a
-    single pseudo-lot with expiry="1"/batch=None — functionally equivalent
-    to the legacy no-lot path.
+    Draw order: undated, unbatched lots first (expiry "1", no batch), then
+    dated or batched lots, earliest expiry first (no expiry last), then by
+    batch (ADR 0015).
+
+    A negative stock row nets against the lot with the same expiry and batch
+    first, and any remainder against the lots in draw order (AUDIT-07-M1).
+    So a SKU's lots sum to its stock total, and a SKU whose total is 0 or
+    less has no lots.
 
     Args:
         stock_df: Stock DataFrame with internal column names already applied.
                   Expected columns: SKU, Stock; optional: Expiry_Date, Batch.
 
     Returns:
-        Dict mapping SKU → sorted list of lot dicts, or None if no lot columns.
+        Dict mapping SKU → list of lot dicts in draw order, or None if no lot columns.
     """
     has_expiry = "Expiry_Date" in stock_df.columns
     has_batch = "Batch" in stock_df.columns
@@ -201,50 +238,35 @@ def _build_fifo_lots(stock_df: pd.DataFrame) -> dict[str, list[dict]] | None:
         return None
 
     fifo_lots: dict[str, list[dict]] = {}
-    _SENTINEL = date(9999, 12, 31)  # sorts after all real dates
 
     for sku, group in stock_df.groupby("SKU"):
-        lots = []
-        for row in group.itertuples(index=False):
-            qty = float(row.Stock) if pd.notna(row.Stock) else 0.0
-            if qty <= 0:
+        rows = [
+            (_lot_fields(row, has_expiry, has_batch), float(row.Stock) if pd.notna(row.Stock) else 0.0)
+            for row in group.itertuples(index=False)
+        ]
+        lots = sorted(
+            (
+                {"expiry": e, "expiry_dt": d, "batch": b, "qty": qty}
+                for (e, d, b), qty in rows
+                if qty > 0
+            ),
+            key=_draw_key,
+        )
+        for (e, _d, b), qty in rows:
+            if qty >= 0:
                 continue
-            raw_e = (
-                row.Expiry_Date if has_expiry and pd.notna(row.Expiry_Date) else None
-            )
-            if raw_e is None:
-                expiry_raw = "1"
-            elif isinstance(raw_e, float):
-                expiry_raw = str(int(raw_e))
-            else:
-                expiry_raw = str(raw_e).strip()
-
-            raw_b = row.Batch if has_batch and pd.notna(row.Batch) else None
-            if raw_b is None:
-                batch_raw = None
-            elif isinstance(raw_b, float):
-                batch_raw = str(int(raw_b))
-            else:
-                batch_raw = str(raw_b).strip()
-
-            if batch_raw == "1":
-                batch_raw = None
-            expiry_dt = _parse_expiry_date(expiry_raw)
-            lots.append(
-                {
-                    "expiry": expiry_raw,
-                    "expiry_dt": expiry_dt,
-                    "batch": batch_raw,
-                    "qty": qty,
-                }
-            )
-
-        if not lots:
-            continue
-
-        # Sort: real expiry dates first (ASC), no-expiry last
-        lots.sort(key=lambda l: (l["expiry_dt"] or _SENTINEL, l["batch"] or ""))
-        fifo_lots[str(sku)] = lots
+            debt = -qty
+            same = [lot for lot in lots if (lot["expiry"], lot["batch"]) == (e, b)]
+            rest = [lot for lot in lots if all(lot is not s for s in same)]
+            for lot in same + rest:  # its own lot first, then draw order
+                take = min(lot["qty"], debt)
+                lot["qty"] -= take
+                debt -= take
+                if debt <= 0:
+                    break
+        lots = [lot for lot in lots if lot["qty"] > 0]
+        if lots:
+            fifo_lots[str(sku)] = lots
 
     return fifo_lots if fifo_lots else {}
 
@@ -627,9 +649,9 @@ def _simulate_stock_allocation(
         orders_df: Cleaned orders DataFrame with item counts
         stock_df: Stock availability DataFrame (aggregated per SKU)
         prioritized_orders: DataFrame with ["Order_Number", "item_count"] in priority order
-        fifo_lots: Optional FIFO lot structure from _build_fifo_lots(). When provided,
-                   consumes lots in expiry-date order (earliest first) and tracks which
-                   lots were allocated per order.
+        fifo_lots: Optional lot structure from _build_fifo_lots(). When provided,
+                   consumes lots in draw order (undated, unbatched stock first, then
+                   earliest expiry first) and tracks which lots were allocated per order.
 
     Returns:
         Tuple of (fulfillment_results, lot_allocations, final_stock_dict):
@@ -637,7 +659,7 @@ def _simulate_stock_allocation(
         - lot_allocations: {order_number: {sku: [{expiry, batch, qty_allocated}]}}
                            Empty dict when fifo_lots is None.
         - final_stock_dict: {sku: remaining_qty} after all fulfillments applied.
-                            Eliminates the need for a separate _calculate_final_stock replay pass.
+                            No separate replay pass recomputes it.
     """
     logger.debug("Phase 3/7: Simulating stock allocation...")
 
@@ -796,7 +818,7 @@ def _iso(value) -> str | None:
 def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") -> pd.DataFrame:
     """R3 (ADR 0015): each SKU line of a fulfillable order owns its lots.
 
-    `lots` is lot_table's FIFO list per SKU, or None. Orders draw in the run's
+    `lots` is lot_table's lots per SKU, in draw order, or None. Orders draw in the run's
     priority sequence (_prioritize_orders, `mode`), an order's lines in row
     order. Units the lots can't cover get one "no lot" entry (expiry "1"), so
     a line's entries always sum to its Quantity. Held orders, no-SKU lines and
@@ -838,53 +860,6 @@ def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") ->
                 entries.append({"expiry": "1", "expiry_dt": None, "batch": None, "qty_allocated": need})
             df.at[idx, "Lot_Details"] = entries
     return df
-
-
-def _calculate_final_stock(
-    stock_df: pd.DataFrame, fulfillment_results: dict[str, str], orders_df: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    Calculate final stock levels after fulfillment simulation.
-
-    Recalculates stock by replaying the fulfillment decisions to determine
-    remaining stock for each SKU.
-
-    Args:
-        stock_df: Initial stock DataFrame
-        fulfillment_results: Dict of order_number -> status from simulation
-        orders_df: Orders DataFrame
-
-    Returns:
-        DataFrame with columns ["SKU", "Final_Stock"]
-
-    Note:
-        This recreates the stock calculation based on fulfillment results.
-    """
-    logger.debug("Phase 4/7: Calculating final stock levels...")
-
-    # Initialize final stock from initial stock
-    live_stock = pd.Series(stock_df.Stock.values, index=stock_df.SKU).to_dict()
-
-    # Replay fulfillment to calculate final stock
-    for order_number, result in fulfillment_results.items():
-        if result.get("fulfillable", False):
-            # Get items for this order
-            order_items = orders_df[orders_df["Order_Number"] == order_number]
-            # Deduct stock - VECTORIZED groupby
-            # Skip NO_SKU items (they don't consume stock)
-            for sku, qty in order_items.groupby("SKU")["Quantity"].sum().items():
-                if sku in live_stock:  # Only deduct if SKU exists in stock
-                    live_stock[sku] -= qty
-
-    # Convert to DataFrame
-    final_stock_levels = (
-        pd.Series(live_stock, name="Final_Stock")
-        .reset_index()
-        .rename(columns={"index": "SKU"})
-    )
-
-    logger.debug(f"Calculated final stock for {len(final_stock_levels)} SKUs")
-    return final_stock_levels
 
 
 def _detect_repeated_orders(
@@ -971,6 +946,30 @@ def _migrate_packaging_tags(final_df: pd.DataFrame) -> pd.DataFrame:
         logger.info("Packaging_Tags migration completed")
 
     return final_df
+
+
+def _with_fulfillment_reasons(
+    notes: pd.Series, order_numbers: pd.Series, fulfillment_results: dict
+) -> pd.Series:
+    """`notes` with "Cannot fulfill: <reason>" added for each held order's rows.
+
+    The reason joins an existing note with "; ". Vectorised: one dict of the
+    held orders' texts, then a map (AUDIT-07-L5).
+    """
+    reasons = {
+        order: f"Cannot fulfill: {result.get('reason', 'Unknown reason')}"
+        for order, result in fulfillment_results.items()
+        if isinstance(result, dict) and not result.get("fulfillable", True)
+    }
+    reason = order_numbers.map(reasons).to_numpy(dtype=object)
+    held = pd.notna(reason)
+    note = notes.to_numpy(dtype=object)
+    has_note = pd.notna(note) & (note.astype(str) != "")
+    out = note.copy()
+    both = held & has_note
+    out[both] = note[both].astype(str) + "; " + reason[both]
+    out[held & ~has_note] = reason[held & ~has_note]
+    return pd.Series(out, index=notes.index, name=notes.name)
 
 
 def _merge_results_to_dataframe(
@@ -1115,23 +1114,9 @@ def _merge_results_to_dataframe(
     )
 
     # Add unfulfillable reasons to System_note
-    def add_fulfillment_reason(row):
-        order_number = row["Order_Number"]
-        result = fulfillment_results.get(order_number, {})
-
-        if isinstance(result, dict) and not result.get("fulfillable", True):
-            reason = result.get("reason", "Unknown reason")
-            existing_note = row["System_note"]
-
-            # Append reason to existing note
-            if pd.notna(existing_note) and existing_note != "":
-                return f"{existing_note}; Cannot fulfill: {reason}"
-            else:
-                return f"Cannot fulfill: {reason}"
-
-        return row["System_note"]
-
-    final_df["System_note"] = final_df.apply(add_fulfillment_reason, axis=1)
+    final_df["System_note"] = _with_fulfillment_reasons(
+        final_df["System_note"], final_df["Order_Number"], fulfillment_results
+    )
 
     # Mark NO_SKU orders as Not Fulfillable with explanation
     if "Has_SKU" in final_df.columns:
@@ -1723,7 +1708,10 @@ def toggle_order_fulfillment(df, order_number):
     Returns:
         tuple[bool, str | None, pd.DataFrame]: A tuple containing:
             - success (bool): True if the toggle was successful, False otherwise.
-            - error_message (str | None): An error message if success is False.
+            - message (str | None): The error when it fails. When it succeeds,
+              a warning or None: force-fulfilling an order with a SKU the
+              stock file doesn't list is allowed, and the warning names the
+              SKUs (AUDIT-09-O3).
             - updated_df (pd.DataFrame): The modified DataFrame. If the toggle
               fails, this is the original, unmodified DataFrame.
     """
@@ -1748,4 +1736,8 @@ def toggle_order_fulfillment(df, order_number):
         new_status = FULFILLABLE
 
     df.loc[order_mask, "Order_Fulfillment_Status"] = new_status
-    return True, None, with_stock_left(df)
+    df = with_stock_left(df)
+    unlisted = unlisted_skus(df, [order_number]) if new_status == FULFILLABLE else []
+    if unlisted:
+        return True, f"Not in the stock file: {', '.join(unlisted)}", df
+    return True, None, df
