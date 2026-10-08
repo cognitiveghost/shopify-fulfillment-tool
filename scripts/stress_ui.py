@@ -199,6 +199,43 @@ def main() -> int:
 
     scenario("Client switch A <-> B", 50, client)
 
+    # 4b. Freshness (2026-10-08 spec): a page pushed while covered is current
+    # the moment it is shown, and a dead render process is replaced.
+    small, other = orders(300), orders(120)
+    other["Order_Number"] = [n.replace("#1", "#9", 1) for n in other["Order_Number"]]
+    first_row = "(document.querySelector('#rows .row') || {innerText: ''}).innerText"
+
+    def covered_then_shown(i):
+        frame, mark = (other, "#9") if i % 2 == 0 else (small, "#1")
+        win.main_tabs.setCurrentIndex(0)
+        win.analysis_results_df = frame
+        win._update_all_views()
+        bridge = win.results_bridge
+        if not wait_for(lambda: bridge.painted_revision == bridge.revision, 5):
+            raise RuntimeError("Results did not paint while covered")
+        win.main_tabs.setCurrentIndex(1)
+        if mark not in str(js(results, first_row)):
+            raise RuntimeError("Results showed the previous orders on show")
+
+    scenario("Results pushed while covered, then shown", 20, covered_then_shown)
+
+    def killed(_i):
+        from PySide6.QtCore import QUrl
+
+        died = []
+        results.page().renderProcessTerminated.connect(lambda *_: died.append(1))
+        results.load(QUrl("chrome://crash"))
+        if not wait_for(lambda: bool(died), 15):
+            raise RuntimeError("the render process did not die")
+        if not wait_for(
+            lambda: js(results, "!!document.documentElement && document.documentElement.dataset.bridge === 'ready'", 2) is True,
+            30,
+        ):
+            raise RuntimeError("Results did not come back")
+        js(results, ERROR_HOOK)
+
+    scenario("Render process killed, page restored", 2, killed)
+
     # 5. Session loop: what New session does, minus its progress dialog.
     def new_session(_i):
         path = win.session_manager.create_session(win.current_client_id)
