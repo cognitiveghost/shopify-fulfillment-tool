@@ -676,3 +676,28 @@ def test_a_lock_that_was_never_taken_is_not_released(session_manager, tmp_path, 
     with pytest.raises(OSError, match="lock refused"), session_manager._exclusive_lock(tmp_path / "x.lock"):
         pass
     assert calls == [fcntl.LOCK_EX]
+
+
+def test_a_listing_survives_an_index_lock_it_cannot_take(session_manager, monkeypatch):
+    """The index is a cache: a lock nobody releases must not hide a client's
+    sessions, or leave the last client's on screen."""
+    import contextlib
+
+    first = Path(session_manager.create_session("M"))
+    assert len(session_manager.list_client_sessions("M")) == 1
+    second = first.with_name(first.name + "_copy")
+    shutil.copytree(first, second)  # a session the index doesn't know yet
+
+    @contextlib.contextmanager
+    def refused(lock_path):
+        raise OSError(36, "Resource deadlock avoided")
+        yield
+
+    monkeypatch.setattr(session_manager, "_exclusive_lock", refused)
+    names = {s["session_name"] for s in session_manager.list_client_sessions("M")}
+    assert names == {first.name, second.name}
+
+    # No index at all (a client never listed, or a torn index): the same.
+    (first.parent / session_manager.INDEX_FILENAME).unlink()
+    names = {s["session_name"] for s in session_manager.list_client_sessions("M")}
+    assert names == {first.name, second.name}

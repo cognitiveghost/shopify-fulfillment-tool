@@ -643,7 +643,7 @@ def _simulate_stock_allocation(
     4. Mark order as fulfillable/not fulfillable
     5. Deduct stock for fulfillable orders
 
-    Skips items without SKU (Has_SKU=False) as they don't consume stock.
+    Skips every order that has a line without SKU (Has_SKU=False).
 
     Args:
         orders_df: Cleaned orders DataFrame with item counts
@@ -663,14 +663,19 @@ def _simulate_stock_allocation(
     """
     logger.debug("Phase 3/7: Simulating stock allocation...")
 
-    # Filter out NO_SKU items before simulation (they don't consume stock)
+    # An order with a NO_SKU line is held: it draws no stock until the
+    # operator marks it. It is still checked, so a shortage on its SKU lines
+    # is reported with the hold; with none it gets no result, as before.
+    held_orders: set = set()
+    orders_for_simulation = orders_df.copy()
     if "Has_SKU" in orders_df.columns:
-        orders_for_simulation = orders_df[orders_df["Has_SKU"] == True].copy()
-        no_sku_count = (~orders_df["Has_SKU"]).sum()
-        if no_sku_count > 0:
-            logger.debug(f"Skipping {no_sku_count} NO_SKU items from stock simulation")
-    else:
-        orders_for_simulation = orders_df.copy()
+        no_sku = orders_df["Has_SKU"] == False
+        held_orders = set(orders_df.loc[no_sku, "Order_Number"])
+        orders_for_simulation = orders_df[~no_sku].copy()
+        if held_orders:
+            logger.debug(
+                f"Holding {len(held_orders)} orders with NO_SKU lines out of stock simulation"
+            )
 
     # Pre-group required quantities per order — single O(N) pass avoids O(N²) per-order scans
     order_required_quantities: dict[str, pd.Series] = {
@@ -682,7 +687,10 @@ def _simulate_stock_allocation(
     # not be silently treated as needing zero units -- groupby.sum() skips
     # NaN, so an order whose only line item is invalid would otherwise look
     # like a legitimate zero-quantity order and get marked Fulfillable.
-    invalid_qty_rows = orders_for_simulation[orders_for_simulation["Quantity"].isna()]
+    invalid_qty_rows = orders_for_simulation[
+        orders_for_simulation["Quantity"].isna()
+        & ~orders_for_simulation["Order_Number"].isin(held_orders)
+    ]
     invalid_qty_by_order: dict[str, list[str]] = (
         invalid_qty_rows.groupby("Order_Number")["SKU"].apply(list).to_dict()
         if not invalid_qty_rows.empty
@@ -721,6 +729,8 @@ def _simulate_stock_allocation(
                     unfulfillable_reasons.append(stock_reason(sku, required_qty, available))
                     can_fulfill_order = False
 
+            if order_number in held_orders and can_fulfill_order:
+                continue
             if can_fulfill_order:
                 fulfillment_results[order_number] = {"fulfillable": True, "reason": ""}
                 for sku, qty in required_quantities.items():
@@ -762,6 +772,9 @@ def _simulate_stock_allocation(
                 if available == 0 or needed > available:
                     unfulfillable_reasons.append(stock_reason(sku, needed, available))
                     can_fulfill_order = False
+
+            if order_number in held_orders and can_fulfill_order:
+                continue
 
             # COMMIT PHASE (mutate live_lots only if order is fulfillable)
             if can_fulfill_order:

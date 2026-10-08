@@ -139,8 +139,12 @@ def test_removing_fulfillable_order_returns_its_stock(verb):
 
 def test_toggle_holds_a_fulfillable_order_whose_first_line_has_no_sku():
     df, *_ = analyse(stock([("A", 5)]), orders([("#1", None, 1), ("#1", "A", 2)]))
-    sku_line = df["SKU"] == "A"
-    assert df.loc[sku_line, "Order_Fulfillment_Status"].iloc[0] == "Fulfillable"
+    # The run holds an order with a no-SKU line; a person marks it fulfillable.
+    assert status(df, "#1") == {"Not Fulfillable"}
+    assert final_stock(df, "A") == 5
+    ok, _, df = toggle_order_fulfillment(df, "#1")
+    assert ok
+    assert status(df, "#1") == {"Fulfillable"}
     assert final_stock(df, "A") == 3
     ok, _, out = toggle_order_fulfillment(df, "#1")
     assert ok

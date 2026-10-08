@@ -21,7 +21,7 @@ from shopify_tool import (
     stock_ledger,
 )
 from shopify_tool.analysis import toggle_order_fulfillment
-from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
+from shopify_tool.csv_utils import AUTO_DELIMITER, normalize_sku, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
 from shopify_tool.session_manager import SessionManagerError
 
@@ -1096,6 +1096,40 @@ class ActionsHandler(QObject):
         self.mw.log_activity("Data Edit", f"Removed order {order_number}.")
         self._results_toast(f"Removed order {order_number}.", undoable=True)
 
+    def _read_stock_file(self) -> pd.DataFrame:
+        """The session's stock file under the internal column names."""
+        setting = self.mw.active_profile_config.get("settings", {}).get(
+            "stock_csv_delimiter"
+        )
+
+        # Load raw stock file
+        stock_df = pd.read_csv(
+            self.mw.stock_file_path,
+            delimiter=resolve_delimiter(self.mw.stock_file_path, setting, "stock"),
+            encoding="utf-8-sig",
+        )
+        self.log.info(f"Loaded stock data: {len(stock_df)} rows")
+
+        # Apply column mappings to convert to internal names
+        column_mappings = self.mw.active_profile_config.get("column_mappings", {})
+        if column_mappings:
+            stock_mappings = column_mappings.get("stock", {})
+            if stock_mappings:
+                # Only rename columns that exist in the DataFrame
+                stock_rename_map = {
+                    csv_col: internal_col
+                    for csv_col, internal_col in stock_mappings.items()
+                    if csv_col in stock_df.columns and csv_col != internal_col
+                }
+                if stock_rename_map:
+                    stock_df = stock_df.rename(columns=stock_rename_map)
+                    self.log.info(f"Applied column mappings: {stock_rename_map}")
+
+        # Normalize SKU column to string
+        if "SKU" in stock_df.columns:
+            stock_df["SKU"] = stock_df["SKU"].apply(normalize_sku)
+        return stock_df
+
     def show_add_product_dialog(self):
         """Show dialog to add product to order."""
         from PySide6.QtWidgets import QDialog
@@ -1115,50 +1149,26 @@ class ActionsHandler(QObject):
             )
             return
 
-        if not hasattr(self.mw, "stock_file_path") or not self.mw.stock_file_path:
-            self.log.warning("show_add_product_dialog called with no stock file")
-            show_error(
-                self.mw,
-                "This session's stock file couldn't be found",
-                "Load a stock file in Setup, then try again.",
-            )
-            return
+        # A session that ran on inventory memory has no stock file: its
+        # opening stock is the session's memory baseline.
+        baseline = None
+        if not getattr(self.mw, "stock_file_path", None):
+            baseline = core.read_memory_baseline(self.mw.session_path)
+            if baseline is None:
+                self.log.warning("show_add_product_dialog called with no stock file")
+                show_error(
+                    self.mw,
+                    "This session's stock file couldn't be found",
+                    "Load a stock file in Setup, then try again.",
+                )
+                return
 
-        # Load stock DataFrame
         try:
-            setting = self.mw.active_profile_config.get("settings", {}).get(
-                "stock_csv_delimiter"
+            stock_df = (
+                core.baseline_stock_df(baseline)
+                if baseline is not None
+                else self._read_stock_file()
             )
-
-            # Load raw stock file
-            stock_df = pd.read_csv(
-                self.mw.stock_file_path,
-                delimiter=resolve_delimiter(self.mw.stock_file_path, setting, "stock"),
-                encoding="utf-8-sig",
-            )
-            self.log.info(f"Loaded stock data: {len(stock_df)} rows")
-
-            # Apply column mappings to convert to internal names
-            column_mappings = self.mw.active_profile_config.get("column_mappings", {})
-            if column_mappings:
-                stock_mappings = column_mappings.get("stock", {})
-                if stock_mappings:
-                    # Only rename columns that exist in the DataFrame
-                    stock_rename_map = {
-                        csv_col: internal_col
-                        for csv_col, internal_col in stock_mappings.items()
-                        if csv_col in stock_df.columns and csv_col != internal_col
-                    }
-                    if stock_rename_map:
-                        stock_df = stock_df.rename(columns=stock_rename_map)
-                        self.log.info(f"Applied column mappings: {stock_rename_map}")
-
-            # Normalize SKU column to string
-            if "SKU" in stock_df.columns:
-                from shopify_tool.csv_utils import normalize_sku
-
-                stock_df["SKU"] = stock_df["SKU"].apply(normalize_sku)
-
         except Exception:
             self.log.exception("Failed to load stock file")
             show_error(

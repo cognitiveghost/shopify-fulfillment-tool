@@ -152,6 +152,26 @@ class TestGenerateCode128LabelsPdfIntegration:
         with pytest.raises(ValueError):
             generate_code128_labels_pdf([], tmp_path / "labels.pdf")
 
+    @pytest.mark.parametrize("render", [generate_code128_labels_pdf, generate_qr_labels_pdf])
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            "BOX, LARGE, CORE+, SKINSTELLAR, NOTE",  # wraps taller than its row
+            "ABCDE, " * 15,  # too long for the smallest font
+        ],
+    )
+    def test_a_tag_that_overflows_its_row_keeps_the_labels_after_it(self, tmp_path, render, tag):
+        """'Label PDF has 16 pages for 69 labels': every label after the
+        overflowing one was dropped."""
+        orders = [
+            self._order(safe_order_number="#1"),
+            self._order(safe_order_number="#2", tag=tag),
+            self._order(safe_order_number="#3"),
+            self._order(safe_order_number="#4"),
+        ]
+        output_pdf = render(orders, tmp_path / "labels.pdf")
+        assert len(pypdf.PdfReader(str(output_pdf)).pages) == 4
+
     def test_long_courier_and_multi_tag_order_renders_without_crash(self, tmp_path):
         """Coverage for the input shape that surfaced the flex min-width overflow
         bug during the 2026-08-09 layout redesign (see

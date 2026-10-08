@@ -481,7 +481,6 @@ class MainWindow(QMainWindow):
         Called after state changes (client selected, files loaded, analysis run).
         """
         has_session = bool(self.session_path)
-        has_stock = bool(getattr(self, "stock_file_path", None))
         has_analysis = (
             hasattr(self, "analysis_results_df")
             and self.analysis_results_df is not None
@@ -497,7 +496,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "results_bridge"):
             self.ui_manager.set_export_enabled(reports_enabled)
         if hasattr(self, "add_product_button_tab2"):
-            self.add_product_button_tab2.setEnabled(has_analysis and has_stock)
+            # Not gated on a stock file: a session that ran on inventory
+            # memory has none, and the dialog says so when neither is there.
+            self.add_product_button_tab2.setEnabled(has_analysis)
 
         self.ui_manager._refresh_nav()
         self.ui_manager.refresh_setup()
@@ -576,6 +577,10 @@ class MainWindow(QMainWindow):
             self.command_bar.current_client() != client_id
         ):
             self.command_bar.set_current_client(client_id)
+        if hasattr(self, "command_bar"):
+            # The picker must not offer the last client's sessions under this
+            # client's name, whether or not this load succeeds.
+            self.command_bar.set_recent_sessions([])
 
         self.current_client_id = client_id
 
@@ -652,6 +657,18 @@ class MainWindow(QMainWindow):
             logger.exception("Error applying loaded client data")
             show_error(self, "The client couldn't be switched", "Details are in Logs.")
             self.command_bar.forget_announced()
+
+    def show_recent_sessions(self, listed):
+        """Fill the bar's picker from a listing ui_manager.refresh_recent_sessions asked for."""
+        client_id, sessions = listed
+        if client_id != self.current_client_id:
+            return
+        self.command_bar.set_recent_sessions(
+            [
+                (info.get("session_name", "?"), info.get("session_path"))
+                for info in sessions[:5]
+            ]
+        )
 
     def _on_client_data_load_error(self, client_id: str, error):
         _exctype, value, _tb = error

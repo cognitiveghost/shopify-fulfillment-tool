@@ -257,10 +257,16 @@ class SessionManager:
             return []
 
         entries = self._read_index(client_sessions_dir)
-        if entries is None:
-            entries = self._rebuild_index(client_sessions_dir)
-        else:
-            entries = self._refresh_index(client_sessions_dir, entries)
+        try:
+            if entries is None:
+                entries = self._rebuild_index(client_sessions_dir)
+            else:
+                entries = self._refresh_index(client_sessions_dir, entries)
+        except OSError:
+            # The index is a cache. A lock that can't be had costs one
+            # slow listing, read from the folders and not written back.
+            logger.warning("Session index is locked; listing the folders instead", exc_info=True)
+            entries = self._scan_sessions(client_sessions_dir)
 
         sessions = []
         for entry in entries:

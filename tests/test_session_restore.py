@@ -174,3 +174,81 @@ def test_opening_a_session_ends_on_results_with_its_orders_painted(main_window, 
     qtbot.waitUntil(lambda: bridge.painted_revision == bridge.revision, timeout=5000)
     body = _eval(qtbot, main_window.results_view, "document.body.innerText")
     assert "NEWSESSION-1001" in body
+
+
+def test_add_product_opens_in_a_session_that_ran_on_inventory_memory(main_window, monkeypatch):
+    """No stock file was ever loaded: the session's opening stock is its
+    memory baseline. The button was greyed out, and the dialog refused."""
+    from shopify_tool import core
+
+    path = main_window.session_manager.create_session("acme")
+    main_window.session_path = path
+    core.write_memory_baseline(path, {"A": 4.0, "B": 9.0}, {"A": "Apple"})
+    main_window.analysis_results_df = pd.DataFrame(
+        {"Order_Number": [1], "SKU": ["A"], "Final_Stock": [4]}
+    )
+    main_window.update_ui_state()
+    assert main_window.stock_file_path is None
+    assert main_window.add_product_button_tab2.isEnabled() is True
+
+    seen = {}
+
+    class Dialog:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr("gui.add_product_dialog.AddProductDialog", Dialog)
+    main_window.actions_handler.show_add_product_dialog()
+
+    assert seen["stock_df"]["SKU"].tolist() == ["A", "B"]
+    assert seen["live_stock"] == {"A": 4, "B": 9}
+
+
+def test_add_product_without_any_stock_source_says_so(main_window, monkeypatch):
+    errors = []
+    monkeypatch.setattr("gui.actions_handler.show_error", lambda _w, title, *_a: errors.append(title))
+    main_window.session_path = main_window.session_manager.create_session("acme")
+    main_window.analysis_results_df = pd.DataFrame(
+        {"Order_Number": [1], "SKU": ["A"], "Final_Stock": [4]}
+    )
+    main_window.actions_handler.show_add_product_dialog()
+    assert errors == ["This session's stock file couldn't be found"]
+
+
+def test_the_recent_picker_is_emptied_then_filled_off_the_main_thread(main_window, qtbot, monkeypatch):
+    """A listing that waits on the share must not freeze the window, and the
+    last client's sessions must not stay on offer under this client's name."""
+    import threading
+
+    shown = []
+    monkeypatch.setattr(main_window.command_bar, "set_recent_sessions", shown.append)
+    main_thread = threading.get_ident()
+    threads = []
+
+    def listing(client_id):
+        threads.append(threading.get_ident())
+        return [{"session_name": "S1", "session_path": "/s/1"}]
+
+    monkeypatch.setattr(main_window.session_manager, "list_client_sessions", listing)
+    main_window.ui_manager.refresh_recent_sessions("acme")
+
+    assert shown == [[]]
+    qtbot.waitUntil(lambda: len(shown) == 2, timeout=5000)
+    assert shown[1] == [("S1", "/s/1")]
+    assert threads and threads[0] != main_thread
+
+
+def test_a_listing_for_a_client_no_longer_open_is_dropped(main_window, qtbot, monkeypatch):
+    shown = []
+    monkeypatch.setattr(main_window.command_bar, "set_recent_sessions", shown.append)
+    monkeypatch.setattr(
+        main_window.session_manager, "list_client_sessions",
+        lambda cid: [{"session_name": "S1", "session_path": "/s/1"}],
+    )
+    main_window.ui_manager.refresh_recent_sessions("other")
+    qtbot.waitUntil(lambda: not main_window._client_load_workers, timeout=5000)
+    QApplication.processEvents()
+    assert shown == [[]]
