@@ -62,9 +62,14 @@ def keep_pages_painted(stack: QStackedWidget) -> None
 ```
 
 It sets `stack.layout().setStackingMode(QStackedLayout.StackingMode.StackAll)`, then, now and on every
-`stack.currentChanged`, enables the current page widget and disables every other one
-(`stack.widget(i).setEnabled(i == stack.currentIndex())`). Disabling is what keeps keyboard focus and Tab out of
-a page the user cannot see; it does not stop the page painting (prototype, section 2).
+`stack.currentChanged`, gives every `QWebEngineView` in a covered page (and the view's focus proxy) the focus
+policy `NoFocus`, and gives the current page's views back the policy they had. That keeps keyboard focus and Tab
+out of a page the user cannot see. The focus proxy is created lazily, so the helper applies the policies again
+when a view finishes loading (Packer Assistant's `deny_focus` does the same).
+
+Covered pages are not disabled. Disabling does not stop a page painting (prototype, section 2), but a disabled
+page disables the Qt buttons parked on it, and the shell clicks those from elsewhere:
+`run_analysis_button.click()` behind "Re-run analysis" would silently do nothing while Setup is covered.
 
 Fulfilment calls it once, in `UIManager._create_tabs`, after the pages are added:
 `keep_pages_painted(self.mw.main_tabs.findChild(QStackedWidget))`. `main_tabs` stays a `QTabWidget` with a
@@ -192,7 +197,7 @@ and ADR 0016's consequences are updated; the roadmap's "After the roadmap" line 
    `deny_focus`.
 4. `packer.html` loads `../../shared/web/page.js` and `packer.js` calls `reportPaints(bridge)`.
 5. `keep_pages_painted(self.stacked_widget)` on its main stack, checked against the scanner invariant (its ADR
-   0001): the disabled, covered page must not take the scanner's focus, and the scanner input must keep it.
+   0001): the covered page must not take the scanner's focus, and the scanner input must keep it.
 6. Adopting `kit.css` itself stays with its UI refresh.
 
 Nothing breaks for Packer Assistant at the sync itself: it imports none of this yet.
@@ -201,8 +206,9 @@ Nothing breaks for Packer Assistant at the sync itself: it imports none of this 
 
 All through a real Chromium, as the page tests already are. Never marked skip.
 
-1. **One per page, in a real `MainWindow`** (`tests/test_web_freshness.py`): for Setup, Results, Browse, Logs and
-   Tools, with another page current, push a state that replaces an earlier one, switch to the page, and assert
+1. **One per page** (`tests/test_web_freshness.py`): for Setup, Results, Browse, Logs and Tools, each mounted in a
+   stack beside a filler page (a real `MainWindow` re-pushes its own state on a switch, which would overwrite the
+   test's); with the filler current, push a state that replaces an earlier one, switch to the page, and assert
    that `bridge.painted_revision == bridge.revision`, that `dataset.painted` says the same, and that a marker
    string of the earlier state is nowhere in `document.body.innerText`. Logs has no state property: its test
    sends a batch of rows while covered and asserts the rows are in the DOM after the switch.
@@ -214,8 +220,8 @@ All through a real Chromium, as the page tests already are. Never marked skip.
    `paintedRevision(n)` sets `painted_revision` and emits `painted`.
 5. **`when_painted`**: runs at once when already painted; runs on the report; runs once at the timeout and
    logs; never runs twice.
-6. **Stack**: after `keep_pages_painted`, every page widget is visible, only the current one is enabled, and
-   that follows a switch.
+6. **Stack**: after `keep_pages_painted`, every page widget is visible, only the current page's web view accepts
+   focus, and that follows a switch.
 7. **Crash**: kill a page's render process, assert the page returns to `dataset.bridge === 'ready'` showing the
    current state; and that the third kill inside a minute is not followed by a reload.
 8. **Session open**: `load_existing_session` on a session with an analysis ends on Results with the new
