@@ -20,6 +20,7 @@ from gui.components.sidebar import Sidebar
 from gui.orders_view import summary_text
 from gui.setup_state import FileSlot, MemoryFacts, RunFacts, SessionFacts, setup_state
 from gui.shortcuts_dialog import ShortcutsDialog
+from gui.worker import Worker
 from shared.icons import icon
 from shared.server_connection import ConnectionSettingsDialog
 from shared.theme import on_theme_changed
@@ -503,16 +504,29 @@ class UIManager:
         set). Bundle 5 deleted the Setup page's own quick-pick strip; this
         method kept its name across three call sites but now writes to the
         bar instead of a QListWidget."""
+        # Emptied first: the picker never offers another client's sessions
+        # while this client's are on their way, or if they never arrive.
+        self.mw.command_bar.set_recent_sessions([])
         if not client_id:
-            self.mw.command_bar.set_recent_sessions([])
             return
-        sessions = self.mw.session_manager.list_client_sessions(client_id)[:5]
-        self.mw.command_bar.set_recent_sessions(
-            [
-                (info.get("session_name", "?"), info.get("session_path"))
-                for info in sessions
-            ]
+
+        # On a worker: the listing reads the share and can wait on the index
+        # lock, which froze the window on every client switch.
+        worker = Worker(
+            lambda: (client_id, self.mw.session_manager.list_client_sessions(client_id))
         )
+        # A method of the window, not a closure: Qt drops the delivery with
+        # the window, so a late listing never reaches a deleted bar.
+        worker.signals.result.connect(self.mw.show_recent_sessions)
+        worker.signals.error.connect(
+            lambda error: self.log.warning(f"Recent sessions weren't listed: {error[1]}")
+        )
+        # Held until it finishes: see MainWindow.on_client_changed.
+        self.mw._client_load_workers.add(worker)
+        worker.signals.finished.connect(
+            lambda: self.mw._client_load_workers.discard(worker)
+        )
+        self.mw.threadpool.start(worker)
 
     def _create_tab2_analysis_results(self):
         """Tab 2: the results document -- one QWebEngineView, no Qt inside.
