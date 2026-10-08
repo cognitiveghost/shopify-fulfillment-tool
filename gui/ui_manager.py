@@ -8,6 +8,7 @@ from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
+    QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -24,7 +25,7 @@ from shared.server_connection import ConnectionSettingsDialog
 from shared.theme import on_theme_changed
 from shopify_tool.profile_manager import PROD_SERVER_PATH
 
-from .web_page import switch_theme
+from .web_page import keep_pages_painted, switch_theme
 
 # The sidebar's collapsed state is this PC's, like the theme -- same QSettings
 # pair theme_manager and logs_widget use. A function so tests can point it at
@@ -304,6 +305,10 @@ class UIManager:
             # the destination's full name still appears. _TAB_TOOLTIPS holds
             # descriptions ("Statistics and logs"), not names, so lead with it.
             self.mw.nav_rail.button(index).setToolTip(f"{label} — {tip}")
+
+        # Covered pages keep painting, so a switch never shows a page's old
+        # frame (2026-10-08 web tier freshness spec, section 4.1).
+        keep_pages_painted(self.mw.main_tabs.findChild(QStackedWidget))
 
         # Two-way, and the back edge is load-bearing: actions_handler jumps
         # straight to Analysis Results after a run, and without this the rail

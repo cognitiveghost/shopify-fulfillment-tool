@@ -158,3 +158,63 @@ def test_when_painted_gives_up_at_the_timeout_and_says_so(qtbot, caplog):
     assert "PageBridge" in caplog.text and "revision 1" in caplog.text
     bridge.paintedRevision(1)  # a late report must not run it again
     assert ran == [1]
+
+
+def _stack(qtbot, pages=3):
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+    from PySide6.QtWidgets import QStackedWidget, QVBoxLayout, QWidget
+
+    stack = QStackedWidget()
+    qtbot.addWidget(stack)
+    views = []
+    for _ in range(pages):
+        holder = QWidget()
+        layout = QVBoxLayout(holder)
+        view = QWebEngineView(holder)
+        layout.addWidget(view)
+        stack.addWidget(holder)
+        views.append(view)
+    stack.resize(800, 600)
+    stack.show()
+    return stack, views
+
+
+def test_kept_pages_are_all_visible_and_only_the_current_takes_focus(qtbot):
+    from PySide6.QtCore import Qt
+
+    from shared.web_page import keep_pages_painted
+
+    stack, views = _stack(qtbot)
+    for view in views:
+        view.setHtml("<p>page</p>")
+    # The view is NoFocus itself; the lazily created proxy is what takes keys.
+    qtbot.waitUntil(lambda: all(v.focusProxy() is not None for v in views), timeout=15000)
+    own = views[0].focusProxy().focusPolicy()
+    assert own != Qt.FocusPolicy.NoFocus
+
+    keep_pages_painted(stack)
+    assert all(view.isVisible() for view in views)
+    assert views[0].focusProxy().focusPolicy() == own
+    for covered in views[1:]:
+        assert covered.focusProxy().focusPolicy() == Qt.FocusPolicy.NoFocus
+
+    stack.setCurrentIndex(2)
+    assert views[2].focusProxy().focusPolicy() == own
+    assert views[0].focusProxy().focusPolicy() == Qt.FocusPolicy.NoFocus
+    stack.setCurrentIndex(0)
+    assert views[0].focusProxy().focusPolicy() == own
+
+
+def test_a_covered_page_stays_enabled(qtbot):
+    from PySide6.QtWidgets import QPushButton
+
+    from shared.web_page import keep_pages_painted
+
+    stack, _views = _stack(qtbot)
+    button = QPushButton("Run", stack.widget(1))
+    clicks = []
+    button.clicked.connect(lambda: clicks.append(1))
+    keep_pages_painted(stack)
+    assert stack.currentIndex() == 0
+    button.click()  # the shell clicks buttons parked on covered pages
+    assert clicks == [1]

@@ -8,10 +8,11 @@ import logging
 import weakref
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QColor
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QStackedLayout, QStackedWidget, QWidget
 
 from shared.theme import on_theme_changed, theme_css_vars
 
@@ -229,3 +230,42 @@ def when_painted(bridge: PageBridge, callback, timeout_ms: int = PAINT_TIMEOUT_M
 
     bridge.painted.connect(on_painted)
     QTimer.singleShot(timeout_ms, lambda: finish(timed_out=True))
+
+
+def keep_pages_painted(stack: QStackedWidget) -> None:
+    """Keep every page of `stack` painting, so a switch never shows an old frame.
+
+    A hidden QWebEngineView stops painting and shows its last frame when it
+    comes back, for as long as a new one takes. Stacked "all", the covered
+    pages stay visible to Qt and to Chromium and are simply underneath.
+
+    A covered page must not take the keyboard. The view itself is NoFocus; its
+    focus proxy, created lazily with the page, is what takes keys, so that is
+    what refuses focus until the page is current again. (Setting the view's own
+    policy would overwrite the proxy's, hence the proxy alone.) Pages are not
+    disabled: that would disable the Qt buttons parked on them, which the shell
+    clicks from elsewhere. Call it after the stack's pages are added.
+    """
+    stack.layout().setStackingMode(QStackedLayout.StackingMode.StackAll)
+    own_policy: dict[QWidget, Qt.FocusPolicy] = {}  # each proxy's, before we touched it
+
+    def views_of(page) -> list[QWebEngineView]:
+        if isinstance(page, QWebEngineView):
+            return [page]
+        return page.findChildren(QWebEngineView)
+
+    def apply(*_args) -> None:
+        for index in range(stack.count()):
+            current = index == stack.currentIndex()
+            for view in views_of(stack.widget(index)):
+                proxy = view.focusProxy()
+                if proxy is None:
+                    continue
+                own_policy.setdefault(proxy, proxy.focusPolicy())
+                proxy.setFocusPolicy(own_policy[proxy] if current else Qt.FocusPolicy.NoFocus)
+
+    for index in range(stack.count()):
+        for view in views_of(stack.widget(index)):
+            view.page().loadFinished.connect(apply)  # the proxy exists by now
+    stack.currentChanged.connect(apply)
+    apply()

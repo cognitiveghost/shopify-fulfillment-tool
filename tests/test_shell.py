@@ -604,3 +604,21 @@ def test_what_the_window_logs_reaches_the_logs_buffer(main_window):
         "Report",
         "Generated: picklist",
     )
+
+
+def test_every_page_of_the_shell_stays_painted(main_window):
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+    from PySide6.QtWidgets import QStackedLayout, QStackedWidget
+
+    stack = main_window.main_tabs.findChild(QStackedWidget)
+    assert stack.layout().stackingMode() == QStackedLayout.StackingMode.StackAll
+    pages = [main_window.main_tabs.widget(i) for i in range(main_window.main_tabs.count())]
+    assert all(page.isVisible() for page in pages)
+    main_window.main_tabs.setCurrentIndex(3)
+    for index, page in enumerate(pages):
+        views = [page] if isinstance(page, QWebEngineView) else page.findChildren(QWebEngineView)
+        assert views, index
+        for view in views:
+            proxy = view.focusProxy()
+            if proxy is not None:  # created with the page; the one that takes keys
+                assert (proxy.focusPolicy() == Qt.FocusPolicy.NoFocus) == (index != 3), index
