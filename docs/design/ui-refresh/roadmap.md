@@ -227,6 +227,6 @@ Qt page is left inside it. The header strip the mockup draws stays out; the nati
 - Re-evaluate an order's status when its short SKU is removed. The mockup's popover promises "becomes
   Fulfillable"; today the order stays Blocked until someone marks it fulfillable, and the popover says so.
   Stock-ledger work with its own spec.
-- `gui/web/kit.css` moves to `shared/` when Packing Tool adopts it.
+- ~~`gui/web/kit.css` moves to `shared/` when Packing Tool adopts it.~~ Moved 2026-10-08 with `web_page.py` (web tier freshness spec).
 - Packing Tool adopts the wide sidebar and the web kit in its own tasks.
 - Revisit this file whenever a phase changes the plan for the ones after it.

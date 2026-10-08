@@ -10,9 +10,10 @@ from test_results_bridge import _eval, _rgb, _until_js
 
 from gui.results_bridge import PAGE, THEME_MARKER, WEB_DIR
 from shared.theme import DARK_THEME, LIGHT_THEME, theme_css_vars
+from shared.web_page import SHARED_WEB_DIR
 
 SHEET = Path(__file__).resolve().parent / "web" / "kit_sheet.html"
-KIT = WEB_DIR / "kit.css"
+KIT = SHARED_WEB_DIR / "kit.css"
 RESULTS_CSS = WEB_DIR / "results.css"
 
 THEMES = pytest.mark.parametrize(
@@ -53,8 +54,8 @@ def _selectors(css: str) -> list[str]:
 
 def test_results_links_the_kit_before_its_own_stylesheet():
     html = PAGE.read_text(encoding="utf-8")
-    assert 'href="kit.css"' in html
-    assert html.index('href="kit.css"') < html.index('href="results.css"')
+    assert 'href="../../shared/web/kit.css"' in html
+    assert html.index('href="../../shared/web/kit.css"') < html.index('href="results.css"')
 
 
 def test_the_kit_names_no_page():

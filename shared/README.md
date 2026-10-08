@@ -24,6 +24,8 @@ every change here.
 | `fonts.py` | Loads and registers the bundled Inter faces with Qt |
 | `navrail.py` | The vertical navigation rail widget |
 | `style_lint.py` | Build-time check for hardcoded colours / pixel font sizes / frozen alias reads in widget code |
+| `web_page.py` | What every web page's bridge shares (theme, toast, mount, painted report) |
+| `web/` | The web kit stylesheet and the page script every web page loads |
 | `logger.py` | Unified logging setup for both apps |
 | `stats_manager.py` | Centralized usage statistics, written to the file server |
 | `session_id.py` | Canonical `session_id` derivation, so both apps agree on one string for the same session |

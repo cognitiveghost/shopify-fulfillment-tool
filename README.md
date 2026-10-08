@@ -49,7 +49,7 @@ Do not create releases by hand in the GitHub UI: nothing builds for them.
 
 ## Layout
 
-- `gui/`: Qt UI; `gui/web/` holds the web pages and their shared kit (QtWebEngine)
+- `gui/`: Qt UI; `gui/web/` holds the web pages (QtWebEngine); their shared kit is `shared/web/`
 - `shopify_tool/`: analysis, rules, sessions, outputs, labels
 - `shared/`: canonical here; packing-tool mirrors it (see `CLAUDE.md`, ADR 0017)
 - `docs/adr/`: decisions; `CONTEXT.md`: the domain glossary
