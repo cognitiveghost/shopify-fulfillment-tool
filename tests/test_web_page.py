@@ -218,3 +218,41 @@ def test_a_covered_page_stays_enabled(qtbot):
     assert stack.currentIndex() == 0
     button.click()  # the shell clicks buttons parked on covered pages
     assert clicks == [1]
+
+
+def test_focus_follows_a_switch_into_the_new_pages_view(qtbot):
+    """The stack moves focus before the new page's proxy accepts it: without
+    the hand-over, keys go to the page widget and the page hears none."""
+    from PySide6.QtWidgets import QApplication
+
+    from shared.web_page import keep_pages_painted
+
+    stack, views = _stack(qtbot)
+    for view in views:
+        view.setHtml("<p>page</p>")
+    qtbot.waitUntil(lambda: all(v.focusProxy() is not None for v in views), timeout=15000)
+    keep_pages_painted(stack)
+    stack.activateWindow()
+    views[0].setFocus()
+    qtbot.waitUntil(lambda: QApplication.focusWidget() is views[0].focusProxy(), timeout=5000)
+
+    stack.setCurrentIndex(1)
+    assert QApplication.focusWidget() is views[1].focusProxy()
+    stack.setCurrentIndex(0)
+    assert QApplication.focusWidget() is views[0].focusProxy()
+
+
+def test_only_the_page_on_top_is_the_current_page(qtbot):
+    from PySide6.QtWidgets import QWidget
+
+    from shared.web_page import is_current_page, keep_pages_painted
+
+    stack, views = _stack(qtbot)
+    keep_pages_painted(stack)
+    assert [is_current_page(view) for view in views] == [True, False, False]
+    assert is_current_page(stack.widget(0)) and not is_current_page(stack.widget(1))
+    stack.setCurrentIndex(2)
+    assert [is_current_page(view) for view in views] == [False, False, True]
+    loose = QWidget()
+    qtbot.addWidget(loose)
+    assert is_current_page(loose)  # in no stack: nothing covers it

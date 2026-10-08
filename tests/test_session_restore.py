@@ -161,7 +161,13 @@ def test_opening_a_session_ends_on_results_with_its_orders_painted(main_window, 
 
     main_window._load_session_analysis = load_analysis
     main_window.main_tabs.setCurrentIndex(0)
+    on_results, on_setup = [], []
+    main_window.results_bridge.toastRaised.connect(lambda text, undo: on_results.append(text))
+    main_window.setup_bridge.toastRaised.connect(lambda text, undo: on_setup.append(text))
     main_window.load_existing_session(path)
+    # The switch is still pending; the toast must not be drawn on the page being left.
+    assert len(on_results) == 1 and "opened" in on_results[0]
+    assert on_setup == []
 
     qtbot.waitUntil(lambda: main_window.main_tabs.currentIndex() == 1, timeout=3000)
     bridge = main_window.results_bridge

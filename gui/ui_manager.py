@@ -309,6 +309,9 @@ class UIManager:
         # Covered pages keep painting, so a switch never shows a page's old
         # frame (2026-10-08 web tier freshness spec, section 4.1).
         keep_pages_painted(self.mw.main_tabs.findChild(QStackedWidget))
+        # ...so a switch sends no show event either: a page that reads the disk
+        # when it is shown is told here.
+        self.mw.main_tabs.currentChanged.connect(self._page_shown)
 
         # Two-way, and the back edge is load-bearing: actions_handler jumps
         # straight to Analysis Results after a run, and without this the rail
@@ -327,6 +330,14 @@ class UIManager:
                 chip=index not in (0, 4), meta=index == 1
             )
         )
+
+    def _page_shown(self, index: int) -> None:
+        """Tell the page that became current, or the widget a tab wraps it in."""
+        page = self.mw.main_tabs.widget(index)
+        for widget in [page, *page.findChildren(QWidget)]:
+            shown = getattr(widget, "page_shown", None)
+            if shown is not None:
+                shown()
 
     def _create_command_bar(self) -> CommandBar:
         """The one-row bar that replaces the two-row global header."""

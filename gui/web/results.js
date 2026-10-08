@@ -757,6 +757,8 @@ function resetView() {
   state.selected = new Set();
   state.anchorKey = null;
   state.cursorKey = null;
+  state.paneHidden = false;
+  state.paneForced = false;
   closeMenu();
   closeBulkPopover();
   closePaneMenus(false);

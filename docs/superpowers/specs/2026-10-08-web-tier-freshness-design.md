@@ -78,6 +78,11 @@ hidden tab bar.
 Consequence: `view.isVisible()` is now true for every main page, so `switch_theme` waits for all five pages to
 report the new theme rather than one. They all paint, so they all report; the 150 ms cap is unchanged.
 
+Second consequence (found in review): a page gets one show event, at start, and none on a switch. Tools and
+Browse refreshed in `showEvent` and asked `isVisible()` whether the user could see them. `shared/web_page.py`
+gains `is_current_page(widget)`; both widgets ask it, and the shell calls their `page_shown()` on
+`main_tabs.currentChanged`.
+
 The Settings dialog's view lives only while the dialog is open and is not in a stack; it is unaffected.
 
 ### 4.2 Revision and painted report
@@ -197,7 +202,9 @@ and ADR 0016's consequences are updated; the roadmap's "After the roadmap" line 
    `deny_focus`.
 4. `packer.html` loads `../../shared/web/page.js` and `packer.js` calls `reportPaints(bridge)`.
 5. `keep_pages_painted(self.stacked_widget)` on its main stack, checked against the scanner invariant (its ADR
-   0001): the covered page must not take the scanner's focus, and the scanner input must keep it.
+   0001): the covered page must not take the scanner's focus, and the scanner input must keep it. Before that,
+   grep its pages for `isVisible`, `showEvent` and `hideEvent`: under stack-all none of them follows a switch
+   (use `is_current_page` and the stack's `currentChanged`).
 6. Adopting `kit.css` itself stays with its UI refresh.
 
 Nothing breaks for Packer Assistant at the sync itself: it imports none of this yet.
@@ -244,3 +251,5 @@ All through a real Chromium, as the page tests already are. Never marked skip.
 - "Resync on show": replaced by keeping pages painted (D1), so there is no show to resync on.
 - "No report in time means re-push, then reload": reduced to a log line (D3). Reload on render-process death is
   kept.
+- Section 4.1 says the view and its focus proxy both get `NoFocus`. Only the proxy is managed: setting a
+  `QWebEngineView`'s focus policy forwards to its proxy and would overwrite the policy being restored.

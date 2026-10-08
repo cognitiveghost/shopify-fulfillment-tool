@@ -13,6 +13,7 @@ from shared.web_page import (  # noqa: F401  (re-exported for the bridges and th
     THEME_ACK_TIMEOUT_MS,
     THEME_MARKER,
     PageBridge,
+    is_current_page,
     keep_pages_painted,
     when_painted,
 )

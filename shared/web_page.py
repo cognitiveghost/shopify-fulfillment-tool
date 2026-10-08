@@ -13,7 +13,7 @@ from PySide6.QtCore import Property, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QColor
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QStackedLayout, QStackedWidget, QWidget
+from PySide6.QtWidgets import QApplication, QStackedLayout, QStackedWidget, QWidget
 
 from shared.theme import on_theme_changed, theme_css_vars
 
@@ -154,7 +154,8 @@ def mount_page(
         )
         bridge.painted_revision = -1  # the new document has painted nothing
         # Not from inside the signal: the page is still tearing the old one down.
-        QTimer.singleShot(0, _load)
+        # With the view as context: a view destroyed in this turn is not loaded.
+        QTimer.singleShot(0, view, _load)
 
     view.page().renderProcessTerminated.connect(_on_terminated)
     _load()
@@ -306,9 +307,37 @@ def keep_pages_painted(stack: QStackedWidget) -> None:
                     continue
                 own_policy.setdefault(proxy, proxy.focusPolicy())
                 proxy.setFocusPolicy(own_policy[proxy] if current else Qt.FocusPolicy.NoFocus)
+        # The stack moves focus before it announces the switch, while the new
+        # page's proxy still refuses it, so focus is left on the page widget or
+        # behind on a covered page. Hand it to the page's view; focus that is
+        # elsewhere in the window (a toolbar field) is not ours to move.
+        page = stack.currentWidget()
+        focused = QApplication.focusWidget()
+        if page is None or focused is None or not stack.isAncestorOf(focused):
+            return
+        if focused is page or not page.isAncestorOf(focused):
+            views = views_of(page)
+            if views:
+                views[0].setFocus()
 
     for index in range(stack.count()):
         for view in views_of(stack.widget(index)):
             view.page().loadFinished.connect(apply)  # the proxy exists by now
     stack.currentChanged.connect(apply)
     apply()
+
+
+def is_current_page(widget: QWidget) -> bool:
+    """Whether `widget` is, or is inside, the page its stack has on top.
+
+    With keep_pages_painted every page is visible to Qt and gets one show
+    event, at start. So a page that reads the disk "when shown", or asks
+    isVisible() whether the user can see it, asks this instead, and the shell
+    tells it when it becomes current. True for a widget in no stack.
+    """
+    child, parent = widget, widget.parentWidget()
+    while parent is not None:
+        if isinstance(parent, QStackedWidget):
+            return parent.currentWidget() is child
+        child, parent = parent, parent.parentWidget()
+    return True

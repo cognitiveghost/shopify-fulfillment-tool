@@ -1021,10 +1021,11 @@ class MainWindow(QMainWindow):
                     self.show_results_when_painted()
 
                     self.log_activity("Session", f"Loaded session: {session_name}")
-                    toast(
-                        self,
+                    # On Results itself: the switch above may not have happened
+                    # yet, and the router would draw it on the page being left.
+                    self.results_bridge.raise_toast(
                         f"Session {session_name} opened · "
-                        f"{self.analysis_results_df['Order_Number'].nunique()} orders.",
+                        f"{self.analysis_results_df['Order_Number'].nunique()} orders."
                     )
                 else:
                     # Session exists but no analysis yet: Setup is where its
