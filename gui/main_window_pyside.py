@@ -947,7 +947,7 @@ class MainWindow(QMainWindow):
         Waits up to 10 s for the background writes first, so the session
         being left has its history and memory on disk before another opens
         (AUDIT-07-H2). On timeout it carries on: the jobs still land, each on
-        its own session.
+        its own session. Tells the results page to forget its view state too.
         """
         queue = getattr(self, "write_queue", None)
         if queue is not None and not queue.flush(timeout=10):
@@ -962,6 +962,8 @@ class MainWindow(QMainWindow):
         self.stock_slot.clear()
         if hasattr(self, "undo_manager"):
             self.undo_manager.reset_for_session()
+        if hasattr(self, "results_bridge"):
+            self.results_bridge.forget_view()
         self._update_all_views()
 
     def load_existing_session(self, session_path: str):

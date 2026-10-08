@@ -61,6 +61,7 @@ class ResultsBridge(PageBridge):
     exportEnabledChanged = Signal()
     columnsChanged = Signal()
     tagCategoriesChanged = Signal()
+    sessionEpochChanged = Signal()
     # JS-facing: Ctrl+F in the Qt window focuses the page's search field.
     focusSearchRequested = Signal()
     # Python-facing. JS reports through the slots below and never connects to
@@ -100,6 +101,7 @@ class ResultsBridge(PageBridge):
         self._columns: dict = {**normalize_column_settings(None), "extras": []}
         self._tag_categories: dict = {}
         self._undo_available = False
+        self._session_epoch = 0
 
     # --- out: Python -> JS -------------------------------------------------
 
@@ -134,6 +136,12 @@ class ResultsBridge(PageBridge):
         return self._undo_available
 
     undoAvailable = Property(bool, _get_undo_available, notify=undoAvailableChanged)
+
+    def _get_session_epoch(self) -> int:
+        return self._session_epoch
+
+    # Goes up when a different session opens: the page forgets its view state.
+    sessionEpoch = Property(int, _get_session_epoch, notify=sessionEpochChanged)
 
     # --- in: JS -> Python --------------------------------------------------
 
@@ -256,6 +264,16 @@ class ResultsBridge(PageBridge):
 
     def selection(self) -> list[str]:
         return list(self._selection)
+
+    def forget_view(self) -> None:
+        """Tell the page a different session is opening.
+
+        The page owns its search, filters, sort and selection (ADR 0005), so
+        only it can drop them; left alone they carry into the next session,
+        which can then open on "no orders match".
+        """
+        self._session_epoch += 1
+        self.sessionEpochChanged.emit()
 
     def set_orders(self, df) -> None:
         """Push the session: the order payload and the KPI numbers, together."""

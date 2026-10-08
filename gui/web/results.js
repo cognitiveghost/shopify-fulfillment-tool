@@ -747,6 +747,24 @@ function clearFilters() {
   render();
 }
 
+// A different session is opening (bridge.sessionEpoch): nothing of the last
+// one's view may carry over. Column choices stay; they are saved settings.
+function resetView() {
+  state.query = "";
+  els.search.value = "";
+  state.chips = [];
+  state.sort = null;
+  state.selected = new Set();
+  state.anchorKey = null;
+  state.cursorKey = null;
+  closeMenu();
+  closeBulkPopover();
+  closePaneMenus(false);
+  closeColumnsPanel(false);
+  els.scroller.scrollTop = 0;
+  render();
+}
+
 // --- bridge ---------------------------------------------------------------------
 
 function onOrders() {
@@ -841,6 +859,7 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   bridge.exportEnabledChanged.connect(renderExport);
   bridge.focusSearchRequested.connect(() => els.search.focus());
   bridge.columnsChanged.connect(onColumns);
+  bridge.sessionEpochChanged.connect(resetView);
   bridge.toastRaised.connect((text, undoable) => raiseToast(text, undoable));
   bridge.undoAvailableChanged.connect(updateToastUndo);
   state.columnSettings = Object.assign(state.columnSettings, bridge.columns || {});

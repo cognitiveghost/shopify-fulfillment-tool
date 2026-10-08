@@ -622,3 +622,9 @@ def test_every_page_of_the_shell_stays_painted(main_window):
             proxy = view.focusProxy()
             if proxy is not None:  # created with the page; the one that takes keys
                 assert (proxy.focusPolicy() == Qt.FocusPolicy.NoFocus) == (index != 3), index
+
+
+def test_every_way_into_a_session_forgets_the_view(main_window):
+    before = main_window.results_bridge.sessionEpoch
+    main_window._reset_session_state()
+    assert main_window.results_bridge.sessionEpoch == before + 1

@@ -3,6 +3,8 @@
 Driven through a real Chromium. Never mark skip.
 """
 
+import json
+
 import pytest
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QStackedWidget, QWidget
@@ -124,3 +126,55 @@ def test_log_rows_sent_while_covered_are_there_when_shown(qtbot):
     bridge.send([log_row(1, NEW)])
     stack.setCurrentIndex(1)
     _until_js(qtbot, view, f"document.body.innerText.includes('{NEW}')")
+
+
+def test_a_new_session_forgets_the_previous_view(qtbot):
+    _stack, view, bridge = _in_stack(qtbot, "results")
+    bridge.set_orders(results_lines(40))
+    _painted(qtbot, view, bridge)
+    _eval(
+        qtbot,
+        view,
+        "(() => { const f = document.getElementById('search'); f.value = '#1';"
+        " f.dispatchEvent(new Event('input', {bubbles: true}));"
+        " document.querySelector('#header .col-order').click();"
+        " document.querySelector('#header .col-select input').click();"
+        " state.chips = [{kind: 'status', value: 'fulfillable', label: 'Fulfillable'}];"
+        " render(); els.scroller.scrollTop = 64; return true; })()",
+    )
+    before = json.loads(
+        _eval(qtbot, view, "JSON.stringify({q: state.query, s: state.sort, n: state.selected.size})")
+    )
+    assert before["q"] == "#1" and before["s"] is not None and before["n"] > 0
+
+    bridge.forget_view()
+    lines = results_lines(12)
+    lines["Order_Number"] = [f"{NEW}-{n}" for n in lines["Order_Number"]]
+    bridge.set_orders(lines)
+    _painted(qtbot, view, bridge)
+
+    after = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify({q: state.query, field: document.getElementById('search').value,"
+            " chips: state.chips.length, s: state.sort, n: state.selected.size,"
+            " anchor: state.anchorKey, cursor: state.cursorKey, top: els.scroller.scrollTop,"
+            " shown: state.view.length, columns: state.columnSettings})",
+        )
+    )
+    assert after["q"] == "" and after["field"] == ""
+    assert after["chips"] == 0 and after["s"] is None and after["n"] == 0
+    assert after["anchor"] is None and after["cursor"] is None and after["top"] == 0
+    assert after["shown"] == 12
+    assert NEW in _body(qtbot, view)
+
+
+def test_forgetting_the_view_keeps_the_column_choices(qtbot):
+    _stack, view, bridge = _in_stack(qtbot, "results")
+    bridge.set_orders(results_lines(12))
+    bridge.setAutoHideEmpty(True)
+    _painted(qtbot, view, bridge)
+    bridge.forget_view()
+    _painted(qtbot, view, bridge)
+    assert _eval(qtbot, view, "state.columnSettings.auto_hide_empty") is True
