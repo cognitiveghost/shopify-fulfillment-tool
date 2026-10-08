@@ -13,6 +13,7 @@ from shared.web_page import (  # noqa: F401  (re-exported for the bridges and th
     THEME_ACK_TIMEOUT_MS,
     THEME_MARKER,
     PageBridge,
+    when_painted,
 )
 
 WEB_DIR = Path(__file__).resolve().parent / "web"

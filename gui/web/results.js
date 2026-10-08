@@ -846,5 +846,6 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   state.columnSettings = Object.assign(state.columnSettings, bridge.columns || {});
   onOrders();
   window.resultsBridge = bridge;
+  reportPaints(bridge);
   document.documentElement.dataset.bridge = "ready";
 });

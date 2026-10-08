@@ -4,6 +4,7 @@ A page's bridge extends PageBridge and adds its own named members; mount_page
 loads the page into a view with the theme already written into it.
 """
 
+import logging
 import weakref
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from shared.theme import on_theme_changed, theme_css_vars
+
+logger = logging.getLogger(__name__)
 
 SHARED_WEB_DIR = Path(__file__).resolve().parent / "web"
 THEME_MARKER = "/* theme-vars */"
@@ -26,7 +29,7 @@ _pages: weakref.WeakKeyDictionary[PageBridge, QWebEngineView] = (
 
 
 class PageBridge(QObject):
-    """The theme and the toast: the two things every web page is told."""
+    """The theme, the toast and the revision: what every web page is told."""
 
     themeCssChanged = Signal()
     # Python-facing: the page has painted the theme it was last sent.
@@ -34,10 +37,33 @@ class PageBridge(QObject):
     # JS-facing: the page draws its own toast, because a Qt child widget
     # cannot paint above a web view's surface (ADR 0007).
     toastRaised = Signal(str, bool)
+    revisionChanged = Signal()
+    # Python-facing: the page has painted this revision.
+    painted = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._theme_css = ""
+        self._revision = 0
+        self.painted_revision = -1  # nothing reported yet
+        # Every property that can change raises the revision, whichever
+        # subclass declares it: none can be forgotten.
+        # (QObject's own objectName is not page state.)
+        meta = self.metaObject()
+        for index in range(QObject.staticMetaObject.propertyCount(), meta.propertyCount()):
+            prop = meta.property(index)
+            if prop.hasNotifySignal() and prop.name() != "revision":
+                signal = getattr(self, bytes(prop.notifySignal().name()).decode())
+                signal.connect(self._bump)
+
+    def _bump(self, *_args) -> None:
+        self._revision += 1
+        self.revisionChanged.emit()
+
+    def _get_revision(self) -> int:
+        return self._revision
+
+    revision = Property(int, _get_revision, notify=revisionChanged)
 
     def _get_theme_css(self) -> str:
         return self._theme_css
@@ -54,6 +80,12 @@ class PageBridge(QObject):
     def themeApplied(self) -> None:
         """Called by the page, two frames after it wrote a changed theme."""
         self.themePainted.emit()
+
+    @Slot(int)
+    def paintedRevision(self, revision) -> None:
+        """Called by the page, two frames after it drew `revision`."""
+        self.painted_revision = int(revision)
+        self.painted.emit(self.painted_revision)
 
     def raise_toast(self, message: str, undoable: bool = False) -> None:
         self.toastRaised.emit(str(message), bool(undoable))
@@ -152,3 +184,48 @@ def switch_theme(name: str, *, current_name, tokens_for, set_theme) -> None:
     css = theme_css_vars(tokens_for(name))
     for bridge in connected:
         bridge.set_theme_css(css)
+
+
+PAINT_TIMEOUT_MS = 150
+
+
+def when_painted(bridge: PageBridge, callback, timeout_ms: int = PAINT_TIMEOUT_MS) -> None:
+    """Run `callback` once the page has painted the bridge's current revision.
+
+    At once if it already has; otherwise on the page's report, or after
+    `timeout_ms`, whichever comes first. A page that never answers costs the
+    timeout and a log line, never a stuck screen.
+    """
+    target = bridge.revision
+    if bridge.painted_revision >= target:
+        callback()
+        return
+
+    done = False
+
+    def finish(timed_out: bool = False) -> None:
+        nonlocal done
+        if done:
+            return
+        done = True
+        try:
+            bridge.painted.disconnect(on_painted)
+            last = bridge.painted_revision
+        except RuntimeError:
+            last = -1  # the bridge was destroyed while we waited
+        if timed_out:
+            logger.warning(
+                "%s did not report revision %s within %s ms (last painted %s)",
+                type(bridge).__name__,
+                target,
+                timeout_ms,
+                last,
+            )
+        callback()
+
+    def on_painted(revision: int) -> None:
+        if revision >= target:
+            finish()
+
+    bridge.painted.connect(on_painted)
+    QTimer.singleShot(timeout_ms, lambda: finish(timed_out=True))
