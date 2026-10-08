@@ -138,3 +138,33 @@ def test_opening_a_session_re_derives_stock_left(main_window):
     main_window.load_existing_session(path)
 
     assert main_window.analysis_results_df["Final_Stock"].tolist() == [3.0]
+
+
+def test_opening_a_session_ends_on_results_with_its_orders_painted(main_window, qtbot):
+    """The switch waits for the page, so the first frame shown is the new session's."""
+    from test_results_bridge import _eval
+
+    path = _session_with_inputs(main_window)
+
+    def load_analysis(_path):
+        main_window.analysis_results_df = pd.DataFrame(
+            {
+                "Order_Number": ["#NEWSESSION-1001"],
+                "SKU": ["A"],
+                "Quantity": [2],
+                "Order_Fulfillment_Status": ["Fulfillable"],
+                "Stock": [5],
+                "Final_Stock": [3.0],
+            }
+        )
+        return True
+
+    main_window._load_session_analysis = load_analysis
+    main_window.main_tabs.setCurrentIndex(0)
+    main_window.load_existing_session(path)
+
+    qtbot.waitUntil(lambda: main_window.main_tabs.currentIndex() == 1, timeout=3000)
+    bridge = main_window.results_bridge
+    qtbot.waitUntil(lambda: bridge.painted_revision == bridge.revision, timeout=5000)
+    body = _eval(qtbot, main_window.results_view, "document.body.innerText")
+    assert "NEWSESSION-1001" in body

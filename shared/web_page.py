@@ -229,7 +229,12 @@ def when_painted(bridge: PageBridge, callback, timeout_ms: int = PAINT_TIMEOUT_M
             finish()
 
     bridge.painted.connect(on_painted)
-    QTimer.singleShot(timeout_ms, lambda: finish(timed_out=True))
+    # Parented to the bridge: if the page goes away while we wait (the window
+    # closed), the timer goes with it and the callback never touches a dead UI.
+    timer = QTimer(bridge)
+    timer.setSingleShot(True)
+    timer.timeout.connect(lambda: finish(timed_out=True))
+    timer.start(timeout_ms)
 
 
 def keep_pages_painted(stack: QStackedWidget) -> None:

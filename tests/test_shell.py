@@ -628,3 +628,28 @@ def test_every_way_into_a_session_forgets_the_view(main_window):
     before = main_window.results_bridge.sessionEpoch
     main_window._reset_session_state()
     assert main_window.results_bridge.sessionEpoch == before + 1
+
+
+def test_results_is_shown_once_its_page_has_painted(main_window, qtbot):
+    bridge = main_window.results_bridge
+    main_window.main_tabs.setCurrentIndex(0)
+    bridge.set_export_enabled(not bridge.exportEnabled)  # a change the page has not painted
+    main_window.show_results_when_painted()
+    assert main_window.main_tabs.currentIndex() == 0  # not before the report
+    bridge.paintedRevision(bridge.revision)
+    assert main_window.main_tabs.currentIndex() == 1
+
+
+def test_results_is_shown_at_the_cap_when_the_page_never_answers(main_window, qtbot):
+    bridge = main_window.results_bridge
+    main_window.main_tabs.setCurrentIndex(0)
+    # A page that never reports: hold its reports back for this test.
+    bridge.blockSignals(True)
+    try:
+        bridge.painted_revision = -1  # nothing painted, whatever the page said before
+        main_window.show_results_when_painted()
+        qtbot.wait(50)
+        assert main_window.main_tabs.currentIndex() == 0
+        qtbot.waitUntil(lambda: main_window.main_tabs.currentIndex() == 1, timeout=2000)
+    finally:
+        bridge.blockSignals(False)

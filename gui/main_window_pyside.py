@@ -32,6 +32,7 @@ from gui.session_write_queue import (
     submit_or_run,
 )
 from gui.ui_manager import UIManager
+from gui.web_page import when_painted
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
 from shopify_tool import APP_NAME, __version__, core, fulfillment_history, session_state
@@ -417,6 +418,15 @@ class MainWindow(QMainWindow):
         """F5: reload the sessions, when Browse is the screen showing."""
         if self.main_tabs.currentIndex() == 2:
             self.session_browser.refresh_sessions()
+
+    def show_results_when_painted(self):
+        """Switch to Results once its page has painted what it was just sent.
+
+        Opening a session pushes the orders and switches in one step, and the
+        page draws them a few frames later: switching at once shows the last
+        session until then. A page that does not answer costs 150 ms.
+        """
+        when_painted(self.results_bridge, lambda: self.main_tabs.setCurrentIndex(1))
 
     def _focus_results_search(self):
         """Ctrl+F: the search field lives in the results document now."""
@@ -1007,8 +1017,8 @@ class MainWindow(QMainWindow):
                     self.analysis_results_df = with_stock_left(self.analysis_results_df)
                     self._update_all_views()
 
-                    # Auto-switch to Analysis Results tab (Tab 2)
-                    self.main_tabs.setCurrentIndex(1)
+                    # Auto-switch to Analysis Results, once it has painted them
+                    self.show_results_when_painted()
 
                     self.log_activity("Session", f"Loaded session: {session_name}")
                     toast(
