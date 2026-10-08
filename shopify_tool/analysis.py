@@ -643,7 +643,7 @@ def _simulate_stock_allocation(
     4. Mark order as fulfillable/not fulfillable
     5. Deduct stock for fulfillable orders
 
-    Skips items without SKU (Has_SKU=False) as they don't consume stock.
+    Skips every order that has a line without SKU (Has_SKU=False).
 
     Args:
         orders_df: Cleaned orders DataFrame with item counts
@@ -663,12 +663,17 @@ def _simulate_stock_allocation(
     """
     logger.debug("Phase 3/7: Simulating stock allocation...")
 
-    # Filter out NO_SKU items before simulation (they don't consume stock)
+    # An order with a NO_SKU line is left out whole: it gets no result, so it
+    # is Not Fulfillable and draws no stock until the operator marks it.
     if "Has_SKU" in orders_df.columns:
-        orders_for_simulation = orders_df[orders_df["Has_SKU"] == True].copy()
-        no_sku_count = (~orders_df["Has_SKU"]).sum()
-        if no_sku_count > 0:
-            logger.debug(f"Skipping {no_sku_count} NO_SKU items from stock simulation")
+        no_sku_orders = orders_df.loc[orders_df["Has_SKU"] == False, "Order_Number"]
+        orders_for_simulation = orders_df[
+            ~orders_df["Order_Number"].isin(no_sku_orders)
+        ].copy()
+        if not no_sku_orders.empty:
+            logger.debug(
+                f"Holding {no_sku_orders.nunique()} orders with NO_SKU lines out of stock simulation"
+            )
     else:
         orders_for_simulation = orders_df.copy()
 
