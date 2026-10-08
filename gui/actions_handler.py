@@ -21,7 +21,7 @@ from shopify_tool import (
     stock_ledger,
 )
 from shopify_tool.analysis import toggle_order_fulfillment
-from shopify_tool.csv_utils import AUTO_DELIMITER, resolve_delimiter
+from shopify_tool.csv_utils import AUTO_DELIMITER, normalize_sku, resolve_delimiter
 from shopify_tool.profile_manager import ProfileManagerError
 from shopify_tool.session_manager import SessionManagerError
 
@@ -1127,8 +1127,6 @@ class ActionsHandler(QObject):
 
         # Normalize SKU column to string
         if "SKU" in stock_df.columns:
-            from shopify_tool.csv_utils import normalize_sku
-
             stock_df["SKU"] = stock_df["SKU"].apply(normalize_sku)
         return stock_df
 

@@ -678,54 +678,6 @@ def test_a_lock_that_was_never_taken_is_not_released(session_manager, tmp_path, 
     assert calls == [fcntl.LOCK_EX]
 
 
-def test_the_windows_lock_outwaits_one_deadlock_report(monkeypatch):
-    """msvcrt's LK_LOCK gives up after ten seconds with EDEADLK. A switch of
-    client died on it ("Resource deadlock avoided") while another listing
-    still held the index lock."""
-    import errno
-    import sys
-    import types
-
-    from shopify_tool import session_manager as module
-
-    calls = []
-
-    def locking(fd, mode, nbytes):
-        calls.append(fd)
-        if len(calls) == 1:
-            raise OSError(errno.EDEADLK, "Resource deadlock avoided")
-
-    monkeypatch.setitem(sys.modules, "msvcrt", types.SimpleNamespace(locking=locking, LK_LOCK=1))
-    module._lock_windows(7)
-    assert calls == [7, 7]
-
-
-def test_the_windows_lock_gives_up_in_the_end_and_passes_other_errors_on(monkeypatch):
-    import errno
-    import sys
-    import types
-
-    from shopify_tool import session_manager as module
-
-    calls = []
-    error = OSError(errno.EDEADLK, "Resource deadlock avoided")
-
-    def locking(fd, mode, nbytes):
-        calls.append(fd)
-        raise error
-
-    monkeypatch.setitem(sys.modules, "msvcrt", types.SimpleNamespace(locking=locking, LK_LOCK=1))
-    with pytest.raises(OSError, match="deadlock"):
-        module._lock_windows(7)
-    assert len(calls) == module._WINDOWS_LOCK_ROUNDS
-
-    calls.clear()
-    error = OSError(errno.EACCES, "denied")
-    with pytest.raises(OSError, match="denied"):
-        module._lock_windows(7)
-    assert len(calls) == 1
-
-
 def test_a_listing_survives_an_index_lock_it_cannot_take(session_manager, monkeypatch):
     """The index is a cache: a lock nobody releases must not hide a client's
     sessions, or leave the last client's on screen."""
@@ -742,5 +694,10 @@ def test_a_listing_survives_an_index_lock_it_cannot_take(session_manager, monkey
         yield
 
     monkeypatch.setattr(session_manager, "_exclusive_lock", refused)
+    names = {s["session_name"] for s in session_manager.list_client_sessions("M")}
+    assert names == {first.name, second.name}
+
+    # No index at all (a client never listed, or a torn index): the same.
+    (first.parent / session_manager.INDEX_FILENAME).unlink()
     names = {s["session_name"] for s in session_manager.list_client_sessions("M")}
     assert names == {first.name, second.name}

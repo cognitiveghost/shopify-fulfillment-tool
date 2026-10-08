@@ -189,6 +189,25 @@ class TestNoSkuHandling:
         # Only #2 drew stock.
         assert other["Final_Stock"] == 7
 
+    def test_a_held_order_still_reports_its_shortage(self):
+        """The operator sees the shortage with the hold, not after fixing the SKU."""
+        orders = _orders([
+            {"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 5},
+            {"Name": "#1", "Lineitem sku": None, "Lineitem quantity": 1},
+            {"Name": "#2", "Lineitem sku": "B1", "Lineitem quantity": 1},
+            {"Name": "#2", "Lineitem sku": None, "Lineitem quantity": 1},
+        ])
+        stock = _stock([{"Артикул": "A1", "Наличност": 0}, {"Артикул": "B1", "Наличност": 4}])
+        final_df, *_ = _run(orders, stock)
+        notes = final_df.set_index(["Order_Number", "SKU"])["System_note"]
+        assert notes["#1", "A1"] == "Cannot fulfill: A1: Out of stock"
+        assert notes["#1", "NO_SKU"] == "Cannot fulfill: A1: Out of stock [NO_SKU]"
+        # No shortage: held for the SKU alone, and it drew nothing.
+        assert not notes["#2", "B1"]
+        assert notes["#2", "NO_SKU"] == "[NO_SKU]"
+        assert (final_df["Order_Fulfillment_Status"] == "Not Fulfillable").all()
+        assert final_df.set_index("SKU").loc["B1", "Final_Stock"] == 4
+
 
 class TestRepeatDetection:
     def test_order_executed_yesterday_is_marked_repeat_with_default_window(self):

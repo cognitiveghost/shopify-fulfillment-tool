@@ -20,7 +20,6 @@ Directory Structure:
 """
 
 import contextlib
-import errno
 import json
 import logging
 import os
@@ -31,28 +30,6 @@ from typing import ClassVar
 from shared.atomic_write import atomic_write_json
 
 logger = logging.getLogger("ShopifyToolLogger")
-
-
-_WINDOWS_LOCK_ROUNDS = 6
-
-
-def _lock_windows(fd: int) -> None:
-    """Take the one-byte lock, waiting about a minute for it.
-
-    LK_LOCK alone is not blocking: it gives up after ten one-second tries
-    with EDEADLK ("Resource deadlock avoided"). A first listing after an
-    upgrade rereads every session of a client under the index lock, which on
-    the share takes longer than that, and the other PC's listing then failed.
-    """
-    import msvcrt
-
-    for round_ in range(_WINDOWS_LOCK_ROUNDS):
-        try:
-            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-            return
-        except OSError as e:
-            if e.errno != errno.EDEADLK or round_ == _WINDOWS_LOCK_ROUNDS - 1:
-                raise
 
 
 class SessionManagerError(Exception):
@@ -280,16 +257,16 @@ class SessionManager:
             return []
 
         entries = self._read_index(client_sessions_dir)
-        if entries is None:
-            entries = self._rebuild_index(client_sessions_dir)
-        else:
-            try:
+        try:
+            if entries is None:
+                entries = self._rebuild_index(client_sessions_dir)
+            else:
                 entries = self._refresh_index(client_sessions_dir, entries)
-            except OSError:
-                # The index is a cache. A lock that can't be had costs one
-                # slow listing, read from the folders and not written back.
-                logger.warning("Session index is locked; listing the folders instead", exc_info=True)
-                entries = self._scan_sessions(client_sessions_dir)
+        except OSError:
+            # The index is a cache. A lock that can't be had costs one
+            # slow listing, read from the folders and not written back.
+            logger.warning("Session index is locked; listing the folders instead", exc_info=True)
+            entries = self._scan_sessions(client_sessions_dir)
 
         sessions = []
         for entry in entries:
@@ -316,7 +293,8 @@ class SessionManager:
             locked = False
             try:
                 if os.name == "nt":
-                    _lock_windows(lock_file.fileno())
+                    import msvcrt
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
                 else:
                     import fcntl
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
