@@ -358,7 +358,7 @@ class ActionsHandler(QObject):
 
             # Auto-switch to Analysis Results tab (Tab 2)
             if hasattr(self.mw, "main_tabs"):
-                self.mw.main_tabs.setCurrentIndex(1)
+                self.mw.show_results_when_painted()
 
             # Update UI state
             if hasattr(self.mw, "update_ui_state"):

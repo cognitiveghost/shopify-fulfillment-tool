@@ -195,7 +195,7 @@ def test_the_page_carries_the_theme_marker_exactly_once():
 
 def test_the_page_links_the_kit_before_its_own_stylesheet():
     html = PAGE.read_text(encoding="utf-8")
-    assert html.index('href="kit.css"') < html.index('href="browse.css"')
+    assert html.index('href="../../shared/web/kit.css"') < html.index('href="browse.css"')
 
 
 # --- views -------------------------------------------------------------------

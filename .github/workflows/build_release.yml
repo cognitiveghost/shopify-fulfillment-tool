@@ -132,6 +132,7 @@ jobs:
           --add-data "shopify_tool/templates;shopify_tool/templates"
           --add-data "shared/assets;shared/assets"
           --add-data "gui/web;gui/web"
+          --add-data "shared/web;shared/web"
           --collect-data blabel
           --collect-submodules reportlab.graphics.barcode
           gui_main.py

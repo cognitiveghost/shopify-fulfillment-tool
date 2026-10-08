@@ -604,3 +604,118 @@ def test_what_the_window_logs_reaches_the_logs_buffer(main_window):
         "Report",
         "Generated: picklist",
     )
+
+
+def test_every_page_of_the_shell_stays_painted(main_window, qtbot):
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+    from PySide6.QtWidgets import QStackedLayout, QStackedWidget
+
+    stack = main_window.main_tabs.findChild(QStackedWidget)
+    assert stack.layout().stackingMode() == QStackedLayout.StackingMode.StackAll
+    pages = [main_window.main_tabs.widget(i) for i in range(main_window.main_tabs.count())]
+    assert all(page.isVisible() for page in pages)
+    views = {
+        index: [page] if isinstance(page, QWebEngineView) else page.findChildren(QWebEngineView)
+        for index, page in enumerate(pages)
+    }
+    assert all(views.values())
+    # The proxy is created with the page, and is the one that takes keys.
+    qtbot.waitUntil(
+        lambda: all(v.focusProxy() is not None for vs in views.values() for v in vs),
+        timeout=15000,
+    )
+    main_window.main_tabs.setCurrentIndex(3)
+    for index, page_views in views.items():
+        for view in page_views:
+            covered = view.focusProxy().focusPolicy() == Qt.FocusPolicy.NoFocus
+            assert covered == (index != 3), index
+
+
+def test_every_way_into_a_session_forgets_the_view(main_window):
+    before = main_window.results_bridge.sessionEpoch
+    main_window._reset_session_state()
+    assert main_window.results_bridge.sessionEpoch == before + 1
+
+
+def test_results_is_shown_once_its_page_has_painted(main_window, qtbot):
+    bridge = main_window.results_bridge
+    main_window.main_tabs.setCurrentIndex(0)
+    bridge.set_export_enabled(not bridge.exportEnabled)  # a change the page has not painted
+    main_window.show_results_when_painted()
+    assert main_window.main_tabs.currentIndex() == 0  # not before the report
+    bridge.paintedRevision(bridge.revision)
+    assert main_window.main_tabs.currentIndex() == 1
+
+
+def test_results_is_shown_at_the_cap_when_the_page_never_answers(main_window, qtbot):
+    bridge = main_window.results_bridge
+    main_window.main_tabs.setCurrentIndex(0)
+    # A page that never reports: hold its reports back for this test.
+    bridge.blockSignals(True)
+    try:
+        bridge.painted_revision = -1  # nothing painted, whatever the page said before
+        main_window.show_results_when_painted()
+        qtbot.wait(50)
+        assert main_window.main_tabs.currentIndex() == 0
+        qtbot.waitUntil(lambda: main_window.main_tabs.currentIndex() == 1, timeout=2000)
+    finally:
+        bridge.blockSignals(False)
+
+
+
+def test_browse_reloads_when_it_becomes_the_current_page(main_window, monkeypatch):
+    """Every page stays visible to Qt, so no show event follows a switch: the
+    shell tells the page. Without it Browse kept a stale list until F5."""
+    browser = main_window.session_browser
+    reloads = []
+    monkeypatch.setattr(browser, "refresh_sessions", lambda *a, **k: reloads.append(1))
+    browser.current_client_id = "M"
+    main_window.main_tabs.setCurrentIndex(1)
+
+    browser._is_dirty = False
+    main_window.main_tabs.setCurrentIndex(2)
+    assert reloads == []  # nothing changed: no read of the file server
+
+    main_window.main_tabs.setCurrentIndex(1)
+    browser.mark_dirty()  # a packing list was written while Results showed
+    assert reloads == []
+    main_window.main_tabs.setCurrentIndex(2)
+    assert reloads == [1]
+
+
+def test_a_covered_browse_does_not_load_a_client_until_it_is_shown(main_window, monkeypatch):
+    browser = main_window.session_browser
+    reloads = []
+    monkeypatch.setattr(browser, "refresh_sessions", lambda *a, **k: reloads.append(1))
+    main_window.main_tabs.setCurrentIndex(0)
+    browser.set_client("COVERED", auto_refresh=False)
+    assert reloads == []
+    main_window.main_tabs.setCurrentIndex(2)
+    assert reloads == [1]
+
+
+def test_tools_reads_this_pc_again_when_it_becomes_the_current_page(main_window, monkeypatch):
+    tools = main_window.tools_widget
+    reads = []
+    monkeypatch.setattr(tools, "_read_this_pc", lambda: reads.append(1))
+    main_window.main_tabs.setCurrentIndex(1)
+    assert reads == []
+    main_window.main_tabs.setCurrentIndex(4)
+    assert reads == [1]
+
+
+def test_a_tools_toast_goes_to_the_page_the_user_is_on(main_window):
+    """A run that finishes after the user left Tools: its own page is covered,
+    so the toast with Open folder there would be seen by nobody."""
+    tools = main_window.tools_widget
+    on_tools, on_results = [], []
+    tools.bridge.toastRaised.connect(lambda text, action: on_tools.append(text))
+    main_window.results_bridge.toastRaised.connect(lambda text, undo: on_results.append(text))
+
+    main_window.main_tabs.setCurrentIndex(1)
+    tools._on_toast("Labels ready.", "/tmp/out")
+    assert (on_tools, on_results) == ([], ["Labels ready."])
+
+    main_window.main_tabs.setCurrentIndex(4)
+    tools._on_toast("Labels ready.", "/tmp/out")
+    assert on_tools == ["Labels ready."]

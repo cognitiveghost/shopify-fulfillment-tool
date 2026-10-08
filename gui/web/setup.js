@@ -388,5 +388,6 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   page.state = bridge.state;
   render();
   window.setupBridge = bridge;
+  reportPaints(bridge);
   document.documentElement.dataset.bridge = "ready";
 });

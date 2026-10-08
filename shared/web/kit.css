@@ -10,12 +10,12 @@
 @font-face {
   font-family: "Inter";
   font-weight: 400;
-  src: url("../../shared/assets/fonts/Inter-Regular.ttf");
+  src: url("../assets/fonts/Inter-Regular.ttf");
 }
 @font-face {
   font-family: "Inter";
   font-weight: 700;
-  src: url("../../shared/assets/fonts/Inter-Bold.ttf");
+  src: url("../assets/fonts/Inter-Bold.ttf");
 }
 
 *, *::before, *::after { box-sizing: border-box; }

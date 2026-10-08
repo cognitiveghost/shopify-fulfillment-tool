@@ -303,3 +303,12 @@ def test_open_column_mapping_is_a_request_python_hears(qapp):
     bridge.columnMappingRequested.connect(lambda: seen.append(1))
     bridge.openColumnMapping()
     assert seen == [1]
+
+
+def test_forget_view_raises_the_session_epoch(qtbot):
+    bridge = ResultsBridge()
+    seen = []
+    bridge.sessionEpochChanged.connect(lambda: seen.append(bridge.sessionEpoch))
+    bridge.forget_view()
+    bridge.forget_view()
+    assert seen == [1, 2]

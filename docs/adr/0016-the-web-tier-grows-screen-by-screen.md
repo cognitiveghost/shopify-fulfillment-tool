@@ -58,6 +58,12 @@
   mapping. The dialog's frame stays Qt until its last Qt page has moved, because a Qt page cannot be drawn
   over a web view (ADR 0007). Python owns every value and every sentence of a page, in a draft; the page
   owns which menu is open.
+- What every bridge shares moved to `shared/web_page.py` and `shared/web/` on 2026-10-08, with three additions
+  (web tier freshness spec). The page stack runs in stack-all mode, so a covered page keeps painting and a switch
+  never shows its old frame; covered pages refuse keyboard focus instead. Every bridge carries a revision the
+  page reports back once painted. A page whose render process dies is loaded again. The cost: all five pages
+  paint from start-up, not on first visit, and a switch sends no show event: a page that refreshes when shown
+  asks `is_current_page` and is told by the shell (`page_shown`), never `isVisible()` or `showEvent` alone.
 
 ## What would reverse it
 

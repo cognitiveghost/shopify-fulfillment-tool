@@ -32,6 +32,7 @@ from gui.session_write_queue import (
     submit_or_run,
 )
 from gui.ui_manager import UIManager
+from gui.web_page import when_painted
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
 from shopify_tool import APP_NAME, __version__, core, fulfillment_history, session_state
@@ -417,6 +418,15 @@ class MainWindow(QMainWindow):
         """F5: reload the sessions, when Browse is the screen showing."""
         if self.main_tabs.currentIndex() == 2:
             self.session_browser.refresh_sessions()
+
+    def show_results_when_painted(self):
+        """Switch to Results once its page has painted what it was just sent.
+
+        Opening a session pushes the orders and switches in one step, and the
+        page draws them a few frames later: switching at once shows the last
+        session until then. A page that does not answer costs 150 ms.
+        """
+        when_painted(self.results_bridge, lambda: self.main_tabs.setCurrentIndex(1))
 
     def _focus_results_search(self):
         """Ctrl+F: the search field lives in the results document now."""
@@ -947,7 +957,7 @@ class MainWindow(QMainWindow):
         Waits up to 10 s for the background writes first, so the session
         being left has its history and memory on disk before another opens
         (AUDIT-07-H2). On timeout it carries on: the jobs still land, each on
-        its own session.
+        its own session. Tells the results page to forget its view state too.
         """
         queue = getattr(self, "write_queue", None)
         if queue is not None and not queue.flush(timeout=10):
@@ -962,6 +972,8 @@ class MainWindow(QMainWindow):
         self.stock_slot.clear()
         if hasattr(self, "undo_manager"):
             self.undo_manager.reset_for_session()
+        if hasattr(self, "results_bridge"):
+            self.results_bridge.forget_view()
         self._update_all_views()
 
     def load_existing_session(self, session_path: str):
@@ -1005,14 +1017,15 @@ class MainWindow(QMainWindow):
                     self.analysis_results_df = with_stock_left(self.analysis_results_df)
                     self._update_all_views()
 
-                    # Auto-switch to Analysis Results tab (Tab 2)
-                    self.main_tabs.setCurrentIndex(1)
+                    # Auto-switch to Analysis Results, once it has painted them
+                    self.show_results_when_painted()
 
                     self.log_activity("Session", f"Loaded session: {session_name}")
-                    toast(
-                        self,
+                    # On Results itself: the switch above may not have happened
+                    # yet, and the router would draw it on the page being left.
+                    self.results_bridge.raise_toast(
                         f"Session {session_name} opened · "
-                        f"{self.analysis_results_df['Order_Number'].nunique()} orders.",
+                        f"{self.analysis_results_df['Order_Number'].nunique()} orders."
                     )
                 else:
                     # Session exists but no analysis yet: Setup is where its

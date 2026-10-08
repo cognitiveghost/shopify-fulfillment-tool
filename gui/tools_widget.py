@@ -23,6 +23,7 @@ from gui.reference_tool import ReferenceTool
 from gui.setup_state import SessionFacts
 from gui.tools_bridge import TOOLS, mount_tools_page
 from gui.tools_state import PRINT_SCOPE, PrintFacts, apply_print_edit, tools_state
+from gui.web_page import is_current_page
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ class ToolsWidget(QWidget):
             self._session_path = path
             self.reference.set_session(path)
             self.barcode.set_session(path)
-            if path and self.isVisible():
+            if path and self._showing():
                 self.barcode.reload()
         self._push()
 
@@ -133,10 +134,20 @@ class ToolsWidget(QWidget):
             )
         )
 
+    def _showing(self) -> bool:
+        """Whether the user is looking at Tools. Every page of the shell stays
+        visible to Qt (keep_pages_painted), so isVisible() alone cannot say."""
+        return self.isVisible() and is_current_page(self)
+
     def showEvent(self, event):
-        """Each time Tools is shown: this PC's printers and settings, and the
-        session's packing lists, are read again."""
         super().showEvent(event)
+        if is_current_page(self):
+            self.page_shown()
+
+    def page_shown(self) -> None:
+        """Each time Tools is shown: this PC's printers and settings, and the
+        session's packing lists, are read again. The shell calls it when Tools
+        becomes the current page, which sends no show event."""
         self._read_this_pc()
         self.sync()
         if self._session_path:
@@ -177,7 +188,7 @@ class ToolsWidget(QWidget):
         """A run finished. While this screen shows, its page draws the toast
         with Open folder; otherwise the router sends it to the page that is
         showing (ADR 0007), with no action."""
-        if folder and self.isVisible():
+        if folder and self._showing():
             self._toast_folder = folder
             self.bridge.raise_toast(text, True)
         else:

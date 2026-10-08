@@ -17,6 +17,7 @@ from gui.background_worker import BackgroundWorker
 from gui.browse_bridge import mount_browse_page
 from gui.browse_state import browse_state
 from gui.components import show_error
+from gui.web_page import is_current_page
 from shopify_tool.session_lifecycle import derive_status_updates
 from shopify_tool.session_manager import SessionManager
 
@@ -191,7 +192,7 @@ class SessionBrowserWidget(QWidget):
         self._loading = bool(client_id)
         self._is_dirty = True
         self._push()
-        if auto_refresh or self.isVisible():
+        if auto_refresh or self._showing():
             self.refresh_sessions()
 
     def refresh_sessions(self, quiet: bool = False):
@@ -242,7 +243,7 @@ class SessionBrowserWidget(QWidget):
         # flight (the user switched tabs). refresh_sessions() already cleared
         # _is_dirty when the load started; re-mark it so the next showEvent()
         # loads again instead of leaving the page on its skeleton forever.
-        if not self.isVisible():
+        if not self._showing():
             logger.debug("Widget not visible when sessions loaded; will retry on next show")
             self._is_dirty = True
             return
@@ -392,12 +393,22 @@ class SessionBrowserWidget(QWidget):
 
     # --- widget events -------------------------------------------------------
 
+    def _showing(self) -> bool:
+        """Whether the user is looking at Browse. Every page of the shell stays
+        visible to Qt (keep_pages_painted), so isVisible() alone cannot say."""
+        return self.isVisible() and is_current_page(self)
+
     def showEvent(self, event):
-        """Refresh only if something changed since the last load -- avoids
-        re-fetching from the file server every time this widget becomes
-        visible with nothing new to show.
-        """
         super().showEvent(event)
+        if is_current_page(self):
+            self.page_shown()
+
+    def page_shown(self) -> None:
+        """Refresh only if something changed since the last load -- avoids
+        re-fetching from the file server every time this widget is shown with
+        nothing new to show. The shell calls it when Browse becomes the
+        current page, which sends no show event.
+        """
         if self._is_dirty and self.current_client_id:
             self.refresh_sessions()
 

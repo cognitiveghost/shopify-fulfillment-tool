@@ -34,7 +34,7 @@ seam is what must not be seen.
 printed-label templates are not web assets: they are rendered to PDF, never
 shown in the web tier, and keep their own font.
 
-**Web kit** — `gui/web/kit.css`, the stylesheet every web page links first:
+**Web kit** — `shared/web/kit.css`, the stylesheet every web page links first:
 cards, buttons, badges, inputs, menus, the toast, the banner, the state panel,
 the page header. Components only, never a page's layout. Its sheet,
 `tests/web/kit_sheet.html`, shows one of each.

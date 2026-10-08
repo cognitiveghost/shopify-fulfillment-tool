@@ -6,9 +6,10 @@
 <!-- gui/web_page.py writes theme_css_vars() over the marker before the page
      loads, then setup.js keeps it current from the bridge. -->
 <style id="theme-vars">/* theme-vars */</style>
-<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="../../shared/web/kit.css">
 <link rel="stylesheet" href="setup.css">
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="../../shared/web/page.js" defer></script>
 <script src="setup.js" defer></script>
 </head>
 <body>

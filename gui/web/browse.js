@@ -595,5 +595,6 @@ new QWebChannel(qt.webChannelTransport, function (channel) {
   page.state = bridge.state;
   onState();
   window.browseBridge = bridge;
+  reportPaints(bridge);
   document.documentElement.dataset.bridge = "ready";
 });

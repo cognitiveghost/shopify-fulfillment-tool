@@ -11,6 +11,7 @@ from test_results_bridge import _eval, _until_js
 from test_results_document import results_lines
 
 from gui.results_bridge import mount_results_page
+from shared.web_page import SHARED_WEB_DIR
 
 
 @pytest.fixture
@@ -481,7 +482,7 @@ def test_no_cell_class_is_a_kit_class():
     from pathlib import Path
 
     web = Path(__file__).resolve().parent.parent / "gui" / "web"
-    kit = set(re.findall(r"(?m)^\.([a-z][a-z0-9-]*)", (web / "kit.css").read_text("utf-8")))
+    kit = set(re.findall(r"(?m)^\.([a-z][a-z0-9-]*)", (SHARED_WEB_DIR / "kit.css").read_text("utf-8")))
     css = (web / "results.css").read_text("utf-8")
     local = set(re.findall(r"\.(?:cell|head)\.([a-z][a-z0-9_-]*)", css))
     # `.mono` is the kit's own font utility, and a cell wants exactly that.
