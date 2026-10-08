@@ -2,7 +2,9 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-body { width: 68mm; height: 38mm; font-family: "JetBrains Mono", monospace; }
+/* No height: blabel puts every label in one body, and WeasyPrint drops the
+   labels after one that overflows a fixed-height body. */
+body { width: 68mm; font-family: "JetBrains Mono", monospace; }
 
 .label {
   width: 68mm;
@@ -82,6 +84,7 @@ body { width: 68mm; height: 38mm; font-family: "JetBrains Mono", monospace; }
 .tag-row .field-label { width: 9mm; font-size: 3mm; font-weight: bold; }
 .tag-row .field-value {
   font-weight: bold;
+  line-height: 1.25; /* what label_tools.fit_font_block sizes for */
   overflow: hidden;
   white-space: normal;
   word-break: break-word;
