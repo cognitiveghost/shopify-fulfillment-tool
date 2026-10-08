@@ -5,9 +5,10 @@ Driven through a real Chromium. Never mark skip.
 
 import json
 import logging
+import os
+import signal
 
 import pytest
-from PySide6.QtCore import QUrl
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QStackedWidget, QWidget
 from test_browse_state import H, session
@@ -186,7 +187,10 @@ def _kill(qtbot, view):
     """End the page's render process and wait for Qt to notice."""
     died = []
     view.page().renderProcessTerminated.connect(lambda *_: died.append(1))
-    view.load(QUrl("chrome://crash"))
+    # Killed outright, not chrome://crash: on the CI runner that crash is
+    # logged but Qt is not told within 15 s.
+    qtbot.waitUntil(lambda: view.page().renderProcessPid() > 0, timeout=15000)
+    os.kill(view.page().renderProcessPid(), getattr(signal, "SIGKILL", signal.SIGTERM))
     qtbot.waitUntil(lambda: bool(died), timeout=15000)
 
 
