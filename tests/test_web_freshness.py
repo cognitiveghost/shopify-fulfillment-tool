@@ -4,8 +4,10 @@ Driven through a real Chromium. Never mark skip.
 """
 
 import json
+import logging
 
 import pytest
+from PySide6.QtCore import QUrl
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QStackedWidget, QWidget
 from test_browse_state import H, session
@@ -178,3 +180,34 @@ def test_forgetting_the_view_keeps_the_column_choices(qtbot):
     bridge.forget_view()
     _painted(qtbot, view, bridge)
     assert _eval(qtbot, view, "state.columnSettings.auto_hide_empty") is True
+
+
+def _kill(qtbot, view):
+    """End the page's render process and wait for Qt to notice."""
+    died = []
+    view.page().renderProcessTerminated.connect(lambda *_: died.append(1))
+    view.load(QUrl("chrome://crash"))
+    qtbot.waitUntil(lambda: bool(died), timeout=15000)
+
+
+def test_a_page_whose_render_process_died_comes_back_current(qtbot, caplog):
+    _stack, view, bridge = _in_stack(qtbot, "browse")
+    _state_push("browse", NEW)(bridge)
+    _painted(qtbot, view, bridge)
+    with caplog.at_level(logging.WARNING, logger="shared.web_page"):
+        _kill(qtbot, view)
+        _until_js(qtbot, view, f"document.body.innerText.includes('{NEW}')", timeout_s=30)
+    assert "render process" in caplog.text
+    _painted(qtbot, view, bridge)
+
+
+def test_a_page_that_keeps_dying_is_not_reloaded_forever(qtbot, caplog):
+    _stack, view, _bridge = _in_stack(qtbot, "browse")
+    with caplog.at_level(logging.WARNING, logger="shared.web_page"):
+        for _ in range(2):
+            _kill(qtbot, view)
+            _ready(qtbot, view)
+        _kill(qtbot, view)  # the third inside a minute
+        qtbot.wait(1500)
+    assert "giving up" in caplog.text
+    assert view.page().renderProcessPid() == 0  # nothing was started again

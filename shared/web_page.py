@@ -5,6 +5,7 @@ loads the page into a view with the theme already written into it.
 """
 
 import logging
+import time
 import weakref
 from pathlib import Path
 
@@ -22,6 +23,10 @@ SHARED_WEB_DIR = Path(__file__).resolve().parent / "web"
 THEME_MARKER = "/* theme-vars */"
 # How long the chrome waits for the visible page to paint a new theme.
 THEME_ACK_TIMEOUT_MS = 150
+
+# A page whose render process dies is loaded again, unless it keeps dying.
+RELOAD_LIMIT = 3
+RELOAD_WINDOW_S = 60
 
 # bridge -> its view, for switch_theme. Weak: a closed page drops out.
 _pages: weakref.WeakKeyDictionary[PageBridge, QWebEngineView] = (
@@ -103,6 +108,10 @@ def mount_page(
     themed, then pushed through the bridge on every theme or density change,
     so the document repaints without a reload. The channel is parented to
     `view` and dies with it. The page's own folder is its base URL.
+
+    A page whose render process dies is loaded again and reads the bridge's
+    current state as a new page does; RELOAD_LIMIT deaths inside
+    RELOAD_WINDOW_S stop that.
     """
     channel = QWebChannel(view)
     channel.registerObject(channel_name, bridge)
@@ -118,8 +127,37 @@ def mount_page(
     _pages[bridge] = view
     on_theme_changed(view, _push_theme)  # runs once now, then on every change
 
-    html = page.read_text(encoding="utf-8").replace(THEME_MARKER, bridge.themeCss)
-    view.setHtml(html, QUrl.fromLocalFile(str(page.parent) + "/"))
+    def _load() -> None:
+        html = page.read_text(encoding="utf-8").replace(THEME_MARKER, bridge.themeCss)
+        view.setHtml(html, QUrl.fromLocalFile(str(page.parent) + "/"))
+
+    deaths: list[float] = []
+
+    def _on_terminated(status, exit_code) -> None:
+        now = time.monotonic()
+        deaths[:] = [at for at in deaths if now - at < RELOAD_WINDOW_S] + [now]
+        if len(deaths) >= RELOAD_LIMIT:
+            logger.error(
+                "%s: render process died %s times in %s s (%s, exit %s); giving up",
+                page.name,
+                len(deaths),
+                RELOAD_WINDOW_S,
+                status,
+                exit_code,
+            )
+            return
+        logger.warning(
+            "%s: render process died (%s, exit %s); reloading the page",
+            page.name,
+            status,
+            exit_code,
+        )
+        bridge.painted_revision = -1  # the new document has painted nothing
+        # Not from inside the signal: the page is still tearing the old one down.
+        QTimer.singleShot(0, _load)
+
+    view.page().renderProcessTerminated.connect(_on_terminated)
+    _load()
 
 
 _finish_pending = None  # completes the switch in flight, if there is one
