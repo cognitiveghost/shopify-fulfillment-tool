@@ -14,9 +14,9 @@ pytest-cov>=7.1.0      # Code coverage reporting for pytest
 
 # Code Quality Tools
 # ------------------
-ruff>=0.16.9            # Fast Python linter and formatter (replaces black + flake8)
+ruff>=0.16.10            # Fast Python linter and formatter (replaces black + flake8)
 
 # Build and Distribution
 # ----------------------
 pyinstaller>=6.22.3     # Package application into standalone executables
-pyinstaller-hooks-contrib>=2026.7  # Additional hooks for PyInstaller
+pyinstaller-hooks-contrib>=2026.8  # Additional hooks for PyInstaller
