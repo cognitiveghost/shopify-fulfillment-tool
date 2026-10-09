@@ -8,8 +8,8 @@
 pandas>=3.0.6          # Data manipulation, analysis, and DataFrame operations
 numpy>=2.5.3           # Numerical computing and array operations (pandas dependency)
 python-dateutil>=2.9.0.post0 # Date/time parsing, manipulation, and timezone handling
-pytz>=2026.4           # Timezone definitions and conversions
-tzdata>=2026.4         # IANA timezone database
+pytz>=2026.5           # Timezone definitions and conversions
+tzdata>=2026.5         # IANA timezone database
 
 # Excel File Support
 # ------------------
@@ -33,7 +33,7 @@ PySide6>=6.11.2         # Qt6 for Python - cross-platform GUI framework
 # PDF Processing (Feature #4 - Reference Labels)
 # -----------------------------------------------
 pypdf>=6.19.0           # page text for Reference Labels matching
-pikepdf>=10.15.0           # Reference Labels page handling (rotation, overlay, merge)
+pikepdf>=10.16.0           # Reference Labels page handling (rotation, overlay, merge)
 reportlab>=5.0.1       # PDF generation and text overlay
 
 # Barcode Generation (Feature #5 - Barcode Generator)
@@ -49,6 +49,6 @@ qrcode>=8.2              # QR code generation (SVG vector output via blabel temp
 
 # Direct Label Printing (raw ZPL for Citizen CL-E300, matches barcode_tool)
 # ---------------------------------------------------------------------
-pypdfium2>=5.13.0          # PDF rasterization for raw ZPL printing
+pypdfium2>=5.14.0          # PDF rasterization for raw ZPL printing
 zebrafy>=2.0.0             # PIL Image -> ZPL conversion for raw ZPL printing
 pywin32>=312; sys_platform == "win32"  # win32print RAW spooling (Windows only)
