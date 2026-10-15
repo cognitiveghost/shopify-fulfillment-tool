@@ -426,6 +426,7 @@ draw();
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.logs;
+  applyStrings(bridge);
   page.bridge = bridge;
   page.capacity = bridge.capacity;
   view.wrap = bridge.wrap;

@@ -849,6 +849,7 @@ document.fonts.ready.then(() => {
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.results;
+  applyStrings(bridge);
   state.bridge = bridge;
   els.themeVars.textContent = bridge.themeCss;
   bridge.themeCssChanged.connect(onTheme);

@@ -616,6 +616,7 @@ bind();
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.settings;
+  applyStrings(bridge);
   page.bridge = bridge;
   els.themeVars.textContent = bridge.themeCss;
   bridge.themeCssChanged.connect(() => {
