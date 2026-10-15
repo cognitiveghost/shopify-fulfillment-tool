@@ -18,12 +18,16 @@ from PySide6.QtGui import (
     QStandardItemModel,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QHBoxLayout,
     QLabel,
     QLayout,
     QMenu,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QToolButton,
     QWidget,
 )
@@ -55,12 +59,15 @@ class BarState(enum.Enum):
 ROW_SECTION = "section"
 ROW_CLIENT = "client"
 ROW_ACTION = "action"
+# A client row's ID, for the delegate and the filter. The name is the display text.
+ROLE_CLIENT_ID = Qt.UserRole + 2
 
 _DOT_PX = 10  # matches StatusDot's default diameter
 _NEW_CLIENT = "New client…"
 _MANAGE_GROUPS = "Manage groups…"
+_ARCHIVED = "Archived clients…"
 _REFRESH = "Refresh clients"
-_ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS)
+_ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS, _ARCHIVED)
 
 # The ladder, widest trigger first. Qt's own elision has no order and would
 # take the session ID first because it is the longest string in the row --
@@ -104,6 +111,40 @@ class _ClientCombo(QComboBox):
             i += delta
 
 
+class _ClientRowDelegate(QStyledItemDelegate):
+    """A client row: its name, then its ID in the secondary text colour."""
+
+    def paint(self, painter, option, index):
+        if index.data(Qt.UserRole) != ROW_CLIENT:
+            super().paint(painter, option, index)
+            return
+        name = index.data(Qt.DisplayRole) or ""
+        cid = index.data(ROLE_CLIENT_ID) or ""
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        style = opt.widget.style() if opt.widget else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        text_rect = style.subElementRect(QStyle.SE_ItemViewItemText, opt, opt.widget)
+        theme = get_theme_manager().get_current_theme()
+        selected = bool(option.state & QStyle.State_Selected)
+        painter.save()
+        painter.setPen(
+            opt.palette.highlightedText().color()
+            if selected
+            else QColor(theme.text)
+        )
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, name)
+        if cid and cid != name:
+            used = opt.fontMetrics.horizontalAdvance(name + "  ")
+            if not selected:
+                painter.setPen(QColor(theme.text_secondary))
+            painter.drawText(
+                text_rect.adjusted(used, 0, 0, 0), Qt.AlignVCenter | Qt.AlignLeft, cid
+            )
+        painter.restore()
+
+
 class CommandBar(QWidget):
     """Emits selections and the action; owns no application state."""
 
@@ -111,6 +152,7 @@ class CommandBar(QWidget):
     clientMenuRequested = Signal(str, QPoint)
     createClientRequested = Signal()
     manageGroupsRequested = Signal()
+    archivedClientsRequested = Signal()
     refreshRequested = Signal()
     newSessionRequested = Signal()
     sessionChosen = Signal(str)
@@ -153,6 +195,7 @@ class CommandBar(QWidget):
         self.client_selector.currentIndexChanged.connect(self._on_client_changed)
         self.client_selector.activated.connect(self._on_row_activated)
         view = self.client_selector.view()
+        view.setItemDelegate(_ClientRowDelegate(self.client_selector))
         view.setContextMenuPolicy(Qt.CustomContextMenu)
         view.customContextMenuRequested.connect(self._on_row_context_menu)
         layout.addWidget(self.client_selector)
@@ -295,8 +338,8 @@ class CommandBar(QWidget):
         """Rebuild the dropdown from ClientDirectory.gather()'s dict.
 
         Pinned, then each non-empty group, then everyone not yet listed. A
-        pinned client that is also in a group appears under both -- that is
-        the sidebar's own behaviour, ported rather than corrected.
+        client is listed once: under Pinned if pinned, else under the first
+        group that holds it, else under All Clients.
         """
         # _restore_client, not current_client(): refresh() is async, so a
         # set_current_client() for a client the model does not hold yet must
@@ -320,7 +363,7 @@ class CommandBar(QWidget):
                 members = [
                     c
                     for c in data["group_members"].get(group.get("id"), [])
-                    if c in data["all_clients"]
+                    if c in data["all_clients"] and c not in listed
                 ]
                 if not members:
                     continue
@@ -361,10 +404,13 @@ class CommandBar(QWidget):
         self.client_selector.model().appendRow(item)
 
     def _add_client(self, client_id: str, data: dict) -> None:
-        settings = data["card_data"].get(client_id, {}).get("ui_settings", {})
-        item = QStandardItem(client_id)
+        card = data["card_data"].get(client_id, {})
+        settings = card.get("ui_settings", {})
+        name = (card.get("client_name") or "").strip() or client_id
+        item = QStandardItem(name)
         item.setData(ROW_CLIENT, Qt.UserRole)
         item.setData(client_id, Qt.UserRole + 1)
+        item.setData(client_id, ROLE_CLIENT_ID)
         # The hex is the client's own custom_color, read from disk -- user
         # data, not a literal, so style_lint has nothing to object to.
         colour = settings.get("custom_color")
@@ -433,6 +479,8 @@ class CommandBar(QWidget):
             self.createClientRequested.emit()
         elif label == _MANAGE_GROUPS:
             self.manageGroupsRequested.emit()
+        elif label == _ARCHIVED:
+            self.archivedClientsRequested.emit()
         else:
             self.refreshRequested.emit()
 
