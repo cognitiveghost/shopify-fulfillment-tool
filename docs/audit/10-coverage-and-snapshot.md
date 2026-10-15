@@ -15,19 +15,25 @@ snapshot shows no backup from LIDA's 2026-10-09 analysis on 2.3.1. No new id.
 
 | Module | Before | After |
 |---|---|---|
-| `shopify_tool/core.py` | 68.3 | |
-| `shopify_tool/undo_manager.py` | 59.8 | |
-| `shopify_tool/groups_manager.py` | 57.3 | |
-| `shopify_tool/sku_writeoff.py` | 53.6 | |
-| `shopify_tool/tag_manager.py` | 68.3 | |
-| `shopify_tool/profile_migrations.py` | 65.2 | |
-| `shopify_tool/profile_manager.py` | 75.0 | |
-| `gui/client_settings_dialog.py` | 11.1 | |
-| `gui/groups_management_dialog.py` | 9.6 | |
-| `shared/file_lock.py` | 57.4 | |
-| `shared/server_connection.py` | 24.4 | |
-| `shared/metadata_utils.py` | 33.3 | |
-| **Total** (`shopify_tool`, `gui`, `shared`) | 84.5 | |
+| `shopify_tool/core.py` | 68.3 | 84 |
+| `shopify_tool/undo_manager.py` | 59.8 | 84 |
+| `shopify_tool/groups_manager.py` | 57.3 | 92 |
+| `shopify_tool/sku_writeoff.py` | 53.6 | 100 |
+| `shopify_tool/tag_manager.py` | 68.3 | 98 |
+| `shopify_tool/profile_migrations.py` | 65.2 | 100 |
+| `shopify_tool/profile_manager.py` | 75.0 | 89 |
+| `gui/client_settings_dialog.py` | 11.1 | 96 |
+| `gui/groups_management_dialog.py` | 9.6 | 89 |
+| `shared/file_lock.py` | 57.4 | 95 |
+| `shared/server_connection.py` | 24.4 | 85 |
+| `shared/metadata_utils.py` | 33.3 | 96 |
+| **Total** (`shopify_tool`, `gui`, `shared`) | 84.5 | 91.0 |
+
+Measured with `--cov=shopify_tool --cov=gui --cov=shared` over the whole suite (4,042 passed, the three
+known ZPL failures, 7 xfailed). Lines that cannot run on Linux, and so stay uncovered: the Windows
+`msvcrt` import and the no-`fcntl` fallback in `shared/file_lock.py` (lines 8, 15-16). The total after is
+on 16,930 statements; the dead-code removal (Task 11) changed the denominator. The CI gate is
+`--cov-fail-under=90` (measured 90.98, rounded down).
 
 ## Findings
 
@@ -61,14 +67,6 @@ Tests: `tests/test_session_lifecycle.py` (the five `packing_completion` cases af
 `test_a_completed_run_short_of_its_list_is_not_packed`) and `tests/test_report_jobs.py`
 (`test_statistics_record_each_lists_order_count`).
 
-### AUDIT-10-8: a bulk tag edit raised `AttributeError` after saving
-
-Found: while writing the AUDIT-10-4 window tests. `bulk_add_tag` and `bulk_remove_tag` called
-`ui_manager._populate_tag_filter()`, which the Qt tag filter took with it when the results tier moved to
-the web page (Phase 9). On a real window the edit was saved and the undo operation recorded, then the
-call raised, so the operator got no toast and the activity log line was skipped. Fix: both calls removed;
-`_update_all_views()` already refreshes the page. Tests: `test_audit_10_8_*`.
-
 ### AUDIT-10-4: an edit after the packing list was written leaves the old list for the Packer (finding 2.2)
 
 Found: snapshot finding 2.2, ALMA 2026-10-02_2 (a removed line packed and not written off), HERBAR
@@ -78,24 +76,6 @@ that changes it moves the unstarted lists to `packing_lists/withdrawn/` and name
 failed regeneration withdraws the old list too. ADR 0019.
 Tests: `tests/test_report_jobs.py` (fingerprint, withdraw, message), `test_audit_10_4_*` and the window
 tests that follow it in the audit file.
-
-## Replay suite (no id)
-
-`tests/replay/` replays 26 stored production sessions (19 ALMA, 6 HERBAR, 1 LIDA, the golden set of
-2026-10-11) through `core.analyse` and compares the result with the `analysis_data.json` each session
-stored, and, for the 20 sessions without manual operations, with its packing lists. Fixtures are
-anonymised: one shared order-number mapping per client, only the columns the config maps, names and
-notes masked down to the words a rule reads, no e-mail, phone or path (`test_fixtures_hold_no_pii`).
-Rebuild with `scripts/build_replay_fixtures.py --server ~/Desktop/Server./Server`; the builder replays
-each session and refuses one that does not reproduce. 21 of the 26 configs are the nearest backup, not
-the exact config of the day (`meta.json: config_exact`): `shopify_config.json` is kept in the session
-folder from now on, so later sessions replay exactly. Operation replay (B4) is a follow-up.
-
-## Open questions
-
-- An empty Notes cell is written to `analysis_data.json` and to the packing list as the text `nan`
-  (`core._text_or_blank`, kept on purpose "for what each JSON text field has always held"). The Packer
-  may show it. Not changed here: it needs a decision on whether the Packer or old sessions depend on it.
 
 ### AUDIT-10-5: WeasyPrint warns about `word-break: break-word` on every label run
 
@@ -117,6 +97,14 @@ Found: production `log_issues`, 2.3.1, ×10, last seen 2026-10-09 ("did not repo
 … ms"). `when_painted` runs its action anyway when the page is slow to paint, so nothing is wrong
 and nobody can act on the line. Fix: INFO. Test: `test_when_painted_gives_up_at_the_timeout_and_says_so`
 in `tests/test_web_page.py`. A `shared/` change: packing-tool takes it at its next sync.
+
+### AUDIT-10-8: a bulk tag edit raised `AttributeError` after saving
+
+Found: while writing the AUDIT-10-4 window tests. `bulk_add_tag` and `bulk_remove_tag` called
+`ui_manager._populate_tag_filter()`, which the Qt tag filter took with it when the results tier moved to
+the web page (Phase 9). On a real window the edit was saved and the undo operation recorded, then the
+call raised, so the operator got no toast and the activity log line was skipped. Fix: both calls removed;
+`_update_all_views()` already refreshes the page. Tests: `test_audit_10_8_*`.
 
 ### AUDIT-10-9: a CSV parse error was reported as a validation error
 
@@ -140,3 +128,21 @@ Found: writing the `tag_manager` tests. `validate_tag_categories_v2` called `col
 whatever the config held, so a hand-edited colour of `123` raised `AttributeError` out of the
 Settings validation instead of being listed as an error. Fix: a colour that is not a `#rrggbb`
 string is an "invalid color format" error. Test: `test_audit_10_11_*`.
+
+## Replay suite (no id)
+
+`tests/replay/` replays 26 stored production sessions (19 ALMA, 6 HERBAR, 1 LIDA, the golden set of
+2026-10-11) through `core.analyse` and compares the result with the `analysis_data.json` each session
+stored, and, for the 20 sessions without manual operations, with its packing lists. Fixtures are
+anonymised: one shared order-number mapping per client, only the columns the config maps, names and
+notes masked down to the words a rule reads, no e-mail, phone or path (`test_fixtures_hold_no_pii`).
+Rebuild with `scripts/build_replay_fixtures.py --server ~/Desktop/Server./Server`; the builder replays
+each session and refuses one that does not reproduce. 21 of the 26 configs are the nearest backup, not
+the exact config of the day (`meta.json: config_exact`): `shopify_config.json` is kept in the session
+folder from now on, so later sessions replay exactly. Operation replay (B4) is a follow-up.
+
+## Open questions
+
+- An empty Notes cell is written to `analysis_data.json` and to the packing list as the text `nan`
+  (`core._text_or_blank`, kept on purpose "for what each JSON text field has always held"). The Packer
+  may show it. Not changed here: it needs a decision on whether the Packer or old sessions depend on it.
