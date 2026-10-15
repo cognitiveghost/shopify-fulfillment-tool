@@ -30,3 +30,11 @@ snapshot shows no backup from LIDA's 2026-10-09 analysis on 2.3.1. No new id.
 | **Total** (`shopify_tool`, `gui`, `shared`) | 84.5 | |
 
 ## Findings
+
+### AUDIT-10-1: a report file name ending `.XLSX` fails the packing list (finding 2.5)
+
+Found: snapshot finding 2.5, ALMA 2026-10-08 15:15 ("Invalid extension for engine … 'XLSX'").
+`_output_file` compared the extension case-sensitively, so `MASKS.XLSX` reached `pd.ExcelWriter`,
+which refuses it; a name with no extension (`ALL`) got none, and a stock export named `X.xlsx`
+became `X.xlsx.xls`. Fix: one lower-case extension from `Path.with_suffix`.
+Test: `test_audit_10_1_*`.

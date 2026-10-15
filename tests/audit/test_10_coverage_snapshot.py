@@ -21,7 +21,6 @@ def test_report_names_already_normalised(report_type, filename, expected, tmp_pa
     assert Path(out).name == expected
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-1: .XLSX is not normalised")
 @pytest.mark.parametrize(
     ("report_type", "filename", "expected"),
     [
@@ -37,7 +36,6 @@ def test_audit_10_1_report_names_get_one_lower_case_extension(report_type, filen
     assert Path(out).name == expected
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-1: .XLSX fails in pd.ExcelWriter")
 def test_audit_10_1_an_upper_case_name_still_writes_the_packing_list(tmp_path):
     frame = pd.DataFrame(
         {"Order_Number": ["#1001"], "SKU": ["A"], "Quantity": [1], "Stock": [5],

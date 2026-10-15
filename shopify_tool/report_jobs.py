@@ -57,17 +57,16 @@ def packing_list_json(df: pd.DataFrame, session_id: str) -> dict:
 
 
 def _output_file(report_type: str, report_name: str, report_config: dict, output_dir: Path) -> str:
-    base_filename = report_config.get("output_filename", "")
-    if not base_filename:
-        base_filename = f"{report_name}.xlsx" if report_type == "packing_lists" else f"{report_name}.xls"
-
-    # Ensure correct extension
-    if report_type == "packing_lists":
-        if not base_filename.endswith(".xlsx"):
-            base_filename = base_filename.replace(".xls", ".xlsx")
-    elif not base_filename.endswith(".xls"):
-        base_filename = base_filename + ".xls"
-    return str(output_dir / base_filename)
+    suffix = ".xlsx" if report_type == "packing_lists" else ".xls"
+    base_filename = report_config.get("output_filename", "") or f"{report_name}{suffix}"
+    # Case-insensitive (AUDIT-10-1): "MASKS.XLSX" passed through and pandas
+    # refused the upper-case extension.
+    path = Path(base_filename)
+    if path.suffix.lower() in (".xls", ".xlsx"):
+        path = path.with_suffix(suffix)
+    else:
+        path = Path(base_filename + suffix)
+    return str(output_dir / path)
 
 
 def generate_report(
