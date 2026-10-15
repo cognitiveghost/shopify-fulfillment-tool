@@ -17,30 +17,30 @@ function profilePage(p) {
     .map((s) => `<div class="card-row" data-stat><span class="card-label">${esc(s.label)}</span><span class="card-control mono">${esc(s.value)}</span></div>`)
     .join("");
   return `<section class="card" data-card="profile">
-    ${cardHead("Client", "")}
-    <div class="card-row"><span class="card-label">Name</span><div class="card-control">
-      <input class="field${p.name.problem ? " invalid" : ""}" type="text" value="${esc(p.name.value)}" aria-label="Client name" data-input="profile_name" data-key="profile-name">
+    ${cardHead(t("Client"), "")}
+    <div class="card-row"><span class="card-label">${t("Name")}</span><div class="card-control">
+      <input class="field${p.name.problem ? " invalid" : ""}" type="text" value="${esc(p.name.value)}" aria-label="${t("Client name")}" data-input="profile_name" data-key="profile-name">
       ${p.name.problem ? problemLine(p.name.problem) : ""}
     </div></div>
-    <div class="card-row"><span class="card-label">Client ID</span><div class="card-control">
+    <div class="card-row"><span class="card-label">${t("Client ID")}</span><div class="card-control">
       <span class="mono" data-key="profile-id">${esc(p.client_id)}</span>
     </div></div>
-    <div class="card-row"><span class="card-label">Group</span><div class="card-control">
-      ${ruleSelect("profile-group", "Group", group.label, false, groupMenu, "profile-group")}
+    <div class="card-row"><span class="card-label">${t("Group")}</span><div class="card-control">
+      ${ruleSelect("profile-group", t("Group"), group.label, false, groupMenu, "profile-group")}
     </div></div>
-    <div class="card-row"><span class="card-label">Colour</span><div class="card-control">
-      <input type="color" value="${esc(p.colour)}" aria-label="Client colour" data-input="profile_colour" data-key="profile-colour">
+    <div class="card-row"><span class="card-label">${t("Colour")}</span><div class="card-control">
+      <input type="color" value="${esc(p.colour)}" aria-label="${t("Client colour")}" data-input="profile_colour" data-key="profile-colour">
     </div></div>
-    <div class="card-row"><span class="card-label">Pinned</span><div class="card-control">
-      <button class="switch" type="button" role="switch" aria-checked="${Boolean(p.pinned)}" aria-label="Pinned" data-act="profile-pin" data-key="profile-pin"><span class="switch-knob"></span></button>
+    <div class="card-row"><span class="card-label">${t("Pinned")}</span><div class="card-control">
+      <button class="switch" type="button" role="switch" aria-checked="${Boolean(p.pinned)}" aria-label="${t("Pinned")}" data-act="profile-pin" data-key="profile-pin"><span class="switch-knob"></span></button>
     </div></div>
   </section>
   <section class="card" data-card="stats">
-    ${cardHead("Statistics", "")}
+    ${cardHead(t("Statistics"), "")}
     ${stats}
   </section>
   <section class="card" data-card="danger">
-    ${cardHead("Danger zone", "")}
+    ${cardHead(t("Danger zone"), "")}
     <div class="card-row"><span class="card-label"></span><div class="card-control">
       <button class="btn secondary" type="button" data-act="profile-archive" data-key="profile-archive">${esc(p.archive.label)}</button>
       <span class="hint">${esc(p.archive.hint)}</span>

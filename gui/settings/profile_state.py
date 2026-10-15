@@ -7,8 +7,9 @@ profile_updates() to client_config.json. No Qt import.
 import json
 
 from gui.settings.contract import PageContract
+from shared.i18n import N_, _
 
-NO_GROUP = "No group"
+NO_GROUP = N_("No group")
 
 
 def _shaped(args, *types) -> bool:
@@ -56,7 +57,7 @@ class ProfileDraft(PageContract):
         return {}
 
     def blocker(self):
-        return "Set Client name" if not self.name.strip() else None
+        return _("Set {what}", what=_("Client name")) if not self.name.strip() else None
 
     def blocker_key(self) -> str:
         return "profile-name"
@@ -81,35 +82,45 @@ class ProfileDraft(PageContract):
         cid = self.client_id
         return {
             "page": "profile",
-            "title": "Profile",
-            "subtitle": f"How {self.name.strip() or cid} appears in the client list.",
+            "title": _("Profile"),
+            "subtitle": _("How {client} appears in the client list.", client=self.name.strip() or cid),
             "action": "",
             "profile": {
-                "name": {"value": self.name, "problem": "Enter a name." if not self.name.strip() else ""},
+                "name": {
+                    "value": self.name,
+                    "problem": _("Enter a name.") if not self.name.strip() else "",
+                },
                 "client_id": cid,
-                "groups": [{"value": "", "label": NO_GROUP, "checked": self.group_id is None}]
+                "groups": [{"value": "", "label": _(NO_GROUP), "checked": self.group_id is None}]
                 + [
-                    {"value": g.get("id", ""), "label": g.get("name", "Unknown"), "checked": g.get("id") == self.group_id}
+                    {
+                        "value": g.get("id", ""),
+                        "label": g.get("name", _("Unknown")),
+                        "checked": g.get("id") == self.group_id,
+                    }
                     for g in self.groups
                 ],
                 "colour": self.colour,
                 "pinned": self.pinned,
                 "stats": [
-                    {"label": "Sessions", "value": self._stat("total_sessions", "0")},
-                    {"label": "Last session", "value": self._stat("last_session_date", "Never")},
-                    {"label": "Last accessed", "value": self._stat("last_accessed", "Unknown")},
+                    {"label": _("Sessions"), "value": self._stat("total_sessions", "0")},
+                    {"label": _("Last session"), "value": self._stat("last_session_date", _("Never"))},
+                    {"label": _("Last accessed"), "value": self._stat("last_accessed", _("Unknown"))},
                 ],
                 "archive": {
-                    "label": "Archive client…",
-                    "hint": f"Hides {cid} in Fulfilment and Packing. Its sessions are kept and it can be "
-                    "restored from Archived clients.",
+                    "label": _("Archive client…"),
+                    "hint": _(
+                        "Hides {client} in Fulfilment and Packing. Its sessions are kept and it can be "
+                        "restored from Archived clients.",
+                        client=cid,
+                    ),
                 },
                 "delete": {
-                    "label": "Delete client…",
+                    "label": _("Delete client…"),
                     "enabled": not self.has_sessions,
-                    "hint": f"{cid} has sessions, so it can only be archived."
+                    "hint": _("{client} has sessions, so it can only be archived.", client=cid)
                     if self.has_sessions
-                    else f"Removes {cid} and its folders for good.",
+                    else _("Removes {client} and its folders for good.", client=cid),
                 },
             },
         }

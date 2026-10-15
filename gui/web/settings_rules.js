@@ -42,14 +42,14 @@ function summaryLines(row) {
 }
 
 function ruleMenu(row, key) {
-  const edit = row.open ? "Close editor" : "Edit";
+  const edit = row.open ? t("Close editor") : t("Edit");
   const item = (act, label, cls) =>
     `<button class="menu-item${cls}" type="button" role="menuitem" data-act="${act}" data-uid="${row.uid}" data-key="${key}-${act.slice(5)}">${label}</button>`;
   return `<div class="menu rule-menu" role="menu">
     ${item("rule-edit", edit, "")}
-    ${item("rule-duplicate", "Duplicate", "")}
+    ${item("rule-duplicate", t("Duplicate"), "")}
     <div class="menu-separator"></div>
-    ${item("rule-delete", "Delete", " danger")}
+    ${item("rule-delete", t("Delete"), " danger")}
   </div>`;
 }
 
@@ -58,15 +58,15 @@ function ruleActions(row) {
   const menuName = `${key}-menu`;
   const open = view.menu === menuName;
   const move = (dir, glyph, able) => {
-    const title = row.move_title || (dir === "up" ? "Move up" : "Move down");
+    const title = row.move_title || (dir === "up" ? t("Move up") : t("Move down"));
     return `<button class="btn ghost compact icon rule-move" type="button" title="${esc(title)}" aria-label="${esc(title)}" data-act="rule-move" data-uid="${row.uid}" data-dir="${dir}" data-key="${key}-${dir}"${off(!able)}>${svg(glyph, "glyph")}</button>`;
   };
   return `<div class="rule-actions">
-    <button class="btn secondary compact rule-test" type="button" title="${esc(row.test_title)}" data-act="rule-test" data-uid="${row.uid}" data-key="${key}-test"${off(!row.can_test)}>Test…</button>
+    <button class="btn secondary compact rule-test" type="button" title="${esc(row.test_title)}" data-act="rule-test" data-uid="${row.uid}" data-key="${key}-test"${off(!row.can_test)}>${t("Test…")}</button>
     ${move("up", RULE_GLYPH.up, row.can_up)}
     ${move("down", GLYPH.chevron, row.can_down)}
     <div class="menu-anchor">
-      <button class="btn ghost compact icon rule-more" type="button" title="Edit, duplicate, delete" aria-label="Edit, duplicate, delete" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="${menuName}" data-key="${menuName}">${svg(RULE_GLYPH.more, "glyph dots")}</button>
+      <button class="btn ghost compact icon rule-more" type="button" title="${t("Edit, duplicate, delete")}" aria-label="${t("Edit, duplicate, delete")}" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="${menuName}" data-key="${menuName}">${svg(RULE_GLYPH.more, "glyph dots")}</button>
       ${open ? ruleMenu(row, menuName) : ""}
     </div>
   </div>`;
@@ -74,9 +74,9 @@ function ruleActions(row) {
 
 function ruleRow(row, level) {
   const key = `rule-${row.uid}`;
-  const grip = row.can_drag ? "Drag to reorder" : row.move_title;
+  const grip = row.can_drag ? t("Drag to reorder") : row.move_title;
   const name = row.open
-    ? `<input class="field rule-name-field" type="text" value="${esc(row.name)}" aria-label="Rule name" data-input="rule_name" data-uid="${row.uid}" data-key="${key}-name">`
+    ? `<input class="field rule-name-field" type="text" value="${esc(row.name)}" aria-label="${t("Rule name")}" data-input="rule_name" data-uid="${row.uid}" data-key="${key}-name">`
     : `<button class="rule-name" type="button" data-act="rule-open" data-uid="${row.uid}" data-key="${key}-name">${esc(row.label)}</button>`;
   const badge = row.badge ? `<span class="badge neutral">${esc(row.badge)}</span>` : "";
   const below = row.open ? "" : summaryLines(row) + (row.problem ? problemLine(row.problem) : "");
@@ -129,7 +129,7 @@ function ruleSelect(key, label, text, invalid, menu, cls) {
   const open = view.menu === key;
   const value = text
     ? `<span class="select-value">${esc(text)}</span>`
-    : `<span class="select-value placeholder">Choose</span>`;
+    : `<span class="select-value placeholder">${t("Choose")}</span>`;
   return `<div class="menu-anchor ${cls}">
     <button class="select${invalid ? " invalid" : ""}" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="${esc(label)}" data-act="menu" data-menu="${key}" data-key="${key}">${value}${svg(GLYPH.chevron, "glyph")}</button>
     ${open ? `<div class="menu editor-menu" role="menu">${menu()}</div>` : ""}
@@ -163,12 +163,13 @@ function under(problem, hint) {
 
 // What a rule's condition row sends. A report's filter row sends its own
 // (settings_reports.js): the row is the same control.
+// removeLabel is a function, so its label stays a literal in the t() call.
 const RULE_CONDITION = {
   field: "cond-field",
   op: "cond-op",
   value: "cond_value",
   remove: "cond-remove",
-  removeLabel: "Remove condition",
+  removeLabel: () => t("Remove condition"),
 };
 
 // A field, an operator and a value. `key` is the row's key prefix, `at` the
@@ -193,12 +194,12 @@ function conditionRow(e, key, at, acts, cond) {
     const listed = cond.extra_operator ? [cond.extra_operator].concat(e.operators) : e.operators;
     return listed
       .map((operator, n) =>
-        menuItem(acts.op, { ...at, value: operator }, operator, n === 0 && cond.extra_operator ? "Not available" : "", operator === cond.operator, `${key}-op-item-${n}`, false),
+        menuItem(acts.op, { ...at, value: operator }, t(operator), n === 0 && cond.extra_operator ? t("Not available") : "", operator === cond.operator, `${key}-op-item-${n}`, false),
       )
       .join("");
   };
   const v = cond.value;
-  const input = `data-input="${acts.value}"${data} data-key="${key}-value" aria-label="Value"`;
+  const input = `data-input="${acts.value}"${data} data-key="${key}-value" aria-label="${t("Value")}"`;
   let value = `<span class="cond-none"></span>`;
   if (v.kind === "date") {
     value = `<input class="field${cond.invalid ? " invalid" : ""}" type="date" value="${esc(v.text)}" ${input}>`;
@@ -208,10 +209,10 @@ function conditionRow(e, key, at, acts, cond) {
   }
   return `<div class="cond">
     <div class="cond-row">
-      ${ruleSelect(`${key}-field`, "Field", cond.field, cond.field_invalid, fieldMenu, "cond-field")}
-      ${ruleSelect(`${key}-op`, "Operator", cond.operator, Boolean(cond.extra_operator), operatorMenu, "cond-op")}
+      ${ruleSelect(`${key}-field`, t("Field"), cond.field, cond.field_invalid, fieldMenu, "cond-field")}
+      ${ruleSelect(`${key}-op`, t("Operator"), t(cond.operator), Boolean(cond.extra_operator), operatorMenu, "cond-op")}
       <div class="cond-value">${value}</div>
-      <button class="btn ghost compact icon" type="button" title="${acts.removeLabel}" aria-label="${acts.removeLabel}" data-act="${acts.remove}"${data} data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
+      <button class="btn ghost compact icon" type="button" title="${acts.removeLabel()}" aria-label="${acts.removeLabel()}" data-act="${acts.remove}"${data} data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
     </div>
     ${under(cond.problem, cond.hint)}
   </div>`;
@@ -227,7 +228,7 @@ function actionParam(uid, s, a, p) {
     const menu = () =>
       listed
         .map((field, n) =>
-          menuItem("action-param", { ...at, value: field }, field, n === 0 && p.extra ? "Not available" : "", field === p.value, `${key}-item-${n}`, false),
+          menuItem("action-param", { ...at, value: field }, field, n === 0 && p.extra ? t("Not available") : "", field === p.value, `${key}-item-${n}`, false),
         )
         .join("");
     return lead + ruleSelect(key, p.name, p.value, Boolean(p.extra), menu, "param-field");
@@ -258,10 +259,10 @@ function actionRow(e, uid, s, a, action) {
   return `<div class="action" data-action="${a}">
     <div class="action-row">
       <div class="action-controls">
-        ${ruleSelect(`${key}-type`, "Action", action.label, false, typeMenu, "action-type")}
+        ${ruleSelect(`${key}-type`, t("Action"), action.label, false, typeMenu, "action-type")}
         ${action.params.map((p) => actionParam(uid, s, a, p)).join("")}
       </div>
-      <button class="btn ghost compact icon" type="button" title="Remove action" aria-label="Remove action" data-act="action-remove" data-uid="${uid}" data-s="${s}" data-a="${a}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
+      <button class="btn ghost compact icon" type="button" title="${t("Remove action")}" aria-label="${t("Remove action")}" data-act="action-remove" data-uid="${uid}" data-s="${s}" data-a="${a}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
     </div>
     ${under(action.problem, action.hint)}
   </div>`;
@@ -274,29 +275,29 @@ function addRow(act, label, uid, s, count, key) {
 function editorStep(e, uid, s, step) {
   const key = `rule-${uid}-s${s}`;
   const remove = step.removable
-    ? `<button class="btn ghost compact danger" type="button" data-act="step-remove" data-uid="${uid}" data-s="${s}" data-key="${key}-remove">Remove step</button>`
+    ? `<button class="btn ghost compact danger" type="button" data-act="step-remove" data-uid="${uid}" data-s="${s}" data-key="${key}-remove">${t("Remove step")}</button>`
     : "";
   const head = step.title
     ? `<div class="step-head"><span class="step-title">${esc(step.title)}</span><span class="step-note">${esc(step.note)}</span><span class="spacer"></span>${remove}</div>`
     : "";
   const match = step.match.show
-    ? `<div class="match-line">${segments(step.match.options, "Match", "step-match", { uid, s }, `${key}-match`)}<span>${esc(step.match.tail)}</span></div>`
+    ? `<div class="match-line">${segments(step.match.options, t("Match"), "step-match", { uid, s }, `${key}-match`)}<span>${esc(step.match.tail)}</span></div>`
     : "";
   return `<div class="editor-step${step.title ? " titled" : ""}" data-step="${s}">
     ${head}
     <div class="editor-line">
-      <span class="editor-label">When</span>
+      <span class="editor-label">${t("When")}</span>
       <div class="editor-content">
         ${match}
         ${step.conditions.map((cond, c) => conditionRow(e, `rule-${uid}-s${s}-c${c}`, { uid, s, c }, RULE_CONDITION, cond)).join("")}
-        ${addRow("cond-add", "Add condition", uid, s, step.conditions.length, `${key}-cond-add`)}
+        ${addRow("cond-add", t("Add condition"), uid, s, step.conditions.length, `${key}-cond-add`)}
       </div>
     </div>
     <div class="editor-line">
-      <span class="editor-label">Then</span>
+      <span class="editor-label">${t("Then")}</span>
       <div class="editor-content">
         ${step.actions.map((action, a) => actionRow(e, uid, s, a, action)).join("")}
-        ${addRow("action-add", "Add action", uid, s, step.actions.length, `${key}-action-add`)}
+        ${addRow("action-add", t("Add action"), uid, s, step.actions.length, `${key}-action-add`)}
       </div>
     </div>
   </div>`;
@@ -308,56 +309,56 @@ function ruleEditor(row) {
   const key = `rule-${uid}`;
   return `<div class="rule-editor">
     <div class="editor-line">
-      <span class="editor-label">Level</span>
-      <div class="editor-content level-line">${segments(e.level.options, "Level", "rule-level", { uid }, `${key}-level`)}<span class="hint">${esc(e.level.hint)}</span></div>
+      <span class="editor-label">${t("Level")}</span>
+      <div class="editor-content level-line">${segments(e.level.options, t("Level"), "rule-level", { uid }, `${key}-level`)}<span class="hint">${esc(e.level.hint)}</span></div>
     </div>
     ${e.steps.map((step, s) => editorStep(e, uid, s, step)).join("")}
     <div class="editor-foot">
-      <button class="btn ghost compact add-row" type="button" data-act="step-add" data-uid="${uid}" data-key="${key}-step-add">${svg(GLYPH.plus, "glyph")}Add step</button>
+      <button class="btn ghost compact add-row" type="button" data-act="step-add" data-uid="${uid}" data-key="${key}-step-add">${svg(GLYPH.plus, "glyph")}${t("Add step")}</button>
       <span class="spacer"></span>
-      <button class="btn secondary" type="button" data-act="rule-close" data-uid="${uid}" data-key="${key}-done">Done</button>
+      <button class="btn secondary" type="button" data-act="rule-close" data-uid="${uid}" data-key="${key}-done">${t("Done")}</button>
     </div>
   </div>`;
 }
 
 // --- the Test panel ------------------------------------------------------------
 
-function testPanel(t) {
-  const session = t.intro.session ? `<span class="mono">${esc(t.intro.session)}</span>` : "";
+function testPanel(panel) {
+  const session = panel.intro.session ? `<span class="mono">${esc(panel.intro.session)}</span>` : "";
   let body = "";
-  if (t.status === "running") {
-    body = `<div class="test-message">${esc(t.message)}</div>`;
-  } else if (t.status === "failed") {
-    body = problemLine(t.message);
+  if (panel.status === "running") {
+    body = `<div class="test-message">${esc(panel.message)}</div>`;
+  } else if (panel.status === "failed") {
+    body = problemLine(panel.message);
   } else {
-    const rows = t.rows
+    const rows = panel.rows
       .map(
         (row) =>
           `<div class="test-row"><span class="test-order mono">${esc(row.order)}</span><span class="test-why mono" title="${esc(row.why)}">${esc(row.why)}</span><span class="test-change mono${row.changed ? "" : " same"}" title="${esc(row.change)}">${esc(row.change)}</span></div>`,
       )
       .join("");
-    const table = t.rows.length
+    const table = panel.rows.length
       ? `<div class="test-table">
-          <div class="test-row heads">${t.heads.map((head) => `<span>${esc(head)}</span>`).join("")}</div>
+          <div class="test-row heads">${panel.heads.map((head) => `<span>${esc(head)}</span>`).join("")}</div>
           ${rows}
-          ${t.more ? `<div class="test-more">${esc(t.more)}</div>` : ""}
+          ${panel.more ? `<div class="test-more">${esc(panel.more)}</div>` : ""}
         </div>`
-      : `<div class="test-message">${esc(t.empty)}</div>`;
-    body = `<div class="test-count"><span class="test-matched mono">${esc(t.matched)}</span><span>${esc(t.total)}</span></div>
+      : `<div class="test-message">${esc(panel.empty)}</div>`;
+    body = `<div class="test-count"><span class="test-matched mono">${esc(panel.matched)}</span><span>${esc(panel.total)}</span></div>
       ${table}
-      ${t.note ? `<span class="hint">${esc(t.note)}</span>` : ""}`;
+      ${panel.note ? `<span class="hint">${esc(panel.note)}</span>` : ""}`;
   }
-  return `<div class="scrim" data-test="${esc(t.status)}">
+  return `<div class="scrim" data-test="${esc(panel.status)}">
     <div class="test-panel" role="dialog" aria-modal="true" aria-labelledby="test-title">
       <div class="test-head">
-        <span class="test-title" id="test-title">${esc(t.title)}</span>
-        <button class="btn ghost icon" type="button" title="Close" aria-label="Close" data-act="test-close" data-key="test-x">${svg(GLYPH.x, "glyph")}</button>
+        <span class="test-title" id="test-title">${esc(panel.title)}</span>
+        <button class="btn ghost icon" type="button" title="${t("Close")}" aria-label="${t("Close")}" data-act="test-close" data-key="test-x">${svg(GLYPH.x, "glyph")}</button>
       </div>
       <div class="test-body">
-        <span class="test-intro">${esc(t.intro.lead)}${session}${esc(t.intro.tail)}</span>
+        <span class="test-intro">${esc(panel.intro.lead)}${session}${esc(panel.intro.tail)}</span>
         ${body}
       </div>
-      <div class="test-foot"><button class="btn secondary" type="button" data-act="test-close" data-key="test-close">Close</button></div>
+      <div class="test-foot"><button class="btn secondary" type="button" data-act="test-close" data-key="test-close">${t("Close")}</button></div>
     </div>
   </div>`;
 }

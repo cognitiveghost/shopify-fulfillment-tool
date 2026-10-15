@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 from gui.settings.contract import PageContract
+from shared.i18n import N_, _
 from shopify_tool.csv_utils import discover_additional_columns, read_csv_preview
 
 
@@ -52,26 +53,26 @@ def _shaped(args, *kinds: type) -> bool:
 # --- General -----------------------------------------------------------------
 
 KINDS = ("stock", "orders")
-DELIMITER_LABEL = {"stock": "Stock CSV delimiter", "orders": "Orders CSV delimiter"}
+DELIMITER_LABEL = {"stock": N_("Stock CSV delimiter"), "orders": N_("Orders CSV delimiter")}
 OTHER = "other"
 # The segments, in order: (the name the page sends, the label, the character).
 DELIMITER_MODES = (
-    ("auto", "Auto", "auto"),
-    ("comma", "Comma", ","),
-    ("semicolon", "Semicolon", ";"),
-    ("tab", "Tab", "\t"),
-    (OTHER, "Other", None),
+    ("auto", N_("Auto"), "auto"),
+    ("comma", N_("Comma"), ","),
+    ("semicolon", N_("Semicolon"), ";"),
+    ("tab", N_("Tab"), "\t"),
+    (OTHER, N_("Other"), None),
 )
 _MODE_OF = {char: name for name, _label, char in DELIMITER_MODES if char}
 _CHAR_OF = {name: char for name, _label, char in DELIMITER_MODES if char}
-_SPLIT_ON = {"comma": "commas", "semicolon": "semicolons", "tab": "tabs"}
+_SPLIT_ON = {"comma": N_("commas"), "semicolon": N_("semicolons"), "tab": N_("tabs")}
 
-DELIMITER_PROBLEM = "Type the character that separates the columns."
-THRESHOLD_HINT = (
+DELIMITER_PROBLEM = N_("Type the character that separates the columns.")
+THRESHOLD_HINT = N_(
     "A SKU is low when fewer than this are left after the session's orders "
     "are allocated."
 )
-THRESHOLD_PROBLEM = "Type a whole number, 0 or more."
+THRESHOLD_PROBLEM = N_("Type a whole number, 0 or more.")
 _WHOLE = re.compile(r"[0-9]+")
 
 
@@ -121,14 +122,15 @@ class GeneralDraft(PageContract):
         return self.char[kind] if mode == OTHER else _CHAR_OF[mode]
 
     def _problems(self) -> list[tuple[str, str, str]]:
-        """(blocker, data-key, sentence) for each value that cannot be saved."""
+        """(name, data-key, sentence) for each value that cannot be saved.
+        The name and sentence are English: blocker() and validate() draw them."""
         found = [
-            (f"Set {DELIMITER_LABEL[kind]}", f"char-{kind}", DELIMITER_PROBLEM)
+            (DELIMITER_LABEL[kind], f"char-{kind}", DELIMITER_PROBLEM)
             for kind in KINDS
             if self.mode[kind] == OTHER and not self.char[kind]
         ]
         if self._bad_threshold():
-            found.append(("Set Low-stock threshold", "threshold", THRESHOLD_PROBLEM))
+            found.append((N_("Low-stock threshold"), "threshold", THRESHOLD_PROBLEM))
         return found
 
     def _bad_threshold(self) -> bool:
@@ -136,7 +138,7 @@ class GeneralDraft(PageContract):
 
     def blocker(self) -> str | None:
         problems = self._problems()
-        return problems[0][0] if problems else None
+        return _("Set {what}", what=_(problems[0][0])) if problems else None
 
     def blocker_key(self) -> str:
         problems = self._problems()
@@ -145,8 +147,8 @@ class GeneralDraft(PageContract):
     def validate(self) -> tuple[bool, list[str]]:
         problems = self._problems()
         return not problems, [
-            f"{blocker.removeprefix('Set ')}: {sentence}"
-            for blocker, _key, sentence in problems
+            _("{what}: {sentence}", what=_(name), sentence=_(sentence))
+            for name, _key, sentence in problems
         ]
 
     def collect(self) -> dict:
@@ -163,43 +165,45 @@ class GeneralDraft(PageContract):
         mode = self.mode[kind]
         missing = mode == OTHER and not self.char[kind]
         if mode == "auto":
-            hint = "Detected for each file as it is read."
+            hint = _("Detected for each file as it is read.")
         elif mode == OTHER:
-            hint = "" if missing else f"Every file is split on “{self.char[kind]}”."
+            hint = "" if missing else _("Every file is split on “{char}”.", char=self.char[kind])
         else:
-            hint = f"Every file is split on {_SPLIT_ON[mode]}."
+            hint = _("Every file is split on {what}.", what=_(_SPLIT_ON[mode]))
         return {
             "kind": kind,
-            "label": DELIMITER_LABEL[kind],
+            "label": _(DELIMITER_LABEL[kind]),
             "options": [
-                {"value": name, "label": label, "checked": name == mode}
+                {"value": name, "label": _(label), "checked": name == mode}
                 for name, label, _char in DELIMITER_MODES
             ],
             "other": mode == OTHER,
             "char": self.char[kind],
             "hint": hint,
-            "problem": DELIMITER_PROBLEM if missing else "",
+            "problem": _(DELIMITER_PROBLEM) if missing else "",
         }
 
     def view(self) -> dict:
         return {
             "page": "general",
-            "title": "General",
-            "subtitle": (
-                f"How {self.client}'s files are read, and when stock counts as low."
+            "title": _("General"),
+            "subtitle": _(
+                "How {client}'s files are read, and when stock counts as low.",
+                client=self.client,
             ),
             "action": "",
             "general": {
-                "csv_text": (
-                    f"The character that separates columns in {self.client}'s files."
+                "csv_text": _(
+                    "The character that separates columns in {client}'s files.",
+                    client=self.client,
                 ),
-                "alerts_text": "When a SKU is flagged as low stock in Results.",
+                "alerts_text": _("When a SKU is flagged as low stock in Results."),
                 "delimiters": [self._delimiter_view(kind) for kind in KINDS],
                 "threshold": {
                     "value": self.threshold,
-                    "unit": "units",
-                    "hint": THRESHOLD_HINT,
-                    "problem": THRESHOLD_PROBLEM if self._bad_threshold() else "",
+                    "unit": _("units"),
+                    "hint": _(THRESHOLD_HINT),
+                    "problem": _(THRESHOLD_PROBLEM) if self._bad_threshold() else "",
                 },
             },
         }
@@ -207,9 +211,10 @@ class GeneralDraft(PageContract):
 
 # --- column mapping ----------------------------------------------------------
 
-READ_ACTION = "Read columns from CSV…"
-NOT_IN_FILE = "Not in this file"
-MAPPING_TITLE = {"orders": "Orders mapping", "stock": "Stock mapping"}
+READ_ACTION = N_("Read columns from CSV…")
+NOT_IN_FILE = N_("Not in this file")
+MAPPING_TITLE = {"orders": N_("Orders mapping"), "stock": N_("Stock mapping")}
+KIND_NOUN = {"orders": N_("orders"), "stock": N_("stock")}
 
 
 @dataclass(frozen=True)
@@ -228,29 +233,29 @@ class MappingField:
 # allocation off.
 FIELDS: dict[str, tuple[MappingField, ...]] = {
     "orders": (
-        MappingField("Order_Number", "Order number", True, example="Name"),
+        MappingField("Order_Number", N_("Order number"), True, example="Name"),
         MappingField("SKU", "SKU", True, example="Lineitem sku"),
-        MappingField("Quantity", "Quantity", True, example="Lineitem quantity"),
+        MappingField("Quantity", N_("Quantity"), True, example="Lineitem quantity"),
         MappingField(
-            "Shipping_Method", "Shipping method", True, example="Shipping Method"
+            "Shipping_Method", N_("Shipping method"), True, example="Shipping Method"
         ),
-        MappingField("Product_Name", "Product name"),
-        MappingField("Shipping_Country", "Country"),
-        MappingField("Tags", "Tags"),
-        MappingField("Notes", "Notes"),
-        MappingField("Total_Price", "Total price"),
-        MappingField("Subtotal", "Subtotal"),
-        MappingField("Customer", "Customer"),
-        MappingField("Created_At", "Created at"),
+        MappingField("Product_Name", N_("Product name")),
+        MappingField("Shipping_Country", N_("Country")),
+        MappingField("Tags", N_("Tags")),
+        MappingField("Notes", N_("Notes")),
+        MappingField("Total_Price", N_("Total price")),
+        MappingField("Subtotal", N_("Subtotal")),
+        MappingField("Customer", N_("Customer")),
+        MappingField("Created_At", N_("Created at")),
     ),
     "stock": (
         MappingField("SKU", "SKU", True, example="Артикул"),
-        MappingField("Stock", "Quantity", True, example="Наличност"),
-        MappingField("Product_Name", "Product name"),
+        MappingField("Stock", N_("Quantity"), True, example="Наличност"),
+        MappingField("Product_Name", N_("Product name")),
         MappingField(
             "Expiry_Date",
-            "Expiry date",
-            hint=(
+            N_("Expiry date"),
+            hint=N_(
                 "When mapped, stock is allocated oldest expiry first, and each "
                 "packing list row shows its lot. Reads YYMMDD, YYYYMMDD, DDMMYY "
                 "and MMYY."
@@ -258,8 +263,8 @@ FIELDS: dict[str, tuple[MappingField, ...]] = {
         ),
         MappingField(
             "Batch",
-            "Batch",
-            hint=(
+            N_("Batch"),
+            hint=N_(
                 "Lot or batch number. Shown per lot on packing lists, and keeps "
                 "separate deliveries of one SKU apart."
             ),
@@ -370,7 +375,7 @@ class MappingDraft(PageContract):
 
     def blocker(self) -> str | None:
         missing = self._missing()
-        return f"Map {missing.label}" if missing else None
+        return _("Map {field}", field=_(missing.label)) if missing else None
 
     def blocker_key(self) -> str:
         missing = self._missing()
@@ -383,37 +388,48 @@ class MappingDraft(PageContract):
             return "", ""
         if self.file is None:
             return (
-                f"{f.label} is required. Use {READ_ACTION}, then choose its column.",
+                _(
+                    "{field} is required. Use {action}, then choose its column.",
+                    field=_(f.label),
+                    action=_(READ_ACTION),
+                ),
                 "",
             )
-        return f"{f.label} is required. Choose the column that holds it, e.g.", f.example
+        return (
+            _("{field} is required. Choose the column that holds it, e.g.", field=_(f.label)),
+            f.example,
+        )
 
     def validate(self) -> tuple[bool, list[str]]:
         problems = []
         for f in self.fields:
             sentence, example = self._problem(f)
             if sentence:
-                problems.append(f"{sentence} {example}." if example else sentence)
+                problems.append(
+                    _("{sentence} {example}.", sentence=sentence, example=example)
+                    if example
+                    else sentence
+                )
         return not problems, problems
 
     def _source(self) -> dict:
         if self.file is None:
             return {
-                "lead": f"No CSV has been read. Use {READ_ACTION} to change a field.",
+                "lead": _("No CSV has been read. Use {action} to change a field.", action=_(READ_ACTION)),
                 "file": "",
                 "tail": "",
             }
         return {
-            "lead": "Columns read from",
+            "lead": _("Columns read from"),
             "file": self.file.name,
-            "tail": ", the file loaded on Setup." if self.file.loaded else ".",
+            "tail": _(", the file loaded on Setup.") if self.file.loaded else ".",
         }
 
     def _field_view(self, f: MappingField) -> dict:
         column = self.chosen[f.name]
         lacking = bool(column) and self.file is not None and column not in self.file.columns
         if lacking:
-            sample = NOT_IN_FILE
+            sample = _(NOT_IN_FILE)
         elif column and self.file is not None:
             sample = self.file.first_row.get(column, "")
         else:
@@ -421,10 +437,10 @@ class MappingDraft(PageContract):
         problem, example = self._problem(f)
         return {
             "name": f.name,
-            "label": f.label,
+            "label": _(f.label),
             "required": f.required,
             "column": column,
-            "placeholder": "Choose column" if f.required else "Not imported",
+            "placeholder": _("Choose column") if f.required else _("Not imported"),
             "sample": sample,
             "sample_missing": lacking,
             "problem": problem,
@@ -433,7 +449,7 @@ class MappingDraft(PageContract):
         }
 
     def _mapping_view(self) -> dict:
-        labels = {f.name: f.label for f in self.fields}
+        labels = {f.name: _(f.label) for f in self.fields}
         return {
             "kind": self.kind,
             "source": self._source(),
@@ -448,11 +464,13 @@ class MappingDraft(PageContract):
     def view(self) -> dict:
         return {
             "page": self.kind,
-            "title": MAPPING_TITLE[self.kind],
-            "subtitle": (
-                f"Which column of {self.client}'s {self.kind} CSV holds each field."
+            "title": _(MAPPING_TITLE[self.kind]),
+            "subtitle": _(
+                "Which column of {client}'s {kind} CSV holds each field.",
+                client=self.client,
+                kind=_(KIND_NOUN[self.kind]),
             ),
-            "action": READ_ACTION,
+            "action": _(READ_ACTION),
             "mapping": self._mapping_view(),
         }
 
@@ -473,20 +491,20 @@ ADDITIONAL_COLUMNS_UNREADABLE = object()
 read, so the draft can tell "there are none" from "we don't know" (ADR 0006).
 Saving the first over the second would discard the profile's real list."""
 
-COURIER_TEXT = (
+COURIER_TEXT = N_(
     "A shipping method that contains the text on the left is filed under the "
     "courier on the right. Anything else keeps its own name."
 )
-COURIER_EMPTY = "No courier names yet. The built-in ones apply: DHL, DPD and PostOne."
-ADDITIONAL_TEXT = (
+COURIER_EMPTY = N_("No courier names yet. The built-in ones apply: DHL, DPD and PostOne.")
+ADDITIONAL_TEXT = N_(
     "Orders columns with no field, carried through the analysis under their own names."
 )
-ADDITIONAL_EMPTY = "None kept."
-ADDITIONAL_UNKNOWN = (
+ADDITIONAL_EMPTY = N_("None kept.")
+ADDITIONAL_UNKNOWN = N_(
     "The saved list couldn't be read, so saving leaves it as it is. "
     "Add a column to replace it."
 )
-NOT_FILLED_DOWN = "not filled down"
+NOT_FILLED_DOWN = N_("not filled down")
 
 
 def _is_entry(value) -> bool:
@@ -682,9 +700,9 @@ class OrdersDraft(MappingDraft):
         for entry in self._discovered():
             lacking = read and not entry["exists_in_df"]
             if entry["enabled"]:
-                notes = [NOT_IN_FILE] if lacking else []
+                notes = [_(NOT_IN_FILE)] if lacking else []
                 if not entry["is_order_level"]:
-                    notes.append(NOT_FILLED_DOWN)
+                    notes.append(_(NOT_FILLED_DOWN))
                 chips.append(
                     {
                         "name": entry["csv_name"],
@@ -694,23 +712,25 @@ class OrdersDraft(MappingDraft):
                 )
             else:
                 candidates.append(
-                    {"name": entry["csv_name"], "note": NOT_IN_FILE if lacking else ""}
+                    {"name": entry["csv_name"], "note": _(NOT_IN_FILE) if lacking else ""}
                 )
         if candidates:
             add_title = ""
         elif read:
-            add_title = "Every column in this file is mapped or kept."
+            add_title = _("Every column in this file is mapped or kept.")
         else:
-            add_title = f"Use {READ_ACTION} to list the file's unmapped columns."
+            add_title = _("Use {action} to list the file's unmapped columns.", action=_(READ_ACTION))
         return {
-            "text": ADDITIONAL_TEXT,
+            "text": _(ADDITIONAL_TEXT),
             "chips": chips,
             "candidates": candidates,
             "group": (
-                f"Unmapped columns in {self.file.name}" if read else "Turned off earlier"
+                _("Unmapped columns in {file}", file=self.file.name)
+                if read
+                else _("Turned off earlier")
             ),
-            "empty": ADDITIONAL_EMPTY,
-            "notice": "" if self.additional_known else ADDITIONAL_UNKNOWN,
+            "empty": _(ADDITIONAL_EMPTY),
+            "notice": "" if self.additional_known else _(ADDITIONAL_UNKNOWN),
             "add_title": add_title,
         }
 
@@ -720,10 +740,10 @@ class OrdersDraft(MappingDraft):
             if code and code not in codes:
                 codes.append(code)
         return {
-            "text": COURIER_TEXT,
+            "text": _(COURIER_TEXT),
             "rows": [{"text": text, "code": code} for text, code in self.courier_rows],
             "codes": codes,
-            "empty": COURIER_EMPTY,
+            "empty": _(COURIER_EMPTY),
         }
 
     def _mapping_view(self) -> dict:

@@ -21,6 +21,7 @@ from gui.settings.rules_state import (
     iso_date,
     value_kind,
 )
+from shared.i18n import N_, _, _n
 from shopify_tool.core import get_unique_column_values
 from shopify_tool.report_filters import (
     count_matches,
@@ -36,32 +37,32 @@ STOCK = "stock"
 KINDS = (
     (
         PACKING,
-        "Packing lists",
-        "Add packing list",
+        N_("Packing lists"),
+        N_("Add packing list"),
         "packing_list_configs",
-        "No packing lists yet. Add one, then generate it from Results after an analysis.",
+        N_("No packing lists yet. Add one, then generate it from Results after an analysis."),
     ),
     (
         STOCK,
-        "Stock exports",
-        "Add stock export",
+        N_("Stock exports"),
+        N_("Add stock export"),
         "stock_export_configs",
-        "No stock exports yet. Add one, then generate it from Results after an analysis.",
+        N_("No stock exports yet. Add one, then generate it from Results after an analysis."),
     ),
 )
 
-SUBTITLE = "The packing lists and stock exports this client generates from Results."
-GROUP_TEXT = "Generated in this order."
-UNTITLED = "Untitled report"
-NO_FILTER = "Every fulfillable order."
-NO_FILENAME = "No file name yet, so this report can't be generated."
-FILENAME_HINT = "The file's name in the session's folder, e.g. DHL.xlsx."
-FILTERS_HINT = "An order line is listed when it passes every filter."
-EXCLUDE_HINT = "Lines with these SKUs are left off the list."
+SUBTITLE = N_("The packing lists and stock exports this client generates from Results.")
+GROUP_TEXT = N_("Generated in this order.")
+UNTITLED = N_("Untitled report")
+NO_FILTER = N_("Every fulfillable order.")
+NO_FILENAME = N_("No file name yet, so this report can't be generated.")
+FILENAME_HINT = N_("The file's name in the session's folder, e.g. DHL.xlsx.")
+FILTERS_HINT = N_("An order line is listed when it passes every filter.")
+EXCLUDE_HINT = N_("Lines with these SKUs are left off the list.")
 EXCLUDE_PLACEHOLDER = "SKU-1, SKU-2"
-COLUMNS_HINT = "Printed in this order. None chosen: the default layout."
-ALL_COLUMNS = "Every column is chosen."
-CANT_COUNT = "Can't count matches for these filters."
+COLUMNS_HINT = N_("Printed in this order. None chosen: the default layout.")
+ALL_COLUMNS = N_("Every column is chosen.")
+CANT_COUNT = N_("Can't count matches for these filters.")
 
 _KEY_UID = re.compile(r"report-(\d+)-")
 
@@ -73,13 +74,14 @@ def _text(value) -> str:
 def match_text(counts) -> str:
     """Copy for a report's match count; None means no analysis has run."""
     if counts is None:
-        return "Run an analysis to see how many orders this report matches."
+        return _("Run an analysis to see how many orders this report matches.")
     orders, rows = counts
     if orders == 0:
-        return "Matches no orders. Check the filters."
-    return (
-        f"Matches {orders} order{'' if orders == 1 else 's'}"
-        f" · {rows} row{'' if rows == 1 else 's'}"
+        return _("Matches no orders. Check the filters.")
+    return _(
+        "Matches {orders} · {rows}",
+        orders=_n("{n} order", "{n} orders", orders),
+        rows=_n("{n} row", "{n} rows", rows),
     )
 
 
@@ -297,7 +299,7 @@ class ReportsDraft(PageContract):
             except Exception:
                 # Debug, not warning: a half-typed regex lands here on every keystroke.
                 logger.debug("Couldn't count report matches", exc_info=True)
-                self._matches[key] = (CANT_COUNT, False)
+                self._matches[key] = (_(CANT_COUNT), False)
         text, warn = self._matches[key]
         return {"text": text, "warn": warn}
 
@@ -307,10 +309,10 @@ class ReportsDraft(PageContract):
             if n:
                 parts.append({"t": "join", "v": "and"})
             parts.append({"t": "bold", "v": f["field"]})
-            parts.append({"t": "text", "v": f["operator"]})
+            parts.append({"t": "text", "v": _(f["operator"])})
             if value_kind(f["operator"]) != "none" and f["value"] != "":
                 parts.append({"t": "chip", "v": f["value"]})
-        return parts or [{"t": "muted", "v": NO_FILTER}]
+        return parts or [{"t": "muted", "v": _(NO_FILTER)}]
 
     def _filter_view(self, f: dict) -> dict:
         """One filter, in the shape of a rule's condition (phase 8 spec 4.7)."""
@@ -325,14 +327,14 @@ class ReportsDraft(PageContract):
             # A stored field that is not offered: listed first, and kept.
             "extra_field": None
             if offered or not field
-            else {"value": field, "note": NOT_AVAILABLE if self._has_analysis() else ""},
+            else {"value": field, "note": _(NOT_AVAILABLE) if self._has_analysis() else ""},
             "field_invalid": bool(field) and not offered and self._has_analysis(),
             "operator": operator,
             "extra_operator": None if operator in REPORT_FILTER_OPERATORS else operator,
             "value": {
                 "kind": kind,
                 "text": iso_date(f["value"]) if kind == "date" else f["value"],
-                "placeholder": _PLACEHOLDER.get(operator, "Value"),
+                "placeholder": _PLACEHOLDER.get(operator) or _("Value"),
                 "suggestions": suggestions[:SUGGESTION_LIMIT],
             },
             "problem": "",
@@ -344,23 +346,23 @@ class ReportsDraft(PageContract):
         packing = entry["kind"] == PACKING
         candidates = self._candidates(entry) if packing else []
         return {
-            "filename_hint": FILENAME_HINT,
-            "filters_hint": FILTERS_HINT,
+            "filename_hint": _(FILENAME_HINT),
+            "filters_hint": _(FILTERS_HINT),
             "field_groups": [{"label": "", "fields": list(self._fields)}],
             "operators": list(REPORT_FILTER_OPERATORS),
             "filters": [self._filter_view(f) for f in entry["filters"]],
             "exclude": {
                 "value": entry["exclude"],
                 "placeholder": EXCLUDE_PLACEHOLDER,
-                "hint": EXCLUDE_HINT,
+                "hint": _(EXCLUDE_HINT),
             }
             if packing
             else None,
             "columns": {
                 "chips": list(entry["columns"]),
                 "candidates": candidates,
-                "hint": COLUMNS_HINT,
-                "add_title": "" if candidates else ALL_COLUMNS,
+                "hint": _(COLUMNS_HINT),
+                "add_title": "" if candidates else _(ALL_COLUMNS),
             }
             if packing
             else None,
@@ -371,14 +373,14 @@ class ReportsDraft(PageContract):
         return {
             "uid": entry["uid"],
             "name": entry["name"],
-            "label": entry["name"].strip() or UNTITLED,
+            "label": entry["name"].strip() or _(UNTITLED),
             "filename": entry["filename"],
             "open": is_open,
             "can_up": place > 0,
             "can_down": place < count - 1,
             "summary": self._summary(entry),
             "match": self._match(entry),
-            "note": "" if entry["filename"].strip() else NO_FILENAME,
+            "note": "" if entry["filename"].strip() else _(NO_FILENAME),
             "editor": self._editor(entry) if is_open else None,
         }
 
@@ -389,17 +391,17 @@ class ReportsDraft(PageContract):
             groups.append(
                 {
                     "kind": kind,
-                    "title": title,
-                    "text": GROUP_TEXT,
-                    "add": add,
-                    "empty": empty,
+                    "title": _(title),
+                    "text": _(GROUP_TEXT),
+                    "add": _(add),
+                    "empty": _(empty),
                     "rows": [self._row(entry, n, len(same)) for n, entry in enumerate(same)],
                 }
             )
         return {
             "page": "reports",
-            "title": "Reports",
-            "subtitle": SUBTITLE,
+            "title": _("Reports"),
+            "subtitle": _(SUBTITLE),
             "action": "",
             "reports": {"groups": groups},
         }
