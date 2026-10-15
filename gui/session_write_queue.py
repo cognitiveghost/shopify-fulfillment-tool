@@ -2,7 +2,8 @@
 
 An edit writes only `current_state.pkl` before the window responds. The
 files derived from it -- fulfilment history, inventory memory,
-`analysis_stats.json`, `session_info.json`'s counts and the undo file -- go
+`analysis_stats.json`, `session_info.json`'s counts, the undo file and the withdrawal of
+packing lists an edit made out of date (AUDIT-10-4) -- go
 through this queue and are written on one background thread.
 
 - A key is `(session_path, kind)`. Submitting to a key that is already
@@ -33,6 +34,7 @@ INVENTORY_MEMORY = "inventory_memory"
 ANALYSIS_STATS = "analysis_stats"
 SESSION_INFO = "session_info"
 UNDO_HISTORY = "undo_history"
+PACKING_LISTS = "packing_lists"
 
 
 def _run_job(key: tuple[str, str], job: Callable[[], object]) -> bool:

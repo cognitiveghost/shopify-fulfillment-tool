@@ -1,0 +1,586 @@
+{
+  "analyzed_at": "2026-10-02T11:22:06.832723+03:00",
+  "total_orders": 19,
+  "fulfillable_orders": 19,
+  "not_fulfillable_orders": 0,
+  "orders": [
+    {
+      "order_number": "#100001618",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1008",
+          "product_name": "Tonix+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001755",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1006",
+          "product_name": "LumiX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001763",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1006",
+          "product_name": "LumiX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001769",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "VIP_CUSTOMER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001781",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001796",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-2002",
+          "product_name": "NeedleX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001802",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001807",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001817",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001820",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001853",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001857",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001860",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001863",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1004",
+          "product_name": "Timeless+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001868",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001869",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1006",
+          "product_name": "LumiX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001876",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1005",
+          "product_name": "Eterna+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001884",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "VIP_CUSTOMER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100001885",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "VIP_CUSTOMER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1005",
+          "product_name": "Eterna+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    }
+  ]
+}

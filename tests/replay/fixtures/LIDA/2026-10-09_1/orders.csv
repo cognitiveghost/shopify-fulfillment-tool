@@ -1,0 +1,27 @@
+Order ID,Ordered at,Shipping Method,Lineitem quantity,Lineitem name,Lineitem sku,Shipping Country,_source_file
+10377,Note,PostOne,1,Lipovon,504,FR,lidagreen.fr_processing_2026-10-02_2026-10-09.csv
+10196,Note,PostOne,1,Lipovon,504,GB,lidagreen.co.uk_processing_2026-10-02_2026-10-09.csv
+10195,Note,PostOne,1,Lipovon,504,GB,lidagreen.co.uk_processing_2026-10-02_2026-10-09.csv
+10194,Note,PostOne,1,Lida Green,501,GB,lidagreen.co.uk_processing_2026-10-02_2026-10-09.csv
+10193,Note,PostOne,1,Lipovon,504,GB,lidagreen.co.uk_processing_2026-10-02_2026-10-09.csv
+10192,Note,PostOne,1,Lipovon,504,GB,lidagreen.co.uk_processing_2026-10-02_2026-10-09.csv
+11318,Note,PostOne,1,Appetite Stop Women,505,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11317,Note,PostOne,1,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11316,Note,PostOne,1,Lida Ultra,514,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11315,Note,PostOne,3,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11314,Note,PostOne,1,Lida Green Confezione tripla,516,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11313,Note,PostOne,1,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11312,Note,PostOne,1,Lipovon,504,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11311,Note,PostOne,2,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11310,Note,PostOne,1,Lida Green,501,DE,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11309,Note,PostOne,2,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11308,Note,PostOne,1,Lipovon,504,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11307,Note,PostOne,1,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11306,Note,PostOne,1,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11305,Note,PostOne,1,Lipovon Premium,515,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11304,Note,PostOne,2,Lipovon Confezione tripla,517,DE,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11303,Note,PostOne,2,Lipovon Premium,515,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11302,Note,PostOne,1,Lida Green Confezione tripla,516,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11301,Note,PostOne,1,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11300,Note,PostOne,2,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv
+11299,Note,PostOne,1,Lida Green,501,IT,lidagreen.com_processing_2026-10-02_2026-10-09.csv

@@ -4,7 +4,8 @@ import logging
 import os
 import shutil
 from collections.abc import Callable
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 from functools import reduce
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ import pandas as pd
 
 from shared.atomic_write import atomic_write_json
 
-from . import analysis, fulfillment_history, packing_lists, stock_export
+from . import analysis, fulfillment_history
 from .csv_utils import AUTO_DELIMITER, normalize_sku, resolve_delimiter
 from .packed_orders import load_session_signals, union_history_with_packed
 from .rules import RuleEngine
@@ -226,7 +227,9 @@ def build_packing_orders(df: pd.DataFrame) -> list[dict[str, Any]]:
     return orders
 
 
-def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
+def _create_analysis_data_for_packing(
+    final_df: pd.DataFrame, now: datetime | None = None
+) -> dict[str, Any]:
     """Create analysis_data.json structure for Packing Tool integration.
 
     This function extracts relevant data from the analysis DataFrame and
@@ -234,10 +237,13 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
 
     Args:
         final_df (pd.DataFrame): The final analysis DataFrame
+        now: The time stamped into analyzed_at; None is the clock (a replay passes the
+            session's creation time)
 
     Returns:
         Dict[str, Any]: Dictionary containing analysis data in Packing Tool format
     """
+    stamp = (now or datetime.now().astimezone()).isoformat()
     try:
         orders_data = build_packing_orders(final_df)
 
@@ -249,7 +255,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
         not_fulfillable_orders = total_orders - fulfillable_orders
 
         analysis_data = {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": total_orders,
             "fulfillable_orders": fulfillable_orders,
             "not_fulfillable_orders": not_fulfillable_orders,
@@ -261,7 +267,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except KeyError as e:
         logger.exception("Missing required column in DataFrame for packing analysis")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -271,7 +277,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except (ValueError, TypeError) as e:
         logger.exception("Invalid data type in DataFrame for packing analysis")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -281,7 +287,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except AttributeError as e:
         logger.exception("Invalid DataFrame object for packing analysis")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -291,7 +297,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except Exception as e:
         logger.exception("Unexpected error creating analysis data for packing")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -597,6 +603,20 @@ def _validate_and_prepare_inputs(
     return use_session_mode, working_path, None, session_path
 
 
+def read_orders_csv(path, column_mappings: dict, delimiter: str = AUTO_DELIMITER) -> pd.DataFrame:
+    """An orders CSV read the way a run reads it: SKU columns as text, BOM-safe, delimiter resolved.
+
+    The one place the orders file is parsed, so a replay of a stored session reads its orders
+    exactly as the run did.
+    """
+    return pd.read_csv(
+        path,
+        delimiter=resolve_delimiter(str(path), delimiter, "orders"),
+        encoding="utf-8-sig",
+        dtype=_get_sku_dtype_dict(column_mappings, "orders"),
+    )
+
+
 def _load_and_validate_files(
     stock_file_path: str | None,
     orders_file_path: str | None,
@@ -641,7 +661,6 @@ def _load_and_validate_files(
         # Get dtype specifications to force SKU columns to string
         column_mappings = config.get("column_mappings", {})
         stock_dtype = _get_sku_dtype_dict(column_mappings, "stock")
-        orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
 
         # Load stock file with error handling
         try:
@@ -692,12 +711,7 @@ def _load_and_validate_files(
             orders_sep = resolve_delimiter(
                 orders_file_path, orders_delimiter, "orders"
             )
-            orders_df = pd.read_csv(
-                orders_file_path,
-                delimiter=orders_sep,
-                encoding="utf-8-sig",
-                dtype=orders_dtype,
-            )
+            orders_df = read_orders_csv(orders_file_path, column_mappings, orders_sep)
             logger.info(
                 f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns"
             )
@@ -742,15 +756,7 @@ def _load_and_validate_files(
                     f"Orders file not found at path: {orders_file_path}"
                 )
             column_mappings = config.get("column_mappings", {})
-            orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
-            orders_df = pd.read_csv(
-                orders_file_path,
-                delimiter=resolve_delimiter(
-                    orders_file_path, orders_delimiter, "orders"
-                ),
-                encoding="utf-8-sig",
-                dtype=orders_dtype,
-            )
+            orders_df = read_orders_csv(orders_file_path, column_mappings, orders_delimiter)
             logger.info(
                 f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns"
             )
@@ -901,6 +907,7 @@ def _run_analysis_and_rules(
     history_df: pd.DataFrame,
     config: dict,
     current_session: str | None = None,
+    today: date | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Runs analysis simulation and applies business rules.
 
@@ -913,6 +920,7 @@ def _run_analysis_and_rules(
         history_df: Detection frame (see packed_orders.union_history_with_packed)
         config: Configuration dict with column_mappings, courier_mappings, rules, settings
         current_session: Name of this run's session, for repeat detection
+        today: The day repeat detection treats as today; None is the real date
 
     Returns:
         Tuple of (final_df, summary_present_df, stats)
@@ -955,6 +963,7 @@ def _run_analysis_and_rules(
         courier_mappings,
         current_session=current_session,
         mode=analysis_mode,
+        today=today,
     )
     logger.info("Analysis computation complete.")
 
@@ -1252,6 +1261,8 @@ def _save_results_and_reports(
     history_readable: bool = True,
     session_path: str | None = None,
     memory_baseline_reused: bool = False,
+    analysis_data: dict | None = None,
+    run_config: dict | None = None,
 ) -> tuple[str | None, str | None]:
     """Saves all analysis results, reports, and updates history.
 
@@ -1400,7 +1411,23 @@ def _save_results_and_reports(
     if use_session_mode:
         try:
             logger.info("Exporting analysis_data.json for Packing Tool integration...")
-            analysis_data = _create_analysis_data_for_packing(final_df)
+            if analysis_data is None:
+                analysis_data = _create_analysis_data_for_packing(final_df)
+
+            # The config of the day, so the session can be replayed later (spec Part B2):
+            # backups rotate within days. Without derived data and run-only keys.
+            if run_config is not None:
+                kept = {
+                    k: v
+                    for k, v in run_config.items()
+                    if not k.startswith(("_", "test_")) and k != "inventory_memory"
+                }
+                try:
+                    atomic_write_json(
+                        Path(session_manager.get_input_dir(working_path)) / "shopify_config.json", kept
+                    )
+                except Exception:
+                    logger.warning("Could not keep the session's config copy", exc_info=True)
 
             # Save analysis_data.json
             analysis_data_path = Path(analysis_dir) / "analysis_data.json"
@@ -1506,6 +1533,33 @@ ANALYSIS_STEPS = (
     "Saving results",
 )
 CANCELLED = "cancelled"
+
+
+@dataclass
+class AnalysisResult:
+    """What `analyse` returns: the frame, its summary, its statistics and analysis_data.json."""
+
+    final_df: pd.DataFrame
+    summary_present_df: pd.DataFrame
+    stats: dict
+    analysis_data: dict
+
+
+def analyse(orders_df, stock_df, config, *, history_df=None, current_session=None, now=None) -> AnalysisResult:
+    """Analyse these frames with this config at this time.
+
+    The one path a run and a replay share: run_full_analysis calls it, and tests/replay/
+    calls it on stored production sessions. `history_df` is the detection frame
+    (packed_orders.union_history_with_packed); `now` is an aware datetime, the session's
+    creation time in a replay, and dates both repeat detection and analyzed_at.
+    """
+    now = now or datetime.now().astimezone()
+    if history_df is None:
+        history_df = pd.DataFrame({"Order_Number": []})
+    final_df, summary_present_df, stats = _run_analysis_and_rules(
+        orders_df, stock_df, history_df, config, current_session, today=now.date()
+    )
+    return AnalysisResult(final_df, summary_present_df, stats, _create_analysis_data_for_packing(final_df, now))
 
 
 class AnalysisCancelled(Exception):
@@ -1661,11 +1715,14 @@ def run_full_analysis(
                 f"Cannot load client config: profile_manager={profile_manager is not None}, client_id={client_id}"
             )
 
-        final_df, summary_present_df, stats = (
-            _run_analysis_and_rules(
-                orders_df, stock_df, detection_history_df, config, current_session
-            )
+        result = analyse(
+            orders_df,
+            stock_df,
+            config,
+            history_df=detection_history_df,
+            current_session=current_session,
         )
+        final_df, summary_present_df, stats = result.final_df, result.summary_present_df, result.stats
 
         step(3)
         saving = True
@@ -1692,6 +1749,8 @@ def run_full_analysis(
             history_readable=history_readable,
             session_path=session_path,
             memory_baseline_reused=bool(config.get("_memory_baseline_reused")),
+            analysis_data=result.analysis_data,
+            run_config=config,
         )
 
         # Return success
@@ -1708,12 +1767,13 @@ def run_full_analysis(
         error_msg = f"File not found: {e!s}"
         logger.exception(error_msg)
         return False, error_msg, None, None
-    except ValueError as e:
-        error_msg = f"Validation error: {e!s}"
+    except pd.errors.ParserError as e:
+        # Before ValueError, which it subclasses: after it, this branch never ran (AUDIT-10-9).
+        error_msg = f"CSV parsing error: {e!s}"
         logger.exception(error_msg)
         return False, error_msg, None, None
-    except pd.errors.ParserError as e:
-        error_msg = f"CSV parsing error: {e!s}"
+    except ValueError as e:
+        error_msg = f"Validation error: {e!s}"
         logger.exception(error_msg)
         return False, error_msg, None, None
     except Exception as e:
@@ -1723,106 +1783,6 @@ def run_full_analysis(
     finally:
         if not saving:
             _discard_unsaved_baseline(config, session_path)
-
-
-def create_packing_list_report(
-    analysis_df,
-    report_config,
-    session_manager: Any | None = None,
-    session_path: str | None = None,
-):
-    """Generates a single packing list report based on a report configuration.
-
-    Uses the provided analysis DataFrame and a specific report configuration
-    to filter and format a packing list. The resulting report is saved to the
-    location specified in the configuration.
-
-    Session Mode: When session_manager and session_path are provided, the report
-    is saved to the session's packing_lists/ directory and session_info is updated.
-
-    Args:
-        analysis_df (pd.DataFrame): The main analysis DataFrame containing
-            fulfillment data.
-        report_config (dict): A dictionary from the main config file that
-            defines the filters, output filename, excluded SKUs, and other
-            settings for this specific report.
-        session_manager (SessionManager, optional): Session manager for session-based workflow.
-        session_path (str, optional): Path to current session directory.
-
-    Returns:
-        tuple[bool, str]: A tuple containing:
-            - bool: True for success, False for failure.
-            - str: A message indicating the result (e.g., success message with
-              file path or an error description).
-    """
-    report_name = report_config.get("name", "Unknown Report")
-    try:
-        # Determine output path based on mode
-        if session_manager and session_path:
-            # Session mode: save to session/packing_lists/
-            packing_lists_dir = session_manager.get_packing_lists_dir(session_path)
-            # Extract just the filename from the configured path
-            original_filename = os.path.basename(report_config["output_filename"])
-            output_file = str(Path(packing_lists_dir) / original_filename)
-            logger.info(f"Session mode: saving packing list to {output_file}")
-        else:
-            # Legacy mode: use configured path
-            output_file = report_config["output_filename"]
-            os.makedirs(os.path.dirname(output_file), exist_ok=True)
-
-        written = packing_lists.create_packing_list(
-            analysis_df=analysis_df,
-            output_file=output_file,
-            report_name=report_name,
-            filters=report_config.get("filters"),
-            exclude_skus=report_config.get("exclude_skus"),  # Pass the new parameter
-        )
-
-        if not written:
-            Path(output_file).unlink(missing_ok=True)
-            return False, f"No orders matched '{report_name}'; no packing list was written."
-
-        # Verify file was actually created before updating session info
-        if not os.path.exists(output_file):
-            error_message = f"Packing list file was not created: {output_file}"
-            logger.error(error_message)
-            return False, error_message
-
-        # Update session info if in session mode
-        if session_manager and session_path:
-            try:
-                if session_manager.append_to_session_list(
-                    session_path, "packing_lists_generated", original_filename
-                ):
-                    logger.info(
-                        f"Session info updated: added packing list {original_filename}"
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to update session info: {e}")
-
-        success_message = (
-            f"Report '{report_name}' created successfully at '{output_file}'."
-        )
-        return True, success_message
-    except KeyError as e:
-        error_message = (
-            f"Configuration error for report '{report_name}': Missing key {e}."
-        )
-        logger.exception(f"Config error for packing list '{report_name}'")
-        return False, error_message
-    except PermissionError:
-        output_filename = report_config.get("output_filename", "N/A")
-        error_message = (
-            f"Permission denied. Could not write report to '{output_filename}'."
-        )
-        logger.exception(
-            f"Permission error creating packing list '{report_name}' at '{output_filename}'",
-        )
-        return False, error_message
-    except Exception:
-        error_message = f"Failed to create report '{report_name}'. See logs/app_errors.log for details."
-        logger.exception(f"Error creating packing list '{report_name}'")
-        return False, error_message
 
 
 def get_unique_column_values(df, column_name):
@@ -1845,184 +1805,3 @@ def get_unique_column_values(df, column_name):
         return []
 
 
-def create_stock_export_report(
-    analysis_df,
-    report_config,
-    session_manager: Any | None = None,
-    session_path: str | None = None,
-    tag_categories: dict | None = None,
-):
-    """Generates a single stock export report based on a configuration.
-
-    Session Mode: When session_manager and session_path are provided, the report
-    is saved to the session's stock_exports/ directory and session_info is updated.
-
-    Args:
-        analysis_df (pd.DataFrame): The main analysis DataFrame.
-        report_config (dict): The configuration for the specific stock export.
-            Can include a 'writeoff_mode' key ("off"/"merged"/"separate") to
-            control packaging write-off.
-        session_manager (SessionManager, optional): Session manager for session-based workflow.
-        session_path (str, optional): Path to current session directory.
-        tag_categories (dict, optional): Tag categories config with writeoff mappings.
-            Required if writeoff_mode is "merged" or "separate" in report_config.
-
-    Returns:
-        tuple[bool, str]: A tuple containing a success flag and a status message.
-    """
-    report_name = report_config.get("name", "Untitled Stock Export")
-    try:
-        # Determine output path based on mode
-        if session_manager and session_path:
-            # Session mode: save to session/stock_exports/
-            stock_exports_dir = session_manager.get_stock_exports_dir(session_path)
-            # Extract just the filename from the configured path
-            original_filename = os.path.basename(report_config["output_filename"])
-            output_filename = str(Path(stock_exports_dir) / original_filename)
-            logger.info(f"Session mode: saving stock export to {output_filename}")
-        else:
-            # Legacy mode: use configured path
-            output_filename = report_config["output_filename"]
-            # Ensure the output directory exists
-            output_dir = os.path.dirname(output_filename)
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-
-        # Stamps the name, moving earlier versions to old/
-        output_filename = stock_export.prepare_export_path(output_filename)
-
-        filters = report_config.get("filters")
-        writeoff_mode = report_config.get("writeoff_mode", "off")
-
-        stock_export.create_stock_export(
-            analysis_df,
-            output_filename,
-            report_name=report_name,
-            filters=filters,
-            writeoff_mode=writeoff_mode,
-            tag_categories=tag_categories,
-        )
-
-        # Verify file was actually created before updating session info
-        if not os.path.exists(output_filename):
-            error_message = f"Stock export file was not created: {output_filename}"
-            logger.error(error_message)
-            return False, error_message
-
-        # Update session info if in session mode
-        if session_manager and session_path:
-            try:
-                if session_manager.append_to_session_list(
-                    session_path, "stock_exports_generated", os.path.basename(output_filename)
-                ):
-                    logger.info(
-                        f"Session info updated: added stock export {os.path.basename(output_filename)}"
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to update session info: {e}")
-
-        success_message = (
-            f"Stock export '{report_name}' created successfully at '{output_filename}'."
-        )
-        return True, success_message
-    except KeyError as e:
-        error_message = (
-            f"Configuration error for stock export '{report_name}': Missing key {e}."
-        )
-        logger.exception(f"Config error for stock export '{report_name}'")
-        return False, error_message
-    except PermissionError:
-        error_message = "Permission denied. Could not write stock export."
-        logger.exception(f"Permission error creating stock export '{report_name}'")
-        return False, error_message
-    except Exception:
-        error_message = (
-            f"Failed to create stock export '{report_name}'. See logs for details."
-        )
-        logger.exception(f"Error creating stock export '{report_name}'")
-        return False, error_message
-
-
-def create_writeoff_report(
-    analysis_df: pd.DataFrame,
-    report_config: dict,
-    tag_categories: dict,
-    session_manager: Any | None = None,
-    session_path: str | None = None,
-) -> tuple[bool, str]:
-    """Generate standalone SKU writeoff report.
-
-    Session Mode: When session_manager and session_path are provided, the report
-    is saved to the session's writeoff_reports/ directory and session_info is updated.
-
-    Args:
-        analysis_df: The main analysis DataFrame with Internal_Tags.
-        report_config: Configuration for the writeoff report.
-            Should include 'name' and 'output_filename' keys.
-        tag_categories: Tag categories config with writeoff mappings.
-        session_manager: Session manager for session-based workflow (optional).
-        session_path: Path to current session directory (optional).
-
-    Returns:
-        tuple[bool, str]: Success flag and status message.
-    """
-    report_name = report_config.get("name", "Writeoff Report")
-
-    try:
-        # Determine output path based on mode
-        if session_manager and session_path:
-            # Session mode: save to session/writeoff_reports/
-            writeoff_dir = Path(session_path) / "writeoff_reports"
-            writeoff_dir.mkdir(exist_ok=True)
-            original_filename = os.path.basename(report_config["output_filename"])
-            output_filename = str(writeoff_dir / original_filename)
-            logger.info(f"Session mode: saving writeoff report to {output_filename}")
-        else:
-            # Legacy mode: use configured path
-            output_filename = report_config["output_filename"]
-            output_dir = os.path.dirname(output_filename)
-            if output_dir and not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-
-        # Generate report using sku_writeoff module
-        from shopify_tool.sku_writeoff import generate_writeoff_report
-
-        generate_writeoff_report(analysis_df, tag_categories, output_filename)
-
-        # Verify file was created
-        if not os.path.exists(output_filename):
-            error_message = f"Writeoff report file was not created: {output_filename}"
-            logger.error(error_message)
-            return False, error_message
-
-        # Update session info if in session mode
-        if session_manager and session_path:
-            try:
-                if session_manager.append_to_session_list(
-                    session_path, "writeoff_reports_generated", original_filename
-                ):
-                    logger.info(
-                        f"Session info updated: added writeoff report {original_filename}"
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to update session info: {e}")
-
-        success_message = f"Writeoff report '{report_name}' created successfully at '{output_filename}'."
-        return True, success_message
-
-    except KeyError as e:
-        error_message = (
-            f"Configuration error for writeoff report '{report_name}': Missing key {e}."
-        )
-        logger.exception(f"Config error for writeoff report '{report_name}'")
-        return False, error_message
-    except PermissionError:
-        error_message = "Permission denied. Could not write writeoff report."
-        logger.exception(f"Permission error creating writeoff report '{report_name}'")
-        return False, error_message
-    except Exception:
-        error_message = (
-            f"Failed to create writeoff report '{report_name}'. See logs for details."
-        )
-        logger.exception(f"Error creating writeoff report '{report_name}'")
-        return False, error_message

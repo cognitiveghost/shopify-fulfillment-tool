@@ -312,6 +312,10 @@ class ActionsHandler(QObject):
                     # No stamp makes the next save refuse: the safe direction.
                     self.log.exception("Could not stamp the session state")
                     self.mw._state_stamp = None
+            # A re-run can change what the lists say, as an edit can (AUDIT-10-4).
+            withdraw = getattr(self.mw, "_withdraw_out_of_date_lists", None)
+            if withdraw is not None:
+                withdraw()
             self.data_changed.emit()
             self.mw.log_activity(
                 "Analysis", f"Analysis complete. Report saved to: {result_msg}"
@@ -623,6 +627,7 @@ class ActionsHandler(QObject):
             analysis_df,
             self._apply_filters,
             parent=self.mw,
+            writeoff_mode=fresh_config.get("last_writeoff_mode", "off"),
         )
 
         dialog.reportsSelected.connect(
@@ -646,6 +651,7 @@ class ActionsHandler(QObject):
             return
 
         batch = [dict(report_config) for report_config in batch]
+        self._remember_writeoff_mode(batch)
         for report_config in batch:
             self._log_report_start(report_config)
         # Looked up now, not imported by name, so a test can replace it.
@@ -655,6 +661,26 @@ class ActionsHandler(QObject):
         worker.signals.finished.connect(self._on_reports_finished)
         self._reports_worker = worker
         self.mw.threadpool.start(worker)
+
+    def _remember_writeoff_mode(self, batch) -> None:
+        """Keep the client's packaging write-off choice for the next dialog (AUDIT-10-2).
+
+        Saved without a backup: it is not a Settings change, and backups are kept for those.
+        """
+        modes = {c.get("writeoff_mode") for c in batch if c.get("report_type") == "stock_exports"}
+        modes.discard(None)
+        client_id = self.mw.current_client_id
+        if len(modes) != 1 or not client_id:
+            return
+        (mode,) = modes
+        if (self.mw.active_profile_config or {}).get("last_writeoff_mode", "off") == mode:
+            return
+        try:
+            self.mw.active_profile_config = self.mw.profile_manager.update_shopify_config(
+                client_id, lambda config: config.update(last_writeoff_mode=mode), backup=False
+            )
+        except Exception:
+            self.log.exception("Could not save the packaging write-off choice")
 
     def _report_snapshot(self, batch) -> tuple:
         """(frame, tag categories, session id, session manager), taken on the GUI thread."""
@@ -696,6 +722,14 @@ class ActionsHandler(QObject):
                 self._results_toast(f"Report saved: {saved}")
             self.mw.log_activity("Report", f"Generated: {outcome.name}")
             wrote_packing_list |= outcome.report_type == "packing_lists"
+            # What the list was written from, so an edit can tell it is out of date (AUDIT-10-4).
+            fingerprints = getattr(self.mw, "_list_fingerprints", None)
+            if fingerprints is not None and outcome.report_type == "packing_lists" and outcome.output_file:
+                stem = Path(outcome.output_file).stem
+                if outcome.removed_empty:
+                    fingerprints.pop(stem, None)
+                elif outcome.fingerprint:
+                    fingerprints[stem] = outcome.fingerprint
 
         if (
             wrote_packing_list
@@ -1520,8 +1554,6 @@ class ActionsHandler(QObject):
 
         self.mw.save_session_state()
         self.mw._update_all_views()
-        if hasattr(self.mw, "ui_manager"):
-            self.mw.ui_manager._populate_tag_filter()
 
         self.mw.log_activity(
             "Bulk Operation",
@@ -1567,8 +1599,6 @@ class ActionsHandler(QObject):
 
         self.mw.save_session_state()
         self.mw._update_all_views()
-        if hasattr(self.mw, "ui_manager"):
-            self.mw.ui_manager._populate_tag_filter()
 
         self.mw.log_activity(
             "Bulk Operation",

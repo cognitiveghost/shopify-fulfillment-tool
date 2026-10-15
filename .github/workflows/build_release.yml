@@ -55,7 +55,7 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest
+        run: python -m pytest --cov=shopify_tool --cov=gui --cov=shared --cov-report=term --cov-fail-under=90
 
   version:
     name: Next Version

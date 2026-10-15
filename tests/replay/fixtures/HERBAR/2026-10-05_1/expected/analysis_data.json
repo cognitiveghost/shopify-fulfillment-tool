@@ -1,0 +1,987 @@
+{
+  "analyzed_at": "2026-10-05T09:59:15.668701+03:00",
+  "total_orders": 21,
+  "fulfillable_orders": 21,
+  "not_fulfillable_orders": 0,
+  "orders": [
+    {
+      "order_number": "#100607",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GB",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "GB",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100608",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "NL",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "NL",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "OIL-50",
+          "product_name": "The Face Oil-50ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100609",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100610",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "DK",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "DK",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "OIL-50",
+          "product_name": "The Face Oil-50ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100611",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "DE",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "DE",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100612",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "PL",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "PL",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100613",
+      "order_type": "Single",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "ES",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "ES",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100614",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GR",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "GR",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100615",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "US",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "US",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "DHL",
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100616",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100617",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "DK",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "DK",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100618",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "PL",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "PL",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100619",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "US",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "US",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "DHL",
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100620",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "DK",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "DK",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100621",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "US",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "US",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "DHL",
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100622",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "SK",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "SK",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100623",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "NL",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "NL",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100624",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "ES",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "ES",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100625",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "NO",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "NO",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100626",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "US",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "US",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "DHL",
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100627",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "US",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "US",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "DHL",
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    }
+  ]
+}

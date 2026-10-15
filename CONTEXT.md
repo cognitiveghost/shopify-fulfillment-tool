@@ -395,6 +395,15 @@ it. It follows the session state, not the run. Distinguished from the
 **Packer signal**, the orders Packing Tool has actually packed, which each
 session's `session_info.json` records.
 
+**Packing fingerprint** — what a packing list would make the Packer pack: each fulfillable
+order's SKUs and quantities, hashed. Tags and notes are not in it. Each list records the one it
+was written from. ADR 0019.
+
+**Withdrawn packing list** — a list moved to `packing_lists/withdrawn/` because an edit or a
+re-run changed the packing fingerprint before the Packer started it. The Packer cannot open
+it; generating the list again replaces it. Not **stale**, which is about a PC's copy of the
+session state.
+
 ## Printing
 
 **Print mode** — how a label PDF reaches a printer: through the operating

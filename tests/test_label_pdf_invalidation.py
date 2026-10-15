@@ -80,7 +80,8 @@ def test_empty_list_with_its_file_open_reports_the_lock(tmp_path, monkeypatch):
 
 
 def test_a_locked_label_pdf_stops_the_run_before_the_list_changes(tmp_path, monkeypatch):
-    # A PDF held open in a viewer must not leave a new XLSX beside the old JSON.
+    # A PDF held open in a viewer must not leave a new XLSX beside the old JSON. The old list
+    # is withdrawn whole (AUDIT-10-4): both files move together, unchanged.
     h = _handler(_df())
     h._generate_single_report("packing_lists", _config(), tmp_path)
     xlsx = tmp_path / "packing_lists" / "ALL.xlsx"
@@ -101,4 +102,6 @@ def test_a_locked_label_pdf_stops_the_run_before_the_list_changes(tmp_path, monk
     h.mw.analysis_results_df = pd.concat([_df(), _df().assign(Order_Number="#2")])
     h._generate_single_report("packing_lists", _config(), tmp_path)
     assert "ALL_barcodes.pdf is open in another program" in shown.call_args[0][2]
-    assert (xlsx.read_bytes(), json_file.read_bytes()) == before
+    withdrawn = tmp_path / "packing_lists" / "withdrawn"
+    assert not xlsx.exists() and not json_file.exists()
+    assert ((withdrawn / "ALL.xlsx").read_bytes(), (withdrawn / "ALL.json").read_bytes()) == before

@@ -6,7 +6,7 @@ tabbed interface for Basic Info, Appearance, Statistics, and Advanced settings.
 
 import logging
 
-from PySide6.QtCore import QThreadPool, Signal
+from PySide6.QtCore import QThreadPool
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
 
 from gui.components import InlineMessage, show_error, toast
 from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
-from gui.wheel_ignore_combobox import WheelIgnoreComboBox
 from gui.worker import Worker
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import (
@@ -206,127 +205,6 @@ class ClientCreationDialog(QDialog):
             show_error(
                 self, "The client profile wasn't created", "Details are in Logs."
             )
-
-
-class ClientSelectorWidget(QWidget):
-    """Widget for selecting active client and managing client profiles.
-
-    Provides:
-    - Dropdown to select active client
-    - "Manage Clients" button to create new clients
-    - Signal when client selection changes
-
-    Signals:
-        client_changed: Emitted when client selection changes (client_id: str)
-    """
-
-    client_changed = Signal(str)  # Emits client_id
-
-    def __init__(self, profile_manager: ProfileManager, parent=None):
-        super().__init__(parent)
-        self.profile_manager = profile_manager
-        self.current_client_id = None
-
-        # Create layout
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Label
-        label = QLabel("Client:")
-        label.setToolTip("Select the active client")
-        layout.addWidget(label)
-
-        # Client dropdown
-        self.client_combo = WheelIgnoreComboBox()
-        self.client_combo.setMinimumWidth(150)
-        self.client_combo.setToolTip("Select active client to work with")
-        self.client_combo.currentTextChanged.connect(self._on_client_changed)
-        layout.addWidget(self.client_combo, 1)
-
-        # Manage clients button
-        self.manage_btn = QPushButton("Manage Clients")
-        self.manage_btn.setToolTip("Create or manage client profiles")
-        self.manage_btn.clicked.connect(self._open_manage_dialog)
-        layout.addWidget(self.manage_btn)
-
-        # Load clients
-        self.refresh_clients()
-
-        logger.info("ClientSelectorWidget initialized")
-
-    def refresh_clients(self):
-        """Reload client list from profile manager."""
-        try:
-            # Save current selection
-            current_client = self.client_combo.currentText()
-
-            # Block signals to avoid triggering client_changed multiple times
-            self.client_combo.blockSignals(True)
-            self.client_combo.clear()
-
-            # Load clients
-            clients = self.profile_manager.list_clients()
-
-            if not clients:
-                self.client_combo.addItem("(No clients available)")
-                self.client_combo.setEnabled(False)
-                logger.warning("No clients found on file server")
-            else:
-                self.client_combo.addItems(clients)
-                self.client_combo.setEnabled(True)
-
-                # Restore previous selection if it still exists
-                if current_client in clients:
-                    self.client_combo.setCurrentText(current_client)
-
-            # Re-enable signals
-            self.client_combo.blockSignals(False)
-
-            # Manually trigger client changed if we have clients
-            if clients:
-                self._on_client_changed(self.client_combo.currentText())
-
-        except Exception:
-            logger.exception("Failed to refresh clients")
-            show_error(self, "The client list didn't load", "Details are in Logs.")
-
-    def _on_client_changed(self, client_id: str):
-        """Handle client selection change."""
-        if not client_id or client_id == "(No clients available)":
-            return
-
-        if client_id != self.current_client_id:
-            self.current_client_id = client_id
-            logger.info(f"Client changed to: {client_id}")
-            self.client_changed.emit(client_id)
-
-    def _open_manage_dialog(self):
-        """Open dialog for managing clients."""
-        dialog = ClientCreationDialog(self.profile_manager, self)
-        if dialog.exec():
-            # Refresh client list after successful creation
-            self.refresh_clients()
-
-    def get_current_client_id(self) -> str:
-        """Get currently selected client ID.
-
-        Returns:
-            str: Current client ID or empty string if none selected
-        """
-        text = self.client_combo.currentText()
-        if text == "(No clients available)":
-            return ""
-        return text
-
-    def set_current_client_id(self, client_id: str):
-        """Set the currently selected client.
-
-        Args:
-            client_id: Client ID to select
-        """
-        index = self.client_combo.findText(client_id)
-        if index >= 0:
-            self.client_combo.setCurrentIndex(index)
 
 
 class ClientSettingsDialog(QDialog):

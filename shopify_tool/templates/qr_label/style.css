@@ -87,5 +87,5 @@ body { width: 68mm; font-family: "JetBrains Mono", monospace; }
   line-height: 1.25; /* what label_tools.fit_font_block sizes for */
   overflow: hidden;
   white-space: normal;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }

@@ -1,0 +1,736 @@
+{
+  "analyzed_at": "2026-10-09T09:13:55.477400+03:00",
+  "total_orders": 26,
+  "fulfillable_orders": 26,
+  "not_fulfillable_orders": 0,
+  "orders": [
+    {
+      "order_number": "10192",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GB",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "GB",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "10193",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GB",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "GB",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "10194",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GB",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "GB",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "10195",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GB",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "GB",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "10196",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GB",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "GB",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "10377",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "FR",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "FR",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11299",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11300",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11301",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11302",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 3,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11303",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "515",
+          "product_name": "Lipovon Premium",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11304",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "DE",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "DE",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 6,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11305",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "515",
+          "product_name": "Lipovon Premium",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11306",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11307",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11308",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11309",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11310",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "DE",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "DE",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11311",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11312",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "504",
+          "product_name": "Lipovon",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11313",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11314",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 3,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11315",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 3,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11316",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "514",
+          "product_name": "Lida Ultra",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11317",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "501",
+          "product_name": "Lida Green",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "11318",
+      "order_type": "Single",
+      "shipping_provider": "Postone",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "IT",
+      "courier": "Postone",
+      "status": "Fulfillable",
+      "shipping_country": "IT",
+      "tags": [],
+      "notes": "Note",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "SMALL_BAG"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "505",
+          "product_name": "Appetite stop Women",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    }
+  ]
+}

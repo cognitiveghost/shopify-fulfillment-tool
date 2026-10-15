@@ -11,8 +11,10 @@ frame, the tag categories, the session id), so an edit made while reports
 generate never reaches a file half-way through.
 """
 
+import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +40,8 @@ class ReportOutcome:
     failed: bool = False
     # The file another program holds open, when that is why it failed.
     locked_file: str | None = None
+    # What a written packing list says to pack; see packing_fingerprint (AUDIT-10-4).
+    fingerprint: str | None = None
 
 
 def packing_list_json(df: pd.DataFrame, session_id: str) -> dict:
@@ -56,18 +60,76 @@ def packing_list_json(df: pd.DataFrame, session_id: str) -> dict:
     }
 
 
-def _output_file(report_type: str, report_name: str, report_config: dict, output_dir: Path) -> str:
-    base_filename = report_config.get("output_filename", "")
-    if not base_filename:
-        base_filename = f"{report_name}.xlsx" if report_type == "packing_lists" else f"{report_name}.xls"
+WITHDRAWN_DIR = "withdrawn"
 
-    # Ensure correct extension
-    if report_type == "packing_lists":
-        if not base_filename.endswith(".xlsx"):
-            base_filename = base_filename.replace(".xls", ".xlsx")
-    elif not base_filename.endswith(".xls"):
-        base_filename = base_filename + ".xls"
-    return str(output_dir / base_filename)
+
+def packing_fingerprint(df: pd.DataFrame) -> str:
+    """What the Packer would pack from `df`: each fulfillable order's SKUs and quantities.
+
+    Tags and notes are not in it, so a tag edit never makes a list out of date (AUDIT-10-4).
+    """
+    orders = core.build_packing_orders(report_filters.fulfillable_only(df))
+    canon = sorted(
+        [o["order_number"], sorted([i["sku"], i["quantity"]] for i in o["items"])] for o in orders
+    )
+    return hashlib.sha256(json.dumps(canon).encode("utf-8")).hexdigest()
+
+
+def recorded_fingerprints(session_info) -> dict[str, str]:
+    """The fingerprints session_info records for its packing lists; {} for an older session."""
+    stats = (session_info or {}).get("statistics")
+    found = stats.get("packing_list_fingerprints") if isinstance(stats, dict) else None
+    if not isinstance(found, dict):
+        return {}
+    return {k: v for k, v in found.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def withdraw_lists(session_path, names) -> list[str]:
+    """Move unstarted packing lists out of the Packer's reach (AUDIT-10-4, ADR 0019).
+
+    The Packer reads only packing_lists/*.json; a list moved to packing_lists/withdrawn/ cannot
+    be opened. A list whose packing/<name>/ folder exists has been started and stays. Returns
+    the names whose JSON was moved. Never raises for a file held open: it logs and goes on.
+    """
+    session = Path(session_path)
+    lists_dir = session / "packing_lists"
+    withdrawn = []
+    for name in names:
+        if (session / "packing" / name).exists():
+            continue
+        moved_json = False
+        for suffix in (".json", ".xlsx"):
+            source = lists_dir / f"{name}{suffix}"
+            if not source.exists():
+                continue
+            try:
+                (lists_dir / WITHDRAWN_DIR).mkdir(exist_ok=True)
+                os.replace(source, lists_dir / WITHDRAWN_DIR / source.name)
+            except PermissionError:
+                logger.warning(f"Could not withdraw {source.name}: it is open in another program")
+                continue
+            moved_json |= suffix == ".json"
+        if not moved_json:
+            continue
+        try:
+            barcode_processor.invalidate_label_pdfs(session_path, name)
+        except PermissionError:
+            logger.warning(f"A label PDF of withdrawn list {name} is open; it stays until regenerated")
+        withdrawn.append(name)
+    return withdrawn
+
+
+def _output_file(report_type: str, report_name: str, report_config: dict, output_dir: Path) -> str:
+    suffix = ".xlsx" if report_type == "packing_lists" else ".xls"
+    base_filename = report_config.get("output_filename", "") or f"{report_name}{suffix}"
+    # Case-insensitive (AUDIT-10-1): "MASKS.XLSX" passed through and pandas
+    # refused the upper-case extension.
+    path = Path(base_filename)
+    if path.suffix.lower() in (".xls", ".xlsx"):
+        path = path.with_suffix(suffix)
+    else:
+        path = Path(base_filename + suffix)
+    return str(output_dir / path)
 
 
 def generate_report(
@@ -107,7 +169,12 @@ def generate_report(
             # Label PDFs from before could label orders this list no longer
             # holds (AUDIT-04-12). First, so a PDF held open in a viewer
             # stops the run before the XLSX and JSON can diverge.
-            barcode_processor.invalidate_label_pdfs(session_path, Path(output_file).stem)
+            try:
+                barcode_processor.invalidate_label_pdfs(session_path, Path(output_file).stem)
+            except PermissionError:
+                # The old list must not wait for the Packer while the PDF is closed (AUDIT-10-4).
+                withdraw_lists(session_path, [Path(output_file).stem])
+                raise
 
             # The module applies the filters itself.
             written = packing_lists.create_packing_list(
@@ -128,6 +195,7 @@ def generate_report(
                 outcome.removed_empty = True
             else:
                 logger.info(f"Packing list XLSX created: {output_file}")
+                outcome.fingerprint = packing_fingerprint(analysis_df)
                 try:
                     filtered_df = report_filters.apply_report_filters(
                         report_filters.fulfillable_only(analysis_df), filters
@@ -193,15 +261,20 @@ def generate_reports(
             )
         outcomes.append(outcome)
 
-    if session_manager is not None and any(
-        o.report_type == "packing_lists" and not o.failed for o in outcomes
-    ):
-        _update_packing_list_statistics(session_manager, session_path)
+    # Failed ones count too: a failed regeneration withdraws the old list (AUDIT-10-4),
+    # and the statistics must follow.
+    if session_manager is not None and any(o.report_type == "packing_lists" for o in outcomes):
+        update_packing_list_statistics(session_manager, session_path, outcomes)
     return outcomes
 
 
-def _update_packing_list_statistics(session_manager, session_path) -> None:
-    """Record the session's packing lists in session_info's statistics."""
+def update_packing_list_statistics(session_manager, session_path, outcomes=()) -> None:
+    """Record the session's packing lists in session_info's statistics.
+
+    Rebuilt from the JSON files in packing_lists/, so a withdrawn or removed list drops out:
+    names, each list's order count (AUDIT-10-3) and the fingerprint it was written from
+    (AUDIT-10-4). Never raises.
+    """
     try:
         packing_lists_dir = Path(session_path) / "packing_lists"
         if not packing_lists_dir.exists():
@@ -211,8 +284,24 @@ def _update_packing_list_statistics(session_manager, session_path) -> None:
         if not session_info:
             return
         statistics = session_info.get("statistics", {})
+        orders = {}
+        for name in names:
+            try:
+                total = json.loads((packing_lists_dir / f"{name}.json").read_text(encoding="utf-8")).get(
+                    "total_orders"
+                )
+            except (OSError, ValueError, AttributeError):
+                continue
+            if isinstance(total, int) and not isinstance(total, bool):
+                orders[name] = total
+        fingerprints = dict(statistics.get("packing_list_fingerprints") or {})
+        for outcome in outcomes:
+            if outcome.report_type == "packing_lists" and outcome.fingerprint and outcome.output_file:
+                fingerprints[Path(outcome.output_file).stem] = outcome.fingerprint
         statistics["packing_lists_count"] = len(names)
         statistics["packing_lists"] = names
+        statistics["packing_list_orders"] = orders
+        statistics["packing_list_fingerprints"] = {n: fingerprints[n] for n in names if n in fingerprints}
         session_manager.update_session_info(str(session_path), {"statistics": statistics})
         logger.info(f"Updated session statistics: {len(names)} packing lists")
     except Exception as e:

@@ -1,0 +1,13 @@
+Name,Subtotal,Total,Shipping Method,Created at,Lineitem quantity,Lineitem name,Lineitem sku,Shipping Name,Shipping Country,Notes,Tags
+#100628,163.20,163.20,Standard Shipping 4 - 7 business days,2026-10-05 08:22:09 +0100,1,The Complete Daily Set,SET_COMPLETESET,Customer,FR,,
+#100629,282.20,282.20,Standard 5-10 business days,2026-10-05 08:41:23 +0100,1,The Face Nectar,NECTAR-30,Customer,DE,,
+#100629,,,,2026-10-05 08:41:23 +0100,1,The Bestsellers Set,SET_BESTSELLERS,,,,
+#100629,,,,2026-10-05 08:41:23 +0100,1,The Complete Daily Set,SET_COMPLETESET,,,,
+#100629,,,,2026-10-05 08:41:23 +0100,1,New Product Launch Lab Sample,SAMPLENEWLAUCH,,,,
+#100630,0.00,5.00,Standard 5-10 business days,2026-10-05 10:16:29 +0100,2,The Bestsellers Set,SET_BESTSELLERS,Customer,PT,,
+#100631,92.00,97.00,Standard 3-9 business days,2026-10-05 10:29:15 +0100,1,The Barrier Repair Set,THE_BARRIER_SET,Customer,GB,,
+#100632,103.70,103.70,Standard 5-10 business days,2026-10-05 10:39:10 +0100,1,The Barrier Cream - Barrier Cream,Barrier_Cream-1,Customer,DK,,
+#100632,,,,2026-10-05 10:39:10 +0100,1,The Face Nectar,NECTAR-30,,,,
+#100633,45.90,50.90,Standard 3-9 business days,2026-10-05 16:10:49 +0100,1,The Barrier Cream - Barrier Cream,Barrier_Cream-1,Customer,GB,,
+#100634,61.20,76.20,Standard 5-8 Business days,2026-10-05 16:46:57 +0100,1,The Bestsellers Set,SET_BESTSELLERS,Customer,US,,
+#100635,63.75,78.75,Standard 5-8 Business days,2026-10-05 16:55:47 +0100,1,The Face Oil - 50ml,OIL-50,Customer,US,,

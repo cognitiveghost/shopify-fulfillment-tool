@@ -1,0 +1,597 @@
+{
+  "analyzed_at": "2026-10-07T12:25:23.452805+03:00",
+  "total_orders": 8,
+  "fulfillable_orders": 8,
+  "not_fulfillable_orders": 0,
+  "orders": [
+    {
+      "order_number": "#100002161",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "VIP_CUSTOMER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1005",
+          "product_name": "Eterna+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1006",
+          "product_name": "LumiX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 2,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100002164",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "blue lux box",
+        "BUNDLE_ORDER"
+      ],
+      "notes": "LUX",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "LUX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1008",
+          "product_name": "Tonix+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1004",
+          "product_name": "Timeless+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1003",
+          "product_name": "Sebula+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5001",
+          "product_name": "Муселинова кърпичка, добавка",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-GIFT-5003",
+          "product_name": "Несесери, подарък",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100002180",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "BUNDLE_ORDER",
+        "VIP_CUSTOMER",
+        "VIP_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "MASK",
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1006",
+          "product_name": "LumiX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1005",
+          "product_name": "Eterna+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1004",
+          "product_name": "Timeless+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "02-FACE-1001",
+          "product_name": "LED - маски за лице",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5002",
+          "product_name": "Eye Patches",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1003",
+          "product_name": "Sebula+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100002181",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "blue lux box",
+        "BUNDLE_ORDER",
+        "FIRST_ORDER",
+        "VIP_ORDER"
+      ],
+      "notes": "LUX",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "LUX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1004",
+          "product_name": "Timeless+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1003",
+          "product_name": "Sebula+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-GIFT-5003",
+          "product_name": "Несесери, подарък",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5001",
+          "product_name": "Муселинова кърпичка, добавка",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1005",
+          "product_name": "Eterna+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1006",
+          "product_name": "LumiX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5002",
+          "product_name": "Eye Patches",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100002182",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "BUNDLE_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5001",
+          "product_name": "Муселинова кърпичка, добавка",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1008",
+          "product_name": "Tonix+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100002202",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "BUNDLE_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5001",
+          "product_name": "Муселинова кърпичка, добавка",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1008",
+          "product_name": "Tonix+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100002207",
+      "order_type": "Multi",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "blue lux box",
+        "BUNDLE_ORDER",
+        "FIRST_ORDER",
+        "VIP_ORDER"
+      ],
+      "notes": "LUX",
+      "system_note": "",
+      "internal_tags": [
+        "BOX",
+        "LUX",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "01-FACE-1007",
+          "product_name": "Azelia+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5001",
+          "product_name": "Муселинова кърпичка, добавка",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1008",
+          "product_name": "Tonix+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1002",
+          "product_name": "HydraX+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1001",
+          "product_name": "PurityX+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1004",
+          "product_name": "Timeless+ ",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "01-FACE-1003",
+          "product_name": "Sebula+",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-ADD-5001",
+          "product_name": "Муселинова кърпичка, добавка",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "05-GIFT-5003",
+          "product_name": "Несесери, подарък",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100002215",
+      "order_type": "Single",
+      "shipping_provider": "SPEEDY",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "BG",
+      "courier": "SPEEDY",
+      "status": "Fulfillable",
+      "shipping_country": "BG",
+      "tags": [
+        "BATCH56",
+        "FIRST_ORDER"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "MASK",
+        "O"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "02-FACE-1001",
+          "product_name": "LED - маски за лице",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    }
+  ]
+}

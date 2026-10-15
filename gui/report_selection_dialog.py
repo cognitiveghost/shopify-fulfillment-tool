@@ -212,11 +212,19 @@ class GenerateReportsDialog(_BaseReportDialog):
     reportsSelected = Signal(list)
 
     def __init__(
-        self, packing_configs, stock_configs, analysis_df, apply_filters_fn, parent=None
+        self,
+        packing_configs,
+        stock_configs,
+        analysis_df,
+        apply_filters_fn,
+        parent=None,
+        writeoff_mode="off",
     ):
         self._packing_configs = packing_configs or []
         self._stock_configs = stock_configs or []
         self._checked_count = 0
+        # Read by _add_extra_sections, which runs inside super().__init__.
+        self._writeoff_mode = writeoff_mode
         super().__init__(
             "Generate Reports",
             [],  # reports_config unused here -- _populate_list is overridden
@@ -271,7 +279,10 @@ class GenerateReportsDialog(_BaseReportDialog):
         self.writeoff_off = QRadioButton("Leave packaging materials out")
         self.writeoff_merged = QRadioButton("Include them in the stock export")
         self.writeoff_separate = QRadioButton("Write them to a file of their own")
-        self.writeoff_off.setChecked(True)
+        # The client's last choice (AUDIT-10-2): it used to reset to "off" every time.
+        {"merged": self.writeoff_merged, "separate": self.writeoff_separate}.get(
+            self._writeoff_mode, self.writeoff_off
+        ).setChecked(True)
         self.writeoff_merged.setToolTip(
             "Orders carrying a packaging tag add its packaging SKU as extra "
             "rows in the same export (e.g. 'BOX' adds PKG-BOX-SMALL)."

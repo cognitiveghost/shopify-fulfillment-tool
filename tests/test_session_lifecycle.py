@@ -396,3 +396,38 @@ class TestAgeCell:
 
 def test_the_in_flight_states_are_the_four_before_a_session_closes():
     assert IN_FLIGHT == ("not_started", "in_progress", "paused", "stale")
+
+
+def _counted(entry, counts):
+    entry["statistics"]["packing_list_orders"] = counts
+    return entry
+
+
+def test_a_completed_run_short_of_its_list_is_not_packed():
+    progress = {"ALL": {"status": "completed", "completed_orders": [f"#{i}" for i in range(38)]}}
+    entry = _counted(_entry(lists=["ALL"], progress=progress), {"ALL": 40})
+    assert packing_completion(entry) == (0, 1)
+    assert not is_fully_packed(entry)
+
+
+def test_a_completed_run_with_every_order_is_packed():
+    progress = {"ALL": {"status": "completed", "completed_orders": [f"#{i}" for i in range(40)]}}
+    entry = _counted(_entry(lists=["ALL"], progress=progress), {"ALL": 40})
+    assert packing_completion(entry) == (1, 1)
+
+
+def test_no_recorded_count_trusts_the_status():
+    progress = {"ALL": {"status": "completed", "completed_orders": ["#1"]}}
+    assert packing_completion(_entry(lists=["ALL"], progress=progress)) == (1, 1)
+
+
+def test_a_short_full_session_run_is_not_packed():
+    progress = {"full_session": {"status": "completed", "completed_orders": ["#1", "#2"]}}
+    entry = _counted(_entry(lists=["A", "B"], progress=progress), {"A": 2, "B": 1})
+    assert packing_completion(entry) == (0, 2)
+
+
+def test_duplicate_order_numbers_count_once():
+    progress = {"ALL": {"status": "completed", "completed_orders": ["#1", "#1"]}}
+    entry = _counted(_entry(lists=["ALL"], progress=progress), {"ALL": 2})
+    assert packing_completion(entry) == (0, 1)

@@ -709,7 +709,7 @@ class ProfileManager:
         return True
 
     def update_shopify_config(
-        self, client_id: str, apply: Callable[[dict], None]
+        self, client_id: str, apply: Callable[[dict], None], backup: bool = True
     ) -> dict:
         """Save one change over the config as it is on disk now.
 
@@ -721,6 +721,8 @@ class ProfileManager:
         Args:
             client_id: Client ID
             apply: Mutates the freshly loaded config in place
+            backup: False for a value that is not a Settings change, such as
+                the write-off choice; backups are kept for Settings (AUDIT-07-M5)
 
         Returns:
             dict: The config as saved; callers keep it as their copy.
@@ -733,7 +735,7 @@ class ProfileManager:
             if config is None:
                 raise ProfileManagerError(f"Shopify config not found: CLIENT_{client_id}")
             apply(config)
-            self.save_shopify_config(client_id, config)
+            self.save_shopify_config(client_id, config, backup=backup)
         return config
 
     # --- Set/Bundle Management Methods ---
