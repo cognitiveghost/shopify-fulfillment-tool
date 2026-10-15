@@ -246,8 +246,8 @@ def stage(release, app, app_dir, progress: Callable[[int], None], fetch=...) -> 
     # checks SHA-256 against the first token of the .sha256 asset,
     # wipes and extracts to <parent>/<app_dir.name>.update/, checks <exe_name> is at its root,
     # deletes the temp zip. Any failure removes the staging folder and raises UpdateError.
-def swap_script(app_dir: Path, staged: Path, exe_name: str, pid: int) -> str   # .cmd text, 4.3
-def arm_install(app_dir, staged, exe_name) -> Path
+def swap_script(app_dir, staged, exe_name: str, pid: int, version: str) -> str   # .cmd text, 4.3
+def arm_install(app_dir, staged, exe_name, version) -> Path
     # Writes <parent>/<app_dir.name>.update.cmd and calls relaunch.on_quit(["cmd", "/c", script], update=True).
 def leftover(app_dir: Path) -> str | None
     # At startup: if <name>.update/failed.txt exists, returns its version line and removes the staging
@@ -365,8 +365,9 @@ Linux (CI and dev VM):
   `tests/conftest.py` already redirects QSettings in both repos.
 - Renders: each main screen of both apps in BG, light and dark, at 1366×768, saved under
   `docs/design/i18n-renders/<app>/` (Fulfilment: a new `scripts/render_i18n.py` that builds
-  `MainWindow` offscreen with QSettings redirected to a temp dir, loads a fixture session and
-  saves `window.grab()` per page; Packer: its `scripts/render_*.py` with a new `--lang bg` flag). Look at each for clipped or overflowing text;
+  `MainWindow` offscreen with QSettings redirected to a temp dir and
+  saves `window.grab()` per page, plus Results and Browse mounted standalone with their tests'
+  sample payloads; Packer: its `scripts/render_*.py` with a new `--lang bg` flag). Look at each for clipped or overflowing text;
   fix by wrapping or eliding, never by shrinking fonts.
 
 Windows only (PR checklist for the owner): the update round trip on a local folder
