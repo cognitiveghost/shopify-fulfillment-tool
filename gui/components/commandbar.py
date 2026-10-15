@@ -162,7 +162,7 @@ class _ClientPopup(QFrame):
     def _apply_theme(self, theme=None) -> None:
         theme = theme or get_theme_manager().get_current_theme()
         self.setStyleSheet(
-            f"_ClientPopup {{ background-color: {theme.background};"
+            f"_ClientPopup {{ background-color: {theme.surface};"
             f" border: 1px solid {theme.border}; }}"
         )
 

@@ -29,7 +29,7 @@ function profilePage(p) {
       ${ruleSelect("profile-group", "Group", group.label, false, groupMenu, "profile-group")}
     </div></div>
     <div class="card-row"><span class="card-label">Colour</span><div class="card-control">
-      <input type="color" value="${esc(p.colour || "#000000")}" aria-label="Client colour" data-input="profile_colour" data-key="profile-colour">
+      <input type="color" value="${esc(p.colour)}" aria-label="Client colour" data-input="profile_colour" data-key="profile-colour">
     </div></div>
     <div class="card-row"><span class="card-label">Pinned</span><div class="card-control">
       <button class="switch" type="button" role="switch" aria-checked="${Boolean(p.pinned)}" aria-label="Pinned" data-act="profile-pin" data-key="profile-pin"><span class="switch-knob"></span></button>
