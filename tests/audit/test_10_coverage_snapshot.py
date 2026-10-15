@@ -298,10 +298,10 @@ def test_audit_10_9_a_broken_quote_is_a_csv_parsing_error(tmp_path):
     assert message.startswith("CSV parsing error:")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-10: a colour re-picked unchanged compares case-sensitively")
 def test_audit_10_10_editing_a_group_without_changes_saves_nothing(qapp, tmp_path, monkeypatch):
-    import gui.groups_management_dialog as groups_dialog
     from PySide6.QtGui import QColor
+
+    import gui.groups_management_dialog as groups_dialog
     from shopify_tool.groups_manager import GroupsManager
 
     groups = GroupsManager(base_path=str(tmp_path))

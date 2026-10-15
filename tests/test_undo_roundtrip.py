@@ -1,6 +1,8 @@
 """Every undoable edit, made through the app's own handler and undone, gives back the frame it
 started from; plus the history file's life cycle (Audit 10, part A)."""
 
+# main_window is a fixture imported by name, so each test that takes it redefines it.
+# ruff: noqa: F811
 import json
 from pathlib import Path
 

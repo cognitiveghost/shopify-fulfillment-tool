@@ -263,7 +263,8 @@ class GroupsManagementDialog(QDialog):
         # Update group (if any changes)
         if name == current_name:
             name = None  # No change
-        if color_hex == current_color:
+        # QColor.name() is lower case; a stored "#FF0000" is the same colour (AUDIT-10-10).
+        if color_hex is not None and color_hex.lower() == str(current_color).lower():
             color_hex = None  # No change
 
         if name is None and color_hex is None:

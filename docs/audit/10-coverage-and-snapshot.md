@@ -117,3 +117,19 @@ Found: production `log_issues`, 2.3.1, ×10, last seen 2026-10-09 ("did not repo
 … ms"). `when_painted` runs its action anyway when the page is slow to paint, so nothing is wrong
 and nobody can act on the line. Fix: INFO. Test: `test_when_painted_gives_up_at_the_timeout_and_says_so`
 in `tests/test_web_page.py`. A `shared/` change: packing-tool takes it at its next sync.
+
+### AUDIT-10-9: a CSV parse error was reported as a validation error
+
+Found: writing the `core` input tests. In `run_full_analysis` the `except ValueError` came before
+`except pd.errors.ParserError`; `ParserError` subclasses `ValueError`, so the "CSV parsing error"
+branch never ran and a stock file with a broken quote told the operator "Validation error: Error
+tokenizing data". Fix: `ParserError` first. (A cp1251 file is a `UnicodeDecodeError`, also a
+`ValueError`; it still reads "Validation error: 'utf-8' codec can't decode…". Left as it is: the text
+names the codec, and the operator-facing wording is a UX decision.) Test: `test_audit_10_9_*`.
+
+### AUDIT-10-10: editing a client group without changing it saved and announced an update
+
+Found: writing the groups dialog tests. `_edit_group` compared the colour the picker returns
+(`QColor.name()`, lower case) with the stored one case-sensitively, so a stored `#FF0000` never
+equalled `#ff0000`, and re-confirming the dialog rewrote `groups.json` (rotating its backup) and
+toasted "updated". Fix: compare case-insensitively. Test: `test_audit_10_10_*`.
