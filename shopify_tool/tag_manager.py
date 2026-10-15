@@ -1,8 +1,6 @@
 """Tag management utilities for Internal_Tags column."""
 
-import hashlib
 import json
-from functools import lru_cache
 
 import pandas as pd
 
@@ -249,21 +247,6 @@ def get_tag_color(tag: str, tag_categories: dict) -> str:
 # ============================================================================
 
 
-def get_config_hash(tag_categories: dict) -> str:
-    """
-    Generate stable hash of tag_categories config for cache invalidation.
-
-    Args:
-        tag_categories: Config dict with tag categories
-
-    Returns:
-        MD5 hash of sorted config JSON
-    """
-    # Sort keys for stable hash
-    config_str = json.dumps(tag_categories, sort_keys=True)
-    return hashlib.md5(config_str.encode()).hexdigest()
-
-
 def _normalize_tag_categories(tag_categories: dict) -> dict:
     """
     Normalize tag_categories to always return v2 format.
@@ -287,30 +270,6 @@ def _normalize_tag_categories(tag_categories: dict) -> dict:
 
     # v1 format - return as is (it's already the categories dict)
     return tag_categories
-
-
-@lru_cache(maxsize=512)
-def get_tag_category_cached(tag: str, config_hash: str, config_json: str) -> str | None:
-    """
-    Cached version of get_tag_category for performance.
-
-    Args:
-        tag: Tag string
-        config_hash: Hash from get_config_hash() for cache invalidation
-        config_json: JSON string of tag_categories config
-
-    Returns:
-        Category name or "custom" if not found
-    """
-    # Parse config from JSON (needed because dicts aren't hashable)
-    tag_categories = json.loads(config_json)
-    categories = _normalize_tag_categories(tag_categories)
-
-    for category_id, config in categories.items():
-        if tag in config.get("tags", []):
-            return category_id
-
-    return "custom"
 
 
 def get_category_tags(category_id: str, tag_categories: dict) -> list[str]:
