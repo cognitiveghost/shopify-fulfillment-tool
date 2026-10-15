@@ -38,3 +38,12 @@ Found: snapshot finding 2.5, ALMA 2026-10-08 15:15 ("Invalid extension for engin
 which refuses it; a name with no extension (`ALL`) got none, and a stock export named `X.xlsx`
 became `X.xlsx.xls`. Fix: one lower-case extension from `Path.with_suffix`.
 Test: `test_audit_10_1_*`.
+
+### AUDIT-10-2: the packaging write-off choice resets to "off" every time (finding 2.3)
+
+Found: snapshot finding 2.3, LIDA stock exports from 2026-10-05 written without packaging rows.
+`GenerateReportsDialog` checked "Leave packaging materials out" in code on every open, so a client
+that wanted write-off had to re-pick it for each export and sometimes did not. Fix: the choice is
+stored per client as `last_writeoff_mode` in `shopify_config.json` (saved with `backup=False`, so it
+does not use up Settings backups; AUDIT-07-M5) and preselected next time.
+Tests: `test_audit_10_2_*`.

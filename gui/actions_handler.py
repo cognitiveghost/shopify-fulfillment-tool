@@ -623,6 +623,7 @@ class ActionsHandler(QObject):
             analysis_df,
             self._apply_filters,
             parent=self.mw,
+            writeoff_mode=fresh_config.get("last_writeoff_mode", "off"),
         )
 
         dialog.reportsSelected.connect(
@@ -646,6 +647,7 @@ class ActionsHandler(QObject):
             return
 
         batch = [dict(report_config) for report_config in batch]
+        self._remember_writeoff_mode(batch)
         for report_config in batch:
             self._log_report_start(report_config)
         # Looked up now, not imported by name, so a test can replace it.
@@ -655,6 +657,26 @@ class ActionsHandler(QObject):
         worker.signals.finished.connect(self._on_reports_finished)
         self._reports_worker = worker
         self.mw.threadpool.start(worker)
+
+    def _remember_writeoff_mode(self, batch) -> None:
+        """Keep the client's packaging write-off choice for the next dialog (AUDIT-10-2).
+
+        Saved without a backup: it is not a Settings change, and backups are kept for those.
+        """
+        modes = {c.get("writeoff_mode") for c in batch if c.get("report_type") == "stock_exports"}
+        modes.discard(None)
+        client_id = self.mw.current_client_id
+        if len(modes) != 1 or not client_id:
+            return
+        (mode,) = modes
+        if (self.mw.active_profile_config or {}).get("last_writeoff_mode", "off") == mode:
+            return
+        try:
+            self.mw.active_profile_config = self.mw.profile_manager.update_shopify_config(
+                client_id, lambda config: config.update(last_writeoff_mode=mode), backup=False
+            )
+        except Exception:
+            self.log.exception("Could not save the packaging write-off choice")
 
     def _report_snapshot(self, batch) -> tuple:
         """(frame, tag categories, session id, session manager), taken on the GUI thread."""

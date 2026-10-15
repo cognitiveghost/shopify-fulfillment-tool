@@ -59,7 +59,6 @@ ONE_ORDER = pd.DataFrame(
 )
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-2: the dialog cannot preselect a mode")
 @pytest.mark.parametrize("mode", ["off", "merged", "separate"])
 def test_audit_10_2_the_dialog_preselects_the_given_mode(qapp, mode):
     dialog = GenerateReportsDialog(PACKING, STOCK, ONE_ORDER, lambda df, f: df, writeoff_mode=mode)
@@ -68,7 +67,6 @@ def test_audit_10_2_the_dialog_preselects_the_given_mode(qapp, mode):
     assert checked[mode].isChecked()
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-2: the choice is not stored")
 def test_audit_10_2_generating_stores_the_mode_without_a_backup(main_window, monkeypatch):
     from shopify_tool import report_jobs as jobs
     path = _open_with_state(main_window, ONE_ORDER.assign(Stock=5))
