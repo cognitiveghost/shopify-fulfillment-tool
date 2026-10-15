@@ -28,14 +28,14 @@ No mockup: the only UI change is a toast and a preselected radio button.
   list's order count recorded when the list is written.
 - 2.2: the Packer finds lists by scanning `packing_lists/*.json` (non-recursive,
   `packing_tool/session_registry_manager.py:273,762`) and treats a list as started when
-  `packing/<list>/` exists. A file moved into `packing_lists/stale/` is invisible to it.
+  `packing/<list>/` exists. A file moved into `packing_lists/withdrawn/` is invisible to it.
 - Every Results edit ends in `MainWindow.save_session_state()` (13 call sites); it is the one choke point.
 - The only clock the analysis reads is `analysis._detect_repeated_orders` (`datetime.now()`, line 911),
   plus `analyzed_at` in `core._create_analysis_data_for_packing`.
 - Dead code (no caller outside its own module, no test): `core.create_packing_list_report`,
   `core.create_stock_export_report`, `core.create_writeoff_report`, `sku_writeoff.generate_writeoff_report`
   (only called by `core.create_writeoff_report`), `sku_writeoff.apply_writeoff_to_stock_export`,
-  `tag_manager.get_tag_category_cached`. About 150 of core's and sku_writeoff's missed statements.
+  `tag_manager.get_tag_category_cached` and `get_config_hash` (only the cached function used it), and `gui/client_settings_dialog.ClientSelectorWidget`. About 150 of core's and sku_writeoff's missed statements.
 - Production warnings still logged on 2.3.1 (snapshot `log_issues`, new tree, last seen 2026-10-09):
   WeasyPrint `Ignored word-break: break-word at 90:3` ×110 (label CSS); `Could not parse expiry date: '0'`
   ×11 (`analysis._parse_expiry_date`); `ResultsBridge did not report revision N within 150 ms` ×10
@@ -87,7 +87,7 @@ preselects it.
 
 ### C3 (AUDIT-10-3, finding 2.1, Shopify side): a list ended with orders unpacked counts as packed
 
-When a packing list is written, its order count is recorded. `report_jobs._update_packing_list_statistics`
+When a packing list is written, its order count is recorded. `report_jobs.update_packing_list_statistics`
 already writes `statistics.packing_lists` (names on disk); it also writes
 `statistics.packing_list_orders: {name: total_orders}` read from each list JSON's `total_orders`
 (a list whose JSON cannot be read is left out of the dict).
@@ -109,11 +109,14 @@ The Packer side (writing `incomplete`) is in the packing-tool coverage task, not
 `[(order_number, sorted((sku, quantity) for items))]` for every order of
 `core.build_packing_orders(report_filters.fulfillable_only(df))`, orders sorted by number. It covers
 which orders ship and what is in them; tags, notes and internal tags are outside it, so tag-only edits
-never change it. Both new functions live in `report_jobs.py`, which already imports `core`, `packing_lists` and `barcode_processor` (`core` imports `packing_lists`, so they cannot go there). A status change to or from Fulfillable, a removed or added item, a quantity change and
-a removed order all do.
+never change it. A status change to or from Fulfillable, a removed or added item, a quantity change and
+a removed order all do. The new functions live in `report_jobs.py`, which already imports `core`,
+`packing_lists` and `barcode_processor` (`core` imports `packing_lists`, so they cannot go there).
+Code says "out of date" or "withdrawn", never "stale": **Stale** is the glossary's word for a PC's old
+copy of the session state.
 
 **Recording.** `ReportOutcome` gains `fingerprint: str | None`. `generate_report` sets it, for a packing
-list that was written, from the frame snapshot it was given. `_update_packing_list_statistics` takes
+list that was written, from the frame snapshot it was given. `update_packing_list_statistics` takes
 the batch's outcomes and merges `{name: fingerprint}` into `statistics.packing_list_fingerprints`
 (names are the JSON stems; lists removed as empty are dropped from the dict). The window keeps the
 same map in memory as `mw._list_fingerprints`: loaded from `session_info.statistics` when a session is
@@ -125,14 +128,16 @@ the outcomes, cleared when the session closes or another one opens.
 fingerprint differs are stale. For them:
 
 1. submit a write-queue job (new kind `PACKING_LISTS = "packing_lists"` in `gui/session_write_queue.py`)
-   running `report_jobs.withdraw_stale(session_path, names) -> list[str]`, which for each name whose
+   running `report_jobs.withdraw_lists(session_path, names) -> list[str]`, which for each name whose
    `packing/<name>/` folder does not exist moves `packing_lists/<name>.json` and `<name>.xlsx` into
-   `packing_lists/stale/` (replacing an older stale copy), then calls
+   `packing_lists/withdrawn/` (replacing an older withdrawn copy), then calls
    `barcode_processor.invalidate_label_pdfs(session_path, name)` and swallows a `PermissionError` from
-   it with a warning (the JSON is already out of the Packer's reach), and finally removes the
-   withdrawn names from `statistics.packing_lists`, `packing_list_orders` and
-   `packing_list_fingerprints` through `session_manager.update_session_info`. Returns the withdrawn names.
-   Started lists are left in place.
+   it with a warning (the JSON is already out of the Packer's reach). Returns the withdrawn names;
+   started lists are left in place. The same job then calls
+   `report_jobs.update_packing_list_statistics(session_manager, session_path)` (today's private
+   `_update_packing_list_statistics`, made public), which rebuilds `packing_lists`,
+   `packing_list_orders` and `packing_list_fingerprints` from the JSON files still in `packing_lists/`,
+   so withdrawn names drop out of all three.
 2. on the GUI thread, drop the stale names from `mw._list_fingerprints` (so it warns once per edit that
    staled them) and show one Results toast, role `info`:
    `"Your change makes packing list ALL out of date. Generate it again; until then the Packer can't
@@ -142,18 +147,22 @@ fingerprint differs are stale. For them:
    contents. Check it with the packer."` Both sentences when both cases occur.
 3. `mw.session_browser.mark_dirty()` when anything was withdrawn, as `_on_reports_generated` does.
 
+The same check runs at the end of a successful `ActionsHandler.on_analysis_complete`: re-running the
+analysis in an open session makes its lists out of date just as an edit does. `mw._list_fingerprints`
+is therefore not cleared by an analysis, only by `_reset_session_state`.
+
 **Failed regeneration.** In `report_jobs.generate_report`, when `invalidate_label_pdfs` raises
-`PermissionError` for a packing list, call `report_jobs.withdraw_stale(session_path, [stem])` before
+`PermissionError` for a packing list, call `report_jobs.withdraw_lists(session_path, [stem])` before
 returning the failed outcome, so the Packer cannot start from the old list while the operator closes the
 PDF. The existing error message ("... is open in another program. Close it, then generate again.")
 stays.
 
-ADR **0019** records the contract: a Shopify session's `packing_lists/stale/` holds lists withdrawn after
+ADR **0019** records the contract: a Shopify session's `packing_lists/withdrawn/` holds lists withdrawn after
 an edit; the Packer never reads it; regenerating writes a fresh list beside it. CONTEXT.md gets the
 terms **Withdrawn packing list** and **Packing fingerprint** under Sessions.
 
-Tests (`tests/audit/test_10_coverage_snapshot.py` plus `tests/test_report_jobs.py`):
-fingerprint unchanged by a tag edit and changed by status/item/quantity edits; `withdraw_stale` moves
+Tests (`tests/audit/test_10_coverage_snapshot.py` plus `tests/test_report_jobs.py`; the re-run case too):
+fingerprint unchanged by a tag edit and changed by status/item/quantity edits; `withdraw_lists` moves
 JSON and XLSX of an unstarted list, leaves a started one, updates statistics; `save_session_state` on a
 window double (the pattern of the existing `test_save_session_*` tests) with a recorded fingerprint and
 a changed frame withdraws and toasts once, a second save toasts nothing; `generate_report` with a label
@@ -189,7 +198,7 @@ It is today's `_run_analysis_and_rules` plus `_create_analysis_data_for_packing`
 through: `analysis.run_analysis` and `_detect_repeated_orders` take `today: date | None` (`None` keeps
 `datetime.now().date()`), and `_create_analysis_data_for_packing(final_df, now)` stamps `analyzed_at`
 with it. `run_full_analysis` calls `analyse` and writes `result.analysis_data` as `analysis_data.json`,
-so production and replay run one path. `_run_analysis_and_rules` is removed (its tests call `analyse`);
+so production and replay run one path. `_run_analysis_and_rules` stays as the private body `analyse` calls (it gains `today`; the six tests that call it keep working);
 callers of `_create_analysis_data_for_packing` keep working.
 
 Two loaders become public so a replay reads inputs exactly as the app does:
@@ -246,7 +255,7 @@ Layout:
 
 ```
 tests/replay/
-  conftest.py            # collects fixtures/*/*/meta.json
+  anonymise.py           # pure anonymising functions the builder uses (tested on synthetic data)
   replay.py              # replay_session(fixture_dir) -> (analysis_data, {name: packing_list_json})
   test_replay.py         # parametrised over the 26; plus test_fixtures_hold_no_pii
   fixtures/<CLIENT>/
@@ -307,7 +316,7 @@ suite. They run in the normal suite and in CI.
 --cov=shared --cov-report=term-missing` (statement coverage, as the baseline).
 
 **Delete dead code first** (each deletion: grep for the name across `gui shopify_tool shared tests
-scripts gui_main.py`, including string uses, before removing it): the six functions listed in Facts.
+scripts gui_main.py`, including string uses, before removing it): the dead symbols listed in Facts.
 `sku_writeoff` keeps only what `stock_export` and others import.
 
 **Floor: each module below reaches 80%** (baseline in brackets).
