@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.components import ConfirmDialog
 from gui.components.error_banner import show_error
 from gui.components.inline_message import InlineMessage
 from gui.settings.contract import PageContract
@@ -34,6 +35,7 @@ from gui.settings.page_state import (
     StockDraft,
     read_file_columns,
 )
+from gui.settings.profile_state import ProfileDraft
 from gui.settings.reports_state import ReportsDraft
 from gui.settings.rules_state import RulesDraft
 from gui.settings.sets_state import SetsDraft
@@ -69,6 +71,7 @@ SAVED_LINE = "Saved. Applies from the next analysis."
 
 # Page name -> words a person might search for that are not in the name.
 SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
+    "Profile": ["name", "group", "colour", "color", "pin", "archive", "delete"],
     "General": ["delimiter", "csv", "low stock", "threshold", "repeat"],
     "Orders mapping": ["columns", "csv", "headers", "courier", "carrier", "shipping"],
     "Stock mapping": ["columns", "csv", "headers", "expiry", "batch", "lot", "fifo"],
@@ -82,6 +85,7 @@ SETTINGS_SEARCH_KEYWORDS: dict[str, list[str]] = {
 # Nav name -> the key SettingsWebHost draws that page under. Every page is a
 # draft the web tier draws (phases 7 to 9); the frame around them is still Qt.
 WEB_PAGE_KEYS: dict[str, str] = {
+    "Profile": "profile",
     "General": "general",
     "Orders mapping": "orders",
     "Stock mapping": "stock",
@@ -133,6 +137,7 @@ class SettingsWindow(QDialog):
     # Grouped left-nav replacing the old 10-tab horizontal QTabWidget strip.
     # Group/order chosen to mirror VS Code's own Settings UI grouping.
     SETTINGS_NAV_GROUPS: ClassVar[list[tuple[str, list[str]]]] = [
+        ("Client", ["Profile"]),
         ("Data", ["General", "Orders mapping", "Stock mapping"]),
         ("Fulfilment logic", ["Rules", "Sets", "Weight"]),
         ("Output", ["Reports"]),
@@ -153,6 +158,7 @@ class SettingsWindow(QDialog):
         initial_page=None,
         loaded_files=None,
         session_name=None,
+        profile=None,
     ):
         """Initializes the SettingsWindow.
 
@@ -175,6 +181,9 @@ class SettingsWindow(QDialog):
             session_name (str, optional): The open session's folder name.
                 Test rule says which analysis it ran against. Defaults to
                 None.
+            profile (dict, optional): {"client_config", "groups", "stats",
+                "has_sessions"} for the Client > Profile page. None leaves
+                the page out. Defaults to None.
         """
         super().__init__(parent)
         self._initial_page = initial_page
@@ -182,6 +191,10 @@ class SettingsWindow(QDialog):
         self.config_data = json.loads(json.dumps(client_config))
         self.profile_manager = profile_manager
         self.analysis_df = analysis_df if analysis_df is not None else pd.DataFrame()
+        self.removed_client: str | None = None  # "archived" / "deleted", for the caller
+        self.profile_saved = False
+        self._profile_draft: ProfileDraft | None = None
+        self._saving_profile = False
         self._save_worker = None  # keeps the in-flight save Worker alive
         self._is_saving = False
         self._saved = False  # the last save's line is still what the footer says
@@ -333,13 +346,7 @@ class SettingsWindow(QDialog):
                 self.config_data.get("tag_categories", {"version": 2, "categories": {}})
             ),
         }
-        self._web_host = SettingsWebHost(
-            drafts, analysis_df=self.analysis_df, session=session_name or ""
-        )
-        self._web_host.edited.connect(self._on_web_edit)
-
-        # In the order a save collects them.
-        for name in (
+        order = (
             "General",
             "Rules",
             "Reports",
@@ -348,7 +355,25 @@ class SettingsWindow(QDialog):
             "Sets",
             "Weight",
             "Tag categories",
-        ):
+        )
+        if profile is not None:
+            self._profile_draft = ProfileDraft(
+                self.client_id,
+                profile["client_config"],
+                profile["groups"],
+                profile["stats"],
+                profile["has_sessions"],
+            )
+            drafts["profile"] = self._profile_draft
+            order = ("Profile", *order)
+        self._web_host = SettingsWebHost(
+            drafts, analysis_df=self.analysis_df, session=session_name or ""
+        )
+        self._web_host.edited.connect(self._on_web_edit)
+        self._web_host.clientActionRequested.connect(self._on_client_action)
+
+        # In the order a save collects them.
+        for name in order:
             self._add_page(drafts[WEB_PAGE_KEYS[name]], name)
         self._build_settings_nav()
 
@@ -478,7 +503,7 @@ class SettingsWindow(QDialog):
     def _refresh_status(self) -> None:
         """Re-check what an edit on a web page can change: the drafts' unsaved
         state, and what blocks the save. Both are cheap, so every edit runs it."""
-        for name in WEB_PAGE_KEYS:
+        for name in self._pages_by_name:
             self._sync_unsaved(name)
         self._check_blockers()
         self._render_status()
@@ -518,11 +543,24 @@ class SettingsWindow(QDialog):
         problems = []
         if any(not names for _group, names in self.SETTINGS_NAV_GROUPS):
             problems.append("a nav group has no pages")
+        declared = [
+            name for _group, names in self.SETTINGS_NAV_GROUPS for name in names
+        ]
+        unbuilt = [
+            name
+            for name in declared
+            if name not in self._pages_by_name and name != "Profile"
+        ]
+        if unbuilt:
+            problems.append(f"nav names pages that are not built: {unbuilt}")
         if sorted(listed) != sorted(self._page_index_by_name):
             problems.append(
                 f"nav lists {sorted(listed)} but pages are {sorted(self._page_index_by_name)}"
             )
-        if sorted(SETTINGS_SEARCH_KEYWORDS) != sorted(listed):
+        keywords = [
+            name for name in SETTINGS_SEARCH_KEYWORDS if name in self._pages_by_name
+        ]
+        if sorted(keywords) != sorted(listed):
             problems.append(
                 "SETTINGS_SEARCH_KEYWORDS does not name exactly the nav's pages"
             )
@@ -530,7 +568,11 @@ class SettingsWindow(QDialog):
             # A page missing from the nav is unreachable, and nothing else says so.
             raise ValueError("; ".join(problems))
 
-        for group_name, page_names in self.SETTINGS_NAV_GROUPS:
+        for group_name, _group_pages in self.SETTINGS_NAV_GROUPS:
+            page_names = [name for name in _group_pages if name in self._pages_by_name]
+            if not page_names:
+                # The Client group has no page without a profile.
+                continue
             header = QListWidgetItem(group_name)
             header.setFlags(Qt.ItemFlag.NoItemFlags)
             header.setSizeHint(QSize(0, NAV_GROUP_PX))
@@ -618,7 +660,13 @@ class SettingsWindow(QDialog):
             )
 
     def _nav_page_names(self) -> list[str]:
-        return [name for _group, names in self.SETTINGS_NAV_GROUPS for name in names]
+        """The nav's pages that this window has: Profile only with a profile."""
+        return [
+            name
+            for _group, names in self.SETTINGS_NAV_GROUPS
+            for name in names
+            if name in self._pages_by_name
+        ]
 
     def _select_page(self, name: str) -> None:
         for item in self._page_items():
@@ -819,6 +867,38 @@ class SettingsWindow(QDialog):
         self._hide_close_guard()
         self._finish()
 
+    def _on_client_action(self, kind: str) -> None:
+        """Archive or delete from the Profile page. The caller runs it: this
+        window only records the choice and closes, so it does no IO."""
+        label = f"CLIENT_{self.client_id}"
+        lost = (
+            " Unsaved changes in this window will be lost."
+            if self.refresh_dirty()
+            else ""
+        )
+        if kind == "archive":
+            ok = ConfirmDialog.ask(
+                self,
+                title=f"Archive {label}?",
+                body="It disappears from the client list in Fulfilment and Packing on every PC. "
+                "Sessions are kept. Restore it from Archived clients." + lost,
+                verb="Archive",
+            )
+        elif kind == "delete":
+            ok = ConfirmDialog.ask(
+                self,
+                title=f"Delete {label} for good?",
+                body="Its settings and empty session folder are removed. This can't be undone."
+                + lost,
+                verb="Delete",
+                require_text=str(self.client_id),
+            )
+        else:
+            return
+        if ok:
+            self.removed_client = "archived" if kind == "archive" else "deleted"
+            self.done(QDialog.DialogCode.Rejected)
+
     def save_settings(self, then_close: bool = False):
         """Validate every page, collect them all, and write the profile once.
 
@@ -866,9 +946,13 @@ class SettingsWindow(QDialog):
         self.save_button.setText("Saving…")
         self._render_footer()
 
-        worker = Worker(
-            self.profile_manager.save_shopify_config, self.client_id, written
+        profile = (
+            self._profile_draft.profile_updates()
+            if self._profile_draft is not None
+            else None
         )
+        self._saving_profile = profile is not None
+        worker = Worker(self._save_all, self.client_id, written, profile)
         worker.signals.result.connect(self._on_save_settings_result)
         worker.signals.error.connect(self._on_save_settings_error)
         # Keep a strong reference until the worker finishes -- a bare local var
@@ -879,12 +963,28 @@ class SettingsWindow(QDialog):
         self._save_worker = worker
         QThreadPool.globalInstance().start(worker)
 
+    def _save_all(self, client_id, written, profile) -> bool:
+        """Worker thread: the settings file, then the profile when it changed."""
+        if not self.profile_manager.save_shopify_config(client_id, written):
+            return False
+        if profile is None:
+            return True
+        return bool(
+            self.profile_manager.update_client_profile(
+                client_id,
+                name=profile["client_name"],
+                ui_settings=profile["ui_settings"],
+            )
+        )
+
     def _on_save_settings_result(self, success: bool):
         self._is_saving = False
         self.save_button.setText("Save")
         if success:
             for page, snapshot in self._written_snapshots:
                 page.mark_clean(snapshot)
+            if self._saving_profile:
+                self.profile_saved = True
             self._saved = True
             self._saved_once = True
             # Re-reads every page: one edited while the write ran is unsaved.
