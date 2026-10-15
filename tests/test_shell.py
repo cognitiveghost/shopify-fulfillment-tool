@@ -173,7 +173,7 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
     )
 
     view = bar.client_selector.view()
-    bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center())
+    bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center(), view)
 
     assert seen == ["M"]
 

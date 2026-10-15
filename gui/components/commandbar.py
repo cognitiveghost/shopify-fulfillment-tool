@@ -8,7 +8,16 @@ section 8). Replaces the sidebar of 70px client cards with a dropdown.
 
 import enum
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import (
+    QEvent,
+    QModelIndex,
+    QPoint,
+    QRect,
+    QSize,
+    QSortFilterProxyModel,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QIcon,
@@ -20,15 +29,19 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLayout,
+    QLineEdit,
+    QListView,
     QMenu,
     QPushButton,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -80,6 +93,148 @@ _LADDER = (
 )
 
 
+class _ClientFilter(QSortFilterProxyModel):
+    """Clients whose name or ID holds the text; a caption while it still has
+    one; the divider and the actions always."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._text = ""
+
+    def set_text(self, text: str) -> None:
+        self.beginFilterChange()
+        self._text = text.strip().casefold()
+        self.endFilterChange()
+
+    def _client_matches(self, row: int) -> bool:
+        index = self.sourceModel().index(row, 0)
+        name = (index.data(Qt.DisplayRole) or "").casefold()
+        cid = (index.data(ROLE_CLIENT_ID) or "").casefold()
+        return self._text in name or self._text in cid
+
+    def filterAcceptsRow(self, row, parent) -> bool:
+        if not self._text:
+            return True
+        model = self.sourceModel()
+        kind = model.index(row, 0).data(Qt.UserRole)
+        if kind == ROW_CLIENT:
+            return self._client_matches(row)
+        if kind == ROW_SECTION and model.index(row, 0).data(Qt.DisplayRole):
+            nxt = row + 1
+            while nxt < model.rowCount() and model.index(nxt, 0).data(Qt.UserRole) == ROW_CLIENT:
+                if self._client_matches(nxt):
+                    return True
+                nxt += 1
+            return False
+        return True  # blank divider, actions
+
+
+class _ClientPopup(QFrame):
+    """The open client list: a filter field over the combo's own rows."""
+
+    _MIN_WIDTH = 280
+    _MAX_HEIGHT = 420
+
+    def __init__(self, combo):
+        super().__init__(combo, Qt.Popup)
+        self.combo = combo
+        # A QWidget subclass paints no QSS background without this.
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        on_theme_changed(self, self._apply_theme)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+        self.filter_edit = QLineEdit(self)
+        self.filter_edit.setPlaceholderText("Filter clients")
+        self.filter_edit.setClearButtonEnabled(True)
+        self.proxy = _ClientFilter(self)
+        self.proxy.setSourceModel(combo.model())
+        self.list_view = QListView(self)
+        self.list_view.setModel(self.proxy)
+        self.list_view.setItemDelegate(_ClientRowDelegate(self.list_view))
+        self.list_view.setUniformItemSizes(True)
+        layout.addWidget(self.filter_edit)
+        layout.addWidget(self.list_view)
+        self.filter_edit.textChanged.connect(self._on_text)
+        self.filter_edit.installEventFilter(self)
+        self.list_view.clicked.connect(self.pick)
+
+    def _apply_theme(self, theme=None) -> None:
+        theme = theme or get_theme_manager().get_current_theme()
+        self.setStyleSheet(
+            f"_ClientPopup {{ background-color: {theme.background};"
+            f" border: 1px solid {theme.border}; }}"
+        )
+
+    def _pickable(self, index) -> bool:
+        return index.isValid() and index.data(Qt.UserRole) in (ROW_CLIENT, ROW_ACTION)
+
+    def _first_client(self):
+        for r in range(self.proxy.rowCount()):
+            index = self.proxy.index(r, 0)
+            if index.data(Qt.UserRole) == ROW_CLIENT:
+                return index
+        return QModelIndex()
+
+    def _on_text(self, text: str) -> None:
+        self.proxy.set_text(text)
+        self.list_view.setCurrentIndex(self._first_client())
+
+    def _step(self, delta: int) -> None:
+        r = self.list_view.currentIndex().row()
+        r = -1 if r < 0 and delta > 0 else (self.proxy.rowCount() if r < 0 else r)
+        r += delta
+        while 0 <= r < self.proxy.rowCount():
+            index = self.proxy.index(r, 0)
+            if self._pickable(index):
+                self.list_view.setCurrentIndex(index)
+                return
+            r += delta
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.filter_edit and event.type() == QEvent.KeyPress:
+            key = event.key()
+            if key in (Qt.Key_Down, Qt.Key_Up):
+                self._step(1 if key == Qt.Key_Down else -1)
+                return True
+            if key in (Qt.Key_Return, Qt.Key_Enter):
+                index = self.list_view.currentIndex()
+                if not self._pickable(index):
+                    index = self._first_client()
+                if index.isValid():
+                    self.pick(index)
+                return True
+            if key == Qt.Key_Escape:
+                self.close()
+                return True
+        return super().eventFilter(obj, event)
+
+    def pick(self, index) -> None:
+        if not self._pickable(index):
+            return
+        row = self.proxy.mapToSource(index).row()
+        self.close()
+        if index.data(Qt.UserRole) == ROW_CLIENT:
+            self.combo.setCurrentIndex(row)
+        self.combo.activated.emit(row)
+
+    def open_under(self) -> None:
+        combo = self.combo
+        self.filter_edit.clear()
+        width = max(combo.width(), self._MIN_WIDTH)
+        rows = max(self.proxy.rowCount(), 1)
+        height = min(
+            self.list_view.sizeHintForRow(0) * rows + self.filter_edit.sizeHint().height() + 16,
+            self._MAX_HEIGHT,
+        )
+        self.setGeometry(QRect(combo.mapToGlobal(combo.rect().bottomLeft()), QSize(width, height)))
+        current = self.proxy.mapFromSource(combo.model().index(combo.currentIndex(), 0))
+        if current.isValid():
+            self.list_view.setCurrentIndex(current)
+        self.show()
+        self.filter_edit.setFocus()
+
+
 class _ClientCombo(QComboBox):
     """A client picker the wheel and the arrow keys cannot misfire.
 
@@ -90,6 +245,21 @@ class _ClientCombo(QComboBox):
     the config and clears the undo history. Disabling the rows does not help:
     QComboBox navigation only tests Qt.ItemIsEnabled.
     """
+
+    popup = None
+    on_popup = None  # CommandBar sets it to wire the context menu onto the popup's list
+
+    def showPopup(self) -> None:
+        if self.popup is None:
+            self.popup = _ClientPopup(self)
+            if self.on_popup is not None:
+                self.on_popup(self.popup)
+        self.popup.open_under()
+
+    def hidePopup(self) -> None:
+        if self.popup is not None and self.popup.isVisible():
+            self.popup.close()
+        super().hidePopup()
 
     def wheelEvent(self, event) -> None:
         event.ignore()  # a client switch is never a scroll gesture
@@ -196,8 +366,8 @@ class CommandBar(QWidget):
         self.client_selector.activated.connect(self._on_row_activated)
         view = self.client_selector.view()
         view.setItemDelegate(_ClientRowDelegate(self.client_selector))
-        view.setContextMenuPolicy(Qt.CustomContextMenu)
-        view.customContextMenuRequested.connect(self._on_row_context_menu)
+        self._wire_context_menu(view)
+        self.client_selector.on_popup = lambda popup: self._wire_context_menu(popup.list_view)
         layout.addWidget(self.client_selector)
 
         self.setFixedHeight(BAR_HEIGHT)
@@ -484,12 +654,22 @@ class CommandBar(QWidget):
         else:
             self.refreshRequested.emit()
 
-    def _on_row_context_menu(self, position: QPoint) -> None:
-        view = self.client_selector.view()
+    def _wire_context_menu(self, view) -> None:
+        view.setContextMenuPolicy(Qt.CustomContextMenu)
+        view.customContextMenuRequested.connect(
+            lambda pos, v=view: self._on_row_context_menu(pos, v)
+        )
+
+    def _on_row_context_menu(self, position: QPoint, view) -> None:
         index = view.indexAt(position)
         if not index.isValid():
             return
-        item = self.client_selector.model().item(index.row())
+        row = (
+            view.model().mapToSource(index).row()
+            if isinstance(view.model(), QSortFilterProxyModel)
+            else index.row()
+        )
+        item = self.client_selector.model().item(row)
         if item.data(Qt.UserRole) != ROW_CLIENT:
             return
         self.clientMenuRequested.emit(
