@@ -14,9 +14,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from gui.setup_state import SessionFacts, session_meta
+from shared.i18n import N_, _
 from shopify_tool.pdf_processor import READING, SAVING, STAMPING, reference_run_warning
 
 MODES = ("driver", "raw_zpl")
+# A run's label is compared raw (cancel() and _run check SAVING); only the text shown is _()'d.
+_RUN_LABELS = {READING: N_("Reading labels"), STAMPING: N_("Stamping labels")}
 # The QSettings scope each tool's print settings live under. They predate
 # this page and must not change: every PC keeps what it has saved.
 PRINT_SCOPE = {"reference": "reference_labels", "barcode": "barcode_generator"}
@@ -103,7 +106,11 @@ def _row(pick: PickedFile | None, noun: str) -> dict:
         return {}
     if pick.problem is not None:
         title, text = pick.problem
-        return {"name": pick.name, "meta": "Problem", "problem": {"title": title, "text": text}}
+        return {
+            "name": pick.name,
+            "meta": _("Problem"),
+            "problem": {"title": _(title), "text": _(text)},
+        }
     return {"name": pick.name, "meta": counted(pick.count or 0, noun), "problem": {}}
 
 
@@ -119,19 +126,25 @@ def _run(run: ToolRun | None) -> dict:
         return {}
     if run.total <= 0:
         # Barcode: one render call, so a sentence and nothing to cancel.
-        return {"label": run.label, "count": "", "bar": False, "percent": 0, "cancel": {}}
+        return {
+            "label": _(_RUN_LABELS.get(run.label, run.label)),
+            "count": "",
+            "bar": False,
+            "percent": 0,
+            "cancel": {},
+        }
     saving = run.label == SAVING
     # One bar across both counted phases, so it never goes back.
     steps = {READING: run.done, STAMPING: run.total + run.done}.get(run.label, 2 * run.total)
     return {
-        "label": "Saving…" if saving else run.label,
-        "count": "" if saving else f"{run.done:,} of {run.total:,}",
+        "label": _("Saving…") if saving else _(_RUN_LABELS.get(run.label, run.label)),
+        "count": "" if saving else _("{done} of {total}", done=f"{run.done:,}", total=f"{run.total:,}"),
         "bar": True,
         "percent": min(100, steps * 100 // (2 * run.total)),
         "cancel": {
-            "label": "Cancelling…" if run.cancelling else "Cancel",
+            "label": _("Cancelling…") if run.cancelling else _("Cancel"),
             "enabled": not saving and not run.cancelling,
-            "title": "Saving can't be cancelled" if saving else "",
+            "title": _("Saving can't be cancelled") if saving else "",
         },
     }
 

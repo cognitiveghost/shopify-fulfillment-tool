@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from gui.components.commandbar import BAR_HEIGHT
 from shared import i18n
 from shared.components.language_segment import LanguageSegment
+from shared.i18n import _
 from shared.icons import icon
 from shared.navrail import RAIL_WIDTH, NavRail
 from shared.theme import current_tokens, font_css, on_theme_changed
@@ -70,8 +71,8 @@ class Sidebar(QWidget):
         self.mark.setAlignment(Qt.AlignCenter)
         self.title = QLabel("Fulfilment Tool", self.header)
         self.title.setMinimumWidth(0)
-        self.collapse_button = self._icon_button("Collapse sidebar", 28, 28)
-        self.expand_button = self._icon_button("Expand sidebar", 40, 32)
+        self.collapse_button = self._icon_button(_("Collapse sidebar"), 28, 28)
+        self.expand_button = self._icon_button(_("Expand sidebar"), 40, 32)
         self.collapse_button.clicked.connect(lambda: self._toggle(False))
         self.expand_button.clicked.connect(lambda: self._toggle(True))
         header.addWidget(self.mark)
@@ -99,8 +100,8 @@ class Sidebar(QWidget):
         footer.addWidget(self.update_button)
 
         self.settings_button = QToolButton(self.footer)
-        self.settings_button.setText("Client settings")
-        self.settings_button.setToolTip("Client settings")
+        self.settings_button.setText(_("Client settings"))
+        self.settings_button.setToolTip(_("Client settings"))
         self.settings_button.setAutoRaise(True)
         self.settings_button.clicked.connect(self.settingsRequested.emit)
         footer.addWidget(self.settings_button)
@@ -110,8 +111,8 @@ class Sidebar(QWidget):
         segment = QHBoxLayout(self.theme_segment)
         segment.setContentsMargins(2, 2, 2, 2)
         segment.setSpacing(2)
-        self.light_button = self._segment_button("Light")
-        self.dark_button = self._segment_button("Dark")
+        self.light_button = self._segment_button(_("Light"))
+        self.dark_button = self._segment_button(_("Dark"))
         group = QButtonGroup(self.theme_segment)
         group.setExclusive(True)
         for button, name in ((self.light_button, "light"), (self.dark_button, "dark")):
@@ -152,7 +153,7 @@ class Sidebar(QWidget):
         self.connection_label = QLabel(self.connection_box)
         self.path_label = QLabel(self.connection_box)
         self.path_label.setFixedWidth(_PATH_WIDTH)
-        self.retry_button = QPushButton("Retry", self.connection_box)
+        self.retry_button = QPushButton(_("Retry"), self.connection_box)
         self.retry_button.setObjectName("RetryButton")
         self.retry_button.setFixedHeight(24)
         self.retry_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
@@ -225,14 +226,16 @@ class Sidebar(QWidget):
     def set_connection(self, connected: bool, server_path: str) -> None:
         self._connected = connected
         self._server_path = server_path
-        label = "Server connected" if connected else "Server unreachable"
+        label = _("Server connected") if connected else _("Server unreachable")
         self.connection_label.setText(label)
         metrics = QFontMetrics(self.path_label.font())
         self.path_label.setText(
             metrics.elidedText(server_path, Qt.ElideMiddle, _PATH_WIDTH)
         )
         self.path_label.setToolTip(server_path)
-        self.connection_icon.setToolTip(f"{label} · {server_path}")
+        self.connection_icon.setToolTip(
+            _("{label} · {server_path}", label=label, server_path=server_path)
+        )
         self.retry_button.setVisible(not connected)
         self._style_connection(current_tokens())
 
@@ -240,7 +243,7 @@ class Sidebar(QWidget):
         self._theme_name = name
         (self.dark_button if name == "dark" else self.light_button).setChecked(True)
         self.theme_toggle.setToolTip(
-            "Switch to Light" if name == "dark" else "Switch to Dark"
+            _("Switch to Light") if name == "dark" else _("Switch to Dark")
         )
         self.theme_toggle.setIcon(icon("sun" if name == "dark" else "moon"))
 

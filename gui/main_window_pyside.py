@@ -38,6 +38,7 @@ from gui.ui_manager import UIManager
 from gui.web_page import when_painted
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
+from shared.i18n import _
 from shared.update_flow import UpdateFlow
 from shared.updater import AppIdentity
 from shopify_tool import (
@@ -88,25 +89,25 @@ def out_of_date_message(withdrawn: list[str], started: list[str]) -> str:
     if withdrawn:
         names = ", ".join(withdrawn)
         if len(withdrawn) == 1:
-            parts.append(f"Your change makes packing list {names} out of date. Generate it again; "
-                         "until then the Packer can't open it.")
+            parts.append(_("Your change makes packing list {names} out of date. Generate it again; "
+                           "until then the Packer can't open it.", names=names))
         else:
-            parts.append(f"Your change makes packing lists {names} out of date. Generate them again; "
-                         "until then the Packer can't open them.")
+            parts.append(_("Your change makes packing lists {names} out of date. Generate them again; "
+                           "until then the Packer can't open them.", names=names))
     if started:
         names = ", ".join(started)
         if len(started) == 1:
-            parts.append(f"{names} is already being packed and still holds the old contents. "
-                         "Check it with the packer.")
+            parts.append(_("{names} is already being packed and still holds the old contents. "
+                           "Check it with the packer.", names=names))
         else:
-            parts.append(f"{names} are already being packed and still hold the old contents. "
-                         "Check them with the packer.")
+            parts.append(_("{names} are already being packed and still hold the old contents. "
+                           "Check them with the packer.", names=names))
     return " ".join(parts)
 
 def withdraw_failed_message(names: str) -> str:
     """The toast when out-of-date packing lists could not be withdrawn (ADR 0019)."""
-    return (f"Packing list {names} couldn't be withdrawn, so the Packer can still open its old contents. "
-            "Close any program that has it open, then generate it again.")
+    return _("Packing list {names} couldn't be withdrawn, so the Packer can still open its old contents. "
+             "Close any program that has it open, then generate it again.", names=names)
 
 class MainWindow(QMainWindow):
     """The main window for the Shopify Fulfillment Tool application.
@@ -264,8 +265,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Initialization Error",
-                f"Failed to initialize profile managers:\n{e!s}",
+                _("Initialization Error"),
+                _("Failed to initialize profile managers:\n{detail}", detail=str(e)),
             )
             QApplication.quit()
             return
@@ -284,8 +285,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Initialization Error",
-                f"Failed to initialize profile managers:\n{e!s}",
+                _("Initialization Error"),
+                _("Failed to initialize profile managers:\n{detail}", detail=str(e)),
             )
             QApplication.quit()
             return
@@ -327,15 +328,15 @@ class MainWindow(QMainWindow):
                 logger.warning(f"Could not load configuration for CLIENT_{client_id}")
                 show_error(
                     self,
-                    f"CLIENT_{client_id}'s configuration couldn't be loaded",
-                    "Details are in Logs.",
+                    _("CLIENT_{client_id}'s configuration couldn't be loaded", client_id=client_id),
+                    _("Details are in Logs."),
                 )
         except Exception:
             logger.exception("Failed to load client config")
             show_error(
                 self,
-                f"CLIENT_{client_id}'s configuration couldn't be loaded",
-                "Details are in Logs.",
+                _("CLIENT_{client_id}'s configuration couldn't be loaded", client_id=client_id),
+                _("Details are in Logs."),
             )
 
     def setup_logging(self):
@@ -521,12 +522,12 @@ class MainWindow(QMainWindow):
             toast(self, message)
         else:
             logger.error(f"Undo failed: {message}")
-            show_error(self, "Undo didn't complete", "Details are in Logs.")
+            show_error(self, _("Undo didn't complete"), _("Details are in Logs."))
 
     def update_session_info_label(self):
         """Update global header session info label."""
         if not self.session_path:
-            self.session_info_label.setText("No session")
+            self.session_info_label.setText(_("No session"))
             return
 
         session_name = os.path.basename(self.session_path)
@@ -599,7 +600,7 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to save inventory memory toggle")
             toast(
                 self,
-                "Inventory memory wasn't saved. Details are in Logs.",
+                _("Inventory memory wasn't saved. Details are in Logs."),
                 role="error",
             )
             self.ui_manager.refresh_setup()
@@ -676,22 +677,31 @@ class MainWindow(QMainWindow):
 
     def _on_client_removed(self, result) -> None:
         client_id, kind = result
-        toast(self, f"CLIENT_{client_id} {kind}.")
+        if kind == "archived":
+            text = _("CLIENT_{client_id} archived.", client_id=client_id)
+        else:
+            text = _("CLIENT_{client_id} deleted.", client_id=client_id)
+        toast(self, text)
         self.client_directory.refresh()
 
     def _on_client_remove_error(self, client_id, kind, error) -> None:
         _exctype, value, _tb = error
         verb = "archived" if kind == "archived" else "deleted"
-        self._report_client_error(f"CLIENT_{client_id} wasn't {verb}", value)
+        if kind == "archived":
+            shown = _("CLIENT_{client_id} wasn't archived", client_id=client_id)
+        else:
+            shown = _("CLIENT_{client_id} wasn't deleted", client_id=client_id)
+        self._report_client_error(f"CLIENT_{client_id} wasn't {verb}", value, shown)
         self.client_directory.refresh()
 
-    def _report_client_error(self, headline: str, value) -> None:
+    def _report_client_error(self, headline: str, value, shown: str) -> None:
+        """headline is the English log line; shown is the same sentence, translated."""
         if isinstance(value, ProfileManagerError):
             logger.warning(f"{headline}: {value}")
-            show_error(self, headline, str(value))
+            show_error(self, shown, str(value))
         else:
             logger.error(headline, exc_info=value)
-            show_error(self, headline, "Details are in Logs.")
+            show_error(self, shown, _("Details are in Logs."))
 
     def open_archived_clients(self) -> None:
         worker = Worker(self.profile_manager.list_archived_clients)
@@ -708,7 +718,7 @@ class MainWindow(QMainWindow):
     def _on_archived_list_error(self, error) -> None:
         _exctype, value, _tb = error
         logger.error("Archived clients couldn't be listed", exc_info=value)
-        show_error(self, "Archived clients couldn't be listed", "Details are in Logs.")
+        show_error(self, _("Archived clients couldn't be listed"), _("Details are in Logs."))
 
     def _restore_client_from_dialog(self, client_id: str) -> None:
         worker = Worker(self.profile_manager.restore_client, client_id)
@@ -722,12 +732,16 @@ class MainWindow(QMainWindow):
 
     def _on_client_restored(self, client_id: str) -> None:
         self._archived_dialog.remove_row(client_id)
-        toast(self, f"CLIENT_{client_id} restored.")
+        toast(self, _("CLIENT_{client_id} restored.", client_id=client_id))
         self.client_directory.refresh()
 
     def _on_client_restore_error(self, client_id: str, error) -> None:
         _exctype, value, _tb = error
-        self._report_client_error(f"CLIENT_{client_id} wasn't restored", value)
+        self._report_client_error(
+            f"CLIENT_{client_id} wasn't restored",
+            value,
+            _("CLIENT_{client_id} wasn't restored", client_id=client_id),
+        )
 
     def on_client_changed(self, client_id: str):
         """Handle client selection change.
@@ -794,8 +808,8 @@ class MainWindow(QMainWindow):
             logger.warning(f"Failed to load configuration for client {client_id}")
             show_error(
                 self,
-                f"CLIENT_{client_id}'s configuration couldn't be loaded",
-                "Details are in Logs.",
+                _("CLIENT_{client_id}'s configuration couldn't be loaded", client_id=client_id),
+                _("Details are in Logs."),
             )
             self.command_bar.set_client_loading(False)
             self.command_bar.forget_announced()
@@ -832,7 +846,7 @@ class MainWindow(QMainWindow):
 
         except Exception:
             logger.exception("Error applying loaded client data")
-            show_error(self, "The client couldn't be switched", "Details are in Logs.")
+            show_error(self, _("The client couldn't be switched"), _("Details are in Logs."))
             self.command_bar.set_client_loading(False)
             self.command_bar.forget_announced()
 
@@ -862,7 +876,7 @@ class MainWindow(QMainWindow):
     def _on_client_data_load_error(self, client_id: str, error):
         _exctype, value, _tb = error
         logger.error("Error loading client data", exc_info=value)
-        show_error(self, "The client couldn't be switched", "Details are in Logs.")
+        show_error(self, _("The client couldn't be switched"), _("Details are in Logs."))
         # A stale failure must not make the bar re-announce -- and so reset the
         # session of -- the client that did load.
         if client_id == self.current_client_id:
@@ -920,7 +934,9 @@ class MainWindow(QMainWindow):
             self.log_activity("UI", "Client list refreshed")
         except Exception:
             logger.exception("Client list refresh failed")
-            show_error(self, "The client list didn't refresh", "Details are in Logs.")
+            show_error(
+                self, _("The client list didn't refresh"), _("Details are in Logs.")
+            )
 
     def on_session_selected(self, session_path: str):
         """Handle session selection from session browser.
@@ -963,18 +979,18 @@ class MainWindow(QMainWindow):
             logger.warning(f"Refused a stale save to {self.session_path}")
             show_error(
                 self,
-                "Another PC changed this session",
-                "Your change wasn't saved. Reopen the session from Sessions to "
-                "load their changes, then make it again.",
+                _("Another PC changed this session"),
+                _("Your change wasn't saved. Reopen the session from Sessions to "
+                  "load their changes, then make it again."),
             )
             return
         except Exception:
             logger.exception("Failed to save session state")
             show_error(
                 self,
-                "Your last change wasn't saved",
-                "Check the connection to the server. Your next change saves "
-                "everything on screen. Details are in Logs.",
+                _("Your last change wasn't saved"),
+                _("Check the connection to the server. Your next change saves "
+                  "everything on screen. Details are in Logs."),
             )
             return
 
@@ -1071,8 +1087,8 @@ class MainWindow(QMainWindow):
     def _on_session_write_failed(self, session_path: str, kind: str) -> None:
         """A background write failed (logged by the queue). On the GUI thread."""
         texts = {
-            HISTORY: "Fulfilment history wasn't saved. It's saved again with your next change.",
-            INVENTORY_MEMORY: "Inventory memory wasn't updated. It's updated again with your next change.",
+            HISTORY: _("Fulfilment history wasn't saved. It's saved again with your next change."),
+            INVENTORY_MEMORY: _("Inventory memory wasn't updated. It's updated again with your next change."),
         }
         if kind in texts:
             toast(self, texts[kind], role="info")
@@ -1285,8 +1301,11 @@ class MainWindow(QMainWindow):
                     # On Results itself: the switch above may not have happened
                     # yet, and the router would draw it on the page being left.
                     self.results_bridge.raise_toast(
-                        f"Session {session_name} opened · "
-                        f"{self.analysis_results_df['Order_Number'].nunique()} orders."
+                        _(
+                            "Session {session_name} opened · {count} orders.",
+                            session_name=session_name,
+                            count=self.analysis_results_df["Order_Number"].nunique(),
+                        )
                     )
                 else:
                     # Session exists but no analysis yet: Setup is where its
@@ -1297,7 +1316,10 @@ class MainWindow(QMainWindow):
                     )
                     toast(
                         self,
-                        f"Session {session_name} opened. Run an analysis to see results.",
+                        _(
+                            "Session {session_name} opened. Run an analysis to see results.",
+                            session_name=session_name,
+                        ),
                         role="info",
                     )
 
@@ -1306,7 +1328,7 @@ class MainWindow(QMainWindow):
 
         except Exception:
             logger.exception("Failed to load session")
-            show_error(self, "The session wasn't loaded", "Details are in Logs.")
+            show_error(self, _("The session wasn't loaded"), _("Details are in Logs."))
 
     def _update_all_views(self):
         """Central slot to refresh every view after `analysis_results_df` changes.
@@ -1360,7 +1382,7 @@ class MainWindow(QMainWindow):
             logger.exception("Failed to save analysis_mode")
             toast(
                 self,
-                "The analysis mode wasn't saved. Details are in Logs.",
+                _("The analysis mode wasn't saved. Details are in Logs."),
                 role="error",
             )
         self.ui_manager.refresh_setup()
@@ -1385,13 +1407,13 @@ class MainWindow(QMainWindow):
         while not queue.flush(timeout=10):
             confirm = ConfirmDialog(
                 self,
-                title="Still saving this session",
-                body="History and stock memory are still being written to the server. If you "
-                "close now, they're written the next time this session is saved.",
-                verb="Close anyway",
+                title=_("Still saving this session"),
+                body=_("History and stock memory are still being written to the server. If you "
+                       "close now, they're written the next time this session is saved."),
+                verb=_("Close anyway"),
             )
             # Cancel waits: say so on the button.
-            confirm.cancel_button.setText("Keep waiting")
+            confirm.cancel_button.setText(_("Keep waiting"))
             if confirm.exec():
                 logger.error(f"Closed with background writes pending: {queue.pending()}")
                 return

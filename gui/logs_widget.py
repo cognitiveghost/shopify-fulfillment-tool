@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QFileDialog, QVBoxLayout, QWidget
 from gui.components import show_error
 from gui.log_buffer import LogBuffer, default_filename, save_text
 from gui.logs_bridge import mount_logs_page
+from shared.i18n import _, _n
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,6 @@ def _settings() -> QSettings:
     """This PC's store, the same pair theme_manager uses. A function so tests
     can point it at an INI file under tmp_path."""
     return QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
-
-
-def _entries(n: int) -> str:
-    return "1 entry" if n == 1 else f"{n} entries"
 
 
 class LogsWidget(QWidget):
@@ -112,7 +109,7 @@ class LogsWidget(QWidget):
         client = getattr(self.mw, "current_client_id", None)
         name = default_filename(client, datetime.now().astimezone().date())
         path, _filter = QFileDialog.getSaveFileName(
-            self, "Save log as text", name, "Text files (*.txt);;All files (*)"
+            self, _("Save log as text"), name, _("Text files (*.txt);;All files (*)")
         )
         if not path:
             return
@@ -125,15 +122,22 @@ class LogsWidget(QWidget):
             logger.warning("Could not save log to %s: %s", path, error)
             show_error(
                 self,
-                "The log wasn't saved",
-                f"{path} couldn't be written. Choose another folder and save again.",
+                _("The log wasn't saved"),
+                _("{path} couldn't be written. Choose another folder and save again.", path=path),
             )
             return
-        self.bridge.raise_toast(f"Saved {_entries(len(rows))} to {Path(path).name}")
+        self.bridge.raise_toast(
+            _n(
+                "Saved {n} entry to {name}",
+                "Saved {n} entries to {name}",
+                len(rows),
+                name=Path(path).name,
+            )
+        )
 
     def _copy(self, entry_id: int) -> None:
         rows = self.buffer.pick([entry_id])
         if not rows or not rows[0]["traceback"]:
             return
         QGuiApplication.clipboard().setText(rows[0]["traceback"])
-        self.bridge.raise_toast("Traceback copied")
+        self.bridge.raise_toast(_("Traceback copied"))

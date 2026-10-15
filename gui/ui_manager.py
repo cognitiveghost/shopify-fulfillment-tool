@@ -22,7 +22,7 @@ from gui.setup_state import FileSlot, MemoryFacts, RunFacts, SessionFacts, setup
 from gui.shortcuts_dialog import ShortcutsDialog
 from gui.worker import Worker
 from shared.components.language_segment import switch_language
-from shared.i18n import _
+from shared.i18n import N_, _
 from shared.icons import icon
 from shared.server_connection import ConnectionSettingsDialog
 from shared.theme import on_theme_changed
@@ -44,11 +44,11 @@ def age_text(delta) -> str:
     """`19 h`, `45 min`, `3 d` -- the one age format the results screen uses."""
     minutes = max(0, int(delta.total_seconds() // 60))
     if minutes < 60:
-        return f"{minutes} min"
+        return _("{n} min", n=minutes)
     hours = minutes // 60
     if hours < 48:
-        return f"{hours} h"
-    return f"{hours // 24} d"
+        return _("{n} h", n=hours)
+    return _("{n} d", n=hours // 24)
 
 
 def _parse_time(text) -> datetime | None:
@@ -99,11 +99,11 @@ class UIManager:
     # The five former tab titles. Still the pages' own titles; the rail uses
     # _RAIL_LABELS instead -- see below.
     _TAB_LABELS = (
-        "Session Setup",
-        "Analysis Results",
-        "Session Browser",
-        "Logs",
-        "Tools",
+        N_("Session Setup"),
+        N_("Analysis Results"),
+        N_("Session Browser"),
+        N_("Logs"),
+        N_("Tools"),
     )
     # 8.6 shipped the rail with _TAB_LABELS verbatim, because guardrail 2 of
     # the parent spec's §6 forbids renaming a destination and moving it in the
@@ -111,13 +111,13 @@ class UIManager:
     # needed: at 56px the rail elides five of the six to "Ses...tup" /
     # "Anal...ults" / "Ses...ser", which is worse than no label. The full names
     # survive as the tooltips in _TAB_TOOLTIPS.
-    _RAIL_LABELS = ("Setup", "Results", "Browse", "Logs", "Tools")
+    _RAIL_LABELS = (N_("Setup"), N_("Results"), N_("Browse"), N_("Logs"), N_("Tools"))
     _TAB_TOOLTIPS = (
-        "Session setup and file loading (Ctrl+1)",
-        "View and edit analysis results (Ctrl+2)",
-        "Browse past sessions (Ctrl+3)",
-        "Activity and execution logs (Ctrl+4)",
-        "PDF processing and utilities (Ctrl+5)",
+        N_("Session setup and file loading (Ctrl+1)"),
+        N_("View and edit analysis results (Ctrl+2)"),
+        N_("Browse past sessions (Ctrl+3)"),
+        N_("Activity and execution logs (Ctrl+4)"),
+        N_("PDF processing and utilities (Ctrl+5)"),
     )
     # No long-lived button icon is re-themed here: the bar re-renders its own.
     _BUTTON_ICONS: ClassVar[dict[str, str]] = {}
@@ -240,11 +240,11 @@ class UIManager:
         rail = self.mw.nav_rail
         for index, on in enumerate(offered):
             rail.button(index).setEnabled(on)
-        label, tip = self._TAB_LABELS[1], self._TAB_TOOLTIPS[1]
+        label = _(self._TAB_LABELS[1])
         rail.button(1).setToolTip(
-            f"{label} — {tip}"
+            _("{label} — {tip}", label=label, tip=_(self._TAB_TOOLTIPS[1]))
             if analysed
-            else f"{label} — available after Run analysis (Ctrl+2)"
+            else _("{label} — available after Run analysis (Ctrl+2)", label=label)
         )
         self.mw.sidebar.set_settings_enabled(connected and has_client)
         if not offered[rail.current_index()]:
@@ -309,12 +309,14 @@ class UIManager:
             self._TAB_TOOLTIPS,
             strict=True,
         ):
-            self.mw.main_tabs.addTab(page, label)
-            index = self.mw.nav_rail.add_item(icon(icon_name), rail_label)
+            self.mw.main_tabs.addTab(page, _(label))
+            index = self.mw.nav_rail.add_item(icon(icon_name), _(rail_label))
             # The rail label is abbreviated, so the tooltip is the only place
             # the destination's full name still appears. _TAB_TOOLTIPS holds
             # descriptions ("Statistics and logs"), not names, so lead with it.
-            self.mw.nav_rail.button(index).setToolTip(f"{label} — {tip}")
+            self.mw.nav_rail.button(index).setToolTip(
+                _("{label} — {tip}", label=_(label), tip=_(tip))
+            )
 
         # Covered pages keep painting, so a switch never shows a page's old
         # frame (2026-10-08 web tier freshness spec, section 4.1).
@@ -359,7 +361,7 @@ class UIManager:
         # so the shim forwards .setText() to set_session_text() instead of
         # editing that method's body.
         self.mw.session_info_label = _SessionLabelShim(bar)
-        bar.set_session_text("No session")
+        bar.set_session_text(_("No session"))
 
         bar.newSessionRequested.connect(
             lambda: self.mw.actions_handler.create_new_session()
@@ -378,16 +380,16 @@ class UIManager:
         menu = bar.overflow
         menu.clear()
 
-        menu.add_section(self.mw.current_client_id or "No client")
+        menu.add_section(self.mw.current_client_id or _("No client"))
         self._open_folder_item = menu.add_item(
-            "Open session folder", self._open_session_folder
+            _("Open session folder"), self._open_session_folder
         )
         self._refresh_overflow()
 
-        menu.add_section("THIS PC")
-        menu.add_item("Server connection…", self._open_connection_settings)
+        menu.add_section(_("THIS PC"))
+        menu.add_item(_("Server connection…"), self._open_connection_settings)
         menu.add_item(_("Check for updates…"), lambda: self.mw.update_flow.check_now())
-        menu.add_item("Keyboard shortcuts…", lambda: ShortcutsDialog(self.mw).exec())
+        menu.add_item(_("Keyboard shortcuts…"), lambda: ShortcutsDialog(self.mw).exec())
 
     def _refresh_overflow(self) -> None:
         self._open_folder_item.setEnabled(bool(getattr(self.mw, "session_path", None)))
@@ -442,7 +444,7 @@ class UIManager:
         # Never shown. Its enabled state is the guard (refresh_setup sets it),
         # and the page's Run analysis, Ctrl+R and Results' "Run analysis
         # again" all click it.
-        self.mw.run_analysis_button = QPushButton("Run analysis", tab)
+        self.mw.run_analysis_button = QPushButton(_("Run analysis"), tab)
         self.mw.run_analysis_button.setEnabled(False)
         self.mw.run_analysis_button.hide()
 
@@ -557,7 +559,7 @@ class UIManager:
 
         # Never shown. Its enabled state is the guard every existing call
         # site already drives, and the page's Export clicks it via the bridge.
-        self.mw.generate_reports_button_tab2 = QPushButton("Generate Reports", tab)
+        self.mw.generate_reports_button_tab2 = QPushButton(_("Generate Reports"), tab)
         self.mw.generate_reports_button_tab2.setEnabled(False)
         self.mw.generate_reports_button_tab2.clicked.connect(
             lambda: (
@@ -663,7 +665,9 @@ class UIManager:
                 bar.set_status("text_secondary", "")
                 bar.set_stock_age("")
                 return
-            bar.set_status("text_secondary", f"Analysed {analysed.strftime('%H:%M')}")
+            bar.set_status(
+                "text_secondary", _("Analysed {time}", time=analysed.strftime("%H:%M"))
+            )
             stock = (
                 Path(self.mw.session_manager.get_input_dir(session_path))
                 / "inventory.csv"
@@ -673,7 +677,7 @@ class UIManager:
             except OSError:
                 bar.set_stock_age("")
                 return
-            bar.set_stock_age(f"Stock file {age_text(analysed - copied)} old")
+            bar.set_stock_age(_("Stock file {age} old", age=age_text(analysed - copied)))
         finally:
             self.refresh_setup()
 
@@ -725,7 +729,9 @@ class UIManager:
         except Exception:
             self.log.exception("Failed to open session folder")
             show_error(
-                self.mw, "The session folder wouldn't open", "Details are in Logs."
+                self.mw,
+                _("The session folder wouldn't open"),
+                _("Details are in Logs."),
             )
 
     def set_ui_busy(self, is_busy):
@@ -783,34 +789,34 @@ class UIManager:
         # What the mockup moves out of the command bar on Results (phase 2
         # spec section 6.2). Their enabled state is read when the menu opens.
         self.mw.rerun_analysis_action = action(
-            "Run analysis again",
+            _("Run analysis again"),
             lambda: self.mw.run_analysis_button.click(),
-            "Run the analysis again on this session's files",
+            _("Run the analysis again on this session's files"),
         )
         self.mw.open_folder_action = action(
-            "Open session folder",
+            _("Open session folder"),
             self._open_session_folder,
-            "Open this session's folder",
+            _("Open this session's folder"),
         )
         self.mw.copy_summary_action = action(
-            "Copy summary",
+            _("Copy summary"),
             self._copy_results_summary,
-            "Copy the session's numbers as one line",
+            _("Copy the session's numbers as one line"),
         )
         menu.addSeparator()
         menu.aboutToShow.connect(self._refresh_results_menu)
 
         self.mw.add_product_button_tab2 = action(
-            "Add Product to Order",
+            _("Add Product to Order"),
             lambda: (
                 self.mw.actions_handler.show_add_product_dialog()
                 if hasattr(self.mw, "actions_handler")
                 else None
             ),
-            "Manually add a product to an existing order",
+            _("Manually add a product to an existing order"),
         )
         self.mw.undo_button = action(
-            "Undo", self.mw.undo_last_operation, "Undo last operation (Ctrl+Z)"
+            _("Undo"), self.mw.undo_last_operation, _("Undo last operation (Ctrl+Z)")
         )
         return menu
 
@@ -827,7 +833,7 @@ class UIManager:
         if not text:
             return
         QGuiApplication.clipboard().setText(text)
-        self.mw.results_bridge.raise_toast("Summary copied")
+        self.mw.results_bridge.raise_toast(_("Summary copied"))
 
     def _create_tab5_tools(self):
         """Tools: one QWebEngineView, no Qt inside (phase 5 spec).

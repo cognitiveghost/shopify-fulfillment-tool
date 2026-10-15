@@ -16,22 +16,10 @@ APP_PY = c.files(ROOT / "gui", "*.py") + [ROOT / "gui_main.py"]
 APP_HTML = c.files(ROOT / "gui" / "web", "*.html")
 APP_JS = c.files(ROOT / "gui" / "web", "*.js")
 
-# Files whose UI text is fully wrapped. Each wrapping task adds its files; Task 17
-# replaces the lists with every file (SHARED_PY + APP_PY, APP_HTML, APP_JS).
-GUARDED_PY: list[Path] = SHARED_PY + [
-    ROOT / "gui" / "settings" / "window.py",
-    ROOT / "gui" / "client_settings_dialog.py",
-    ROOT / "gui" / "groups_management_dialog.py",
-    ROOT / "gui" / "client_directory.py",
-    ROOT / "gui" / "report_selection_dialog.py",
-    ROOT / "gui" / "add_product_dialog.py",
-    ROOT / "gui" / "shortcuts_dialog.py",
-    ROOT / "gui" / "barcode_tool.py",
-    ROOT / "gui" / "reference_tool.py",
-    ROOT / "gui" / "session_browser_widget.py",
-    ROOT / "gui" / "pdf_printing.py",
-    ROOT / "gui" / "file_handler.py",
-]
+# Every Python file is scanned for Qt-call literals. The scanner cannot see text
+# kept in dicts (the *_state.py modules feeding the web pages); those are wrapped
+# by hand in Tasks 13-15, and the HTML/JS lists below are filled there too.
+GUARDED_PY: list[Path] = SHARED_PY + APP_PY
 GUARDED_HTML: list[Path] = []
 GUARDED_JS: list[Path] = []
 # Text that is never translated, with the reason.
@@ -40,6 +28,7 @@ ALLOW = {
     "Packer Assistant",  # brand
     "Shopify",           # brand
     "Ctrl+S",            # keyboard shortcut, shown as typed
+    "{APP_NAME} {__version__}",  # window title: the brand and the version, nothing to translate
 }
 
 

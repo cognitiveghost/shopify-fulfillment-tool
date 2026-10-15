@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from shared.i18n import _
 from shared.theme import font_css, on_theme_changed, set_button_role
 
 
@@ -35,7 +36,7 @@ class ErrorBanner(QFrame):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("errorBanner")
-        self.setAccessibleName("Error")
+        self.setAccessibleName(_("Error"))
 
         self._headline = QLabel(self)
         self._headline.setObjectName("errorHeadline")
@@ -54,11 +55,11 @@ class ErrorBanner(QFrame):
 
         self.logs_button = None
         if open_logs is not None:
-            self.logs_button = QPushButton("Open Logs", self)
+            self.logs_button = QPushButton(_("Open Logs"), self)
             set_button_role(self.logs_button, "ghost")
             self.logs_button.clicked.connect(open_logs)
             row.addWidget(self.logs_button, 0, Qt.AlignmentFlag.AlignTop)
-        self.dismiss_button = QPushButton("Dismiss", self)
+        self.dismiss_button = QPushButton(_("Dismiss"), self)
         set_button_role(self.dismiss_button, "ghost")
         self.dismiss_button.clicked.connect(self.dismiss)
         row.addWidget(self.dismiss_button, 0, Qt.AlignmentFlag.AlignTop)
