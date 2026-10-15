@@ -11,8 +11,10 @@ frame, the tag categories, the session id), so an edit made while reports
 generate never reaches a file half-way through.
 """
 
+import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +58,87 @@ def packing_list_json(df: pd.DataFrame, session_id: str) -> dict:
         "total_items": int(df["Quantity"].sum()) if "Quantity" in df.columns else len(df),
         "orders": orders_data,
     }
+
+
+WITHDRAWN_DIR = "withdrawn"
+
+
+def packing_fingerprint(df: pd.DataFrame) -> str:
+    """What the Packer would pack from `df`: each fulfillable order's SKUs and quantities.
+
+    Tags and notes are not in it, so a tag edit never makes a list out of date (AUDIT-10-4).
+    """
+    orders = core.build_packing_orders(report_filters.fulfillable_only(df))
+    canon = sorted(
+        [o["order_number"], sorted([i["sku"], i["quantity"]] for i in o["items"])] for o in orders
+    )
+    return hashlib.sha256(json.dumps(canon).encode("utf-8")).hexdigest()
+
+
+def recorded_fingerprints(session_info) -> dict[str, str]:
+    """The fingerprints session_info records for its packing lists; {} for an older session."""
+    stats = (session_info or {}).get("statistics")
+    found = stats.get("packing_list_fingerprints") if isinstance(stats, dict) else None
+    if not isinstance(found, dict):
+        return {}
+    return {k: v for k, v in found.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def withdraw_lists(session_path, names) -> list[str]:
+    """Move unstarted packing lists out of the Packer's reach (AUDIT-10-4, ADR 0019).
+
+    The Packer reads only packing_lists/*.json; a list moved to packing_lists/withdrawn/ cannot
+    be opened. A list whose packing/<name>/ folder exists has been started and stays. Returns
+    the names whose JSON was moved. Never raises for a file held open: it logs and goes on.
+    """
+    session = Path(session_path)
+    lists_dir = session / "packing_lists"
+    withdrawn = []
+    for name in names:
+        if (session / "packing" / name).exists():
+            continue
+        moved_json = False
+        for suffix in (".json", ".xlsx"):
+            source = lists_dir / f"{name}{suffix}"
+            if not source.exists():
+                continue
+            try:
+                (lists_dir / WITHDRAWN_DIR).mkdir(exist_ok=True)
+                os.replace(source, lists_dir / WITHDRAWN_DIR / source.name)
+            except PermissionError:
+                logger.warning(f"Could not withdraw {source.name}: it is open in another program")
+                continue
+            moved_json |= suffix == ".json"
+        if not moved_json:
+            continue
+        try:
+            barcode_processor.invalidate_label_pdfs(session_path, name)
+        except PermissionError:
+            logger.warning(f"A label PDF of withdrawn list {name} is open; it stays until regenerated")
+        withdrawn.append(name)
+    return withdrawn
+
+
+def out_of_date_message(withdrawn: list[str], started: list[str]) -> str:
+    """The toast after an edit that made packing lists out of date."""
+    parts = []
+    if withdrawn:
+        names = ", ".join(withdrawn)
+        if len(withdrawn) == 1:
+            parts.append(f"Your change makes packing list {names} out of date. Generate it again; "
+                         "until then the Packer can't open it.")
+        else:
+            parts.append(f"Your change makes packing lists {names} out of date. Generate them again; "
+                         "until then the Packer can't open them.")
+    if started:
+        names = ", ".join(started)
+        if len(started) == 1:
+            parts.append(f"{names} is already being packed and still holds the old contents. "
+                         "Check it with the packer.")
+        else:
+            parts.append(f"{names} are already being packed and still hold the old contents. "
+                         "Check them with the packer.")
+    return " ".join(parts)
 
 
 def _output_file(report_type: str, report_name: str, report_config: dict, output_dir: Path) -> str:
@@ -108,7 +191,12 @@ def generate_report(
             # Label PDFs from before could label orders this list no longer
             # holds (AUDIT-04-12). First, so a PDF held open in a viewer
             # stops the run before the XLSX and JSON can diverge.
-            barcode_processor.invalidate_label_pdfs(session_path, Path(output_file).stem)
+            try:
+                barcode_processor.invalidate_label_pdfs(session_path, Path(output_file).stem)
+            except PermissionError:
+                # The old list must not wait for the Packer while the PDF is closed (AUDIT-10-4).
+                withdraw_lists(session_path, [Path(output_file).stem])
+                raise
 
             # The module applies the filters itself.
             written = packing_lists.create_packing_list(
@@ -129,6 +217,7 @@ def generate_report(
                 outcome.removed_empty = True
             else:
                 logger.info(f"Packing list XLSX created: {output_file}")
+                outcome.fingerprint = packing_fingerprint(analysis_df)
                 try:
                     filtered_df = report_filters.apply_report_filters(
                         report_filters.fulfillable_only(analysis_df), filters

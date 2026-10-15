@@ -86,7 +86,6 @@ def test_audit_10_2_generating_stores_the_mode_without_a_backup(main_window, mon
     assert after == before
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: a failed regeneration leaves the old list")
 def test_audit_10_4_a_failed_regeneration_withdraws_the_old_list(tmp_path, monkeypatch):
     lists = tmp_path / "packing_lists"
     lists.mkdir()
