@@ -3,6 +3,9 @@
 // that map and reports clicks through the bridge's named slots. No rule, count
 // or enabled flag is computed here. Its own words are fixed labels, plus the
 // progress line and the Run and Cancel captions, worded from the run's step.
+//
+// Its own words are wrapped in t() where they are drawn. A table entry is a
+// thunk, so the catalogue (loaded by applyStrings) is read at display time.
 "use strict";
 
 const TOAST_MS = 4000;
@@ -20,27 +23,28 @@ const GLYPH = {
 
 const FILES = {
   orders: {
-    title: "Orders file",
-    hint: "Shopify orders export · CSV",
-    drop: "Drop the Shopify orders export here",
+    title: () => t("Orders file"),
+    hint: () => t("Shopify orders export · CSV"),
+    drop: () => t("Drop the Shopify orders export here"),
   },
   stock: {
-    title: "Stock file",
-    hint: "Warehouse stock export · CSV",
-    drop: "Drop the warehouse stock export here",
+    title: () => t("Stock file"),
+    hint: () => t("Warehouse stock export · CSV"),
+    drop: () => t("Drop the warehouse stock export here"),
   },
 };
 
+// The value is what Python receives; the title and text are only drawn.
 const STRATEGIES = [
   {
     value: "multi_first",
-    title: "Multi-item first",
-    text: "Fills orders that can go out whole before partial ones. A few old orders wait longer for stock instead.",
+    title: () => t("Multi-item first"),
+    text: () => t("Fills orders that can go out whole before partial ones. A few old orders wait longer for stock instead."),
   },
   {
     value: "fifo",
-    title: "Oldest first",
-    text: "Fills strictly by order date, whatever it contains. No order waits behind a newer one; more leave part-filled.",
+    title: () => t("Oldest first"),
+    text: () => t("Fills strictly by order date, whatever it contains. No order waits behind a newer one; more leave part-filled."),
   },
 ];
 
@@ -69,27 +73,27 @@ function panel(s) {
   if (s.view === "unreachable") {
     return `<div class="state">
       ${svg(GLYPH.alert, "state-glyph")}
-      <p class="state-title">This PC can't reach the fulfilment server</p>
-      <p class="state-text">Clients, stock files and past sessions all live on the server. Until this PC reaches it, there is nothing to set up.</p>
+      <p class="state-title">${t("This PC can't reach the fulfilment server")}</p>
+      <p class="state-text">${t("Clients, stock files and past sessions all live on the server. Until this PC reaches it, there is nothing to set up.")}</p>
       <span class="state-path">${esc(s.server_path)}</span>
-      <button class="btn secondary" type="button" data-act="open-connection" data-key="open-connection">Server connection…</button>
+      <button class="btn secondary" type="button" data-act="open-connection" data-key="open-connection">${t("Server connection…")}</button>
     </div>`;
   }
   if (s.view === "no_session") {
     return `<div class="state">
       ${svg(GLYPH.clipboard, "state-glyph")}
-      <p class="state-title">No session open for ${esc(s.client)}</p>
-      <p class="state-text">Start a session for today's orders, or reopen one from this client.</p>
+      <p class="state-title">${esc(t("No session open for {client}", { client: s.client }))}</p>
+      <p class="state-text">${t("Start a session for today's orders, or reopen one from this client.")}</p>
       <div class="state-actions">
-        <button class="btn primary" type="button" data-act="new-session" data-key="new-session">New session</button>
-        <button class="btn secondary" type="button" data-act="open-recent" data-key="open-recent">Open recent</button>
+        <button class="btn primary" type="button" data-act="new-session" data-key="new-session">${t("New session")}</button>
+        <button class="btn secondary" type="button" data-act="open-recent" data-key="open-recent">${t("Open recent")}</button>
       </div>
     </div>`;
   }
   return `<div class="state">
     ${svg(GLYPH.users, "state-glyph")}
-    <p class="state-title">Choose a client to begin</p>
-    <p class="state-text">Pick a client in the bar above. Sessions, stock and reports all belong to one client.</p>
+    <p class="state-title">${t("Choose a client to begin")}</p>
+    <p class="state-text">${t("Pick a client in the bar above. Sessions, stock and reports all belong to one client.")}</p>
   </div>`;
 }
 
@@ -98,12 +102,12 @@ function panel(s) {
 function dropzone(kind, locked) {
   return `<div class="dropzone">
     ${svg(GLYPH.upload, "dropzone-glyph")}
-    <span class="dropzone-text">${FILES[kind].drop}</span>
+    <span class="dropzone-text">${FILES[kind].drop()}</span>
     <div class="dropzone-buttons">
-      <button class="btn secondary" type="button" data-act="choose-file" data-kind="${kind}" data-key="${kind}-file"${off(locked)}>Choose file…</button>
-      <button class="btn secondary" type="button" data-act="choose-folder" data-kind="${kind}" data-key="${kind}-folder"${off(locked)}>Choose folder…</button>
+      <button class="btn secondary" type="button" data-act="choose-file" data-kind="${kind}" data-key="${kind}-file"${off(locked)}>${t("Choose file…")}</button>
+      <button class="btn secondary" type="button" data-act="choose-folder" data-kind="${kind}" data-key="${kind}-folder"${off(locked)}>${t("Choose folder…")}</button>
     </div>
-    <span class="dropzone-note">A folder merges every CSV in it into one input.</span>
+    <span class="dropzone-note">${t("A folder merges every CSV in it into one input.")}</span>
   </div>`;
 }
 
@@ -112,7 +116,7 @@ function fileBody(kind, card, locked) {
     ? `<div class="parts">${card.parts
         .map(
           (p) =>
-            `<div class="part"><span class="part-name">${esc(p.name)}</span><span class="part-rows">${esc(p.rows)} rows</span></div>`,
+            `<div class="part"><span class="part-name">${esc(p.name)}</span><span class="part-rows">${esc(t("{rows} rows", { rows: p.rows }))}</span></div>`,
         )
         .join("")}</div>`
     : "";
@@ -127,7 +131,7 @@ function fileBody(kind, card, locked) {
     <div class="file-row">
       ${svg(card.is_folder ? GLYPH.folder : GLYPH.file, "glyph")}
       <span class="file-name" title="${esc(card.name)}">${esc(card.name)}</span>
-      <button class="btn secondary compact" type="button" data-act="clear" data-kind="${kind}" data-key="${kind}-clear"${off(locked)}>Replace</button>
+      <button class="btn secondary compact" type="button" data-act="clear" data-kind="${kind}" data-key="${kind}-clear"${off(locked)}>${t("Replace")}</button>
     </div>
     ${parts}${note}
     <div class="stats">${stats}</div>
@@ -156,11 +160,11 @@ function fileCard(kind, card, locked) {
         (card.state === "problem" ? problemBlock(kind, card.problem) : "");
   // No data-file-kind while a run holds the inputs: a drop then finds no card.
   const target = locked ? "" : ` data-file-kind="${kind}"`;
-  return `<section class="card file-card" data-card="${kind}" data-state="${card.state}"${target} aria-label="${FILES[kind].title}">
+  return `<section class="card file-card" data-card="${kind}" data-state="${card.state}"${target} aria-label="${FILES[kind].title()}">
     <div class="file-head">
       <div class="file-titles">
-        <span class="file-title">${FILES[kind].title}</span>
-        <span class="file-hint">${FILES[kind].hint}</span>
+        <span class="file-title">${FILES[kind].title()}</span>
+        <span class="file-hint">${FILES[kind].hint()}</span>
       </div>
       <span class="badge ${esc(card.badge_tone)}">${esc(card.badge)}</span>
     </div>
@@ -181,25 +185,25 @@ function optionsCard(s) {
     return `<button class="radio-card" type="button" role="radio" aria-checked="${checked}" tabindex="${checked ? 0 : -1}" data-act="strategy" data-value="${o.value}" data-key="strategy-${o.value}"${off(locked)}>
       <span class="radio-mark"></span>
       <span class="radio-card-body">
-        <span class="radio-card-title">${o.title}</span>
-        <span class="radio-card-text">${o.text}</span>
+        <span class="radio-card-title">${o.title()}</span>
+        <span class="radio-card-text">${o.text()}</span>
       </span>
     </button>`;
   }).join("");
   return `<section class="card options">
     <div class="form-row">
-      <span class="form-label" id="memory-label">Inventory memory</span>
+      <span class="form-label" id="memory-label">${t("Inventory memory")}</span>
       <div class="memory">
         <div class="memory-toggle">
           <button class="switch" type="button" role="switch" aria-checked="${on}" aria-labelledby="memory-label" data-act="memory" data-key="memory"${off(locked)}><span class="switch-knob"></span></button>
-          <span class="memory-state">${on ? "On" : "Off"}</span>
+          <span class="memory-state">${on ? t("On") : t("Off")}</span>
         </div>
         <span class="memory-text">${esc(s.memory.text)}</span>
         ${previous}
       </div>
     </div>
     <div class="form-row">
-      <span class="form-label" id="strategy-label">Allocation strategy</span>
+      <span class="form-label" id="strategy-label">${t("Allocation strategy")}</span>
       <div class="strategies" role="radiogroup" aria-labelledby="strategy-label">${radios}</div>
     </div>
   </section>`;
@@ -222,27 +226,27 @@ function summaryCard(s) {
       (_, n) => `<span class="progress-bar${n <= run.step ? " done" : ""}"></span>`,
     ).join("");
     progress = `<div class="progress">
-      <span class="progress-label">Working · step ${run.step + 1} of ${run.steps}</span>
+      <span class="progress-label">${esc(t("Working · step {step} of {steps}", { step: run.step + 1, steps: run.steps }))}</span>
       <span class="progress-step">${esc(run.step_name)}</span>
       <div class="progress-bars">${bars}</div>
     </div>`;
   }
   const lastStep = run.step >= run.steps - 1;
   const cancel = run.running
-    ? `<button class="btn secondary" type="button" data-act="cancel" data-key="cancel" title="${lastStep ? "Saving can't be cancelled" : ""}"${off(!run.can_cancel)}>${run.cancelling ? "Cancelling…" : "Cancel"}</button>`
+    ? `<button class="btn secondary" type="button" data-act="cancel" data-key="cancel" title="${lastStep ? t("Saving can't be cancelled") : ""}"${off(!run.can_cancel)}>${run.cancelling ? t("Cancelling…") : t("Cancel")}</button>`
     : "";
   const reason = s.summary.reason
     ? `<span class="summary-reason${s.summary.reason_tone === "danger" ? " danger" : ""}">${esc(s.summary.reason)}</span>`
     : "";
-  return `<aside class="card summary" aria-label="Run summary">
+  return `<aside class="card summary" aria-label="${t("Run summary")}">
     <div class="summary-head">
-      <span class="summary-label">Run summary</span>
+      <span class="summary-label">${t("Run summary")}</span>
       <span class="summary-headline${s.summary.ready ? " ready" : ""}">${esc(s.summary.headline)}</span>
     </div>
     <div class="summary-rows">${rows}</div>
     ${progress}
     <div class="summary-actions">
-      <button class="btn primary" type="button" data-act="run" data-key="run"${off(!run.enabled)}>${run.running ? "Running…" : "Run analysis"}</button>
+      <button class="btn primary" type="button" data-act="run" data-key="run"${off(!run.enabled)}>${run.running ? t("Running…") : t("Run analysis")}</button>
       ${cancel}
     </div>
     ${reason}

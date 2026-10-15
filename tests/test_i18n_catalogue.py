@@ -20,8 +20,16 @@ APP_JS = c.files(ROOT / "gui" / "web", "*.js")
 # kept in dicts (the *_state.py modules feeding the web pages); those are wrapped
 # by hand in Tasks 13-15, and the HTML/JS lists below are filled there too.
 GUARDED_PY: list[Path] = SHARED_PY + APP_PY
-GUARDED_HTML: list[Path] = []
-GUARDED_JS: list[Path] = []
+GUARDED_HTML: list[Path] = [
+    ROOT / "gui" / "web" / "setup.html",
+    ROOT / "gui" / "web" / "tools.html",
+    ROOT / "gui" / "web" / "logs.html",
+]
+GUARDED_JS: list[Path] = [
+    ROOT / "gui" / "web" / "setup.js",
+    ROOT / "gui" / "web" / "tools.js",
+    ROOT / "gui" / "web" / "logs.js",
+]
 # Text that is never translated, with the reason.
 ALLOW = {
     "Fulfilment Tool",   # brand

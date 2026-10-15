@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from gui.setup_state import SessionFacts, session_meta
-from shared.i18n import N_, _
+from shared.i18n import N_, _, _n
 from shopify_tool.pdf_processor import READING, SAVING, STAMPING, reference_run_warning
 
 MODES = ("driver", "raw_zpl")
@@ -24,11 +24,11 @@ _RUN_LABELS = {READING: N_("Reading labels"), STAMPING: N_("Stamping labels")}
 # this page and must not change: every PC keeps what it has saved.
 PRINT_SCOPE = {"reference": "reference_labels", "barcode": "barcode_generator"}
 
-REFERENCE_SIZE_HINT = (
+REFERENCE_SIZE_HINT = N_(
     "Physical label size as loaded in the printer, e.g. 152.4 x 101.6 for 6x4in "
     "shipping labels. 0 disables fitting and uses each page's own PDF size."
 )
-BARCODE_SIZE_HINT = (
+BARCODE_SIZE_HINT = N_(
     "Physical label size as loaded in the printer, e.g. 68 x 38 for this flow's "
     "default label stock. 0 disables fitting and uses the generated PDF's own page size."
 )
@@ -97,11 +97,7 @@ def short_path(path: str) -> str:
     return "…" + os.sep + os.sep.join(parts[-2:])
 
 
-def counted(value: int, noun: str) -> str:
-    return f"{value:,} {noun}{'' if value == 1 else 's'}"
-
-
-def _row(pick: PickedFile | None, noun: str) -> dict:
+def _row(pick: PickedFile | None, meta: str) -> dict:
     if pick is None:
         return {}
     if pick.problem is not None:
@@ -111,12 +107,12 @@ def _row(pick: PickedFile | None, noun: str) -> dict:
             "meta": _("Problem"),
             "problem": {"title": _(title), "text": _(text)},
         }
-    return {"name": pick.name, "meta": counted(pick.count or 0, noun), "problem": {}}
+    return {"name": pick.name, "meta": meta, "problem": {}}
 
 
 def _folder(path: str, empty: str) -> dict:
     if not path:
-        return {"text": empty, "title": "", "muted": True}
+        return {"text": _(empty), "title": "", "muted": True}
     return {"text": short_path(path), "title": path, "muted": False}
 
 
@@ -161,45 +157,50 @@ def _print_block(facts: PrintFacts, noun: str, size_hint: str) -> dict:
         options = [(name, name) for name in installed]
         printer = {
             "value": current,
-            "label": current or "Choose a printer",
+            "label": current or _("Choose a printer"),
             "placeholder": not current,
         }
         if current:
             help_text, tone = (
-                f"Sends {noun} straight to the label printer as ZPL, no dialog. "
-                "Saved for this PC."
-            ), ""
+                _("Sends {noun} straight to the label printer as ZPL, no dialog. Saved for this PC.", noun=_(noun)),
+                "",
+            )
         else:
-            help_text, tone = "Raw ZPL needs a printer. Choose the one the labels go to.", "danger"
+            help_text, tone = _("Raw ZPL needs a printer. Choose the one the labels go to."), "danger"
         width = float(settings.get("raw_zpl_label_width_mm") or 0.0)
         height = float(settings.get("raw_zpl_label_height_mm") or 0.0)
         turned = bool(settings.get("raw_zpl_rotate"))
         inverted = bool(settings.get("raw_zpl_invert"))
-        summary = f"{width:g} × {height:g} mm" if width > 0 and height > 0 else "the PDF's page size"
+        if width > 0 and height > 0:
+            size = _("{width} × {height} mm", width=f"{width:g}", height=f"{height:g}")
+        else:
+            size = _("the PDF's page size")
+        extras = []
         if turned:
-            summary += ", rotated 90°"
+            extras.append(_("rotated 90°"))
         if inverted:
-            summary += ", colours inverted"
+            extras.append(_("colours inverted"))
         setup = {
-            "summary": summary,
+            "summary": ", ".join([size, *extras]),
             "target": current,
             "width": width,
             "height": height,
             "rotate": turned,
             "invert": inverted,
-            "size_hint": size_hint,
+            "size_hint": _(size_hint),
         }
     else:
         current = str(settings.get("driver_printer_name") or "")
-        options = [("", "Windows default")] + [(name, name) for name in installed]
+        options = [("", _("Windows default"))] + [(name, name) for name in installed]
         printer = {
             "value": current,
-            "label": current or "Windows default",
+            "label": current or _("Windows default"),
             "placeholder": False,
         }
         help_text, tone = (
-            f"Prints {noun} through the Windows print dialog. Saved for this PC."
-        ), ""
+            _("Prints {noun} through the Windows print dialog. Saved for this PC.", noun=_(noun)),
+            "",
+        )
         setup = {}
 
     # A saved printer this PC no longer lists is still the one in use.
@@ -223,15 +224,15 @@ def _print_button(block: dict, *, base: str, has_pdf: bool, live: bool, missing:
     zpl = block["mode"] == "raw_zpl"
     target = block["printer"]["value"] if zpl else ""
     if not has_pdf:
-        title = missing
+        title = _(missing)
     elif zpl and not target:
-        title = "Choose a printer under Print mode"
+        title = _("Choose a printer under Print mode")
     elif zpl:
-        title = f"Send to {target}"
+        title = _("Send to {target}", target=target)
     else:
-        title = "Open the print dialog"
+        title = _("Open the print dialog")
     return {
-        "label": base if zpl else f"{base}…",
+        "label": _(base) if zpl else _("{label}…", label=_(base)),
         "title": title,
         "enabled": has_pdf and live and (not zpl or bool(target)),
     }
@@ -242,13 +243,22 @@ def _matched(result: dict) -> str:
     matched = result.get("matched", 0)
     unmatched = result.get("unmatched", 0)
     by_name = result.get("name_matched", 0)
-    text = f"{matched:,} of {pages:,} labels matched"
+    counts = {
+        "matched": f"{matched:,}",
+        "pages": f"{pages:,}",
+        "unmatched": f"{unmatched:,}",
+        "by_name": f"{by_name:,}",
+    }
+    if unmatched and by_name:
+        return _(
+            "{matched} of {pages} labels matched, {unmatched} unmatched. {by_name} matched by name only.",
+            **counts,
+        )
     if unmatched:
-        text += f", {unmatched:,} unmatched"
-    text += "."
+        return _("{matched} of {pages} labels matched, {unmatched} unmatched.", **counts)
     if by_name:
-        text += f" {by_name:,} matched by name only."
-    return text
+        return _("{matched} of {pages} labels matched. {by_name} matched by name only.", **counts)
+    return _("{matched} of {pages} labels matched.", **counts)
 
 
 def _reference(facts: ReferenceFacts, prints: PrintFacts, quiet: bool) -> dict:
@@ -257,20 +267,22 @@ def _reference(facts: ReferenceFacts, prints: PrintFacts, quiet: bool) -> dict:
     csv_bad = facts.csv is not None and facts.csv.problem is not None
     pdf_ok = facts.pdf is not None and not pdf_bad
     csv_ok = facts.csv is not None and not csv_bad
+    pages = (facts.pdf.count or 0) if facts.pdf is not None else 0
+    rows = (facts.csv.count or 0) if facts.csv is not None else 0
 
     reason, tone = "", ""
     if quiet or locked:
         pass
     elif pdf_bad:
-        reason, tone = "Fix the labels PDF to process.", "danger"
+        reason, tone = _("Fix the labels PDF to process."), "danger"
     elif csv_bad:
-        reason, tone = "Fix the mapping CSV to process.", "danger"
+        reason, tone = _("Fix the mapping CSV to process."), "danger"
     elif facts.pdf is None and facts.csv is None:
-        reason = "Choose the labels PDF and mapping CSV."
+        reason = _("Choose the labels PDF and mapping CSV.")
     elif facts.pdf is None:
-        reason = "Choose the labels PDF."
+        reason = _("Choose the labels PDF.")
     elif facts.csv is None:
-        reason = "Choose the mapping CSV."
+        reason = _("Choose the mapping CSV.")
     elif facts.result is not None:
         warning = reference_run_warning(facts.result)
         if warning:
@@ -278,18 +290,19 @@ def _reference(facts: ReferenceFacts, prints: PrintFacts, quiet: bool) -> dict:
         else:
             reason = _matched(facts.result)
     else:
-        reason = (
-            f"{counted(facts.pdf.count or 0, 'page')}, "
-            f"{counted(facts.csv.count or 0, 'CSV row')}."
+        reason = _(
+            "{pages}, {rows}.",
+            pages=_n("{count} page", "{count} pages", pages, count=f"{pages:,}"),
+            rows=_n("{count} CSV row", "{count} CSV rows", rows, count=f"{rows:,}"),
         )
 
-    block = _print_block(prints, "stamped labels", REFERENCE_SIZE_HINT)
+    block = _print_block(prints, N_("stamped labels"), REFERENCE_SIZE_HINT)
     return {
         "quiet": quiet,
         "locked": locked,
-        "pdf": _row(facts.pdf, "page"),
-        "csv": _row(facts.csv, "row"),
-        "folder": _folder("" if quiet else facts.folder, "Session folder"),
+        "pdf": _row(facts.pdf, _n("{count} page", "{count} pages", pages, count=f"{pages:,}")),
+        "csv": _row(facts.csv, _n("{count} row", "{count} rows", rows, count=f"{rows:,}")),
+        "folder": _folder("" if quiet else facts.folder, N_("Session folder")),
         "open_pdf": facts.open_pdf,
         "print": block,
         "run": _run(facts.run),
@@ -298,10 +311,10 @@ def _reference(facts: ReferenceFacts, prints: PrintFacts, quiet: bool) -> dict:
         "can_run": not quiet and not locked and pdf_ok and csv_ok and bool(facts.folder),
         "print_button": _print_button(
             block,
-            base="Print",
+            base=N_("Print"),
             has_pdf=facts.has_output,
             live=not quiet and not locked,
-            missing="Process labels first",
+            missing=N_("Process labels first"),
         ),
     }
 
@@ -320,58 +333,67 @@ def _barcode(facts: BarcodeFacts, prints: PrintFacts, quiet: bool) -> dict:
         # With no analysis nothing was counted: the list itself may be fine.
         if not facts.analysed:
             meta = ""
+        elif cur.count is None:
+            meta = _("Unreadable")
         else:
-            meta = "Unreadable" if cur.count is None else f"{cur.count:,} Fulfillable"
+            meta = _("{count} Fulfillable", count=f"{cur.count:,}")
         shown = {"name": cur.name, "meta": meta, "placeholder": ""}
     elif waiting and not quiet:
-        shown = {"name": "", "meta": "", "placeholder": "Reading packing lists…"}
+        shown = {"name": "", "meta": "", "placeholder": _("Reading packing lists…")}
     elif lists:
-        shown = {"name": "", "meta": "", "placeholder": "Choose a packing list"}
+        shown = {"name": "", "meta": "", "placeholder": _("Choose a packing list")}
     else:
-        shown = {"name": "", "meta": "", "placeholder": "No packing lists"}
+        shown = {"name": "", "meta": "", "placeholder": _("No packing lists")}
 
     reason, tone = "", ""
     if quiet or locked:
         pass
     elif waiting:
-        reason = "Reading packing lists…"
+        reason = _("Reading packing lists…")
     elif not lists:
-        reason = "No packing lists in this session yet. Generate one on Results, then Refresh."
+        reason = _("No packing lists in this session yet. Generate one on Results, then Refresh.")
     elif not facts.analysed:
-        reason = "This session has no analysis loaded. Run it on Setup."
+        reason = _("This session has no analysis loaded. Run it on Setup.")
     elif cur is None:
-        reason = "Choose a packing list."
+        reason = _("Choose a packing list.")
     elif cur.count is None:
-        reason, tone = "This packing list couldn't be read. Details are in Logs.", "danger"
+        reason, tone = _("This packing list couldn't be read. Details are in Logs."), "danger"
     elif cur.count == 0:
-        reason = "No Fulfillable orders in this list."
+        reason = _("No Fulfillable orders in this list.")
     elif result is not None and result.get("failed"):
+        labels, failed = result.get("labels", 0), result["failed"]
         reason, tone = (
-            f"{counted(result.get('labels', 0), 'label')} written, "
-            f"{counted(result['failed'], 'order number')} couldn't be encoded. "
-            "Details are in Logs."
-        ), "warning"
+            _(
+                "{labels} written, {failed} couldn't be encoded. Details are in Logs.",
+                labels=_n("{count} label", "{count} labels", labels, count=f"{labels:,}"),
+                failed=_n("{count} order number", "{count} order numbers", failed, count=f"{failed:,}"),
+            ),
+            "warning",
+        )
     elif result is not None and result.get("qr_failed"):
         reason, tone = (
-            "Barcode labels written. The QR labels failed; details are in Logs."
-        ), "warning"
+            _("Barcode labels written. The QR labels failed; details are in Logs."),
+            "warning",
+        )
     elif cur.has_labels:
-        reason = f"Generating again replaces the labels in {short_path(folder)}."
+        reason = _("Generating again replaces the labels in {folder}.", folder=short_path(folder))
+    elif facts.qr:
+        reason = _("Saves to {folder}, with QR labels.", folder=short_path(folder))
     else:
-        reason = f"Saves to {short_path(folder)}" + (", with QR labels." if facts.qr else ".")
+        reason = _("Saves to {folder}.", folder=short_path(folder))
 
-    block = _print_block(prints, "barcode labels", BARCODE_SIZE_HINT)
+    block = _print_block(prints, N_("barcode labels"), BARCODE_SIZE_HINT)
     live = not quiet and not locked
     qr_button = {}
     if cur is not None and (facts.qr or cur.has_qr):
         qr_button = _print_button(
             block,
-            base="Print QR labels",
+            base=N_("Print QR labels"),
             has_pdf=cur.has_qr,
             live=live,
-            missing="Generate with QR labels ticked first",
+            missing=N_("Generate with QR labels ticked first"),
         )
-    empty = "Session folder" if quiet else "Choose a packing list"
+    empty = N_("Session folder") if quiet else N_("Choose a packing list")
     return {
         "quiet": quiet,
         "locked": locked,
@@ -394,10 +416,10 @@ def _barcode(facts: BarcodeFacts, prints: PrintFacts, quiet: bool) -> dict:
         "can_run": live and facts.analysed and cur is not None and bool(cur.count),
         "print_button": _print_button(
             block,
-            base="Print",
+            base=N_("Print"),
             has_pdf=cur is not None and cur.has_labels,
             live=live,
-            missing="Generate this list's labels first",
+            missing=N_("Generate this list's labels first"),
         ),
         "qr_button": qr_button,
     }
