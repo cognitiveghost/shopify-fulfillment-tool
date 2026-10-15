@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.commandbar import BAR_HEIGHT
+from shared import i18n
+from shared.components.language_segment import LanguageSegment
 from shared.icons import icon
 from shared.navrail import RAIL_WIDTH, NavRail
 from shared.theme import current_tokens, font_css, on_theme_changed
@@ -37,6 +39,7 @@ class Sidebar(QWidget):
 
     settingsRequested = Signal()
     themeRequested = Signal(str)
+    languageRequested = Signal(str)
     retryRequested = Signal()
     expandedChanged = Signal(bool)
 
@@ -87,6 +90,14 @@ class Sidebar(QWidget):
         footer.setContentsMargins(8, 8, 8, 8)
         footer.setSpacing(6)
 
+        # Hidden until UpdateFlow has a newer release to offer.
+        self.update_button = QToolButton(self.footer)
+        self.update_button.setObjectName("UpdateButton")
+        self.update_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.update_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.update_button.hide()
+        footer.addWidget(self.update_button)
+
         self.settings_button = QToolButton(self.footer)
         self.settings_button.setText("Client settings")
         self.settings_button.setToolTip("Client settings")
@@ -108,6 +119,11 @@ class Sidebar(QWidget):
             segment.addWidget(button)
             button.clicked.connect(lambda _c=False, n=name: self.themeRequested.emit(n))
         footer.addWidget(self.theme_segment)
+
+        self.language_segment = LanguageSegment(self.footer)
+        self.language_segment.set_language(i18n.language())
+        self.language_segment.languageRequested.connect(self.languageRequested.emit)
+        footer.addWidget(self.language_segment)
 
         self.theme_toggle = self._icon_button("", 40, 32)
         self.theme_toggle.clicked.connect(
@@ -190,13 +206,14 @@ class Sidebar(QWidget):
         self.setFixedWidth(SIDEBAR_WIDTH if expanded else RAIL_WIDTH)
         self.rail.set_expanded(expanded)
         for widget in (self.mark, self.title, self.collapse_button,
-                       self.theme_segment, self.connection_box):
+                       self.theme_segment, self.language_segment, self.connection_box):
             widget.setVisible(expanded)
         for widget in (self.expand_button, self.theme_toggle, self.connection_icon):
             widget.setVisible(not expanded)
-        self.settings_button.setToolButtonStyle(
-            Qt.ToolButtonTextBesideIcon if expanded else Qt.ToolButtonIconOnly
-        )
+        for button in (self.settings_button, self.update_button):
+            button.setToolButtonStyle(
+                Qt.ToolButtonTextBesideIcon if expanded else Qt.ToolButtonIconOnly
+            )
         self.settings_button.setFixedSize(
             (SIDEBAR_WIDTH if expanded else RAIL_WIDTH) - 16, 32
         )
@@ -256,13 +273,21 @@ class Sidebar(QWidget):
             f" background-color: {t.hover}; }}"
             f"#SidebarFooter QToolButton:disabled {{ color: {t.text_disabled}; }}"
             f"#SidebarFooter > QToolButton {{ padding-left: {pad}px; }}"
-            f"#ThemeSegment {{ background-color: {t.surface_sunken};"
+            f"#ThemeSegment, #LanguageSegment {{ background-color: {t.surface_sunken};"
             f" border: 1px solid {t.border}; border-radius: 8px; }}"
-            f"#ThemeSegment QToolButton {{ border-radius: 6px; {font_css('caption')} }}"
-            f"#ThemeSegment QToolButton:checked {{ background-color: {t.surface};"
-            f" border: 1px solid {t.border_subtle}; color: {t.text}; font-weight: bold; }}"
+            f"#ThemeSegment QToolButton, #LanguageSegment QToolButton {{ border-radius: 6px;"
+            f" {font_css('caption')} }}"
+            f"#ThemeSegment QToolButton:checked, #LanguageSegment QToolButton:checked {{"
+            f" background-color: {t.surface}; border: 1px solid {t.border_subtle};"
+            f" color: {t.text}; font-weight: bold; }}"
+            f"#UpdateButton {{ background-color: {t.accent_fill}; color: {t.on_accent};"
+            f" border: none; border-radius: 6px; padding: 4px 8px; {font_css('caption', bold=True)} }}"
+            f"#UpdateButton:hover {{ background-color: {t.accent_fill_hover}; }}"
+            f"#UpdateButton:disabled {{ background-color: {t.accent_fill_active};"
+            f" color: {t.on_accent}; }}"
         )
         self.mark.setPixmap(icon("package", color=t.on_accent).pixmap(16, 16))
+        self.update_button.setIcon(icon("download", color=t.on_accent))
         self.collapse_button.setIcon(icon("panel-left-close"))
         self.expand_button.setIcon(icon("panel-left-open"))
         self.settings_button.setIcon(icon("settings"))

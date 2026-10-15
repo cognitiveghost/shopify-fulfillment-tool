@@ -21,6 +21,8 @@ from gui.orders_view import summary_text
 from gui.setup_state import FileSlot, MemoryFacts, RunFacts, SessionFacts, setup_state
 from gui.shortcuts_dialog import ShortcutsDialog
 from gui.worker import Worker
+from shared.components.language_segment import switch_language
+from shared.i18n import _
 from shared.icons import icon
 from shared.server_connection import ConnectionSettingsDialog
 from shared.theme import on_theme_changed
@@ -200,6 +202,13 @@ class UIManager:
             lambda: self.mw.actions_handler.open_settings_window()
         )
         sidebar.themeRequested.connect(switch_theme)
+        settings = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
+
+        def on_language(code):
+            switch_language(self.mw, settings, code)
+            sidebar.language_segment.set_language(str(settings.value("language", "en")))
+
+        sidebar.languageRequested.connect(on_language)
         sidebar.retryRequested.connect(self.mw.recheck_connection)
         sidebar.expandedChanged.connect(
             lambda expanded: _shell_settings().setValue(_COLLAPSED_KEY, not expanded)
@@ -377,6 +386,7 @@ class UIManager:
 
         menu.add_section("THIS PC")
         menu.add_item("Server connection…", self._open_connection_settings)
+        menu.add_item(_("Check for updates…"), lambda: self.mw.update_flow.check_now())
         menu.add_item("Keyboard shortcuts…", lambda: ShortcutsDialog(self.mw).exec())
 
     def _refresh_overflow(self) -> None:

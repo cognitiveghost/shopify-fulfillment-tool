@@ -10,7 +10,12 @@ import sys
 import time
 from pathlib import Path
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
+
+from shared import i18n
+
+APP_ROOT = Path(__file__).resolve().parent
 
 # Wall clock starts as early as the module loads -- everything below this,
 # including the MainWindow import, is part of what the operator experiences
@@ -64,6 +69,12 @@ from shared.icons import brand_icon
 from shopify_tool import APP_NAME, __version__
 
 
+def apply_saved_language() -> str:
+    code = str(QSettings("ShopifyFulfillmentTool", "FulfillmentApp").value("language", i18n.DEFAULT_LANGUAGE))
+    i18n.set_language(code, i18n.catalogue_files(APP_ROOT, code))
+    return i18n.language()
+
+
 def build_app_icon():
     """The window/taskbar icon: the Fulfilment Tool logo, the same multi-size
     .ico PyInstaller puts on the exe (--icon), so every surface shows one image."""
@@ -84,6 +95,7 @@ def main():
         print("Running in offscreen mode.")
 
     app = QApplication(sys.argv)
+    apply_saved_language()
 
     # Initialize and apply theme
     theme_manager = get_theme_manager()

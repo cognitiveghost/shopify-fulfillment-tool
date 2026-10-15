@@ -38,6 +38,8 @@ from gui.ui_manager import UIManager
 from gui.web_page import when_painted
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
+from shared.update_flow import UpdateFlow
+from shared.updater import AppIdentity
 from shopify_tool import (
     APP_NAME,
     __version__,
@@ -194,6 +196,12 @@ class MainWindow(QMainWindow):
 
         # Setup UI and connect signals
         self.ui_manager.create_widgets()
+        self.update_flow = UpdateFlow(
+            self, self.sidebar.update_button, lambda text: toast(self, text),
+            AppIdentity("cognitiveghost/shopify-fulfillment-tool", "FulfilmentTool", "FulfilmentTool.exe"),
+            __version__,
+        )
+        self.update_flow.start()
         self.connect_signals()
         self.setup_logging()
 
