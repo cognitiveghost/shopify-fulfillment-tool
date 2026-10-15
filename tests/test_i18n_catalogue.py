@@ -18,7 +18,12 @@ APP_JS = c.files(ROOT / "gui" / "web", "*.js")
 
 # Files whose UI text is fully wrapped. Each wrapping task adds its files; Task 17
 # replaces the lists with every file (SHARED_PY + APP_PY, APP_HTML, APP_JS).
-GUARDED_PY: list[Path] = SHARED_PY
+GUARDED_PY: list[Path] = SHARED_PY + [
+    ROOT / "gui" / "settings" / "window.py",
+    ROOT / "gui" / "client_settings_dialog.py",
+    ROOT / "gui" / "groups_management_dialog.py",
+    ROOT / "gui" / "client_directory.py",
+]
 GUARDED_HTML: list[Path] = []
 GUARDED_JS: list[Path] = []
 # Text that is never translated, with the reason.
@@ -26,6 +31,7 @@ ALLOW = {
     "Fulfilment Tool",   # brand
     "Packer Assistant",  # brand
     "Shopify",           # brand
+    "Ctrl+S",            # keyboard shortcut, shown as typed
 }
 
 

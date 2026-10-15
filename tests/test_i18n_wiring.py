@@ -59,3 +59,32 @@ def test_main_window_has_update_flow_and_overflow_item(main_window):
     main_window.ui_manager._populate_overflow(main_window.command_bar)
     labels = [a.text() for a in main_window.command_bar.overflow.actions()]
     assert "Check for updates…" in labels
+
+
+def test_bg_settings_nav_still_opens_the_page_by_its_english_name(
+    qapp, no_modals, started_workers, make_settings_config
+):
+    """Review Focus 2: the nav draws Bulgarian names, but the page it opens is
+    still chosen by the English name (its WEB_PAGE_KEYS key)."""
+    from unittest.mock import Mock
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    from gui.settings.window import WEB_PAGE_KEYS, SettingsWindow
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    win = SettingsWindow(
+        client_id="M", client_config=make_settings_config(), profile_manager=Mock()
+    )
+    win.show()
+    nav = win._settings_nav
+    item = next(
+        nav.item(row) for row in range(nav.count())
+        if nav.item(row).text() == i18n._("Rules")
+    )
+    QTest.mouseClick(
+        nav.viewport(), Qt.MouseButton.LeftButton, pos=nav.visualItemRect(item).center()
+    )
+    assert win._web_host._current == WEB_PAGE_KEYS["Rules"]
+    win.deleteLater()

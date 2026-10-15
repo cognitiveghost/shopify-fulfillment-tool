@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from gui.components import InlineMessage, show_error, toast
 from gui.theme_manager import apply_dialog_button_roles, font_css, get_theme_manager
+from shared.i18n import _
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import (
     ProfileManager,
@@ -50,7 +51,7 @@ class ClientCreationDialog(QDialog):
         self.groups_manager = groups_manager
         self._live = {cid.upper() for cid, _name in clients or []}
         self._archived = {cid.upper() for cid in archived_ids or []}
-        self.setWindowTitle("Create New Client")
+        self.setWindowTitle(_("Create New Client"))
         self.setModal(True)
         self.setMinimumWidth(400)
 
@@ -61,22 +62,24 @@ class ClientCreationDialog(QDialog):
         form_layout = QFormLayout()
 
         self.client_id_input = QLineEdit()
-        self.client_id_input.setPlaceholderText("e.g., M, A, B")
+        self.client_id_input.setPlaceholderText(_("e.g., M, A, B"))
         self.client_id_input.setToolTip(
-            "Client ID (letters, numbers, underscore only)\n"
-            "Max 20 characters\n"
-            "Don't include 'CLIENT_' prefix"
+            _(
+                "Client ID (letters, numbers, underscore only)\n"
+                "Max 20 characters\n"
+                "Don't include 'CLIENT_' prefix"
+            )
         )
-        form_layout.addRow("Client ID:", self.client_id_input)
+        form_layout.addRow(_("Client ID:"), self.client_id_input)
 
         self.client_id_error = InlineMessage(self)
         form_layout.addRow("", self.client_id_error)
         self.client_id_input.textChanged.connect(self._check_id)
 
         self.client_name_input = QLineEdit()
-        self.client_name_input.setPlaceholderText("e.g., M Cosmetics")
-        self.client_name_input.setToolTip("Full name of the client")
-        form_layout.addRow("Client Name:", self.client_name_input)
+        self.client_name_input.setPlaceholderText(_("e.g., M Cosmetics"))
+        self.client_name_input.setToolTip(_("Full name of the client"))
+        form_layout.addRow(_("Client Name:"), self.client_name_input)
 
         self.client_name_error = InlineMessage(self)
         form_layout.addRow("", self.client_name_error)
@@ -84,18 +87,18 @@ class ClientCreationDialog(QDialog):
 
         # Copy settings from: Defaults, then every live client
         self.copy_combo = QComboBox()
-        self.copy_combo.addItem("Defaults", None)
+        self.copy_combo.addItem(_("Defaults"), None)
         for cid, name in clients or []:
             label = f"{name}  ({cid})" if name and name != cid else cid
             self.copy_combo.addItem(label, cid)
-        self.copy_combo.setToolTip("Start from another client's settings")
-        form_layout.addRow("Copy settings from:", self.copy_combo)
+        self.copy_combo.setToolTip(_("Start from another client's settings"))
+        form_layout.addRow(_("Copy settings from:"), self.copy_combo)
 
         # Group dropdown
         self.group_combo = QComboBox()
-        self.group_combo.addItem("(No group)", None)
-        self.group_combo.setToolTip("Assign client to a group")
-        form_layout.addRow("Group:", self.group_combo)
+        self.group_combo.addItem(_("(No group)"), None)
+        self.group_combo.setToolTip(_("Assign client to a group"))
+        form_layout.addRow(_("Group:"), self.group_combo)
 
         # Color picker
         color_layout = QHBoxLayout()
@@ -107,17 +110,17 @@ class ClientCreationDialog(QDialog):
         )
         color_layout.addWidget(self.color_display)
 
-        self.color_button = QPushButton("Choose Color")
+        self.color_button = QPushButton(_("Choose Color"))
         self.color_button.clicked.connect(self._choose_color)
         color_layout.addWidget(self.color_button)
         color_layout.addStretch()
 
         self.current_color = theme.status_success  # Default
-        form_layout.addRow("Color:", color_layout)
+        form_layout.addRow(_("Color:"), color_layout)
 
         # Pin checkbox
-        self.pin_checkbox = QCheckBox("Pin to top of sidebar")
-        form_layout.addRow("Pinned:", self.pin_checkbox)
+        self.pin_checkbox = QCheckBox(_("Pin to top of sidebar"))
+        form_layout.addRow(_("Pinned:"), self.pin_checkbox)
 
         layout.addLayout(form_layout)
 
@@ -126,8 +129,10 @@ class ClientCreationDialog(QDialog):
 
         # Add info label
         info_label = QLabel(
-            "This will create a new client profile with default Shopify configuration.\n"
-            "You can customize it later in Profile Settings."
+            _(
+                "This will create a new client profile with default Shopify configuration.\n"
+                "You can customize it later in Profile Settings."
+            )
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet(
@@ -153,9 +158,11 @@ class ClientCreationDialog(QDialog):
             if not ok:
                 problem = message
             elif cid in self._live:
-                problem = f"CLIENT_{cid} already exists."
+                problem = _("CLIENT_{cid} already exists.", cid=cid)
             elif cid in self._archived:
-                problem = f"CLIENT_{cid} is archived. Restore it from Archived clients."
+                problem = _(
+                    "CLIENT_{cid} is archived. Restore it from Archived clients.", cid=cid
+                )
         if problem:
             self.client_id_error.show_message(problem)
         else:
@@ -166,7 +173,7 @@ class ClientCreationDialog(QDialog):
         """Open color picker dialog."""
         theme = get_theme_manager().get_current_theme()
         current_color = QColor(self.current_color)
-        color = QColorDialog.getColor(current_color, self, "Choose Client Color")
+        color = QColorDialog.getColor(current_color, self, _("Choose Client Color"))
 
         if color.isValid():
             self.current_color = color.name()
@@ -191,11 +198,11 @@ class ClientCreationDialog(QDialog):
 
         # Validate inputs
         if not client_id:
-            self.client_id_error.show_message("Enter a client ID.")
+            self.client_id_error.show_message(_("Enter a client ID."))
             return
 
         if not client_name:
-            self.client_name_error.show_message("Enter a client name.")
+            self.client_name_error.show_message(_("Enter a client name."))
             return
 
         # Validate client ID format
@@ -219,20 +226,30 @@ class ClientCreationDialog(QDialog):
             if success:
                 self.accept()
                 if self.parent() is not None:
-                    toast(self.parent(), f"Client CLIENT_{client_id.upper()} created.")
+                    toast(
+                        self.parent(),
+                        _("Client CLIENT_{cid} created.", cid=client_id.upper()),
+                    )
             else:
                 self.client_id_error.show_message(
-                    f"CLIENT_{client_id.upper()} already exists or is archived."
+                    _(
+                        "CLIENT_{cid} already exists or is archived.",
+                        cid=client_id.upper(),
+                    )
                 )
         except (ValidationError, ProfileManagerError):
             logger.exception("Failed to create client profile")
             show_error(
-                self, "The client profile wasn't created", "Details are in Logs."
+                self,
+                _("The client profile wasn't created"),
+                _("Details are in Logs."),
             )
         except Exception:
             logger.exception("Unexpected error creating client")
             show_error(
-                self, "The client profile wasn't created", "Details are in Logs."
+                self,
+                _("The client profile wasn't created"),
+                _("Details are in Logs."),
             )
 
 
@@ -247,13 +264,15 @@ class ArchivedClientsDialog(QDialog):
     ):
         super().__init__(parent)
         self._restore = restore
-        self.setWindowTitle("Archived clients")
+        self.setWindowTitle(_("Archived clients"))
         self.setMinimumWidth(480)
         theme = get_theme_manager().get_current_theme()
         layout = QVBoxLayout(self)
 
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Client ID", "Name", "Archived"])
+        self.table.setHorizontalHeaderLabels(
+            [_("Client ID"), _("Name"), _("Archived")]
+        )
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -264,13 +283,13 @@ class ArchivedClientsDialog(QDialog):
             self._append(client)
         layout.addWidget(self.table)
 
-        self.empty_label = QLabel("No archived clients.")
+        self.empty_label = QLabel(_("No archived clients."))
         self.empty_label.setStyleSheet(f"color: {theme.text_secondary};")
         layout.addWidget(self.empty_label)
         self._show_rows(bool(clients))
 
         button_box = QDialogButtonBox(QDialogButtonBox.Close)
-        self.restore_button = QPushButton("Restore")
+        self.restore_button = QPushButton(_("Restore"))
         self.restore_button.clicked.connect(self._on_restore)
         button_box.addButton(self.restore_button, QDialogButtonBox.ActionRole)
         button_box.rejected.connect(self.reject)
