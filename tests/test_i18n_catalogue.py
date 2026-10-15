@@ -20,31 +20,8 @@ APP_JS = c.files(ROOT / "gui" / "web", "*.js")
 # kept in dicts (the *_state.py modules feeding the web pages); those are wrapped
 # by hand in Tasks 13-15, and the HTML/JS lists below are filled there too.
 GUARDED_PY: list[Path] = SHARED_PY + APP_PY
-GUARDED_HTML: list[Path] = [
-    ROOT / "gui" / "web" / "setup.html",
-    ROOT / "gui" / "web" / "tools.html",
-    ROOT / "gui" / "web" / "logs.html",
-    ROOT / "gui" / "web" / "browse.html",
-    ROOT / "gui" / "web" / "results.html",
-    ROOT / "gui" / "web" / "settings.html",
-]
-GUARDED_JS: list[Path] = [
-    ROOT / "gui" / "web" / "setup.js",
-    ROOT / "gui" / "web" / "tools.js",
-    ROOT / "gui" / "web" / "logs.js",
-    ROOT / "gui" / "web" / "browse.js",
-    ROOT / "gui" / "web" / "results.js",
-    ROOT / "gui" / "web" / "columns.js",
-    ROOT / "gui" / "web" / "bulk.js",
-    ROOT / "gui" / "web" / "pane.js",
-    ROOT / "gui" / "web" / "settings.js",
-    ROOT / "gui" / "web" / "settings_rules.js",
-    ROOT / "gui" / "web" / "settings_sets.js",
-    ROOT / "gui" / "web" / "settings_weight.js",
-    ROOT / "gui" / "web" / "settings_reports.js",
-    ROOT / "gui" / "web" / "settings_tags.js",
-    ROOT / "gui" / "web" / "settings_profile.js",
-]
+GUARDED_HTML: list[Path] = APP_HTML
+GUARDED_JS: list[Path] = APP_JS
 # Text that is never translated, with the reason.
 ALLOW = {
     "Fulfilment Tool",   # brand

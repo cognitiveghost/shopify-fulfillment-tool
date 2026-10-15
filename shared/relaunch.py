@@ -24,13 +24,19 @@ def relaunch_argv() -> list[str]:
     return [sys.executable, *sys.argv]
 
 
+def _quit_signal():
+    # A seam: tests emit their own signal, because Qt WebEngine shuts itself
+    # down on the application's aboutToQuit and crashes once a view has run.
+    return QCoreApplication.instance().aboutToQuit
+
+
 def on_quit(argv: list[str], *, update: bool = False) -> None:
     global _pending, _is_update, _connected
     if _is_update and not update:
         return
     _pending, _is_update = list(argv), update
     if not _connected:
-        QCoreApplication.instance().aboutToQuit.connect(_fire)
+        _quit_signal().connect(_fire)
         _connected = True
 
 
@@ -58,5 +64,5 @@ def _start(argv: list[str], update: bool) -> None:
 
 def _reset() -> None:
     """Tests only."""
-    global _pending, _is_update
-    _pending, _is_update = None, False
+    global _pending, _is_update, _connected
+    _pending, _is_update, _connected = None, False, False

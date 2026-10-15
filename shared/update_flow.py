@@ -159,14 +159,14 @@ class UpdateFlow(QObject):
             shown = (_(NOT_RELEASED) if reason == NOT_RELEASED
                      else _(NO_PERMISSION, folder=self._app_dir.parent))
             if ask(self._window, title=_("Can't update this copy"),
-                   body=shown + " " + _("Download it from the release page instead."),
+                   body=_("{reason} Download it from the release page instead.", reason=shown),
                    verb=_("Open release page")):
                 QDesktopServices.openUrl(QUrl(release.page_url))
             return
-        body = _("The app downloads the update, then closes and restarts. What's new: {url}",
-                 url=release.page_url)
-        if is_server_copy(self._app_dir):
-            body += " " + _("This copy runs from the server: close it on every PC first.")
+        note = (_("This copy runs from the server: close it on every PC first.")
+                if is_server_copy(self._app_dir) else "")
+        body = _("The app downloads the update, then closes and restarts. What's new: {url} {note}",
+                 url=release.page_url, note=note).rstrip()
         if ask(self._window, title=_("Update to {version}?", version=release.version),
                body=body, verb=_("Update and restart")):
             self._installing = True

@@ -894,20 +894,16 @@ class SettingsWindow(QDialog):
         if self._is_saving:  # done() below skips reject()'s guard
             return
         label = f"CLIENT_{self.client_id}"
-        lost = (
-            " " + _("Unsaved changes in this window will be lost.")
-            if self.refresh_dirty()
-            else ""
-        )
+        lost = _("Unsaved changes in this window will be lost.") if self.refresh_dirty() else ""
         if kind == "archive":
             ok = ConfirmDialog.ask(
                 self,
                 title=_("Archive {label}?", label=label),
                 body=_(
                     "It disappears from the client list in Fulfilment and Packing on every PC. "
-                    "Sessions are kept. Restore it from Archived clients."
-                )
-                + lost,
+                    "Sessions are kept. Restore it from Archived clients. {lost}",
+                    lost=lost,
+                ).rstrip(),
                 verb=_("Archive"),
             )
         elif kind == "delete":
@@ -915,9 +911,9 @@ class SettingsWindow(QDialog):
                 self,
                 title=_("Delete {label} for good?", label=label),
                 body=_(
-                    "Its settings and empty session folder are removed. This can't be undone."
-                )
-                + lost,
+                    "Its settings and empty session folder are removed. This can't be undone. {lost}",
+                    lost=lost,
+                ).rstrip(),
                 verb=_("Delete"),
                 require_text=str(self.client_id),
             )

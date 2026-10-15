@@ -9,7 +9,6 @@
   "Could not reach GitHub: {detail}": "Няма връзка с GitHub: {detail}",
   "Couldn't check for updates: {message}": "Проверката за актуализации не успя: {message}",
   "Dec": "дек",
-  "Download it from the release page instead.": "Изтеглете я от страницата на версията.",
   "Downloading… {n}%": "Изтегляне… {n}%",
   "Exit": "Изход",
   "Feb": "фев",
@@ -35,7 +34,7 @@
   "Server Connection": "Връзка със сървъра",
   "Server path:": "Път до сървъра:",
   "Test Connection": "Тествай връзката",
-  "The app downloads the update, then closes and restarts. What's new: {url}": "Приложението изтегля актуализацията, затваря се и се стартира отново. Какво ново: {url}",
+  "The app downloads the update, then closes and restarts. What's new: {url} {note}": "Приложението изтегля актуализацията, затваря се и се стартира отново. Какво ново: {url} {note}",
   "The download does not contain {exe}.": "Изтегленият файл не съдържа {exe}.",
   "The download is damaged (checksum mismatch).": "Изтегленият файл е повреден (контролната сума не съвпада).",
   "The new language applies after a restart.": "Новият език се прилага след рестартиране.",
@@ -49,6 +48,7 @@
   "Updates install only in the released app.": "Актуализации се инсталират само в издадената версия на приложението.",
   "Version {version} is available": "Налична е версия {version}",
   "You have the latest version ({version})": "Имате последната версия ({version})",
+  "{reason} Download it from the release page instead.": "{reason} Изтеглете я от страницата на версията.",
   "✅ Connected": "✅ Свързано",
   "❌ Not reachable": "❌ Няма достъп"
 }
