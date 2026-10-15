@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gui.actions_handler import ActionsHandler
+from gui.client_settings_dialog import ArchivedClientsDialog
 from gui.components import ConfirmDialog, show_error, toast
 from gui.components.commandbar import BarState
 from gui.file_handler import FileHandler
@@ -47,7 +48,7 @@ from shopify_tool import (
 )
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
-from shopify_tool.profile_manager import ProfileManager
+from shopify_tool.profile_manager import ProfileManager, ProfileManagerError
 from shopify_tool.session_manager import SessionManager
 from shopify_tool.stock_ledger import with_stock_left
 from shopify_tool.tag_manager import _normalize_tag_categories
@@ -379,6 +380,7 @@ class MainWindow(QMainWindow):
         self.command_bar.manageGroupsRequested.connect(
             lambda: self.client_directory.open_groups_dialog(self)
         )
+        self.command_bar.archivedClientsRequested.connect(self.open_archived_clients)
         # The sidebar's refresh button is now a dropdown row: on the shared
         # file server a client added from another PC has no other way in
         # short of restarting the app.
@@ -620,6 +622,104 @@ class MainWindow(QMainWindow):
     def _on_client_menu_requested(self, client_id: str, position):
         """The bar has no ProfileManager, so it asks for the menu here."""
         self.client_directory.menu_for(client_id, self).exec(position)
+
+    def _start_tracked(self, worker: Worker) -> None:
+        """Start a Worker and hold it until it finishes (see on_client_changed)."""
+        self._client_load_workers.add(worker)
+        worker.signals.finished.connect(
+            lambda: self._client_load_workers.discard(worker)
+        )
+        self.threadpool.start(worker)
+
+    def remove_client(self, client_id: str, kind: str) -> None:
+        """Archive or delete a client (spec A6). The folder move runs in a
+        worker after this PC's pending writes, so nothing here holds a file in it."""
+        if client_id == self.current_client_id:
+            self._reset_session_state(wait=False)
+            self.session_path = None
+            self.current_client_id = None
+            self.command_bar.set_current_client("")
+            self.command_bar.set_recent_sessions([])
+            self.update_session_info_label()
+            self.update_ui_state()
+        act = (
+            self.profile_manager.archive_client
+            if kind == "archived"
+            else self.profile_manager.delete_client
+        )
+
+        def run():
+            self.write_queue.flush(timeout=10)
+            act(client_id)
+            return client_id, kind
+
+        worker = Worker(run)
+        worker.signals.result.connect(self._on_client_removed)
+        worker.signals.error.connect(
+            lambda error, cid=client_id, k=kind: self._on_client_remove_error(
+                cid, k, error
+            )
+        )
+        self._start_tracked(worker)
+
+    def _on_client_removed(self, result) -> None:
+        client_id, kind = result
+        toast(self, f"CLIENT_{client_id} {kind}.")
+        self.client_directory.refresh()
+
+    def _on_client_remove_error(self, client_id, kind, error) -> None:
+        _exctype, value, _tb = error
+        verb = "archived" if kind == "archived" else "deleted"
+        headline = f"CLIENT_{client_id} wasn't {verb}"
+        if isinstance(value, ProfileManagerError):
+            logger.warning(f"{headline}: {value}")
+            show_error(self, headline, str(value))
+        else:
+            logger.error(headline, exc_info=value)
+            show_error(self, headline, "Details are in Logs.")
+        self.client_directory.refresh()
+
+    def open_archived_clients(self) -> None:
+        worker = Worker(self.profile_manager.list_archived_clients)
+        worker.signals.result.connect(self._show_archived_clients)
+        worker.signals.error.connect(self._on_archived_list_error)
+        self._start_tracked(worker)
+
+    def _show_archived_clients(self, clients) -> None:
+        self._archived_dialog = ArchivedClientsDialog(
+            clients, restore=self._restore_client_from_dialog, parent=self
+        )
+        self._archived_dialog.exec()
+
+    def _on_archived_list_error(self, error) -> None:
+        _exctype, value, _tb = error
+        logger.error("Archived clients couldn't be listed", exc_info=value)
+        show_error(self, "Archived clients couldn't be listed", "Details are in Logs.")
+
+    def _restore_client_from_dialog(self, client_id: str) -> None:
+        worker = Worker(self.profile_manager.restore_client, client_id)
+        worker.signals.result.connect(
+            lambda _result, cid=client_id: self._on_client_restored(cid)
+        )
+        worker.signals.error.connect(
+            lambda error, cid=client_id: self._on_client_restore_error(cid, error)
+        )
+        self._start_tracked(worker)
+
+    def _on_client_restored(self, client_id: str) -> None:
+        self._archived_dialog.remove_row(client_id)
+        toast(self, f"CLIENT_{client_id} restored.")
+        self.client_directory.refresh()
+
+    def _on_client_restore_error(self, client_id: str, error) -> None:
+        _exctype, value, _tb = error
+        headline = f"CLIENT_{client_id} wasn't restored"
+        if isinstance(value, ProfileManagerError):
+            logger.warning(f"{headline}: {value}")
+            show_error(self, headline, str(value))
+        else:
+            logger.error(headline, exc_info=value)
+            show_error(self, headline, "Details are in Logs.")
 
     def on_client_changed(self, client_id: str):
         """Handle client selection change.

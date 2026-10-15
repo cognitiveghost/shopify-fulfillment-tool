@@ -1,10 +1,12 @@
-"""The client creation dialog. Editing a client's profile is the Client settings
-window's Profile page (gui/settings/window.py)."""
+"""Client creation, and the list of archived clients. Editing a client's profile
+is the Client settings window's Profile page (gui/settings/window.py)."""
 
 import logging
+from collections.abc import Callable
 
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QColorDialog,
     QComboBox,
@@ -15,6 +17,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
 )
 
@@ -230,3 +234,75 @@ class ClientCreationDialog(QDialog):
             show_error(
                 self, "The client profile wasn't created", "Details are in Logs."
             )
+
+
+class ArchivedClientsDialog(QDialog):
+    """The archived clients, each with a Restore. Spec A6.
+
+    The caller runs the restore and calls remove_row() when it has worked.
+    """
+
+    def __init__(
+        self, clients: list[dict], restore: Callable[[str], None], parent=None
+    ):
+        super().__init__(parent)
+        self._restore = restore
+        self.setWindowTitle("Archived clients")
+        self.setMinimumWidth(480)
+        theme = get_theme_manager().get_current_theme()
+        layout = QVBoxLayout(self)
+
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["Client ID", "Name", "Archived"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.itemSelectionChanged.connect(self._on_selection_changed)
+        for client in clients:
+            self._append(client)
+        layout.addWidget(self.table)
+
+        self.empty_label = QLabel("No archived clients.")
+        self.empty_label.setStyleSheet(f"color: {theme.text_secondary};")
+        layout.addWidget(self.empty_label)
+        self._show_rows(bool(clients))
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        self.restore_button = QPushButton("Restore")
+        self.restore_button.clicked.connect(self._on_restore)
+        button_box.addButton(self.restore_button, QDialogButtonBox.ActionRole)
+        button_box.rejected.connect(self.reject)
+        apply_dialog_button_roles(button_box)
+        layout.addWidget(button_box)
+        self._on_selection_changed()
+
+    def _append(self, client: dict) -> None:
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        archived = (client.get("archived_at") or "")[:10]
+        for column, text in enumerate(
+            (client["client_id"], client.get("client_name", ""), archived)
+        ):
+            self.table.setItem(row, column, QTableWidgetItem(text))
+
+    def _show_rows(self, any_rows: bool) -> None:
+        self.table.setVisible(any_rows)
+        self.empty_label.setVisible(not any_rows)
+
+    def _on_selection_changed(self) -> None:
+        self.restore_button.setEnabled(bool(self.table.selectionModel().selectedRows()))
+
+    def _on_restore(self) -> None:
+        row = self.table.currentRow()
+        if row >= 0:
+            self._restore(self.table.item(row, 0).text())
+
+    def remove_row(self, client_id: str) -> None:
+        """Drop a restored client's row; say so when none are left."""
+        for row in range(self.table.rowCount()):
+            if self.table.item(row, 0).text() == client_id:
+                self.table.removeRow(row)
+                break
+        self._show_rows(self.table.rowCount() > 0)
