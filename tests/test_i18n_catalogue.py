@@ -23,6 +23,14 @@ GUARDED_PY: list[Path] = SHARED_PY + [
     ROOT / "gui" / "client_settings_dialog.py",
     ROOT / "gui" / "groups_management_dialog.py",
     ROOT / "gui" / "client_directory.py",
+    ROOT / "gui" / "report_selection_dialog.py",
+    ROOT / "gui" / "add_product_dialog.py",
+    ROOT / "gui" / "shortcuts_dialog.py",
+    ROOT / "gui" / "barcode_tool.py",
+    ROOT / "gui" / "reference_tool.py",
+    ROOT / "gui" / "session_browser_widget.py",
+    ROOT / "gui" / "pdf_printing.py",
+    ROOT / "gui" / "file_handler.py",
 ]
 GUARDED_HTML: list[Path] = []
 GUARDED_JS: list[Path] = []

@@ -7,6 +7,7 @@ export combined stock, Undo.
 """
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
 
 from PySide6.QtCore import Signal
@@ -18,6 +19,7 @@ from gui.browse_bridge import mount_browse_page
 from gui.browse_state import browse_state
 from gui.components import show_error
 from gui.web_page import is_current_page
+from shared.i18n import N_, _
 from shopify_tool.session_lifecycle import derive_status_updates
 from shopify_tool.session_manager import SessionManager
 
@@ -29,13 +31,20 @@ logger = logging.getLogger(__name__)
 # not have is restored as absent. Undo touches nothing its change did not.
 _STATUS_KEYS = ("status", "status_manually_set", "status_updated_at")
 _COMMENT_KEYS = ("comments", "last_updated")
+# Status names a toast shows; the stored values stay English.
+_STATUS_LABELS = {
+    "active": N_("Active"),
+    "completed": N_("Completed"),
+    "abandoned": N_("Abandoned"),
+    "archived": N_("Archived"),
+}
 
 
 def _what(entries: list[dict]) -> str:
     """How a toast names what it changed: the session, or how many."""
     if len(entries) == 1:
         return entries[0]["session_name"]
-    return f"{len(entries)} sessions"
+    return _("{count} sessions", count=len(entries))
 
 
 class SessionLoaderWorker(BackgroundWorker):
@@ -310,8 +319,12 @@ class SessionBrowserWidget(QWidget):
                 path, status, manual=True
             ),
             undo_keys=_STATUS_KEYS,
-            done=f"Set {{what}} to {status.capitalize()}",
-            one_failed="The status wasn't updated",
+            done=lambda what: _(
+                "Set {what} to {status}",
+                what=what,
+                status=_(_STATUS_LABELS.get(status, status.capitalize())),
+            ),
+            one_failed=_("The status wasn't updated"),
         )
 
     def _set_comment(self, names, text: str) -> None:
@@ -321,11 +334,23 @@ class SessionBrowserWidget(QWidget):
                 path, {"comments": text}
             ),
             undo_keys=_COMMENT_KEYS,
-            done="Comment saved on {what}" if text else "Comment cleared on {what}",
-            one_failed="The comment wasn't saved",
+            done=lambda what: (
+                _("Comment saved on {what}", what=what)
+                if text
+                else _("Comment cleared on {what}", what=what)
+            ),
+            one_failed=_("The comment wasn't saved"),
         )
 
-    def _write(self, names, write, *, undo_keys, done: str, one_failed: str) -> None:
+    def _write(
+        self,
+        names,
+        write,
+        *,
+        undo_keys,
+        done: Callable[[str], str],
+        one_failed: str,
+    ) -> None:
         """Apply one change to every named session, then say so once.
 
         One banner for the sessions that failed, one toast with Undo for the
@@ -361,12 +386,16 @@ class SessionBrowserWidget(QWidget):
                 self,
                 one_failed
                 if len(entries) == 1
-                else f"{failed} of {len(entries)} sessions weren't updated",
-                "Details are in Logs.",
+                else _(
+                    "{failed} of {count} sessions weren't updated",
+                    failed=failed,
+                    count=len(entries),
+                ),
+                _("Details are in Logs."),
             )
         if written:
             self._undo = undo
-            self.bridge.raise_toast(done.format(what=_what(written)), True)
+            self.bridge.raise_toast(done(_what(written)), True)
         self.refresh_sessions(quiet=True)
 
     def _undo_last(self) -> None:
@@ -384,10 +413,14 @@ class SessionBrowserWidget(QWidget):
         if failed:
             show_error(
                 self,
-                "The change wasn't undone"
+                _("The change wasn't undone")
                 if len(undo) == 1
-                else f"{failed} of {len(undo)} sessions weren't restored",
-                "Details are in Logs.",
+                else _(
+                    "{failed} of {count} sessions weren't restored",
+                    failed=failed,
+                    count=len(undo),
+                ),
+                _("Details are in Logs."),
             )
         self.refresh_sessions(quiet=True)
 

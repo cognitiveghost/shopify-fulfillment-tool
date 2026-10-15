@@ -25,9 +25,16 @@ from PySide6.QtWidgets import (
 
 from gui.components import InlineMessage
 from gui.theme_manager import apply_dialog_button_roles, get_theme_manager
+from shared.i18n import N_, _
 from shopify_tool.stock_ledger import FULFILLABLE, NOT_FULFILLABLE, is_fulfillable
 
 logger = logging.getLogger(__name__)
+
+# The stock status constants are logic values; the names shown are translated at display.
+_STATUS_LABELS = {
+    FULFILLABLE: N_("Fulfillable"),
+    NOT_FULFILLABLE: N_("Not Fulfillable"),
+}
 
 
 class AddProductDialog(QDialog):
@@ -66,7 +73,7 @@ class AddProductDialog(QDialog):
 
     def setup_ui(self):
         """Setup dialog UI components."""
-        self.setWindowTitle("Add Product to Order")
+        self.setWindowTitle(_("Add Product to Order"))
         self.setModal(True)
         self.setMinimumWidth(420)
 
@@ -85,9 +92,9 @@ class AddProductDialog(QDialog):
     def _build_form(self, form_layout: QFormLayout):
         """Populate the order/SKU/quantity form rows."""
         self.order_input = QLineEdit()
-        self.order_input.setPlaceholderText("Type order number... (e.g., 1001)")
+        self.order_input.setPlaceholderText(_("Type order number... (e.g., 1001)"))
         self.order_input.textChanged.connect(self._on_order_changed)
-        form_layout.addRow("Order Number:", self.order_input)
+        form_layout.addRow(_("Order Number:"), self.order_input)
 
         self.order_status_label = QLabel("")
         form_layout.addRow("", self.order_status_label)
@@ -97,9 +104,9 @@ class AddProductDialog(QDialog):
         self.order_input.textChanged.connect(self.order_error.clear)
 
         self.sku_input = QLineEdit()
-        self.sku_input.setPlaceholderText("Type SKU... (e.g., SKU-HAT)")
+        self.sku_input.setPlaceholderText(_("Type SKU... (e.g., SKU-HAT)"))
         self.sku_input.textChanged.connect(self._on_sku_changed)
-        form_layout.addRow("Product SKU:", self.sku_input)
+        form_layout.addRow(_("Product SKU:"), self.sku_input)
 
         self.product_info_label = QLabel("")
         form_layout.addRow("", self.product_info_label)
@@ -112,7 +119,7 @@ class AddProductDialog(QDialog):
         self.quantity_spin.setMinimum(1)
         self.quantity_spin.setMaximum(9999)
         self.quantity_spin.setValue(1)
-        form_layout.addRow("Quantity:", self.quantity_spin)
+        form_layout.addRow(_("Quantity:"), self.quantity_spin)
 
         self.quantity_error = InlineMessage(self)
         form_layout.addRow("", self.quantity_error)
@@ -145,7 +152,7 @@ class AddProductDialog(QDialog):
         box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         apply_dialog_button_roles(box)
         self.add_btn = box.button(QDialogButtonBox.Ok)
-        self.add_btn.setText("Add Product")
+        self.add_btn.setText(_("Add Product"))
         box.accepted.connect(self._on_add_clicked)
         box.rejected.connect(self.reject)
         return box
@@ -206,17 +213,21 @@ class AddProductDialog(QDialog):
             status = FULFILLABLE if is_fulfillable(order_rows, text_str) else NOT_FULFILLABLE
 
             self.order_status_label.setText(
-                f"Order found: {item_count} items, Status: {status}"
+                _(
+                    "Order found: {item_count} items, Status: {status}",
+                    item_count=item_count,
+                    status=_(_STATUS_LABELS[status]),
+                )
             )
             self.order_status_label.setStyleSheet(f"color: {theme.status_success};")
         else:
-            self.order_status_label.setText("Order not found")
+            self.order_status_label.setText(_("Order not found"))
             self.order_status_label.setStyleSheet(f"color: {theme.status_danger};")
 
     def _on_sku_changed(self, text):
         """Handle SKU input change."""
         self._unknown_sku_accepted = ""
-        self.add_btn.setText("Add Product")
+        self.add_btn.setText(_("Add Product"))
         theme = get_theme_manager().get_current_theme()
         if not text:
             self.product_info_label.setText("")
@@ -230,7 +241,7 @@ class AddProductDialog(QDialog):
         ]
 
         if stock_row.empty:
-            self.product_info_label.setText("SKU not found in stock")
+            self.product_info_label.setText(_("SKU not found in stock"))
             self.product_info_label.setStyleSheet(f"color: {theme.status_danger};")
             return
 
@@ -239,15 +250,22 @@ class AddProductDialog(QDialog):
         # Live stock keys might be strings, ensure we lookup with string
         current_stock = self.live_stock.get(text_str, self.live_stock.get(text, 0))
 
-        self.product_info_label.setText(f"{product_name} | Live stock: {current_stock}")
+        self.product_info_label.setText(
+            _(
+                "{product_name} | Live stock: {current_stock}",
+                product_name=product_name,
+                current_stock=current_stock,
+            )
+        )
         self.product_info_label.setStyleSheet(f"color: {theme.status_success};")
 
         # Show warning if low/zero stock
         if current_stock == 0:
-            warning_text = (
+            warning_text = _(
                 "WARNING\n\n"
-                f"Product {text} has 0 stock available!\n"
-                "Adding this product will affect order fulfillment."
+                "Product {sku} has 0 stock available!\n"
+                "Adding this product will affect order fulfillment.",
+                sku=text,
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
@@ -261,8 +279,10 @@ class AddProductDialog(QDialog):
                 }}
             """)
         elif current_stock < self.low_stock_threshold:
-            warning_text = (
-                f"WARNING\n\nProduct {text} has low stock ({current_stock} units)."
+            warning_text = _(
+                "WARNING\n\nProduct {sku} has low stock ({stock} units).",
+                sku=text,
+                stock=current_stock,
             )
             self.warning_box.setText(warning_text)
             self.warning_box.setVisible(True)
@@ -315,7 +335,7 @@ class AddProductDialog(QDialog):
 
         # Check order number entered
         if not order_number:
-            self.order_error.show_message("Enter an order number.")
+            self.order_error.show_message(_("Enter an order number."))
             self.order_input.setFocus()
             return False
 
@@ -323,14 +343,14 @@ class AddProductDialog(QDialog):
         order_numbers_str = self.analysis_df["Order_Number"].astype(str)
         if order_number not in order_numbers_str.values:
             self.order_error.show_message(
-                f"Order {order_number} isn't in this analysis."
+                _("Order {order_number} isn't in this analysis.", order_number=order_number)
             )
             self.order_input.setFocus()
             return False
 
         # Check SKU entered
         if not sku:
-            self.sku_error.show_message("Enter a product SKU.")
+            self.sku_error.show_message(_("Enter a product SKU."))
             self.sku_input.setFocus()
             return False
 
@@ -338,16 +358,19 @@ class AddProductDialog(QDialog):
         stock_skus_str = self.stock_df["SKU"].astype(str).str.strip()
         if sku not in stock_skus_str.values and sku != self._unknown_sku_accepted:
             self.sku_error.show_message(
-                f"{sku} isn't in the stock file. Press Add anyway to add it."
+                _(
+                    "{sku} isn't in the stock file. Press Add anyway to add it.",
+                    sku=sku,
+                )
             )
-            self.add_btn.setText("Add anyway")
+            self.add_btn.setText(_("Add anyway"))
             self._unknown_sku_accepted = sku
             self.sku_input.setFocus()
             return False
 
         # Check quantity
         if self.quantity_spin.value() < 1:
-            self.quantity_error.show_message("Quantity must be at least 1.")
+            self.quantity_error.show_message(_("Quantity must be at least 1."))
             self.quantity_spin.setFocus()
             return False
 
