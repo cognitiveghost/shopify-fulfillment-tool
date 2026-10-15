@@ -317,7 +317,6 @@ def test_audit_10_10_editing_a_group_without_changes_saves_nothing(qapp, tmp_pat
     assert toasts == []  # nothing changed, so nothing was saved or announced
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-11: a colour that is not text crashes the validator")
 def test_audit_10_11_a_colour_that_is_not_text_is_reported_not_raised():
     from shopify_tool.tag_manager import validate_tag_categories_v2
 

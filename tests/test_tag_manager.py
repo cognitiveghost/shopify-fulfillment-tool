@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from shopify_tool.barcode_processor import format_tags_for_barcode
 from shopify_tool.tag_manager import expand_to_order_rows, merge_tags
@@ -85,3 +86,83 @@ def test_validator_rejects_whitespace_only_label():
     }
     is_valid, _errors = validate_tag_categories_v2(config)
     assert is_valid is False
+
+
+# --- validate_tag_categories_v2 (Audit 10, part A) ----------------------------------------
+
+
+def _v2(**category):
+    base = {"label": "Box", "color": "#112233", "tags": ["BOX"], "order": 1}
+    base.update(category)
+    return {"version": 2, "categories": {"packaging": base}}
+
+
+class TestValidateTagCategoriesV2:
+    def test_a_well_formed_config_is_valid(self):
+        from shopify_tool.tag_manager import validate_tag_categories_v2
+
+        config = _v2(sku_writeoff={"enabled": True, "mappings": {"BOX": [{"sku": "PKG", "quantity": 2}]}})
+        assert validate_tag_categories_v2(config) == (True, [])
+
+    @pytest.mark.parametrize(
+        ("config", "expected"),
+        [
+            ({"categories": {}}, "Missing 'version'"),
+            ({"version": 2}, "Missing 'categories'"),
+            ({"version": 2, "categories": []}, "'categories' must be a dictionary"),
+            ({"version": 2, "categories": {"packaging": "x"}}, "Category 'packaging' config must be a dictionary"),
+            (_v2(label=" "), "has an empty label"),
+            (_v2(color="red"), "invalid color format: red"),
+            (_v2(tags="BOX"), "tags must be a list"),
+            (_v2(order="1"), "order must be an integer"),
+            (_v2(sku_writeoff="x"), "sku_writeoff must be a dictionary"),
+            (_v2(sku_writeoff={"mappings": {}}), "missing 'enabled' field"),
+            (_v2(sku_writeoff={"enabled": True, "mappings": []}), "mappings must be a dictionary"),
+            (_v2(sku_writeoff={"enabled": True, "mappings": {"BOX": "PKG"}}), "must be a list"),
+            (_v2(sku_writeoff={"enabled": True, "mappings": {"BOX": ["PKG"]}}), "must be a dictionary"),
+            (_v2(sku_writeoff={"enabled": True, "mappings": {"BOX": [{"quantity": 1}]}}), "missing 'sku' field"),
+            (_v2(sku_writeoff={"enabled": True, "mappings": {"BOX": [{"sku": "P"}]}}), "missing 'quantity' field"),
+            (_v2(sku_writeoff={"enabled": True, "mappings": {"BOX": [{"sku": "P", "quantity": "2"}]}}),
+             "quantity must be a number"),
+            (_v2(sku_writeoff={"enabled": True, "mappings": {"BOX": [{"sku": "P", "quantity": 0}]}}),
+             "quantity must be positive"),
+        ],
+    )
+    def test_each_kind_of_mistake_is_named(self, config, expected):
+        from shopify_tool.tag_manager import validate_tag_categories_v2
+
+        valid, errors = validate_tag_categories_v2(config)
+        assert valid is False
+        assert any(expected in e for e in errors), errors
+
+    def test_a_missing_field_is_named_once(self):
+        from shopify_tool.tag_manager import validate_tag_categories_v2
+
+        config = {"version": 2, "categories": {"packaging": {"color": "#112233", "tags": [], "order": 1}}}
+        valid, errors = validate_tag_categories_v2(config)
+        assert valid is False and errors == ["Category 'packaging' missing required field 'label'"]
+
+    def test_a_tag_in_two_categories_names_both(self):
+        from shopify_tool.tag_manager import validate_tag_categories_v2
+
+        config = _v2()
+        config["categories"]["status"] = {"label": "S", "color": "#445566", "tags": ["BOX"], "order": 2}
+        valid, errors = validate_tag_categories_v2(config)
+        assert not valid and "'packaging' and 'status'" in errors[0]
+
+
+class TestV2Helpers:
+    def test_normalise_accepts_both_shapes(self):
+        from shopify_tool.tag_manager import (
+            _normalize_tag_categories,
+            get_category_tags,
+            get_tag_color,
+        )
+
+        v1 = {"packaging": {"tags": ["BOX"], "color": "#112233"}}
+        v2 = {"version": 2, "categories": v1}
+        assert _normalize_tag_categories(v1) == v1 == _normalize_tag_categories(v2)
+        assert _normalize_tag_categories({}) == {}
+        assert get_category_tags("packaging", v2) == ["BOX"] and get_category_tags("nope", v2) == []
+        assert get_tag_color("BOX", v2) == "#112233"
+        assert get_tag_color("UNKNOWN", v2) == "#9E9E9E"  # not in any category: "custom" has no colour here

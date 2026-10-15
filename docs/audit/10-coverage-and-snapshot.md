@@ -133,3 +133,10 @@ Found: writing the groups dialog tests. `_edit_group` compared the colour the pi
 (`QColor.name()`, lower case) with the stored one case-sensitively, so a stored `#FF0000` never
 equalled `#ff0000`, and re-confirming the dialog rewrote `groups.json` (rotating its backup) and
 toasted "updated". Fix: compare case-insensitively. Test: `test_audit_10_10_*`.
+
+### AUDIT-10-11: a tag category colour that is not text crashed the validator
+
+Found: writing the `tag_manager` tests. `validate_tag_categories_v2` called `color.startswith` on
+whatever the config held, so a hand-edited colour of `123` raised `AttributeError` out of the
+Settings validation instead of being listed as an error. Fix: a colour that is not a `#rrggbb`
+string is an "invalid color format" error. Test: `test_audit_10_11_*`.

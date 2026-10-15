@@ -342,7 +342,8 @@ def validate_tag_categories_v2(config: dict) -> tuple[bool, list[str]]:
 
         # Validate color format (basic check)
         color = category_config.get("color", "")
-        if color and not (color.startswith("#") and len(color) == 7):
+        # Not text (a hand-edited 123 or null) is as invalid as "red" (AUDIT-10-11).
+        if color and not (isinstance(color, str) and color.startswith("#") and len(color) == 7):
             errors.append(f"Category '{category_id}' has invalid color format: {color}")
 
         # Validate tags
