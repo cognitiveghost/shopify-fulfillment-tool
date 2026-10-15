@@ -47,9 +47,11 @@ class SettingsWebHost(QWidget):
 
     Signals:
         edited: a draft's values, or the file it reads columns from, changed
+        clientActionRequested: "archive" or "delete" from the Profile page
     """
 
     edited = Signal()
+    clientActionRequested = Signal(str)
 
     def __init__(self, drafts: dict, analysis_df=None, session: str = "", parent=None):
         super().__init__(parent)
@@ -83,6 +85,7 @@ class SettingsWebHost(QWidget):
         self.bridge.importRequested.connect(self._import)
         self.bridge.exportRequested.connect(self._export)
         self.bridge.toastActionRequested.connect(self._update_import)
+        self.bridge.clientActionRequested.connect(self.clientActionRequested.emit)
         self._push()
 
     def show_page(self, key: str) -> None:

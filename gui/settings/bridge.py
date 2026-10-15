@@ -33,6 +33,8 @@ class SettingsBridge(PageBridge):
     importRequested = Signal(str)
     exportRequested = Signal(str)
     toastActionRequested = Signal()
+    # "archive" or "delete" from the Profile page's danger zone.
+    clientActionRequested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -87,6 +89,12 @@ class SettingsBridge(PageBridge):
     def toastAction(self) -> None:
         """The toast's button was pressed."""
         self.toastActionRequested.emit()
+
+    @Slot(str)
+    def clientAction(self, kind) -> None:
+        """Archive or delete the client. The window asks; the caller does it."""
+        if kind in ("archive", "delete"):
+            self.clientActionRequested.emit(kind)
 
 
 def mount_settings_page(view: QWebEngineView) -> SettingsBridge:
