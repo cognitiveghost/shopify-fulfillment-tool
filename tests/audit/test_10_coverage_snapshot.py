@@ -247,3 +247,23 @@ def test_run_full_analysis_writes_what_analyse_returns(analysis_run, sessions, m
     assert ok, msg
     written = json.loads((Path(session) / "analysis" / "analysis_data.json").read_text(encoding="utf-8"))
     assert written == seen["result"].analysis_data
+
+
+def test_a_session_keeps_the_config_it_ran_with(sessions, tmp_path, monkeypatch):
+    from shopify_tool import fulfillment_history
+
+    monkeypatch.setattr(core, "load_session_signals",
+                        lambda _pm, _cid: (pd.DataFrame(columns=fulfillment_history.COLUMNS), None))
+    (tmp_path / "o.csv").write_text(
+        "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A,1,DHL\n", encoding="utf-8")
+    (tmp_path / "s.csv").write_text("Артикул,Име,Наличност\nA,Alpha,5\n", encoding="utf-8")
+    config = {"column_mappings": MAPPINGS_10, "rules": [], "inventory_memory": {"skus": {"A": 1}},
+              "_client_config": {"x": 1}, "test_history_df": None}
+    session = sessions.create_session("M")
+    ok, msg, _df, _stats = core.run_full_analysis(
+        str(tmp_path / "s.csv"), str(tmp_path / "o.csv"), str(tmp_path / "out"), ",", ",", config,
+        client_id="M", session_manager=sessions, profile_manager=sessions.profile_manager,
+        session_path=str(session))
+    assert ok, msg
+    kept = json.loads((Path(session) / "input" / "shopify_config.json").read_text(encoding="utf-8"))
+    assert kept == {"column_mappings": MAPPINGS_10, "rules": []}

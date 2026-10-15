@@ -1414,6 +1414,21 @@ def _save_results_and_reports(
             if analysis_data is None:
                 analysis_data = _create_analysis_data_for_packing(final_df)
 
+            # The config of the day, so the session can be replayed later (spec Part B2):
+            # backups rotate within days. Without derived data and run-only keys.
+            if run_config is not None:
+                kept = {
+                    k: v
+                    for k, v in run_config.items()
+                    if not k.startswith(("_", "test_")) and k != "inventory_memory"
+                }
+                try:
+                    atomic_write_json(
+                        Path(session_manager.get_input_dir(working_path)) / "shopify_config.json", kept
+                    )
+                except Exception:
+                    logger.warning("Could not keep the session's config copy", exc_info=True)
+
             # Save analysis_data.json
             analysis_data_path = Path(analysis_dir) / "analysis_data.json"
             with open(analysis_data_path, "w", encoding="utf-8") as f:
