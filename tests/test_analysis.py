@@ -611,3 +611,14 @@ def test_fulfillment_reasons_join_the_existing_note():
     orders = pd.Series(["#1", "#2", "#3", "#4", "#5"])
     assert _with_fulfillment_reasons(notes, orders, results).tolist() == [
         "Repeat; Cannot fulfill: A short", "", "Cannot fulfill: Unknown reason", "x", "y"]
+
+
+def test_repeat_detection_uses_the_given_day():
+    from datetime import date
+
+    from shopify_tool.analysis import _detect_repeated_orders
+
+    final = pd.DataFrame({"Order_Number": ["#1"]})
+    history = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": ["2026-10-05"], "Session": [""]})
+    assert list(_detect_repeated_orders(final, history, None, today=date(2026, 10, 5))) == [""]
+    assert list(_detect_repeated_orders(final, history, None, today=date(2026, 10, 6))) == ["Repeat"]

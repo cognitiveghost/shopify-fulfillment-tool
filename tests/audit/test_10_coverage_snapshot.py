@@ -6,10 +6,16 @@ lives in tests/replay/.
 """
 # main_window is a fixture imported by name, so each test that takes it redefines it.
 # ruff: noqa: F811
+import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
 import pytest
+from audit_support import (  # noqa: F401  pytest fixtures, used by name
+    analysis_run_fixture,
+    sessions_fixture,
+)
 from test_stale_session import (  # noqa: F401  main_window is a fixture
     _open_with_state,
     main_window,
@@ -17,7 +23,7 @@ from test_stale_session import (  # noqa: F401  main_window is a fixture
 
 import gui.main_window_pyside as main_window_module
 from gui.report_selection_dialog import GenerateReportsDialog
-from shopify_tool import report_jobs
+from shopify_tool import core, report_jobs
 
 
 @pytest.mark.parametrize(
@@ -196,3 +202,48 @@ def test_opening_a_session_loads_its_recorded_fingerprints(main_window):
     session_state.save_state(path, LISTED, None)
     main_window.load_existing_session(path)
     assert main_window._list_fingerprints == {"ALL": "ab"}
+
+
+MAPPINGS_10 = {
+    "orders": {"Name": "Order_Number", "Lineitem sku": "SKU",
+               "Lineitem quantity": "Quantity", "Shipping Method": "Shipping_Method"},
+    "stock": {"Артикул": "SKU", "Име": "Product_Name", "Наличност": "Stock"},
+}
+
+
+def _inputs(tmp_path):
+    """Orders and stock read the way a run reads them (as tests/test_rule_settle.py does)."""
+    (tmp_path / "orders.csv").write_text(
+        "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A,1,DHL\n#2,B,2,DHL\n", encoding="utf-8")
+    (tmp_path / "stock.csv").write_text("Артикул,Име,Наличност\nA,Alpha,5\nB,Beta,1\n", encoding="utf-8")
+    config = {"column_mappings": MAPPINGS_10, "settings": {}}
+    orders, stock = core._load_and_validate_files(
+        str(tmp_path / "stock.csv"), str(tmp_path / "orders.csv"), ",", ",", config)
+    return orders, stock, config
+
+
+def test_analyse_stamps_the_given_time_and_matches_the_private_path(tmp_path):
+    orders, stock, config = _inputs(tmp_path)
+    when = datetime(2026, 10, 9, 9, 13, tzinfo=timezone(timedelta(hours=3)))
+    result = core.analyse(orders, stock, config, now=when, current_session="S1")
+    assert result.analysis_data["analyzed_at"] == when.isoformat()
+    final, _, _stats = core._run_analysis_and_rules(
+        orders, stock, pd.DataFrame({"Order_Number": []}), config, "S1")
+    pd.testing.assert_frame_equal(result.final_df, final)
+    assert result.analysis_data["total_orders"] == 2
+
+
+def test_run_full_analysis_writes_what_analyse_returns(analysis_run, sessions, monkeypatch):
+    seen = {}
+    real = core.analyse
+
+    def spy(*a, **k):
+        seen["result"] = real(*a, **k)
+        return seen["result"]
+
+    monkeypatch.setattr(core, "analyse", spy)
+    session = sessions.create_session("M")
+    ok, msg, _df, _stats = analysis_run(session)
+    assert ok, msg
+    written = json.loads((Path(session) / "analysis" / "analysis_data.json").read_text(encoding="utf-8"))
+    assert written == seen["result"].analysis_data

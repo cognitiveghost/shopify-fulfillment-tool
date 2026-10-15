@@ -876,7 +876,10 @@ def with_lots(df: pd.DataFrame, lots: dict | None, mode: str = "multi_first") ->
 
 
 def _detect_repeated_orders(
-    final_df: pd.DataFrame, history_df: pd.DataFrame, current_session: str | None = None
+    final_df: pd.DataFrame,
+    history_df: pd.DataFrame,
+    current_session: str | None = None,
+    today: date | None = None,
 ) -> pd.Series:
     """Mark orders already shipped by another session as "Repeat" (ADR 0012).
 
@@ -895,6 +898,9 @@ def _detect_repeated_orders(
     `current_session=None` every sessioned history row counts. Order numbers
     compare as `str(x).strip()` on both sides, so numeric and text forms match.
 
+    `today` is the day the legacy rule treats as today; None is the real date
+    (a replay passes the session's).
+
     Returns:
         pd.Series (string) with "Repeat" for repeated orders, "" otherwise
     """
@@ -908,7 +914,7 @@ def _detect_repeated_orders(
     source = h["Source"] if "Source" in h.columns else pd.Series("history", index=h.index)
     if "Execution_Date" in h.columns:
         # Deliberately naive: pd.to_datetime yields tz-naive dates.
-        today = pd.Timestamp(datetime.now().date())  # noqa: DTZ005
+        today = pd.Timestamp(today or datetime.now().date())  # noqa: DTZ005
         dates = pd.to_datetime(h["Execution_Date"], errors="coerce", format="mixed").dt.normalize()
         before_today = dates.isna() | (dates < today)
     else:
@@ -995,9 +1001,13 @@ def _merge_results_to_dataframe(
     courier_mappings: dict | None = None,
     current_session: str | None = None,
     additional_columns_config: list | None = None,
+    today: date | None = None,
 ) -> pd.DataFrame:
     """
     Merge all analysis results into final output DataFrame.
+
+    `today` is the day repeat detection treats as today; None is the real date
+    (a replay passes the session's).
 
     Combines:
     - Original order data
@@ -1123,7 +1133,7 @@ def _merge_results_to_dataframe(
 
     # Detect repeated orders - VECTORIZED
     final_df["System_note"] = _detect_repeated_orders(
-        final_df, history_df, current_session
+        final_df, history_df, current_session, today=today
     )
 
     # Add unfulfillable reasons to System_note
@@ -1333,9 +1343,13 @@ def run_analysis(
     courier_mappings=None,
     current_session=None,
     mode: str = "multi_first",
+    today: date | None = None,
 ):
     """
     Main analysis engine for order fulfillment simulation.
+
+    `today` is the day repeat detection treats as today; None is the real date
+    (a replay passes the session's).
 
     Orchestrates complete analysis workflow through 7 specialized phases:
     1. Data cleaning and preparation
@@ -1480,6 +1494,7 @@ def run_analysis(
             courier_mappings,
             current_session,
             additional_columns_config,
+            today=today,
         )
         final_df = with_lots(final_df, fifo_lots, mode)
 

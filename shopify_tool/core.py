@@ -4,7 +4,8 @@ import logging
 import os
 import shutil
 from collections.abc import Callable
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 from functools import reduce
 from pathlib import Path
 from typing import Any
@@ -226,7 +227,9 @@ def build_packing_orders(df: pd.DataFrame) -> list[dict[str, Any]]:
     return orders
 
 
-def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
+def _create_analysis_data_for_packing(
+    final_df: pd.DataFrame, now: datetime | None = None
+) -> dict[str, Any]:
     """Create analysis_data.json structure for Packing Tool integration.
 
     This function extracts relevant data from the analysis DataFrame and
@@ -234,10 +237,13 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
 
     Args:
         final_df (pd.DataFrame): The final analysis DataFrame
+        now: The time stamped into analyzed_at; None is the clock (a replay passes the
+            session's creation time)
 
     Returns:
         Dict[str, Any]: Dictionary containing analysis data in Packing Tool format
     """
+    stamp = (now or datetime.now().astimezone()).isoformat()
     try:
         orders_data = build_packing_orders(final_df)
 
@@ -249,7 +255,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
         not_fulfillable_orders = total_orders - fulfillable_orders
 
         analysis_data = {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": total_orders,
             "fulfillable_orders": fulfillable_orders,
             "not_fulfillable_orders": not_fulfillable_orders,
@@ -261,7 +267,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except KeyError as e:
         logger.exception("Missing required column in DataFrame for packing analysis")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -271,7 +277,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except (ValueError, TypeError) as e:
         logger.exception("Invalid data type in DataFrame for packing analysis")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -281,7 +287,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except AttributeError as e:
         logger.exception("Invalid DataFrame object for packing analysis")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -291,7 +297,7 @@ def _create_analysis_data_for_packing(final_df: pd.DataFrame) -> dict[str, Any]:
     except Exception as e:
         logger.exception("Unexpected error creating analysis data for packing")
         return {
-            "analyzed_at": datetime.now().astimezone().isoformat(),
+            "analyzed_at": stamp,
             "total_orders": 0,
             "fulfillable_orders": 0,
             "not_fulfillable_orders": 0,
@@ -597,6 +603,20 @@ def _validate_and_prepare_inputs(
     return use_session_mode, working_path, None, session_path
 
 
+def read_orders_csv(path, column_mappings: dict, delimiter: str = AUTO_DELIMITER) -> pd.DataFrame:
+    """An orders CSV read the way a run reads it: SKU columns as text, BOM-safe, delimiter resolved.
+
+    The one place the orders file is parsed, so a replay of a stored session reads its orders
+    exactly as the run did.
+    """
+    return pd.read_csv(
+        path,
+        delimiter=resolve_delimiter(str(path), delimiter, "orders"),
+        encoding="utf-8-sig",
+        dtype=_get_sku_dtype_dict(column_mappings, "orders"),
+    )
+
+
 def _load_and_validate_files(
     stock_file_path: str | None,
     orders_file_path: str | None,
@@ -641,7 +661,6 @@ def _load_and_validate_files(
         # Get dtype specifications to force SKU columns to string
         column_mappings = config.get("column_mappings", {})
         stock_dtype = _get_sku_dtype_dict(column_mappings, "stock")
-        orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
 
         # Load stock file with error handling
         try:
@@ -692,12 +711,7 @@ def _load_and_validate_files(
             orders_sep = resolve_delimiter(
                 orders_file_path, orders_delimiter, "orders"
             )
-            orders_df = pd.read_csv(
-                orders_file_path,
-                delimiter=orders_sep,
-                encoding="utf-8-sig",
-                dtype=orders_dtype,
-            )
+            orders_df = read_orders_csv(orders_file_path, column_mappings, orders_sep)
             logger.info(
                 f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns"
             )
@@ -742,15 +756,7 @@ def _load_and_validate_files(
                     f"Orders file not found at path: {orders_file_path}"
                 )
             column_mappings = config.get("column_mappings", {})
-            orders_dtype = _get_sku_dtype_dict(column_mappings, "orders")
-            orders_df = pd.read_csv(
-                orders_file_path,
-                delimiter=resolve_delimiter(
-                    orders_file_path, orders_delimiter, "orders"
-                ),
-                encoding="utf-8-sig",
-                dtype=orders_dtype,
-            )
+            orders_df = read_orders_csv(orders_file_path, column_mappings, orders_delimiter)
             logger.info(
                 f"Orders data loaded: {len(orders_df)} rows, {len(orders_df.columns)} columns"
             )
@@ -901,6 +907,7 @@ def _run_analysis_and_rules(
     history_df: pd.DataFrame,
     config: dict,
     current_session: str | None = None,
+    today: date | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """Runs analysis simulation and applies business rules.
 
@@ -913,6 +920,7 @@ def _run_analysis_and_rules(
         history_df: Detection frame (see packed_orders.union_history_with_packed)
         config: Configuration dict with column_mappings, courier_mappings, rules, settings
         current_session: Name of this run's session, for repeat detection
+        today: The day repeat detection treats as today; None is the real date
 
     Returns:
         Tuple of (final_df, summary_present_df, stats)
@@ -955,6 +963,7 @@ def _run_analysis_and_rules(
         courier_mappings,
         current_session=current_session,
         mode=analysis_mode,
+        today=today,
     )
     logger.info("Analysis computation complete.")
 
@@ -1252,6 +1261,8 @@ def _save_results_and_reports(
     history_readable: bool = True,
     session_path: str | None = None,
     memory_baseline_reused: bool = False,
+    analysis_data: dict | None = None,
+    run_config: dict | None = None,
 ) -> tuple[str | None, str | None]:
     """Saves all analysis results, reports, and updates history.
 
@@ -1400,7 +1411,8 @@ def _save_results_and_reports(
     if use_session_mode:
         try:
             logger.info("Exporting analysis_data.json for Packing Tool integration...")
-            analysis_data = _create_analysis_data_for_packing(final_df)
+            if analysis_data is None:
+                analysis_data = _create_analysis_data_for_packing(final_df)
 
             # Save analysis_data.json
             analysis_data_path = Path(analysis_dir) / "analysis_data.json"
@@ -1506,6 +1518,33 @@ ANALYSIS_STEPS = (
     "Saving results",
 )
 CANCELLED = "cancelled"
+
+
+@dataclass
+class AnalysisResult:
+    """What `analyse` returns: the frame, its summary, its statistics and analysis_data.json."""
+
+    final_df: pd.DataFrame
+    summary_present_df: pd.DataFrame
+    stats: dict
+    analysis_data: dict
+
+
+def analyse(orders_df, stock_df, config, *, history_df=None, current_session=None, now=None) -> AnalysisResult:
+    """Analyse these frames with this config at this time.
+
+    The one path a run and a replay share: run_full_analysis calls it, and tests/replay/
+    calls it on stored production sessions. `history_df` is the detection frame
+    (packed_orders.union_history_with_packed); `now` is an aware datetime, the session's
+    creation time in a replay, and dates both repeat detection and analyzed_at.
+    """
+    now = now or datetime.now().astimezone()
+    if history_df is None:
+        history_df = pd.DataFrame({"Order_Number": []})
+    final_df, summary_present_df, stats = _run_analysis_and_rules(
+        orders_df, stock_df, history_df, config, current_session, today=now.date()
+    )
+    return AnalysisResult(final_df, summary_present_df, stats, _create_analysis_data_for_packing(final_df, now))
 
 
 class AnalysisCancelled(Exception):
@@ -1661,11 +1700,14 @@ def run_full_analysis(
                 f"Cannot load client config: profile_manager={profile_manager is not None}, client_id={client_id}"
             )
 
-        final_df, summary_present_df, stats = (
-            _run_analysis_and_rules(
-                orders_df, stock_df, detection_history_df, config, current_session
-            )
+        result = analyse(
+            orders_df,
+            stock_df,
+            config,
+            history_df=detection_history_df,
+            current_session=current_session,
         )
+        final_df, summary_present_df, stats = result.final_df, result.summary_present_df, result.stats
 
         step(3)
         saving = True
@@ -1692,6 +1734,8 @@ def run_full_analysis(
             history_readable=history_readable,
             session_path=session_path,
             memory_baseline_reused=bool(config.get("_memory_baseline_reused")),
+            analysis_data=result.analysis_data,
+            run_config=config,
         )
 
         # Return success

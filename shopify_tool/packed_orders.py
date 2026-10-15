@@ -69,7 +69,16 @@ def load_session_signals(profile_manager, client_id: str) -> tuple[pd.DataFrame,
 
 
 def _load_session_signals(profile_manager, client_id: str) -> tuple[pd.DataFrame, set[str] | None]:
-    entries = SessionManager(profile_manager).list_client_sessions(client_id)
+    return signals_from_entries(SessionManager(profile_manager).list_client_sessions(client_id))
+
+
+def signals_from_entries(entries: list) -> tuple[pd.DataFrame, set[str] | None]:
+    """(packed, live) from session entries, as `load_session_signals` returns them.
+
+    An entry is a dict holding `session_name` or `session_path`, `status` and
+    `packing_progress` (the shape `SessionManager.list_client_sessions` yields).
+    A replay builds its entries from stored sessions and calls this directly.
+    """
     if not entries:
         # An unreachable sessions folder also lists as empty. Rows can't name
         # sessions that never existed, so "no sessions" is "unknown".
@@ -126,7 +135,7 @@ def _load_session_signals(profile_manager, client_id: str) -> tuple[pd.DataFrame
     df = df.sort_values("Execution_Date").drop_duplicates(
         subset=["Order_Number", "Session"], keep="first"
     )
-    logger.info(f"Loaded {len(df)} packed orders for repeat detection ({client_id})")
+    logger.info(f"Loaded {len(df)} packed orders for repeat detection")
     return df.reset_index(drop=True), live
 
 
