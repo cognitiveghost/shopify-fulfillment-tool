@@ -146,16 +146,19 @@ def test_when_painted_waits_for_the_report_and_runs_once(qtbot):
     assert ran == [1]
 
 
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-7: the paint timeout is logged as a warning")
 def test_when_painted_gives_up_at_the_timeout_and_says_so(qtbot, caplog):
     from shared.web_page import when_painted
 
     bridge = PageBridge()
     bridge.set_theme_css(":root { --a: 1 }")
     ran = []
-    with caplog.at_level(logging.WARNING, logger="shared.web_page"):
+    with caplog.at_level(logging.INFO, logger="shared.web_page"):
         when_painted(bridge, lambda: ran.append(1), timeout_ms=50)
         qtbot.waitUntil(lambda: ran == [1], timeout=2000)
     assert "PageBridge" in caplog.text and "revision 1" in caplog.text
+    # Handled (the action runs anyway), so not a warning: AUDIT-10-7.
+    assert all(r.levelno == logging.INFO for r in caplog.records if "did not report" in r.getMessage())
     bridge.paintedRevision(1)  # a late report must not run it again
     assert ran == [1]
 
