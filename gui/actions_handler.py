@@ -1542,8 +1542,6 @@ class ActionsHandler(QObject):
 
         self.mw.save_session_state()
         self.mw._update_all_views()
-        if hasattr(self.mw, "ui_manager"):
-            self.mw.ui_manager._populate_tag_filter()
 
         self.mw.log_activity(
             "Bulk Operation",
@@ -1589,8 +1587,6 @@ class ActionsHandler(QObject):
 
         self.mw.save_session_state()
         self.mw._update_all_views()
-        if hasattr(self.mw, "ui_manager"):
-            self.mw.ui_manager._populate_tag_filter()
 
         self.mw.log_activity(
             "Bulk Operation",

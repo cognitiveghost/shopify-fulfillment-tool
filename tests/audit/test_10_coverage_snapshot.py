@@ -141,14 +141,12 @@ def test_audit_10_4_an_edit_withdraws_the_out_of_date_list_once(main_window, toa
     assert toasts == [report_jobs.out_of_date_message(["ALL"], [])]  # once, not per edit
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-8: adding a tag calls a method UIManager no longer has")
 def test_audit_10_8_a_bulk_tag_edit_does_not_raise(main_window, toasts):
     _with_list(main_window)
     main_window.actions_handler.bulk_add_tag(["#1001"], "VIP")
     main_window.actions_handler.bulk_remove_tag(["#1001"], "VIP")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-8: adding a tag calls a method UIManager no longer has")
 def test_a_tag_edit_withdraws_nothing(main_window, toasts):
     path = _with_list(main_window)
     toasts.clear()

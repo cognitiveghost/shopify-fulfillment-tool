@@ -60,3 +60,11 @@ keeps today's behaviour. The Packer side (writing `incomplete`) is the packing-t
 Tests: `tests/test_session_lifecycle.py` (the five `packing_completion` cases after
 `test_a_completed_run_short_of_its_list_is_not_packed`) and `tests/test_report_jobs.py`
 (`test_statistics_record_each_lists_order_count`).
+
+### AUDIT-10-8: a bulk tag edit raised `AttributeError` after saving
+
+Found: while writing the AUDIT-10-4 window tests. `bulk_add_tag` and `bulk_remove_tag` called
+`ui_manager._populate_tag_filter()`, which the Qt tag filter took with it when the results tier moved to
+the web page (Phase 9). On a real window the edit was saved and the undo operation recorded, then the
+call raised, so the operator got no toast and the activity log line was skipped. Fix: both calls removed;
+`_update_all_views()` already refreshes the page. Tests: `test_audit_10_8_*`.
