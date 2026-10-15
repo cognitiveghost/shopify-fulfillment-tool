@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from shared.i18n import _
 from shared.theme import apply_dialog_button_roles, font_css
 
 _VERBS_THAT_NAME_NO_ACT = {"ok", "yes", "confirm", "continue"}
@@ -49,7 +50,9 @@ class ConfirmDialog(QDialog):
         self.confirm_input = None
         if require_text is not None:
             self.confirm_input = QLineEdit(self)
-            self.confirm_input.setPlaceholderText(f"Type {require_text} to confirm")
+            self.confirm_input.setPlaceholderText(
+                _("Type {require_text} to confirm", require_text=require_text)
+            )
             layout.addWidget(self.confirm_input)
 
         self.buttons = QDialogButtonBox(self)

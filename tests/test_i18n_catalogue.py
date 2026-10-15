@@ -18,8 +18,7 @@ APP_JS = c.files(ROOT / "gui" / "web", "*.js")
 
 # Files whose UI text is fully wrapped. Each wrapping task adds its files; Task 17
 # replaces the lists with every file (SHARED_PY + APP_PY, APP_HTML, APP_JS).
-GUARDED_PY: list[Path] = [ROOT / "shared" / "components" / "language_segment.py",
-                          ROOT / "shared" / "update_flow.py"]
+GUARDED_PY: list[Path] = SHARED_PY
 GUARDED_HTML: list[Path] = []
 GUARDED_JS: list[Path] = []
 # Text that is never translated, with the reason.
