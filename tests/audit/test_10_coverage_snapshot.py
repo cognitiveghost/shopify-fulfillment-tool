@@ -287,7 +287,6 @@ def test_audit_10_6_expiry_zero_means_none_quietly(caplog):
     assert caplog.records == []
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-9: a ParserError is caught as the ValueError it subclasses")
 def test_audit_10_9_a_broken_quote_is_a_csv_parsing_error(tmp_path):
     (tmp_path / "orders.csv").write_text(
         "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A,1,DHL\n", encoding="utf-8")
@@ -297,3 +296,22 @@ def test_audit_10_9_a_broken_quote_is_a_csv_parsing_error(tmp_path):
         {"column_mappings": MAPPINGS_10})
     assert not ok
     assert message.startswith("CSV parsing error:")
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-10: a colour re-picked unchanged compares case-sensitively")
+def test_audit_10_10_editing_a_group_without_changes_saves_nothing(qapp, tmp_path, monkeypatch):
+    import gui.groups_management_dialog as groups_dialog
+    from PySide6.QtGui import QColor
+    from shopify_tool.groups_manager import GroupsManager
+
+    groups = GroupsManager(base_path=str(tmp_path))
+    groups.create_group("Bulk", "#FF0000")
+    toasts = []
+    monkeypatch.setattr(groups_dialog, "toast", lambda _w, text, **k: toasts.append(text))
+    monkeypatch.setattr(groups_dialog.QInputDialog, "getText", staticmethod(lambda *a, **k: ("Bulk", True)))
+    monkeypatch.setattr(groups_dialog.QColorDialog, "getColor", staticmethod(lambda *a, **k: QColor("#FF0000")))
+    dialog = groups_dialog.GroupsManagementDialog(groups, profile_manager=type("P", (), {
+        "list_clients": lambda self: [], "load_client_config": lambda self, c: None})())
+    dialog.groups_table.selectRow(0)
+    dialog._edit_group()
+    assert toasts == []  # nothing changed, so nothing was saved or announced
