@@ -363,6 +363,11 @@ class MainWindow(QMainWindow):
         )
         self.client_directory.loaded.connect(self.command_bar.set_clients_from)
         self.client_directory.clientCreated.connect(self.on_client_changed)
+        self.client_directory.editClientRequested.connect(
+            lambda cid: self.actions_handler.open_settings_window(
+                page="Profile", client_id=cid
+            )
+        )
         self.command_bar.clientChanged.connect(self.on_client_changed)
         self.command_bar.clientChanged.connect(
             lambda _c: self.ui_manager._populate_overflow(self.command_bar)

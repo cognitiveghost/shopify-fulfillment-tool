@@ -456,25 +456,36 @@ class ActionsHandler(QObject):
         self.log.error("An unexpected error occurred in a background task", exc_info=value)
         show_error(self.mw, "A background task failed", "Details are in Logs.")
 
-    def open_settings_window(self, page: str | None = None):
-        """Opens the settings window for the active client.
+    def open_settings_window(
+        self, page: str | None = None, client_id: str | None = None
+    ):
+        """Opens the settings window for a client (the active one by default).
 
         Args:
             page (str, optional): Nav entry to open on, e.g. "Orders mapping".
                 Defaults to whichever page was open last.
+            client_id (str, optional): The client to edit. Defaults to the
+                active client.
         """
-        if not self.mw.current_client_id:
+        client_id = client_id or self.mw.current_client_id
+        if not client_id:
             self.log.warning("open_settings_window called with no client selected")
             return
+        is_active = client_id == self.mw.current_client_id
 
         # Reload fresh config
         try:
-            fresh_config = self.mw.profile_manager.load_shopify_config(
-                self.mw.current_client_id
-            )
+            fresh_config = self.mw.profile_manager.load_shopify_config(client_id)
 
             if not fresh_config:
                 raise ProfileManagerError("Failed to load configuration")
+            profile = {
+                "client_config": self.mw.profile_manager.load_client_config(client_id)
+                or {},
+                "groups": self.mw.groups_manager.list_groups(),
+                "stats": self.mw.profile_manager.calculate_metadata(client_id),
+                "has_sessions": self.mw.profile_manager.client_has_sessions(client_id),
+            }
 
         except Exception:
             self.log.exception("Failed to load settings")
@@ -484,27 +495,35 @@ class ActionsHandler(QObject):
         # Open settings with fresh data
 
         settings_win = SettingsWindow(
-            client_id=self.mw.current_client_id,
+            client_id=client_id,
             client_config=fresh_config,  # Fresh data
             profile_manager=self.mw.profile_manager,
-            analysis_df=self.mw.analysis_results_df,
+            analysis_df=self.mw.analysis_results_df if is_active else None,
             parent=self.mw,
             initial_page=page,
             loaded_files={
                 "orders": self.mw.orders_file_path,
                 "stock": self.mw.stock_file_path,
-            },
+            }
+            if is_active
+            else None,
             # Test rule names the analysis it ran against.
             session_name=os.path.basename(self.mw.session_path)
-            if self.mw.session_path
+            if is_active and self.mw.session_path
             else None,
+            profile=profile,
         )
 
         saved = settings_win.exec()
         # The main window is its parent, so nothing else ever deletes it, and
         # it holds a web view (ADR 0016: the view lives while the dialog is open).
         settings_win.deleteLater()
-        if saved:
+        if settings_win.removed_client:
+            self.mw.remove_client(client_id, settings_win.removed_client)
+            return
+        if settings_win.profile_saved:
+            self.mw.client_directory.refresh()
+        if saved and is_active:
             # It saved at least once while it was open; its footer said so.
             try:
                 self.mw.active_profile_config = (
