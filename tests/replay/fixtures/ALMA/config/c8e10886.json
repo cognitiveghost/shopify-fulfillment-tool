@@ -1,0 +1,881 @@
+{
+  "client_id": "ALMA",
+  "client_name": "Alma Derm",
+  "created_at": "2026-08-14T11:06:05.014859+03:00",
+  "column_mappings": {
+    "version": 2,
+    "orders": {
+      "Name": "Order_Number",
+      "Lineitem sku": "SKU",
+      "Lineitem quantity": "Quantity",
+      "Shipping Method": "Shipping_Method",
+      "Lineitem name": "Product_Name",
+      "Shipping Country": "Shipping_Country",
+      "Tags": "Tags",
+      "Notes": "Notes",
+      "Total": "Total_Price",
+      "Subtotal": "Subtotal",
+      "Shipping Name": "Customer",
+      "Created at": "Created_At"
+    },
+    "stock": {
+      "Артикул": "SKU",
+      "Наличност": "Stock",
+      "Име": "Product_Name",
+      "Годност": "Expiry_Date",
+      "Партида": "Batch"
+    },
+    "additional_columns": [
+      {
+        "csv_name": "Accepts Marketing",
+        "internal_name": "Accepts_Marketing",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Address1",
+        "internal_name": "Billing_Address1",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Address2",
+        "internal_name": "Billing_Address2",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing City",
+        "internal_name": "Billing_City",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Company",
+        "internal_name": "Billing_Company",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Country",
+        "internal_name": "Billing_Country",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Name",
+        "internal_name": "Billing_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Phone",
+        "internal_name": "Billing_Phone",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Province",
+        "internal_name": "Billing_Province",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Province Name",
+        "internal_name": "Billing_Province_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Street",
+        "internal_name": "Billing_Street",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Zip",
+        "internal_name": "Billing_Zip",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Cancelled at",
+        "internal_name": "Cancelled_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Created at",
+        "internal_name": "Created_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Currency",
+        "internal_name": "Currency",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Device ID",
+        "internal_name": "Device_ID",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Discount Amount",
+        "internal_name": "Discount_Amount",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Discount Code",
+        "internal_name": "Discount_Code",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Duties",
+        "internal_name": "Duties",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Email",
+        "internal_name": "Email",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Employee",
+        "internal_name": "Employee",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Financial Status",
+        "internal_name": "Financial_Status",
+        "enabled": true,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Fulfilled at",
+        "internal_name": "Fulfilled_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Fulfillment Status",
+        "internal_name": "Fulfillment_Status",
+        "enabled": true,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Id",
+        "internal_name": "Id",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem compare at price",
+        "internal_name": "Lineitem_compare_at_price",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem discount",
+        "internal_name": "Lineitem_discount",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem fulfillment status",
+        "internal_name": "Lineitem_fulfillment_status",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem price",
+        "internal_name": "Lineitem_price",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem requires shipping",
+        "internal_name": "Lineitem_requires_shipping",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem taxable",
+        "internal_name": "Lineitem_taxable",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Location",
+        "internal_name": "Location",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Next Payment Due At",
+        "internal_name": "Next_Payment_Due_At",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Note Attributes",
+        "internal_name": "Note_Attributes",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Outstanding Balance",
+        "internal_name": "Outstanding_Balance",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Paid at",
+        "internal_name": "Paid_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment ID",
+        "internal_name": "Payment_ID",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment Method",
+        "internal_name": "Payment_Method",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment Reference",
+        "internal_name": "Payment_Reference",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment References",
+        "internal_name": "Payment_References",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment Terms Name",
+        "internal_name": "Payment_Terms_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Phone",
+        "internal_name": "Phone",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Receipt Number",
+        "internal_name": "Receipt_Number",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Refunded Amount",
+        "internal_name": "Refunded_Amount",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Risk Level",
+        "internal_name": "Risk_Level",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping",
+        "internal_name": "Shipping",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Address1",
+        "internal_name": "Shipping_Address1",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Address2",
+        "internal_name": "Shipping_Address2",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping City",
+        "internal_name": "Shipping_City",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Company",
+        "internal_name": "Shipping_Company",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Name",
+        "internal_name": "Shipping_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Phone",
+        "internal_name": "Shipping_Phone",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Province",
+        "internal_name": "Shipping_Province",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Province Name",
+        "internal_name": "Shipping_Province_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Street",
+        "internal_name": "Shipping_Street",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Zip",
+        "internal_name": "Shipping_Zip",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Source",
+        "internal_name": "Source",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 1 Name",
+        "internal_name": "Tax_1_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 1 Value",
+        "internal_name": "Tax_1_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 2 Name",
+        "internal_name": "Tax_2_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 2 Value",
+        "internal_name": "Tax_2_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 3 Name",
+        "internal_name": "Tax_3_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 3 Value",
+        "internal_name": "Tax_3_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 4 Name",
+        "internal_name": "Tax_4_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 4 Value",
+        "internal_name": "Tax_4_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 5 Name",
+        "internal_name": "Tax_5_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 5 Value",
+        "internal_name": "Tax_5_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Taxes",
+        "internal_name": "Taxes",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Vendor",
+        "internal_name": "Vendor",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      }
+    ],
+    "set_decoders": {
+      "01-BODY-1010": [
+        {
+          "sku": "01-FACE-1010",
+          "quantity": 1
+        }
+      ]
+    }
+  },
+  "courier_mappings": {
+    "SPEEDY": {
+      "patterns": [
+        "Спиди"
+      ],
+      "case_sensitive": false
+    },
+    "DPD": {
+      "patterns": [
+        "Dpd"
+      ],
+      "case_sensitive": false
+    },
+    "POST": {
+      "patterns": [
+        "POSTONE"
+      ],
+      "case_sensitive": false
+    }
+  },
+  "analysis_mode": "fifo",
+  "settings": {
+    "low_stock_threshold": 5,
+    "stock_csv_delimiter": "auto",
+    "orders_csv_delimiter": "auto",
+    "repeat_detection_days": 1,
+    "delimiter_auto_migrated": true
+  },
+  "rules": [
+    {
+      "name": "Mask",
+      "priority": 1,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "SKU",
+              "operator": "matches regex",
+              "value": "^02-FACE"
+            }
+          ],
+          "match": "ANY",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "MASK"
+            }
+          ]
+        },
+        {
+          "conditions": [
+            {
+              "field": "SKU",
+              "operator": "contains",
+              "value": "02-FACE-1002"
+            },
+            {
+              "field": "SKU",
+              "operator": "contains",
+              "value": "02-FACE-1003"
+            }
+          ],
+          "match": "ANY",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "MASK_II"
+            },
+            {
+              "type": "REMOVE_INTERNAL_TAG",
+              "value": "MASK"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Box",
+      "priority": 2,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "SKU",
+              "operator": "matches regex",
+              "value": "^(01|05)"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "BOX"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "International",
+      "priority": 3,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "Destination_Country",
+              "operator": "does not contain",
+              "value": "BG"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "INTERNATIONAL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lux Box",
+      "priority": 4,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "Notes",
+              "operator": "contains",
+              "value": "LUX"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "LUX"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Large orders",
+      "priority": 5,
+      "level": "order",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "total_quantity",
+              "operator": "is greater than",
+              "value": "13"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "Large"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o",
+      "priority": 6,
+      "level": "order",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "Order_Fulfillment_Status",
+              "operator": "equals",
+              "value": "Fulfillable"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "O"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "order_rules": [],
+  "packing_list_configs": [
+    {
+      "name": "All",
+      "output_filename": "ALL_ALMADERM.xlsx",
+      "filters": [
+        {
+          "field": "Order_Fulfillment_Status",
+          "operator": "equals",
+          "value": "Fulfillable"
+        }
+      ],
+      "exclude_skus": []
+    }
+  ],
+  "stock_export_configs": [
+    {
+      "name": "ALL",
+      "output_filename": "ALL_ORDERS_ALMADERM.xls",
+      "filters": [
+        {
+          "field": "Order_Fulfillment_Status",
+          "operator": "equals",
+          "value": "Fulfillable"
+        }
+      ]
+    }
+  ],
+  "set_decoders": {
+    "01-BODY-1010": [
+      {
+        "sku": "01-FACE-1010",
+        "quantity": 1
+      }
+    ]
+  },
+  "packaging_rules": [],
+  "weight_config": {
+    "volumetric_divisor": 6000,
+    "products": {},
+    "boxes": []
+  },
+  "tag_categories": {
+    "version": 2,
+    "categories": {
+      "packaging": {
+        "label": "Packaging",
+        "color": "#4CAF50",
+        "order": 1,
+        "tags": [
+          "BOX",
+          "LUX",
+          "O"
+        ],
+        "sku_writeoff": {
+          "enabled": true,
+          "mappings": {
+            "BOX": [
+              {
+                "sku": "100010",
+                "quantity": 1.0
+              }
+            ],
+            "LUX": [
+              {
+                "sku": "1000010",
+                "quantity": 1.0
+              },
+              {
+                "sku": "100007",
+                "quantity": 1.0
+              },
+              {
+                "sku": "100008",
+                "quantity": 1.0
+              }
+            ],
+            "O": [
+              {
+                "sku": "100009",
+                "quantity": 1.0
+              }
+            ]
+          }
+        }
+      },
+      "priority": {
+        "label": "Priority",
+        "color": "#FF9800",
+        "order": 2,
+        "tags": [
+          "URGENT",
+          "HIGH_VALUE",
+          "DOUBLE_TRACK"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "status": {
+        "label": "Status",
+        "color": "#2196F3",
+        "order": 3,
+        "tags": [
+          "CHECKED",
+          "PROBLEM",
+          "VERIFIED"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "order_type": {
+        "label": "Order Type",
+        "color": "#9C27B0",
+        "order": 4,
+        "tags": [
+          "MASK",
+          "MASK_II"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "accessories": {
+        "label": "Accessories",
+        "color": "#E91E63",
+        "order": 5,
+        "tags": [
+          "STICKER",
+          "BUSINESS_CARD",
+          "GIFT_BOX"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "delivery": {
+        "label": "Delivery",
+        "color": "#FF5722",
+        "order": 6,
+        "tags": [
+          "SPEEDY",
+          "INTERNATIONAL"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "custom": {
+        "label": "Other",
+        "color": "#9E9E9E",
+        "order": 999,
+        "tags": [],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      }
+    }
+  }
+}

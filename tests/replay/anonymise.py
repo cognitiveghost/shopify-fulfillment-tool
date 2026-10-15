@@ -53,6 +53,43 @@ def _column_for(config: dict, internal: str) -> list[str]:
     return [c for c, v in config["column_mappings"]["orders"].items() if v == internal]
 
 
+def rule_words(config: dict, field: str) -> list[str]:
+    """The literal values the config's rules compare `field` with, wherever a rule sits."""
+    found: list[str] = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("field") == field and "value" in node:
+                value = node["value"]
+                found.extend(str(v) for v in (value if isinstance(value, list) else [value]) if str(v))
+            for child in node.values():
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(config)
+    return sorted(set(found))
+
+
+def mask_text(text, placeholder: str, words: list[str]) -> str:
+    """People's words out, the words a rule reads kept: the matched parts only, or the placeholder.
+
+    Whatever a rule's condition on this text tests (contains, equals, starts with ...) gives the
+    same answer on the masked text, so the replay still takes the same branches.
+    """
+    text = "" if text is None else str(text)
+    if text.strip() == "":
+        return text
+    lowered = text.lower()
+    kept = []
+    for word in words:
+        at = lowered.find(word.lower())
+        if at >= 0:
+            kept.append(text[at:at + len(word)])
+    return " ".join(kept) if kept else placeholder
+
+
 def orders_frame(raw: pd.DataFrame, config: dict, omap: OrderMap) -> pd.DataFrame:
     mapping = config["column_mappings"]["orders"]
     extra = [c["csv_name"] for c in config["column_mappings"].get("additional_columns", []) or []
@@ -63,18 +100,22 @@ def orders_frame(raw: pd.DataFrame, config: dict, omap: OrderMap) -> pd.DataFram
         if column in out:
             out[column] = out[column].map(omap.map)
     for internal, placeholder in (("Customer", "Customer"), ("Notes", "Note")):
+        words = rule_words(config, internal)
         for column in _column_for(config, internal):
             if column in out:
-                out[column] = out[column].where(out[column].fillna("") == "", placeholder)
+                out[column] = out[column].map(lambda text, p=placeholder, w=words: mask_text(text, p, w))
     return out
 
 
-def packing_doc(doc: dict, omap: OrderMap) -> dict:
+def packing_doc(doc: dict, omap: OrderMap, note_words: list[str] | None = None) -> dict:
+    """The document with order numbers mapped and notes masked like orders_frame masks them."""
     out = copy.deepcopy(doc)
     for order in out.get("orders", []):
         order["order_number"] = omap.map(order.get("order_number"))
-        if order.get("notes"):
-            order["notes"] = "Note"
+        # "nan" is what an empty Notes cell becomes (core._text_or_blank) and holds no words;
+        # masking it would make the replay, which also gives "nan", look different.
+        if order.get("notes") not in ("", "nan", None):
+            order["notes"] = mask_text(order["notes"], "Note", note_words or [])
     return out
 
 

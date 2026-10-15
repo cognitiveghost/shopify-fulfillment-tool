@@ -1,0 +1,10 @@
+Name,Subtotal,Total,Shipping Method,Created at,Lineitem quantity,Lineitem name,Lineitem sku,Shipping Name,Shipping Country,Notes,Tags
+#100550,72.00,82.00,Standard 5-10 business days,2026-09-27 11:05:10 +0100,1,The Bestsellers Set,SET_BESTSELLERS,Customer,DK,,express
+#100550,,,,2026-09-27 11:05:10 +0100,1,New Product Launch Lab Sample,SAMPLENEWLAUCH,,,,
+#100645,52.00,62.00,Standard 5-10 business days,2026-10-07 12:36:52 +0100,1,The Barrier Cream - Core Refill,Barrier_Cream-Refill,Customer,PL,,
+#100650,118.15,118.15,Standard Shipping 4 - 7 business days,2026-10-08 09:22:31 +0100,1,The Sun Shield SPF 30,Sunshieldspf,Customer,FR,,
+#100650,,,,2026-10-08 09:22:31 +0100,1,The Dewy Skin Set,SET_DEWY,,,,
+#100651,82.45,92.45,Standard 5-10 business days,2026-10-08 10:04:35 +0100,1,The Dewy Skin Set,SET_DEWY,Customer,FI,,
+#100652,63.75,68.75,Standard 3-9 business days,2026-10-08 10:52:00 +0100,1,The Face Oil - 50ml,OIL-50,Customer,GB,,
+#100653,192.00,192.00,Standard 5-8 Business days,2026-10-08 20:21:40 +0100,1,The Complete Daily Set,SET_COMPLETESET,Customer,US,,
+#100654,50.00,65.00,Standard 5-8 Business days,2026-10-09 04:34:16 +0100,1,The Barrier Cream - Barrier Cream,Barrier_Cream-1,Customer,US,,

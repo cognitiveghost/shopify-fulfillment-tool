@@ -3,7 +3,15 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-from anonymise import OrderMap, clean_config, config_of_day, orders_frame, packing_doc
+from anonymise import (
+    OrderMap,
+    clean_config,
+    config_of_day,
+    mask_text,
+    orders_frame,
+    packing_doc,
+    rule_words,
+)
 from replay import first_difference
 
 
@@ -41,10 +49,11 @@ def test_orders_frame_keeps_only_mapped_columns_and_masks_people():
 
 def test_packing_doc_maps_numbers_and_masks_notes():
     doc = {"analyzed_at": "t", "orders": [{"order_number": "#12", "notes": "call me", "items": []},
-                                         {"order_number": "#13", "notes": "", "items": []}]}
-    out = packing_doc(doc, OrderMap(["#12", "#13"]))
-    assert [o["order_number"] for o in out["orders"]] == ["#11", "#12"]
-    assert [o["notes"] for o in out["orders"]] == ["Note", ""]
+                                         {"order_number": "#13", "notes": "", "items": []},
+                                         {"order_number": "#14", "notes": "nan", "items": []}]}
+    out = packing_doc(doc, OrderMap(["#12", "#13", "#14"]))
+    assert [o["order_number"] for o in out["orders"]] == ["#11", "#12", "#13"]
+    assert [o["notes"] for o in out["orders"]] == ["Note", "", "nan"]  # "nan" is an empty cell, no words
     assert doc["orders"][0]["order_number"] == "#12"  # input untouched
 
 
@@ -69,3 +78,28 @@ def test_first_difference_ignores_time_stamps_and_names_the_changed_order():
     changed = {**base, "orders": [{"order_number": "#11", "items": [{"sku": "A", "quantity": 2}]}]}
     message = first_difference(base, changed)
     assert "#11" in message and "items" in message
+
+
+RULES = {"rules": [{"steps": [{"conditions": [{"field": "Notes", "operator": "contains", "value": "LUX"},
+                                                {"field": "SKU", "operator": "equals", "value": "A"}]}]}]}
+
+
+def test_rule_words_finds_the_values_rules_compare_a_field_with():
+    assert rule_words(RULES, "Notes") == ["LUX"]
+    assert rule_words(RULES, "Customer") == []
+
+
+def test_mask_text_keeps_only_what_a_rule_reads():
+    assert mask_text("please make it lux, call Real Person", "Note", ["LUX"]) == "lux"
+    assert mask_text("call Real Person", "Note", ["LUX"]) == "Note"
+    assert mask_text("", "Note", ["LUX"]) == ""
+
+
+def test_orders_frame_and_packing_doc_mask_notes_alike_when_a_rule_reads_them():
+    config = {**CONFIG, **RULES}
+    raw = pd.DataFrame({"Name": ["#12"], "Shipping Name": [""], "Notes": ["LUX for Real Person"],
+                        "Lineitem sku": ["A"], "Financial Status": ["paid"], "_source_file": ["s.csv"]})
+    omap = OrderMap(["#12"])
+    assert list(orders_frame(raw, config, omap)["Notes"]) == ["LUX"]
+    doc = {"orders": [{"order_number": "#12", "notes": "LUX for Real Person", "items": []}]}
+    assert packing_doc(doc, omap, rule_words(config, "Notes"))["orders"][0]["notes"] == "LUX"

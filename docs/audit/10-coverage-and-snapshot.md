@@ -78,3 +78,21 @@ that changes it moves the unstarted lists to `packing_lists/withdrawn/` and name
 failed regeneration withdraws the old list too. ADR 0019.
 Tests: `tests/test_report_jobs.py` (fingerprint, withdraw, message), `test_audit_10_4_*` and the window
 tests that follow it in the audit file.
+
+## Replay suite (no id)
+
+`tests/replay/` replays 26 stored production sessions (19 ALMA, 6 HERBAR, 1 LIDA, the golden set of
+2026-10-11) through `core.analyse` and compares the result with the `analysis_data.json` each session
+stored, and, for the 20 sessions without manual operations, with its packing lists. Fixtures are
+anonymised: one shared order-number mapping per client, only the columns the config maps, names and
+notes masked down to the words a rule reads, no e-mail, phone or path (`test_fixtures_hold_no_pii`).
+Rebuild with `scripts/build_replay_fixtures.py --server ~/Desktop/Server./Server`; the builder replays
+each session and refuses one that does not reproduce. 21 of the 26 configs are the nearest backup, not
+the exact config of the day (`meta.json: config_exact`): `shopify_config.json` is kept in the session
+folder from now on, so later sessions replay exactly. Operation replay (B4) is a follow-up.
+
+## Open questions
+
+- An empty Notes cell is written to `analysis_data.json` and to the packing list as the text `nan`
+  (`core._text_or_blank`, kept on purpose "for what each JSON text field has always held"). The Packer
+  may show it. Not changed here: it needs a decision on whether the Packer or old sessions depend on it.

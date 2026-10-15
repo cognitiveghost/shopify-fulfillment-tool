@@ -22,7 +22,14 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(REPO), str(REPO / "tests" / "replay")]
-from anonymise import OrderMap, clean_config, config_of_day, orders_frame, packing_doc
+from anonymise import (
+    OrderMap,
+    clean_config,
+    config_of_day,
+    orders_frame,
+    packing_doc,
+    rule_words,
+)
 from replay import first_difference, replay_session
 
 from shopify_tool import fulfillment_history
@@ -74,7 +81,7 @@ def _backups(client):
     return found
 
 
-def build_client(server: Path, client_id: str, only: set[str] | None) -> list[str]:
+def build_client(server: Path, client_id: str, only: set[str] | None, keep_failed: bool = False) -> list[str]:
     tree = server / TREE
     client = tree / "Clients" / f"CLIENT_{client_id}"
     sessions_root = tree / "Sessions" / f"CLIENT_{client_id}"
@@ -131,18 +138,19 @@ def build_client(server: Path, client_id: str, only: set[str] | None) -> list[st
         config_name = f"config/{hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]}.json"
         _write_json(out / config_name, config)
         target = out / name
+        words = rule_words(config, "Notes")
         shutil.rmtree(target, ignore_errors=True)
         target.mkdir(parents=True)
         orders_frame(_raw_csv(_orders_file(source)), config, omap).to_csv(
             target / "orders.csv", index=False, encoding="utf-8")
         shutil.copyfile(source / "analysis" / "memory_baseline.json", target / "memory_baseline.json")
         _write_json(target / "expected" / "analysis_data.json",
-                    packing_doc(_read(source / "analysis" / "analysis_data.json"), omap))
+                    packing_doc(_read(source / "analysis" / "analysis_data.json"), omap, words))
         lists = []
         if (client_id, name) not in WITH_OPERATIONS:
             for path in sorted((source / "packing_lists").glob("*.json")):
                 lists.append(path.stem)
-                _write_json(target / "expected" / "packing_lists" / path.name, packing_doc(_read(path), omap))
+                _write_json(target / "expected" / "packing_lists" / path.name, packing_doc(_read(path), omap, words))
         _write_json(target / "meta.json", {"created_at": infos[name]["created_at"], "config": config_name,
                                            "config_exact": exact, "packing_lists": lists})
         with tempfile.TemporaryDirectory() as work:
@@ -155,7 +163,8 @@ def build_client(server: Path, client_id: str, only: set[str] | None) -> list[st
             except Exception as e:  # a crash is a failed replay too
                 problem = f"{type(e).__name__}: {e}"
         if problem:
-            shutil.rmtree(target)
+            if not keep_failed:
+                shutil.rmtree(target)
             failed.append(f"{client_id}/{name}: {problem}")
         else:
             print(f"ok {client_id}/{name} ({'exact' if exact else 'nearest'} config, {len(lists)} lists)")
@@ -166,13 +175,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--server", type=Path, required=True, help="the Server/ folder of the snapshot")
     parser.add_argument("--only", action="append", help="CLIENT/SESSION, repeatable")
+    parser.add_argument("--keep-failed", action="store_true",
+                        help="leave a session that did not reproduce on disk, for debugging (never commit it)")
     args = parser.parse_args()
     only = set(args.only or [])
     failed = []
     for client_id in GOLDEN:
         if only and not any(o.startswith(f"{client_id}/") for o in only):
             continue
-        failed += build_client(args.server.expanduser(), client_id, only)
+        failed += build_client(args.server.expanduser(), client_id, only, args.keep_failed)
     for line in failed:
         print(f"FAILED {line}", file=sys.stderr)
     return 1 if failed else 0

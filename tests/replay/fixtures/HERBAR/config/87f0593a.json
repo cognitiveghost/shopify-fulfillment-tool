@@ -1,0 +1,1157 @@
+{
+  "client_id": "HERBAR",
+  "client_name": "Herbar",
+  "created_at": "2026-08-14T11:40:38.126924+03:00",
+  "column_mappings": {
+    "version": 2,
+    "orders": {
+      "Name": "Order_Number",
+      "Lineitem sku": "SKU",
+      "Lineitem quantity": "Quantity",
+      "Shipping Method": "Shipping_Method",
+      "Lineitem name": "Product_Name",
+      "Shipping Country": "Shipping_Country",
+      "Tags": "Tags",
+      "Notes": "Notes",
+      "Total": "Total_Price",
+      "Subtotal": "Subtotal",
+      "Shipping Name": "Customer",
+      "Created at": "Created_At"
+    },
+    "stock": {
+      "Артикул": "SKU",
+      "Наличност": "Stock",
+      "Име": "Product_Name",
+      "Годност": "Expiry_Date",
+      "Партида": "Batch"
+    },
+    "set_decoders": {
+      "Barrier_Cream-1": [
+        {
+          "sku": "Barrier_Cream",
+          "quantity": 1
+        }
+      ],
+      "NECTAR-30": [
+        {
+          "sku": "NECTAR-30",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "quantity": 1
+        }
+      ],
+      "SET-YINGYANG": [
+        {
+          "sku": "NECTAR-30",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "quantity": 1
+        },
+        {
+          "sku": "OIL-50",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "SET_360": [
+        {
+          "sku": "NECTAR-30",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "quantity": 1
+        },
+        {
+          "sku": "OIL-50",
+          "quantity": 1
+        },
+        {
+          "sku": "GUASHROOM-DALMATION",
+          "quantity": 1
+        },
+        {
+          "sku": "Barrier_Cream",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "SET_BESTSELLERS": [
+        {
+          "sku": "Barrier_Cream",
+          "quantity": 1
+        },
+        {
+          "sku": "Sunshieldspf",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "SET_COMPLETESET": [
+        {
+          "sku": "Barrier_Cream",
+          "quantity": 1
+        },
+        {
+          "sku": "OIL-50",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-30",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "quantity": 1
+        },
+        {
+          "sku": "Sunshieldspf",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "SET_DEWY": [
+        {
+          "sku": "Barrier_Cream",
+          "quantity": 1
+        },
+        {
+          "sku": "OIL-50",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "SET_GRWM": [
+        {
+          "sku": "NECTAR-30",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "quantity": 1
+        },
+        {
+          "sku": "OIL-50",
+          "quantity": 1
+        },
+        {
+          "sku": "GUASHROOM-DALMATION",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "SET_OG": [
+        {
+          "sku": "OIL-50",
+          "quantity": 1
+        },
+        {
+          "sku": "GUASHROOM-DALMATION",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "SET_TRIOSET": [
+        {
+          "sku": "Barrier_Cream",
+          "quantity": 1
+        },
+        {
+          "sku": "OIL-50",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-30",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ],
+      "THE_BARRIER_SET": [
+        {
+          "sku": "NECTAR-30",
+          "quantity": 1
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "quantity": 1
+        },
+        {
+          "sku": "Barrier_Cream",
+          "quantity": 1
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "quantity": 1
+        }
+      ]
+    },
+    "additional_columns": [
+      {
+        "csv_name": "Accepts Marketing",
+        "internal_name": "Accepts_Marketing",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Address1",
+        "internal_name": "Billing_Address1",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Address2",
+        "internal_name": "Billing_Address2",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing City",
+        "internal_name": "Billing_City",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Company",
+        "internal_name": "Billing_Company",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Country",
+        "internal_name": "Billing_Country",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Name",
+        "internal_name": "Billing_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Phone",
+        "internal_name": "Billing_Phone",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Province",
+        "internal_name": "Billing_Province",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Province Name",
+        "internal_name": "Billing_Province_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Street",
+        "internal_name": "Billing_Street",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Billing Zip",
+        "internal_name": "Billing_Zip",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Cancelled at",
+        "internal_name": "Cancelled_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Created at",
+        "internal_name": "Created_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Currency",
+        "internal_name": "Currency",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Discount Amount",
+        "internal_name": "Discount_Amount",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Discount Code",
+        "internal_name": "Discount_Code",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Duties",
+        "internal_name": "Duties",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Email",
+        "internal_name": "Email",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Financial Status",
+        "internal_name": "Financial_Status",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Fulfilled at",
+        "internal_name": "Fulfilled_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Fulfillment Status",
+        "internal_name": "Fulfillment_Status",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Id",
+        "internal_name": "Id",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem compare at price",
+        "internal_name": "Lineitem_compare_at_price",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem discount",
+        "internal_name": "Lineitem_discount",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem fulfillment status",
+        "internal_name": "Lineitem_fulfillment_status",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem price",
+        "internal_name": "Lineitem_price",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem requires shipping",
+        "internal_name": "Lineitem_requires_shipping",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Lineitem taxable",
+        "internal_name": "Lineitem_taxable",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Next Payment Due At",
+        "internal_name": "Next_Payment_Due_At",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Note Attributes",
+        "internal_name": "Note_Attributes",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Paid at",
+        "internal_name": "Paid_at",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment ID",
+        "internal_name": "Payment_ID",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment Method",
+        "internal_name": "Payment_Method",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment Reference",
+        "internal_name": "Payment_Reference",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment References",
+        "internal_name": "Payment_References",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Payment Terms Name",
+        "internal_name": "Payment_Terms_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Phone",
+        "internal_name": "Phone",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Receipt Number",
+        "internal_name": "Receipt_Number",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Refunded Amount",
+        "internal_name": "Refunded_Amount",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Risk Level",
+        "internal_name": "Risk_Level",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping",
+        "internal_name": "Shipping",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Address1",
+        "internal_name": "Shipping_Address1",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Address2",
+        "internal_name": "Shipping_Address2",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping City",
+        "internal_name": "Shipping_City",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Company",
+        "internal_name": "Shipping_Company",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Name",
+        "internal_name": "Shipping_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Phone",
+        "internal_name": "Shipping_Phone",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Province",
+        "internal_name": "Shipping_Province",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Province Name",
+        "internal_name": "Shipping_Province_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Street",
+        "internal_name": "Shipping_Street",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Shipping Zip",
+        "internal_name": "Shipping_Zip",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Source",
+        "internal_name": "Source",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 1 Name",
+        "internal_name": "Tax_1_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 1 Value",
+        "internal_name": "Tax_1_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 2 Name",
+        "internal_name": "Tax_2_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 2 Value",
+        "internal_name": "Tax_2_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 3 Name",
+        "internal_name": "Tax_3_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 3 Value",
+        "internal_name": "Tax_3_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 4 Name",
+        "internal_name": "Tax_4_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 4 Value",
+        "internal_name": "Tax_4_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 5 Name",
+        "internal_name": "Tax_5_Name",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Tax 5 Value",
+        "internal_name": "Tax_5_Value",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Taxes",
+        "internal_name": "Taxes",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      },
+      {
+        "csv_name": "Vendor",
+        "internal_name": "Vendor",
+        "enabled": false,
+        "is_order_level": true,
+        "exists_in_df": true
+      }
+    ]
+  },
+  "courier_mappings": {
+    "DHL": {
+      "patterns": [
+        "DHL"
+      ],
+      "case_sensitive": false
+    },
+    "POST": {
+      "patterns": [
+        "7-15",
+        "3-9",
+        "5-10",
+        "4 - 7",
+        "FREE",
+        "5-8"
+      ],
+      "case_sensitive": false
+    }
+  },
+  "analysis_mode": "fifo",
+  "settings": {
+    "low_stock_threshold": 5,
+    "stock_csv_delimiter": "auto",
+    "orders_csv_delimiter": "auto",
+    "repeat_detection_days": 1,
+    "delimiter_auto_migrated": true
+  },
+  "rules": [
+    {
+      "name": "O",
+      "priority": 1,
+      "level": "order",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "Order_Fulfillment_Status",
+              "operator": "equals",
+              "value": "Fulfillable"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "O"
+            },
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "BOX"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MISSING SKU",
+      "priority": 2,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "SKU",
+              "operator": "contains",
+              "value": "NO_SKU"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "MISSING SKU"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "BG",
+      "priority": 3,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "Destination_Country",
+              "operator": "contains",
+              "value": "BG"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "SPEEDY"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DHL",
+      "priority": 4,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "Destination_Country",
+              "operator": "contains",
+              "value": "US"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "DHL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "New Rule",
+      "priority": 5,
+      "level": "order",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "total_quantity",
+              "operator": "is greater than",
+              "value": "10"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "STOKIST"
+            },
+            {
+              "type": "REMOVE_INTERNAL_TAG",
+              "value": "O"
+            },
+            {
+              "type": "REMOVE_INTERNAL_TAG",
+              "value": "BOX"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "order_rules": [],
+  "packing_list_configs": [
+    {
+      "name": "ALL",
+      "output_filename": "ALL_HERBAR.xlsx",
+      "filters": [
+        {
+          "field": "Order_Fulfillment_Status",
+          "operator": "equals",
+          "value": "Fulfillable"
+        }
+      ],
+      "exclude_skus": []
+    }
+  ],
+  "stock_export_configs": [
+    {
+      "name": "ALL",
+      "output_filename": "ALL_HERBAR.xls",
+      "filters": [
+        {
+          "field": "Order_Fulfillment_Status",
+          "operator": "equals",
+          "value": "Fulfillable"
+        }
+      ]
+    }
+  ],
+  "set_decoders": {
+    "Barrier_Cream-1": [
+      {
+        "sku": "Barrier_Cream",
+        "quantity": 1
+      }
+    ],
+    "NECTAR-30": [
+      {
+        "sku": "NECTAR-30",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-DROPPER",
+        "quantity": 1
+      }
+    ],
+    "SET-YINGYANG": [
+      {
+        "sku": "NECTAR-30",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-DROPPER",
+        "quantity": 1
+      },
+      {
+        "sku": "OIL-50",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "SET_360": [
+      {
+        "sku": "NECTAR-30",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-DROPPER",
+        "quantity": 1
+      },
+      {
+        "sku": "OIL-50",
+        "quantity": 1
+      },
+      {
+        "sku": "GUASHROOM-DALMATION",
+        "quantity": 1
+      },
+      {
+        "sku": "Barrier_Cream",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "SET_BESTSELLERS": [
+      {
+        "sku": "Barrier_Cream",
+        "quantity": 1
+      },
+      {
+        "sku": "Sunshieldspf",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "SET_COMPLETESET": [
+      {
+        "sku": "Barrier_Cream",
+        "quantity": 1
+      },
+      {
+        "sku": "OIL-50",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-30",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-DROPPER",
+        "quantity": 1
+      },
+      {
+        "sku": "Sunshieldspf",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "SET_DEWY": [
+      {
+        "sku": "Barrier_Cream",
+        "quantity": 1
+      },
+      {
+        "sku": "OIL-50",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "SET_GRWM": [
+      {
+        "sku": "NECTAR-30",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-DROPPER",
+        "quantity": 1
+      },
+      {
+        "sku": "OIL-50",
+        "quantity": 1
+      },
+      {
+        "sku": "GUASHROOM-DALMATION",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "SET_OG": [
+      {
+        "sku": "OIL-50",
+        "quantity": 1
+      },
+      {
+        "sku": "GUASHROOM-DALMATION",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "SET_TRIOSET": [
+      {
+        "sku": "Barrier_Cream",
+        "quantity": 1
+      },
+      {
+        "sku": "OIL-50",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-30",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-DROPPER",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ],
+    "THE_BARRIER_SET": [
+      {
+        "sku": "NECTAR-30",
+        "quantity": 1
+      },
+      {
+        "sku": "NECTAR-DROPPER",
+        "quantity": 1
+      },
+      {
+        "sku": "Barrier_Cream",
+        "quantity": 1
+      },
+      {
+        "sku": "SET-CORDUROY",
+        "quantity": 1
+      }
+    ]
+  },
+  "packaging_rules": [],
+  "weight_config": {
+    "volumetric_divisor": 6000,
+    "products": {},
+    "boxes": []
+  },
+  "tag_categories": {
+    "version": 2,
+    "categories": {
+      "packaging": {
+        "label": "Packaging",
+        "color": "#4CAF50",
+        "order": 1,
+        "tags": [
+          "BOX",
+          "ENVELOPE"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "priority": {
+        "label": "Priority",
+        "color": "#FF9800",
+        "order": 2,
+        "tags": [
+          "URGENT",
+          "HIGH_VALUE",
+          "DOUBLE_TRACK"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "status": {
+        "label": "Status",
+        "color": "#2196F3",
+        "order": 3,
+        "tags": [
+          "CHECKED",
+          "PROBLEM",
+          "VERIFIED"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "order_type": {
+        "label": "Order Type",
+        "color": "#9C27B0",
+        "order": 4,
+        "tags": [
+          "STOKIST",
+          "O"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "accessories": {
+        "label": "Accessories",
+        "color": "#E91E63",
+        "order": 5,
+        "tags": [
+          "STICKER",
+          "BUSINESS_CARD",
+          "GIFT_BOX"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "delivery": {
+        "label": "Delivery",
+        "color": "#FF5722",
+        "order": 6,
+        "tags": [
+          "DHL",
+          "POSTONE",
+          "SPEEDY"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "custom": {
+        "label": "Other",
+        "color": "#9E9E9E",
+        "order": 999,
+        "tags": [],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      }
+    }
+  }
+}
