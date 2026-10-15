@@ -285,3 +285,15 @@ def test_audit_10_6_expiry_zero_means_none_quietly(caplog):
     with caplog.at_level(logging.WARNING, logger="shopify_tool.analysis"):
         assert _parse_expiry_date("0") is None
     assert caplog.records == []
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-9: a ParserError is caught as the ValueError it subclasses")
+def test_audit_10_9_a_broken_quote_is_a_csv_parsing_error(tmp_path):
+    (tmp_path / "orders.csv").write_text(
+        "Name,Lineitem sku,Lineitem quantity,Shipping Method\n#1,A,1,DHL\n", encoding="utf-8")
+    (tmp_path / "stock.csv").write_text('Артикул,Име,Наличност\nA,"Alpha,5\nB,Beta,5\n', encoding="utf-8")
+    ok, message, _, _ = core.run_full_analysis(
+        str(tmp_path / "stock.csv"), str(tmp_path / "orders.csv"), str(tmp_path / "out"), ",", ",",
+        {"column_mappings": MAPPINGS_10})
+    assert not ok
+    assert message.startswith("CSV parsing error:")
