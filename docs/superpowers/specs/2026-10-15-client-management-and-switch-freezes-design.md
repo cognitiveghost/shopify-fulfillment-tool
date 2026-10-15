@@ -191,8 +191,8 @@ deleted (A4). Backend: `ProfileManager.create_client_profile`.
   - validation failure: the message `validate_client_id` returns;
   - live duplicate: "CLIENT_X already exists.";
   - archived: "CLIENT_X is archived. Restore it from Archived clients."
-- Create runs `create_client_profile` in a `Worker` (it writes to the share); the button reads
-  "Creating…" and is disabled until the result.
+- Create calls `create_client_profile` on the GUI thread, as today (one small write; a copy adds
+  one config read). Not moved to a worker in this run.
 
 ### Backend
 
@@ -307,7 +307,7 @@ client list.
 
 ### Callers
 
-- `ActionsHandler.open_client_settings` (`gui/actions_handler.py:~460`) gains an optional
+- `ActionsHandler.open_settings_window(page=None)` (`gui/actions_handler.py:459`) gains an optional
   `client_id=None` (default: the current client). It builds the `ProfileDraft` inputs: it already
   loads `shopify_config.json`; it also needs `client_config.json`, `list_groups()`, the stats and
   `client_has_sessions` — load them in the same place (they are small reads; the existing load there
@@ -318,8 +318,12 @@ client list.
     group, colour, pin.
   - the existing "saved" branch (reload `active_profile_config`, revalidate files) runs only when
     `client_id == current_client_id`.
-- `ClientDirectory.menu_for`'s **Edit Settings…** calls `open_client_settings(page="Profile",
-  client_id=client_id)` instead of opening `ClientSettingsDialog`.
+- `ClientDirectory.menu_for`'s **Edit Settings…** emits a new `ClientDirectory.editClientRequested(str)`
+  signal instead of opening `ClientSettingsDialog`; `MainWindow` connects it to
+  `actions_handler.open_settings_window(page="Profile", client_id=cid)`.
+- `SettingsWindow` gains a keyword `profile: dict | None = None` (`client_config`, `groups`, `stats`,
+  `has_sessions`). With None the Profile page is left out of the nav, so existing callers and tests that
+  build the window without it are unchanged.
 - `ClientSettingsDialog` and its test file `tests/test_client_settings_dialog.py` are deleted; the
   creation-dialog tests in that file move to `tests/test_client_creation_dialog.py`. Fix
   `tests/test_settings_entry_points.py` to the new entry point.
@@ -368,7 +372,8 @@ recent-sessions listing result), `shopify_tool/session_manager.py`.
 
 `CommandBar.set_client_loading(loading: bool)`. While loading: `session_button` and
 `new_session_button` are disabled (fold it into `_refresh()`, where both are enabled today: `usable
-and not self._client_loading`), and the step readout shows `Loading <client name>…`. The client combo
+and not self._client_loading`), and a small `loading_label` after the session picker shows `Loading <client name>…` in
+`theme.text_secondary` (hidden otherwise). The client combo
 stays enabled, so a second pick is possible (the existing stale-result check drops the first).
 
 - `on_client_changed` sets it True.
