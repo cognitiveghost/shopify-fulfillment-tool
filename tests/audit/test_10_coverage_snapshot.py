@@ -84,3 +84,19 @@ def test_audit_10_2_generating_stores_the_mode_without_a_backup(main_window, mon
     assert main_window.active_profile_config["last_writeoff_mode"] == "merged"
     after = set(backups.glob("*")) if backups.exists() else set()
     assert after == before
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: a failed regeneration leaves the old list")
+def test_audit_10_4_a_failed_regeneration_withdraws_the_old_list(tmp_path, monkeypatch):
+    lists = tmp_path / "packing_lists"
+    lists.mkdir()
+    (lists / "ALL.json").write_text("{}", encoding="utf-8")
+
+    def held(session_path, stem):
+        raise PermissionError(13, "open in a viewer", f"{stem}_barcodes.pdf")
+
+    monkeypatch.setattr(report_jobs.barcode_processor, "invalidate_label_pdfs", held)
+    config = {"name": "ALL", "report_type": "packing_lists", "output_filename": "ALL.xlsx", "filters": []}
+    outcome = report_jobs.generate_report(config, tmp_path, pd.DataFrame(), {}, "s")
+    assert outcome.failed and outcome.locked_file
+    assert not (lists / "ALL.json").exists()
