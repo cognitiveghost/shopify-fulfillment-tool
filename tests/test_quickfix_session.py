@@ -88,6 +88,7 @@ def test_an_open_session_survives_the_client_menu(main_window, qtbot, monkeypatc
     # The dialogs are modal; the bar's behaviour is what is under test.
     monkeypatch.setattr(win.client_directory, "open_create_client_dialog", lambda _p: None)
     monkeypatch.setattr(win.client_directory, "open_groups_dialog", lambda _p: None)
+    monkeypatch.setattr(win, "_show_archived_clients", lambda _clients: None)
 
     for label in _action_labels(win.command_bar):
         _activate_action(win.command_bar, label)
