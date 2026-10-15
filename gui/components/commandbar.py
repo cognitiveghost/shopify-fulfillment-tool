@@ -126,6 +126,7 @@ class CommandBar(QWidget):
         get_theme_manager().theme_changed.connect(self._apply_theme)
 
         self._repopulating = False
+        self._client_loading = False
         self._restore_client = ""
         self._announced = ""  # the last client clientChanged carried
         self._show_chip = False
@@ -149,7 +150,7 @@ class CommandBar(QWidget):
         self.client_selector = _ClientCombo(self)
         self.client_selector.setModel(QStandardItemModel(self.client_selector))
         self.client_selector.setPlaceholderText("Choose a client")
-        self.client_selector.currentTextChanged.connect(self._on_client_changed)
+        self.client_selector.currentIndexChanged.connect(self._on_client_changed)
         self.client_selector.activated.connect(self._on_row_activated)
         view = self.client_selector.view()
         view.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -181,6 +182,11 @@ class CommandBar(QWidget):
         self.session_menu = QMenu(self.session_button)
         self.session_button.setMenu(self.session_menu)
         layout.addWidget(self.session_button)
+
+        # Shown while a client's settings load; see set_client_loading.
+        self.loading_label = QLabel("", self)
+        self.loading_label.hide()
+        layout.addWidget(self.loading_label)
 
         # The open session's name, never elided: an elided ID is a wrong ID.
         self.session_chip = QLabel("", self)
@@ -251,6 +257,7 @@ class CommandBar(QWidget):
         )
         quiet = f"{font_css('caption')} color: {theme.text_secondary};"
         self.meta_label.setStyleSheet(quiet)
+        self.loading_label.setStyleSheet(quiet)
         self.step_count_label.setStyleSheet(
             f"{quiet} font-family: {theme.font_family_mono};"
         )
@@ -389,7 +396,7 @@ class CommandBar(QWidget):
         item = self.client_selector.model().item(index)
         return None if item is None else item.data(Qt.UserRole)
 
-    def _on_client_changed(self, _text: str) -> None:
+    def _on_client_changed(self, _index: int) -> None:
         # Repopulating fires currentTextChanged per removal/insert; a consumer
         # reloading a client per signal would thrash the network file server.
         # An action row or a caption landing in the box is not a change either.
@@ -448,8 +455,20 @@ class CommandBar(QWidget):
             return ""
         return self.client_selector.model().item(index).data(Qt.UserRole + 1)
 
+    def set_client_loading(self, loading: bool, name: str = "") -> None:
+        """While a client's settings load: no session can be started or opened."""
+        self._client_loading = loading
+        self.loading_label.setText(f"Loading {name}…" if loading else "")
+        self.loading_label.setVisible(loading)
+        self._refresh()
+
     def set_current_client(self, client_id: str) -> None:
         """Select the first row for this client. Unknown ids are ignored."""
+        if not client_id:
+            self._restore_client = ""
+            self._announced = ""
+            self.client_selector.setCurrentIndex(-1)
+            return
         # Recorded before the search: an id the model does not hold yet is
         # honoured by the next set_clients_from(), not silently dropped.
         self._restore_client = client_id
@@ -515,7 +534,7 @@ class CommandBar(QWidget):
         """
         state = self._state
         has_session = state in (BarState.SESSION, BarState.RUNNING)
-        usable = state in (BarState.NO_SESSION, BarState.SESSION)
+        usable = state in (BarState.NO_SESSION, BarState.SESSION) and not self._client_loading
 
         self.new_session_button.setEnabled(usable)
         self.session_button.setEnabled(usable)
