@@ -36,7 +36,14 @@ from gui.ui_manager import UIManager
 from gui.web_page import when_painted
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
-from shopify_tool import APP_NAME, __version__, core, fulfillment_history, report_jobs, session_state
+from shopify_tool import (
+    APP_NAME,
+    __version__,
+    core,
+    fulfillment_history,
+    report_jobs,
+    session_state,
+)
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager

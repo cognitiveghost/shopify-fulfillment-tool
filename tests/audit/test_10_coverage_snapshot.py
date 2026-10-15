@@ -4,15 +4,20 @@ Report: docs/audit/10-coverage-and-snapshot.md. Every AUDIT-10-k test was commit
 xfail(strict=True), before its fix removed the marker. Fixtures are synthetic; the production replay
 lives in tests/replay/.
 """
+# main_window is a fixture imported by name, so each test that takes it redefines it.
+# ruff: noqa: F811
 from pathlib import Path
 
 import pandas as pd
 import pytest
+from test_stale_session import (  # noqa: F401  main_window is a fixture
+    _open_with_state,
+    main_window,
+)
 
 import gui.main_window_pyside as main_window_module
 from gui.report_selection_dialog import GenerateReportsDialog
 from shopify_tool import report_jobs
-from test_stale_session import _open_with_state, main_window  # noqa: F401  main_window is a fixture
 
 
 @pytest.mark.parametrize(
