@@ -32,6 +32,10 @@ alone.
 - After an edit that changes what is packed, the operator has to generate the lists again. The toast says so.
 - A list the Packer already started still holds the old contents. The Packer-side fix (refusing a list older
   than the session's last edit) is future packing-tool work.
-- A file another PC or the Packer holds open cannot be moved; it is logged and the list is not reported as
-  withdrawn.
+- A file another PC or the Packer holds open cannot be moved. The withdrawal is logged as failed and a second
+  toast says the Packer can still open the list and that it must be generated again.
+- The fingerprint covers every fulfillable order, not what each list holds, so a list with filters or excluded
+  SKUs is also withdrawn by an edit to an order it never contained. It errs on the safe side.
+- Each withdrawal is its own write-queue job, keyed by the names it withdraws, so a second withdrawal queued
+  behind a first does not replace it.
 - The word is **withdrawn**, not stale: Stale is a PC's old copy of the session state (CONTEXT.md).

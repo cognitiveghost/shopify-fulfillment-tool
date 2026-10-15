@@ -10,6 +10,7 @@ from test_stale_session import (  # noqa: F401  main_window is a fixture
     main_window,
 )
 
+from gui.main_window_pyside import out_of_date_message
 from shopify_tool import report_jobs, stock_ledger
 from shopify_tool.report_jobs import ReportOutcome
 
@@ -178,11 +179,11 @@ def test_a_written_list_carries_its_fingerprint(tmp_path):
 
 
 def test_the_message_names_withdrawn_and_started_lists():
-    assert report_jobs.out_of_date_message(["ALL"], []) == (
+    assert out_of_date_message(["ALL"], []) == (
         "Your change makes packing list ALL out of date. Generate it again; "
         "until then the Packer can't open it."
     )
-    assert report_jobs.out_of_date_message(["ALL", "DHL"], ["MASKS"]) == (
+    assert out_of_date_message(["ALL", "DHL"], ["MASKS"]) == (
         "Your change makes packing lists ALL, DHL out of date. Generate them again; "
         "until then the Packer can't open them. MASKS is already being packed and still "
         "holds the old contents. Check it with the packer."

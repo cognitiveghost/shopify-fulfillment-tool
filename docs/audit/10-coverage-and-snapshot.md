@@ -73,7 +73,9 @@ Found: snapshot finding 2.2, ALMA 2026-10-02_2 (a removed line packed and not wr
 2026-09-28_1 and 2026-09-29_1. Nothing tied an edit to the lists already on disk. Now each list records
 its packing fingerprint (orders + SKU + quantity of fulfillable lines, tags excluded). An edit or a re-run
 that changes it moves the unstarted lists to `packing_lists/withdrawn/` and names the started ones; a
-failed regeneration withdraws the old list too. ADR 0019.
+failed regeneration withdraws the old list too. A list that could not be moved (held open) gets a second
+toast saying the Packer can still open it, and each withdrawal is its own queue job so a later one does
+not replace a pending one (both from the Stage C review). ADR 0019.
 Tests: `tests/test_report_jobs.py` (fingerprint, withdraw, message), `test_audit_10_4_*` and the window
 tests that follow it in the audit file.
 

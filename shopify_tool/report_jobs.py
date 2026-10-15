@@ -119,28 +119,6 @@ def withdraw_lists(session_path, names) -> list[str]:
     return withdrawn
 
 
-def out_of_date_message(withdrawn: list[str], started: list[str]) -> str:
-    """The toast after an edit that made packing lists out of date."""
-    parts = []
-    if withdrawn:
-        names = ", ".join(withdrawn)
-        if len(withdrawn) == 1:
-            parts.append(f"Your change makes packing list {names} out of date. Generate it again; "
-                         "until then the Packer can't open it.")
-        else:
-            parts.append(f"Your change makes packing lists {names} out of date. Generate them again; "
-                         "until then the Packer can't open them.")
-    if started:
-        names = ", ".join(started)
-        if len(started) == 1:
-            parts.append(f"{names} is already being packed and still holds the old contents. "
-                         "Check it with the packer.")
-        else:
-            parts.append(f"{names} are already being packed and still hold the old contents. "
-                         "Check them with the packer.")
-    return " ".join(parts)
-
-
 def _output_file(report_type: str, report_name: str, report_config: dict, output_dir: Path) -> str:
     suffix = ".xlsx" if report_type == "packing_lists" else ".xls"
     base_filename = report_config.get("output_filename", "") or f"{report_name}{suffix}"

@@ -78,6 +78,32 @@ def follow_inventory_memory(profile_manager, client_id: str, session_path: str, 
     )
 
 
+def out_of_date_message(withdrawn: list[str], started: list[str]) -> str:
+    """The toast after an edit that made packing lists out of date."""
+    parts = []
+    if withdrawn:
+        names = ", ".join(withdrawn)
+        if len(withdrawn) == 1:
+            parts.append(f"Your change makes packing list {names} out of date. Generate it again; "
+                         "until then the Packer can't open it.")
+        else:
+            parts.append(f"Your change makes packing lists {names} out of date. Generate them again; "
+                         "until then the Packer can't open them.")
+    if started:
+        names = ", ".join(started)
+        if len(started) == 1:
+            parts.append(f"{names} is already being packed and still holds the old contents. "
+                         "Check it with the packer.")
+        else:
+            parts.append(f"{names} are already being packed and still hold the old contents. "
+                         "Check them with the packer.")
+    return " ".join(parts)
+
+def withdraw_failed_message(names: str) -> str:
+    """The toast when out-of-date packing lists could not be withdrawn (ADR 0019)."""
+    return (f"Packing list {names} couldn't be withdrawn, so the Packer can still open its old contents. "
+            "Close any program that has it open, then generate it again.")
+
 class MainWindow(QMainWindow):
     """The main window for the Shopify Fulfillment Tool application.
 
@@ -878,11 +904,15 @@ class MainWindow(QMainWindow):
                 report_jobs.withdraw_lists(session_path, unstarted)
                 if session_manager is not None:
                     report_jobs.update_packing_list_statistics(session_manager, session_path)
+                # False makes the queue report it: a list left in place is still the Packer's.
+                return not any((lists_dir / f"{n}.json").exists() for n in unstarted)
 
-            submit_or_run(getattr(self, "write_queue", None), session_path, PACKING_LISTS, withdraw)
+            # The names are in the key: a pending withdrawal of other lists must not be replaced.
+            kind = f"{PACKING_LISTS}:{', '.join(unstarted)}"
+            submit_or_run(getattr(self, "write_queue", None), session_path, kind, withdraw)
             if hasattr(self, "session_browser"):
                 self.session_browser.mark_dirty()
-        toast(self, report_jobs.out_of_date_message(unstarted, started), role="info")
+        toast(self, out_of_date_message(unstarted, started), role="info")
 
     def _on_session_write_failed(self, session_path: str, kind: str) -> None:
         """A background write failed (logged by the queue). On the GUI thread."""
@@ -892,6 +922,8 @@ class MainWindow(QMainWindow):
         }
         if kind in texts:
             toast(self, texts[kind], role="info")
+        elif kind.startswith(f"{PACKING_LISTS}:"):
+            toast(self, withdraw_failed_message(kind.partition(":")[2]), role="info")
 
     def _load_session_analysis(self, session_path):
         """Load analysis data from session directory.

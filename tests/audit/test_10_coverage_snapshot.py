@@ -146,9 +146,37 @@ def test_audit_10_4_an_edit_withdraws_the_out_of_date_list_once(main_window, toa
     assert main_window.write_queue.flush(timeout=10)
     assert not (Path(path) / "packing_lists" / "ALL.json").exists()
     assert (Path(path) / "packing_lists" / "withdrawn" / "ALL.json").exists()
-    assert toasts == [report_jobs.out_of_date_message(["ALL"], [])]
+    assert toasts == [main_window_module.out_of_date_message(["ALL"], [])]
     main_window.actions_handler.bulk_change_status(["#1002"], False)
-    assert toasts == [report_jobs.out_of_date_message(["ALL"], [])]  # once, not per edit
+    assert toasts == [main_window_module.out_of_date_message(["ALL"], [])]  # once, not per edit
+
+
+def test_audit_10_4_a_list_that_could_not_be_withdrawn_is_reported(main_window, toasts, qtbot, monkeypatch):
+    path = _with_list(main_window)
+    toasts.clear()
+    monkeypatch.setattr(report_jobs, "withdraw_lists", lambda session_path, names: [])  # held open
+    main_window.actions_handler.bulk_change_status(["#1001"], False)
+    assert main_window.write_queue.flush(timeout=10)
+    assert (Path(path) / "packing_lists" / "ALL.json").exists()
+    qtbot.waitUntil(lambda: len(toasts) == 2, timeout=5000)
+    assert toasts[1] == main_window_module.withdraw_failed_message("ALL")
+
+
+def test_audit_10_4_a_second_withdrawal_queued_behind_the_first_is_kept(main_window, toasts):
+    import threading
+    path = _with_list(main_window)
+    lists = Path(path) / "packing_lists"
+    (lists / "DHL.json").write_text('{"total_orders": 2}', encoding="utf-8")
+    gate = threading.Event()
+    main_window.write_queue.submit(path, "gate", lambda: gate.wait(10))
+    main_window._list_fingerprints = {"ALL": "old"}
+    main_window._withdraw_out_of_date_lists()
+    main_window._list_fingerprints = {"DHL": "old"}
+    main_window._withdraw_out_of_date_lists()
+    gate.set()
+    assert main_window.write_queue.flush(timeout=10)
+    assert not (lists / "ALL.json").exists()
+    assert not (lists / "DHL.json").exists()
 
 
 def test_audit_10_8_a_bulk_tag_edit_does_not_raise(main_window, toasts):
@@ -172,7 +200,7 @@ def test_a_started_list_stays_and_is_named(main_window, toasts):
     main_window.actions_handler.bulk_change_status(["#1001"], False)
     assert main_window.write_queue.flush(timeout=10)
     assert (Path(path) / "packing_lists" / "ALL.json").exists()
-    assert toasts == [report_jobs.out_of_date_message([], ["ALL"])]
+    assert toasts == [main_window_module.out_of_date_message([], ["ALL"])]
 
 
 def test_a_session_without_fingerprints_withdraws_nothing(main_window, toasts):
