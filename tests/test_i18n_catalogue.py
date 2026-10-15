@@ -24,11 +24,18 @@ GUARDED_HTML: list[Path] = [
     ROOT / "gui" / "web" / "setup.html",
     ROOT / "gui" / "web" / "tools.html",
     ROOT / "gui" / "web" / "logs.html",
+    ROOT / "gui" / "web" / "browse.html",
+    ROOT / "gui" / "web" / "results.html",
 ]
 GUARDED_JS: list[Path] = [
     ROOT / "gui" / "web" / "setup.js",
     ROOT / "gui" / "web" / "tools.js",
     ROOT / "gui" / "web" / "logs.js",
+    ROOT / "gui" / "web" / "browse.js",
+    ROOT / "gui" / "web" / "results.js",
+    ROOT / "gui" / "web" / "columns.js",
+    ROOT / "gui" / "web" / "bulk.js",
+    ROOT / "gui" / "web" / "pane.js",
 ]
 # Text that is never translated, with the reason.
 ALLOW = {

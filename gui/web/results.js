@@ -14,7 +14,6 @@ const TABLE_MIN_PX = 728;
 const PANE_PX = 340;
 const DASH = "—";
 const FULFILLABLE = "Fulfillable";
-const BLOCKED = "Blocked";
 const NO_COURIER = "No courier";
 const NUMBER = new Intl.NumberFormat("en-US");
 
@@ -46,7 +45,7 @@ const state = {
   records: [], // {o, index, key, hay} in frame order
   view: [], // records that pass the filters, in display order
   query: "",
-  chips: [], // {kind, value, label}
+  chips: [], // {kind, value}
   sort: null, // {key, dir: 1 | -1}
   selected: new Set(), // order numbers
   anchorKey: null, // the fixed end of a Shift range
@@ -100,13 +99,21 @@ function fmtAge(iso) {
   const ms = ageMs(iso);
   if (ms === null) return DASH;
   const minutes = Math.floor(ms / 60000);
-  if (minutes < 60) return minutes + " min";
+  if (minutes < 60) return t("{n} min", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 48) return hours + " h";
-  return Math.floor(hours / 24) + " d";
+  if (hours < 48) return t("{n} h", { n: hours });
+  return t("{n} d", { n: Math.floor(hours / 24) });
 }
-function plural(n, word) {
-  return NUMBER.format(n) + " " + word + (n === 1 ? "" : "s");
+// A count as one sentence in the PC's language: "1 order", "3 orders". Each
+// plural is written as a literal tn() call so the catalogue scanner sees it.
+function orderCount(n) {
+  return tn("{n} order", "{n} orders", n, { n: NUMBER.format(n) });
+}
+function unitCount(n) {
+  return tn("{n} unit", "{n} units", n, { n: NUMBER.format(n) });
+}
+function lineCount(n) {
+  return tn("{n} line", "{n} lines", n, { n: NUMBER.format(n) });
 }
 function isFulfillable(o) {
   return o.Order_Fulfillment_Status === FULFILLABLE;
@@ -114,7 +121,7 @@ function isFulfillable(o) {
 // One source for the Status cell's words: the chip renders it and the column
 // registry measures and empties on it.
 function statusText(o) {
-  return isFulfillable(o) ? FULFILLABLE : BLOCKED;
+  return isFulfillable(o) ? t("Fulfillable") : t("Blocked");
 }
 function courierOf(o) {
   return str(o.Shipping_Provider).trim() || NO_COURIER;
@@ -128,23 +135,57 @@ function svg(path, cls) {
 
 // --- columns, filters, sort -----------------------------------------------
 
+// Labels are thunks: t() reads the catalogue when the word is drawn.
 const FLAGS = [
-  { value: "repeat", label: "Repeat", test: (o) => o._repeat === true },
-  { value: "unknown_sku", label: "Unknown SKU", test: (o) => o.Unknown_SKU === true },
-  { value: "low_stock", label: "Low stock", test: (o) => o.Low_Stock === true },
-  { value: "lines3", label: "3 or more lines", test: (o) => (num(o.Items) || 0) >= 3 },
+  { value: "repeat", label: () => t("Repeat"), test: (o) => o._repeat === true },
+  { value: "unknown_sku", label: () => t("Unknown SKU"), test: (o) => o.Unknown_SKU === true },
+  { value: "low_stock", label: () => t("Low stock"), test: (o) => o.Low_Stock === true },
+  { value: "lines3", label: () => t("3 or more lines"), test: (o) => (num(o.Items) || 0) >= 3 },
+];
+
+// The two status choices, as chips.
+const STATUS_CHIPS = [
+  { kind: "status", value: "fulfillable", label: () => t("Fulfillable") },
+  { kind: "status", value: "blocked", label: () => t("Blocked") },
 ];
 
 function chipId(chip) {
   return chip.kind + ":" + chip.value;
 }
 
-const CHIP_KEYS = { status: "Status", flag: "Flag", courier: "Courier", tag: "Tag" };
+// The nouns a chip starts with, as thunks (see FLAGS).
+const CHIP_KEYS = {
+  status: () => t("Status"),
+  flag: () => t("Flag"),
+  courier: () => t("Courier"),
+  tag: () => t("Tag"),
+};
 
-// What the chip says after "is": the menu's label carries a "Courier: " or
-// "Tag: " prefix the chip's own key already states.
+// What a chip or menu item says. Courier and tag values are names from the data,
+// shown as they are; the one word the page itself adds is "No courier".
 function chipValue(chip) {
-  return chip.kind === "courier" || chip.kind === "tag" ? chip.value : chip.label;
+  if (chip.kind === "courier") return courierName(chip.value);
+  if (chip.kind === "tag") return chip.value;
+  // A status or flag shows the word its own table gives its value.
+  const table = chip.kind === "status" ? STATUS_CHIPS : FLAGS;
+  return table.find((c) => c.value === chip.value).label();
+}
+
+// A courier's name as drawn: the data's own, or the word for an order with none.
+function courierName(name) {
+  return name === NO_COURIER ? t("No courier") : name;
+}
+
+// "Courier: X" and "Tag: X" menu lines, whole sentences with the name in them.
+function itemLabel(item) {
+  if (item.kind === "courier") return t("Courier: {name}", { name: chipValue(item) });
+  if (item.kind === "tag") return t("Tag: {name}", { name: item.value });
+  return chipValue(item);
+}
+
+// A chip as one sentence: "Status is Fulfillable".
+function chipSentence(chip) {
+  return t("{key} is {value}", { key: CHIP_KEYS[chip.kind](), value: chipValue(chip) });
 }
 
 // The filters as one sentence, for the no-match state. Flags all have to
@@ -152,14 +193,19 @@ function chipValue(chip) {
 function filterSentence() {
   const parts = [];
   for (const kind of Object.keys(CHIP_KEYS)) {
-    const values = state.chips.filter((c) => c.kind === kind).map(chipValue);
-    if (values.length) parts.push(CHIP_KEYS[kind] + " is " + values.join(kind === "flag" ? " and " : " or "));
+    const chips = state.chips.filter((c) => c.kind === kind);
+    if (!chips.length) continue;
+    const joiner = kind === "flag" ? t("and") : t("or");
+    const value = chips.map(chipValue).join(" " + joiner + " ");
+    parts.push(t("{key} is {value}", { key: CHIP_KEYS[kind](), value }));
   }
   const query = els.search.value.trim();
-  if (query) parts.push("search is “" + query + "”");
-  return parts.join(" and ") + ".";
+  if (query) parts.push(t("search is “{query}”", { query }));
+  return parts.join(" " + t("and") + " ") + ".";
 }
 
+// The menu's groups, in the order they show: [title thunk, items]. Keys and
+// values stay English: they are what a chip filters on.
 function menuGroups() {
   const couriers = new Set();
   const tags = new Set();
@@ -169,13 +215,10 @@ function menuGroups() {
   }
   const byName = (a, b) => a.localeCompare(b);
   return [
-    ["Status", [
-      { kind: "status", value: "fulfillable", label: "Fulfillable" },
-      { kind: "status", value: "blocked", label: "Blocked" },
-    ]],
-    ["Flags", FLAGS.map((f) => ({ kind: "flag", value: f.value, label: f.label }))],
-    ["Courier", [...couriers].sort(byName).map((c) => ({ kind: "courier", value: c, label: "Courier: " + c }))],
-    ["Tags", [...tags].sort(byName).map((t) => ({ kind: "tag", value: t, label: "Tag: " + t }))],
+    [() => t("Status"), STATUS_CHIPS],
+    [() => t("Flags"), FLAGS.map((f) => ({ kind: "flag", value: f.value }))],
+    [() => t("Courier"), [...couriers].sort(byName).map((c) => ({ kind: "courier", value: c }))],
+    [() => t("Tags"), [...tags].sort(byName).map((t) => ({ kind: "tag", value: t }))],
   ];
 }
 
@@ -306,12 +349,12 @@ function valueHint() {
   const body = document.createElement("div");
   body.className = "kpi-hint-body";
   const text = document.createElement("span");
-  text.textContent = "Order value shows once a price column is mapped.";
+  text.textContent = t("Order value shows once a price column is mapped.");
   const link = document.createElement("button");
   link.type = "button";
   link.id = "map-columns";
   link.className = "btn link";
-  link.textContent = "Map columns";
+  link.textContent = t("Map columns");
   link.addEventListener("click", () => state.bridge && state.bridge.openColumnMapping());
   body.append(text, link);
   cell.appendChild(body);
@@ -323,20 +366,20 @@ function renderKpis() {
   const has = s.orders !== undefined;
   const oldest = has ? s.oldest : null;
   const cells = [
-    kpiCell("orders", "Orders", has ? fmtInt(s.orders) : DASH,
-      has ? NUMBER.format(s.lines) + " lines · " + NUMBER.format(s.skus) + " SKUs touched" : ""),
-    kpiCell("fulfillable", "Fulfillable", has ? fmtInt(s.fulfillable) : DASH,
-      has && s.orders ? Math.round((100 * s.fulfillable) / s.orders) + "% of orders" : "", "success"),
-    kpiCell("blocked", "Blocked", has ? fmtInt(s.blocked) : DASH,
-      has ? NUMBER.format(s.blocked_lines) + " lines, " + NUMBER.format(s.blocked_skus) + " SKUs" : "", "danger"),
-    kpiCell("labels", "Labels", has ? fmtInt(s.fulfillable) : DASH,
-      has ? (s.labels_by_courier || []).map((p) => p[0] + " " + NUMBER.format(p[1])).join(" · ") : ""),
-    kpiCell("oldest", "Oldest waiting", oldest ? fmtAge(oldest.created_at) : DASH,
-      oldest ? "order " + oldest.order_number : ""),
+    kpiCell("orders", t("Orders"), has ? fmtInt(s.orders) : DASH,
+      has ? t("{lines} lines · {skus} SKUs touched", { lines: NUMBER.format(s.lines), skus: NUMBER.format(s.skus) }) : ""),
+    kpiCell("fulfillable", t("Fulfillable"), has ? fmtInt(s.fulfillable) : DASH,
+      has && s.orders ? t("{pct}% of orders", { pct: Math.round((100 * s.fulfillable) / s.orders) }) : "", "success"),
+    kpiCell("blocked", t("Blocked"), has ? fmtInt(s.blocked) : DASH,
+      has ? t("{lines} lines, {skus} SKUs", { lines: NUMBER.format(s.blocked_lines), skus: NUMBER.format(s.blocked_skus) }) : "", "danger"),
+    kpiCell("labels", t("Labels"), has ? fmtInt(s.fulfillable) : DASH,
+      has ? (s.labels_by_courier || []).map((p) => courierName(p[0]) + " " + NUMBER.format(p[1])).join(" · ") : ""),
+    kpiCell("oldest", t("Oldest waiting"), oldest ? fmtAge(oldest.created_at) : DASH,
+      oldest ? t("order {number}", { number: oldest.order_number }) : ""),
     has && s.value_total === null
       ? valueHint()
-      : kpiCell("value", "Value ready", has && s.value_ready !== null ? fmtCompact(s.value_ready) : DASH,
-        has ? "across " + plural(s.fulfillable, "fulfillable order") : ""),
+      : kpiCell("value", t("Value ready"), has && s.value_ready !== null ? fmtCompact(s.value_ready) : DASH,
+        has ? t("across {orders}", { orders: tn("{n} fulfillable order", "{n} fulfillable orders", s.fulfillable, { n: NUMBER.format(s.fulfillable) }) }) : ""),
   ];
   els.kpis.classList.toggle("has-wide", Boolean(oldest));
   els.kpis.replaceChildren(...cells);
@@ -350,15 +393,15 @@ function renderChips() {
     box.dataset.chip = chipId(chip);
     const key = document.createElement("span");
     key.className = "chip-key";
-    key.textContent = CHIP_KEYS[chip.kind] + " is";
+    key.textContent = t("{key} is", { key: CHIP_KEYS[chip.kind]() });
     const value = document.createElement("span");
     value.className = "chip-value";
     value.textContent = chipValue(chip);
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "chip-remove";
-    remove.title = "Remove filter";
-    remove.setAttribute("aria-label", "Remove filter: " + CHIP_KEYS[chip.kind] + " is " + chipValue(chip));
+    remove.title = t("Remove filter");
+    remove.setAttribute("aria-label", t("Remove filter: {filter}", { filter: chipSentence(chip) }));
     remove.innerHTML = svg(X_MARK, "glyph");
     remove.addEventListener("click", () => {
       toggleChip(chip);
@@ -374,7 +417,9 @@ function renderChips() {
 function renderCount() {
   const total = state.records.length;
   const shown = state.view.length;
-  els.count.textContent = shown === total ? plural(total, "order") : NUMBER.format(shown) + " of " + plural(total, "order");
+  els.count.textContent = shown === total
+    ? orderCount(total)
+    : t("{shown} of {total}", { shown: NUMBER.format(shown), total: orderCount(total) });
 }
 
 function renderExport() {
@@ -382,7 +427,7 @@ function renderExport() {
   const n = s.fulfillable || 0;
   els.exportBtn.replaceChildren();
   els.exportBtn.insertAdjacentHTML("beforeend", svg(DOWNLOAD, "glyph"));
-  els.exportBtn.append(s.fulfillable === undefined ? "Export" : "Export " + plural(n, "order"));
+  els.exportBtn.append(s.fulfillable === undefined ? t("Export") : t("Export {orders}", { orders: orderCount(n) }));
   els.exportBtn.disabled = !(state.bridge && state.bridge.exportEnabled && n > 0);
 }
 
@@ -399,11 +444,11 @@ function renderStates() {
 
 function renderMenu() {
   els.menu.textContent = "";
-  for (const [group, items] of menuGroups()) {
+  for (const [groupTitle, items] of menuGroups()) {
     if (!items.length) continue;
     const head = document.createElement("div");
     head.className = "menu-group";
-    head.textContent = group;
+    head.textContent = groupTitle();
     els.menu.appendChild(head);
     for (const item of items) {
       const button = document.createElement("button");
@@ -412,7 +457,7 @@ function renderMenu() {
       button.setAttribute("role", "menuitemcheckbox");
       button.setAttribute("aria-checked", String(state.chips.some((c) => chipId(c) === chipId(item))));
       button.innerHTML = svg(CHECK, "check");
-      button.appendChild(document.createTextNode(item.label));
+      button.appendChild(document.createTextNode(itemLabel(item)));
       button.addEventListener("click", () => {
         toggleChip(item);
         closeMenu();
@@ -449,7 +494,7 @@ function renderHeader() {
       box.type = "checkbox";
       box.tabIndex = -1;
       // With anything checked the box clears; with nothing, it checks all shown.
-      box.title = picked > 0 ? "Clear selection" : "Select every order shown";
+      box.title = picked > 0 ? t("Clear selection") : t("Select every order shown");
       box.setAttribute("aria-label", box.title);
       box.checked = all;
       box.indeterminate = picked > 0 && !all;
@@ -463,7 +508,7 @@ function renderHeader() {
       const s = (state.bridge && state.bridge.summary) || {};
       if (col.key === "value" && s.orders !== undefined && s.value_total === null) cell.classList.add("unmapped");
       const label = document.createElement("span");
-      label.textContent = col.title;
+      label.textContent = colTitle(col);
       cell.appendChild(label);
       cell.insertAdjacentHTML("beforeend", svg(sorted && state.sort.dir === 1 ? CHEVRON_UP : CHEVRON_DOWN, "caret"));
       cell.addEventListener("click", () => cycleSort(col.key));
@@ -484,9 +529,9 @@ function measureColumns() {
   const widths = cols.map((col) => {
     if (col.key === "select" || col.stretch) return col.width || 0;
     ctx.font = "700 " + caption;
-    let widest = ctx.measureText(col.title).width + 14; // + the sort caret
+    let widest = ctx.measureText(colTitle(col)).width + 14; // + the sort caret
     if (col.key === "status") {
-      widest = Math.max(widest, ctx.measureText(FULFILLABLE).width + 18); // badge padding + edge
+      widest = Math.max(widest, ctx.measureText(t("Fulfillable")).width + 18); // badge padding + edge
     } else {
       ctx.font = (col.key === "order" ? "700 " : "") + (col.mono ? mono : sans);
       for (const r of state.records) widest = Math.max(widest, ctx.measureText(col.text(r.o) || DASH).width);
@@ -562,7 +607,7 @@ function renderSlot() {
   count.textContent = visibleColumns().length + "/" + allColumns().length;
   els.columnsButton.replaceChildren();
   els.columnsButton.insertAdjacentHTML("beforeend", svg(COLUMNS, "glyph"));
-  els.columnsButton.append("Columns ", count);
+  els.columnsButton.append(t("Columns") + " ", count);
   if (mode === "pane") renderPane();
   if (state.columnsOpen) renderColumnsPanel();
 }
@@ -622,14 +667,14 @@ function cellElement(col, record, selected) {
     box.type = "checkbox";
     box.tabIndex = -1;
     box.checked = selected;
-    box.setAttribute("aria-label", "Select order " + record.key);
+    box.setAttribute("aria-label", t("Select order {number}", { number: record.key }));
     cell.appendChild(box);
   } else if (col.key === "status") {
     cell.appendChild(statusBadge(record.o));
   } else if (col.key === "repeat" && record.o._repeat === true) {
     const badge = document.createElement("span");
     badge.className = "badge info";
-    badge.textContent = "Repeat";
+    badge.textContent = t("Repeat");
     cell.appendChild(badge);
   } else {
     const text = col.text(record.o);

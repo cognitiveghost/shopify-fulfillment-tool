@@ -950,3 +950,22 @@ def test_a_narrow_window_drops_the_count_then_scrolls_sideways(qtbot, listed):
         " scrolls: b.scrollWidth > b.clientWidth}; })()",
     )
     assert box == {"card": 780, "scrolls": True}
+
+
+def test_bg_page_draws_its_words_in_bulgarian(qtbot):
+    """ADR 0021: with the PC set to BG, the page's own words come out in BG."""
+    import gui_main
+    from shared import i18n
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    view = QWebEngineView()
+    qtbot.addWidget(view)
+    bridge = mount_browse_page(view)
+    view.resize(1166, 720)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    _show(qtbot, view, bridge, make_state(SESSIONS))
+    assert _text(qtbot, view, ".group-label") == "Изисква внимание"
+    assert _text(qtbot, view, "#footer span:last-child") == (
+        "Направете двоен клик върху сесия, за да я отворите"
+    )
