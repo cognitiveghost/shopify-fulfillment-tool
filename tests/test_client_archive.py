@@ -106,6 +106,18 @@ def test_restore_refuses_when_a_live_client_has_the_id(profile_manager):
         pm.restore_client(cid)
 
 
+def test_restore_refuses_when_a_stale_save_recreated_the_sessions_folder(profile_manager):
+    pm = profile_manager
+    cid = _make(pm)
+    _session(pm, cid)
+    pm.archive_client(cid)
+    _session(pm, cid)  # another PC saved into its open session after the archive
+    with pytest.raises(ProfileManagerError, match="exists again"):
+        pm.restore_client(cid)
+    assert (pm.clients_dir / "_archive" / "CLIENT_ACME").is_dir()
+    assert "ACME" not in pm.list_clients()
+
+
 def test_list_archived_clients(profile_manager):
     pm = profile_manager
     assert pm.list_archived_clients() == []

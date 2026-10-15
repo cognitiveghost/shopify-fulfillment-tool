@@ -353,11 +353,13 @@ class ProfileManager:
         try:
             os.rename(src_c, dst_c)
         except OSError as e:
+            logger.warning(f"Could not move {src_c} to {dst_c}", exc_info=True)
             raise ProfileManagerError(busy) from e
         if src_s.exists():
             try:
                 os.rename(src_s, dst_s)
             except OSError as e:
+                logger.warning(f"Could not move {src_s} to {dst_s}", exc_info=True)
                 try:
                     os.rename(dst_c, src_c)
                 except OSError:
@@ -404,6 +406,13 @@ class ProfileManager:
             )
         if not arch_c.is_dir():
             raise ProfileManagerError(f"{label} is not archived.")
+        if arch_s.exists() and live_s.exists():
+            # A PC that still had the client open saved after the archive, and
+            # the write recreated the live folder (ADR 0020).
+            raise ProfileManagerError(
+                f"{live_s} exists again: a PC saved into {label} after it was archived. "
+                f"Move the session folders in it into {arch_s}, delete it, then try again."
+            )
         self._move_client(client_id, arch_c, live_c, arch_s, live_s, "restored")
 
         def unstamp(data):

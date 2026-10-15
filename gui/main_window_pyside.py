@@ -639,6 +639,7 @@ class MainWindow(QMainWindow):
             self.session_path = None
             self.current_client_id = None
             self.command_bar.set_current_client("")
+            self.command_bar.set_client_loading(False)
             self.command_bar.set_recent_sessions([])
             self.update_session_info_label()
             self.update_ui_state()
@@ -649,7 +650,10 @@ class MainWindow(QMainWindow):
         )
 
         def run():
-            self.write_queue.flush(timeout=10)
+            if not self.write_queue.flush(timeout=10):
+                raise ProfileManagerError(
+                    "This PC is still saving to the server. Try again in a moment."
+                )
             act(client_id)
             return client_id, kind
 
@@ -670,14 +674,16 @@ class MainWindow(QMainWindow):
     def _on_client_remove_error(self, client_id, kind, error) -> None:
         _exctype, value, _tb = error
         verb = "archived" if kind == "archived" else "deleted"
-        headline = f"CLIENT_{client_id} wasn't {verb}"
+        self._report_client_error(f"CLIENT_{client_id} wasn't {verb}", value)
+        self.client_directory.refresh()
+
+    def _report_client_error(self, headline: str, value) -> None:
         if isinstance(value, ProfileManagerError):
             logger.warning(f"{headline}: {value}")
             show_error(self, headline, str(value))
         else:
             logger.error(headline, exc_info=value)
             show_error(self, headline, "Details are in Logs.")
-        self.client_directory.refresh()
 
     def open_archived_clients(self) -> None:
         worker = Worker(self.profile_manager.list_archived_clients)
@@ -713,13 +719,7 @@ class MainWindow(QMainWindow):
 
     def _on_client_restore_error(self, client_id: str, error) -> None:
         _exctype, value, _tb = error
-        headline = f"CLIENT_{client_id} wasn't restored"
-        if isinstance(value, ProfileManagerError):
-            logger.warning(f"{headline}: {value}")
-            show_error(self, headline, str(value))
-        else:
-            logger.error(headline, exc_info=value)
-            show_error(self, headline, "Details are in Logs.")
+        self._report_client_error(f"CLIENT_{client_id} wasn't restored", value)
 
     def on_client_changed(self, client_id: str):
         """Handle client selection change.

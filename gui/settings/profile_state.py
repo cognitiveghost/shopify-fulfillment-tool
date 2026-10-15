@@ -68,14 +68,10 @@ class ProfileDraft(PageContract):
     def profile_updates(self):
         if not self.is_dirty():
             return None
-        return {
-            "client_name": self.name.strip(),
-            "ui_settings": {
-                "group_id": self.group_id,
-                "custom_color": self.colour,
-                "is_pinned": self.pinned,
-            },
-        }
+        ui = {"group_id": self.group_id, "is_pinned": self.pinned}
+        if self.colour:  # never write an empty colour over the default
+            ui["custom_color"] = self.colour
+        return {"client_name": self.name.strip(), "ui_settings": ui}
 
     def _stat(self, key, empty):
         value = self.stats.get(key)

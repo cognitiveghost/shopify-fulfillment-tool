@@ -870,6 +870,8 @@ class SettingsWindow(QDialog):
     def _on_client_action(self, kind: str) -> None:
         """Archive or delete from the Profile page. The caller runs it: this
         window only records the choice and closes, so it does no IO."""
+        if self._is_saving:  # done() below skips reject()'s guard
+            return
         label = f"CLIENT_{self.client_id}"
         lost = (
             " Unsaved changes in this window will be lost."

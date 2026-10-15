@@ -93,7 +93,7 @@ def test_saving_a_renamed_profile_writes_the_settings_then_the_profile(
     manager.update_client_profile.assert_called_once_with(
         "M",
         name="New",
-        ui_settings={"group_id": None, "custom_color": "", "is_pinned": False},
+        ui_settings={"group_id": None, "is_pinned": False},
     )
     assert win.profile_saved
 

@@ -25,6 +25,8 @@ restore never collides.
 
 - A rename fails on Windows while another PC holds a file inside the folder open. The app reports it and
   undoes a half-done archive (client moved, sessions not).
-- A PC that has the client open when it is archived finds out on its next write or list refresh. Nothing
-  coordinates PCs; archive is rare and deliberate.
+- A PC that has the client open when it is archived finds out at its next list refresh. Nothing
+  coordinates PCs; archive is rare and deliberate. A save it makes before then recreates
+  `Sessions/CLIENT_X/<session>/` (writes create their parent folders), and restore then refuses until
+  someone moves those folders into the archived one by hand.
 - Anything that later reads `Clients/` or `Sessions/` by walking every child must skip `_archive`.
