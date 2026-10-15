@@ -459,7 +459,13 @@ class ProfileManager:
         self._forget_client(client_id)
         logger.info(f"Deleted {label}")
 
-    def create_client_profile(self, client_id: str, client_name: str) -> bool:
+    def create_client_profile(
+        self,
+        client_id: str,
+        client_name: str,
+        ui_settings: dict | None = None,
+        copy_from: str | None = None,
+    ) -> bool:
         """Create a new client profile with default configuration.
 
         Creates directory structure:
@@ -471,9 +477,12 @@ class ProfileManager:
         Args:
             client_id (str): Client ID (e.g., "M")
             client_name (str): Full client name (e.g., "M Cosmetics")
+            ui_settings (dict | None): Overrides for the default ui_settings, written in the first write
+            copy_from (str | None): Client ID whose shopify settings are copied (not identity or stock memory)
 
         Returns:
-            bool: True if created successfully, False if already exists
+            bool: True if created successfully, False if the ID is live or archived,
+                or copy_from can't be loaded
 
         Raises:
             ValidationError: If client_id is invalid
@@ -487,10 +496,22 @@ class ProfileManager:
         client_id = client_id.upper()
         client_dir = self.clients_dir / f"CLIENT_{client_id}"
 
-        # Check if already exists
-        if client_dir.exists():
-            logger.warning(f"Client profile already exists: CLIENT_{client_id}")
+        # Check if already exists, live or archived
+        if client_dir.exists() or (self.clients_dir / self.ARCHIVE_DIR / f"CLIENT_{client_id}").exists():
+            logger.warning(f"Client profile already exists (live or archived): CLIENT_{client_id}")
             return False
+
+        # Read the source before any folder exists, so a bad copy_from leaves nothing behind
+        shopify_config = self._create_default_shopify_config(client_id, client_name)
+        if copy_from:
+            source = self.load_shopify_config(copy_from.upper())
+            if not source:
+                logger.warning(f"Can't copy settings from CLIENT_{copy_from}: not loaded")
+                return False
+            fresh = shopify_config
+            shopify_config = copy.deepcopy(source)
+            for key in ("client_id", "client_name", "created_at", "inventory_memory"):
+                shopify_config[key] = fresh[key]
 
         try:
             # Create directory structure
@@ -503,14 +524,12 @@ class ProfileManager:
                 "client_name": client_name,
                 "created_at": datetime.now().astimezone().isoformat(),
                 "created_by": os.environ.get("COMPUTERNAME", "Unknown"),
+                "ui_settings": {**self._get_default_ui_settings(), **(ui_settings or {})},
             }
 
             config_path = client_dir / "client_config.json"
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(client_config, f, indent=2)
-
-            # Create default shopify config
-            shopify_config = self._create_default_shopify_config(client_id, client_name)
 
             shopify_config_path = client_dir / "shopify_config.json"
             with open(shopify_config_path, "w", encoding="utf-8") as f:
