@@ -393,6 +393,14 @@ function segments(options, counted) {
   }).join("");
 }
 
+// The chips and the save label are built once the strings are known: bind()
+// runs before the bridge connects, so the channel callback calls this again.
+function paintChrome() {
+  els.streams.innerHTML = segments(STREAMS, false);
+  els.bands.innerHTML = segments(BANDS, true);
+  els.save.innerHTML = `${svg(GLYPH.download, "glyph")}${t("Save as text")}`;
+}
+
 function bind() {
   const ids = {
     card: "card", streams: "streams", bands: "bands", searchBox: "search-box", search: "search",
@@ -404,10 +412,8 @@ function bind() {
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 
   // The fixed parts of the page: the two controls and the glyphs.
-  els.streams.innerHTML = segments(STREAMS, false);
-  els.bands.innerHTML = segments(BANDS, true);
+  paintChrome();
   els.searchBox.insertAdjacentHTML("afterbegin", svg(GLYPH.search, "glyph"));
-  els.save.innerHTML = `${svg(GLYPH.download, "glyph")}${t("Save as text")}`;
   els.empty.insertAdjacentHTML("afterbegin", svg(GLYPH.searchX, "state-glyph"));
   els.toastDismiss.innerHTML = svg(GLYPH.x, "glyph");
 
@@ -451,6 +457,7 @@ draw();
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.logs;
   applyStrings(bridge);
+  paintChrome();
   page.bridge = bridge;
   page.capacity = bridge.capacity;
   view.wrap = bridge.wrap;

@@ -445,7 +445,7 @@ class MappingDraft(PageContract):
             "sample_missing": lacking,
             "problem": problem,
             "example": example,
-            "hint": f.hint,
+            "hint": _(f.hint),
         }
 
     def _mapping_view(self) -> dict:

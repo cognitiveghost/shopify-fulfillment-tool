@@ -349,7 +349,9 @@ function valueHint() {
   const body = document.createElement("div");
   body.className = "kpi-hint-body";
   const text = document.createElement("span");
-  text.textContent = t("Order value shows once a price column is mapped.");
+  const message = t("Order value shows once a price column is mapped.");
+  text.textContent = message;
+  text.title = message;
   const link = document.createElement("button");
   link.type = "button";
   link.id = "map-columns";

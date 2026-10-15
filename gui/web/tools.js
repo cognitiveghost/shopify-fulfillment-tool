@@ -241,7 +241,7 @@ function printRow(tool, card) {
     `<div class="mode-line">
       <div class="segmented" role="radiogroup" aria-label="${t("Print mode")}">${segments}</div>
       <div class="menu-anchor printer-anchor">
-        <button class="select" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t("Printer")}" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(locked)}>${svg(GLYPH.printer, "glyph")}<span class="select-value${print.printer.placeholder ? " placeholder" : ""}">${esc(print.printer.label)}</span>${svg(GLYPH.chevron, "glyph")}</button>
+        <button class="select" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t("Printer")}" title="${esc(print.printer.label)}" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(locked)}>${svg(GLYPH.printer, "glyph")}<span class="select-value${print.printer.placeholder ? " placeholder" : ""}">${esc(print.printer.label)}</span>${svg(GLYPH.chevron, "glyph")}</button>
         ${menu}
       </div>
     </div>

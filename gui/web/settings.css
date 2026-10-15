@@ -200,12 +200,14 @@
 
 .rule-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rule-line-label {
-  width: 36px;
+  /* A minimum, not a width: the column grows for a longer translation ("Когато"). */
+  min-width: 36px;
+  flex: none;
   font-size: var(--type-caption-size);
   font-weight: 700;
   color: var(--text-secondary);
 }
-.rule.wide .rule-line-label { width: 60px; }
+.rule.wide .rule-line-label { min-width: 60px; }
 .rule-word.bold { font-weight: 700; }
 .rule-word.muted { color: var(--text-secondary); }
 /* A value longer than its line is cut; its title holds the rest. */

@@ -594,6 +594,8 @@ class SettingsWindow(QDialog):
             self._settings_nav.addItem(header)
             for page_name in page_names:
                 item = QListWidgetItem(_(page_name))
+                # The rail elides long names ("Сопоставяне на налич..."); the full name is the tooltip.
+                item.setToolTip(_(page_name))
                 item.setData(_NAME_ROLE, page_name)
                 item.setSizeHint(QSize(0, NAV_ROW_PX))
                 item.setData(
