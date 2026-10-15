@@ -445,10 +445,22 @@ class SessionManager:
         as changed, so the first listing after the upgrade rereads each
         session once.
 
-        Nothing changed means no lock and no write.
+        Nothing changed means no lock and no write. Changed sessions are read
+        before the lock is taken.
         """
-        if self._index_matches(self._listing(client_sessions_dir), entries):
+        listing = self._listing(client_sessions_dir)
+        if self._index_matches(listing, entries):
             return entries
+
+        # The slow part -- one session_info.json per changed folder -- runs
+        # without the lock. Under it, an entry read here is used only when its
+        # folder's mtime has not moved since.
+        known = {e.get("session_name"): e for e in entries}
+        pre = {}
+        for name, dir_mtime in listing.items():
+            entry = known.get(name)
+            if entry is None or entry.get("_dir_mtime") != dir_mtime:
+                pre[name] = (dir_mtime, self._index_entry(client_sessions_dir / name, dir_mtime))
 
         with self._exclusive_lock(self._index_lock_path(client_sessions_dir)):
             current = self._read_index(client_sessions_dir) or []
@@ -458,7 +470,11 @@ class SessionManager:
             for name, dir_mtime in listing.items():
                 entry = by_name.get(name)
                 if entry is None or entry.get("_dir_mtime") != dir_mtime:
-                    entry = self._index_entry(client_sessions_dir / name, dir_mtime)
+                    early = pre.get(name)
+                    if early is not None and early[0] == dir_mtime:
+                        entry = early[1]
+                    else:
+                        entry = self._index_entry(client_sessions_dir / name, dir_mtime)
                 refreshed.append(entry)
             # A session_info.json that still can't be read is retried on every
             # listing and rereads the same marker: no write for that.

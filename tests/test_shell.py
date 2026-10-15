@@ -173,7 +173,7 @@ def test_right_clicking_a_client_row_asks_the_directory_for_a_menu(main_window):
     )
 
     view = bar.client_selector.view()
-    bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center())
+    bar._on_row_context_menu(view.visualRect(model.index(row, 0)).center(), view)
 
     assert seen == ["M"]
 
@@ -250,7 +250,7 @@ def test_resuming_a_past_session_reaches_the_session_state(main_window, tmp_path
     assert item.isEnabled()
 
 
-def test_new_session_is_reachable_from_the_bar_with_a_session_open(main_window):
+def test_new_session_is_reachable_from_the_bar_with_a_session_open(main_window, qtbot):
     """Phase 3 spec section 8: the bar's New session is always there, so the
     overflow no longer carries a copy of it."""
     from gui.components.commandbar import BarState
@@ -258,6 +258,8 @@ def test_new_session_is_reachable_from_the_bar_with_a_session_open(main_window):
     main_window.profile_manager.create_client_profile("M", "Client M")
     main_window.command_bar.set_clients(["M"])
     main_window.command_bar.set_current_client("M")
+    # A client switch disables the session buttons until its settings load (spec B1).
+    qtbot.waitUntil(lambda: not main_window.command_bar._client_loading, timeout=5000)
     main_window.command_bar.set_state(BarState.SESSION)
 
     button = main_window.command_bar.new_session_button

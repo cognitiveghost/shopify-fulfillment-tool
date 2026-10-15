@@ -10,7 +10,7 @@ import logging
 from PySide6.QtCore import QObject, QThreadPool, Signal
 from PySide6.QtWidgets import QMenu, QWidget
 
-from gui.client_settings_dialog import ClientCreationDialog, ClientSettingsDialog
+from gui.client_settings_dialog import ClientCreationDialog
 from gui.components import show_error
 from gui.groups_management_dialog import GroupsManagementDialog
 from gui.worker import Worker
@@ -25,6 +25,7 @@ class ClientDirectory(QObject):
 
     loaded = Signal(dict)
     clientCreated = Signal(str)
+    editClientRequested = Signal(str)  # the client whose Profile page to open
 
     def __init__(
         self,
@@ -36,6 +37,11 @@ class ClientDirectory(QObject):
         self.profile_manager = profile_manager
         self.groups_manager = groups_manager
         self._refresh_workers = set()  # keeps in-flight refresh Workers alive
+        self.last_data: dict | None = None  # the last gather() result the GUI applied
+        self.loaded.connect(self._remember)
+
+    def _remember(self, data: dict) -> None:
+        self.last_data = data
 
     def gather(self) -> dict:
         """All the file-server IO refresh() needs, with zero Qt object
@@ -70,6 +76,7 @@ class ClientDirectory(QObject):
             "pinned_client_ids": pinned_client_ids,
             "group_members": group_members,
             "card_data": card_data,
+            "archived_ids": [c["client_id"] for c in self.profile_manager.list_archived_clients()],
         }
 
     def refresh(self) -> None:
@@ -104,7 +111,7 @@ class ClientDirectory(QObject):
         pin_action.triggered.connect(lambda: self._toggle_pin(client_id, parent))
 
         edit_action = menu.addAction("Edit Settings...")
-        edit_action.triggered.connect(lambda: self._edit_client(client_id, parent))
+        edit_action.triggered.connect(lambda: self.editClientRequested.emit(client_id))
 
         move_menu = menu.addMenu("Move to Group")
         move_menu.addAction("(No group)").triggered.connect(
@@ -139,17 +146,6 @@ class ClientDirectory(QObject):
             logger.exception("Failed to toggle pin")
             show_error(parent, "The pin wasn't changed", "Details are in Logs.")
 
-    def _edit_client(self, client_id: str, parent: QWidget) -> None:
-        dialog = ClientSettingsDialog(
-            client_id=client_id,
-            profile_manager=self.profile_manager,
-            groups_manager=self.groups_manager,
-            parent=parent,
-        )
-
-        if dialog.exec():
-            self.refresh()
-
     def _move_to_group(
         self, client_id: str, group_id: str | None, parent: QWidget
     ) -> None:
@@ -175,10 +171,16 @@ class ClientDirectory(QObject):
             self.refresh()
 
     def open_create_client_dialog(self, parent: QWidget) -> None:
+        data = self.last_data or {"all_clients": [], "card_data": {}}
         dialog = ClientCreationDialog(
             profile_manager=self.profile_manager,
             groups_manager=self.groups_manager,
             parent=parent,
+            clients=[
+                (cid, (data["card_data"].get(cid, {}).get("client_name") or cid))
+                for cid in data["all_clients"]
+            ],
+            archived_ids=data.get("archived_ids", []),
         )
 
         if dialog.exec():

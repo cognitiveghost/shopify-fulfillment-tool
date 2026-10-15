@@ -88,6 +88,7 @@ def test_an_open_session_survives_the_client_menu(main_window, qtbot, monkeypatc
     # The dialogs are modal; the bar's behaviour is what is under test.
     monkeypatch.setattr(win.client_directory, "open_create_client_dialog", lambda _p: None)
     monkeypatch.setattr(win.client_directory, "open_groups_dialog", lambda _p: None)
+    monkeypatch.setattr(win, "_show_archived_clients", lambda _clients: None)
 
     for label in _action_labels(win.command_bar):
         _activate_action(win.command_bar, label)
@@ -104,7 +105,7 @@ def test_a_client_that_failed_to_load_is_retried_by_a_refresh(main_window, qtbot
     monkeypatch.setattr("gui.main_window_pyside.show_error", lambda *a, **k: None)
     loads = []
     monkeypatch.setattr(
-        win, "_load_client_data", lambda cid: (loads.append(cid), (None, None))[1]
+        win, "_load_client_data", lambda cid: (loads.append(cid), (None, None, {}))[1]
     )
     win.command_bar.set_clients(["M"])
     win.command_bar.set_current_client("M")

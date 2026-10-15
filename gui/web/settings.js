@@ -70,6 +70,7 @@ const LIST_PAGES = {
   weight: [weightPage, weightClick, weightInput],
   reports: [reportsPage, reportsClick, reportsInput],
   tags: [tagsPage, tagsClick, tagsInput],
+  profile: [profilePage, profileClick, profileInput],
 };
 
 // The LIST_PAGES key this state holds, or undefined.

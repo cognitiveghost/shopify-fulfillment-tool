@@ -74,7 +74,7 @@ def test_save_writes_a_rule_that_is_off(window, started_workers, no_modals):
     _rules(window).edit("rule_enabled", ["1", False])
     window.save_settings()
     assert no_modals == []
-    _client, written = started_workers[0].args
+    _client, written, _profile = started_workers[0].args
     assert written["rules"] == [
         {
             "name": "Flag big orders",

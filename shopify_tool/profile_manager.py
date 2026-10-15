@@ -327,7 +327,154 @@ class ProfileManager:
             logger.exception("Unexpected error listing clients")
             return []
 
-    def create_client_profile(self, client_id: str, client_name: str) -> bool:
+    ARCHIVE_DIR = "_archive"
+
+    def _lifecycle_paths(self, client_id: str):
+        name = f"CLIENT_{client_id}"
+        return (
+            self.clients_dir / name,
+            self.clients_dir / self.ARCHIVE_DIR / name,
+            self.sessions_dir / name,
+            self.sessions_dir / self.ARCHIVE_DIR / name,
+        )
+
+    def _forget_client(self, client_id: str) -> None:
+        self._config_cache.pop(f"{self.base_path}::shopify_{client_id}", None)
+        self._config_cache.pop(f"{self.base_path}::client_{client_id}", None)
+        self.invalidate_metadata_cache(client_id)
+
+    def _move_client(self, client_id, src_c, dst_c, src_s, dst_s, verb):
+        """Move the client folder, then its sessions folder; undo the first
+        move when the second fails (ADR 0020)."""
+        label = f"CLIENT_{client_id}"
+        busy = f"{label} is open on another PC. Close it there, then try again."
+        dst_c.parent.mkdir(parents=True, exist_ok=True)
+        dst_s.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.rename(src_c, dst_c)
+        except OSError as e:
+            logger.warning(f"Could not move {src_c} to {dst_c}", exc_info=True)
+            raise ProfileManagerError(busy) from e
+        if src_s.exists():
+            try:
+                os.rename(src_s, dst_s)
+            except OSError as e:
+                logger.warning(f"Could not move {src_s} to {dst_s}", exc_info=True)
+                try:
+                    os.rename(dst_c, src_c)
+                except OSError:
+                    logger.error(f"{label} half {verb}: {dst_c} should be at {src_c}")
+                    raise ProfileManagerError(
+                        f"{label} is half {verb}: move {dst_c} back to {src_c} by hand."
+                    ) from e
+                raise ProfileManagerError(busy) from e
+
+    def _edit_config_file(self, path: Path, change: Callable[[dict], None]) -> None:
+        """Best effort: the folder move is the act, the stamp is a note."""
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            change(data)
+            atomic_write_json(path, data)
+        except Exception:
+            logger.warning(f"Could not update {path}", exc_info=True)
+
+    def archive_client(self, client_id: str) -> None:
+        live_c, arch_c, live_s, arch_s = self._lifecycle_paths(client_id)
+        label = f"CLIENT_{client_id}"
+        if not live_c.is_dir():
+            raise ProfileManagerError(f"{label} does not exist.")
+        if arch_c.exists() or arch_s.exists():
+            raise ProfileManagerError(
+                f"An archived {label} already exists. Restore or delete it first."
+            )
+        self._move_client(client_id, live_c, arch_c, live_s, arch_s, "archived")
+
+        def stamp(data):
+            data["archived_at"] = datetime.now().astimezone().isoformat()
+            data["archived_by"] = os.environ.get("COMPUTERNAME", "Unknown")
+
+        self._edit_config_file(arch_c / "client_config.json", stamp)
+        self._forget_client(client_id)
+        logger.info(f"Archived {label}")
+
+    def restore_client(self, client_id: str) -> None:
+        live_c, arch_c, live_s, arch_s = self._lifecycle_paths(client_id)
+        label = f"CLIENT_{client_id}"
+        if live_c.exists():
+            raise ProfileManagerError(
+                f"A live {label} exists. Rename or archive it before restoring."
+            )
+        if not arch_c.is_dir():
+            raise ProfileManagerError(f"{label} is not archived.")
+        if arch_s.exists() and live_s.exists():
+            # A PC that still had the client open saved after the archive, and
+            # the write recreated the live folder (ADR 0020).
+            raise ProfileManagerError(
+                f"{live_s} exists again: a PC saved into {label} after it was archived. "
+                f"Move the session folders in it into {arch_s}, delete it, then try again."
+            )
+        self._move_client(client_id, arch_c, live_c, arch_s, live_s, "restored")
+
+        def unstamp(data):
+            data.pop("archived_at", None)
+            data.pop("archived_by", None)
+
+        self._edit_config_file(live_c / "client_config.json", unstamp)
+        self._forget_client(client_id)
+        logger.info(f"Restored {label}")
+
+    def list_archived_clients(self) -> list[dict]:
+        root = self.clients_dir / self.ARCHIVE_DIR
+        if not root.is_dir():
+            return []
+        found = []
+        for d in sorted(root.iterdir(), key=lambda p: p.name):
+            if not (d.is_dir() and d.name.startswith("CLIENT_")):
+                continue
+            cid = d.name[len("CLIENT_"):]
+            try:
+                cfg = json.loads((d / "client_config.json").read_text(encoding="utf-8"))
+            except Exception:
+                cfg = {}
+            found.append(
+                {
+                    "client_id": cid,
+                    "client_name": cfg.get("client_name") or cid,
+                    "archived_at": cfg.get("archived_at") or "",
+                }
+            )
+        return found
+
+    def client_has_sessions(self, client_id: str) -> bool:
+        d = self.sessions_dir / f"CLIENT_{client_id}"
+        return d.is_dir() and any(p.is_dir() for p in d.iterdir())
+
+    def delete_client(self, client_id: str) -> None:
+        live_c, _arch_c, live_s, _arch_s = self._lifecycle_paths(client_id)
+        label = f"CLIENT_{client_id}"
+        if not live_c.is_dir():
+            raise ProfileManagerError(f"{label} does not exist.")
+        if self.client_has_sessions(client_id):
+            raise ProfileManagerError(f"{label} has sessions. Archive it instead.")
+        try:
+            shutil.rmtree(live_c)
+            if live_s.exists():
+                shutil.rmtree(live_s)
+        except OSError as e:
+            raise ProfileManagerError(
+                f"{label} couldn't be deleted: a file in it is open. "
+                "Close it on every PC, then try again."
+            ) from e
+        self._forget_client(client_id)
+        logger.info(f"Deleted {label}")
+
+    def create_client_profile(
+        self,
+        client_id: str,
+        client_name: str,
+        ui_settings: dict | None = None,
+        copy_from: str | None = None,
+    ) -> bool:
         """Create a new client profile with default configuration.
 
         Creates directory structure:
@@ -339,9 +486,12 @@ class ProfileManager:
         Args:
             client_id (str): Client ID (e.g., "M")
             client_name (str): Full client name (e.g., "M Cosmetics")
+            ui_settings (dict | None): Overrides for the default ui_settings, written in the first write
+            copy_from (str | None): Client ID whose shopify settings are copied (not identity or stock memory)
 
         Returns:
-            bool: True if created successfully, False if already exists
+            bool: True if created successfully, False if the ID is live or archived,
+                or copy_from can't be loaded
 
         Raises:
             ValidationError: If client_id is invalid
@@ -355,10 +505,22 @@ class ProfileManager:
         client_id = client_id.upper()
         client_dir = self.clients_dir / f"CLIENT_{client_id}"
 
-        # Check if already exists
-        if client_dir.exists():
-            logger.warning(f"Client profile already exists: CLIENT_{client_id}")
+        # Check if already exists, live or archived
+        if client_dir.exists() or (self.clients_dir / self.ARCHIVE_DIR / f"CLIENT_{client_id}").exists():
+            logger.warning(f"Client profile already exists (live or archived): CLIENT_{client_id}")
             return False
+
+        # Read the source before any folder exists, so a bad copy_from leaves nothing behind
+        shopify_config = self._create_default_shopify_config(client_id, client_name)
+        if copy_from:
+            source = self.load_shopify_config(copy_from.upper())
+            if not source:
+                logger.warning(f"Can't copy settings from CLIENT_{copy_from}: not loaded")
+                return False
+            fresh = shopify_config
+            shopify_config = copy.deepcopy(source)
+            for key in ("client_id", "client_name", "created_at", "inventory_memory"):
+                shopify_config[key] = fresh[key]
 
         try:
             # Create directory structure
@@ -371,14 +533,12 @@ class ProfileManager:
                 "client_name": client_name,
                 "created_at": datetime.now().astimezone().isoformat(),
                 "created_by": os.environ.get("COMPUTERNAME", "Unknown"),
+                "ui_settings": {**self._get_default_ui_settings(), **(ui_settings or {})},
             }
 
             config_path = client_dir / "client_config.json"
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(client_config, f, indent=2)
-
-            # Create default shopify config
-            shopify_config = self._create_default_shopify_config(client_id, client_name)
 
             shopify_config_path = client_dir / "shopify_config.json"
             with open(shopify_config_path, "w", encoding="utf-8") as f:

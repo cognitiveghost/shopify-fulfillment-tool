@@ -1,6 +1,7 @@
 from PySide6.QtCore import Qt
 
 from gui.components.commandbar import (
+    ROLE_CLIENT_ID,
     ROW_ACTION,
     ROW_CLIENT,
     ROW_SECTION,
@@ -72,7 +73,6 @@ def test_the_dropdown_is_pinned_then_groups_then_the_rest(qapp):
         (ROW_SECTION, "Pinned"),
         (ROW_CLIENT, "A"),
         (ROW_SECTION, "Retail"),
-        (ROW_CLIENT, "A"),
         (ROW_CLIENT, "B"),
         (ROW_SECTION, "All Clients"),
         (ROW_CLIENT, "Q"),
@@ -80,6 +80,7 @@ def test_the_dropdown_is_pinned_then_groups_then_the_rest(qapp):
         (ROW_ACTION, "Refresh clients"),
         (ROW_ACTION, "New client…"),
         (ROW_ACTION, "Manage groups…"),
+        (ROW_ACTION, "Archived clients…"),
     ]
 
 
@@ -100,7 +101,7 @@ def test_no_clients_means_no_separator_above_the_actions(qapp):
     bar.set_clients_from({"groups": [], "special_groups": {}, "all_clients": []})
     rows = _rows(bar)
 
-    assert [kind for kind, _p, _t in rows] == [ROW_ACTION] * 3
+    assert [kind for kind, _p, _t in rows] == [ROW_ACTION] * 4
 
 
 def test_the_popup_scrollbar_is_themed_not_native(qapp):
@@ -291,5 +292,51 @@ def test_a_theme_toggle_restyles_the_bar(qapp):
         assert bar.styleSheet() != before
     finally:
         manager.toggle_theme()
+
+
+def _data(**names):
+    return {
+        "special_groups": {},
+        "custom_groups": [],
+        "all_clients": list(names),
+        "pinned_client_ids": set(),
+        "group_members": {},
+        "card_data": {cid: {"client_name": n, "ui_settings": {}} for cid, n in names.items()},
+    }
+
+
+def test_a_row_shows_the_client_name_and_keeps_the_id_as_payload(qapp):
+    bar = CommandBar()
+    bar.set_clients_from(_data(ACME="Acme Ltd"))
+    kinds = _rows(bar)
+    assert (ROW_CLIENT, "ACME", "Acme Ltd") in kinds
+    item = next(bar.client_selector.model().item(i) for i in range(len(kinds)) if kinds[i][0] == ROW_CLIENT)
+    assert item.data(ROLE_CLIENT_ID) == "ACME"
+
+
+def test_a_blank_name_falls_back_to_the_id(qapp):
+    bar = CommandBar()
+    bar.set_clients_from(_data(ACME=""))
+    assert _client_rows(bar) == ["ACME"]
+
+
+def test_two_clients_with_one_name_still_switch(qapp):
+    bar = CommandBar()
+    bar.set_clients_from(_data(A1="Same", A2="Same"))
+    seen = []
+    bar.clientChanged.connect(seen.append)
+    bar.set_current_client("A1")
+    bar.set_current_client("A2")
+    assert seen == ["A1", "A2"]
+
+
+def test_the_archived_clients_row_asks_for_the_list(qapp):
+    bar = CommandBar()
+    bar.set_clients_from(_data(ACME="Acme"))
+    asked = []
+    bar.archivedClientsRequested.connect(lambda: asked.append(True))
+    row = next(i for i, (k, _p, t) in enumerate(_rows(bar)) if t == "Archived clients…")
+    bar.client_selector.activated.emit(row)
+    assert asked == [True]
 
 

@@ -348,6 +348,16 @@ A loaded stock file is always used as it is; memory stands in only when a run ha
 kept in the session. A re-run of that session starts from its baseline, not
 from memory it has already drawn down.
 
+## Clients
+
+**Archived client** — a client whose folders were moved into `Clients/_archive/`
+and `Sessions/_archive/`. Neither tool lists it; Archived clients… restores it.
+Not the session status "archived".
+
+**Client profile** — a client's name, group, colour and pin, kept in
+`client_config.json` and edited on Client settings › Profile. Its fulfilment
+settings are in `shopify_config.json`.
+
 ## Sessions
 
 **Blocked order** — an order this session cannot fulfil, counted as
