@@ -36,6 +36,11 @@ class ClientDirectory(QObject):
         self.profile_manager = profile_manager
         self.groups_manager = groups_manager
         self._refresh_workers = set()  # keeps in-flight refresh Workers alive
+        self.last_data: dict | None = None  # the last gather() result the GUI applied
+        self.loaded.connect(self._remember)
+
+    def _remember(self, data: dict) -> None:
+        self.last_data = data
 
     def gather(self) -> dict:
         """All the file-server IO refresh() needs, with zero Qt object
@@ -70,6 +75,7 @@ class ClientDirectory(QObject):
             "pinned_client_ids": pinned_client_ids,
             "group_members": group_members,
             "card_data": card_data,
+            "archived_ids": [c["client_id"] for c in self.profile_manager.list_archived_clients()],
         }
 
     def refresh(self) -> None:
@@ -175,10 +181,16 @@ class ClientDirectory(QObject):
             self.refresh()
 
     def open_create_client_dialog(self, parent: QWidget) -> None:
+        data = self.last_data or {"all_clients": [], "card_data": {}}
         dialog = ClientCreationDialog(
             profile_manager=self.profile_manager,
             groups_manager=self.groups_manager,
             parent=parent,
+            clients=[
+                (cid, (data["card_data"].get(cid, {}).get("client_name") or cid))
+                for cid in data["all_clients"]
+            ],
+            archived_ids=data.get("archived_ids", []),
         )
 
         if dialog.exec():

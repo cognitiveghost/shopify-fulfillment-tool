@@ -45,10 +45,14 @@ class ClientCreationDialog(QDialog):
         profile_manager: ProfileManager,
         groups_manager: GroupsManager | None = None,
         parent=None,
+        clients: list[tuple[str, str]] | None = None,
+        archived_ids: list[str] | None = None,
     ):
         super().__init__(parent)
         self.profile_manager = profile_manager
         self.groups_manager = groups_manager
+        self._live = {cid.upper() for cid, _name in clients or []}
+        self._archived = {cid.upper() for cid in archived_ids or []}
         self.setWindowTitle("Create New Client")
         self.setModal(True)
         self.setMinimumWidth(400)
@@ -70,7 +74,7 @@ class ClientCreationDialog(QDialog):
 
         self.client_id_error = InlineMessage(self)
         form_layout.addRow("", self.client_id_error)
-        self.client_id_input.textChanged.connect(self.client_id_error.clear)
+        self.client_id_input.textChanged.connect(self._check_id)
 
         self.client_name_input = QLineEdit()
         self.client_name_input.setPlaceholderText("e.g., M Cosmetics")
@@ -80,6 +84,15 @@ class ClientCreationDialog(QDialog):
         self.client_name_error = InlineMessage(self)
         form_layout.addRow("", self.client_name_error)
         self.client_name_input.textChanged.connect(self.client_name_error.clear)
+
+        # Copy settings from: Defaults, then every live client
+        self.copy_combo = QComboBox()
+        self.copy_combo.addItem("Defaults", None)
+        for cid, name in clients or []:
+            label = f"{name}  ({cid})" if name and name != cid else cid
+            self.copy_combo.addItem(label, cid)
+        self.copy_combo.setToolTip("Start from another client's settings")
+        form_layout.addRow("Copy settings from:", self.copy_combo)
 
         # Group dropdown
         self.group_combo = QComboBox()
@@ -127,10 +140,30 @@ class ClientCreationDialog(QDialog):
 
         # Button box
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.create_button = button_box.button(QDialogButtonBox.Ok)
         apply_dialog_button_roles(button_box)
         button_box.accepted.connect(self.validate_and_accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+        self._check_id("")  # Create starts disabled
+
+    def _check_id(self, text: str) -> None:
+        """Show the first problem with the ID as you type; Create waits for none."""
+        cid = text.strip().upper()
+        problem = ""
+        if cid:
+            ok, message = ProfileManager.validate_client_id(cid)
+            if not ok:
+                problem = message
+            elif cid in self._live:
+                problem = f"CLIENT_{cid} already exists."
+            elif cid in self._archived:
+                problem = f"CLIENT_{cid} is archived. Restore it from Archived clients."
+        if problem:
+            self.client_id_error.show_message(problem)
+        else:
+            self.client_id_error.clear()
+        self.create_button.setEnabled(bool(cid) and not problem)
 
     def _choose_color(self):
         """Open color picker dialog."""
@@ -176,24 +209,23 @@ class ClientCreationDialog(QDialog):
 
         # Try to create client profile
         try:
-            success = self.profile_manager.create_client_profile(client_id, client_name)
-            if success:
-                # Update ui_settings with optional fields
-                ui_settings = {
+            success = self.profile_manager.create_client_profile(
+                client_id,
+                client_name,
+                ui_settings={
                     "is_pinned": self.pin_checkbox.isChecked(),
                     "group_id": self.group_combo.currentData(),
                     "custom_color": self.current_color,
-                    "custom_badges": [],
-                    "display_order": 0,
-                }
-                self.profile_manager.update_ui_settings(client_id, ui_settings)
-
+                },
+                copy_from=self.copy_combo.currentData(),
+            )
+            if success:
                 self.accept()
                 if self.parent() is not None:
                     toast(self.parent(), f"Client CLIENT_{client_id.upper()} created.")
             else:
                 self.client_id_error.show_message(
-                    f"CLIENT_{client_id.upper()} already exists."
+                    f"CLIENT_{client_id.upper()} already exists or is archived."
                 )
         except (ValidationError, ProfileManagerError):
             logger.exception("Failed to create client profile")
