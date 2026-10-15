@@ -840,7 +840,10 @@ class MainWindow(QMainWindow):
                 lambda: session_manager.update_session_info(session_path, session_state.order_counts(df)),
             )
 
-        self._withdraw_out_of_date_lists()
+        # getattr: tests call this unbound on a plain namespace (see the queue note above).
+        withdraw = getattr(self, "_withdraw_out_of_date_lists", None)
+        if withdraw is not None:
+            withdraw()
 
     def _withdraw_out_of_date_lists(self) -> None:
         """Withdraw the packing lists the frame on screen has made out of date (AUDIT-10-4, ADR 0019).
