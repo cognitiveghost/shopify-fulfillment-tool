@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import gui.main_window_pyside as main_window_module
 from gui.report_selection_dialog import GenerateReportsDialog
 from shopify_tool import report_jobs
 from test_stale_session import _open_with_state, main_window  # noqa: F401  main_window is a fixture
@@ -99,3 +100,100 @@ def test_audit_10_4_a_failed_regeneration_withdraws_the_old_list(tmp_path, monke
     outcome = report_jobs.generate_report(config, tmp_path, pd.DataFrame(), {}, "s")
     assert outcome.failed and outcome.locked_file
     assert not (lists / "ALL.json").exists()
+
+
+LISTED = pd.DataFrame(
+    {"Order_Number": ["#1001", "#1002"], "SKU": ["A", "B"], "Quantity": [1, 1], "Stock": [5, 5],
+     "Order_Fulfillment_Status": ["Fulfillable", "Fulfillable"], "Internal_Tags": ["[]", "[]"],
+     "Tags": ["", ""]}
+)
+
+
+def _with_list(win, name="ALL", started=False):
+    path = _open_with_state(win, LISTED)
+    lists = Path(path) / "packing_lists"
+    lists.mkdir(exist_ok=True)
+    (lists / f"{name}.json").write_text('{"total_orders": 2}', encoding="utf-8")
+    (lists / f"{name}.xlsx").write_bytes(b"x")
+    if started:
+        (Path(path) / "packing" / name).mkdir(parents=True)
+    win._list_fingerprints = {name: report_jobs.packing_fingerprint(LISTED)}
+    return path
+
+
+@pytest.fixture
+def toasts(monkeypatch):
+    seen = []
+    monkeypatch.setattr(main_window_module, "toast", lambda src, text, **k: seen.append(text))
+    return seen
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: an edit leaves the old list for the Packer")
+def test_audit_10_4_an_edit_withdraws_the_out_of_date_list_once(main_window, toasts):
+    path = _with_list(main_window)
+    toasts.clear()  # opening the session toasted
+    main_window.actions_handler.bulk_change_status(["#1001"], False)
+    assert main_window.write_queue.flush(timeout=10)
+    assert not (Path(path) / "packing_lists" / "ALL.json").exists()
+    assert (Path(path) / "packing_lists" / "withdrawn" / "ALL.json").exists()
+    assert toasts == [report_jobs.out_of_date_message(["ALL"], [])]
+    main_window.actions_handler.bulk_change_status(["#1002"], False)
+    assert toasts == [report_jobs.out_of_date_message(["ALL"], [])]  # once, not per edit
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-8: adding a tag calls a method UIManager no longer has")
+def test_audit_10_8_a_bulk_tag_edit_does_not_raise(main_window, toasts):
+    _with_list(main_window)
+    main_window.actions_handler.bulk_add_tag(["#1001"], "VIP")
+    main_window.actions_handler.bulk_remove_tag(["#1001"], "VIP")
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-8: adding a tag calls a method UIManager no longer has")
+def test_a_tag_edit_withdraws_nothing(main_window, toasts):
+    path = _with_list(main_window)
+    toasts.clear()
+    main_window.actions_handler.bulk_add_tag(["#1001"], "VIP")
+    assert main_window.write_queue.flush(timeout=10)
+    assert (Path(path) / "packing_lists" / "ALL.json").exists()
+    assert toasts == []
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: a started list is not named")
+def test_a_started_list_stays_and_is_named(main_window, toasts):
+    path = _with_list(main_window, started=True)
+    toasts.clear()
+    main_window.actions_handler.bulk_change_status(["#1001"], False)
+    assert main_window.write_queue.flush(timeout=10)
+    assert (Path(path) / "packing_lists" / "ALL.json").exists()
+    assert toasts == [report_jobs.out_of_date_message([], ["ALL"])]
+
+
+def test_a_session_without_fingerprints_withdraws_nothing(main_window, toasts):
+    path = _with_list(main_window)
+    main_window._list_fingerprints = {}
+    main_window.actions_handler.bulk_change_status(["#1001"], False)
+    assert main_window.write_queue.flush(timeout=10)
+    assert (Path(path) / "packing_lists" / "ALL.json").exists()
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: a re-run leaves the old list")
+def test_a_rerun_analysis_withdraws_out_of_date_lists(main_window, toasts):
+    path = _with_list(main_window)
+    toasts.clear()
+    rerun = LISTED.assign(Quantity=[2, 1])
+    main_window.actions_handler.on_analysis_complete((True, "report.xlsx", rerun, {}))
+    assert main_window.write_queue.flush(timeout=10)
+    assert not (Path(path) / "packing_lists" / "ALL.json").exists()
+
+
+@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: fingerprints are not loaded with a session")
+def test_opening_a_session_loads_its_recorded_fingerprints(main_window):
+    path = main_window.session_manager.create_session("acme")
+    main_window.session_manager.update_session_info(
+        path, {"statistics": {"packing_list_fingerprints": {"ALL": "ab"}}}
+    )
+    from shopify_tool import session_state
+
+    session_state.save_state(path, LISTED, None)
+    main_window.load_existing_session(path)
+    assert main_window._list_fingerprints == {"ALL": "ab"}
