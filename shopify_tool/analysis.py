@@ -80,7 +80,7 @@ def _parse_expiry_date(raw) -> date | None:
 
     Tries candidate formats in priority order, keeping the first
     calendar-valid one:
-    - "1" or None or NaN or "" -> None  (sentinel for "no expiry info")
+    - "0" or "1" or None or NaN or "" -> None  (sentinel for "no expiry info")
     - 6-digit: YYMM with day 00 -> the 1st; else YYMMDD, then DDMMYY
     - 8-digit: YYYYMMDD
     - 4-digit: MMYY, then YYMM (day defaults to 1)
@@ -103,7 +103,8 @@ def _parse_expiry_date(raw) -> date | None:
     except (TypeError, ValueError):
         pass
     s = str(raw).strip()
-    if not s or s == "1":
+    # "0" and "1" are placeholders some exports write for "no expiry" (production log, 2.3.1).
+    if not s or s in ("0", "1"):
         return None
 
     if len(s) == 6 and s[4:6] == "00":

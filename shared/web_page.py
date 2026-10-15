@@ -254,7 +254,10 @@ def when_painted(bridge: PageBridge, callback, timeout_ms: int = PAINT_TIMEOUT_M
         except RuntimeError:
             last = -1  # the bridge was destroyed while we waited
         if timed_out:
-            logger.warning(
+            # Handled: the action runs anyway. On the warehouse PCs a large Results frame takes
+            # longer than the cap, which is nothing an operator or a log reader can act on
+            # (AUDIT-10-7).
+            logger.info(
                 "%s did not report revision %s within %s ms (last painted %s)",
                 type(bridge).__name__,
                 target,

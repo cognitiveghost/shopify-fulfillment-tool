@@ -96,3 +96,24 @@ folder from now on, so later sessions replay exactly. Operation replay (B4) is a
 - An empty Notes cell is written to `analysis_data.json` and to the packing list as the text `nan`
   (`core._text_or_blank`, kept on purpose "for what each JSON text field has always held"). The Packer
   may show it. Not changed here: it needs a decision on whether the Packer or old sessions depend on it.
+
+### AUDIT-10-5: WeasyPrint warns about `word-break: break-word` on every label run
+
+Found: production `log_issues`, 2.3.1, ×110, last seen 2026-10-09 (WeasyPrint "Ignored `word-break:
+break-word`, invalid value"). The label CSS used a value WeasyPrint does not know, so it ignored the
+rule and logged it per label. Fix: `overflow-wrap: anywhere` in `barcode_label` and `qr_label`.
+Test: `test_audit_10_5_*` (checks the CSS text; a real render is not run here, WeasyPrint is the
+dependency that segfaults in some test setups).
+
+### AUDIT-10-6: expiry `"0"` logs a warning for every stock row that carries it
+
+Found: production `log_issues`, 2.3.1, ×11, last seen 2026-10-09 (unparseable expiry "0").
+`_parse_expiry_date` treated only "1" as the "no expiry" placeholder; some exports write "0".
+Fix: both are "no expiry", silently. Test: `test_audit_10_6_*`.
+
+### AUDIT-10-7: the Results paint timeout is logged as a warning
+
+Found: production `log_issues`, 2.3.1, ×10, last seen 2026-10-09 ("did not report revision N within
+… ms"). `when_painted` runs its action anyway when the page is slow to paint, so nothing is wrong
+and nobody can act on the line. Fix: INFO. Test: `test_when_painted_gives_up_at_the_timeout_and_says_so`
+in `tests/test_web_page.py`. A `shared/` change: packing-tool takes it at its next sync.

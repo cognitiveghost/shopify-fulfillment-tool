@@ -269,7 +269,6 @@ def test_a_session_keeps_the_config_it_ran_with(sessions, tmp_path, monkeypatch)
     assert kept == {"column_mappings": MAPPINGS_10, "rules": []}
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-5: label CSS uses word-break: break-word")
 def test_audit_10_5_label_css_has_no_property_weasyprint_ignores():
     root = Path(__file__).resolve().parents[2] / "shopify_tool" / "templates"
     for name in ("barcode_label", "qr_label"):
@@ -278,7 +277,6 @@ def test_audit_10_5_label_css_has_no_property_weasyprint_ignores():
         assert "overflow-wrap: anywhere" in css
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-6: expiry '0' logs a warning")
 def test_audit_10_6_expiry_zero_means_none_quietly(caplog):
     import logging
 
