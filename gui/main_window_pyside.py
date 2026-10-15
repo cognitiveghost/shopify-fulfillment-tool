@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -166,6 +167,10 @@ class MainWindow(QMainWindow):
         self.write_queue = SessionWriteQueue(self)
         self.write_queue.failed.connect(self._on_session_write_failed)
         self._client_load_workers = set()  # keeps in-flight client-switch Workers alive
+        # Timing of the client switch under way, for its one log line (spec B3).
+        self._switch_started: tuple[str, float] | None = None
+        self._switch_timings: dict | None = None
+        self._switch_apply_end: float | None = None
         self._analysis_running = False  # Guard against duplicate analysis runs
         self._analysis_step = 0  # index into core.ANALYSIS_STEPS while a run is going
         self._analysis_cancelling = False
@@ -276,7 +281,7 @@ class MainWindow(QMainWindow):
             QApplication.quit()
             return
 
-    def load_client_config(self, client_id: str):
+    def load_client_config(self, client_id: str, reset: bool = True):
         """Load configuration for the selected client.
 
         Args:
@@ -296,7 +301,8 @@ class MainWindow(QMainWindow):
                 logger.info(f"Loaded configuration for CLIENT_{client_id}")
 
                 # Reset analysis data when switching clients
-                self._reset_session_state()
+                if reset:
+                    self._reset_session_state()
                 self.session_path = None
                 self.command_bar.set_state(BarState.NO_SESSION)
                 self.ui_manager.refresh_setup()
@@ -585,17 +591,26 @@ class MainWindow(QMainWindow):
 
     # --- Client and Session Management (New Architecture) ---
     def _load_client_data(self, client_id: str):
-        """Worker-thread IO for a client switch.
+        """Worker-thread IO for a client switch: drain the last session's
+        writes, then read this client's configs (spec B2).
 
-        Returns (shopify_config, column_settings): the results table's saved
-        column layout, normalized (Bundle 13 spec §7.3).
+        Returns (shopify_config, column_settings, timings): the results table's
+        saved column layout, normalized (Bundle 13 spec §7.3), and the flush and
+        read times in ms for the switch's timing line (spec B3).
         """
+        t0 = time.perf_counter()
+        queue = getattr(self, "write_queue", None)
+        if queue is not None and not queue.flush(timeout=10):
+            logger.warning(f"Background writes still pending while switching clients: {queue.pending()}")
+        t1 = time.perf_counter()
         shopify_config = self.profile_manager.load_shopify_config(client_id)
         client_config = self.profile_manager.load_client_config(client_id) or {}
         column_settings = normalize_column_settings(
             (client_config.get("ui_settings") or {}).get("results_columns")
         )
-        return shopify_config, column_settings
+        t2 = time.perf_counter()
+        timings = {"flush_ms": round((t1 - t0) * 1000), "read_ms": round((t2 - t1) * 1000)}
+        return shopify_config, column_settings, timings
 
     def _on_client_menu_requested(self, client_id: str, position):
         """The bar has no ProfileManager, so it asks for the menu here."""
@@ -617,8 +632,17 @@ class MainWindow(QMainWindow):
             # The picker must not offer the last client's sessions under this
             # client's name, whether or not this load succeeds.
             self.command_bar.set_recent_sessions([])
+            self.command_bar.set_client_loading(
+                True, self.command_bar.client_selector.currentText() or client_id
+            )
 
         self.current_client_id = client_id
+        self._switch_started = (client_id, time.perf_counter())
+        self._switch_timings = None
+        # The flush happens in the load worker below, not on the GUI thread (spec B2).
+        self._reset_session_state(wait=False)
+        self.session_path = None
+        self.update_session_info_label()
 
         worker = Worker(self._load_client_data, client_id)
         worker.signals.result.connect(
@@ -645,7 +669,8 @@ class MainWindow(QMainWindow):
 
     def _on_client_data_loaded(self, client_id: str, result):
         """Apply client-switch IO results to the UI (main thread only)."""
-        shopify_config, column_settings = result
+        apply_start = time.perf_counter()
+        shopify_config, column_settings, timings = result
 
         if client_id != self.current_client_id:
             # User switched again before this load finished -- discard stale result.
@@ -659,6 +684,7 @@ class MainWindow(QMainWindow):
                 f"CLIENT_{client_id}'s configuration couldn't be loaded",
                 "Details are in Logs.",
             )
+            self.command_bar.set_client_loading(False)
             self.command_bar.forget_announced()
             return
 
@@ -671,13 +697,9 @@ class MainWindow(QMainWindow):
             # might) would leave active_profile_config stale after every client
             # switch -- it's read throughout actions_handler.py/file_handler.py
             # for delimiters, column mappings, and tag categories.
-            self.load_client_config(client_id)
+            # No reset here: on_client_changed already reset the session state.
+            self.load_client_config(client_id, reset=False)
             self.results_bridge.set_column_settings(column_settings)
-
-            # load_client_config resets too, but only when the config loads.
-            self._reset_session_state()
-            self.session_path = None
-            self.update_session_info_label()
 
             # Update session browser to show this client's sessions
             self.session_browser.set_client(client_id, auto_refresh=False)
@@ -689,9 +711,16 @@ class MainWindow(QMainWindow):
 
             logger.info(f"Client {client_id} loaded successfully")
 
+            self.command_bar.set_client_loading(False)
+            self._switch_apply_end = time.perf_counter()
+            self._switch_timings = dict(
+                timings, apply_ms=round((self._switch_apply_end - apply_start) * 1000)
+            )
+
         except Exception:
             logger.exception("Error applying loaded client data")
             show_error(self, "The client couldn't be switched", "Details are in Logs.")
+            self.command_bar.set_client_loading(False)
             self.command_bar.forget_announced()
 
     def show_recent_sessions(self, listed):
@@ -699,6 +728,17 @@ class MainWindow(QMainWindow):
         client_id, sessions = listed
         if client_id != self.current_client_id:
             return
+        started = self._switch_started
+        timings = self._switch_timings
+        if started and timings and started[0] == client_id:
+            now = time.perf_counter()
+            logger.info(
+                f"Client switch to CLIENT_{client_id}: flush {timings['flush_ms']} ms, "
+                f"read {timings['read_ms']} ms, apply {timings['apply_ms']} ms, "
+                f"sessions {round((now - self._switch_apply_end) * 1000)} ms, "
+                f"total {round((now - started[1]) * 1000)} ms"
+            )
+            self._switch_started = None
         self.command_bar.set_recent_sessions(
             [
                 (info.get("session_name", "?"), info.get("session_path"))
@@ -713,6 +753,7 @@ class MainWindow(QMainWindow):
         # A stale failure must not make the bar re-announce -- and so reset the
         # session of -- the client that did load.
         if client_id == self.current_client_id:
+            self.command_bar.set_client_loading(False)
             self.command_bar.forget_announced()
 
     def schedule_results_columns_save(self, settings: dict):
@@ -1049,7 +1090,7 @@ class MainWindow(QMainWindow):
             self.file_handler.validate_file(kind)
         self.file_handler.check_files_ready()
 
-    def _reset_session_state(self):
+    def _reset_session_state(self, wait: bool = True):
         """Forget the open session's orders, inputs, undo history and stamp.
 
         Every way into a session calls this first (AUDIT-05-2); without it the
@@ -1061,10 +1102,12 @@ class MainWindow(QMainWindow):
         being left has its history and memory on disk before another opens
         (AUDIT-07-H2). On timeout it carries on: the jobs still land, each on
         its own session. Tells the results page to forget its view state too.
+        A client switch passes wait=False and flushes in its load worker instead (spec B2).
         """
-        queue = getattr(self, "write_queue", None)
-        if queue is not None and not queue.flush(timeout=10):
-            logger.warning(f"Background writes still pending while switching sessions: {queue.pending()}")
+        if wait:
+            queue = getattr(self, "write_queue", None)
+            if queue is not None and not queue.flush(timeout=10):
+                logger.warning(f"Background writes still pending while switching sessions: {queue.pending()}")
         self.analysis_results_df = None
         self.analysis_stats = None
         self.lot_table = None

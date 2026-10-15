@@ -104,7 +104,7 @@ def test_a_client_that_failed_to_load_is_retried_by_a_refresh(main_window, qtbot
     monkeypatch.setattr("gui.main_window_pyside.show_error", lambda *a, **k: None)
     loads = []
     monkeypatch.setattr(
-        win, "_load_client_data", lambda cid: (loads.append(cid), (None, None))[1]
+        win, "_load_client_data", lambda cid: (loads.append(cid), (None, None, {}))[1]
     )
     win.command_bar.set_clients(["M"])
     win.command_bar.set_current_client("M")
