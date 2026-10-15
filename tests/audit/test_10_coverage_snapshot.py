@@ -128,7 +128,6 @@ def toasts(monkeypatch):
     return seen
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: an edit leaves the old list for the Packer")
 def test_audit_10_4_an_edit_withdraws_the_out_of_date_list_once(main_window, toasts):
     path = _with_list(main_window)
     toasts.clear()  # opening the session toasted
@@ -156,7 +155,6 @@ def test_a_tag_edit_withdraws_nothing(main_window, toasts):
     assert toasts == []
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: a started list is not named")
 def test_a_started_list_stays_and_is_named(main_window, toasts):
     path = _with_list(main_window, started=True)
     toasts.clear()
@@ -174,7 +172,6 @@ def test_a_session_without_fingerprints_withdraws_nothing(main_window, toasts):
     assert (Path(path) / "packing_lists" / "ALL.json").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: a re-run leaves the old list")
 def test_a_rerun_analysis_withdraws_out_of_date_lists(main_window, toasts):
     path = _with_list(main_window)
     toasts.clear()
@@ -184,7 +181,6 @@ def test_a_rerun_analysis_withdraws_out_of_date_lists(main_window, toasts):
     assert not (Path(path) / "packing_lists" / "ALL.json").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-4: fingerprints are not loaded with a session")
 def test_opening_a_session_loads_its_recorded_fingerprints(main_window):
     path = main_window.session_manager.create_session("acme")
     main_window.session_manager.update_session_info(

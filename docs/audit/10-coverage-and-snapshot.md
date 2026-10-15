@@ -68,3 +68,13 @@ Found: while writing the AUDIT-10-4 window tests. `bulk_add_tag` and `bulk_remov
 the web page (Phase 9). On a real window the edit was saved and the undo operation recorded, then the
 call raised, so the operator got no toast and the activity log line was skipped. Fix: both calls removed;
 `_update_all_views()` already refreshes the page. Tests: `test_audit_10_8_*`.
+
+### AUDIT-10-4: an edit after the packing list was written leaves the old list for the Packer (finding 2.2)
+
+Found: snapshot finding 2.2, ALMA 2026-10-02_2 (a removed line packed and not written off), HERBAR
+2026-09-28_1 and 2026-09-29_1. Nothing tied an edit to the lists already on disk. Now each list records
+its packing fingerprint (orders + SKU + quantity of fulfillable lines, tags excluded). An edit or a re-run
+that changes it moves the unstarted lists to `packing_lists/withdrawn/` and names the started ones; a
+failed regeneration withdraws the old list too. ADR 0019.
+Tests: `tests/test_report_jobs.py` (fingerprint, withdraw, message), `test_audit_10_4_*` and the window
+tests that follow it in the audit file.

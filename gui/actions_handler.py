@@ -312,6 +312,10 @@ class ActionsHandler(QObject):
                     # No stamp makes the next save refuse: the safe direction.
                     self.log.exception("Could not stamp the session state")
                     self.mw._state_stamp = None
+            # A re-run can change what the lists say, as an edit can (AUDIT-10-4).
+            withdraw = getattr(self.mw, "_withdraw_out_of_date_lists", None)
+            if withdraw is not None:
+                withdraw()
             self.data_changed.emit()
             self.mw.log_activity(
                 "Analysis", f"Analysis complete. Report saved to: {result_msg}"
@@ -718,6 +722,7 @@ class ActionsHandler(QObject):
                 self._results_toast(f"Report saved: {saved}")
             self.mw.log_activity("Report", f"Generated: {outcome.name}")
             wrote_packing_list |= outcome.report_type == "packing_lists"
+            self._record_list_fingerprint(outcome)
 
         if (
             wrote_packing_list
@@ -726,6 +731,17 @@ class ActionsHandler(QObject):
             and hasattr(self.mw, "session_browser")
         ):
             self.mw.session_browser.mark_dirty()
+
+    def _record_list_fingerprint(self, outcome) -> None:
+        """Remember what a packing list was written from, so an edit can tell it is out of date."""
+        fingerprints = getattr(self.mw, "_list_fingerprints", None)
+        if fingerprints is None or outcome.report_type != "packing_lists" or not outcome.output_file:
+            return
+        stem = Path(outcome.output_file).stem
+        if outcome.removed_empty:
+            fingerprints.pop(stem, None)
+        elif outcome.fingerprint:
+            fingerprints[stem] = outcome.fingerprint
 
     def _on_reports_finished(self) -> None:
         self._reports_worker = None

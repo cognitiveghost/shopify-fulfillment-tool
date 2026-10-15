@@ -27,6 +27,7 @@ from gui.session_write_queue import (
     ANALYSIS_STATS,
     HISTORY,
     INVENTORY_MEMORY,
+    PACKING_LISTS,
     SESSION_INFO,
     SessionWriteQueue,
     submit_or_run,
@@ -35,7 +36,7 @@ from gui.ui_manager import UIManager
 from gui.web_page import when_painted
 from gui.worker import Worker
 from shared.atomic_write import atomic_write_json
-from shopify_tool import APP_NAME, __version__, core, fulfillment_history, session_state
+from shopify_tool import APP_NAME, __version__, core, fulfillment_history, report_jobs, session_state
 from shopify_tool.analysis import recalculate_statistics
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
@@ -125,6 +126,8 @@ class MainWindow(QMainWindow):
         self.lot_table = None
         # current_state.pkl as this PC last loaded or saved it (ADR 0011).
         self._state_stamp = None
+        # name -> packing fingerprint of each packing list written, for the open session (AUDIT-10-4).
+        self._list_fingerprints: dict[str, str] = {}
         self.threadpool = QThreadPool()
         # Every file derived from a save is written here, off the click (AUDIT-07-H2).
         self.write_queue = SessionWriteQueue(self)
@@ -830,6 +833,47 @@ class MainWindow(QMainWindow):
                 lambda: session_manager.update_session_info(session_path, session_state.order_counts(df)),
             )
 
+        self._withdraw_out_of_date_lists()
+
+    def _withdraw_out_of_date_lists(self) -> None:
+        """Withdraw the packing lists the frame on screen has made out of date (AUDIT-10-4, ADR 0019).
+
+        A list records the packing fingerprint it was written from. When the frame's own
+        fingerprint differs, the list no longer says what to pack: an unstarted one leaves the
+        Packer's reach on the write queue, a started one is named so the operator checks it.
+        Each list is reported once; generating it again records it afresh.
+        """
+        recorded = getattr(self, "_list_fingerprints", None)
+        df = self.analysis_results_df
+        if not recorded or not self.session_path or df is None:
+            return
+        current = report_jobs.packing_fingerprint(df)
+        out_of_date = sorted(name for name, fp in recorded.items() if fp != current)
+        if not out_of_date:
+            return
+        for name in out_of_date:
+            del recorded[name]
+        session_path = str(self.session_path)
+        # A list already gone (withdrawn by a failed regeneration, or removed) has nothing to say.
+        lists_dir = Path(session_path) / "packing_lists"
+        out_of_date = [n for n in out_of_date if (lists_dir / f"{n}.json").exists()]
+        if not out_of_date:
+            return
+        started = [n for n in out_of_date if (Path(session_path) / "packing" / n).exists()]
+        unstarted = [n for n in out_of_date if n not in started]
+        if unstarted:
+            session_manager = getattr(self, "session_manager", None)
+
+            def withdraw():
+                report_jobs.withdraw_lists(session_path, unstarted)
+                if session_manager is not None:
+                    report_jobs.update_packing_list_statistics(session_manager, session_path)
+
+            submit_or_run(getattr(self, "write_queue", None), session_path, PACKING_LISTS, withdraw)
+            if hasattr(self, "session_browser"):
+                self.session_browser.mark_dirty()
+        toast(self, report_jobs.out_of_date_message(unstarted, started), role="info")
+
     def _on_session_write_failed(self, session_path: str, kind: str) -> None:
         """A background write failed (logged by the queue). On the GUI thread."""
         texts = {
@@ -983,6 +1027,7 @@ class MainWindow(QMainWindow):
         self.analysis_stats = None
         self.lot_table = None
         self._state_stamp = None
+        self._list_fingerprints = {}
         self.orders_file_path = None
         self.stock_file_path = None
         self.orders_slot.clear()
@@ -1022,6 +1067,7 @@ class MainWindow(QMainWindow):
 
             # Load session info
             session_info = self.session_manager.get_session_info(session_path)
+            self._list_fingerprints = report_jobs.recorded_fingerprints(session_info)
 
             if session_info:
                 self._restore_session_inputs(session_path)
