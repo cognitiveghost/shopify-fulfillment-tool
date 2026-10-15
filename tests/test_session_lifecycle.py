@@ -403,7 +403,6 @@ def _counted(entry, counts):
     return entry
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-3: a short run counts as packed")
 def test_a_completed_run_short_of_its_list_is_not_packed():
     progress = {"ALL": {"status": "completed", "completed_orders": [f"#{i}" for i in range(38)]}}
     entry = _counted(_entry(lists=["ALL"], progress=progress), {"ALL": 40})
@@ -422,14 +421,12 @@ def test_no_recorded_count_trusts_the_status():
     assert packing_completion(_entry(lists=["ALL"], progress=progress)) == (1, 1)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-3: a short full-session run counts as packed")
 def test_a_short_full_session_run_is_not_packed():
     progress = {"full_session": {"status": "completed", "completed_orders": ["#1", "#2"]}}
     entry = _counted(_entry(lists=["A", "B"], progress=progress), {"A": 2, "B": 1})
     assert packing_completion(entry) == (0, 2)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-10-3: duplicates count twice")
 def test_duplicate_order_numbers_count_once():
     progress = {"ALL": {"status": "completed", "completed_orders": ["#1", "#1"]}}
     entry = _counted(_entry(lists=["ALL"], progress=progress), {"ALL": 2})

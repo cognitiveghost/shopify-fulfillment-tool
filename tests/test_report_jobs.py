@@ -103,3 +103,18 @@ def test_a_second_batch_waits_for_the_first(main_window, qtbot, monkeypatch):  #
     finally:
         gate.set()
     qtbot.waitUntil(lambda: main_window.actions_handler._reports_worker is None, timeout=10_000)
+
+
+def test_statistics_record_each_lists_order_count(tmp_path):
+    from types import SimpleNamespace
+
+    lists = tmp_path / "packing_lists"
+    lists.mkdir()
+    (lists / "ALL.json").write_text(json.dumps({"total_orders": 40}), encoding="utf-8")
+    (lists / "BROKEN.json").write_text("{", encoding="utf-8")
+    info = {"statistics": {}}
+    sm = SimpleNamespace(get_session_info=lambda p: info,
+                         update_session_info=lambda p, u: info.update(u) or True)
+    report_jobs.update_packing_list_statistics(sm, tmp_path)
+    assert info["statistics"]["packing_lists"] == ["ALL", "BROKEN"]
+    assert info["statistics"]["packing_list_orders"] == {"ALL": 40}

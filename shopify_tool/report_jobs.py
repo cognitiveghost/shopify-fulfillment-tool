@@ -38,6 +38,8 @@ class ReportOutcome:
     failed: bool = False
     # The file another program holds open, when that is why it failed.
     locked_file: str | None = None
+    # What a written packing list says to pack; see packing_fingerprint (AUDIT-10-4).
+    fingerprint: str | None = None
 
 
 def packing_list_json(df: pd.DataFrame, session_id: str) -> dict:
@@ -192,15 +194,20 @@ def generate_reports(
             )
         outcomes.append(outcome)
 
-    if session_manager is not None and any(
-        o.report_type == "packing_lists" and not o.failed for o in outcomes
-    ):
-        _update_packing_list_statistics(session_manager, session_path)
+    # Failed ones count too: a failed regeneration withdraws the old list (AUDIT-10-4),
+    # and the statistics must follow.
+    if session_manager is not None and any(o.report_type == "packing_lists" for o in outcomes):
+        update_packing_list_statistics(session_manager, session_path, outcomes)
     return outcomes
 
 
-def _update_packing_list_statistics(session_manager, session_path) -> None:
-    """Record the session's packing lists in session_info's statistics."""
+def update_packing_list_statistics(session_manager, session_path, outcomes=()) -> None:
+    """Record the session's packing lists in session_info's statistics.
+
+    Rebuilt from the JSON files in packing_lists/, so a withdrawn or removed list drops out:
+    names, each list's order count (AUDIT-10-3) and the fingerprint it was written from
+    (AUDIT-10-4). Never raises.
+    """
     try:
         packing_lists_dir = Path(session_path) / "packing_lists"
         if not packing_lists_dir.exists():
@@ -210,8 +217,24 @@ def _update_packing_list_statistics(session_manager, session_path) -> None:
         if not session_info:
             return
         statistics = session_info.get("statistics", {})
+        orders = {}
+        for name in names:
+            try:
+                total = json.loads((packing_lists_dir / f"{name}.json").read_text(encoding="utf-8")).get(
+                    "total_orders"
+                )
+            except (OSError, ValueError, AttributeError):
+                continue
+            if isinstance(total, int) and not isinstance(total, bool):
+                orders[name] = total
+        fingerprints = dict(statistics.get("packing_list_fingerprints") or {})
+        for outcome in outcomes:
+            if outcome.report_type == "packing_lists" and outcome.fingerprint and outcome.output_file:
+                fingerprints[Path(outcome.output_file).stem] = outcome.fingerprint
         statistics["packing_lists_count"] = len(names)
         statistics["packing_lists"] = names
+        statistics["packing_list_orders"] = orders
+        statistics["packing_list_fingerprints"] = {n: fingerprints[n] for n in names if n in fingerprints}
         session_manager.update_session_info(str(session_path), {"statistics": statistics})
         logger.info(f"Updated session statistics: {len(names)} packing lists")
     except Exception as e:

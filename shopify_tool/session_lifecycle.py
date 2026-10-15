@@ -43,20 +43,33 @@ def packing_completion(entry: dict) -> tuple[int, int]:
     if not isinstance(progress, dict):
         progress = {}
 
-    def _done(key: str) -> bool:
+    counts = stats.get("packing_list_orders") if isinstance(stats, dict) else None
+    if not isinstance(counts, dict):
+        counts = {}
+
+    def _done(key: str, expected: int | None = None) -> bool:
         block = progress.get(key)
         # Only "completed" counts; "in_progress" and "paused" do not.
-        return isinstance(block, dict) and block.get("status") == "completed"
+        if not (isinstance(block, dict) and block.get("status") == "completed"):
+            return False
+        if expected is None:
+            return True  # written before order counts were recorded
+        # The Packer writes "completed" for a run ended with orders unpacked (AUDIT-10-3).
+        orders = block.get("completed_orders")
+        packed = {o for o in orders if isinstance(o, str)} if isinstance(orders, list) else set()
+        return len(packed) >= expected
 
     total = len(names)
-    if _done(FULL_SESSION_KEY):
+    known = [_count(counts.get(name)) for name in names]
+    full_expected = sum(known) if names and all(k is not None for k in known) else None
+    if _done(FULL_SESSION_KEY, full_expected):
         # The whole session was packed in one go. Report it as covering every
         # list, and as 1/1 when the lists were never written to disk.
         return (total, total) if total else (1, 1)
 
     # Denominator is the lists actually on disk, so a progress key with no
     # matching file is ignored rather than able to block completion.
-    return sum(1 for name in names if _done(name)), total
+    return sum(1 for name, k in zip(names, known, strict=True) if _done(name, k)), total
 
 
 def is_fully_packed(entry: dict) -> bool:

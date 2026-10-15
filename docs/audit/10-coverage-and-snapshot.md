@@ -47,3 +47,16 @@ that wanted write-off had to re-pick it for each export and sometimes did not. F
 stored per client as `last_writeoff_mode` in `shopify_config.json` (saved with `backup=False`, so it
 does not use up Settings backups; AUDIT-07-M5) and preselected next time.
 Tests: `test_audit_10_2_*`.
+
+### AUDIT-10-3: a list ended with orders unpacked counts as packed (finding 2.1, Shopify side)
+
+Found: snapshot finding 2.1, LIDA 2026-10-02 and 2026-10-05. The Packer writes `status: "completed"`
+for a run that ended with orders still unpacked, and `session_lifecycle.packing_completion` trusted
+it, so the session read as fully packed. Fix: each packing list's order count is recorded in
+`statistics.packing_list_orders` (from the list JSON's `total_orders`); a `completed` block counts only
+when its distinct `completed_orders` reach that count. For `full_session` the count is the sum over
+the lists, known only when every list has one. A session written before this change has no counts and
+keeps today's behaviour. The Packer side (writing `incomplete`) is the packing-tool task.
+Tests: `tests/test_session_lifecycle.py` (the five `packing_completion` cases after
+`test_a_completed_run_short_of_its_list_is_not_packed`) and `tests/test_report_jobs.py`
+(`test_statistics_record_each_lists_order_count`).
