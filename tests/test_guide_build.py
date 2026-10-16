@@ -67,3 +67,19 @@ def test_fulfilment_guide_uses_every_screenshot():
     shots = {path.name for path in (USER_GUIDE_DIR / "img" / "en").glob("*.png")}
     used = {Path(src).name for src in _IMAGE_RE.findall(text)}
     assert shots - used == set()
+
+
+def test_fulfilment_guide_bg_matches_en():
+    en = (USER_GUIDE_DIR / "en.md").read_text(encoding="utf-8")
+    bg_path = USER_GUIDE_DIR / "bg.md"
+    assert bg_path.is_file()
+    bg = bg_path.read_text(encoding="utf-8")
+    en_srcs = _IMAGE_RE.findall(en)
+    bg_srcs = _IMAGE_RE.findall(bg)
+    assert [Path(src).name for src in bg_srcs] == [Path(src).name for src in en_srcs]
+    assert all(src.startswith("img/bg/") for src in bg_srcs)
+    assert all(src.startswith("img/en/") for src in en_srcs)
+    for prefix in ("## ", "### "):
+        en_count = sum(line.startswith(prefix) for line in en.splitlines())
+        bg_count = sum(line.startswith(prefix) for line in bg.splitlines())
+        assert bg_count == en_count, f"{prefix!r} headings: bg {bg_count} vs en {en_count}"
