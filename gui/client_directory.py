@@ -14,6 +14,7 @@ from gui.client_settings_dialog import ClientCreationDialog
 from gui.components import show_error
 from gui.groups_management_dialog import GroupsManagementDialog
 from gui.worker import Worker
+from shared.i18n import _
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
 
@@ -97,7 +98,7 @@ class ClientDirectory(QObject):
         _exctype, value, _tb = error
         logger.error("Client directory refresh failed", exc_info=value)
         show_error(
-            self.parent(), "The client list didn't refresh", "Details are in Logs."
+            self.parent(), _("The client list didn't refresh"), _("Details are in Logs.")
         )
 
     def menu_for(self, client_id: str, parent: QWidget) -> QMenu:
@@ -107,14 +108,14 @@ class ClientDirectory(QObject):
         ui_settings = self.profile_manager.get_ui_settings(client_id)
         is_pinned = ui_settings.get("is_pinned", False)
 
-        pin_action = menu.addAction("Unpin" if is_pinned else "Pin to Top")
+        pin_action = menu.addAction(_("Unpin") if is_pinned else _("Pin to Top"))
         pin_action.triggered.connect(lambda: self._toggle_pin(client_id, parent))
 
-        edit_action = menu.addAction("Edit Settings...")
+        edit_action = menu.addAction(_("Edit Settings..."))
         edit_action.triggered.connect(lambda: self.editClientRequested.emit(client_id))
 
-        move_menu = menu.addMenu("Move to Group")
-        move_menu.addAction("(No group)").triggered.connect(
+        move_menu = menu.addMenu(_("Move to Group"))
+        move_menu.addAction(_("(No group)")).triggered.connect(
             lambda: self._move_to_group(client_id, None, parent)
         )
 
@@ -144,7 +145,7 @@ class ClientDirectory(QObject):
 
         except Exception:
             logger.exception("Failed to toggle pin")
-            show_error(parent, "The pin wasn't changed", "Details are in Logs.")
+            show_error(parent, _("The pin wasn't changed"), _("Details are in Logs."))
 
     def _move_to_group(
         self, client_id: str, group_id: str | None, parent: QWidget
@@ -158,7 +159,7 @@ class ClientDirectory(QObject):
 
         except Exception:
             logger.exception("Failed to move client to group")
-            show_error(parent, "The client wasn't moved", "Details are in Logs.")
+            show_error(parent, _("The client wasn't moved"), _("Details are in Logs."))
 
     def open_groups_dialog(self, parent: QWidget) -> None:
         dialog = GroupsManagementDialog(

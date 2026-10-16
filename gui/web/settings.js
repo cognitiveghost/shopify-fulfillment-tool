@@ -125,7 +125,7 @@ function delimiterRow(d) {
     )
     .join("");
   const other = d.other
-    ? `<input class="field mono other-char${d.problem ? " invalid" : ""}" type="text" maxlength="1" value="${esc(d.char)}" aria-label="Delimiter character" data-input="delimiter_char" data-kind="${d.kind}" data-key="char-${d.kind}">`
+    ? `<input class="field mono other-char${d.problem ? " invalid" : ""}" type="text" maxlength="1" value="${esc(d.char)}" aria-label="${t("Delimiter character")}" data-input="delimiter_char" data-kind="${d.kind}" data-key="char-${d.kind}">`
     : "";
   return `<div class="card-row" data-row="delimiter-${d.kind}">
     <span class="card-label">${esc(d.label)}</span>
@@ -137,18 +137,18 @@ function delimiterRow(d) {
 }
 
 function generalPage(g) {
-  const t = g.threshold;
+  const th = g.threshold;
   return `<section class="card" data-card="csv">
-    ${cardHead("CSV files", esc(g.csv_text))}
+    ${cardHead(t("CSV files"), esc(g.csv_text))}
     ${g.delimiters.map(delimiterRow).join("")}
   </section>
   <section class="card" data-card="alerts">
-    ${cardHead("Stock alerts", esc(g.alerts_text))}
+    ${cardHead(t("Stock alerts"), esc(g.alerts_text))}
     <div class="card-row" data-row="threshold">
-      <span class="card-label">Low-stock threshold</span>
+      <span class="card-label">${t("Low-stock threshold")}</span>
       <div class="card-control">
-        <div class="control-line"><input class="field mono threshold${t.problem ? " invalid" : ""}" type="text" inputmode="numeric" value="${esc(t.value)}" aria-label="Low-stock threshold" data-input="threshold" data-key="threshold"><span>${esc(t.unit)}</span></div>
-        ${below(t.problem, t.hint)}
+        <div class="control-line"><input class="field mono threshold${th.problem ? " invalid" : ""}" type="text" inputmode="numeric" value="${esc(th.value)}" aria-label="${t("Low-stock threshold")}" data-input="threshold" data-key="threshold"><span>${esc(th.unit)}</span></div>
+        ${below(th.problem, th.hint)}
       </div>
     </div>
   </section>`;
@@ -179,7 +179,7 @@ function fieldRow(m, f) {
   const value = f.column
     ? `<span class="select-value mono">${esc(f.column)}</span>`
     : `<span class="select-value placeholder${bad ? " danger" : ""}">${esc(f.placeholder)}</span>`;
-  const required = f.required ? `<span class="field-required">Required</span>` : "";
+  const required = f.required ? `<span class="field-required">${t("Required")}</span>` : "";
   let under = "";
   if (f.problem) {
     const example = f.example ? ` <span class="mono">${esc(f.example)}</span>.` : "";
@@ -191,7 +191,7 @@ function fieldRow(m, f) {
     <div class="field-name"><span class="field-label">${esc(f.label)}</span>${required}</div>
     ${svg(GLYPH.arrowLeft, "glyph arrow")}
     <div class="menu-anchor">
-      <button class="select${bad ? " invalid" : ""}" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="${esc(f.label)} column" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(!m.can_pick)}>${value}${svg(GLYPH.chevron, "glyph")}</button>
+      <button class="select${bad ? " invalid" : ""}" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="${esc(t("{label} column", { label: f.label }))}" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(!m.can_pick)}>${value}${svg(GLYPH.chevron, "glyph")}</button>
       ${open ? fieldMenu(m, f) : ""}
     </div>
     <span class="field-sample mono${f.sample_missing ? " missing" : ""}" title="${esc(f.sample)}">${esc(f.sample)}</span>
@@ -203,8 +203,8 @@ function fieldsCard(m) {
   const src = m.source;
   const file = src.file ? ` <span class="mono">${esc(src.file)}</span>` : "";
   return `<section class="card" data-card="fields">
-    ${cardHead("Fields", `${esc(src.lead)}${file}${esc(src.tail)}`)}
-    <div class="field-row field-heads"><span>Field</span><span></span><span>CSV column</span><span>First row</span></div>
+    ${cardHead(t("Fields"), `${esc(src.lead)}${file}${esc(src.tail)}`)}
+    <div class="field-row field-heads"><span>${t("Field")}</span><span></span><span>${t("CSV column")}</span><span>${t("First row")}</span></div>
     ${m.fields.map((f) => fieldRow(m, f)).join("")}
   </section>`;
 }
@@ -216,7 +216,7 @@ function courierMenu(c, row, n) {
     .map((code, i) => menuItem("courier-code", { index: n, value: code }, code, "", code === row.code, `courier-code-${n}-item-${i}`, false))
     .join("");
   const rule = c.codes.length ? `<div class="menu-separator"></div>` : "";
-  return `<div class="menu courier-menu" role="menu">${items}${rule}<input class="field new-courier" type="text" placeholder="New courier" aria-label="New courier" data-new-courier="${n}" data-key="courier-new-${n}"></div>`;
+  return `<div class="menu courier-menu" role="menu">${items}${rule}<input class="field new-courier" type="text" placeholder="${t("New courier")}" aria-label="${t("New courier")}" data-new-courier="${n}" data-key="courier-new-${n}"></div>`;
 }
 
 function courierRow(c, row, n) {
@@ -224,25 +224,25 @@ function courierRow(c, row, n) {
   const open = view.menu === menuName;
   const value = row.code
     ? `<span class="select-value">${esc(row.code)}</span>`
-    : `<span class="select-value placeholder">Choose courier</span>`;
+    : `<span class="select-value placeholder">${t("Choose courier")}</span>`;
   return `<div class="courier-row" data-courier="${n}">
-    <input class="field mono" type="text" value="${esc(row.text)}" placeholder="dhl express" aria-label="Shipping method contains" data-input="courier_pattern" data-index="${n}" data-key="courier-text-${n}">
+    <input class="field mono" type="text" value="${esc(row.text)}" placeholder="dhl express" aria-label="${t("Shipping method contains")}" data-input="courier_pattern" data-index="${n}" data-key="courier-text-${n}">
     ${svg(GLYPH.arrowRight, "glyph arrow")}
     <div class="menu-anchor">
-      <button class="select" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="Courier" data-act="menu" data-menu="${menuName}" data-key="${menuName}">${value}${svg(GLYPH.chevron, "glyph")}</button>
+      <button class="select" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t("Courier")}" data-act="menu" data-menu="${menuName}" data-key="${menuName}">${value}${svg(GLYPH.chevron, "glyph")}</button>
       ${open ? courierMenu(c, row, n) : ""}
     </div>
-    <button class="btn ghost icon" type="button" title="Remove" aria-label="Remove" data-act="courier-remove" data-index="${n}" data-key="courier-remove-${n}">${svg(GLYPH.x, "glyph")}</button>
+    <button class="btn ghost icon" type="button" title="${t("Remove")}" aria-label="${t("Remove")}" data-act="courier-remove" data-index="${n}" data-key="courier-remove-${n}">${svg(GLYPH.x, "glyph")}</button>
   </div>`;
 }
 
 function couriersCard(c) {
-  const add = `<button class="btn secondary" type="button" data-act="courier-add" data-key="courier-add">Add name</button>`;
+  const add = `<button class="btn secondary" type="button" data-act="courier-add" data-key="courier-add">${t("Add name")}</button>`;
   const body = c.rows.length
-    ? `<div class="courier-row courier-heads"><span>Shipping method contains</span><span></span><span>Courier</span><span></span></div>${c.rows.map((row, n) => courierRow(c, row, n)).join("")}`
+    ? `<div class="courier-row courier-heads"><span>${t("Shipping method contains")}</span><span></span><span>${t("Courier")}</span><span></span></div>${c.rows.map((row, n) => courierRow(c, row, n)).join("")}`
     : `<div class="card-empty">${esc(c.empty)}</div>`;
   return `<section class="card" data-card="couriers">
-    ${cardHead("Courier names", esc(c.text), add)}
+    ${cardHead(t("Courier names"), esc(c.text), add)}
     ${body}
   </section>`;
 }
@@ -254,10 +254,10 @@ function chip(item) {
   const open = view.menu === menuName;
   const note = item.note ? `<span class="chip-note">${esc(item.note)}</span>` : "";
   const menu = open
-    ? `<div class="menu" role="menu"><button class="menu-item" type="button" role="menuitemcheckbox" aria-checked="${Boolean(item.fill)}" data-act="column-fill" data-name="${esc(item.name)}" data-key="${esc(`chip-fill:${item.name}`)}">${svg(GLYPH.check, "check")}<span class="menu-label">Fill down onto every line of the order</span></button></div>`
+    ? `<div class="menu" role="menu"><button class="menu-item" type="button" role="menuitemcheckbox" aria-checked="${Boolean(item.fill)}" data-act="column-fill" data-name="${esc(item.name)}" data-key="${esc(`chip-fill:${item.name}`)}">${svg(GLYPH.check, "check")}<span class="menu-label">${t("Fill down onto every line of the order")}</span></button></div>`
     : "";
   return `<span class="menu-anchor chip-anchor" data-chip="${esc(item.name)}">
-    <span class="chip"><button class="chip-name mono" type="button" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="${esc(menuName)}" data-key="${esc(menuName)}">${esc(item.name)}</button>${note}<button class="chip-remove" type="button" title="Remove" aria-label="Remove ${esc(item.name)}" data-act="column-remove" data-name="${esc(item.name)}" data-key="${esc(`chip-remove:${item.name}`)}">${svg(GLYPH.x, "glyph")}</button></span>
+    <span class="chip"><button class="chip-name mono" type="button" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="${esc(menuName)}" data-key="${esc(menuName)}">${esc(item.name)}</button>${note}<button class="chip-remove" type="button" title="${t("Remove")}" aria-label="${esc(t("Remove {name}", { name: item.name }))}" data-act="column-remove" data-name="${esc(item.name)}" data-key="${esc(`chip-remove:${item.name}`)}">${svg(GLYPH.x, "glyph")}</button></span>
     ${menu}
   </span>`;
 }
@@ -271,7 +271,7 @@ function additionalCard(a) {
     ? `<div class="menu add-menu" role="menu"><div class="menu-group">${esc(a.group)}</div>${items}</div>`
     : "";
   const add = `<div class="menu-anchor">
-      <button class="btn secondary" type="button" aria-haspopup="menu" aria-expanded="${open}" title="${esc(a.add_title)}" data-act="menu" data-menu="column-add" data-key="column-add"${off(!a.candidates.length)}>Add column</button>
+      <button class="btn secondary" type="button" aria-haspopup="menu" aria-expanded="${open}" title="${esc(a.add_title)}" data-act="menu" data-menu="column-add" data-key="column-add"${off(!a.candidates.length)}>${t("Add column")}</button>
       ${menu}
     </div>`;
   const notice = a.notice ? `<div class="card-notice">${esc(a.notice)}</div>` : "";
@@ -279,7 +279,7 @@ function additionalCard(a) {
     ? a.chips.map(chip).join("")
     : `<span class="chips-empty">${esc(a.empty)}</span>`;
   return `<section class="card" data-card="additional">
-    ${cardHead("Additional columns", esc(a.text), add)}
+    ${cardHead(t("Additional columns"), esc(a.text), add)}
     ${notice}
     <div class="chips">${chips}</div>
   </section>`;
@@ -616,6 +616,7 @@ bind();
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.settings;
+  applyStrings(bridge);
   page.bridge = bridge;
   els.themeVars.textContent = bridge.themeCss;
   bridge.themeCssChanged.connect(() => {

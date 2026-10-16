@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
 
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from shared.components.overflow import OverflowMenu, overflow_button
+from shared.i18n import N_, _
 from shared.icons import icon
 from shared.theme import on_theme_changed
 
@@ -76,11 +77,14 @@ ROW_ACTION = "action"
 ROLE_CLIENT_ID = Qt.UserRole + 2
 
 _DOT_PX = 10  # matches StatusDot's default diameter
-_NEW_CLIENT = "New client…"
-_MANAGE_GROUPS = "Manage groups…"
-_ARCHIVED = "Archived clients…"
-_REFRESH = "Refresh clients"
+# The action rows' raw values are compared by _on_row_activated; the text shown is _()'d.
+_NEW_CLIENT = N_("New client…")
+_MANAGE_GROUPS = N_("Manage groups…")
+_ARCHIVED = N_("Archived clients…")
+_REFRESH = N_("Refresh clients")
 _ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS, _ARCHIVED)
+_PINNED_NAME = N_("Pinned")
+_ALL_CLIENTS_NAME = N_("All Clients")
 
 # The ladder, widest trigger first. Qt's own elision has no order and would
 # take the session ID first because it is the longest string in the row --
@@ -145,7 +149,7 @@ class _ClientPopup(QFrame):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
         self.filter_edit = QLineEdit(self)
-        self.filter_edit.setPlaceholderText("Filter clients")
+        self.filter_edit.setPlaceholderText(_("Filter clients"))
         self.filter_edit.setClearButtonEnabled(True)
         self.proxy = _ClientFilter(self)
         self.proxy.setSourceModel(combo.model())
@@ -361,7 +365,7 @@ class CommandBar(QWidget):
 
         self.client_selector = _ClientCombo(self)
         self.client_selector.setModel(QStandardItemModel(self.client_selector))
-        self.client_selector.setPlaceholderText("Choose a client")
+        self.client_selector.setPlaceholderText(_("Choose a client"))
         self.client_selector.currentIndexChanged.connect(self._on_client_changed)
         self.client_selector.activated.connect(self._on_row_activated)
         view = self.client_selector.view()
@@ -375,7 +379,7 @@ class CommandBar(QWidget):
 
         # Always there: a session can be started from any screen. Secondary,
         # because the screen's primary is the page's own.
-        self.new_session_button = QPushButton("New session", self)
+        self.new_session_button = QPushButton(_("New session"), self)
         set_button_role(self.new_session_button, "secondary")
         self.new_session_button.clicked.connect(self.newSessionRequested.emit)
         # A QIcon is a snapshot: re-rendered on a theme change.
@@ -391,7 +395,7 @@ class CommandBar(QWidget):
         self.session_button.setAutoRaise(True)
         self.session_button.setPopupMode(QToolButton.InstantPopup)
         self.session_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.session_button.setText("Open recent")
+        self.session_button.setText(_("Open recent"))
         self.session_menu = QMenu(self.session_button)
         self.session_button.setMenu(self.session_menu)
         layout.addWidget(self.session_button)
@@ -421,7 +425,7 @@ class CommandBar(QWidget):
         self.step_name_label = QLabel("", self)
         self.step_name_label.hide()
         layout.addWidget(self.step_name_label)
-        self.running_button = QPushButton("Running…", self)
+        self.running_button = QPushButton(_("Running…"), self)
         set_button_role(self.running_button, "primary")
         self.running_button.setEnabled(False)
         self.running_button.hide()
@@ -524,7 +528,7 @@ class CommandBar(QWidget):
 
             pinned = [c for c in data["all_clients"] if c in data["pinned_client_ids"]]
             if pinned:
-                self._add_section(special.get("pinned", {}).get("name", "Pinned"))
+                self._add_section(_(special.get("pinned", {}).get("name", _PINNED_NAME)))
                 for client_id in pinned:
                     self._add_client(client_id, data)
                 listed.update(pinned)
@@ -537,14 +541,14 @@ class CommandBar(QWidget):
                 ]
                 if not members:
                     continue
-                self._add_section(group.get("name", "Unknown"))
+                self._add_section(group["name"] if "name" in group else _("Unknown"))
                 for client_id in members:
                     self._add_client(client_id, data)
                 listed.update(members)
 
             rest = [c for c in data["all_clients"] if c not in listed]
             if rest:
-                self._add_section(special.get("all", {}).get("name", "All Clients"))
+                self._add_section(_(special.get("all", {}).get("name", _ALL_CLIENTS_NAME)))
                 for client_id in rest:
                     self._add_client(client_id, data)
 
@@ -591,7 +595,7 @@ class CommandBar(QWidget):
     def _add_action(self, label: str) -> None:
         # No QComboBox.insertSeparator(): it inserts a real, dataless row
         # into the model, which would show up in every row-indexed lookup.
-        item = QStandardItem(label)
+        item = QStandardItem(_(label))
         item.setData(ROW_ACTION, Qt.UserRole)
         item.setData(label, Qt.UserRole + 1)
         self.client_selector.model().appendRow(item)
@@ -686,7 +690,7 @@ class CommandBar(QWidget):
     def set_client_loading(self, loading: bool, name: str = "") -> None:
         """While a client's settings load: no session can be started or opened."""
         self._client_loading = loading
-        self.loading_label.setText(f"Loading {name}…" if loading else "")
+        self.loading_label.setText(_("Loading {name}…", name=name) if loading else "")
         self.loading_label.setVisible(loading)
         self._refresh()
 
@@ -724,7 +728,7 @@ class CommandBar(QWidget):
             )
         if self._recent:
             self.session_menu.addSeparator()
-        browse = self.session_menu.addAction("Browse all sessions…\tCtrl+3")
+        browse = self.session_menu.addAction(_("Browse all sessions…") + "\tCtrl+3")
         browse.triggered.connect(lambda _checked=False: self.browseAllRequested.emit())
         self._refresh()
 
@@ -792,10 +796,12 @@ class CommandBar(QWidget):
         )
 
         index, total, name = self._step
-        self.step_count_label.setText(f"Step {index + 1} of {total}" if total else "")
+        self.step_count_label.setText(
+            _("Step {index} of {total}", index=index + 1, total=total) if total else ""
+        )
         self.step_name_label.setText(name)
         self.step_name_label.setVisible(
             self._state is BarState.RUNNING and "step" not in fired and bool(name)
         )
 
-        self.new_session_button.setText("" if "new_session" in fired else "New session")
+        self.new_session_button.setText("" if "new_session" in fired else _("New session"))

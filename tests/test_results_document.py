@@ -65,6 +65,26 @@ def _text(qtbot, view, selector):
     )
 
 
+def test_bg_page_draws_its_words_in_bulgarian(qtbot):
+    """ADR 0021: with the PC set to BG, the page's own words come out in BG."""
+    import gui_main
+    from shared import i18n
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    view = QWebEngineView()
+    qtbot.addWidget(view)
+    bridge = mount_results_page(view)
+    view.resize(1310, 692)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    bridge.set_orders(results_lines())
+    _until_js(qtbot, view, "document.querySelectorAll('#rows .row').length > 0")
+    assert _text(qtbot, view, "[data-kpi='orders'] .kpi-label") == "Поръчки"
+    assert _eval(qtbot, view, "document.getElementById('search').placeholder") == (
+        "Поръчка, клиент или SKU"
+    )
+
+
 def _resize(qtbot, view, width, height):
     view.resize(width, height)
     _until_js(

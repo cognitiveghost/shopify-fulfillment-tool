@@ -3,6 +3,10 @@
 // that map and reports what the operator asks for through the bridge's named
 // slots. No rule, count or enabled flag is computed here. The page's own state
 // is which menu is open and which Label setup folds are open.
+//
+// Its own words are wrapped in t() where they are drawn, not where the table
+// holding them is written: a table entry is a thunk, so the catalogue (loaded
+// by applyStrings) is read at display time.
 "use strict";
 
 const TOAST_MS = 4000;
@@ -23,25 +27,34 @@ const GLYPH = {
 
 const TOOLS = {
   reference: {
-    title: "Reference labels",
-    text: "Stamps each courier label PDF with its order's reference number.",
-    action: "Process labels",
+    title: () => t("Reference labels"),
+    text: () => t("Stamps each courier label PDF with its order's reference number."),
+    action: () => t("Process labels"),
   },
   barcode: {
-    title: "Barcode labels",
-    text: "One barcode label for every Fulfillable order in a packing list. Each list gets its own folder.",
-    action: "Generate barcode labels",
+    title: () => t("Barcode labels"),
+    text: () => t("One barcode label for every Fulfillable order in a packing list. Each list gets its own folder."),
+    action: () => t("Generate barcode labels"),
   },
 };
 
 const FILES = {
-  pdf: { label: "Labels PDF", choose: "Choose PDF…", again: "Choose another PDF" },
-  csv: { label: "Mapping CSV", choose: "Choose CSV…", again: "Choose another CSV" },
+  pdf: {
+    label: () => t("Labels PDF"),
+    choose: () => t("Choose PDF…"),
+    again: () => t("Choose another PDF"),
+  },
+  csv: {
+    label: () => t("Mapping CSV"),
+    choose: () => t("Choose CSV…"),
+    again: () => t("Choose another CSV"),
+  },
 };
 
+// The value is what Python receives; the label is only drawn.
 const MODES = [
-  { value: "driver", label: "Driver" },
-  { value: "raw_zpl", label: "Raw ZPL" },
+  { value: "driver", label: () => t("Driver") },
+  { value: "raw_zpl", label: () => "Raw ZPL" },
 ];
 
 const els = {};
@@ -71,18 +84,18 @@ function head(s) {
   const session = s.session.name
     ? `<span class="code">${esc(s.session.name)}</span><span class="page-meta">${esc(s.session.meta)}</span>`
     : "";
-  return `<div class="page-head"><span class="page-title">Tools</span>${session}</div>`;
+  return `<div class="page-head"><span class="page-title">${t("Tools")}</span>${session}</div>`;
 }
 
 function banner() {
   return `<section class="banner neutral" data-banner="no-session">
     ${svg(GLYPH.folder, "glyph")}
     <div class="banner-body">
-      <span class="banner-title">Open a session to use these tools</span>
-      <span class="banner-text">Both tools read the session's files and save into its folder. Print modes can be set now; they're saved on this PC.</span>
+      <span class="banner-title">${t("Open a session to use these tools")}</span>
+      <span class="banner-text">${t("Both tools read the session's files and save into its folder. Print modes can be set now; they're saved on this PC.")}</span>
     </div>
-    <button class="btn primary" type="button" data-act="new-session" data-key="new-session">New session</button>
-    <button class="btn secondary" type="button" data-act="open-recent" data-key="open-recent">Open recent</button>
+    <button class="btn primary" type="button" data-act="new-session" data-key="new-session">${t("New session")}</button>
+    <button class="btn secondary" type="button" data-act="open-recent" data-key="open-recent">${t("Open recent")}</button>
   </section>`;
 }
 
@@ -90,8 +103,8 @@ function banner() {
 
 function cardHead(tool) {
   return `<div class="tool-head">
-    <span class="tool-title">${TOOLS[tool].title}</span>
-    <span class="tool-text">${TOOLS[tool].text}</span>
+    <span class="tool-title">${TOOLS[tool].title()}</span>
+    <span class="tool-text">${TOOLS[tool].text()}</span>
   </div>`;
 }
 
@@ -105,7 +118,7 @@ function problemBlock(kind, problem, disabled) {
     <div class="banner-body">
       <span class="problem-title">${esc(problem.title)}</span>
       <span class="banner-text">${esc(problem.text)}</span>
-      <button class="btn link" type="button" data-act="choose" data-kind="${kind}" data-key="${kind}-again"${off(disabled)}>${FILES[kind].again}</button>
+      <button class="btn link" type="button" data-act="choose" data-kind="${kind}" data-key="${kind}-again"${off(disabled)}>${FILES[kind].again()}</button>
     </div>
   </div>`;
 }
@@ -115,20 +128,20 @@ function fileRow(kind, picked, disabled) {
   if (!picked.name) {
     return row(
       kind,
-      file.label,
-      `<div class="tool-line"><button class="btn secondary" type="button" data-act="choose" data-kind="${kind}" data-key="${kind}-choose"${off(disabled)}>${file.choose}</button></div>`,
+      file.label(),
+      `<div class="tool-line"><button class="btn secondary" type="button" data-act="choose" data-kind="${kind}" data-key="${kind}-choose"${off(disabled)}>${file.choose()}</button></div>`,
     );
   }
   const bad = Boolean(picked.problem && picked.problem.title);
   return row(
     kind,
-    file.label,
+    file.label(),
     `<div class="tool-line${bad ? " bad" : ""}">
       ${svg(GLYPH.file, "glyph")}
       <span class="file-name" title="${esc(picked.name)}">${esc(picked.name)}</span>
       <span class="file-meta">${esc(picked.meta)}</span>
       <span class="spacer"></span>
-      <button class="btn secondary compact" type="button" data-act="clear" data-kind="${kind}" data-key="${kind}-clear"${off(disabled)}>Replace</button>
+      <button class="btn secondary compact" type="button" data-act="clear" data-kind="${kind}" data-key="${kind}-clear"${off(disabled)}>${t("Replace")}</button>
     </div>${bad ? problemBlock(kind, picked.problem, disabled) : ""}`,
   );
 }
@@ -159,17 +172,17 @@ function listRow(s) {
     )
     .join("");
   const menu = open
-    ? `<div class="menu" role="menu"><div class="menu-group">Packing lists in ${esc(s.session.name)}</div>${items}</div>`
+    ? `<div class="menu" role="menu"><div class="menu-group">${esc(t("Packing lists in {session}", { session: s.session.name }))}</div>${items}</div>`
     : "";
   return row(
     "list",
-    "Packing list",
+    t("Packing list"),
     `<div class="tool-line">
       <div class="menu-anchor list-anchor">
         <button class="select" type="button" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="barcode-list" data-key="barcode-list"${off(disabled)}>${shown}${svg(GLYPH.chevron, "glyph")}</button>
         ${menu}
       </div>
-      <button class="btn secondary" type="button" data-act="refresh" data-key="barcode-refresh" title="Refresh packing lists"${off(card.quiet || card.locked)}>${svg(GLYPH.refresh, "glyph")}Refresh</button>
+      <button class="btn secondary" type="button" data-act="refresh" data-key="barcode-refresh" title="${t("Refresh packing lists")}"${off(card.quiet || card.locked)}>${svg(GLYPH.refresh, "glyph")}${t("Refresh")}</button>
     </div>`,
   );
 }
@@ -189,22 +202,22 @@ function fold(tool, card) {
   const inverted = setup.invert ? " checked" : "";
   const body = open
     ? `<div class="fold-body">
-        <label class="fold-label" for="${tool}-target">Target</label>
+        <label class="fold-label" for="${tool}-target">${t("Target")}</label>
         <input id="${tool}-target" class="field" type="text" value="${esc(setup.target)}" placeholder="Printer name, or \\\\server\\printer" data-print="target" data-tool="${tool}" data-key="${tool}-target"${off(locked)}>
-        <span class="fold-label">Label size</span>
+        <span class="fold-label">${t("Label size")}</span>
         <div class="size">
-          <input class="field size-field" type="number" min="0" max="500" step="0.1" value="${size(setup.width)}" placeholder="PDF" title="${esc(setup.size_hint)}" aria-label="Label width in mm" data-print="width" data-tool="${tool}" data-key="${tool}-width"${off(locked)}>
+          <input class="field size-field" type="number" min="0" max="500" step="0.1" value="${size(setup.width)}" placeholder="PDF" title="${esc(setup.size_hint)}" aria-label="${t("Label width in mm")}" data-print="width" data-tool="${tool}" data-key="${tool}-width"${off(locked)}>
           <span>×</span>
-          <input class="field size-field" type="number" min="0" max="500" step="0.1" value="${size(setup.height)}" placeholder="PDF" title="${esc(setup.size_hint)}" aria-label="Label height in mm" data-print="height" data-tool="${tool}" data-key="${tool}-height"${off(locked)}>
+          <input class="field size-field" type="number" min="0" max="500" step="0.1" value="${size(setup.height)}" placeholder="PDF" title="${esc(setup.size_hint)}" aria-label="${t("Label height in mm")}" data-print="height" data-tool="${tool}" data-key="${tool}-height"${off(locked)}>
           <span>mm</span>
         </div>
         <span></span>
-        <label class="option${locked ? " disabled" : ""}"><input type="checkbox" data-print="rotate" data-tool="${tool}" data-key="${tool}-rotate"${turned}${off(locked)}>Rotate 90°</label>
+        <label class="option${locked ? " disabled" : ""}"><input type="checkbox" data-print="rotate" data-tool="${tool}" data-key="${tool}-rotate"${turned}${off(locked)}>${t("Rotate 90°")}</label>
         <span></span>
-        <label class="option${locked ? " disabled" : ""}" title="Tick if labels print white on black."><input type="checkbox" data-print="invert" data-tool="${tool}" data-key="${tool}-invert"${inverted}${off(locked)}>Invert colours</label>
+        <label class="option${locked ? " disabled" : ""}" title="${t("Tick if labels print white on black.")}"><input type="checkbox" data-print="invert" data-tool="${tool}" data-key="${tool}-invert"${inverted}${off(locked)}>${t("Invert colours")}</label>
       </div>`
     : "";
-  return `<button class="fold" type="button" aria-expanded="${open}" data-act="fold" data-tool="${tool}" data-key="${tool}-fold">${svg(open ? GLYPH.chevron : GLYPH.chevronRight, "glyph")}<span class="fold-title">Label setup</span><span class="fold-summary">${esc(setup.summary)}</span></button>${body}`;
+  return `<button class="fold" type="button" aria-expanded="${open}" data-act="fold" data-tool="${tool}" data-key="${tool}-fold">${svg(open ? GLYPH.chevron : GLYPH.chevronRight, "glyph")}<span class="fold-title">${t("Label setup")}</span><span class="fold-summary">${esc(setup.summary)}</span></button>${body}`;
 }
 
 function printRow(tool, card) {
@@ -214,7 +227,7 @@ function printRow(tool, card) {
   const open = view.menu === menuName;
   const segments = MODES.map((mode) => {
     const on = print.mode === mode.value;
-    return `<button class="segment" type="button" role="radio" aria-checked="${on}" tabindex="${on ? 0 : -1}" data-act="mode" data-tool="${tool}" data-value="${mode.value}" data-key="${tool}-mode-${mode.value}"${off(locked)}>${mode.label}</button>`;
+    return `<button class="segment" type="button" role="radio" aria-checked="${on}" tabindex="${on ? 0 : -1}" data-act="mode" data-tool="${tool}" data-value="${mode.value}" data-key="${tool}-mode-${mode.value}"${off(locked)}>${mode.label()}</button>`;
   }).join("");
   const items = print.printers
     .map((entry, n) =>
@@ -224,11 +237,11 @@ function printRow(tool, card) {
   const menu = open ? `<div class="menu" role="menu">${items}</div>` : "";
   return row(
     "print",
-    "Print mode",
+    t("Print mode"),
     `<div class="mode-line">
-      <div class="segmented" role="radiogroup" aria-label="Print mode">${segments}</div>
+      <div class="segmented" role="radiogroup" aria-label="${t("Print mode")}">${segments}</div>
       <div class="menu-anchor printer-anchor">
-        <button class="select" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="Printer" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(locked)}>${svg(GLYPH.printer, "glyph")}<span class="select-value${print.printer.placeholder ? " placeholder" : ""}">${esc(print.printer.label)}</span>${svg(GLYPH.chevron, "glyph")}</button>
+        <button class="select" type="button" aria-haspopup="menu" aria-expanded="${open}" aria-label="${t("Printer")}" title="${esc(print.printer.label)}" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(locked)}>${svg(GLYPH.printer, "glyph")}<span class="select-value${print.printer.placeholder ? " placeholder" : ""}">${esc(print.printer.label)}</span>${svg(GLYPH.chevron, "glyph")}</button>
         ${menu}
       </div>
     </div>
@@ -263,7 +276,7 @@ function foot(tool, card) {
     <span class="tool-reason${card.tone ? ` ${esc(card.tone)}` : ""}">${esc(card.reason)}</span>
     ${qr}
     ${printButton(tool, "labels", card.print_button)}
-    <button class="btn primary" type="button" data-act="run" data-tool="${tool}" data-key="${tool}-run"${off(!card.can_run)}>${TOOLS[tool].action}</button>
+    <button class="btn primary" type="button" data-act="run" data-tool="${tool}" data-key="${tool}-run"${off(!card.can_run)}>${TOOLS[tool].action()}</button>
   </div>`;
 }
 
@@ -272,19 +285,19 @@ function foot(tool, card) {
 function referenceCard(s) {
   const card = s.reference;
   const disabled = card.quiet || card.locked;
-  return `<section class="card tool-card" data-tool="reference" aria-label="${TOOLS.reference.title}">
+  return `<section class="card tool-card" data-tool="reference" aria-label="${TOOLS.reference.title()}">
     ${cardHead("reference")}
     ${fileRow("pdf", card.pdf, disabled)}
     ${fileRow("csv", card.csv, disabled)}
     ${row(
       "folder",
-      "Output folder",
+      t("Output folder"),
       `<div class="tool-line">
         ${folderText(card.folder)}
         <span class="spacer"></span>
-        <button class="btn secondary" type="button" data-act="folder" data-key="reference-folder"${off(disabled)}>Change…</button>
+        <button class="btn secondary" type="button" data-act="folder" data-key="reference-folder"${off(disabled)}>${t("Change…")}</button>
       </div>
-      ${option("reference", "open_pdf", "Open the PDF when it's ready", card.open_pdf, disabled)}`,
+      ${option("reference", "open_pdf", t("Open the PDF when it's ready"), card.open_pdf, disabled)}`,
     )}
     ${printRow("reference", card)}
     ${foot("reference", card)}
@@ -294,16 +307,16 @@ function referenceCard(s) {
 function barcodeCard(s) {
   const card = s.barcode;
   const disabled = card.quiet || card.locked;
-  return `<section class="card tool-card" data-tool="barcode" aria-label="${TOOLS.barcode.title}">
+  return `<section class="card tool-card" data-tool="barcode" aria-label="${TOOLS.barcode.title()}">
     ${cardHead("barcode")}
     ${listRow(s)}
     ${row(
       "folder",
-      "Output folder",
+      t("Output folder"),
       `<div class="tool-line">${folderText(card.folder)}</div>
       <div class="options">
-        ${option("barcode", "qr", "Add QR labels (order number)", card.qr, disabled)}
-        ${option("barcode", "open_pdf", "Open the PDF when it's ready", card.open_pdf, disabled)}
+        ${option("barcode", "qr", t("Add QR labels (order number)"), card.qr, disabled)}
+        ${option("barcode", "open_pdf", t("Open the PDF when it's ready"), card.open_pdf, disabled)}
       </div>`,
     )}
     ${printRow("barcode", card)}
@@ -539,6 +552,7 @@ bind();
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.tools;
+  applyStrings(bridge);
   page.bridge = bridge;
   els.themeVars.textContent = bridge.themeCss;
   bridge.themeCssChanged.connect(() => {

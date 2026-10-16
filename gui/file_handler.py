@@ -7,7 +7,8 @@ import pandas as pd
 from PySide6.QtWidgets import QFileDialog
 
 from gui.components import ConfirmDialog
-from gui.setup_state import FILE_NOUN, MAPPING_PAGE
+from gui.setup_state import MAPPING_PAGE
+from shared.i18n import N_, _, _n
 from shopify_tool import core
 from shopify_tool.csv_utils import (
     AUTO_DELIMITER,
@@ -30,6 +31,11 @@ _REQUIRED = {
     "stock": ("SKU", "Stock"),
 }
 _KEY = {"orders": "Order_Number", "stock": "SKU"}
+# The title of a slot whose file cannot be read, per slot.
+_UNREADABLE_TITLE = {
+    "orders": N_("The orders file couldn't be read"),
+    "stock": N_("The stock file couldn't be read"),
+}
 # A v1 profile names no columns: these are the defaults it meant.
 _V1_COLUMNS = {
     "orders": {
@@ -81,16 +87,19 @@ class FileHandler:
 
     def select_orders_file(self):
         """Opens a file dialog for the orders CSV, then loads what was chosen."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self.mw, "Select Orders File", "", "CSV files (*.csv)"
+        filepath, _chosen_filter = QFileDialog.getOpenFileName(
+            self.mw, _("Select Orders File"), "", _("CSV files (*.csv)")
         )
         if filepath:
             self.load_file("orders", filepath)
 
     def select_stock_file(self):
         """Opens a file dialog for the stock CSV, then loads what was chosen."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self.mw, "Select Stock File", "", "CSV files (*.csv);;All Files (*)"
+        filepath, _chosen_filter = QFileDialog.getOpenFileName(
+            self.mw,
+            _("Select Stock File"),
+            "",
+            _("CSV files (*.csv);;All Files (*)"),
         )
         if filepath:
             self.load_file("stock", filepath)
@@ -150,9 +159,12 @@ class FileHandler:
             self._fail(
                 "stock",
                 path,
-                "The stock file couldn't be read",
-                f"It was read with “{delimiter}” as the delimiter. Check the stock "
-                "delimiter in Client settings › General, then replace the file.",
+                _(_UNREADABLE_TITLE["stock"]),
+                _(
+                    "It was read with “{delimiter}” as the delimiter. Check the stock "
+                    "delimiter in Client settings › General, then replace the file.",
+                    delimiter=delimiter,
+                ),
                 "General",
             )
             return False
@@ -176,9 +188,9 @@ class FileHandler:
                     )
                     if is_anomaly and not ConfirmDialog.ask(
                         self.mw,
-                        title="Use this stock file?",
+                        title=_("Use this stock file?"),
                         body=anomaly_msg,
-                        verb="Use this stock file",
+                        verb=_("Use this stock file"),
                     ):
                         self.clear_file("stock")
                         return False
@@ -215,14 +227,23 @@ class FileHandler:
         if overlap < 0.5:
             return (
                 True,
-                f"Only {overlap:.0%} SKU overlap with saved inventory ({len(old_skus)} known SKUs). Wrong client file?",
+                _(
+                    "Only {overlap} SKU overlap with saved inventory ({known} known SKUs). Wrong client file?",
+                    overlap=f"{overlap:.0%}",
+                    known=len(old_skus),
+                ),
             )
         old_total = memory.get("total_units", 0)
         new_total = core.inventory_total_units(new_stock_df)
         if old_total > 0 and abs(new_total - old_total) / old_total > 0.40:
             return (
                 True,
-                f"Total units changed by {(new_total - old_total) / old_total:+.0%} ({int(old_total)} → {int(new_total)}). Confirm?",
+                _(
+                    "Total units changed by {change} ({old} → {new}). Confirm?",
+                    change=f"{(new_total - old_total) / old_total:+.0%}",
+                    old=int(old_total),
+                    new=int(new_total),
+                ),
             )
         return False, ""
 
@@ -283,8 +304,8 @@ class FileHandler:
             self._fail(
                 file_type,
                 path,
-                f"The {FILE_NOUN[file_type]} couldn't be read",
-                "Check that it still exists and is a CSV export, then replace it.",
+                _(_UNREADABLE_TITLE[file_type]),
+                _("Check that it still exists and is a CSV export, then replace it."),
             )
         else:
             slot.set_invalid(
@@ -331,9 +352,11 @@ class FileHandler:
         which widgets they wrote to; now that both write to a FileSlot there
         is nothing left to differ in.
         """
-        label = "Orders" if file_type == "orders" else "Stock"
+        title = (
+            _("Select Orders Folder") if file_type == "orders" else _("Select Stock Folder")
+        )
         folder_path = QFileDialog.getExistingDirectory(
-            self.mw, f"Select {label} Folder", "", QFileDialog.ShowDirsOnly
+            self.mw, title, "", QFileDialog.ShowDirsOnly
         )
         if not folder_path:
             return
@@ -355,8 +378,8 @@ class FileHandler:
             self._fail(
                 file_type,
                 folder_path,
-                "No CSV files in this folder",
-                "Choose a folder that holds the exported CSV files.",
+                _("No CSV files in this folder"),
+                _("Choose a folder that holds the exported CSV files."),
             )
             return
 
@@ -367,7 +390,10 @@ class FileHandler:
         except Exception:
             self.log.exception("Error validating files")
             self._fail(
-                file_type, folder_path, "The files weren't merged", "Details are in Logs."
+                file_type,
+                folder_path,
+                _("The files weren't merged"),
+                _("Details are in Logs."),
             )
             return
 
@@ -376,8 +402,8 @@ class FileHandler:
             self._fail(
                 file_type,
                 folder_path,
-                f"None of the {len(csv_files)} files can be used",
-                f"{names}. Each is missing a mapped column.",
+                _("None of the {count} files can be used", count=len(csv_files)),
+                _("{names}. Each is missing a mapped column.", names=names),
                 MAPPING_PAGE[file_type],
             )
             return
@@ -394,7 +420,10 @@ class FileHandler:
         except Exception:
             self.log.exception("Failed to merge files")
             self._fail(
-                file_type, folder_path, "The files weren't merged", "Details are in Logs."
+                file_type,
+                folder_path,
+                _("The files weren't merged"),
+                _("Details are in Logs."),
             )
             return
 
@@ -408,21 +437,29 @@ class FileHandler:
 
         notes = []
         if skipped:
-            noun = "order" if file_type == "orders" else "SKU"
-            notes.append(
-                f"{skipped} overlapping {noun}{'' if skipped == 1 else 's'} skipped"
-            )
+            if file_type == "orders":
+                notes.append(
+                    _n("{n} overlapping order skipped", "{n} overlapping orders skipped", skipped)
+                )
+            else:
+                notes.append(
+                    _n("{n} overlapping SKU skipped", "{n} overlapping SKUs skipped", skipped)
+                )
         if invalid_files:
-            n = len(invalid_files)
-            notes.append(f"{n} file{'' if n == 1 else 's'} skipped")
+            notes.append(
+                _n("{n} file skipped", "{n} files skipped", len(invalid_files))
+            )
         delimiters = {p["delimiter"] for p in parts}
         count = len(valid_files)
 
         self.validate_file(
             file_type,
             loaded={
-                "name": f"{Path(folder_path).name}\\  ·  "
-                f"{count} CSV{'' if count == 1 else 's'} merged",
+                "name": _(
+                    "{folder}\\  ·  {merged}",
+                    folder=Path(folder_path).name,
+                    merged=_n("{n} CSV merged", "{n} CSVs merged", count),
+                ),
                 "parts": [{"name": p["name"], "rows": p["rows"]} for p in parts],
                 "note": " · ".join(notes),
                 "delimiter": delimiters.pop() if len(delimiters) == 1 else "mixed",
@@ -565,40 +602,70 @@ class FileHandler:
         Returns:
             True if user confirms, False if cancelled
         """
-        msg = f"Found {len(valid_files) + len(invalid_files)} CSV files\n\n"
+        msg = (
+            _("Found {count} CSV files", count=len(valid_files) + len(invalid_files))
+            + "\n\n"
+        )
 
-        msg += f"Valid: {len(valid_files)} files ({total_rows} rows)\n"
+        msg += (
+            _(
+                "Valid: {count} files ({rows} rows)",
+                count=len(valid_files),
+                rows=total_rows,
+            )
+            + "\n"
+        )
         if invalid_files:
-            msg += f"Invalid: {len(invalid_files)} files\n"
+            msg += _("Invalid: {count} files", count=len(invalid_files)) + "\n"
 
         msg += "\n"
 
         # Show first 10 valid files
         if valid_files:
-            msg += "Valid files:\n"
+            msg += _("Valid files:") + "\n"
             for filepath in valid_files[:10]:
                 msg += f"  • {os.path.basename(filepath)}\n"
             if len(valid_files) > 10:
-                msg += f"  ... and {len(valid_files) - 10} more\n"
+                msg += (
+                    "  "
+                    + _("... and {count} more", count=len(valid_files) - 10)
+                    + "\n"
+                )
             msg += "\n"
 
         # Show first 5 invalid files
         if invalid_files:
-            msg += "Invalid files:\n"
+            msg += _("Invalid files:") + "\n"
             for filepath, missing in invalid_files[:5]:
                 msg += (
-                    f"  • {os.path.basename(filepath)}: missing {', '.join(missing)}\n"
+                    "  • "
+                    + _(
+                        "{name}: missing {columns}",
+                        name=os.path.basename(filepath),
+                        columns=", ".join(missing),
+                    )
+                    + "\n"
                 )
             if len(invalid_files) > 5:
-                msg += f"  ... and {len(invalid_files) - 5} more\n"
+                msg += (
+                    "  "
+                    + _("... and {count} more", count=len(invalid_files) - 5)
+                    + "\n"
+                )
             msg += "\n"
 
-        thing = "An order" if file_type == "orders" else "A SKU"
-        msg += f"{thing} found in more than one file is taken from the newest file.\n\n"
+        if file_type == "orders":
+            msg += _("An order found in more than one file is taken from the newest file.")
+        else:
+            msg += _("A SKU found in more than one file is taken from the newest file.")
+        msg += "\n\n"
 
         n = len(valid_files)
         return ConfirmDialog.ask(
-            self.mw, title=f"Merge {n} files?", body=msg, verb=f"Merge {n} files"
+            self.mw,
+            title=_("Merge {count} files?", count=n),
+            body=msg,
+            verb=_("Merge {count} files", count=n),
         )
 
     def merge_and_save_files(

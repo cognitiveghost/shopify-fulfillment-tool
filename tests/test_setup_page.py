@@ -483,3 +483,19 @@ def test_a_drop_on_no_card_or_during_a_run_loads_nothing(qtbot, page, tmp_path):
     qtbot.wait(600)
     assert seen == []
     assert _count(qtbot, view, "section[data-card]") == 2
+
+
+def test_bg_page_draws_its_words_in_bulgarian(qtbot):
+    """ADR 0021: with the PC set to BG, the page's own words come out in BG."""
+    import gui_main
+    from shared import i18n
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    view = SetupView()
+    qtbot.addWidget(view)
+    bridge = mount_setup_page(view)
+    view.resize(1166, 720)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    _show(qtbot, view, bridge, make_state(client="", session=None))
+    assert _text(qtbot, view, ".state-title") == "Избери клиент, за да започнеш"

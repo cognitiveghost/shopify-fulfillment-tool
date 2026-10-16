@@ -23,14 +23,14 @@ function weightBelow(row) {
 function productRow(row) {
   const key = `product-${row.uid}`;
   return `<div class="weight-row product-row" data-product="${row.uid}" data-key="${key}">
-    ${weightField("product", row, "sku", "SKU", "mono weight-first")}
-    ${weightField("product", row, "name", "Name", "")}
-    ${weightField("product", row, "l", "Length in cm", "mono amount")}
-    ${weightField("product", row, "w", "Width in cm", "mono amount")}
-    ${weightField("product", row, "h", "Height in cm", "mono amount")}
+    ${weightField("product", row, "sku", t("SKU"), "mono weight-first")}
+    ${weightField("product", row, "name", t("Name"), "")}
+    ${weightField("product", row, "l", t("Length in cm"), "mono amount")}
+    ${weightField("product", row, "w", t("Width in cm"), "mono amount")}
+    ${weightField("product", row, "h", t("Height in cm"), "mono amount")}
     <span class="weight-value mono">${esc(row.weight)}</span>
-    <button class="switch" type="button" role="switch" aria-checked="${Boolean(row.no_packaging)}" aria-label="No packaging" data-act="product-no-packaging" data-uid="${row.uid}" data-key="${key}-no-packaging"><span class="switch-knob"></span></button>
-    <button class="btn ghost compact icon" type="button" title="Remove product" aria-label="Remove product" data-act="product-remove" data-uid="${row.uid}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
+    <button class="switch" type="button" role="switch" aria-checked="${Boolean(row.no_packaging)}" aria-label="${t("No packaging")}" data-act="product-no-packaging" data-uid="${row.uid}" data-key="${key}-no-packaging"><span class="switch-knob"></span></button>
+    <button class="btn ghost compact icon" type="button" title="${t("Remove product")}" aria-label="${t("Remove product")}" data-act="product-remove" data-uid="${row.uid}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
     ${weightBelow(row)}
   </div>`;
 }
@@ -38,12 +38,12 @@ function productRow(row) {
 function boxRow(row) {
   const key = `box-${row.uid}`;
   return `<div class="weight-row box-row" data-box="${row.uid}" data-key="${key}">
-    ${weightField("box", row, "name", "Box name", "weight-first")}
-    ${weightField("box", row, "l", "Length in cm", "mono amount")}
-    ${weightField("box", row, "w", "Width in cm", "mono amount")}
-    ${weightField("box", row, "h", "Height in cm", "mono amount")}
+    ${weightField("box", row, "name", t("Box name"), "weight-first")}
+    ${weightField("box", row, "l", t("Length in cm"), "mono amount")}
+    ${weightField("box", row, "w", t("Width in cm"), "mono amount")}
+    ${weightField("box", row, "h", t("Height in cm"), "mono amount")}
     <span class="weight-value mono">${esc(row.weight)}</span>
-    <button class="btn ghost compact icon" type="button" title="Remove box" aria-label="Remove box" data-act="box-remove" data-uid="${row.uid}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
+    <button class="btn ghost compact icon" type="button" title="${t("Remove box")}" aria-label="${t("Remove box")}" data-act="box-remove" data-uid="${row.uid}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
     ${weightBelow(row)}
   </div>`;
 }
@@ -58,17 +58,17 @@ function productsCard(p) {
     `<button class="menu-item" type="button" role="menuitem" data-act="weight-import" data-kind="${kind}" data-key="${key}"><span class="menu-label">${label}</span></button>`;
   const menu = open
     ? `<div class="menu add-menu" role="menu">
-        ${item("products-stock", "SKUs from a stock CSV…", "products-import-stock")}
-        ${item("products-dims", "Dimensions from a CSV…", "products-import-dims")}
+        ${item("products-stock", t("SKUs from a stock CSV…"), "products-import-stock")}
+        ${item("products-dims", t("Dimensions from a CSV…"), "products-import-dims")}
       </div>`
     : "";
   const actions = `<div class="card-actions">
       <div class="menu-anchor">
-        <button class="btn secondary" type="button" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="products-import" data-key="products-import">Import${svg(GLYPH.chevron, "glyph")}</button>
+        <button class="btn secondary" type="button" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="products-import" data-key="products-import">${t("Import")}${svg(GLYPH.chevron, "glyph")}</button>
         ${menu}
       </div>
-      <button class="btn secondary" type="button" data-act="weight-export" data-kind="products" data-key="products-export"${off(!p.can_export)}>Export</button>
-      <button class="btn secondary" type="button" data-act="product-add" data-key="product-add">${svg(GLYPH.plus, "glyph")}Add product</button>
+      <button class="btn secondary" type="button" data-act="weight-export" data-kind="products" data-key="products-export"${off(!p.can_export)}>${t("Export")}</button>
+      <button class="btn secondary" type="button" data-act="product-add" data-key="product-add">${svg(GLYPH.plus, "glyph")}${t("Add product")}</button>
     </div>`;
   const body = p.empty
     ? `<div class="card-empty">${esc(p.empty)}</div>`
@@ -82,23 +82,23 @@ function productsCard(p) {
       ${p.no_hits ? `<div class="list-none">${esc(p.no_hits)}</div>` : ""}
       ${p.more ? `<div class="list-more">${esc(p.more)}</div>` : ""}`;
   return `<section class="card" data-card="products">
-    ${cardHead("Products", esc(p.text), actions)}
+    ${cardHead(t("Products"), esc(p.text), actions)}
     ${body}
   </section>`;
 }
 
 function boxesCard(b) {
   const actions = `<div class="card-actions">
-      <button class="btn secondary" type="button" data-act="weight-import" data-kind="boxes" data-key="boxes-import">Import…</button>
-      <button class="btn secondary" type="button" data-act="weight-export" data-kind="boxes" data-key="boxes-export"${off(!b.can_export)}>Export</button>
-      <button class="btn secondary" type="button" data-act="box-add" data-key="box-add">${svg(GLYPH.plus, "glyph")}Add box</button>
+      <button class="btn secondary" type="button" data-act="weight-import" data-kind="boxes" data-key="boxes-import">${t("Import…")}</button>
+      <button class="btn secondary" type="button" data-act="weight-export" data-kind="boxes" data-key="boxes-export"${off(!b.can_export)}>${t("Export")}</button>
+      <button class="btn secondary" type="button" data-act="box-add" data-key="box-add">${svg(GLYPH.plus, "glyph")}${t("Add box")}</button>
     </div>`;
   const body = b.empty
     ? `<div class="card-empty">${esc(b.empty)}</div>`
     : `${weightHeads(b.heads, "box-row")}
       <div class="box-rows">${b.rows.map(boxRow).join("")}</div>`;
   return `<section class="card" data-card="boxes">
-    ${cardHead("Boxes", esc(b.text), actions)}
+    ${cardHead(t("Boxes"), esc(b.text), actions)}
     ${body}
     <div class="card-note"><span class="hint">${esc(b.note)}</span></div>
   </section>`;
@@ -107,11 +107,11 @@ function boxesCard(b) {
 function weightPage(w) {
   const d = w.divisor;
   return `<section class="card" data-card="divisor">
-    ${cardHead("Volumetric weight", "")}
+    ${cardHead(t("Volumetric weight"), "")}
     <div class="card-row" data-row="divisor">
-      <span class="card-label">Divisor</span>
+      <span class="card-label">${t("Divisor")}</span>
       <div class="card-control">
-        <div class="control-line"><input class="field mono divisor${d.problem ? " invalid" : ""}" type="text" inputmode="numeric" value="${esc(d.value)}" aria-label="Divisor" data-input="divisor" data-key="divisor"><span>${esc(d.unit)}</span></div>
+        <div class="control-line"><input class="field mono divisor${d.problem ? " invalid" : ""}" type="text" inputmode="numeric" value="${esc(d.value)}" aria-label="${t("Divisor")}" data-input="divisor" data-key="divisor"><span>${esc(d.unit)}</span></div>
         ${below(d.problem, d.hint)}
       </div>
     </div>

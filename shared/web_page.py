@@ -4,6 +4,7 @@ A page's bridge extends PageBridge and adds its own named members; mount_page
 loads the page into a view with the theme already written into it.
 """
 
+import json
 import logging
 import time
 import weakref
@@ -15,6 +16,7 @@ from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QStackedLayout, QStackedWidget, QWidget
 
+from shared import i18n
 from shared.theme import on_theme_changed, theme_css_vars
 
 logger = logging.getLogger(__name__)
@@ -75,6 +77,18 @@ class PageBridge(QObject):
         return self._theme_css
 
     themeCss = Property(str, _get_theme_css, notify=themeCssChanged)
+
+    # The page's language, read once at load (ADR 0021): a language applies
+    # on restart, so these never change while the page lives.
+    def _get_language(self) -> str:
+        return i18n.language()
+
+    language = Property(str, _get_language, constant=True)
+
+    def _get_strings(self) -> str:
+        return json.dumps(i18n.catalogue(), ensure_ascii=False)
+
+    strings = Property(str, _get_strings, constant=True)
 
     def set_theme_css(self, css: str) -> None:
         if css == self._theme_css:

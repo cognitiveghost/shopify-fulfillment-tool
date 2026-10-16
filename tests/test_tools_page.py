@@ -858,3 +858,26 @@ def test_left_and_right_move_between_the_two_mode_segments(qtbot, page):
     assert press("barcode-mode-raw_zpl", "ArrowLeft") == "barcode-mode-driver"
     # Moving focus chooses nothing: Space or Enter does.
     assert _attr(qtbot, view, _key("reference-mode-driver"), "aria-checked") == "true"
+
+
+def test_bg_page_draws_its_words_in_bulgarian(qtbot):
+    """ADR 0021: with the PC set to BG, the page's own words come out in BG."""
+    import gui_main
+    from shared import i18n
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    view = QWebEngineView()
+    qtbot.addWidget(view)
+    bridge = mount_tools_page(view)
+    view.resize(1166, 720)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    _show(
+        qtbot,
+        view,
+        bridge,
+        make_state(session=None, reference=ReferenceFacts(), barcode=BarcodeFacts()),
+    )
+    assert _text(qtbot, view, "[data-banner] .banner-title") == (
+        "Отвори сесия, за да използваш тези инструменти"
+    )

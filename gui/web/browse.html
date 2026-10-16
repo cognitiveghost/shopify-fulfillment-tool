@@ -17,48 +17,48 @@
   <section id="panel" class="card" hidden></section>
   <section id="card" class="card" hidden>
     <div class="toolbar">
-      <div id="tabs" class="tabs" role="tablist" aria-label="Session status"></div>
+      <div id="tabs" class="tabs" role="tablist" data-i18n-attr="aria-label" aria-label="Session status"></div>
       <span class="spacer"></span>
       <label id="search-box" class="input search">
-        <input id="search" type="search" placeholder="Search sessions" aria-label="Search sessions">
+        <input id="search" type="search" data-i18n-attr="placeholder,aria-label" placeholder="Search sessions" aria-label="Search sessions">
       </label>
       <span id="count" class="count"></span>
-      <button id="refresh" class="btn secondary" type="button" title="Refresh  F5"></button>
+      <button id="refresh" class="btn secondary" type="button" data-i18n-attr="title" title="Refresh  F5"></button>
     </div>
     <div id="head" class="list-head grid">
-      <span class="cell-check"><input id="head-check" type="checkbox" aria-label="Select every session shown"></span>
-      <span>Session</span>
-      <span class="num">Age</span>
-      <span>Status</span>
-      <span class="num">Orders</span>
-      <span class="num">Items</span>
-      <span class="num">Blocked</span>
-      <span>Packing</span>
-      <span>Comment</span>
+      <span class="cell-check"><input id="head-check" type="checkbox" data-i18n-attr="aria-label" aria-label="Select every session shown"></span>
+      <span data-i18n>Session</span>
+      <span class="num" data-i18n>Age</span>
+      <span data-i18n>Status</span>
+      <span class="num" data-i18n>Orders</span>
+      <span class="num" data-i18n>Items</span>
+      <span class="num" data-i18n>Blocked</span>
+      <span data-i18n>Packing</span>
+      <span data-i18n>Comment</span>
     </div>
     <div id="selbar" class="selbar" hidden>
-      <span class="cell-check"><input id="sel-check" type="checkbox" aria-label="Clear selection" title="Clear selection"></span>
+      <span class="cell-check"><input id="sel-check" type="checkbox" data-i18n-attr="aria-label,title" aria-label="Clear selection" title="Clear selection"></span>
       <span id="sel-count" class="sel-count"></span>
-      <button id="sel-open" class="btn secondary compact" type="button">Open</button>
+      <button id="sel-open" class="btn secondary compact" type="button" data-i18n>Open</button>
       <div class="menu-anchor">
         <button id="status-button" class="btn secondary compact" type="button" aria-haspopup="menu" aria-expanded="false"></button>
         <div id="status-menu" class="menu status-menu" role="menu" hidden></div>
       </div>
       <div class="menu-anchor">
-        <button id="comment-button" class="btn secondary compact" type="button" aria-haspopup="dialog" aria-expanded="false">Comment…</button>
+        <button id="comment-button" class="btn secondary compact" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n>Comment…</button>
         <div id="comment-pop" class="popover comment-pop" role="dialog" aria-labelledby="comment-title" hidden>
           <div class="comment-body">
             <span id="comment-title" class="comment-title"></span>
-            <textarea id="comment-text" class="comment-text" rows="3" placeholder="Visible to everyone who opens this client"></textarea>
+            <textarea id="comment-text" class="comment-text" rows="3" data-i18n-attr="placeholder" placeholder="Visible to everyone who opens this client"></textarea>
             <span id="comment-note" class="comment-note"></span>
           </div>
           <div class="comment-foot">
-            <button id="comment-cancel" class="btn secondary" type="button">Cancel</button>
-            <button id="comment-save" class="btn primary" type="button">Save</button>
+            <button id="comment-cancel" class="btn secondary" type="button" data-i18n>Cancel</button>
+            <button id="comment-save" class="btn primary" type="button" data-i18n>Save</button>
           </div>
         </div>
       </div>
-      <button id="sel-export" class="btn secondary compact" type="button">Export combined stock</button>
+      <button id="sel-export" class="btn secondary compact" type="button" data-i18n>Export combined stock</button>
     </div>
     <div id="list" class="list"></div>
     <div id="footer" class="footer"></div>
@@ -66,8 +66,8 @@
 </main>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden>
   <span id="toast-text"></span>
-  <button id="toast-undo" class="toast-action" type="button" hidden>Undo</button>
-  <button id="toast-dismiss" class="toast-close" type="button" aria-label="Dismiss"></button>
+  <button id="toast-undo" class="toast-action" type="button" data-i18n hidden>Undo</button>
+  <button id="toast-dismiss" class="toast-close" type="button" data-i18n-attr="aria-label" aria-label="Dismiss"></button>
 </div>
 </body>
 </html>

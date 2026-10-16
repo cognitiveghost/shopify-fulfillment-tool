@@ -70,6 +70,8 @@
 }
 .kpi-hint > .glyph { margin-top: 2px; }
 .kpi-hint-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+/* The KPI row is 88px; a long translation is cut to two lines (the title holds the rest) so the link stays visible. */
+.kpi-hint-body > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .kpi-hint .btn.link { color: var(--text); }
 
 .kpi-wide { display: none; }

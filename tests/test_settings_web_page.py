@@ -790,6 +790,26 @@ def test_every_blocker_key_names_a_control_the_page_draws(qtbot, page):
         ), key
 
 
+def test_bg_page_draws_its_words_in_bulgarian(qtbot):
+    """ADR 0021: with the PC set to BG, the page's own words come out in BG."""
+    import gui_main
+    from shared import i18n
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    view = QWebEngineView()
+    qtbot.addWidget(view)
+    bridge = mount_settings_page(view)
+    view.resize(868, 560)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    _show(qtbot, view, bridge, general())
+    assert _text(qtbot, view, ".page-title") == "Общи"
+    assert _text(qtbot, view, ".card-title") == "CSV файлове"
+    assert _text(qtbot, view, "[data-row='threshold'] .card-label") == (
+        "Праг за ниска наличност"
+    )
+
+
 # --- theme -------------------------------------------------------------------
 
 

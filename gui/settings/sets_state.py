@@ -12,36 +12,34 @@ from typing import ClassVar
 
 from gui.settings.contract import FileProblem, PageContract
 from gui.settings.page_state import _shaped
+from shared.i18n import N_, _, _n
 from shopify_tool.set_decoder import export_sets_to_csv, import_sets_from_csv
 
 MAX_QUANTITY = 9999
 CHIP_LIMIT = 6
 LIST_LIMIT = 500
 
-SUBTITLE = "A set SKU on an order is replaced by its components before stock is allocated."
-ADD_SET = "Add set"
-NEW_SET = "New set"
-EMPTY_TITLE = "No sets yet"
-EMPTY_TEXT = "A set is one SKU sold as several. Add one, or import them all from a CSV."
-EMPTY_IMPORT = "Import from CSV…"
-FILTER_PLACEHOLDER = "Filter by SKU or component"
-IMPORT_HINT = "CSV columns: Set_SKU, Component_SKU, Component_Quantity"
+SUBTITLE = N_("A set SKU on an order is replaced by its components before stock is allocated.")
+ADD_SET = N_("Add set")
+NEW_SET = N_("New set")
+EMPTY_TITLE = N_("No sets yet")
+EMPTY_TEXT = N_("A set is one SKU sold as several. Add one, or import them all from a CSV.")
+EMPTY_IMPORT = N_("Import from CSV…")
+FILTER_PLACEHOLDER = N_("Filter by SKU or component")
+IMPORT_HINT = N_("CSV columns: Set_SKU, Component_SKU, Component_Quantity")
 
-NO_SKU = "Type the set's SKU."
-DUPLICATE_SKU = "Another set already has this SKU."
-NO_COMPONENT = "Add at least one component."
-QUANTITY_PROBLEM = f"Type a whole number from 1 to {MAX_QUANTITY}."
-NO_SETS_DETAIL = "Each row needs Set_SKU, Component_SKU and Component_Quantity."
+NO_SKU = N_("Type the set's SKU.")
+DUPLICATE_SKU = N_("Another set already has this SKU.")
+NO_COMPONENT = N_("Add at least one component.")
+QUANTITY_PROBLEM_TEMPLATE = N_("Type a whole number from 1 to {max}.")
+QUANTITY_PROBLEM = QUANTITY_PROBLEM_TEMPLATE.format(max=MAX_QUANTITY)
+NO_SETS_DETAIL = N_("Each row needs Set_SKU, Component_SKU and Component_Quantity.")
 
 _KEY_UID = re.compile(r"set-(\d+)-")
 
 
 def _text(value) -> str:
     return "" if value is None else str(value)
-
-
-def _plural(count: int, word: str) -> str:
-    return f"{count} {word}" if count == 1 else f"{count} {word}s"
 
 
 def whole_text(value) -> str:
@@ -77,19 +75,19 @@ class SetsDraft(PageContract):
 
     # kind -> the file dialog's title
     imports: ClassVar[dict[str, str]] = {
-        "sets-merge": "Import Sets from CSV",
-        "sets-replace": "Import Sets from CSV",
+        "sets-merge": N_("Import Sets from CSV"),
+        "sets-replace": N_("Import Sets from CSV"),
     }
     # kind -> (the file dialog's title, the name it offers)
     exports: ClassVar[dict[str, tuple[str, str]]] = {
-        "sets": ("Export Sets to CSV", "sets_export.csv")
+        "sets": (N_("Export Sets to CSV"), "sets_export.csv")
     }
     # kind -> the headline of a failure that is not a FileProblem
     import_failed: ClassVar[dict[str, str]] = {
-        "sets-merge": "The sets weren't imported",
-        "sets-replace": "The sets weren't imported",
+        "sets-merge": N_("The sets weren't imported"),
+        "sets-replace": N_("The sets weren't imported"),
     }
-    export_failed: ClassVar[dict[str, str]] = {"sets": "The sets weren't exported"}
+    export_failed: ClassVar[dict[str, str]] = {"sets": N_("The sets weren't exported")}
 
     def __init__(self, set_decoders: dict):
         # The live dict: collect() refills it in place (PageContract).
@@ -204,16 +202,16 @@ class SetsDraft(PageContract):
         key = f"set-{entry['uid']}"
         found = []
         if not entry["sku"].strip():
-            found.append((NO_SKU, f"{key}-sku"))
+            found.append((_(NO_SKU), f"{key}-sku"))
         elif entry["uid"] in duplicates:
-            found.append((DUPLICATE_SKU, f"{key}-sku"))
+            found.append((_(DUPLICATE_SKU), f"{key}-sku"))
         named = [
             (c, part) for c, part in enumerate(entry["components"]) if part["sku"].strip()
         ]
         if not named:
-            found.append((NO_COMPONENT, f"{key}-comp-add"))
+            found.append((_(NO_COMPONENT), f"{key}-comp-add"))
         found.extend(
-            (QUANTITY_PROBLEM, f"{key}-c{c}-quantity")
+            (_(QUANTITY_PROBLEM_TEMPLATE, max=MAX_QUANTITY), f"{key}-c{c}-quantity")
             for c, part in named
             if _quantity(part["quantity"]) is None
         )
@@ -232,7 +230,7 @@ class SetsDraft(PageContract):
         if not blocking:
             return None
         sku = blocking[0][0]["sku"].strip()
-        return f"Fix set “{sku}”" if sku else "Fix the new set"
+        return _("Fix set “{sku}”", sku=sku) if sku else _("Fix the new set")
 
     def blocker_key(self) -> str:
         blocking = self._blocking()
@@ -242,8 +240,8 @@ class SetsDraft(PageContract):
         lines = []
         for entry, problems in self._blocking():
             sku = entry["sku"].strip()
-            who = f"Set “{sku}”" if sku else NEW_SET
-            lines.extend(f"{who}: {sentence}" for sentence, _key in problems)
+            who = _("Set “{sku}”", sku=sku) if sku else _(NEW_SET)
+            lines.extend(_("{who}: {sentence}", who=who, sentence=sentence) for sentence, _key in problems)
         return not lines, lines
 
     # --- what is saved -----------------------------------------------------
@@ -284,7 +282,7 @@ class SetsDraft(PageContract):
         name = Path(path).name
         imported = import_sets_from_csv(str(path))
         if not imported:
-            raise FileProblem(f"No sets found in {name}", NO_SETS_DETAIL)
+            raise FileProblem(_("No sets found in {file}", file=name), _(NO_SETS_DETAIL))
         self.open_uid = None
         if kind == "sets-replace":
             self.entries = []
@@ -296,15 +294,17 @@ class SetsDraft(PageContract):
             else:
                 self.entries.append(fresh)
         if kind == "sets-replace":
-            return f"Replaced all sets with {len(imported)} from {name}", False
-        return f"Imported {_plural(len(imported), 'set')} from {name}", False
+            return _("Replaced all sets with {count} from {file}", count=len(imported), file=name), False
+        sets = _n("{n} set", "{n} sets", len(imported))
+        return _("Imported {sets} from {file}", sets=sets, file=name), False
 
     def export_csv(self, kind: str, path) -> str:
         if kind not in self.exports:
             raise ValueError(f"Unknown export: {kind}")
         stored = self.stored()
         export_sets_to_csv(stored, str(path))
-        return f"Exported {_plural(len(stored), 'set')} to {Path(path).name}"
+        sets = _n("{n} set", "{n} sets", len(stored))
+        return _("Exported {sets} to {file}", sets=sets, file=Path(path).name)
 
     # --- what the page draws -----------------------------------------------
 
@@ -345,10 +345,10 @@ class SetsDraft(PageContract):
         return {
             "uid": entry["uid"],
             "sku": entry["sku"],
-            "label": entry["sku"].strip() or NEW_SET,
+            "label": entry["sku"].strip() or _(NEW_SET),
             "open": is_open,
             "chips": [f"{part['sku'].strip()} ×{part['quantity']}" for part in named[:CHIP_LIMIT]],
-            "more_chips": f"+{more} more" if more > 0 else "",
+            "more_chips": _("+{count} more", count=more) if more > 0 else "",
             "problem": problems[0][0] if problems else "",
             "editor": editor,
         }
@@ -357,36 +357,40 @@ class SetsDraft(PageContract):
         empty = None
         if not self.entries:
             empty = {
-                "title": EMPTY_TITLE,
-                "text": EMPTY_TEXT,
-                "action": ADD_SET,
-                "import": EMPTY_IMPORT,
+                "title": _(EMPTY_TITLE),
+                "text": _(EMPTY_TEXT),
+                "action": _(ADD_SET),
+                "import": _(EMPTY_IMPORT),
             }
         listed = self._listed()
         duplicates = self._duplicates()
         no_hits = ""
         if self.entries and not listed:
-            no_hits = f"No set matches “{self.filter.strip()}”."
+            no_hits = _("No set matches “{query}”.", query=self.filter.strip())
         more = ""
         if len(listed) > LIST_LIMIT:
-            more = f"Showing {LIST_LIMIT} of {len(listed)}. Filter to find the rest."
+            more = _(
+                "Showing {shown} of {total}. Filter to find the rest.",
+                shown=LIST_LIMIT,
+                total=len(listed),
+            )
         shown = listed[:LIST_LIMIT]
         # The open set is drawn even past the limit: the footer's link opens it.
         shown += [entry for entry in listed[LIST_LIMIT:] if entry["uid"] == self.open_uid]
         return {
             "page": "sets",
-            "title": "Sets",
-            "subtitle": SUBTITLE,
-            "action": ADD_SET if self.entries else "",
+            "title": _("Sets"),
+            "subtitle": _(SUBTITLE),
+            "action": _(ADD_SET) if self.entries else "",
             "sets": {
                 "empty": empty,
                 "filter": self.filter,
-                "filter_placeholder": FILTER_PLACEHOLDER,
-                "count": _plural(len(self.entries), "set"),
+                "filter_placeholder": _(FILTER_PLACEHOLDER),
+                "count": _n("{n} set", "{n} sets", len(self.entries)),
                 "no_hits": no_hits,
                 "more": more,
                 "can_export": bool(self.stored()),
-                "import_hint": IMPORT_HINT,
+                "import_hint": _(IMPORT_HINT),
                 "rows": [self._row(entry, duplicates) for entry in shown],
             },
         }

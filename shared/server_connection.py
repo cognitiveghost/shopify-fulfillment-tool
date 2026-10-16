@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from shared.i18n import _
 from shared.theme import set_button_role
 
 _SETTINGS_KEY = "server_path"
@@ -90,12 +91,12 @@ def _build_path_fields(layout, initial_path: str):
 
     def _browse():
         directory = QFileDialog.getExistingDirectory(
-            path_edit.parentWidget(), "Select Server Path", path_edit.text()
+            path_edit.parentWidget(), _("Select Server Path"), path_edit.text()
         )
         if directory:
             path_edit.setText(directory)
 
-    browse_btn = QPushButton("Browse…")
+    browse_btn = QPushButton(_("Browse…"))
     browse_btn.clicked.connect(_browse)
     path_row.addWidget(browse_btn)
     layout.addLayout(path_row)
@@ -105,9 +106,9 @@ def _build_path_fields(layout, initial_path: str):
 
     def _test():
         ok = test_path_reachable(path_edit.text())
-        result_label.setText("✅ Connected" if ok else "❌ Not reachable")
+        result_label.setText(_("✅ Connected") if ok else _("❌ Not reachable"))
 
-    test_btn = QPushButton("Test Connection")
+    test_btn = QPushButton(_("Test Connection"))
     test_btn.clicked.connect(_test)
     test_row.addWidget(test_btn)
     test_row.addWidget(result_label)
@@ -128,19 +129,19 @@ class ConnectionSettingsDialog(QDialog):
         super().__init__(parent)
         self.org = org
 
-        self.setWindowTitle("Server Connection")
+        self.setWindowTitle(_("Server Connection"))
         self.setMinimumWidth(480)
 
         layout = QVBoxLayout(self)
 
         env_value = os.environ.get(env_var)
         if env_value:
-            warning = QLabel(f"Overridden by {env_var} environment variable")
+            warning = QLabel(_("Overridden by {env_var} environment variable", env_var=env_var))
             warning.setEnabled(False)
             layout.addWidget(warning)
 
-        layout.addWidget(QLabel("Server path:"))
-        self.path_edit, _ = _build_path_fields(
+        layout.addWidget(QLabel(_("Server path:")))
+        self.path_edit, _result_label = _build_path_fields(
             layout, resolve_server_path(org, env_var, fallback)
         )
 
@@ -153,7 +154,9 @@ class ConnectionSettingsDialog(QDialog):
     def _save(self):
         save_server_path(self.org, self.path_edit.text().strip())
         QMessageBox.information(
-            self, "Saved", "Restart the application for the new path to take effect."
+            self,
+            _("Saved"),
+            _("Restart the application for the new path to take effect."),
         )
         self.accept()
 
@@ -167,7 +170,7 @@ def prompt_for_recovery_path(parent, attempted_path: str, org: str) -> bool:
     exits as before).
     """
     dialog = QDialog(parent)
-    dialog.setWindowTitle("Cannot Connect to Server")
+    dialog.setWindowTitle(_("Cannot Connect to Server"))
     dialog.setMinimumWidth(480)
 
     layout = QVBoxLayout(dialog)
@@ -176,13 +179,13 @@ def prompt_for_recovery_path(parent, attempted_path: str, org: str) -> bool:
     error_label.setWordWrap(True)
     layout.addWidget(error_label)
 
-    layout.addWidget(QLabel("Server path:"))
-    path_edit, _ = _build_path_fields(layout, get_saved_server_path(org) or "")
+    layout.addWidget(QLabel(_("Server path:")))
+    path_edit, _result_label = _build_path_fields(layout, get_saved_server_path(org) or "")
 
     button_row = QHBoxLayout()
     button_row.addStretch()
-    exit_btn = QPushButton("Exit")
-    retry_btn = QPushButton("Retry")
+    exit_btn = QPushButton(_("Exit"))
+    retry_btn = QPushButton(_("Retry"))
     set_button_role(retry_btn, "primary")
     button_row.addWidget(exit_btn)
     button_row.addWidget(retry_btn)

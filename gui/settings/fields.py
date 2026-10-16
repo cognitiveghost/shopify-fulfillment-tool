@@ -4,6 +4,8 @@ Imports nothing from this package: pages import from here, never the
 reverse, so there is no cycle back through window.py. No Qt import.
 """
 
+from shared.i18n import N_
+
 FILTERABLE_COLUMNS: list[str] = [
     "Order_Number",
     "Order_Type",
@@ -43,6 +45,17 @@ CONDITION_OPERATORS: list[str] = [
     "matches regex",
     "does not match regex",
 ]
+# Each operator's name as a page shows it. The engine matches the stored
+# English name; _() draws the translation. Listed here so the key scanner sees
+# every one.
+OPERATOR_NAMES = (
+    N_("equals"), N_("does not equal"), N_("contains"), N_("does not contain"),
+    N_("is greater than"), N_("is less than"), N_("is greater than or equal"),
+    N_("is less than or equal"), N_("starts with"), N_("ends with"),
+    N_("is empty"), N_("is not empty"), N_("in list"), N_("not in list"),
+    N_("between"), N_("not between"), N_("date before"), N_("date after"),
+    N_("date equals"), N_("matches regex"), N_("does not match regex"),
+)
 
 ACTION_TYPES: list[str] = [
     "ADD_INTERNAL_TAG",

@@ -423,6 +423,7 @@ def test_the_overflow_keeps_only_what_the_sidebar_does_not(main_window):
         "Open session folder",
         "THIS PC",
         "Server connection…",
+        "Check for updates…",
         "Keyboard shortcuts…",
     ]
     assert not any(a.isCheckable() for a in menu.actions())

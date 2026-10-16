@@ -23,10 +23,10 @@ from gui.tools_state import (
     PickedFile,
     ReferenceFacts,
     ToolRun,
-    counted,
     short_path,
 )
 from gui.worker import Worker
+from shared.i18n import N_, _, _n
 from shopify_tool import pdf_processor
 from shopify_tool.pdf_processor import (
     InvalidCSVError,
@@ -40,19 +40,19 @@ logger = logging.getLogger(__name__)
 
 KINDS = ("pdf", "csv")
 PDF_PROBLEM = (
-    "This PDF can't be read",
-    "Check that it isn't damaged, then choose it again.",
+    N_("This PDF can't be read"),
+    N_("Check that it isn't damaged, then choose it again."),
 )
 CSV_PROBLEM = (
-    "This CSV has no usable rows",
-    (
+    N_("This CSV has no usable rows"),
+    N_(
         "Each row needs the PostOne export's columns: PostOne ID (1st), Tracking (2nd), "
         "Reference (3rd) and Name (7th)."
     ),
 )
 _DIALOG = {
-    "pdf": ("Select the labels PDF", "PDF Files (*.pdf)"),
-    "csv": ("Select the mapping CSV", "CSV Files (*.csv);;All Files (*.*)"),
+    "pdf": (N_("Select the labels PDF"), N_("PDF Files (*.pdf)")),
+    "csv": (N_("Select the mapping CSV"), N_("CSV Files (*.csv);;All Files (*.*)")),
 }
 # Seconds between two progress pushes: a 2,000-page PDF must not redraw the
 # page 4,000 times.
@@ -136,7 +136,9 @@ class ReferenceTool(QObject):
         if kind not in KINDS or not self._editable():
             return
         title, pattern = _DIALOG[kind]
-        path, _ = QFileDialog.getOpenFileName(self._host, title, "", pattern)
+        path, _chosen_filter = QFileDialog.getOpenFileName(
+            self._host, _(title), "", _(pattern)
+        )
         if path:
             self.load(kind, path)
 
@@ -180,7 +182,7 @@ class ReferenceTool(QObject):
         if not self._editable():
             return
         chosen = QFileDialog.getExistingDirectory(
-            self._host, "Select the output folder", str(self._folder)
+            self._host, _("Select the output folder"), str(self._folder)
         )
         if chosen:
             self._folder = Path(chosen)
@@ -254,8 +256,15 @@ class ReferenceTool(QObject):
         # Duplicate or missing REFs stay on screen, in the footer, not in a toast.
         if reference_run_warning(result) is None:
             folder = str(output.parent)
+            pages = result["pages_processed"]
             self.toast.emit(
-                f"{counted(result['pages_processed'], 'label')} saved to {short_path(folder)}",
+                _n(
+                    "{labels} label saved to {folder}",
+                    "{labels} labels saved to {folder}",
+                    pages,
+                    labels=f"{pages:,}",
+                    folder=short_path(folder),
+                ),
                 folder,
             )
 
@@ -263,29 +272,29 @@ class ReferenceTool(QObject):
         _exctype, value, _traceback_str = error_info
         if isinstance(value, ProcessingCancelled):
             logger.info("Reference label processing cancelled")
-            self.toast.emit("Processing cancelled", "")
+            self.toast.emit(_("Processing cancelled"), "")
             return
         logger.error("PDF processing failed", exc_info=value)
         if isinstance(value, InvalidPDFError):
-            what_to_do = (
+            what_to_do = _(
                 "The PDF couldn't be read. Check that it isn't damaged, "
                 "then process it again."
             )
         elif isinstance(value, InvalidCSVError):
-            what_to_do = (
+            what_to_do = _(
                 "The CSV isn't in the expected format. Expected columns: "
                 "PostOne ID (1st), Tracking (2nd), Reference (3rd), Name (7th)."
             )
         elif isinstance(value, MappingError):
-            what_to_do = (
+            what_to_do = _(
                 "Some pages didn't match a row in the CSV. Check the CSV "
                 "mapping file, then process it again."
             )
         elif isinstance(value, OSError):
-            what_to_do = "Can't reach this session's folder. Check the server connection."
+            what_to_do = _("Can't reach this session's folder. Check the server connection.")
         else:
-            what_to_do = "Details are in Logs."
-        show_error(self._host, "The PDF wasn't processed", what_to_do)
+            what_to_do = _("Details are in Logs.")
+        show_error(self._host, _("The PDF wasn't processed"), what_to_do)
 
     def _on_finished(self) -> None:
         self._run = None
@@ -299,7 +308,11 @@ class ReferenceTool(QObject):
             logger.info(f"Opened PDF: {path}")
         else:
             logger.warning(f"Failed to open PDF: {path}")
-            show_error(self._host, "The PDF didn't open", f"Open it manually: {path}")
+            show_error(
+                self._host,
+                _("The PDF didn't open"),
+                _("Open it manually: {path}", path=path),
+            )
 
     def print_output(self) -> None:
         if self._output is None or self._run is not None:
