@@ -18,6 +18,7 @@ edit the text without developer tools, and a script re-takes the screenshots whe
 | Language | EN and BG. English is written first, then Bulgarian. The screenshots are rendered in each language. The owner reviews the BG wording. |
 | Audience | Part 1 covers daily work for operators and packers, task by task. Part 2 covers client setup and settings for the lead/admin. |
 | Screenshots | Rendered by a script, offscreen, from anonymised production data with real client names. They are re-run after any UI change. |
+| Help link (spec approval, question 84) | Approved with an in-app Help entry in both apps that opens the guide PDF (section 10). |
 
 ## Goals
 
@@ -31,7 +32,6 @@ edit the text without developer tools, and a script re-takes the screenshots whe
 
 ## Non-goals
 
-- In-app Help menu or links to the guide. Possible follow-up; no app behaviour changes in this task.
 - Developer documentation. README, ADRs and CONTEXT.md stay as they are.
 - Committing the PDFs. They are build output and gitignored. The owner builds them and puts them on the server.
 - Dark-theme screenshots or several window sizes. The guides use light theme at 1366×768, the warehouse minimum.
@@ -263,6 +263,30 @@ The render scripts are verified by running them. They have no unit tests, which 
 - PDFs are not committed. The README states the build commands. The Stage C report gives the owner the four commands
   that produce the four PDFs.
 
+### 10. Help entry in both apps
+
+- `shared/guide/help.py` holds:
+  - `guide_pdf(server_root, app) -> Path | None`. `app` is `"fulfilment"` or `"packing-tool"`. It returns
+    `<server_root>/Guides/<app>-<lang>.pdf` for the current `shared.i18n.language()`. If that file is missing it
+    falls back to `<app>-en.pdf`. If neither exists it returns `None`.
+  - `open_guide(parent, server_root, app)`. This opens the file with `QDesktopServices.openUrl(QUrl.fromLocalFile(...))`,
+    which uses the PC's PDF viewer. On `None` it shows a warning that names the folder the guide was expected in.
+    The message is wrapped in `_()`.
+  - The module imports nothing from `build.py`, so the frozen apps never pull in `markdown` or `weasyprint`.
+- Each app gets one more ⋯ menu item, **User guide** (`_("User guide")`), as the first item of its "this PC" items:
+  - Fulfilment: `gui/ui_manager.py` `_populate_overflow`, placed before "Server connection…".
+  - Packing Tool: `gui/main_window.py` `_init_overflow`, placed before "Server connection…".
+  Both pass the app's current server root. `F1` opens it too, through a `QShortcut` on the main window.
+- The two new strings go in the **shared** catalogue `shared/assets/locales/bg.json`: "User guide" and the
+  not-found message. In BG they read "Ръководство" and "Ръководството не е намерено в {folder}."
+- `shared/guide/README.md` documents the server location and the file names, for example
+  `Guides/fulfilment-bg.pdf`. The build command writes those names through `--out`.
+- Tests (Fulfilment, `tests/test_guide_help.py`): `guide_pdf` returns the language file, falls back to EN, and
+  returns `None` when neither file exists. The test uses a temp dir and sets the language with `shared.i18n`.
+  A pytest-qt test checks that the Fulfilment overflow menu has the item and that triggering it calls
+  `open_guide`, with `open_guide` monkeypatched. Packing-tool gets the same menu test.
+- `ShortcutsDialog` lists F1 if it lists global shortcuts.
+
 ## Left to the builder
 
 - The exact Markdown extensions beyond `extra`/`toc`, and the CSS details within the style rules above.
@@ -282,4 +306,4 @@ The render scripts are verified by running them. They have no unit tests, which 
 - Screenshot data comes from `tests/replay/fixtures/` only, never the raw Server snapshot. The client names are the
   real ALMA/HERBAR display names. Workers are fictional.
 - PDFs are gitignored build output.
-- No in-app Help entry. It could be a follow-up task.
+- The Help entry opens the PDF from the server folder (`<server>/Guides/`), not one bundled with the app. That needs no release-build change, and a guide fix reaches every PC without a release. The cost is that the owner copies the PDFs there after building them.
