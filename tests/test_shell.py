@@ -422,6 +422,7 @@ def test_the_overflow_keeps_only_what_the_sidebar_does_not(main_window):
         "No client",
         "Open session folder",
         "THIS PC",
+        "User guide",
         "Server connection…",
         "Check for updates…",
         "Keyboard shortcuts…",
@@ -430,6 +431,32 @@ def test_the_overflow_keeps_only_what_the_sidebar_does_not(main_window):
     menu.aboutToShow.emit()
     folder = next(a for a in menu.actions() if a.text() == "Open session folder")
     assert not folder.isEnabled()  # no session is open
+
+
+def test_overflow_has_user_guide(main_window, monkeypatch):
+    import gui.ui_manager as ui
+
+    calls = []
+    monkeypatch.setattr(ui, "open_guide", lambda *args: calls.append(args))
+    menu = main_window.command_bar.overflow
+    texts = [a.text() for a in menu.actions() if not a.isSeparator()]
+    assert texts[texts.index("User guide") + 1] == "Server connection…"
+
+    item = next(a for a in menu.actions() if a.text() == "User guide")
+    item.trigger()
+    assert calls == [(main_window, str(main_window.profile_manager.base_path), "fulfilment")]
+
+
+def test_f1_opens_user_guide(main_window, monkeypatch):
+    from PySide6.QtGui import QShortcut
+
+    import gui.ui_manager as ui
+
+    calls = []
+    monkeypatch.setattr(ui, "open_guide", lambda *args: calls.append(args))
+    f1 = next(s for s in main_window.findChildren(QShortcut) if s.key().toString() == "F1")
+    f1.activated.emit()
+    assert calls == [(main_window, str(main_window.profile_manager.base_path), "fulfilment")]
 
 
 def test_collapsing_is_remembered_on_this_pc(tmp_path, monkeypatch):

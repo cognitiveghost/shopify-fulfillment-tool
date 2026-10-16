@@ -23,6 +23,7 @@ SHORTCUTS = (
     ("Ctrl+F", N_("Search results")),
     ("Ctrl+Z", N_("Undo the last change")),
     ("F5", N_("Refresh the session list, on Browse")),
+    ("F1", N_("User guide")),
 )
 
 
