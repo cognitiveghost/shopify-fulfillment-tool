@@ -22,6 +22,7 @@ from gui.setup_state import FileSlot, MemoryFacts, RunFacts, SessionFacts, setup
 from gui.shortcuts_dialog import ShortcutsDialog
 from gui.worker import Worker
 from shared.components.language_segment import switch_language
+from shared.guide.help import open_guide
 from shared.i18n import N_, _
 from shared.icons import icon
 from shared.server_connection import ConnectionSettingsDialog
@@ -387,12 +388,17 @@ class UIManager:
         self._refresh_overflow()
 
         menu.add_section(_("THIS PC"))
+        menu.add_item(_("User guide"), self._open_user_guide)
         menu.add_item(_("Server connection…"), self._open_connection_settings)
         menu.add_item(_("Check for updates…"), lambda: self.mw.update_flow.check_now())
         menu.add_item(_("Keyboard shortcuts…"), lambda: ShortcutsDialog(self.mw).exec())
 
     def _refresh_overflow(self) -> None:
         self._open_folder_item.setEnabled(bool(getattr(self.mw, "session_path", None)))
+
+    def _open_user_guide(self):
+        """The Fulfilment user guide, from the ⋯ menu or F1."""
+        open_guide(self.mw, str(self.mw.profile_manager.base_path), "fulfilment")
 
     def _open_connection_settings(self):
         """Open the Server Connection settings dialog.
@@ -410,7 +416,8 @@ class UIManager:
 
         Bound to the rail rather than straight to main_tabs: a disabled rail
         button that a keystroke walks past is not a guard, and while
-        disconnected three of these destinations touch the share.
+        disconnected three of these destinations touch the share. F1 opens the
+        user guide.
         """
         for number, index in enumerate(range(5), start=1):
             QShortcut(
@@ -418,6 +425,7 @@ class UIManager:
                 self.mw,
                 lambda index=index: self._go_to_destination(index),
             )
+        QShortcut(QKeySequence("F1"), self.mw, self._open_user_guide)
 
     def _go_to_destination(self, index: int) -> None:
         """Navigate to a rail destination, if the rail is offering it."""

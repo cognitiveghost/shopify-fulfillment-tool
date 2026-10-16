@@ -103,3 +103,6 @@ nul
 
 # superpowers brainstorming visual companion
 /.superpowers/
+
+# User guide PDFs are build output (shared/guide/build.py), never committed
+docs/user-guide/*.pdf

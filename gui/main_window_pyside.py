@@ -980,7 +980,7 @@ class MainWindow(QMainWindow):
             show_error(
                 self,
                 _("Another PC changed this session"),
-                _("Your change wasn't saved. Reopen the session from Sessions to "
+                _("Your change wasn't saved. Reopen the session from Browse to "
                   "load their changes, then make it again."),
             )
             return
