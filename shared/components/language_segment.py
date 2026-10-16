@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from shared import update_flow
 from shared.i18n import LANGUAGES, _
-from shared.relaunch import on_quit, relaunch_argv
+from shared.relaunch import cancel, on_quit, relaunch_argv
 
 
 class LanguageSegment(QFrame):
@@ -65,5 +65,6 @@ def switch_language(window: QWidget, settings: QSettings, code: str) -> bool:
                            verb=_("Restart now")):
         return False
     on_quit(relaunch_argv())
-    window.close()
+    if not window.close():  # vetoed: a later, ordinary close must not restart
+        cancel()
     return True

@@ -61,3 +61,14 @@ def test_switch_cancel_keeps_the_choice_for_next_start(qtbot, settings, monkeypa
     assert settings.value("language") == "bg"
     assert relaunch.pending() is None
     assert window.isVisible()
+
+
+def test_a_vetoed_restart_does_not_fire_on_a_later_close(qtbot, settings, monkeypatch):
+    relaunch._reset()
+    window = QWidget()
+    qtbot.addWidget(window)
+    monkeypatch.setattr(window, "close", lambda: False)
+    monkeypatch.setattr(update_flow, "ask", lambda w, **kw: True)
+    switch_language(window, settings, "bg")
+    assert relaunch.pending() is None
+    relaunch._reset()

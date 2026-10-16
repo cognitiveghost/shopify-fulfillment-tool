@@ -70,6 +70,10 @@ def test_dev_builds_never_check(qtbot, tmp_path):
                                app_dir=tmp_path, frozen=True, updater=fake)
     f.start()
     assert fake.checks == []
+    toasts = []
+    f._toast = toasts.append
+    f.check_now()
+    assert toasts == ["Updates are checked only in the released app."]
 
 
 def test_available_shows_the_button(flow):
@@ -119,9 +123,36 @@ def test_staged_arms_the_swap_and_closes(flow, qtbot):
     button.click()
     updater.staging_dir(app_dir).mkdir()
     fake.staged.emit(R)
-    assert relaunch.pending()[:2] == ["cmd", "/c"]
-    assert button.text() == "Update installs when you close the app"
+    assert relaunch.pending().startswith("cmd /d /s /c")
+    assert button.toolTip() == "Update installs when you close the app"
     assert not window.isVisible()
+
+
+def test_a_vetoed_close_after_staging_toasts_the_full_text(flow, monkeypatch):
+    f, fake, button, toasts, _asked, app_dir, window = flow
+    monkeypatch.setattr(window, "close", lambda: False)
+    f.start()
+    fake.available.emit(R)
+    button.click()
+    updater.staging_dir(app_dir).mkdir()
+    fake.staged.emit(R)
+    assert toasts[-1] == "Update installs when you close the app"
+
+
+def test_arming_failure_restores_the_offer(flow, monkeypatch):
+    f, fake, button, toasts, _asked, app_dir, _window = flow
+    def boom(*a):
+        raise OSError("read-only")
+    monkeypatch.setattr(update_flow, "arm_install", boom)
+    f.start()
+    fake.available.emit(R)
+    button.click()
+    updater.staging_dir(app_dir).mkdir()
+    fake.staged.emit(R)
+    assert toasts[-1] == "read-only"
+    assert not updater.staging_dir(app_dir).exists()
+    assert button.isEnabled() and button.text() == "Update to 2.4.0"
+    assert relaunch.pending() is None
 
 
 def test_install_failure_restores_the_button(flow):

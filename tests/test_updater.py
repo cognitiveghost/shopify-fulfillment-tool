@@ -159,17 +159,21 @@ def test_swap_script_steps_in_order(tmp_path):
         W(r"C:\Apps\Fulfil 100%"), W(r"C:\Apps\Fulfil 100%.update"), "FulfilmentTool.exe", 4242, "2.4.0"
     )
     order = [
+        'cd /d "%SystemRoot%"',
         'tasklist /FI "PID eq 4242"',
         'rd /s /q "C:\\Apps\\Fulfil 100%%.previous"',
         'ren "C:\\Apps\\Fulfil 100%%" "Fulfil 100%%.previous"',
         'ren "C:\\Apps\\Fulfil 100%%.update" "Fulfil 100%%"',
         'robocopy "C:\\Apps\\Fulfil 100%%.previous" "C:\\Apps\\Fulfil 100%%" /E /XC /XN /XO',
-        'start "" "C:\\Apps\\Fulfil 100%%\\FulfilmentTool.exe"',
+        'if errorlevel 8',
+        'start "" /D "C:\\Apps\\Fulfil 100%%" "C:\\Apps\\Fulfil 100%%\\FulfilmentTool.exe"',
     ]
     positions = [text.index(step) for step in order]
     assert positions == sorted(positions)
     assert "failed.txt" in text and "2.4.0" in text
     assert "if %n% geq 60" in text
+    assert "timeout" not in text  # needs console input the hidden console lacks
+    assert '|| (ren "C:\\Apps\\Fulfil 100%%.previous" "Fulfil 100%%" & goto fail)' in text
 
 
 def test_arm_install_writes_the_script_and_arms_on_quit(tmp_path, qapp):
@@ -181,7 +185,7 @@ def test_arm_install_writes_the_script_and_arms_on_quit(tmp_path, qapp):
     script = updater.arm_install(app_dir, staged, "FulfilmentTool.exe", "2.4.0")
     assert script == tmp_path / "FulfilmentTool.update.cmd"
     assert script.read_text(encoding="utf-8").startswith("@echo off")
-    assert relaunch.pending() == ["cmd", "/c", str(script)]
+    assert relaunch.pending() == f'cmd /d /s /c ""{script}""'
     relaunch._reset()
 
 

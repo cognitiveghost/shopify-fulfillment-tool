@@ -29,6 +29,7 @@ CHUNK = 1 << 20
 RENAME_TRIES = 60
 
 NOT_RELEASED = N_("Updates install only in the released app.")
+NOT_CHECKED = N_("Updates are checked only in the released app.")
 NO_PERMISSION = N_("No permission to write to {folder}.")
 BAD_CHECKSUM = N_("The download is damaged (checksum mismatch).")
 NO_EXE = N_("The download does not contain {exe}.")
@@ -181,28 +182,33 @@ def _q(path) -> str:
 def swap_script(app_dir, staged, exe_name: str, pid: int, version: str) -> str:
     previous = app_dir.parent / f"{app_dir.name}.previous"
     name = app_dir.name.replace("%", "%%")
+    staged_name = staged.name.replace("%", "%%")
     exe = app_dir / exe_name
     return "\r\n".join([
         "@echo off",
         "rem Written by shared/updater.py (ADR 0022): swaps in a new release after the app exits.",
+        # Leave the app folder: a cwd inside it blocks the rename. ping, not timeout:
+        # timeout needs console input, which a hidden console may not give it.
+        'cd /d "%SystemRoot%"',
         ":waitpid",
-        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul && (timeout /t 1 /nobreak >nul & goto waitpid)',
+        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul && (ping -n 2 127.0.0.1 >nul & goto waitpid)',
         f"if exist {_q(previous)} rd /s /q {_q(previous)}",
         "set n=0",
         ":rename",
         f'ren {_q(app_dir)} "{name}.previous" 2>nul && goto swap',
         "set /a n+=1",
         f"if %n% geq {RENAME_TRIES} goto fail",
-        "timeout /t 1 /nobreak >nul",
+        "ping -n 2 127.0.0.1 >nul",
         "goto rename",
         ":swap",
-        f'ren {_q(staged)} "{name}"',
+        f'ren {_q(staged)} "{name}" || (ren {_q(previous)} "{name}" & goto fail)',
         f"robocopy {_q(previous)} {_q(app_dir)} /E /XC /XN /XO /NFL /NDL /NJH /NJS >nul",
-        f'start "" {_q(exe)}',
+        f'if errorlevel 8 (ren {_q(app_dir)} "{staged_name}" & ren {_q(previous)} "{name}" & goto fail)',
+        f'start "" /D {_q(app_dir)} {_q(exe)}',
         '(goto) 2>nul & del "%~f0"',
         ":fail",
-        f"echo {version}> {_q(staged / 'failed.txt')}",
-        f'start "" {_q(exe)}',
+        f">{_q(staged / 'failed.txt')} echo {version}",
+        f'start "" /D {_q(app_dir)} {_q(exe)}',
         "exit /b 1",
         "",
     ])
@@ -212,7 +218,8 @@ def arm_install(app_dir: Path, staged: Path, exe_name: str, version: str) -> Pat
     script = Path(app_dir).parent / f"{Path(app_dir).name}.update.cmd"
     text = swap_script(Path(app_dir), Path(staged), exe_name, os.getpid(), version)
     script.write_text(text, encoding="utf-8", newline="")
-    relaunch.on_quit(["cmd", "/c", str(script)], update=True)
+    # /s plus doubled quotes: a plain "/c path" breaks on a folder named "App (1)".
+    relaunch.on_quit(f'cmd /d /s /c ""{script}""', update=True)
     return script
 
 

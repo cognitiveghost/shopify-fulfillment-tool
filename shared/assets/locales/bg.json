@@ -45,6 +45,7 @@
   "Update to {version}": "Актуализирай до {version}",
   "Update to {version} didn't finish: the app folder was in use. Is it open on another PC?": "Актуализацията до {version} не завърши: папката на приложението беше заета. Отворено ли е на друг компютър?",
   "Update to {version}?": "Актуализиране до {version}?",
+  "Updates are checked only in the released app.": "Актуализации се проверяват само в издадената версия на приложението.",
   "Updates install only in the released app.": "Актуализации се инсталират само в издадената версия на приложението.",
   "Version {version} is available": "Налична е версия {version}",
   "You have the latest version ({version})": "Имате последната версия ({version})",

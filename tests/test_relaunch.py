@@ -59,3 +59,12 @@ def test_relaunch_argv(monkeypatch):
     assert relaunch.relaunch_argv() == ["/py", "gui_main.py", "--x"]
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     assert relaunch.relaunch_argv() == ["/py", "--x"]
+
+
+def test_cancel_drops_a_relaunch_but_keeps_an_update(clean):
+    relaunch.on_quit(["app.exe"])
+    relaunch.cancel()
+    assert relaunch.pending() is None
+    relaunch.on_quit("cmd /c swap.cmd", update=True)
+    relaunch.cancel()
+    assert relaunch.pending() == "cmd /c swap.cmd"

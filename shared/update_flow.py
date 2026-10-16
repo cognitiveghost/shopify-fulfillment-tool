@@ -9,12 +9,13 @@ is armed and the window closes.
 from __future__ import annotations
 
 import logging
+import shutil
 import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QToolButton, QWidget
 
@@ -23,6 +24,7 @@ from shared.i18n import _
 from shared.icons import icon
 from shared.updater import (
     NO_PERMISSION,
+    NOT_CHECKED,
     NOT_RELEASED,
     AppIdentity,
     Release,
@@ -109,7 +111,12 @@ class UpdateFlow(QObject):
         return self._frozen and parse_version(self._version) is not None
 
     def start(self) -> None:
-        version = leftover(self._app_dir)
+        version = None
+        if self._frozen:  # a dev build's app_dir is the Python folder
+            try:
+                version = leftover(self._app_dir)
+            except OSError:
+                _log.exception("Could not clean up an earlier update")
         if version:
             self._toast(_("Update to {version} didn't finish: the app folder was in use. "
                           "Is it open on another PC?", version=version))
@@ -119,7 +126,7 @@ class UpdateFlow(QObject):
 
     def check_now(self) -> None:
         if not self._can_check():
-            self._toast(_(NOT_RELEASED))
+            self._toast(_(NOT_CHECKED))
             return
         self._manual = True
         self._updater.check(manual=True)
@@ -177,7 +184,21 @@ class UpdateFlow(QObject):
         self._button.setText(_("Downloading… {n}%", n=percent))
 
     def _on_staged(self, release: Release) -> None:
+        staged = staging_dir(self._app_dir)
+        try:
+            arm_install(self._app_dir, staged, self._app.exe_name, release.version)
+        except OSError as exc:
+            _log.exception("Could not arm the update")
+            shutil.rmtree(staged, ignore_errors=True)
+            self._on_failed(str(exc))
+            return
         self._installing = False
-        arm_install(self._app_dir, staging_dir(self._app_dir), self._app.exe_name, release.version)
-        self._button.setText(_("Update installs when you close the app"))
-        self._window.close()
+        text = _("Update installs when you close the app")
+        # The footer is narrow (BG runs twice as long): elide, full text in the
+        # tooltip, and a toast when the close is vetoed (spec section 8).
+        room = self._button.width() - self._button.iconSize().width() - 24
+        self._button.setText(self._button.fontMetrics().elidedText(text, Qt.ElideRight, room)
+                             if self._button.isVisible() and room > 0 else text)
+        self._button.setToolTip(text)
+        if not self._window.close():
+            self._toast(text)
