@@ -20,12 +20,12 @@ from shared.i18n import _
 def guide_pdf(server_root: str | Path, app: str) -> Path | None:
     guides = Path(server_root) / "Guides"
     for lang in dict.fromkeys((i18n.language(), "en")):
+        path = guides / f"{app}-{lang}.pdf"
         try:
-            path = guides / f"{app}-{lang}.pdf"
             if path.is_file():
                 return path
         except OSError:
-            return None
+            continue
     return None
 
 
@@ -36,4 +36,6 @@ def open_guide(parent: QWidget | None, server_root: str | Path, app: str) -> Non
         QMessageBox.warning(parent, _("User guide"),
                             _("The user guide was not found in {folder}.", folder=folder))
         return
-    QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+    if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+        QMessageBox.warning(parent, _("User guide"),
+                            _("No program on this PC could open {path}.", path=str(path)))

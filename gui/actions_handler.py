@@ -567,7 +567,7 @@ class ActionsHandler(QObject):
             show_error(
                 self.mw,
                 _("Another PC changed this session"),
-                _("Nothing was exported. Reopen the session from Sessions to load "
+                _("Nothing was exported. Reopen the session from Browse to load "
                   "their changes, then export again."),
             )
         return stale

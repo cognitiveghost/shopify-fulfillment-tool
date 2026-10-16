@@ -165,9 +165,9 @@ The app shows **Another PC changed this session**. Someone on another PC saved t
 1. Click **Browse**, then double-click the session to open it again.
 2. Make your change or export again.
 
-#### {sku} isn't in the stock file
+#### A SKU isn't in the stock file
 
-When you add a product with **Add Product to Order**, the app can show **{sku} isn't in the stock file. Press Add anyway to add it.**
+When you add a product with **Add Product to Order**, the app can show a message such as **SKU-123 isn't in the stock file. Press Add anyway to add it.** SKU-123 stands for the SKU you typed.
 
 1. Check the SKU for typing mistakes.
 2. If the SKU is right, click **Add anyway**.

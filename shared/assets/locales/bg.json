@@ -18,6 +18,7 @@
   "Mar": "мар",
   "May": "май",
   "No permission to write to {folder}.": "Няма права за запис в {folder}.",
+  "No program on this PC could open {path}.": "Нито една програма на този компютър не може да отвори {path}.",
   "Notification": "Известие",
   "Nov": "ное",
   "Oct": "окт",

@@ -13,7 +13,9 @@ are never touched. Names are the same in EN and BG; only the folder differs.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -48,6 +50,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 from shared import i18n
 
 CLIENT = "ALMA"
+SERVER_LABEL = r"\\fs01\fulfillment"  # what the guide shows instead of the temp server path
 SETTINGS_PAGES = {
     "profile": "Profile",
     "general": "General",
@@ -59,6 +62,28 @@ SETTINGS_PAGES = {
     "tags": "Tag categories",
 }
 TABS = {"browse": 2, "logs": 3, "tools": 4}
+
+
+def mask_server(text: str) -> str:
+    """The temp server path, and any path under it, as the Windows share a warehouse PC sees."""
+    return re.sub(re.escape(str(SERVER)) + r"[^\s'\"]*",
+                  lambda m: SERVER_LABEL + m[0][len(str(SERVER)):].replace("/", "\\"), text)
+
+
+def mask_server_everywhere() -> None:
+    """Patch the sidebar's server line and every log message, before the window is built."""
+    from gui.components.sidebar import Sidebar
+
+    real_set = Sidebar.set_connection
+    Sidebar.set_connection = lambda self, connected, path: real_set(self, connected, mask_server(path))
+    make_record = logging.getLogRecordFactory()
+
+    def masked_record(*args, **kwargs):
+        record = make_record(*args, **kwargs)
+        record.msg, record.args = mask_server(record.getMessage()), ()
+        return record
+
+    logging.setLogRecordFactory(masked_record)
 
 
 def pump(ms: int) -> None:
@@ -241,6 +266,7 @@ def main() -> int:
 
     from gui.main_window_pyside import MainWindow
 
+    mask_server_everywhere()
     window = MainWindow()
     window.show()
     pump(500)
@@ -251,8 +277,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    code = main()
-    sys.stdout.flush()
-    shutil.rmtree(TMP, ignore_errors=True)
+    try:
+        code = main()
+    finally:
+        sys.stdout.flush()
+        shutil.rmtree(TMP, ignore_errors=True)
     # QtWebEngine segfaults in its teardown after the PNGs are written; skip it.
     os._exit(code)
