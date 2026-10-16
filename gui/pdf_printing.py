@@ -20,6 +20,7 @@ from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import QWidget
 
 from gui.components import show_error
+from shared.i18n import _
 from shopify_tool import label_printing
 
 logger = logging.getLogger(__name__)
@@ -75,8 +76,8 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
     if not target.strip():
         show_error(
             parent,
-            "Nothing was printed",
-            "Choose a printer under Print mode, then print again.",
+            _("Nothing was printed"),
+            _("Choose a printer under Print mode, then print again."),
         )
         return False
     width_mm = settings.get("raw_zpl_label_width_mm", 0.0)
@@ -93,7 +94,7 @@ def _print_pdf_raw_zpl_mode(parent, pdf_path: Path, settings: dict) -> bool:
         return True
     except (OSError, *label_printing.windows_print_errors()):
         logger.exception("Raw ZPL print failed")
-        show_error(parent, "Nothing was printed", "Details are in Logs.")
+        show_error(parent, _("Nothing was printed"), _("Details are in Logs."))
         return False
 
 
@@ -145,7 +146,7 @@ def _print_pdf_driver_mode(
     load_error = document.load(str(pdf_path))
     if load_error != QPdfDocument.Error.None_:
         logger.error(f"Could not open PDF for printing: {pdf_path}: {load_error}")
-        show_error(parent, "Nothing was printed", "Details are in Logs.")
+        show_error(parent, _("Nothing was printed"), _("Details are in Logs."))
         return False
 
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
@@ -183,5 +184,5 @@ def _print_pdf_driver_mode(
         return True
     except Exception:
         logger.exception("Driver print failed")
-        show_error(parent, "Nothing was printed", "Details are in Logs.")
+        show_error(parent, _("Nothing was printed"), _("Details are in Logs."))
         return False

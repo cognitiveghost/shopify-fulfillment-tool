@@ -13,21 +13,23 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from shared.i18n import N_, _
 from shared.theme import current_tokens
 
+# The key combo stays as typed; the action is translated at display.
 SHORTCUTS = (
-    ("Ctrl+1 … Ctrl+5", "Go to Setup, Results, Browse, Logs, Tools"),
-    ("Ctrl+R", "Run analysis"),
-    ("Ctrl+F", "Search results"),
-    ("Ctrl+Z", "Undo the last change"),
-    ("F5", "Refresh the session list, on Browse"),
+    ("Ctrl+1 … Ctrl+5", N_("Go to Setup, Results, Browse, Logs, Tools")),
+    ("Ctrl+R", N_("Run analysis")),
+    ("Ctrl+F", N_("Search results")),
+    ("Ctrl+Z", N_("Undo the last change")),
+    ("F5", N_("Refresh the session list, on Browse")),
 )
 
 
 class ShortcutsDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Keyboard shortcuts")
+        self.setWindowTitle(_("Keyboard shortcuts"))
         # Opened from the overflow menu each time; don't keep one per open.
         self.setAttribute(Qt.WA_DeleteOnClose)
         layout = QVBoxLayout(self)
@@ -36,7 +38,7 @@ class ShortcutsDialog(QDialog):
         for combo, action in SHORTCUTS:
             keys = QLabel(combo)
             keys.setStyleSheet(f"font-family: {mono};")
-            form.addRow(keys, QLabel(action))
+            form.addRow(keys, QLabel(_(action)))
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)

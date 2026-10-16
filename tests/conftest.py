@@ -326,12 +326,21 @@ def clean_nav_setting():
     any test that builds a SettingsWindow would otherwise leave the developer's
     (and CI's) last-page setting behind and leak it into the next run."""
     store = QSettings("ShopifyFulfillmentTool", "FulfillmentApp")
-    keys = (SettingsWindow.NAV_SETTINGS_KEY, _COLLAPSED_KEY)
+    keys = (SettingsWindow.NAV_SETTINGS_KEY, _COLLAPSED_KEY, "language")
     for key in keys:
         store.remove(key)
     yield
     for key in keys:
         store.remove(key)
+
+
+@pytest.fixture(autouse=True)
+def english_ui():
+    """shared.i18n is process-global: a test that switched to BG must not leak it."""
+    from shared import i18n, relaunch
+    yield
+    i18n.set_language("en", [])
+    relaunch._reset()
 
 
 @pytest.fixture(autouse=True)

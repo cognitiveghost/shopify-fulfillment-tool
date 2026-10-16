@@ -10,10 +10,11 @@ import logging
 from PySide6.QtCore import QObject, QThreadPool, Signal
 from PySide6.QtWidgets import QMenu, QWidget
 
-from gui.client_settings_dialog import ClientCreationDialog, ClientSettingsDialog
+from gui.client_settings_dialog import ClientCreationDialog
 from gui.components import show_error
 from gui.groups_management_dialog import GroupsManagementDialog
 from gui.worker import Worker
+from shared.i18n import _
 from shopify_tool.groups_manager import GroupsManager
 from shopify_tool.profile_manager import ProfileManager
 
@@ -25,6 +26,7 @@ class ClientDirectory(QObject):
 
     loaded = Signal(dict)
     clientCreated = Signal(str)
+    editClientRequested = Signal(str)  # the client whose Profile page to open
 
     def __init__(
         self,
@@ -36,6 +38,11 @@ class ClientDirectory(QObject):
         self.profile_manager = profile_manager
         self.groups_manager = groups_manager
         self._refresh_workers = set()  # keeps in-flight refresh Workers alive
+        self.last_data: dict | None = None  # the last gather() result the GUI applied
+        self.loaded.connect(self._remember)
+
+    def _remember(self, data: dict) -> None:
+        self.last_data = data
 
     def gather(self) -> dict:
         """All the file-server IO refresh() needs, with zero Qt object
@@ -70,6 +77,7 @@ class ClientDirectory(QObject):
             "pinned_client_ids": pinned_client_ids,
             "group_members": group_members,
             "card_data": card_data,
+            "archived_ids": [c["client_id"] for c in self.profile_manager.list_archived_clients()],
         }
 
     def refresh(self) -> None:
@@ -90,7 +98,7 @@ class ClientDirectory(QObject):
         _exctype, value, _tb = error
         logger.error("Client directory refresh failed", exc_info=value)
         show_error(
-            self.parent(), "The client list didn't refresh", "Details are in Logs."
+            self.parent(), _("The client list didn't refresh"), _("Details are in Logs.")
         )
 
     def menu_for(self, client_id: str, parent: QWidget) -> QMenu:
@@ -100,14 +108,14 @@ class ClientDirectory(QObject):
         ui_settings = self.profile_manager.get_ui_settings(client_id)
         is_pinned = ui_settings.get("is_pinned", False)
 
-        pin_action = menu.addAction("Unpin" if is_pinned else "Pin to Top")
+        pin_action = menu.addAction(_("Unpin") if is_pinned else _("Pin to Top"))
         pin_action.triggered.connect(lambda: self._toggle_pin(client_id, parent))
 
-        edit_action = menu.addAction("Edit Settings...")
-        edit_action.triggered.connect(lambda: self._edit_client(client_id, parent))
+        edit_action = menu.addAction(_("Edit Settings..."))
+        edit_action.triggered.connect(lambda: self.editClientRequested.emit(client_id))
 
-        move_menu = menu.addMenu("Move to Group")
-        move_menu.addAction("(No group)").triggered.connect(
+        move_menu = menu.addMenu(_("Move to Group"))
+        move_menu.addAction(_("(No group)")).triggered.connect(
             lambda: self._move_to_group(client_id, None, parent)
         )
 
@@ -137,18 +145,7 @@ class ClientDirectory(QObject):
 
         except Exception:
             logger.exception("Failed to toggle pin")
-            show_error(parent, "The pin wasn't changed", "Details are in Logs.")
-
-    def _edit_client(self, client_id: str, parent: QWidget) -> None:
-        dialog = ClientSettingsDialog(
-            client_id=client_id,
-            profile_manager=self.profile_manager,
-            groups_manager=self.groups_manager,
-            parent=parent,
-        )
-
-        if dialog.exec():
-            self.refresh()
+            show_error(parent, _("The pin wasn't changed"), _("Details are in Logs."))
 
     def _move_to_group(
         self, client_id: str, group_id: str | None, parent: QWidget
@@ -162,7 +159,7 @@ class ClientDirectory(QObject):
 
         except Exception:
             logger.exception("Failed to move client to group")
-            show_error(parent, "The client wasn't moved", "Details are in Logs.")
+            show_error(parent, _("The client wasn't moved"), _("Details are in Logs."))
 
     def open_groups_dialog(self, parent: QWidget) -> None:
         dialog = GroupsManagementDialog(
@@ -175,10 +172,16 @@ class ClientDirectory(QObject):
             self.refresh()
 
     def open_create_client_dialog(self, parent: QWidget) -> None:
+        data = self.last_data or {"all_clients": [], "card_data": {}}
         dialog = ClientCreationDialog(
             profile_manager=self.profile_manager,
             groups_manager=self.groups_manager,
             parent=parent,
+            clients=[
+                (cid, (data["card_data"].get(cid, {}).get("client_name") or cid))
+                for cid in data["all_clients"]
+            ],
+            archived_ids=data.get("archived_ids", []),
         )
 
         if dialog.exec():

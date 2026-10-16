@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -256,6 +257,24 @@ def test_a_counted_run_draws_one_bar_that_never_goes_back(run, label, count, per
     assert card["run"]["bar"] is True
     assert card["run"]["percent"] == percent
     assert card["run"]["cancel"]["enabled"] is cancel
+
+
+def test_bulgarian_run_text_is_shown_while_the_raw_label_still_drives_logic():
+    """The label is translated where it is drawn; cancel() and the SAVING check compare the raw value."""
+    from shared import i18n
+
+    root = Path(__file__).resolve().parent.parent
+    i18n.set_language("bg", i18n.catalogue_files(root, "bg"))
+    try:
+        run = ToolRun(READING, 60, 120)
+        card = make_state(reference=reference(run=run))["reference"]
+        assert card["run"]["label"] == "Четене на етикетите"
+        assert run.label == READING
+        saving = make_state(reference=reference(run=ToolRun(SAVING, 120, 120)))["reference"]
+        assert saving["run"]["cancel"]["enabled"] is False
+        assert saving["run"]["cancel"]["title"] == "Запазването не може да се отмени"
+    finally:
+        i18n.set_language("en", [])
 
 
 def test_cancel_says_what_it_is_doing_and_why_it_cannot():

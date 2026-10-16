@@ -5,43 +5,58 @@
 "use strict";
 
 const COLUMN_GROUPS = ["Order", "Customer", "Money", "Shipping", "Tags & notes", "Other"];
+// The group headings as drawn; COLUMN_GROUPS is what the registry matches on.
+const GROUP_TITLES = {
+  "Order": () => t("Order"),
+  "Customer": () => t("Customer"),
+  "Money": () => t("Money"),
+  "Shipping": () => t("Shipping"),
+  "Tags & notes": () => t("Tags & notes"),
+  "Other": () => t("Other"),
+};
 
 const REGISTRY = [
-  { key: "status", title: "Status", group: "Order", width: 108, pinned: true, shown: true,
+  { key: "status", title: () => t("Status"), group: "Order", width: 108, pinned: true, shown: true,
     text: (o) => statusText(o), sortValue: (o) => (isFulfillable(o) ? 0 : 1) },
-  { key: "order", title: "Order", group: "Order", width: 64, pinned: true, shown: true, mono: true,
+  { key: "order", title: () => t("Order"), group: "Order", width: 64, pinned: true, shown: true, mono: true,
     text: (o) => str(o.Order_Number) },
-  { key: "customer", title: "Customer", group: "Customer", stretch: true, shown: true, text: (o) => str(o.Customer) },
-  { key: "lines", title: "Lines", group: "Order", width: 52, shown: true, numeric: true, mono: true,
+  { key: "customer", title: () => t("Customer"), group: "Customer", stretch: true, shown: true, text: (o) => str(o.Customer) },
+  { key: "lines", title: () => t("Lines"), group: "Order", width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtInt(o.Items), sortValue: (o) => num(o.Items) },
-  { key: "units", title: "Units", group: "Order", width: 52, shown: true, numeric: true, mono: true,
+  { key: "units", title: () => t("Units"), group: "Order", width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtInt(o.Units), sortValue: (o) => num(o.Units) },
-  { key: "value", title: "Value", group: "Money", width: 76, shown: true, numeric: true, mono: true,
+  { key: "value", title: () => t("Value"), group: "Money", width: 76, shown: true, numeric: true, mono: true,
     text: (o) => fmtMoney(o.Total_Price), sortValue: (o) => num(o.Total_Price) },
-  { key: "courier", title: "Courier", group: "Shipping", width: 72, shown: true, text: (o) => str(o.Shipping_Provider) },
-  { key: "age", title: "Age", group: "Order", width: 52, shown: true, numeric: true, mono: true,
+  { key: "courier", title: () => t("Courier"), group: "Shipping", width: 72, shown: true, text: (o) => str(o.Shipping_Provider) },
+  { key: "age", title: () => t("Age"), group: "Order", width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtAge(o.Created_At), sortValue: (o) => ageMs(o.Created_At) },
-  { key: "type", title: "Type", group: "Order", width: 64, maxWidth: 120, text: (o) => str(o.Order_Type) },
-  { key: "reason", title: "Reason", group: "Order", width: 120, maxWidth: 240, text: (o) => str(o.Blocker) },
-  { key: "country", title: "Country", group: "Customer", width: 64, maxWidth: 120, text: (o) => str(o.Destination_Country) },
-  { key: "subtotal", title: "Subtotal", group: "Money", width: 84, numeric: true, mono: true,
+  { key: "type", title: () => t("Type"), group: "Order", width: 64, maxWidth: 120, text: (o) => str(o.Order_Type) },
+  { key: "reason", title: () => t("Reason"), group: "Order", width: 120, maxWidth: 240, text: (o) => str(o.Blocker) },
+  { key: "country", title: () => t("Country"), group: "Customer", width: 64, maxWidth: 120, text: (o) => str(o.Destination_Country) },
+  { key: "subtotal", title: () => t("Subtotal"), group: "Money", width: 84, numeric: true, mono: true,
     text: (o) => fmtMoney(o.Subtotal), sortValue: (o) => num(o.Subtotal) },
-  { key: "method", title: "Shipping method", group: "Shipping", width: 120, maxWidth: 240, text: (o) => str(o.Shipping_Method) },
-  { key: "internal_tags", title: "Internal tags", group: "Tags & notes", width: 120, maxWidth: 240,
+  { key: "method", title: () => t("Shipping method"), group: "Shipping", width: 120, maxWidth: 240, text: (o) => str(o.Shipping_Method) },
+  { key: "internal_tags", title: () => t("Internal tags"), group: "Tags & notes", width: 120, maxWidth: 240,
     text: (o) => (o.Tag_List || []).map(String).join(", ") },
-  { key: "shopify_tags", title: "Shopify tags", group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Tags) },
-  { key: "notes", title: "Notes", group: "Tags & notes", width: 160, maxWidth: 240, text: (o) => str(o.Notes) },
-  { key: "status_note", title: "Status note", group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Status_Note) },
-  { key: "repeat", title: "Repeat", group: "Tags & notes", width: 76, shown: true, text: (o) => (o._repeat === true ? "Repeat" : "") },
+  { key: "shopify_tags", title: () => t("Shopify tags"), group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Tags) },
+  { key: "notes", title: () => t("Notes"), group: "Tags & notes", width: 160, maxWidth: 240, text: (o) => str(o.Notes) },
+  { key: "status_note", title: () => t("Status note"), group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Status_Note) },
+  { key: "repeat", title: () => t("Repeat"), group: "Tags & notes", width: 76, shown: true, text: (o) => (o._repeat === true ? t("Repeat") : "") },
 ];
 const PINNED_KEYS = REGISTRY.filter((c) => c.pinned).map((c) => c.key);
 
 function allColumns() {
   const extras = (state.columnSettings.extras || []).map((field) => ({
-    key: "extra:" + field, title: String(field).replace(/_/g, " "), group: "Other",
+    key: "extra:" + field, title: String(field).replace(/_/g, " "), group: "Other", extra: true,
     width: 120, maxWidth: 240, text: (o) => str(o[field]),
   }));
   return REGISTRY.concat(extras).map((col) => (col.sortValue ? col : Object.assign({ sortValue: col.text }, col)));
+}
+
+// A column's header as drawn. The registry's titles are the app's own, so they
+// translate; an additional column is named after the file's field, so it does not.
+function colTitle(col) {
+  return col.extra ? col.title : col.title();
 }
 
 // Pinned first, then the saved order, then everything else in registry order.
@@ -108,8 +123,10 @@ function renderColumnsPanel() {
   if (!els.columnsPanel.firstChild) buildColumnsChrome();
   const shown = visibleColumns().length;
   const total = allColumns().length;
-  document.getElementById("columns-count").textContent =
-    NUMBER.format(shown) + " shown · " + NUMBER.format(total - shown) + " hidden";
+  document.getElementById("columns-count").textContent = t("{shown} shown · {hidden} hidden", {
+    shown: NUMBER.format(shown),
+    hidden: NUMBER.format(total - shown),
+  });
   document.getElementById("hide-empty").checked = Boolean(state.columnSettings.auto_hide_empty);
   renderColumnRows();
 }
@@ -117,14 +134,14 @@ function renderColumnsPanel() {
 function buildColumnsChrome() {
   const panel = els.columnsPanel;
   const head = el("div", "columns-head");
-  head.append(el("div", "columns-title", "Columns"), el("div", "columns-count-line"));
+  head.append(el("div", "columns-title", t("Columns")), el("div", "columns-count-line"));
   head.lastChild.id = "columns-count";
 
   const search = el("input", "field columns-search");
   search.id = "columns-search";
   search.type = "search";
-  search.placeholder = "Find a column";
-  search.setAttribute("aria-label", "Find a column");
+  search.placeholder = t("Find a column");
+  search.setAttribute("aria-label", t("Find a column"));
   search.addEventListener("input", () => {
     columnQuery = search.value;
     renderColumnRows();
@@ -141,10 +158,10 @@ function buildColumnsChrome() {
   hideBox.addEventListener("change", () =>
     storeColumns({ auto_hide_empty: hideBox.checked }, (b) => b.setAutoHideEmpty(hideBox.checked)),
   );
-  hideLabel.append(hideBox, el("span", "", "Hide empty columns"));
-  const reset = paneButton("ghost compact", "Reset");
+  hideLabel.append(hideBox, el("span", "", t("Hide empty columns")));
+  const reset = paneButton("ghost compact", t("Reset"));
   reset.id = "columns-reset";
-  reset.title = "Reset to defaults";
+  reset.title = t("Reset to defaults");
   reset.addEventListener("click", () => storeColumns({ order: null, visible: null }, (b) => b.resetColumns()));
   foot.append(hideLabel, el("span", "spacer"), reset);
 
@@ -164,12 +181,14 @@ function renderColumnRows() {
   scroller.textContent = "";
   for (const group of COLUMN_GROUPS) {
     const cols = ordered.filter((c) => c.group === group);
-    const hits = cols.filter((c) => c.title.toLowerCase().includes(query));
+    const hits = cols.filter((c) => colTitle(c).toLowerCase().includes(query));
     if (!hits.length) continue;
-    const head = el("div", "col-group", group.toUpperCase() + " ");
+    const head = el("div", "col-group", GROUP_TITLES[group]().toUpperCase() + " ");
     head.dataset.group = group;
-    head.append(el("span", "col-group-count",
-      NUMBER.format(cols.filter((c) => visible.has(c.key)).length) + " of " + NUMBER.format(cols.length)));
+    head.append(el("span", "col-group-count", t("{shown} of {total}", {
+      shown: NUMBER.format(cols.filter((c) => visible.has(c.key)).length),
+      total: NUMBER.format(cols.length),
+    })));
     scroller.append(head);
     for (const col of hits) scroller.append(columnRow(col));
   }
@@ -193,13 +212,13 @@ function columnRow(col) {
   box.type = "checkbox";
   box.checked = userVisible(col);
   box.disabled = Boolean(col.pinned);
-  box.setAttribute("aria-label", col.title);
+  box.setAttribute("aria-label", colTitle(col));
   box.addEventListener("change", () => setColumnShown(col.key, box.checked));
   row.append(box);
 
-  const title = el("span", "col-title" + (hidden ? " muted" : ""), col.title);
-  title.title = col.title;
-  row.append(title, el("span", "col-note", col.pinned ? "pinned" : hidden ? "empty" : ""));
+  const title = el("span", "col-title" + (hidden ? " muted" : ""), colTitle(col));
+  title.title = colTitle(col);
+  row.append(title, el("span", "col-note", col.pinned ? t("pinned") : hidden ? t("empty") : ""));
 
   // Pinned rows accept a drop too -- moveColumn's floor is what keeps a drop
   // above the pinned pair legal, landing the moved column right after them.

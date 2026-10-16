@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from gui.pandas_model import cell_display_text
+from shared.i18n import N_, _, _n
 from shopify_tool.rules import RuleEngine
 from shopify_tool.stock_ledger import NOT_FULFILLABLE
 from shopify_tool.tag_manager import parse_tags
@@ -18,11 +19,11 @@ from shopify_tool.tag_manager import parse_tags
 LIMIT = 5
 # How many of an order's values Matched on spells out before it trails off.
 VALUES_SHOWN = 3
-HEADS = ["Order", "Matched on", "Change"]
-NO_CHANGE = "No change"
-NO_CHANGE_NOTE = "No change: the analysis already has the saved rules applied."
-NO_MATCH = "No order in this analysis matches."
-FAILED = "The rule test didn’t finish. Details are in Logs."
+HEADS = [N_("Order"), N_("Matched on"), N_("Change")]
+NO_CHANGE = N_("No change")
+NO_CHANGE_NOTE = N_("No change: the analysis already has the saved rules applied.")
+NO_MATCH = N_("No order in this analysis matches.")
+FAILED = N_("The rule test didn’t finish. Details are in Logs.")
 # The order fields the engine works out as a number. The others (has_sku and
 # its kin) answer yes or no about the condition's own value.
 NUMERIC_ORDER_FIELDS = (
@@ -45,7 +46,7 @@ def _order_keys(df: pd.DataFrame) -> pd.Series:
 
 
 def _orders_text(count: int) -> str:
-    return "1 order" if count == 1 else f"{count} orders"
+    return _n("{n} order", "{n} orders", count)
 
 
 def _view(rule: dict, session: str, status: str, **drawn) -> dict:
@@ -53,18 +54,18 @@ def _view(rule: dict, session: str, status: str, **drawn) -> dict:
     never has to ask whether one is there."""
     view = {
         "status": status,
-        "title": f"Test “{rule.get('name', '')}”",
+        "title": _("Test “{name}”", name=rule.get("name", "")),
         "intro": {
-            "lead": "Runs this rule, as edited, against the analysis in "
+            "lead": _("Runs this rule, as edited, against the analysis in ")
             if session
-            else "Runs this rule, as edited, against the last analysis",
+            else _("Runs this rule, as edited, against the last analysis"),
             "session": session,
-            "tail": ". Orders aren’t changed.",
+            "tail": _(". Orders aren’t changed."),
         },
         "message": "",
         "matched": "",
         "total": "",
-        "heads": HEADS,
+        "heads": [_(head) for head in HEADS],
         "rows": [],
         "more": "",
         "empty": "",
@@ -76,11 +77,11 @@ def _view(rule: dict, session: str, status: str, **drawn) -> dict:
 
 def running_view(rule: dict, df: pd.DataFrame, session: str = "") -> dict:
     total = _order_keys(df).nunique(dropna=False)
-    return _view(rule, session, "running", message=f"Testing {_orders_text(total)}…")
+    return _view(rule, session, "running", message=_("Testing {orders}…", orders=_orders_text(total)))
 
 
 def failed_view(rule: dict, session: str = "") -> dict:
-    return _view(rule, session, "failed", message=FAILED)
+    return _view(rule, session, "failed", message=_(FAILED))
 
 
 def _number(value) -> str:
@@ -100,7 +101,7 @@ def _matched_on(rule: dict, engine: RuleEngine, order: pd.DataFrame, lines: pd.D
                 continue
             seen.add(field)
             if field in order.columns:
-                values = list(dict.fromkeys(cell_display_text(v) or "empty" for v in lines[field]))
+                values = list(dict.fromkeys(cell_display_text(v) or _("empty") for v in lines[field]))
                 # "; " and not ", ": a value can hold commas (Tags: VIP, repeat).
                 shown = "; ".join(values[:VALUES_SHOWN])
                 if len(values) > VALUES_SHOWN:
@@ -136,7 +137,7 @@ def _change(before: pd.DataFrame, after: pd.DataFrame, added: pd.DataFrame) -> s
         if changed.any():
             value = _texts(after, status)[changed][0]
             # A rule can only hold an order (spec 2026-09-26 D3).
-            parts.append("Held" if value == NOT_FULFILLABLE else f"{status} → {value}")
+            parts.append(_("Held") if value == NOT_FULFILLABLE else f"{status} → {value}")
 
     for column in after.columns:
         if column in _UNLISTED:
@@ -153,7 +154,7 @@ def _change(before: pd.DataFrame, after: pd.DataFrame, added: pd.DataFrame) -> s
     for _label, line in added.iterrows():
         sku = cell_display_text(line.get("SKU"))
         parts.append(f"+ {sku} ×{cell_display_text(line.get('Quantity'))}")
-    return ", ".join(parts) or NO_CHANGE
+    return ", ".join(parts)
 
 
 def run_rule_test(rule: dict, df: pd.DataFrame, session: str = "", limit: int = LIMIT) -> dict:
@@ -181,8 +182,8 @@ def run_rule_test(rule: dict, df: pd.DataFrame, session: str = "", limit: int = 
             {
                 "order": cell_display_text(orders[code]),
                 "why": _matched_on(rule, engine, df[of_order], df[lines]),
-                "change": change,
-                "changed": change != NO_CHANGE,
+                "change": change or _(NO_CHANGE),
+                "changed": bool(change),
             }
         )
 
@@ -193,9 +194,9 @@ def run_rule_test(rule: dict, df: pd.DataFrame, session: str = "", limit: int = 
         session,
         "done",
         matched=str(len(hit)),
-        total="of 1 order matches" if total == 1 else f"of {total} orders match",
+        total=_n("of {n} order matches", "of {n} orders match", total),
         rows=rows,
-        more=f"and {more} more" if more else "",
-        empty="" if len(hit) else NO_MATCH,
-        note=NO_CHANGE_NOTE if any(not row["changed"] for row in rows) else "",
+        more=_("and {count} more", count=more) if more else "",
+        empty="" if len(hit) else _(NO_MATCH),
+        note=_(NO_CHANGE_NOTE) if any(not row["changed"] for row in rows) else "",
     )

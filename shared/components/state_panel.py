@@ -20,6 +20,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from shared.components.card import Card
+from shared.i18n import _
 from shared.theme import font_css, on_theme_changed, set_button_role
 
 
@@ -95,13 +96,13 @@ class StatePanel(QWidget):
         return cls(title, step, parent=parent)
 
     @classmethod
-    def no_results(cls, title, cause, action_text="Clear all filters", parent=None):
+    def no_results(cls, title, cause, action_text=None, parent=None):
         """A filter emptied the list. Secondary, because the operator may
         actually want the empty answer."""
         return cls(
             title,
             cause,
-            action_text=action_text,
+            action_text=action_text or _("Clear all filters"),
             action_role="secondary",
             parent=parent,
         )

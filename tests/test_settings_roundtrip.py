@@ -188,8 +188,11 @@ def test_every_page_shares_one_widget_in_the_stack(window):
 
     host = window._web_host
     assert window.tab_widget.count() == 1
-    assert sorted(WEB_PAGE_KEYS) == sorted(window._pages_by_name)
-    for name, key in WEB_PAGE_KEYS.items():
+    # Profile is a page only for a window given a profile (this one is not).
+    without_profile = [name for name in WEB_PAGE_KEYS if name != "Profile"]
+    assert sorted(without_profile) == sorted(window._pages_by_name)
+    for name in without_profile:
+        key = WEB_PAGE_KEYS[name]
         window._select_page(name)
         assert window.tab_widget.currentWidget() is host
         assert host.bridge.state["page"] == key

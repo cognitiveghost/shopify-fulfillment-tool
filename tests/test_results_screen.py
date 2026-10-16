@@ -295,7 +295,7 @@ def test_the_column_layout_round_trips_through_the_client_config(
     main_window.schedule_results_columns_save(layout)
     qtbot.waitUntil(lambda: profiles.saved == 1, timeout=5000)
     assert profiles.client["ui_settings"]["results_columns"] == layout
-    _shopify, settings = main_window._load_client_data("ACME")
+    _shopify, settings, _timings = main_window._load_client_data("ACME")
     assert settings == layout
 
 

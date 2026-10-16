@@ -22,6 +22,9 @@ from PySide6.QtWidgets import (
 )
 
 from gui.components.commandbar import BAR_HEIGHT
+from shared import i18n
+from shared.components.language_segment import LanguageSegment
+from shared.i18n import _
 from shared.icons import icon
 from shared.navrail import RAIL_WIDTH, NavRail
 from shared.theme import current_tokens, font_css, on_theme_changed
@@ -37,6 +40,7 @@ class Sidebar(QWidget):
 
     settingsRequested = Signal()
     themeRequested = Signal(str)
+    languageRequested = Signal(str)
     retryRequested = Signal()
     expandedChanged = Signal(bool)
 
@@ -67,8 +71,8 @@ class Sidebar(QWidget):
         self.mark.setAlignment(Qt.AlignCenter)
         self.title = QLabel("Fulfilment Tool", self.header)
         self.title.setMinimumWidth(0)
-        self.collapse_button = self._icon_button("Collapse sidebar", 28, 28)
-        self.expand_button = self._icon_button("Expand sidebar", 40, 32)
+        self.collapse_button = self._icon_button(_("Collapse sidebar"), 28, 28)
+        self.expand_button = self._icon_button(_("Expand sidebar"), 40, 32)
         self.collapse_button.clicked.connect(lambda: self._toggle(False))
         self.expand_button.clicked.connect(lambda: self._toggle(True))
         header.addWidget(self.mark)
@@ -87,9 +91,17 @@ class Sidebar(QWidget):
         footer.setContentsMargins(8, 8, 8, 8)
         footer.setSpacing(6)
 
+        # Hidden until UpdateFlow has a newer release to offer.
+        self.update_button = QToolButton(self.footer)
+        self.update_button.setObjectName("UpdateButton")
+        self.update_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.update_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.update_button.hide()
+        footer.addWidget(self.update_button)
+
         self.settings_button = QToolButton(self.footer)
-        self.settings_button.setText("Client settings")
-        self.settings_button.setToolTip("Client settings")
+        self.settings_button.setText(_("Client settings"))
+        self.settings_button.setToolTip(_("Client settings"))
         self.settings_button.setAutoRaise(True)
         self.settings_button.clicked.connect(self.settingsRequested.emit)
         footer.addWidget(self.settings_button)
@@ -99,8 +111,8 @@ class Sidebar(QWidget):
         segment = QHBoxLayout(self.theme_segment)
         segment.setContentsMargins(2, 2, 2, 2)
         segment.setSpacing(2)
-        self.light_button = self._segment_button("Light")
-        self.dark_button = self._segment_button("Dark")
+        self.light_button = self._segment_button(_("Light"))
+        self.dark_button = self._segment_button(_("Dark"))
         group = QButtonGroup(self.theme_segment)
         group.setExclusive(True)
         for button, name in ((self.light_button, "light"), (self.dark_button, "dark")):
@@ -108,6 +120,11 @@ class Sidebar(QWidget):
             segment.addWidget(button)
             button.clicked.connect(lambda _c=False, n=name: self.themeRequested.emit(n))
         footer.addWidget(self.theme_segment)
+
+        self.language_segment = LanguageSegment(self.footer)
+        self.language_segment.set_language(i18n.language())
+        self.language_segment.languageRequested.connect(self.languageRequested.emit)
+        footer.addWidget(self.language_segment)
 
         self.theme_toggle = self._icon_button("", 40, 32)
         self.theme_toggle.clicked.connect(
@@ -136,7 +153,7 @@ class Sidebar(QWidget):
         self.connection_label = QLabel(self.connection_box)
         self.path_label = QLabel(self.connection_box)
         self.path_label.setFixedWidth(_PATH_WIDTH)
-        self.retry_button = QPushButton("Retry", self.connection_box)
+        self.retry_button = QPushButton(_("Retry"), self.connection_box)
         self.retry_button.setObjectName("RetryButton")
         self.retry_button.setFixedHeight(24)
         self.retry_button.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
@@ -190,13 +207,14 @@ class Sidebar(QWidget):
         self.setFixedWidth(SIDEBAR_WIDTH if expanded else RAIL_WIDTH)
         self.rail.set_expanded(expanded)
         for widget in (self.mark, self.title, self.collapse_button,
-                       self.theme_segment, self.connection_box):
+                       self.theme_segment, self.language_segment, self.connection_box):
             widget.setVisible(expanded)
         for widget in (self.expand_button, self.theme_toggle, self.connection_icon):
             widget.setVisible(not expanded)
-        self.settings_button.setToolButtonStyle(
-            Qt.ToolButtonTextBesideIcon if expanded else Qt.ToolButtonIconOnly
-        )
+        for button in (self.settings_button, self.update_button):
+            button.setToolButtonStyle(
+                Qt.ToolButtonTextBesideIcon if expanded else Qt.ToolButtonIconOnly
+            )
         self.settings_button.setFixedSize(
             (SIDEBAR_WIDTH if expanded else RAIL_WIDTH) - 16, 32
         )
@@ -208,14 +226,16 @@ class Sidebar(QWidget):
     def set_connection(self, connected: bool, server_path: str) -> None:
         self._connected = connected
         self._server_path = server_path
-        label = "Server connected" if connected else "Server unreachable"
+        label = _("Server connected") if connected else _("Server unreachable")
         self.connection_label.setText(label)
         metrics = QFontMetrics(self.path_label.font())
         self.path_label.setText(
             metrics.elidedText(server_path, Qt.ElideMiddle, _PATH_WIDTH)
         )
         self.path_label.setToolTip(server_path)
-        self.connection_icon.setToolTip(f"{label} · {server_path}")
+        self.connection_icon.setToolTip(
+            _("{label} · {server_path}", label=label, server_path=server_path)
+        )
         self.retry_button.setVisible(not connected)
         self._style_connection(current_tokens())
 
@@ -223,7 +243,7 @@ class Sidebar(QWidget):
         self._theme_name = name
         (self.dark_button if name == "dark" else self.light_button).setChecked(True)
         self.theme_toggle.setToolTip(
-            "Switch to Light" if name == "dark" else "Switch to Dark"
+            _("Switch to Light") if name == "dark" else _("Switch to Dark")
         )
         self.theme_toggle.setIcon(icon("sun" if name == "dark" else "moon"))
 
@@ -256,13 +276,21 @@ class Sidebar(QWidget):
             f" background-color: {t.hover}; }}"
             f"#SidebarFooter QToolButton:disabled {{ color: {t.text_disabled}; }}"
             f"#SidebarFooter > QToolButton {{ padding-left: {pad}px; }}"
-            f"#ThemeSegment {{ background-color: {t.surface_sunken};"
+            f"#ThemeSegment, #LanguageSegment {{ background-color: {t.surface_sunken};"
             f" border: 1px solid {t.border}; border-radius: 8px; }}"
-            f"#ThemeSegment QToolButton {{ border-radius: 6px; {font_css('caption')} }}"
-            f"#ThemeSegment QToolButton:checked {{ background-color: {t.surface};"
-            f" border: 1px solid {t.border_subtle}; color: {t.text}; font-weight: bold; }}"
+            f"#ThemeSegment QToolButton, #LanguageSegment QToolButton {{ border-radius: 6px;"
+            f" {font_css('caption')} }}"
+            f"#ThemeSegment QToolButton:checked, #LanguageSegment QToolButton:checked {{"
+            f" background-color: {t.surface}; border: 1px solid {t.border_subtle};"
+            f" color: {t.text}; font-weight: bold; }}"
+            f"#UpdateButton {{ background-color: {t.accent_fill}; color: {t.on_accent};"
+            f" border: none; border-radius: 6px; padding: 4px 8px; {font_css('caption', bold=True)} }}"
+            f"#UpdateButton:hover {{ background-color: {t.accent_fill_hover}; }}"
+            f"#UpdateButton:disabled {{ background-color: {t.accent_fill_active};"
+            f" color: {t.on_accent}; }}"
         )
         self.mark.setPixmap(icon("package", color=t.on_accent).pixmap(16, 16))
+        self.update_button.setIcon(icon("download", color=t.on_accent))
         self.collapse_button.setIcon(icon("panel-left-close"))
         self.expand_button.setIcon(icon("panel-left-open"))
         self.settings_button.setIcon(icon("settings"))

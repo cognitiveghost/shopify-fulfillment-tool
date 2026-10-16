@@ -7,6 +7,7 @@ groups the rows it is given and decides none of them.
 
 from datetime import datetime
 
+from shared.i18n import N_, _
 from shopify_tool.session_lifecycle import (
     DISPLAY_STATUSES,
     IN_FLIGHT,
@@ -17,6 +18,20 @@ from shopify_tool.session_lifecycle import (
     packing_completion,
 )
 from shopify_tool.session_manager import SessionManager
+
+# The row's status word, drawn in the PC's language. A status not listed here
+# is shown as its stored name, as it always was.
+_STATUS_LABELS = {
+    "active": N_("Active"),
+    "not_started": N_("Not started"),
+    "in_progress": N_("In progress"),
+    "paused": N_("Paused"),
+    "stale": N_("Stale"),
+    "completed": N_("Completed"),
+    "incomplete": N_("Incomplete"),
+    "abandoned": N_("Abandoned"),
+    "archived": N_("Archived"),
+}
 
 # A status with no entry here is neutral: not started, abandoned, archived,
 # and any status this build has never heard of.
@@ -89,7 +104,7 @@ def _row(entry: dict, now: datetime) -> dict:
         "age_title": age_title,
         "age_warn": age_warn,
         "status": status,
-        "label": status.replace("_", " ").capitalize(),
+        "label": _(_STATUS_LABELS[status]) if status in _STATUS_LABELS else status.replace("_", " ").capitalize(),
         "tone": _TONES.get(status, "neutral"),
         "dot": _dot(status),
         "tab": _tab(entry),
@@ -101,7 +116,7 @@ def _row(entry: dict, now: datetime) -> dict:
         "pack_pct": round(packed / total * 100) if has_pack else 0,
         "pack_tone": pack_tone,
         "pack_title": (
-            f"{packed} of {total} packing lists completed in Packing Tool"
+            _("{packed} of {total} packing lists completed in Packing Tool", packed=packed, total=total)
             if has_pack
             else ""
         ),

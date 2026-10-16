@@ -9,6 +9,7 @@ abstraction this phase keeps deleting.
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
+from shared.i18n import _
 from shared.theme import current_tokens, font_css, on_theme_changed, set_button_role
 
 
@@ -36,7 +37,7 @@ class FilterBar(QWidget):
         layout.setSpacing(8)
 
         self.search_field = QLineEdit(self)
-        self.search_field.setPlaceholderText("Search")
+        self.search_field.setPlaceholderText(_("Search"))
         self.search_field.setClearButtonEnabled(True)
         self.search_field.textChanged.connect(self.searchChanged.emit)
         layout.addWidget(self.search_field, 1)

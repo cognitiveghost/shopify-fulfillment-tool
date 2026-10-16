@@ -21,6 +21,7 @@ from gui.rule_validator import condition_error, validate_list
 from gui.settings.contract import PageContract
 from gui.settings.fields import ACTION_TYPES, CONDITION_OPERATORS
 from gui.settings.page_state import _shaped
+from shared.i18n import N_, _, _n
 from shopify_tool.core import get_unique_column_values
 from shopify_tool.rules import RuleEngine, _parse_date_safe
 from shopify_tool.stock_ledger import NOT_FULFILLABLE
@@ -49,57 +50,61 @@ EQUALITY_OPERATORS = ("equals", "does not equal")
 SUGGESTION_LIMIT = 200
 MAX_QUANTITY = 9999
 
-SUBTITLE = "Change orders at the end of each analysis. Rules run top to bottom."
-ADD_RULE = "Add rule"
-EMPTY_TITLE = "No rules yet"
-EMPTY_TEXT = "Rules change orders at the end of each analysis, e.g. tag VIP orders."
+SUBTITLE = N_("Change orders at the end of each analysis. Rules run top to bottom.")
+ADD_RULE = N_("Add rule")
+EMPTY_TITLE = N_("No rules yet")
+EMPTY_TEXT = N_("Rules change orders at the end of each analysis, e.g. tag VIP orders.")
+# A saved name: stored as it is, so not translated.
 NEW_RULE_NAME = "New rule"
-UNNAMED = "Unnamed rule"
-CLEAR_FILTER = "Clear the filter to reorder"
+UNNAMED = N_("Unnamed rule")
+CLEAR_FILTER = N_("Clear the filter to reorder")
 GROUPS = {
-    "article": ("Article rules", "Check one order line at a time."),
-    "order": ("Order rules", "Check the whole order. Run after every article rule."),
+    "article": (N_("Article rules"), N_("Check one order line at a time.")),
+    "order": (N_("Order rules"), N_("Check the whole order. Run after every article rule.")),
 }
-LEVEL_LABEL = {"article": "Article", "order": "Order"}
+LEVEL_LABEL = {"article": N_("Article"), "order": N_("Order")}
+LEVEL_WORD = {"article": N_("article"), "order": N_("order")}
 LEVEL_HINT = {
-    "article": "Checks one order line at a time.",
-    "order": "Checks the whole order. Runs after every article rule.",
+    "article": N_("Checks one order line at a time."),
+    "order": N_("Checks the whole order. Runs after every article rule."),
 }
-NO_CONDITION = "No condition yet, so this rule never matches."
-NO_ACTION = "No action yet."
-TEST_NO_ANALYSIS = "Run an analysis first. Test needs its orders."
-TEST_NO_CONDITION = "Add a condition first."
-TEST_BLOCKED = "Fix the marked value first."
-NOT_AVAILABLE = "Not available"
-NO_FIELD = "Choose a field. Until then this condition never matches."
-NO_DATE = "Pick a date. Until then this condition never matches."
-QUANTITY_PROBLEM = f"Type a whole number from 1 to {MAX_QUANTITY}."
-HOLD_HINT = "Holds every line of the order and returns its stock."
-RETIRED_ONE = "Writes the Status_Note text, not a tag. Use Add internal tag for a real tag."
-RETIRED_MANY = "Writes the Status_Note text, not tags. Use one Add internal tag per tag."
-NO_OPERATOR = "This condition has no operator, so it never matches."
-UNKNOWN_ACTION = "This version does not know this action, so it does nothing."
+ROW_WORD = {"condition": N_("condition"), "action": N_("action")}
+NO_CONDITION = N_("No condition yet, so this rule never matches.")
+NO_ACTION = N_("No action yet.")
+TEST_NO_ANALYSIS = N_("Run an analysis first. Test needs its orders.")
+TEST_NO_CONDITION = N_("Add a condition first.")
+TEST_BLOCKED = N_("Fix the marked value first.")
+NOT_AVAILABLE = N_("Not available")
+NO_FIELD = N_("Choose a field. Until then this condition never matches.")
+NO_DATE = N_("Pick a date. Until then this condition never matches.")
+QUANTITY_PROBLEM_TEMPLATE = N_("Type a whole number from 1 to {max}.")
+QUANTITY_PROBLEM = QUANTITY_PROBLEM_TEMPLATE.format(max=MAX_QUANTITY)
+HOLD_HINT = N_("Holds every line of the order and returns its stock.")
+RETIRED_ONE = N_("Writes the Status_Note text, not a tag. Use Add internal tag for a real tag.")
+RETIRED_MANY = N_("Writes the Status_Note text, not tags. Use one Add internal tag per tag.")
+NO_OPERATOR = N_("This condition has no operator, so it never matches.")
+UNKNOWN_ACTION = N_("This version does not know this action, so it does nothing.")
 
 ACTION_LABELS = {
-    "ADD_INTERNAL_TAG": "Add internal tag",
-    "REMOVE_INTERNAL_TAG": "Remove internal tag",
-    "SET_STATUS": "Hold the order",
-    "COPY_FIELD": "Copy field",
-    "CALCULATE": "Calculate",
-    "ALERT_NOTIFICATION": "Log an alert",
-    "ADD_PRODUCT": "Add bonus line",
-    "ADD_TAG": "Add status note (retired)",
-    "ADD_ORDER_TAG": "Add status note (retired)",
-    "SET_MULTI_TAGS": "Add status notes (retired)",
+    "ADD_INTERNAL_TAG": N_("Add internal tag"),
+    "REMOVE_INTERNAL_TAG": N_("Remove internal tag"),
+    "SET_STATUS": N_("Hold the order"),
+    "COPY_FIELD": N_("Copy field"),
+    "CALCULATE": N_("Calculate"),
+    "ALERT_NOTIFICATION": N_("Log an alert"),
+    "ADD_PRODUCT": N_("Add bonus line"),
+    "ADD_TAG": N_("Add status note (retired)"),
+    "ADD_ORDER_TAG": N_("Add status note (retired)"),
+    "SET_MULTI_TAGS": N_("Add status notes (retired)"),
 }
 # (stored value, the menu's label, the summary's sign)
 OPERATIONS = (
-    ("add", "plus", "+"),
-    ("subtract", "minus", "−"),
-    ("multiply", "times", "×"),
-    ("divide", "divided by", "÷"),
+    ("add", N_("plus"), "+"),
+    ("subtract", N_("minus"), "−"),
+    ("multiply", N_("times"), "×"),
+    ("divide", N_("divided by"), "÷"),
 )
-SEVERITIES = (("info", "Info"), ("warning", "Warning"), ("error", "Error"))
+SEVERITIES = (("info", N_("Info")), ("warning", N_("Warning")), ("error", N_("Error")))
 _CHOICES = {
     "operation": [(value, label) for value, label, _sign in OPERATIONS],
     "severity": list(SEVERITIES),
@@ -108,28 +113,28 @@ _SIGN = {value: sign for value, _label, sign in OPERATIONS}
 
 # type -> its parameters, in the order the row draws them:
 # (name, kind, placeholder, the word or sign drawn before it).
-_TAG = (("value", "suggest", "Tag", ""),)
-_NOTE = (("value", "text", "Value", ""),)
+_TAG = (("value", "suggest", N_("Tag"), ""),)
+_NOTE = (("value", "text", N_("Value"), ""),)
 ACTION_PARAMS = {
     "ADD_INTERNAL_TAG": _TAG,
     "REMOVE_INTERNAL_TAG": _TAG,
     "SET_STATUS": (),
     "COPY_FIELD": (
         ("source", "field", "", ""),
-        ("target", "text", "Target column", "→"),
+        ("target", "text", N_("Target column"), "→"),
     ),
     "CALCULATE": (
         ("field1", "field", "", ""),
         ("operation", "choice", "", ""),
         ("field2", "field", "", ""),
-        ("target", "text", "Result column", "→"),
+        ("target", "text", N_("Result column"), "→"),
     ),
     "ALERT_NOTIFICATION": (
-        ("message", "text", "Alert message", ""),
+        ("message", "text", N_("Alert message"), ""),
         ("severity", "choice", "", ""),
     ),
     "ADD_PRODUCT": (
-        ("sku", "text", "Product SKU", ""),
+        ("sku", "text", N_("Product SKU"), ""),
         ("quantity", "number", "", "×"),
     ),
     "ADD_TAG": _NOTE,
@@ -160,8 +165,8 @@ def rule_fields(level: str, analysis_df) -> list[tuple[str, list[str]]]:
     """
     groups = []
     if level == "order":
-        groups.append(("Order fields", list(RuleEngine.ORDER_LEVEL_FIELDS)))
-    groups.append(("Common fields", list(COMMON_FIELDS)))
+        groups.append((N_("Order fields"), list(RuleEngine.ORDER_LEVEL_FIELDS)))
+    groups.append((N_("Common fields"), list(COMMON_FIELDS)))
     if analysis_df is not None and not analysis_df.empty:
         other = sorted(
             column
@@ -169,7 +174,7 @@ def rule_fields(level: str, analysis_df) -> list[tuple[str, list[str]]]:
             if not column.startswith("_") and column not in COMMON_FIELDS
         )
         if other:
-            groups.append(("Other fields in this analysis", other))
+            groups.append((N_("Other fields in this analysis"), other))
     return groups
 
 
@@ -258,10 +263,6 @@ def _loaded_step(stored: dict) -> dict:
     }
 
 
-def _plural(count: int, word: str) -> str:
-    return f"{count} {word}" if count == 1 else f"{count} {word}s"
-
-
 def _part(kind: str, text) -> dict:
     return {"t": kind, "v": _text(text)}
 
@@ -274,34 +275,34 @@ def _action_parts(action: dict) -> list[dict]:
         return [_part("chip", v) for v in values if _text(v) != ""]
 
     if kind in ("ADD_INTERNAL_TAG", "REMOVE_INTERNAL_TAG"):
-        return [_part("text", ACTION_LABELS[kind]), *chips(action.get("value"))]
+        return [_part("text", _(ACTION_LABELS[kind])), *chips(action.get("value"))]
     if kind == "SET_STATUS":
-        return [_part("text", ACTION_LABELS[kind])]
+        return [_part("text", _(ACTION_LABELS[kind]))]
     if kind == "COPY_FIELD":
         return [
-            _part("text", "Copy"),
+            _part("text", _("Copy")),
             *chips(action.get("source")),
-            _part("text", "to"),
+            _part("text", _("to")),
             *chips(action.get("target")),
         ]
     if kind == "CALCULATE":
         sign = _SIGN.get(_text(action.get("operation")), "?")
         sum_text = f"{_text(action.get('field1'))} {sign} {_text(action.get('field2'))}"
         return [
-            _part("text", "Calculate"),
+            _part("text", _("Calculate")),
             _part("chip", sum_text),
-            _part("text", "into"),
+            _part("text", _("into")),
             *chips(action.get("target")),
         ]
     if kind == "ALERT_NOTIFICATION":
-        return [_part("text", ACTION_LABELS[kind]), *chips(action.get("message"))]
+        return [_part("text", _(ACTION_LABELS[kind])), *chips(action.get("message"))]
     if kind == "ADD_PRODUCT":
         line = f"{_text(action.get('sku'))} ×{_text(action.get('quantity', 1))}"
-        return [_part("text", ACTION_LABELS[kind]), _part("chip", line)]
+        return [_part("text", _(ACTION_LABELS[kind])), _part("chip", line)]
     if kind in ("ADD_TAG", "ADD_ORDER_TAG"):
-        return [_part("text", "Add status note"), *chips(action.get("value"))]
+        return [_part("text", _("Add status note")), *chips(action.get("value"))]
     if kind == "SET_MULTI_TAGS":
-        return [_part("text", "Add status notes"), *chips(action.get("value"))]
+        return [_part("text", _("Add status notes")), *chips(action.get("value"))]
     return [_part("text", _text(action.get("type")))]
 
 
@@ -693,25 +694,28 @@ class RulesDraft(PageContract):
         if error:
             return error, "", True
         if not field:
-            return NO_FIELD, "", False
+            return _(NO_FIELD), "", False
         if not self._resolvable(field, rule["level"]):
-            unread = (
-                f"“{field}” is not a field an {rule['level']} rule can read, "
-                "so this condition never matches."
+            unread = _(
+                "“{field}” is not a field an {level} rule can read, "
+                "so this condition never matches.",
+                field=field,
+                level=_(LEVEL_WORD[rule["level"]]),
             )
             return unread, "", False
         if operator not in CONDITION_OPERATORS:
             if not operator:
-                return NO_OPERATOR, "", False
-            unknown = (
-                f"“{operator}” is not an operator this version knows, "
-                "so this condition never matches."
+                return _(NO_OPERATOR), "", False
+            unknown = _(
+                "“{operator}” is not an operator this version knows, "
+                "so this condition never matches.",
+                operator=operator,
             )
             return unknown, "", False
         if value_kind(operator) == "date" and not self._iso_date(value):
-            return NO_DATE, "", False
+            return _(NO_DATE), "", False
         if operator in LIST_OPERATORS:
-            return "", _plural(validate_list(value)[1], "item"), False
+            return "", _n("{n} item", "{n} items", validate_list(value)[1]), False
         return "", "", False
 
     def _action_report(self, action: dict) -> tuple[str, str, bool]:
@@ -719,16 +723,16 @@ class RulesDraft(PageContract):
         kind = _kind(action)
         if kind == "ADD_PRODUCT":
             if not _valid_quantity(action.get("quantity", 1)):
-                return QUANTITY_PROBLEM, "", True
+                return _(QUANTITY_PROBLEM_TEMPLATE, max=MAX_QUANTITY), "", True
             return "", "", False
         if kind == "SET_STATUS":
-            return "", HOLD_HINT, False
+            return "", _(HOLD_HINT), False
         if kind in ("ADD_TAG", "ADD_ORDER_TAG"):
-            return "", RETIRED_ONE, False
+            return "", _(RETIRED_ONE), False
         if kind == "SET_MULTI_TAGS":
-            return "", RETIRED_MANY, False
+            return "", _(RETIRED_MANY), False
         if kind not in ACTION_PARAMS:
-            return UNKNOWN_ACTION, "", False
+            return _(UNKNOWN_ACTION), "", False
         return "", "", False
 
     def _blocking(self, rule: dict) -> list[tuple[int, str, int, str, str]]:
@@ -760,7 +764,9 @@ class RulesDraft(PageContract):
         if blocked is None:
             return None
         position, rule, _row = blocked
-        return f"Fix rule “{rule['name']}”" if rule["name"] else f"Fix rule {position + 1:02d}"
+        if rule["name"]:
+            return _("Fix rule “{name}”", name=rule["name"])
+        return _("Fix rule {number}", number=f"{position + 1:02d}")
 
     def blocker_key(self) -> str:
         blocked = self._first_blocked()
@@ -769,12 +775,26 @@ class RulesDraft(PageContract):
     def validate(self) -> tuple[bool, list[str]]:
         """Refuse to save a rule the page marks red (AUDIT-03-5)."""
         errors = [
-            f"{called}, step {s}, {row} {n}: {message}"
+            _(
+                "{called}, step {step}, {row} {n}: {message}",
+                called=called,
+                step=s,
+                row=_(ROW_WORD[row]),
+                n=n,
+                message=message,
+            )
             for position, rule in enumerate(self.rules)
-            for called in [f"Rule “{rule['name']}”" if rule["name"] else f"Rule {position + 1:02d}"]
+            for called in [self._rule_label(rule, position)]
             for s, row, n, message, _key in self._blocking(rule)
         ]
         return not errors, errors
+
+    @staticmethod
+    def _rule_label(rule: dict, position: int) -> str:
+        """What a message calls a rule: its name, or its place in the list."""
+        if rule["name"]:
+            return _("Rule “{name}”", name=rule["name"])
+        return _("Rule {number}", number=f"{position + 1:02d}")
 
     # --- the contract ------------------------------------------------------
 
@@ -812,28 +832,28 @@ class RulesDraft(PageContract):
     def _summary(self, rule: dict) -> list[dict]:
         lines = []
         for s, step in enumerate(rule["steps"]):
-            join = "or" if step["match"] == "ANY" else "and"
+            join = _("or") if step["match"] == "ANY" else _("and")
             when = []
             for c, condition in enumerate(step["conditions"]):
                 if c:
                     when.append(_part("join", join))
                 when.append(_part("bold", condition["field"]))
-                when.append(_part("text", condition["operator"]))
+                when.append(_part("text", _(condition["operator"])))
                 value = _text(condition["value"])
                 if value_kind(condition["operator"]) != "none" and value != "":
                     when.append(_part("chip", value))
             then = []
             for a, action in enumerate(step["actions"]):
                 if a:
-                    then.append(_part("join", "and"))
+                    then.append(_part("join", _("and")))
                 then.extend(_action_parts(action))
             lines.append(
                 {
-                    "label": "And when" if s else "When",
-                    "parts": when or [_part("muted", NO_CONDITION)],
+                    "label": _("And when") if s else _("When"),
+                    "parts": when or [_part("muted", _(NO_CONDITION))],
                 }
             )
-            lines.append({"label": "Then", "parts": then or [_part("muted", NO_ACTION)]})
+            lines.append({"label": _("Then"), "parts": then or [_part("muted", _(NO_ACTION))]})
         return lines
 
     def _row_problem(self, rule: dict) -> str:
@@ -841,10 +861,11 @@ class RulesDraft(PageContract):
         if not blocking:
             return ""
         s, row, n, message, _key = blocking[0]
-        where = f"{row.capitalize()} {n}"
         if len(rule["steps"]) > 1:
-            where = f"Step {s}, {row} {n}"
-        return f"{where}: {message}"
+            where = _("Step {step}, {row} {n}", step=s, row=_(ROW_WORD[row]), n=n)
+        else:
+            where = _("{row} {n}", row=_(ROW_WORD[row]).capitalize(), n=n)
+        return _("{where}: {message}", where=where, message=message)
 
     def _condition_view(self, rule: dict, condition: dict) -> dict:
         field, operator = condition["field"], condition["operator"]
@@ -861,14 +882,14 @@ class RulesDraft(PageContract):
             # A stored field the level does not offer: listed first, and kept.
             "extra_field": None
             if offered or not field
-            else {"value": field, "note": "" if resolvable else NOT_AVAILABLE},
+            else {"value": field, "note": "" if resolvable else _(NOT_AVAILABLE)},
             "field_invalid": not resolvable,
             "operator": operator,
             "extra_operator": None if operator in CONDITION_OPERATORS else operator,
             "value": {
                 "kind": kind,
                 "text": self._iso_date(text) if kind == "date" else text,
-                "placeholder": _PLACEHOLDER.get(operator, "Value"),
+                "placeholder": _PLACEHOLDER.get(operator) or _("Value"),
                 "suggestions": suggestions[:SUGGESTION_LIMIT],
             },
             "problem": problem,
@@ -887,12 +908,12 @@ class RulesDraft(PageContract):
             if value and value not in options:
                 extra = value
         elif kind == "choice":
-            options = [{"value": v, "label": label} for v, label in _CHOICES[name]]
+            options = [{"value": v, "label": _(label)} for v, label in _CHOICES[name]]
         return {
             "name": name,
             "kind": kind,
             "value": value,
-            "placeholder": placeholder,
+            "placeholder": _(placeholder),
             "lead": lead,
             "options": options,
             "extra": extra,
@@ -902,7 +923,7 @@ class RulesDraft(PageContract):
     def _action_view(self, action: dict) -> dict:
         kind = _kind(action)
         problem, hint, blocks = self._action_report(action)
-        label = ACTION_LABELS.get(kind, _text(action.get("type")))
+        label = _(ACTION_LABELS[kind]) if kind in ACTION_LABELS else _text(action.get("type"))
         return {
             "type": kind,
             "label": label,
@@ -923,21 +944,21 @@ class RulesDraft(PageContract):
         note = ""
         if several and s:
             note = (
-                f"Runs only if step {s} matched."
+                _("Runs only if step {step} matched.", step=s)
                 if rule["level"] == "order"
-                else f"Checks only the lines step {s} matched."
+                else _("Checks only the lines step {step} matched.", step=s)
             )
         return {
-            "title": f"Step {s + 1}" if several else "",
+            "title": _("Step {step}", step=s + 1) if several else "",
             "note": note,
             "removable": s > 0,
             "match": {
                 "show": len(step["conditions"]) > 1,
                 "options": [
                     {"value": value, "label": label, "checked": step["match"] == value}
-                    for value, label in (("ALL", "All"), ("ANY", "Any"))
+                    for value, label in (("ALL", _("All")), ("ANY", _("Any")))
                 ],
-                "tail": "of these match",
+                "tail": _("of these match"),
             },
             "conditions": [self._condition_view(rule, c) for c in step["conditions"]],
             "actions": [self._action_view(a) for a in step["actions"]],
@@ -949,20 +970,20 @@ class RulesDraft(PageContract):
                 "options": [
                     {
                         "value": level,
-                        "label": LEVEL_LABEL[level],
+                        "label": _(LEVEL_LABEL[level]),
                         "checked": rule["level"] == level,
                     }
                     for level in LEVELS
                 ],
-                "hint": LEVEL_HINT[rule["level"]],
+                "hint": _(LEVEL_HINT[rule["level"]]),
             },
             "field_groups": [
-                {"label": label, "fields": fields}
+                {"label": _(label), "fields": fields}
                 for label, fields in rule_fields(rule["level"], self.analysis_df)
             ],
             "operators": list(CONDITION_OPERATORS),
             "action_types": [
-                {"value": kind, "label": ACTION_LABELS[kind]} for kind in ACTION_TYPES
+                {"value": kind, "label": _(ACTION_LABELS[kind])} for kind in ACTION_TYPES
             ],
             "steps": [
                 self._step_view(rule, s, step) for s, step in enumerate(rule["steps"])
@@ -979,17 +1000,17 @@ class RulesDraft(PageContract):
             "num": f"{position + 1:02d}",
             "name": rule["name"],
             # What the row calls the rule: a rule can be saved with no name.
-            "label": rule["name"] or UNNAMED,
+            "label": rule["name"] or _(UNNAMED),
             "on": rule["enabled"],
             "open": is_open,
-            "switch_title": "Turn off" if rule["enabled"] else "Turn on",
-            "badge": "" if rule["enabled"] else "Off",
+            "switch_title": _("Turn off") if rule["enabled"] else _("Turn on"),
+            "badge": "" if rule["enabled"] else _("Off"),
             "can_up": not filtering and place > 0,
             "can_down": not filtering and place < len(group) - 1,
             "can_drag": not filtering and len(group) > 1,
-            "move_title": CLEAR_FILTER if filtering else "",
+            "move_title": _(CLEAR_FILTER) if filtering else "",
             "can_test": not untestable,
-            "test_title": untestable,
+            "test_title": _(untestable),
             "summary": self._summary(rule),
             "wide_labels": len(rule["steps"]) > 1,
             "problem": self._row_problem(rule),
@@ -1013,23 +1034,29 @@ class RulesDraft(PageContract):
             ]
             if rows:
                 label, note = GROUPS[level] if both else ("", "")
-                groups.append({"level": level, "label": label, "note": note, "rows": rows})
+                groups.append(
+                    {"level": level, "label": _(label), "note": _(note), "rows": rows}
+                )
         on = sum(1 for rule in self.rules if rule["enabled"])
         return {
             "page": "rules",
-            "title": "Rules",
-            "subtitle": SUBTITLE,
+            "title": _("Rules"),
+            "subtitle": _(SUBTITLE),
             # With no rule the empty state holds the button.
-            "action": ADD_RULE if self.rules else "",
+            "action": _(ADD_RULE) if self.rules else "",
             "rules": {
                 "empty": None
                 if self.rules
-                else {"title": EMPTY_TITLE, "text": EMPTY_TEXT, "action": ADD_RULE},
+                else {"title": _(EMPTY_TITLE), "text": _(EMPTY_TEXT), "action": _(ADD_RULE)},
                 "filter": self.filter,
-                "filter_placeholder": "Filter by name",
+                "filter_placeholder": _("Filter by name"),
                 "filtering": bool(needle),
-                "count": f"{_plural(len(self.rules), 'rule')} · {on} on",
-                "no_hits": f"No rules named “{self.filter.strip()}”."
+                "count": _(
+                    "{rules} · {on} on",
+                    rules=_n("{n} rule", "{n} rules", len(self.rules)),
+                    on=on,
+                ),
+                "no_hits": _("No rules named “{name}”.", name=self.filter.strip())
                 if self.rules and not groups
                 else "",
                 "groups": groups,

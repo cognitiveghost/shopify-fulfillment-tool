@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
+from shared.i18n import N_, _
 from shared.icons import glyph_url
 from shopify_tool.report_filters import match_counts
 
@@ -59,7 +60,7 @@ class _BaseReportDialog(QDialog):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 6, 0)
 
-        list_label = QLabel("Available Reports")
+        list_label = QLabel(_("Available Reports"))
         list_label.setStyleSheet(f"{font_css('label')} padding-bottom: 4px;")
         left_layout.addWidget(list_label)
 
@@ -83,10 +84,10 @@ class _BaseReportDialog(QDialog):
         layout.setContentsMargins(6, 0, 0, 0)
 
         # Preview group
-        preview_group = QGroupBox("Preview")
+        preview_group = QGroupBox(_("Preview"))
         preview_layout = QVBoxLayout(preview_group)
 
-        self.preview_orders_label = QLabel("Select a report to see preview")
+        self.preview_orders_label = QLabel(_("Select a report to see preview"))
         self.preview_orders_label.setStyleSheet(f"{font_css('body')} padding: 2px;")
         preview_layout.addWidget(self.preview_orders_label)
 
@@ -107,7 +108,7 @@ class _BaseReportDialog(QDialog):
         layout.addStretch()
 
         # Generate button
-        self.generate_btn = QPushButton("Generate Report")
+        self.generate_btn = QPushButton(_("Generate Report"))
         self.generate_btn.setMinimumHeight(40)
         self.generate_btn.setEnabled(False)
         set_button_role(self.generate_btn, "primary")
@@ -123,12 +124,14 @@ class _BaseReportDialog(QDialog):
         """Fill the report list from reports_config."""
         self.report_list.clear()
         for cfg in self.reports_config:
-            name = cfg.get("name", "Unnamed Report")
+            name = cfg.get("name", _("Unnamed Report"))
             filters = cfg.get("filters", [])
             item = QListWidgetItem(name)
             item.setData(Qt.UserRole, cfg)
             item.setToolTip(
-                f"Filters: {len(filters)} active" if filters else "No filters"
+                _("Filters: {count} active", count=len(filters))
+                if filters
+                else _("No filters")
             )
             self.report_list.addItem(item)
 
@@ -137,7 +140,7 @@ class _BaseReportDialog(QDialog):
         if row < 0:
             self._selected_config = None
             self.generate_btn.setEnabled(False)
-            self.preview_orders_label.setText("Select a report to see preview")
+            self.preview_orders_label.setText(_("Select a report to see preview"))
             self.preview_filters_text.setPlainText("")
             return
 
@@ -164,12 +167,16 @@ class _BaseReportDialog(QDialog):
                     self._preview_cache[cache_key] = match_counts(filtered)
                 num_orders, num_rows = self._preview_cache[cache_key]
                 self.preview_orders_label.setText(
-                    f"Matching: {num_orders} orders · {num_rows} rows"
+                    _(
+                        "Matching: {num_orders} orders · {num_rows} rows",
+                        num_orders=num_orders,
+                        num_rows=num_rows,
+                    )
                 )
             except Exception:
-                self.preview_orders_label.setText("Preview unavailable")
+                self.preview_orders_label.setText(_("Preview unavailable"))
         else:
-            self.preview_orders_label.setText("Run analysis first to see preview")
+            self.preview_orders_label.setText(_("Run analysis first to see preview"))
 
         # Format filters description
         if filters:
@@ -181,7 +188,9 @@ class _BaseReportDialog(QDialog):
                 lines.append(f"• {field} {op} {val}")
             self.preview_filters_text.setPlainText("\n".join(lines))
         else:
-            self.preview_filters_text.setPlainText("(no filters — includes all data)")
+            self.preview_filters_text.setPlainText(
+                _("(no filters — includes all data)")
+            )
 
     def _build_emit_config(self):
         """Build the config dict to emit. Override to inject extra fields."""
@@ -226,7 +235,7 @@ class GenerateReportsDialog(_BaseReportDialog):
         # Read by _add_extra_sections, which runs inside super().__init__.
         self._writeoff_mode = writeoff_mode
         super().__init__(
-            "Generate Reports",
+            _("Generate Reports"),
             [],  # reports_config unused here -- _populate_list is overridden
             analysis_df,
             apply_filters_fn,
@@ -236,7 +245,7 @@ class GenerateReportsDialog(_BaseReportDialog):
 
     def _init_ui(self):
         super()._init_ui()
-        self.footer_label = QLabel("0 selected")
+        self.footer_label = QLabel(_("{count} selected", count=0))
         self.layout().addWidget(self.footer_label)
 
         # Every row is checkable; Qt's default edit triggers open a text
@@ -273,23 +282,27 @@ class GenerateReportsDialog(_BaseReportDialog):
         sep.setFrameShadow(QFrame.Sunken)
         layout.addWidget(sep)
 
-        writeoff_group = QGroupBox("Packaging write-off")
+        writeoff_group = QGroupBox(_("Packaging write-off"))
         writeoff_layout = QVBoxLayout(writeoff_group)
 
-        self.writeoff_off = QRadioButton("Leave packaging materials out")
-        self.writeoff_merged = QRadioButton("Include them in the stock export")
-        self.writeoff_separate = QRadioButton("Write them to a file of their own")
+        self.writeoff_off = QRadioButton(_("Leave packaging materials out"))
+        self.writeoff_merged = QRadioButton(_("Include them in the stock export"))
+        self.writeoff_separate = QRadioButton(_("Write them to a file of their own"))
         # The client's last choice (AUDIT-10-2): it used to reset to "off" every time.
         {"merged": self.writeoff_merged, "separate": self.writeoff_separate}.get(
             self._writeoff_mode, self.writeoff_off
         ).setChecked(True)
         self.writeoff_merged.setToolTip(
-            "Orders carrying a packaging tag add its packaging SKU as extra "
-            "rows in the same export (e.g. 'BOX' adds PKG-BOX-SMALL)."
+            _(
+                "Orders carrying a packaging tag add its packaging SKU as extra "
+                "rows in the same export (e.g. 'BOX' adds PKG-BOX-SMALL)."
+            )
         )
         self.writeoff_separate.setToolTip(
-            "Packaging SKUs go to <name>_packaging.xls beside the stock export, "
-            "so the warehouse system imports the two separately."
+            _(
+                "Packaging SKUs go to <name>_packaging.xls beside the stock export, "
+                "so the warehouse system imports the two separately."
+            )
         )
         for button in (
             self.writeoff_off,
@@ -303,13 +316,13 @@ class GenerateReportsDialog(_BaseReportDialog):
     def _populate_list(self):
         """Fill the list with both kinds under section headers."""
         self.report_list.clear()
-        self.generate_btn.setText("Generate Selected Reports")
+        self.generate_btn.setText(_("Generate Selected Reports"))
 
         for kind, title, configs in (
-            ("packing_lists", "PACKING LISTS", self._packing_configs),
-            ("stock_exports", "STOCK EXPORTS", self._stock_configs),
+            ("packing_lists", N_("PACKING LISTS"), self._packing_configs),
+            ("stock_exports", N_("STOCK EXPORTS"), self._stock_configs),
         ):
-            header_item = QListWidgetItem(title)
+            header_item = QListWidgetItem(_(title))
             header_item.setFlags(Qt.NoItemFlags)
             header_item.setData(Qt.UserRole, _SECTION_HEADER_MARKER)
             header_font = header_item.font()
@@ -319,14 +332,16 @@ class GenerateReportsDialog(_BaseReportDialog):
             self.report_list.addItem(header_item)
 
             for index, cfg in enumerate(configs):
-                name = cfg.get("name", "Unnamed Report")
+                name = cfg.get("name", _("Unnamed Report"))
                 filters = cfg.get("filters", [])
                 item = QListWidgetItem(name)
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Unchecked)
                 item.setData(Qt.UserRole, (kind, index, cfg))
                 item.setToolTip(
-                    f"Filters: {len(filters)} active" if filters else "No filters"
+                    _("Filters: {count} active", count=len(filters))
+                    if filters
+                    else _("No filters")
                 )
                 self.report_list.addItem(item)
 
@@ -354,7 +369,7 @@ class GenerateReportsDialog(_BaseReportDialog):
             if self.report_list.item(i).data(Qt.UserRole) != _SECTION_HEADER_MARKER
             and self.report_list.item(i).checkState() == Qt.Checked
         )
-        self.footer_label.setText(f"{self._checked_count} selected")
+        self.footer_label.setText(_("{count} selected", count=self._checked_count))
         self.generate_btn.setEnabled(self._checked_count > 0)
 
     def set_checked(self, kind, index, checked):

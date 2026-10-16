@@ -805,3 +805,16 @@ def test_a_smaller_window_keeps_a_following_list_at_its_end(qtbot, page):
         " return l.scrollHeight - l.scrollTop - l.clientHeight <= 4; })()",
     )
     assert _eval(qtbot, view, "document.querySelector('#follow').checked") is True
+
+
+def test_bg_page_draws_its_words_in_bulgarian(qtbot):
+    """ADR 0021: with the PC set to BG, the page's own words come out in BG."""
+    import gui_main
+    from shared import i18n
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    view, _bridge = _mount(qtbot)
+    assert _eval(qtbot, view, "document.querySelector('#empty-title').textContent") == (
+        "Още няма записи"
+    )
+

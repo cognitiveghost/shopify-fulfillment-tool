@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style id="theme-vars">/* theme-vars */</style>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="../../shared/web/page.js" defer></script>
+<script defer>
+document.addEventListener("DOMContentLoaded", () => {
+  new QWebChannel(qt.webChannelTransport, (channel) => {
+    const bridge = channel.objects.bridge;
+    applyStrings(bridge);
+    document.getElementById("built").textContent = t("{n} of {m}", {n: 2, m: 5});
+    document.getElementById("plural").textContent = tn("{n} order", "{n} orders", 3);
+    document.documentElement.dataset.bridge = "ready";
+  });
+});
+</script>
+</head>
+<body>
+<button id="save" data-i18n> Save
+  now </button>
+<input id="search" data-i18n-attr="placeholder,title" placeholder="Search" title="Find">
+<p id="missing" data-i18n>Not translated</p>
+<p id="built"></p><p id="plural"></p>
+</body>
+</html>

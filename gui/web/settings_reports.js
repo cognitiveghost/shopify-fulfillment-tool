@@ -14,7 +14,7 @@ const REPORT_FILTER = {
   op: "filter-op",
   value: "filter_value",
   remove: "filter-remove",
-  removeLabel: "Remove filter",
+  removeLabel: () => t("Remove filter"),
 };
 
 function reportMatch(match) {
@@ -28,7 +28,7 @@ function reportColumns(uid, columns) {
   const chips = columns.chips
     .map(
       (name) =>
-        `<span class="chip"><span class="mono">${esc(name)}</span><button class="chip-remove" type="button" title="Remove" aria-label="Remove ${esc(name)}" data-act="report-column-remove" data-uid="${uid}" data-name="${esc(name)}" data-key="${esc(`${key}-column-remove:${name}`)}">${svg(GLYPH.x, "glyph")}</button></span>`,
+        `<span class="chip"><span class="mono">${esc(name)}</span><button class="chip-remove" type="button" title="${t("Remove")}" aria-label="${esc(t("Remove {name}", { name }))}" data-act="report-column-remove" data-uid="${uid}" data-name="${esc(name)}" data-key="${esc(`${key}-column-remove:${name}`)}">${svg(GLYPH.x, "glyph")}</button></span>`,
     )
     .join("");
   const items = columns.candidates
@@ -37,7 +37,7 @@ function reportColumns(uid, columns) {
   return `<div class="report-chips">
       ${chips}
       <div class="menu-anchor">
-        <button class="btn ghost compact add-row" type="button" aria-haspopup="menu" aria-expanded="${open}" title="${esc(columns.add_title)}" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(!columns.candidates.length)}>${svg(GLYPH.plus, "glyph")}Add column</button>
+        <button class="btn ghost compact add-row" type="button" aria-haspopup="menu" aria-expanded="${open}" title="${esc(columns.add_title)}" data-act="menu" data-menu="${menuName}" data-key="${menuName}"${off(!columns.candidates.length)}>${svg(GLYPH.plus, "glyph")}${t("Add column")}</button>
         ${open ? `<div class="menu editor-menu" role="menu">${items}</div>` : ""}
       </div>
     </div>
@@ -53,32 +53,32 @@ function reportEditor(row) {
     .join("");
   const exclude = e.exclude
     ? `<div class="editor-line">
-        <span class="editor-label">Exclude SKUs</span>
+        <span class="editor-label">${t("Exclude SKUs")}</span>
         <div class="editor-content">
-          <input class="field mono" type="text" value="${esc(e.exclude.value)}" placeholder="${esc(e.exclude.placeholder)}" aria-label="Exclude SKUs" data-input="report_exclude" data-uid="${uid}" data-key="${key}-exclude">
+          <input class="field mono" type="text" value="${esc(e.exclude.value)}" placeholder="${esc(e.exclude.placeholder)}" aria-label="${t("Exclude SKUs")}" data-input="report_exclude" data-uid="${uid}" data-key="${key}-exclude">
           <span class="hint">${esc(e.exclude.hint)}</span>
         </div>
       </div>`
     : "";
   const columns = e.columns
     ? `<div class="editor-line">
-        <span class="editor-label">Columns</span>
+        <span class="editor-label">${t("Columns")}</span>
         <div class="editor-content">${reportColumns(uid, e.columns)}</div>
       </div>`
     : "";
   return `<div class="list-editor">
     <div class="editor-line">
-      <span class="editor-label">File name</span>
+      <span class="editor-label">${t("File name")}</span>
       <div class="editor-content">
-        <div class="control-line"><input class="field mono report-filename" type="text" value="${esc(row.filename)}" aria-label="File name" data-input="report_filename" data-uid="${uid}" data-key="${key}-filename"><span class="hint">${esc(e.filename_hint)}</span></div>
+        <div class="control-line"><input class="field mono report-filename" type="text" value="${esc(row.filename)}" aria-label="${t("File name")}" data-input="report_filename" data-uid="${uid}" data-key="${key}-filename"><span class="hint">${esc(e.filename_hint)}</span></div>
         ${row.note ? problemLine(row.note) : ""}
       </div>
     </div>
     <div class="editor-line">
-      <span class="editor-label">Filters</span>
+      <span class="editor-label">${t("Filters")}</span>
       <div class="editor-content">
         ${filters}
-        <button class="btn ghost compact add-row" type="button" data-act="filter-add" data-uid="${uid}" data-count="${e.filters.length}" data-key="${key}-filter-add">${svg(GLYPH.plus, "glyph")}Add filter</button>
+        <button class="btn ghost compact add-row" type="button" data-act="filter-add" data-uid="${uid}" data-count="${e.filters.length}" data-key="${key}-filter-add">${svg(GLYPH.plus, "glyph")}${t("Add filter")}</button>
         <span class="hint">${esc(e.filters_hint)}</span>
         ${reportMatch(row.match)}
       </div>
@@ -87,7 +87,7 @@ function reportEditor(row) {
     ${columns}
     <div class="editor-foot">
       <span class="spacer"></span>
-      <button class="btn secondary" type="button" data-act="report-close" data-uid="${uid}" data-key="${key}-done">Done</button>
+      <button class="btn secondary" type="button" data-act="report-close" data-uid="${uid}" data-key="${key}-done">${t("Done")}</button>
     </div>
   </div>`;
 }
@@ -95,7 +95,7 @@ function reportEditor(row) {
 function reportRow(row) {
   const key = `report-${row.uid}`;
   const name = row.open
-    ? `<input class="field list-name-field" type="text" value="${esc(row.name)}" placeholder="Report name" aria-label="Report name" data-input="report_name" data-uid="${row.uid}" data-key="${key}-name">`
+    ? `<input class="field list-name-field" type="text" value="${esc(row.name)}" placeholder="${t("Report name")}" aria-label="${t("Report name")}" data-input="report_name" data-uid="${row.uid}" data-key="${key}-name">`
     : `<button class="list-name" type="button" data-act="report-open" data-uid="${row.uid}" data-key="${key}-name">${esc(row.label)}</button><span class="list-muted mono">${esc(row.filename)}</span>`;
   const below = row.open
     ? ""
@@ -110,9 +110,9 @@ function reportRow(row) {
       ${below}
     </div>
     <div class="list-actions">
-      ${move("up", RULE_GLYPH.up, row.can_up, "Move up")}
-      ${move("down", GLYPH.chevron, row.can_down, "Move down")}
-      <button class="btn ghost compact icon" type="button" title="Delete report" aria-label="Delete report" data-act="report-delete" data-uid="${row.uid}" data-key="${key}-delete">${svg(GLYPH.x, "glyph")}</button>
+      ${move("up", RULE_GLYPH.up, row.can_up, t("Move up"))}
+      ${move("down", GLYPH.chevron, row.can_down, t("Move down"))}
+      <button class="btn ghost compact icon" type="button" title="${t("Delete report")}" aria-label="${t("Delete report")}" data-act="report-delete" data-uid="${row.uid}" data-key="${key}-delete">${svg(GLYPH.x, "glyph")}</button>
     </div>
     ${row.open ? reportEditor(row) : ""}
   </div>`;

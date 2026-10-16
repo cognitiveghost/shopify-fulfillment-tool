@@ -102,6 +102,25 @@ def opened(rules, analysis_df=None, **kwargs):
 # --- loading -----------------------------------------------------------------
 
 
+def test_a_rule_saved_under_bg_stores_its_english_names(analysis_df):
+    """Translate at display, never identity: the page shows the Bulgarian
+    names, and the saved rule keeps the English values the engine matches."""
+    import gui_main
+    from shared import i18n
+
+    i18n.set_language("bg", i18n.catalogue_files(gui_main.APP_ROOT, "bg"))
+    draft = opened(
+        [rule(conditions=[cond("SKU", "does not equal", "x")], actions=[tag("VIP")])],
+        analysis_df,
+    )
+    shown = [part["v"] for line in rows(draft)[0]["summary"] for part in line["parts"]]
+    assert "не е равно на" in shown
+    assert "Добави вътрешен таг" in shown
+    saved = stored(draft)[0]["steps"][0]
+    assert saved["conditions"][0]["operator"] == "does not equal"
+    assert saved["actions"][0]["type"] == "ADD_INTERNAL_TAG"
+
+
 def test_rules_load_in_the_order_the_engine_runs_them():
     given = [
         rule("o1", "order", priority=1),
