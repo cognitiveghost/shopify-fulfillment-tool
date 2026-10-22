@@ -48,8 +48,10 @@ def atomic_write_json(path, data, *, indent=2, ensure_ascii=False, retries=3, re
         tmp_path = None
         try:
             fd, tmp_str = tempfile.mkstemp(
-                dir=path.parent, prefix=f".{path.stem}_tmp_", suffix=path.suffix
+                dir=path.parent, prefix=f".{path.stem}_tmp_", suffix=".tmp"
             )
+            # Not `path.suffix`: a complete `.json` temp file would match the
+            # `*.json` scans of the folder (packing lists) until it is renamed.
             tmp_path = Path(tmp_str)
             # fdopen owns fd from here: its `with` closes it on success and on
             # failure, so a second os.close() would raise EBADF over the real

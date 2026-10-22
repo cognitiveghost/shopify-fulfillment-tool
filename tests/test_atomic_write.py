@@ -37,3 +37,17 @@ def test_replace_with_retry_does_not_retry_other_errors(tmp_path, monkeypatch):
     with pytest.raises(FileNotFoundError):
         replace_with_retry(tmp_path / "a.tmp", tmp_path / "a.json")
     assert len(calls) == 1
+
+
+def test_temp_file_does_not_match_a_json_scan(tmp_path, monkeypatch):
+    # Packing lists are found by `*.json`; a temp file must not be one.
+    seen = []
+    real = os.replace
+
+    def spy(src, dst, *args, **kwargs):
+        seen.extend(p.name for p in tmp_path.glob("*.json"))
+        return real(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(os, "replace", spy)
+    atomic_write.atomic_write_json(tmp_path / "ALL.json", {"orders": []})
+    assert seen == []

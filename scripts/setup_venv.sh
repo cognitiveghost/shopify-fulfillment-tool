@@ -19,12 +19,21 @@ have_deps() { [ -x "$1/bin/python" ] && "$1/bin/python" -c "import PySide6, pyte
 MAIN=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo)
 MAIN=${MAIN%/.git}
 
+# A floor bump in requirements must reach an existing venv too (zebrafy 2.0
+# was missed). Best effort: an offline run keeps the venv it has.
+resync() {
+    "$1/bin/python" -m pip install -q -r requirements.txt -r requirements-dev.txt \
+        || echo "venv: could not re-sync with requirements (offline?), using it as is" >&2
+}
+
 if have_deps "$REPO/.venv"; then
     echo "venv: already good"
+    resync "$REPO/.venv"
 elif [ -n "$MAIN" ] && [ "$MAIN" != "$REPO" ] && have_deps "$MAIN/.venv"; then
     rm -rf "$REPO/.venv"
     ln -s "$MAIN/.venv" "$REPO/.venv"
     echo "venv: linked -> $MAIN/.venv"
+    resync "$MAIN/.venv"
 else
     # Bare `python3` is NOT safe to trust here. On this machine
     # /usr/local/bin/python3 shadows the system one and its ensurepip fails, so
@@ -56,8 +65,6 @@ else
     "$REPO/.venv/bin/python" -m pip install -q -r requirements.txt -r requirements-dev.txt
 fi
 
-# A floor bump in requirements must reach the shared venv (zebrafy 2.0 was missed).
-"$REPO/.venv/bin/python" -m pip install -q -r requirements.txt -r requirements-dev.txt
 
 have_deps "$REPO/.venv" || { echo "venv still missing PySide6/pytest — see errors above." >&2; exit 1; }
 

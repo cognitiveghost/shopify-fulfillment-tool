@@ -1315,6 +1315,11 @@ def _save_results_and_reports(
                 worksheet.set_row(row_num + 1, None, highlight_format)
     logger.info(f"Excel report saved to '{output_file_path}'")
 
+    # The packing data is built before history and any state file is written,
+    # so a build error fails the run and leaves the previous run's files in place.
+    if use_session_mode and analysis_data is None:
+        analysis_data = _create_analysis_data_for_packing(final_df)
+
     # Record this session's orders in fulfillment history. Before the stats
     # file is written, so it carries any warning.
     if history_readable:
@@ -1335,11 +1340,6 @@ def _save_results_and_reports(
     # Save initial state files (current_state.pkl, analysis_stats.json). No
     # current_state.xlsx: fulfillment_analysis.xlsx above is the readable copy
     # of the run, and an edit no longer mirrors its state to Excel (AUDIT-07-H2).
-    # The packing data is built before any state file is written, so a build
-    # error fails the run and leaves the previous run's files in place.
-    if use_session_mode and analysis_data is None:
-        analysis_data = _create_analysis_data_for_packing(final_df)
-
     if use_session_mode:
         try:
             logger.info("Saving initial session state files...")
@@ -1350,11 +1350,8 @@ def _save_results_and_reports(
             )
             atomic_write_json(Path(analysis_dir) / "analysis_stats.json", stats)
             logger.info("Initial session state files saved successfully")
-        except PermissionError:
-            logger.exception("Permission denied saving session state files")
-            # The run still succeeds: history and inventory memory are already saved.
-            stats["state_warning"] = STATE_WARNING
         except Exception:
+            # The run still succeeds: history and inventory memory are already saved.
             logger.exception("Could not save the session state files")
             stats["state_warning"] = STATE_WARNING
 
@@ -1408,18 +1405,22 @@ def _save_results_and_reports(
 
         except PermissionError:
             logger.exception("Permission denied exporting analysis data")
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
         except OSError:
             logger.exception(
                 "File system error exporting analysis data (disk full or invalid path?)"
             )
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
         except SessionManagerError:
             logger.exception("Session manager error updating session info")
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
         except Exception:
             logger.exception("Unexpected error exporting analysis data")
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
 
     # Persist inventory memory if enabled (or unconditionally update the SKU snapshot)
     if (

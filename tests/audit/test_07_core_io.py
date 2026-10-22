@@ -311,6 +311,16 @@ def test_AUDIT_07_M3_a_failed_state_save_is_reported(sessions, analysis_run):
     assert _save_failure_reported(ok, stats)
 
 
+def test_a_failed_packer_data_export_is_reported(sessions, analysis_run):
+    path = sessions.create_session("M")
+    # analysis_data.json is what the packer reads; a stale one must not be silent.
+    (Path(path) / "analysis" / "analysis_data.json").mkdir(parents=True)
+
+    ok, _msg, _df, stats = analysis_run(path)
+
+    assert _save_failure_reported(ok, stats)
+
+
 # --------------------------------------------------------------------------
 # AUDIT-07-M4: the replace-retry window is shorter than a slow read
 # --------------------------------------------------------------------------
