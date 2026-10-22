@@ -18,7 +18,7 @@
   height: 100%;
   padding: 16px 24px 20px;
   display: grid;
-  grid-template-rows: 88px var(--control-height) minmax(0, 1fr);
+  grid-template-rows: 88px auto minmax(0, 1fr);
   row-gap: var(--spacing-md);
   container-type: inline-size;
 }
@@ -87,6 +87,7 @@
 
 .filterbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-sm);
   min-width: 0;
@@ -102,7 +103,7 @@
   white-space: nowrap;
 }
 
-.chips { display: flex; gap: var(--spacing-sm); min-width: 0; overflow: hidden; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); min-width: 0; }
 
 /* A filter chip states its filter; only its x removes it. */
 .chip-filter {

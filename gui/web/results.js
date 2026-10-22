@@ -315,6 +315,13 @@ function recompute() {
 
 // --- rendering ----------------------------------------------------------------
 
+// A filter, search or mode change starts the list at the top. Sort and row
+// clicks must not jump, so they call render() directly.
+function filterChanged() {
+  els.scroller.scrollTop = 0;
+  render();
+}
+
 function render() {
   recompute();
   renderChips();
@@ -424,7 +431,7 @@ function renderChips() {
     remove.innerHTML = svg(X_MARK, "glyph");
     remove.addEventListener("click", () => {
       toggleChip(chip);
-      render();
+      filterChanged();
     });
     // The text node is the space a reader hears; flex ignores it for layout.
     box.append(key, " ", value, remove);
@@ -480,7 +487,7 @@ function renderMenu() {
       button.addEventListener("click", () => {
         toggleChip(item);
         closeMenu();
-        render();
+        filterChanged();
       });
       els.menu.appendChild(button);
     }
@@ -808,7 +815,7 @@ function clearFilters() {
   state.query = "";
   els.search.value = "";
   state.chips = [];
-  render();
+  filterChanged();
 }
 
 // A different session is opening (bridge.sessionEpoch): nothing of the last
@@ -872,11 +879,11 @@ function bind() {
 
   els.search.addEventListener("input", () => {
     state.query = els.search.value.trim().toLowerCase();
-    render();
+    filterChanged();
   });
   els.searchPrefix.addEventListener("change", () => {
     state.prefix = els.searchPrefix.checked;
-    render();
+    filterChanged();
   });
   els.addFilter.addEventListener("click", () => (els.menu.hidden ? openMenu() : closeMenu()));
   els.menu.addEventListener("keydown", (e) => {

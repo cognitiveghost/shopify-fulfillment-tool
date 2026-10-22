@@ -396,6 +396,50 @@ def test_chips_and_across_groups_and_or_within_one(qtbot, doc):
     _count_is(qtbot, view, "312 orders")
 
 
+def test_a_filter_change_starts_the_list_at_the_top(qtbot, doc):
+    view, _ = doc
+    _eval(qtbot, view, "document.getElementById('scroller').scrollTop = 2000; true")
+    _until_js(qtbot, view, "document.getElementById('scroller').scrollTop > 0")
+    _choose_filter(qtbot, view, "Blocked")
+    # No scroll event is awaited: the reset must come from the filter change itself.
+    assert _eval(qtbot, view, "document.getElementById('scroller').scrollTop") == 0
+    assert _eval(qtbot, view, "document.querySelector('#rows .row').style.top") == "0px"
+    assert _shown_orders(qtbot, view).split(",")[0] == "#10004"
+    drawn = _eval(
+        qtbot,
+        view,
+        "(function () { var n = +document.getElementById('table').dataset.visibleRows;"
+        " return Array.from(document.querySelectorAll('#rows .row'))"
+        ".filter(function (r) { return parseInt(r.style.top, 10) < n * 32; }).length; })()",
+    )
+    assert drawn == min(14, 31)
+
+
+def test_chips_wrap_instead_of_clipping(qtbot, doc):
+    view, _ = doc
+    _resize(qtbot, view, 900, 692)
+    for label in ("Blocked", "Courier: DHL", "Courier: DPD", "Courier: Packeta", "Tag: vip"):
+        _choose_filter(qtbot, view, label)
+    rights = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify(Array.from(document.querySelectorAll('#chips .chip-filter'))"
+            ".map(function (e) { return e.getBoundingClientRect().right; }))",
+        )
+    )
+    assert len(rights) == 5
+    assert all(right <= 900 for right in rights)
+    # The table shows exactly the whole rows the table area has room for.
+    _until_js(
+        qtbot,
+        view,
+        "document.getElementById('table').dataset.visibleRows === String("
+        "Math.min(Math.floor((document.getElementById('table-area').clientHeight - 36) / 32),"
+        " state.view.length))",
+    )
+
+
 def test_the_filter_bar_reads_search_add_filter_then_chips(qtbot, doc):
     view, _ = doc
     order = json.loads(
