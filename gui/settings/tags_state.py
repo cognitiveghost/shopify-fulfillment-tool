@@ -10,6 +10,7 @@ import re
 
 from gui.settings.contract import PageContract
 from gui.settings.page_state import _shaped
+from shared.i18n import N_, _, _n
 from shopify_tool.tag_manager import validate_tag_categories_v2
 
 # A category's colour is data, not a theme value. Nothing draws it today; the
@@ -19,25 +20,27 @@ MIN_QUANTITY = 0.01
 MAX_QUANTITY = 999.99
 LAST = 999
 
-SUBTITLE = "The internal tags an order can carry, in groups. A tag belongs to one category."
-ADD_CATEGORY = "Add category"
+SUBTITLE = N_("The internal tags an order can carry, in groups. A tag belongs to one category.")
+ADD_CATEGORY = N_("Add category")
+# A saved name: stored as it is, so not translated.
 NEW_CATEGORY = "New category"
-UNNAMED = "Unnamed category"
-EMPTY_TITLE = "No tag categories yet"
-EMPTY_TEXT = "Tags mark orders for packing and for reports. Group them into categories here."
-NO_TAGS = "No tags yet."
-TAG_PLACEHOLDER = "Add tag"
-TAG_HINT = "Press Enter to add. Tags are stored in capitals."
-WRITEOFF_LABEL = "Packaging write-off"
-WRITEOFF_BADGE = "Write-off"
-WRITEOFF_HINT = (
+UNNAMED = N_("Unnamed category")
+EMPTY_TITLE = N_("No tag categories yet")
+EMPTY_TEXT = N_("Tags mark orders for packing and for reports. Group them into categories here.")
+NO_TAGS = N_("No tags yet.")
+TAG_PLACEHOLDER = N_("Add tag")
+TAG_HINT = N_("Press Enter to add. Tags are stored in capitals.")
+WRITEOFF_LABEL = N_("Packaging write-off")
+WRITEOFF_BADGE = N_("Write-off")
+WRITEOFF_HINT = N_(
     "A stock export can write off the SKUs below for each order that carries the tag."
 )
-ADD_TAG_FIRST = "Add a tag first."
+ADD_TAG_FIRST = N_("Add a tag first.")
 
-NO_NAME = "Type the category's name."
-NO_WRITEOFF_SKU = "Type the SKU to write off."
-QUANTITY_PROBLEM = f"Type a number from {MIN_QUANTITY} to {MAX_QUANTITY}."
+NO_NAME = N_("Type the category's name.")
+NO_WRITEOFF_SKU = N_("Type the SKU to write off.")
+QUANTITY_PROBLEM_TEMPLATE = N_("Type a number from {min} to {max}.")
+QUANTITY_PROBLEM = QUANTITY_PROBLEM_TEMPLATE.format(min=MIN_QUANTITY, max=MAX_QUANTITY)
 
 _KEY_UID = re.compile(r"cat-(\d+)-")
 _NOT_ID = re.compile(r"[^a-z0-9]+")
@@ -45,10 +48,6 @@ _NOT_ID = re.compile(r"[^a-z0-9]+")
 
 def _text(value) -> str:
     return "" if value is None else str(value)
-
-
-def _plural(count: int, one: str, many: str) -> str:
-    return f"{count} {one if count == 1 else many}"
 
 
 def _quantity_text(value) -> str:
@@ -135,7 +134,7 @@ class TagsDraft(PageContract):
 
     @staticmethod
     def _name(entry: dict) -> str:
-        return entry["label"].strip() or UNNAMED
+        return entry["label"].strip() or _(UNNAMED)
 
     # --- the edits ---------------------------------------------------------
 
@@ -249,12 +248,14 @@ class TagsDraft(PageContract):
         if not tag:
             return had
         if tag in entry["tags"]:
-            entry["tag_problem"] = f"{tag} is already in this category."
+            entry["tag_problem"] = _("{tag} is already in this category.", tag=tag)
             return True
         other = next((e for e in self.entries if e is not entry and tag in e["tags"]), None)
         if other is not None:
-            entry["tag_problem"] = (
-                f"{tag} is already in {self._name(other)}. A tag belongs to one category."
+            entry["tag_problem"] = _(
+                "{tag} is already in {category}. A tag belongs to one category.",
+                tag=tag,
+                category=self._name(other),
             )
             return True
         entry["tags"].append(tag)
@@ -268,14 +269,18 @@ class TagsDraft(PageContract):
         key = f"cat-{entry['uid']}"
         found = []
         if not entry["label"].strip():
-            found.append((NO_NAME, f"{key}-label"))
+            found.append((_(NO_NAME), f"{key}-label"))
         earlier = self.entries[: self.entries.index(entry)]
         for tag in entry["tags"]:
             owner = next((e for e in earlier if tag in e["tags"]), None)
             if owner is not None:
                 found.append(
                     (
-                        f"{tag} is also in {self._name(owner)}. Remove it from one.",
+                        _(
+                            "{tag} is also in {category}. Remove it from one.",
+                            tag=tag,
+                            category=self._name(owner),
+                        ),
                         f"{key}-tag-input",
                     )
                 )
@@ -284,11 +289,18 @@ class TagsDraft(PageContract):
             sku = mapping["sku"].strip()
             pair = (mapping["tag"], sku)
             if not sku:
-                found.append((NO_WRITEOFF_SKU, f"{key}-m{m}-sku"))
+                found.append((_(NO_WRITEOFF_SKU), f"{key}-m{m}-sku"))
             elif _quantity(mapping["quantity"]) is None:
-                found.append((QUANTITY_PROBLEM, f"{key}-m{m}-quantity"))
+                found.append(
+                    (_(QUANTITY_PROBLEM_TEMPLATE, min=MIN_QUANTITY, max=MAX_QUANTITY), f"{key}-m{m}-quantity")
+                )
             elif pair in seen:
-                found.append((f"{sku} is mapped to {mapping['tag']} twice.", f"{key}-m{m}-sku"))
+                found.append(
+                    (
+                        _("{sku} is mapped to {tag} twice.", sku=sku, tag=mapping["tag"]),
+                        f"{key}-m{m}-sku",
+                    )
+                )
             seen.add(pair)
         return found
 
@@ -305,8 +317,8 @@ class TagsDraft(PageContract):
             return None
         place, entry, _problems = blocking[0]
         if not entry["label"].strip():
-            return f"Name category {place}"
-        return f"Fix category “{entry['label'].strip()}”"
+            return _("Name category {place}", place=place)
+        return _("Fix category “{name}”", name=entry["label"].strip())
 
     def blocker_key(self) -> str:
         blocking = self._blocking()
@@ -314,7 +326,7 @@ class TagsDraft(PageContract):
 
     def validate(self) -> tuple[bool, list[str]]:
         lines = [
-            f"Category “{self._name(entry)}”: {sentence}"
+            _("Category “{name}”: {sentence}", name=self._name(entry), sentence=sentence)
             for _place, entry, problems in self._blocking()
             for sentence, _key in problems
         ]
@@ -419,15 +431,15 @@ class TagsDraft(PageContract):
         return {
             "label_problem": by_key.get(f"{key}-label", ""),
             "tags": list(entry["tags"]),
-            "tag_placeholder": TAG_PLACEHOLDER,
+            "tag_placeholder": _(TAG_PLACEHOLDER),
             "tag_problem": entry["tag_problem"] or by_key.get(f"{key}-tag-input", ""),
-            "tag_hint": TAG_HINT,
+            "tag_hint": _(TAG_HINT),
             "writeoff": {
                 "on": entry["writeoff"],
-                "label": WRITEOFF_LABEL,
-                "hint": WRITEOFF_HINT,
+                "label": _(WRITEOFF_LABEL),
+                "hint": _(WRITEOFF_HINT),
                 "can_add": bool(entry["tags"]),
-                "add_title": "" if entry["tags"] else ADD_TAG_FIRST,
+                "add_title": "" if entry["tags"] else _(ADD_TAG_FIRST),
                 "rows": rows,
             },
         }
@@ -443,8 +455,8 @@ class TagsDraft(PageContract):
             "label": self._name(entry),
             "open": is_open,
             "chips": list(entry["tags"]),
-            "no_tags": "" if entry["tags"] else NO_TAGS,
-            "badge": WRITEOFF_BADGE if entry["writeoff"] else "",
+            "no_tags": "" if entry["tags"] else _(NO_TAGS),
+            "badge": _(WRITEOFF_BADGE) if entry["writeoff"] else "",
             "can_up": place > 0,
             "can_down": place < len(self.entries) - 1,
             "problem": problems[0][0] if problems else "",
@@ -454,17 +466,20 @@ class TagsDraft(PageContract):
     def view(self) -> dict:
         empty = None
         if not self.entries:
-            empty = {"title": EMPTY_TITLE, "text": EMPTY_TEXT, "action": ADD_CATEGORY}
+            empty = {"title": _(EMPTY_TITLE), "text": _(EMPTY_TEXT), "action": _(ADD_CATEGORY)}
         tags = sum(len(entry["tags"]) for entry in self.entries)
         return {
             "page": "tags",
-            "title": "Tag categories",
-            "subtitle": SUBTITLE,
-            "action": ADD_CATEGORY if self.entries else "",
+            "title": _("Tag categories"),
+            "subtitle": _(SUBTITLE),
+            "action": _(ADD_CATEGORY) if self.entries else "",
             "tags": {
                 "empty": empty,
-                "count": f"{_plural(len(self.entries), 'category', 'categories')}, "
-                f"{_plural(tags, 'tag', 'tags')}",
+                "count": _(
+                    "{categories}, {tags}",
+                    categories=_n("{n} category", "{n} categories", len(self.entries)),
+                    tags=_n("{n} tag", "{n} tags", tags),
+                ),
                 "rows": [self._row(entry, place) for place, entry in enumerate(self.entries)],
             },
         }

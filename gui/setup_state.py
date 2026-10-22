@@ -12,26 +12,30 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from shared.i18n import N_, _, month_abbr
 from shopify_tool.core import ANALYSIS_STEPS
 
-FILE_NOUN = {"orders": "orders file", "stock": "stock file"}
-MAPPING_PAGE = {"orders": "Orders mapping", "stock": "Stock mapping"}
+FILE_HEADER = {
+    "orders": N_("The orders file's header row"),
+    "stock": N_("The stock file's header row"),
+}
+MAPPING_PAGE = {"orders": N_("Orders mapping"), "stock": N_("Stock mapping")}
 # How an internal column name reads in a sentence.
 _INTERNAL = {
-    "Order_Number": "order number",
-    "SKU": "SKU",
-    "Quantity": "quantity",
-    "Shipping_Method": "shipping method",
-    "Stock": "stock",
+    "Order_Number": N_("order number"),
+    "SKU": N_("SKU"),
+    "Quantity": N_("quantity"),
+    "Shipping_Method": N_("shipping method"),
+    "Stock": N_("stock"),
 }
 _DELIMITERS = {
-    ",": "Comma  ,",
-    ";": "Semicolon  ;",
-    "\t": "Tab",
-    "|": "Pipe  |",
-    "mixed": "Mixed",
+    ",": N_("Comma  ,"),
+    ";": N_("Semicolon  ;"),
+    "\t": N_("Tab"),
+    "|": N_("Pipe  |"),
+    "mixed": N_("Mixed"),
 }
-_STRATEGY = {"multi_first": "Multi-item first", "fifo": "Oldest first"}
+_STRATEGY = {"multi_first": N_("Multi-item first"), "fifo": N_("Oldest first")}
 _DASH = "—"
 
 
@@ -108,20 +112,27 @@ class FileSlot:
 
         def internal(column: str) -> str:
             mapped = names.get(column, "")
-            return _INTERNAL.get(mapped, mapped or column)
+            return _(_INTERNAL.get(mapped, mapped or column))
 
-        file = FILE_NOUN[self.kind]
+        header = _(FILE_HEADER[self.kind])
         if len(self.missing_columns) == 1:
             column = self.missing_columns[0]
-            title = f"No {internal(column)} column"
-            text = (
-                f"The {file}'s header row has no “{column}” column, "
-                f"which is mapped to {internal(column)}."
+            title = _("No {name} column", name=internal(column))
+            text = _(
+                "{header} has no “{column}” column, which is mapped to {name}.",
+                header=header,
+                column=column,
+                name=internal(column),
             )
         else:
-            listed = ", ".join(f"“{c}” ({internal(c)})" for c in self.missing_columns)
-            title = f"{len(self.missing_columns)} mapped columns missing"
-            text = f"The {file}'s header row has none of: {listed}."
+            listed = ", ".join(
+                _("“{column}” ({name})", column=c, name=internal(c))
+                for c in self.missing_columns
+            )
+            title = _(
+                "{count} mapped columns missing", count=len(self.missing_columns)
+            )
+            text = _("{header} has none of: {listed}.", header=header, listed=listed)
         self.problem = _problem(title, text, MAPPING_PAGE[self.kind])
         self.on_change()
 
@@ -140,7 +151,7 @@ def _problem(title: str, text: str, fix_page: str) -> dict:
         "title": title,
         "text": text,
         "fix_page": fix_page,
-        "fix_label": f"Open {fix_page}" if fix_page else "",
+        "fix_label": _("Open {page}", page=_(fix_page)) if fix_page else "",
     }
 
 
@@ -166,15 +177,20 @@ class RunFacts:
     cancelling: bool = False
 
 
-def _n(value) -> str:
+def _num(value) -> str:
     return _DASH if value is None else f"{value:,}"
+
+
+def _stamp(moment: datetime) -> str:
+    """"%d %b %H:%M", with the month through month_abbr (strftime is English)."""
+    return f"{moment:%d} {month_abbr(moment.month)} {moment:%H:%M}"
 
 
 def _when(moment: datetime, now: datetime) -> str:
     local = moment.astimezone()
     if local.date() == now.astimezone().date():
         return local.strftime("%H:%M")
-    return local.strftime("%d %b %H:%M")
+    return _stamp(local)
 
 
 def session_meta(client: str, session: SessionFacts, now: datetime) -> str:
@@ -182,19 +198,23 @@ def session_meta(client: str, session: SessionFacts, now: datetime) -> str:
     "ACME · analysed 14:06" once analysed, the client alone with no time.
     Setup and Tools both draw it."""
     moment = session.analysed or session.opened
-    verb = "analysed" if session.analysed is not None else "opened"
-    return f"{client} · {verb} {_when(moment, now)}" if moment else client
+    if not moment:
+        return client
+    when = _when(moment, now)
+    if session.analysed is not None:
+        return _("{client} · analysed {when}", client=client, when=when)
+    return _("{client} · opened {when}", client=client, when=when)
 
 
 def _stat(key: str, value) -> dict:
-    return {"k": key, "v": _n(value), "muted": value is None}
+    return {"k": key, "v": _num(value), "muted": value is None}
 
 
 def _card(slot: FileSlot, covered: bool) -> dict:
     if slot.path is None:
         return {
             "state": "missing",
-            "badge": "From memory" if covered else "Missing",
+            "badge": _("From memory") if covered else _("Missing"),
             "badge_tone": "neutral",
             "name": "",
             "is_folder": False,
@@ -203,20 +223,20 @@ def _card(slot: FileSlot, covered: bool) -> dict:
             "stats": [],
             "problem": {},
         }
-    delimiter = _DELIMITERS.get(slot.delimiter, slot.delimiter)
+    delimiter = _(_DELIMITERS.get(slot.delimiter, slot.delimiter))
     problem = slot.problem or {}
     return {
         "state": "loaded" if slot.is_valid else "problem",
-        "badge": "Loaded" if slot.is_valid else "Problem",
+        "badge": _("Loaded") if slot.is_valid else _("Problem"),
         "badge_tone": "success" if slot.is_valid else "danger",
         "name": slot.name,
         "is_folder": slot.is_folder,
-        "parts": [{"name": p["name"], "rows": _n(p["rows"])} for p in slot.parts],
+        "parts": [{"name": p["name"], "rows": _num(p["rows"])} for p in slot.parts],
         "note": slot.note,
         "stats": [
-            _stat("Rows", slot.rows),
-            _stat("Orders" if slot.kind == "orders" else "SKUs", slot.keys),
-            {"k": "Delimiter", "v": delimiter or _DASH, "muted": not delimiter},
+            _stat(_("Rows"), slot.rows),
+            _stat(_("Orders") if slot.kind == "orders" else _("SKUs"), slot.keys),
+            {"k": _("Delimiter"), "v": delimiter or _DASH, "muted": not delimiter},
         ],
         "problem": (
             {key: problem[key] for key in ("title", "text", "fix_label")}
@@ -228,7 +248,7 @@ def _card(slot: FileSlot, covered: bool) -> dict:
 
 def _problem_row(slot: FileSlot) -> str:
     title = (slot.problem or {}).get("title", "")
-    return f"Problem: {title[:1].lower()}{title[1:]}"
+    return _("Problem: {problem}", problem=f"{title[:1].lower()}{title[1:]}")
 
 
 def setup_state(
@@ -255,7 +275,7 @@ def setup_state(
         view = "setup"
 
     strategy = strategy if strategy in _STRATEGY else "multi_first"
-    strategy_title = _STRATEGY[strategy]
+    strategy_title = _(_STRATEGY[strategy])
     strategy_words = strategy_title[:1].lower() + strategy_title[1:]
 
     orders_problem = orders.path is not None and not orders.is_valid
@@ -265,87 +285,101 @@ def setup_state(
     ready = orders.is_valid and stock_ok
     analysed = session is not None and session.analysed is not None
 
-    order_count, line_count = _n(orders.keys), _n(orders.rows)
-    sku_count = _n(memory.skus if memory_covers else stock.keys)
-    stock_phrase = (
-        f"last run's stock for {sku_count} SKUs"
-        if memory_covers
-        else f"stock for {sku_count} SKUs"
-    )
+    order_count, line_count = _num(orders.keys), _num(orders.rows)
+    sku_count = _num(memory.skus if memory_covers else stock.keys)
+    if memory_covers:
+        stock_phrase = _("last run's stock for {skus} SKUs", skus=sku_count)
+    else:
+        stock_phrase = _("stock for {skus} SKUs", skus=sku_count)
 
     if orders_problem:
-        headline = "The orders file needs fixing before this can run"
+        headline = _("The orders file needs fixing before this can run")
     elif stock_problem:
-        headline = "The stock file needs fixing before this can run"
+        headline = _("The stock file needs fixing before this can run")
     elif ready:
-        headline = (
-            f"{order_count} orders, {line_count} lines, {stock_phrase}, {strategy_words}"
+        headline = _(
+            "{orders} orders, {lines} lines, {stock}, {strategy}",
+            orders=order_count,
+            lines=line_count,
+            stock=stock_phrase,
+            strategy=strategy_words,
         )
     elif orders.is_valid:
-        headline = f"{order_count} orders, {line_count} lines, waiting for the stock file"
+        headline = _(
+            "{orders} orders, {lines} lines, waiting for the stock file",
+            orders=order_count,
+            lines=line_count,
+        )
     elif stock_ok:
-        headline = (
-            f"{stock_phrase[:1].upper()}{stock_phrase[1:]}, waiting for the orders file"
+        headline = _(
+            "{stock}, waiting for the orders file",
+            stock=stock_phrase[:1].upper() + stock_phrase[1:],
         )
     else:
-        headline = "Load both files to see what this run will do"
+        headline = _("Load both files to see what this run will do")
 
     if orders.is_valid:
-        orders_row = f"{order_count} orders · {line_count} lines"
+        orders_row = _(
+            "{orders} orders · {lines} lines", orders=order_count, lines=line_count
+        )
     elif orders_problem:
         orders_row = _problem_row(orders)
     else:
-        orders_row = "Not loaded"
+        orders_row = _("Not loaded")
 
     if stock.is_valid:
-        stock_row = f"Stock file · {sku_count} SKUs"
+        stock_row = _("Stock file · {skus} SKUs", skus=sku_count)
     elif memory_covers:
-        stock_row = f"From {memory.session or 'memory'} · {sku_count} SKUs"
+        stock_row = _(
+            "From {session} · {skus} SKUs",
+            session=memory.session or _("memory"),
+            skus=sku_count,
+        )
     elif stock_problem:
         stock_row = _problem_row(stock)
     else:
-        stock_row = "Not loaded"
+        stock_row = _("Not loaded")
 
     tone = ""
     if run.running:
         reason = ""
     elif orders_problem:
-        reason = "Fix the orders file to run."
+        reason = _("Fix the orders file to run.")
     elif stock_problem:
-        reason = "Fix the stock file to run."
+        reason = _("Fix the stock file to run.")
     elif not orders.is_valid and not stock_ok:
-        reason = "Load the orders and stock files to run."
+        reason = _("Load the orders and stock files to run.")
     elif not orders.is_valid:
-        reason = "Load the orders file to run."
+        reason = _("Load the orders file to run.")
     elif not stock_ok:
-        reason = "Load the stock file to run."
+        reason = _("Load the stock file to run.")
     elif not connected:
-        reason = "Server unreachable. Files stay loaded; Retry is in the sidebar."
+        reason = _("Server unreachable. Files stay loaded; Retry is in the sidebar.")
         tone = "danger"
     elif analysed:
-        reason = "Running again replaces this session's results."
+        reason = _("Running again replaces this session's results.")
     else:
-        reason = "Results open when it finishes."
+        reason = _("Results open when it finishes.")
 
     if session is None:
         session_out = {}
     else:
         session_out = {
             "name": session.name,
-            "title": "Session" if analysed else "New session",
+            "title": _("Session") if analysed else _("New session"),
             "meta": session_meta(client, session, now),
         }
 
     if not memory.on:
         previous = ""
     elif memory.skus > 0:
-        bits = [f"Previous run {memory.session}".strip()]
+        bits = [_("Previous run {session}", session=memory.session).strip()]
         if memory.updated is not None:
-            bits.append(memory.updated.astimezone().strftime("%d %b %H:%M"))
-        bits.append(f"{_n(memory.skus)} SKUs")
+            bits.append(_stamp(memory.updated.astimezone()))
+        bits.append(_("{skus} SKUs", skus=_num(memory.skus)))
         previous = " · ".join(bits)
     else:
-        previous = "Nothing is remembered yet. The first run needs a stock file."
+        previous = _("Nothing is remembered yet. The first run needs a stock file.")
 
     last = len(ANALYSIS_STEPS) - 1
     step = min(max(int(run.step), 0), last)
@@ -361,9 +395,10 @@ def setup_state(
         },
         "memory": {
             "on": memory.on,
-            "text": (
-                f"When on, a run with no stock file starts from the stock {client}'s "
-                "previous run left. A loaded stock file is always used as it is."
+            "text": _(
+                "When on, a run with no stock file starts from the stock {client}'s "
+                "previous run left. A loaded stock file is always used as it is.",
+                client=client,
             ),
             "previous": previous,
         },
@@ -372,9 +407,9 @@ def setup_state(
             "headline": headline,
             "ready": ready,
             "rows": [
-                {"k": "Orders", "v": orders_row, "muted": not orders.is_valid},
-                {"k": "Stock", "v": stock_row, "muted": not stock_ok},
-                {"k": "Strategy", "v": strategy_title, "muted": False},
+                {"k": _("Orders"), "v": orders_row, "muted": not orders.is_valid},
+                {"k": _("Stock"), "v": stock_row, "muted": not stock_ok},
+                {"k": _("Strategy"), "v": strategy_title, "muted": False},
             ],
             "reason": reason,
             "reason_tone": tone,

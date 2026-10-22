@@ -217,3 +217,28 @@ def test_the_menu_ends_with_a_route_to_the_browser(qapp, qtbot):
     assert "Browse all sessions" in last.text()
     with qtbot.waitSignal(bar.browseAllRequested):
         last.trigger()
+
+
+def test_loading_a_client_disables_the_session_actions_and_says_so(qapp):
+    bar = CommandBar()
+    bar.set_clients(["Acme"])
+    bar.set_state(BarState.NO_SESSION)
+    bar.set_client_loading(True, "Acme")
+    assert not bar.session_button.isEnabled()
+    assert not bar.new_session_button.isEnabled()
+    assert bar.client_selector.isEnabled()
+    assert bar.loading_label.text() == "Loading Acme…"
+    assert not bar.loading_label.isHidden()
+    bar.set_client_loading(False)
+    assert bar.session_button.isEnabled()
+    assert bar.new_session_button.isEnabled()
+    assert bar.loading_label.isHidden()
+
+
+def test_an_empty_client_id_clears_the_box(qapp):
+    bar = CommandBar()
+    bar.set_clients(["Acme"])
+    bar.set_current_client("Acme")
+    bar.set_current_client("")
+    assert bar.current_client() == ""
+    assert bar.client_selector.currentIndex() == -1

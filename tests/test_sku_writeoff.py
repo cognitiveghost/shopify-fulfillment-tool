@@ -116,3 +116,68 @@ def test_an_order_number_with_a_trailing_space_is_one_order():
     })
     result = calculate_writeoff_quantities(df, BOX_ONLY)
     assert result.loc[result["SKU"] == "PKG-BOX", "Writeoff_Quantity"].sum() == 1.0
+
+
+# --- config hygiene and accumulation (Audit 10, part A) ---------------------------------------
+
+
+def _orders(*tags_per_order):
+    return pd.DataFrame({
+        "Order_Number": [f"#{i + 1}" for i in range(len(tags_per_order))],
+        "Internal_Tags": [str(list(t)).replace("'", '"') for t in tags_per_order],
+        "Order_Fulfillment_Status": ["Fulfillable"] * len(tags_per_order),
+    })
+
+
+def test_orders_with_the_same_tag_sum_their_quantities_and_count_orders():
+    config = _config({"BOX": [{"sku": "PKG-BOX", "quantity": 1.5}]})
+    result = calculate_writeoff_quantities(_orders(["BOX"], ["BOX"], ["OTHER"]), config)
+    assert result.to_dict("records") == [
+        {"SKU": "PKG-BOX", "Writeoff_Quantity": 3.0, "Tags_Applied": ["BOX"], "Order_Count": 2}
+    ]
+
+
+def test_a_tag_without_a_mapping_adds_nothing():
+    result = calculate_writeoff_quantities(_orders(["OTHER"]), BOX_ONLY)
+    assert result.empty
+    assert list(result.columns) == ["SKU", "Writeoff_Quantity", "Tags_Applied", "Order_Count"]
+
+
+def test_without_a_status_column_every_row_counts():
+    frame = _orders(["BOX"]).drop(columns="Order_Fulfillment_Status")
+    assert calculate_writeoff_quantities(frame, BOX_ONLY)["Writeoff_Quantity"].tolist() == [1.0]
+
+
+def test_missing_tags_in_a_row_are_not_an_error():
+    frame = _orders(["BOX"], ["BOX"])
+    frame.loc[1, "Internal_Tags"] = None
+    assert calculate_writeoff_quantities(frame, BOX_ONLY)["Order_Count"].tolist() == [1]
+
+
+@pytest.mark.parametrize(
+    "bad_mapping",
+    [
+        "PKG-BOX",                                              # not a list
+        ["PKG-BOX"],                                            # item not a dict
+        [{"sku": "PKG-BOX"}],                                   # no quantity
+        [{"quantity": 1}],                                      # no sku
+        [{"sku": "PKG-BOX", "quantity": "two"}],                # not a number
+        [{"sku": "PKG-BOX", "quantity": 0}],                    # not positive
+        [{"sku": "PKG-BOX", "quantity": -1}],
+    ],
+)
+def test_an_invalid_mapping_is_skipped_and_the_rest_still_apply(bad_mapping):
+    config = _config({"BAD": bad_mapping, "BOX": [{"sku": "PKG-OK", "quantity": 1}]})
+    result = calculate_writeoff_quantities(_orders(["BAD", "BOX"]), config)
+    assert result["SKU"].tolist() == ["PKG-OK"]
+
+
+def test_a_quantity_written_as_text_is_read_as_a_number():
+    config = _config({"BOX": [{"sku": "PKG-BOX", "quantity": "2"}]})
+    assert calculate_writeoff_quantities(_orders(["BOX"]), config)["Writeoff_Quantity"].tolist() == [2.0]
+
+
+def test_v1_shaped_categories_work_too():
+    config = {"packaging": {"tags": ["BOX"], "sku_writeoff": {
+        "enabled": True, "mappings": {"BOX": [{"sku": "PKG-BOX", "quantity": 1}]}}}}
+    assert calculate_writeoff_quantities(_orders(["BOX"]), config)["SKU"].tolist() == ["PKG-BOX"]

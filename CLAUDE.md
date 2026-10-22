@@ -146,6 +146,9 @@ the GitHub UI — nothing builds for it.
 
 - **No UI calls from background threads** — PySide6 will crash (use signals instead)
 - **No hardcoded colors** in stylesheets — use `theme_manager` variables
+- **No bare UI strings** — wrap user-facing text in `_()` from `shared.i18n` (`N_()` for module-level
+  constants, never `_()` at import time) and add the Bulgarian to the catalogue; the guard tests in
+  `tests/test_i18n_catalogue.py` fail otherwise (ADR 0021)
 - **No `pyproject.toml`** — project uses `requirements.txt` intentionally
 - **No `permutations`/unused typing imports** — keep imports clean
 - **No direct commits to `main`** — this repo is PR-only, with no exception for "trivial"

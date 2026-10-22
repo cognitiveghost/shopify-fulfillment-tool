@@ -21,10 +21,11 @@ from gui.settings.page_state import MappingDraft, read_file_columns
 from gui.settings.rule_test import failed_view, run_rule_test, running_view
 from gui.settings.rules_state import RulesDraft
 from gui.worker import Worker
+from shared.i18n import N_, _
 
 logger = logging.getLogger(__name__)
 
-CSV_FILTER = "CSV Files (*.csv);;All Files (*)"
+CSV_FILTER = N_("CSV Files (*.csv);;All Files (*)")
 
 
 def _tested(token: int, uid: str, rule: dict, analysis_df, session: str) -> tuple[int, dict]:
@@ -47,9 +48,11 @@ class SettingsWebHost(QWidget):
 
     Signals:
         edited: a draft's values, or the file it reads columns from, changed
+        clientActionRequested: "archive" or "delete" from the Profile page
     """
 
     edited = Signal()
+    clientActionRequested = Signal(str)
 
     def __init__(self, drafts: dict, analysis_df=None, session: str = "", parent=None):
         super().__init__(parent)
@@ -83,6 +86,7 @@ class SettingsWebHost(QWidget):
         self.bridge.importRequested.connect(self._import)
         self.bridge.exportRequested.connect(self._export)
         self.bridge.toastActionRequested.connect(self._update_import)
+        self.bridge.clientActionRequested.connect(self.clientActionRequested.emit)
         self._push()
 
     def show_page(self, key: str) -> None:
@@ -162,12 +166,8 @@ class SettingsWebHost(QWidget):
         draft = self.drafts[self._current]
         if not isinstance(draft, MappingDraft):
             return
-        path, _filter = QFileDialog.getOpenFileName(
-            self,
-            f"Select {draft.kind.capitalize()} CSV",
-            "",
-            "CSV Files (*.csv);;All Files (*)",
-        )
+        title = _("Select Stock CSV") if draft.kind == "stock" else _("Select Orders CSV")
+        path, _filter = QFileDialog.getOpenFileName(self, title, "", _(CSV_FILTER))
         if not path:
             return
         try:
@@ -175,7 +175,7 @@ class SettingsWebHost(QWidget):
         except Exception:
             logger.exception("Failed to read column names from CSV")
             show_error(
-                self, "The column names couldn't be read", "Details are in Logs."
+                self, _("The column names couldn't be read"), _("Details are in Logs.")
             )
             return
         draft.set_file(file)
@@ -190,7 +190,7 @@ class SettingsWebHost(QWidget):
         if kind not in titles:
             return
         if path is None:
-            path, _filter = QFileDialog.getOpenFileName(self, titles[kind], "", CSV_FILTER)
+            path, _filter = QFileDialog.getOpenFileName(self, _(titles[kind]), "", _(CSV_FILTER))
             if not path:
                 return
         self._retry = None
@@ -201,7 +201,7 @@ class SettingsWebHost(QWidget):
             return
         except Exception:
             logger.exception(f"The {kind} import failed")
-            show_error(self, draft.import_failed[kind], "Details are in Logs.")
+            show_error(self, _(draft.import_failed[kind]), _("Details are in Logs."))
             # It may have added rows before it failed.
             self._push()
             self.edited.emit()
@@ -226,13 +226,13 @@ class SettingsWebHost(QWidget):
         if kind not in offered:
             return
         title, name = offered[kind]
-        path, _filter = QFileDialog.getSaveFileName(self, title, name, CSV_FILTER)
+        path, _filter = QFileDialog.getSaveFileName(self, _(title), name, _(CSV_FILTER))
         if not path:
             return
         try:
             text = draft.export_csv(kind, path)
         except Exception:
             logger.exception(f"The {kind} export failed")
-            show_error(self, draft.export_failed[kind], "Details are in Logs.")
+            show_error(self, _(draft.export_failed[kind]), _("Details are in Logs."))
             return
         self.bridge.raise_toast(text)

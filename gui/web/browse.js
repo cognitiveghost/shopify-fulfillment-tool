@@ -27,28 +27,34 @@ const GLYPH = {
   x: "M18 6 6 18M6 6l12 12",
 };
 
+// Labels are thunks, so t() reads the catalogue when the word is drawn.
 const TABS = [
-  { key: "all", label: "All" },
-  { key: "active", label: "Active" },
-  { key: "completed", label: "Completed" },
-  { key: "abandoned", label: "Abandoned" },
-  { key: "archived", label: "Archived" },
+  { key: "all", label: () => t("All") },
+  { key: "active", label: () => t("Active") },
+  { key: "completed", label: () => t("Completed") },
+  { key: "abandoned", label: () => t("Abandoned") },
+  { key: "archived", label: () => t("Archived") },
 ];
 
 // The four statuses a person can set, and what each one resolves to.
 const STATUS_ITEMS = [
-  { status: "active", label: "Active", tone: "info", dot: "half", note: "Shows as Not started, In progress, Paused or Stale from activity" },
-  { status: "completed", label: "Completed", tone: "success", dot: "solid", note: "Shows as Incomplete if packing is not finished" },
-  { status: "abandoned", label: "Abandoned", tone: "neutral", dot: "solid", note: "Kept on the server. Repeat-order checks ignore it" },
-  { status: "archived", label: "Archived", tone: "neutral", dot: "solid", note: "Hidden from All until you choose Show" },
+  { status: "active", label: () => t("Active"), tone: "info", dot: "half",
+    note: () => t("Shows as Not started, In progress, Paused or Stale from activity") },
+  { status: "completed", label: () => t("Completed"), tone: "success", dot: "solid",
+    note: () => t("Shows as Incomplete if packing is not finished") },
+  { status: "abandoned", label: () => t("Abandoned"), tone: "neutral", dot: "solid",
+    note: () => t("Kept on the server. Repeat-order checks ignore it") },
+  { status: "archived", label: () => t("Archived"), tone: "neutral", dot: "solid",
+    note: () => t("Hidden from All until you choose Show") },
 ];
 
-// The Needs attention note, in the order it reads.
+// The Needs attention note, in the order it reads: each reason is a sentence
+// with its count.
 const REASONS = [
-  ["paused", "paused"],
-  ["stale", "stale"],
-  ["incomplete", "incomplete"],
-  ["blocked", "with blocked orders"],
+  ["paused", (n) => t("{n} paused", { n })],
+  ["stale", (n) => t("{n} stale", { n })],
+  ["incomplete", (n) => t("{n} incomplete", { n })],
+  ["blocked", (n) => t("{n} with blocked orders", { n })],
 ];
 
 const els = {};
@@ -68,9 +74,10 @@ function svg(path, cls) {
 }
 
 function sessions(n) {
-  return n === 1 ? "1 session" : `${n} sessions`;
+  return tn("{n} session", "{n} sessions", n);
 }
 
+// `label` is already in the PC's language: a status label from Python, or t(...).
 function badge(tone, dot, label) {
   return `<span class="badge ${esc(tone)}"><span class="badge-dot ${esc(dot)}"></span>${esc(label)}</span>`;
 }
@@ -106,7 +113,7 @@ function checkedNames(visible) {
 }
 
 function tabLabel() {
-  return TABS.find((tab) => tab.key === view.tab).label;
+  return TABS.find((tab) => tab.key === view.tab).label();
 }
 
 // --- the three panels --------------------------------------------------------
@@ -115,23 +122,23 @@ function panel(s) {
   if (s.view === "failed") {
     return `<div class="state">
       ${svg(GLYPH.alert, "state-glyph")}
-      <p class="state-title">Sessions didn't load</p>
-      <p class="state-text">Details are in Logs.</p>
-      <button class="btn secondary" type="button" data-act="refresh" data-key="try-again">Try again</button>
+      <p class="state-title">${t("Sessions didn't load")}</p>
+      <p class="state-text">${t("Details are in Logs.")}</p>
+      <button class="btn secondary" type="button" data-act="refresh" data-key="try-again">${t("Try again")}</button>
     </div>`;
   }
   if (s.view === "empty") {
     return `<div class="state">
       ${svg(GLYPH.folder, "state-glyph")}
-      <p class="state-title">No sessions yet</p>
-      <p class="state-text">CLIENT_${esc(s.client)} has no sessions on the file server.</p>
-      <button class="btn primary" type="button" data-act="new-session" data-key="new-session">${svg(GLYPH.plus, "glyph")}New session</button>
+      <p class="state-title">${t("No sessions yet")}</p>
+      <p class="state-text">${t("CLIENT_{client} has no sessions on the file server.", { client: esc(s.client) })}</p>
+      <button class="btn primary" type="button" data-act="new-session" data-key="new-session">${svg(GLYPH.plus, "glyph")}${t("New session")}</button>
     </div>`;
   }
   return `<div class="state">
     ${svg(GLYPH.folder, "state-glyph")}
-    <p class="state-title">Choose a client</p>
-    <p class="state-text">Pick a client in the bar above to see its sessions.</p>
+    <p class="state-title">${t("Choose a client")}</p>
+    <p class="state-text">${t("Pick a client in the bar above to see its sessions.")}</p>
   </div>`;
 }
 
@@ -141,14 +148,16 @@ function renderTabs(loading) {
   els.tabs.innerHTML = TABS.map((tab) => {
     const on = tab.key === view.tab;
     const count = loading ? "–" : tabCount(tab.key);
-    return `<button class="tab" type="button" role="tab" aria-selected="${on}" tabindex="${on ? 0 : -1}" data-tab="${tab.key}" data-key="tab-${tab.key}">${tab.label}<span class="segment-count">${count}</span></button>`;
+    return `<button class="tab" type="button" role="tab" aria-selected="${on}" tabindex="${on ? 0 : -1}" data-tab="${tab.key}" data-key="tab-${tab.key}">${tab.label()}<span class="segment-count">${count}</span></button>`;
   }).join("");
 }
 
 function countLabel(loading, visible) {
-  if (loading) return "Reading…";
+  if (loading) return t("Reading…");
   const inThisTab = allRows().filter((row) => inTab(row, view.tab)).length;
-  return view.query ? `${visible.length} of ${sessions(inThisTab)}` : sessions(inThisTab);
+  return view.query
+    ? t("{shown} of {total}", { shown: visible.length, total: sessions(inThisTab) })
+    : sessions(inThisTab);
 }
 
 // --- header row and selection bar --------------------------------------------
@@ -165,7 +174,7 @@ function renderBar(loading, visible) {
   }
   els.selCheck.checked = n === visible.length;
   els.selCheck.indeterminate = n < visible.length;
-  els.selCount.textContent = `${n} selected`;
+  els.selCount.textContent = t("{n} selected", { n });
   els.selOpen.hidden = n !== 1;
   els.selExport.hidden = n < 2;
 }
@@ -186,8 +195,8 @@ function rowHtml(row) {
   const comment = row.comment
     ? `<span class="cell-comment" title="${esc(row.comment)}">${esc(row.comment)}</span>`
     : `<span class="cell-comment none">—</span>`;
-  return `<div class="row grid${on ? " checked" : ""}" data-row="${name}" title="Double-click to open">
-    <span class="cell-check"><input type="checkbox" data-key="row-${name}" aria-label="Select ${name}"${on ? " checked" : ""}></span>
+  return `<div class="row grid${on ? " checked" : ""}" data-row="${name}" title="${t("Double-click to open")}">
+    <span class="cell-check"><input type="checkbox" data-key="row-${name}" aria-label="${t("Select {name}", { name })}"${on ? " checked" : ""}></span>
     <span class="cell-name">${name}</span>
     <span class="cell-age${row.age_warn ? " warn" : ""}" title="${esc(row.age_title)}">${esc(row.age)}</span>
     <span>${badge(row.tone, row.dot, row.label)}</span>
@@ -207,9 +216,9 @@ function groupHtml(label, rows, note, attention) {
 }
 
 function attentionNote(rows) {
-  return REASONS.map(([why, words]) => {
+  return REASONS.map(([why, sentence]) => {
     const n = rows.filter((row) => row.why === why).length;
-    return n ? `${n} ${words}` : "";
+    return n ? sentence(n) : "";
   })
     .filter(Boolean)
     .join(" · ");
@@ -222,7 +231,7 @@ function skeleton() {
     const mid = 64 + (i % 3) * 8;
     rows += `<div class="sk-row grid"><span></span>${bar(96)}${bar(28)}${bar(mid)}${bar(28)}${bar(28)}${bar(28)}${bar(mid)}${bar(60 + ((i * 37) % 120))}</div>`;
   }
-  return `<div class="loading-line">${svg(GLYPH.loader, "glyph")}<span>Reading sessions from the server…</span></div>${rows}`;
+  return `<div class="loading-line">${svg(GLYPH.loader, "glyph")}<span>${t("Reading sessions from the server…")}</span></div>${rows}`;
 }
 
 // A panel names its cause and offers the act that resolves it.
@@ -230,23 +239,23 @@ function noRows() {
   if (view.query) {
     return `<div class="state">
       ${svg(GLYPH.searchX, "state-glyph")}
-      <p class="state-title">No sessions match</p>
-      <p class="state-text">Nothing in ${tabLabel()} has “${esc(els.search.value.trim())}” in its name or comment.</p>
-      <button class="btn secondary" type="button" data-act="clear-search" data-key="clear-search">Clear search</button>
+      <p class="state-title">${t("No sessions match")}</p>
+      <p class="state-text">${t("Nothing in {tab} has “{query}” in its name or comment.", { tab: tabLabel(), query: esc(els.search.value.trim()) })}</p>
+      <button class="btn secondary" type="button" data-act="clear-search" data-key="clear-search">${t("Clear search")}</button>
     </div>`;
   }
   if (view.tab === "all") {
     return `<div class="state">
       ${svg(GLYPH.folder, "state-glyph")}
-      <p class="state-title">Nothing in All</p>
-      <p class="state-text">Every session of this client is archived.</p>
-      <button class="btn secondary" type="button" data-act="toggle-archived" data-key="show-archived">Show archived</button>
+      <p class="state-title">${t("Nothing in All")}</p>
+      <p class="state-text">${t("Every session of this client is archived.")}</p>
+      <button class="btn secondary" type="button" data-act="toggle-archived" data-key="show-archived">${t("Show archived")}</button>
     </div>`;
   }
   return `<div class="state">
     ${svg(GLYPH.folder, "state-glyph")}
-    <p class="state-title">Nothing in ${tabLabel()}</p>
-    <p class="state-text">No session of this client is ${tabLabel().toLowerCase()}.</p>
+    <p class="state-title">${t("Nothing in {tab}", { tab: tabLabel() })}</p>
+    <p class="state-text">${t("No session of this client is {tab}.", { tab: tabLabel().toLowerCase() })}</p>
   </div>`;
 }
 
@@ -262,18 +271,21 @@ function renderList(loading, visible) {
   const attention = visible.filter((row) => row.why);
   const rest = visible.filter((row) => !row.why);
   let html = "";
-  if (attention.length) html += groupHtml("Needs attention", attention, attentionNote(attention), true);
-  if (rest.length) html += groupHtml(attention.length ? "Everything else" : tabLabel(), rest, "", false);
+  if (attention.length) html += groupHtml(t("Needs attention"), attention, attentionNote(attention), true);
+  if (rest.length) html += groupHtml(attention.length ? t("Everything else") : tabLabel(), rest, "", false);
   els.list.innerHTML = html;
 }
 
 function renderFooter(loading) {
   const archived = allRows().filter((row) => row.tab === "archived").length;
+  const archivedText = view.showArchived
+    ? t("{n} archived shown", { n: archived })
+    : t("{n} archived", { n: archived });
   const line =
     view.tab === "all" && archived > 0 && !loading
-      ? `<span id="archived-count">${archived} archived${view.showArchived ? " shown" : ""}</span><span>·</span><button class="btn link" type="button" data-act="toggle-archived" data-key="toggle-archived">${view.showArchived ? "Hide" : "Show"}</button>`
+      ? `<span id="archived-count">${archivedText}</span><span>·</span><button class="btn link" type="button" data-act="toggle-archived" data-key="toggle-archived">${view.showArchived ? t("Hide") : t("Show")}</button>`
       : "";
-  els.footer.innerHTML = `${line}<span class="spacer"></span><span>Double-click a session to open it</span>`;
+  els.footer.innerHTML = `${line}<span class="spacer"></span><span>${t("Double-click a session to open it")}</span>`;
 }
 
 // --- render ------------------------------------------------------------------
@@ -350,22 +362,24 @@ function closePopover() {
 
 function namesList(names) {
   if (names.length <= 3) return names.join(", ");
-  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+  return t("{names} and {count} more", { names: names.slice(0, 2).join(", "), count: names.length - 2 });
 }
 
 function openPopover(which) {
   const names = checkedNames(visibleRows());
   if (!names.length) return;
-  const what = names.length === 1 ? names[0] : `${names.length} sessions`;
+  const what = names.length === 1 ? names[0] : sessions(names.length);
   view.open = which;
   if (which === "status") {
-    els.statusTitle.textContent = `Set status for ${what}`;
+    els.statusTitle.textContent = t("Set status for {what}", { what });
   } else {
     const row = allRows().find((r) => r.name === names[0]);
-    els.commentTitle.textContent = `Comment on ${what}`;
+    els.commentTitle.textContent = t("Comment on {what}", { what });
     els.commentText.value = names.length === 1 && row ? row.comment : "";
     els.commentNote.textContent =
-      names.length === 1 ? "Shown in the Comment column." : `Replaces the comment on ${namesList(names)}.`;
+      names.length === 1
+        ? t("Shown in the Comment column.")
+        : t("Replaces the comment on {names}.", { names: namesList(names) });
   }
   syncPopover();
   if (which === "status") els.statusMenu.querySelector(".status-item").focus();
@@ -498,6 +512,20 @@ function dismissToast() {
 
 // --- boot --------------------------------------------------------------------
 
+// The fixed text the page builds itself. Runs once the strings are in, so
+// t() sees the catalogue; bind() runs before the bridge exists.
+function paintFixedText() {
+  els.refresh.innerHTML = `${svg(GLYPH.refresh, "glyph")}${t("Refresh")}`;
+  els.statusButton.innerHTML = `${t("Status")}${svg(GLYPH.chevron, "glyph")}`;
+  els.statusMenu.innerHTML =
+    `<div id="status-title" class="menu-group"></div>` +
+    STATUS_ITEMS.map(
+      (item) =>
+        `<button class="status-item" type="button" role="menuitem" data-status="${item.status}">${badge(item.tone, item.dot, item.label())}<span class="status-note">${item.note()}</span></button>`,
+    ).join("");
+  els.statusTitle = document.getElementById("status-title");
+}
+
 function bind() {
   const ids = {
     browse: "browse", panel: "panel", card: "card", tabs: "tabs", searchBox: "search-box",
@@ -513,16 +541,7 @@ function bind() {
 
   // The fixed parts of the page: glyphs, and the Status menu's four choices.
   els.searchBox.insertAdjacentHTML("afterbegin", svg(GLYPH.search, "glyph"));
-  els.refresh.innerHTML = `${svg(GLYPH.refresh, "glyph")}Refresh`;
-  els.statusButton.innerHTML = `Status${svg(GLYPH.chevron, "glyph")}`;
   els.toastDismiss.innerHTML = svg(GLYPH.x, "glyph");
-  els.statusMenu.innerHTML =
-    `<div id="status-title" class="menu-group"></div>` +
-    STATUS_ITEMS.map(
-      (item) =>
-        `<button class="status-item" type="button" role="menuitem" data-status="${item.status}">${badge(item.tone, item.dot, item.label)}<span class="status-note">${item.note}</span></button>`,
-    ).join("");
-  els.statusTitle = document.getElementById("status-title");
 
   els.tabs.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-tab]");
@@ -583,6 +602,8 @@ bind();
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.browse;
+  applyStrings(bridge);
+  paintFixedText();
   page.bridge = bridge;
   els.themeVars.textContent = bridge.themeCss;
   bridge.themeCssChanged.connect(() => {

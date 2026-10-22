@@ -1,4 +1,5 @@
 """Session lifecycle & session_info.json accuracy (part of priority 6: app config)."""
+import contextlib
 import json
 import os
 import shutil
@@ -390,6 +391,33 @@ class TestIndexRefresh:
         session_manager.list_client_sessions("M")
         session_manager.list_client_sessions("M")
         assert len(reads) == 2
+
+    def test_a_legacy_refresh_reads_sessions_outside_the_lock(self, session_manager, monkeypatch):
+        a, b = (Path(session_manager.create_session("M")) for _ in range(2))
+        (a.parent / SessionManager.INDEX_FILENAME).write_text(json.dumps(
+            [{"session_name": a.name, "status": "active"}, {"session_name": b.name, "status": "active"}]))
+        held = {"now": False, "reads_under_lock": 0}
+        real_lock = session_manager._exclusive_lock
+        real_entry = session_manager._index_entry
+
+        @contextlib.contextmanager
+        def lock(path):
+            with real_lock(path):
+                held["now"] = True
+                try:
+                    yield
+                finally:
+                    held["now"] = False
+
+        def entry(*args, **kwargs):
+            if held["now"]:
+                held["reads_under_lock"] += 1
+            return real_entry(*args, **kwargs)
+
+        monkeypatch.setattr(session_manager, "_exclusive_lock", lock)
+        monkeypatch.setattr(session_manager, "_index_entry", entry)
+        assert len(session_manager.list_client_sessions("M")) == 2
+        assert held["reads_under_lock"] == 0
 
     def test_a_stray_folder_is_read_once_until_it_changes(self, session_manager, monkeypatch):
         real = Path(session_manager.create_session("M"))

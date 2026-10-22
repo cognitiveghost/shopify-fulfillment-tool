@@ -207,11 +207,13 @@ def order_verdict(status, notes, line_skus, has_sku) -> dict:
     return {"state": state, "by_hand": by_hand, "problems": problems}
 
 
-def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
+def orders_frame(df: pd.DataFrame, ready: set | None = None) -> pd.DataFrame:
     """Fold ``df`` to one row per ``Order_Number``, preserving row order.
 
     Adds three columns that exist only at the order level: ``Items`` (line
-    count), ``Blocker`` (the reason, extracted) and ``REPEAT_COLUMN``.
+    count), ``Blocker`` (the reason, extracted) and ``REPEAT_COLUMN``. ``ready``
+    is ``stock_ledger.fulfillable_orders(df)``, passed in by a caller that has
+    it already.
     """
     if df is None or df.empty or ORDER_KEY not in df.columns:
         return pd.DataFrame()
@@ -245,7 +247,8 @@ def orders_frame(df: pd.DataFrame) -> pd.DataFrame:
         out[REPEAT_COLUMN] = False
 
     if "Order_Fulfillment_Status" in out.columns:
-        ready = stock_ledger.fulfillable_orders(df)
+        if ready is None:
+            ready = stock_ledger.fulfillable_orders(df)
         out["Order_Fulfillment_Status"] = [
             FULFILLABLE if str(k).strip() in ready else NOT_FULFILLABLE
             for k in out[ORDER_KEY]
@@ -302,27 +305,40 @@ def order_payload(df: pd.DataFrame) -> list[dict]:
     under their own names, and ``lines``, the line-level columns one dict per
     line. The page builds its own search text from these (9.13).
     """
-    orders = orders_frame(df)
+    ready = stock_ledger.fulfillable_orders(df)
+    orders = orders_frame(df, ready=ready)
     if orders.empty:
         return []
     _, line_level = classify_columns(df)
+    keys = df[ORDER_KEY].tolist()
+    records = df[line_level].to_dict("records")
+    has_status = "Order_Fulfillment_Status" in df.columns
+    notes = df["System_note"].tolist() if "System_note" in df.columns else None
+    skus = df["SKU"].tolist() if "SKU" in df.columns else None
+    has_skus = df["Has_SKU"].tolist() if "Has_SKU" in df.columns else None
+    # ponytail: one pass into plain lists (#365); groupby slices cost ~0.7 ms an order.
+    per_order: dict = {}
+    for i, key in enumerate(keys):
+        if pd.isna(key):  # groupby drops a missing key; so do we
+            continue
+        bucket = per_order.get(key)
+        if bucket is None:
+            bucket = per_order[key] = ([], [], [], [])
+        bucket[0].append({k: _json_value(v) for k, v in records[i].items()})
+        if notes is not None:
+            bucket[1].append(notes[i])
+        if skus is not None:
+            bucket[2].append(skus[i])
+        if has_skus is not None:
+            bucket[3].append(has_skus[i])
     lines, verdicts = {}, {}
-    ready = stock_ledger.fulfillable_orders(df)
-    for key, group in df.groupby(ORDER_KEY, sort=False):
-        lines[key] = [
-            dict(zip(line_level, map(_json_value, row)))
-            for row in group[line_level].itertuples(index=False, name=None)
-        ]
-        if "Order_Fulfillment_Status" in group:
+    for key, (rows, key_notes, key_skus, key_has) in per_order.items():
+        lines[key] = rows
+        if has_status:
             status = FULFILLABLE if str(key).strip() in ready else NOT_FULFILLABLE
         else:
             status = ""
-        verdicts[key] = order_verdict(
-            status,
-            group["System_note"].tolist() if "System_note" in group else [],
-            group["SKU"].tolist() if "SKU" in group else [],
-            group["Has_SKU"].tolist() if "Has_SKU" in group else [],
-        )
+        verdicts[key] = order_verdict(status, key_notes, key_skus, key_has)
     columns = [ORDER_KEY] + [c for c in orders.columns if c != ORDER_KEY]
     by_order = df[ORDER_KEY]
     units = (

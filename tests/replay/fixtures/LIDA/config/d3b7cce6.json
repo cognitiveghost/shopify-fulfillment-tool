@@ -1,0 +1,440 @@
+{
+  "client_id": "LIDA",
+  "client_name": "Lida Green",
+  "created_at": "2026-08-14T11:41:29.823327+03:00",
+  "column_mappings": {
+    "version": 2,
+    "orders": {
+      "Order ID": "Order_Number",
+      "Lineitem sku": "SKU",
+      "Lineitem quantity": "Quantity",
+      "Shipping Method": "Shipping_Method",
+      "Lineitem name": "Product_Name",
+      "Shipping Country": "Shipping_Country",
+      "Ordered at": "Notes"
+    },
+    "stock": {
+      "Артикул": "SKU",
+      "Наличност": "Stock",
+      "Име": "Product_Name",
+      "Годност": "Expiry_Date",
+      "Партида": "Batch"
+    },
+    "set_decoders": {
+      "516": [
+        {
+          "sku": "501",
+          "quantity": 3
+        }
+      ],
+      "517": [
+        {
+          "sku": "504",
+          "quantity": 3
+        }
+      ],
+      "518": [
+        {
+          "sku": "514",
+          "quantity": 1
+        },
+        {
+          "sku": "515",
+          "quantity": 1
+        }
+      ],
+      "519": [
+        {
+          "sku": "501",
+          "quantity": 1
+        },
+        {
+          "sku": "504",
+          "quantity": 1
+        },
+        {
+          "sku": "503",
+          "quantity": 1
+        }
+      ],
+      "533": [
+        {
+          "sku": "529",
+          "quantity": 3
+        }
+      ],
+      "535": [
+        {
+          "sku": "534",
+          "quantity": 1
+        },
+        {
+          "sku": "504",
+          "quantity": 1
+        }
+      ],
+      "536": [
+        {
+          "sku": "534",
+          "quantity": 1
+        },
+        {
+          "sku": "515",
+          "quantity": 1
+        }
+      ],
+      "537": [
+        {
+          "sku": "531",
+          "quantity": 1
+        },
+        {
+          "sku": "532",
+          "quantity": 1
+        },
+        {
+          "sku": "511",
+          "quantity": 1
+        }
+      ]
+    },
+    "additional_columns": []
+  },
+  "courier_mappings": {
+    "DHL": {
+      "patterns": [
+        "dhl",
+        "dhl express",
+        "dhl_express"
+      ],
+      "case_sensitive": false
+    }
+  },
+  "analysis_mode": "multi_first",
+  "settings": {
+    "low_stock_threshold": 5,
+    "stock_csv_delimiter": "auto",
+    "orders_csv_delimiter": "auto",
+    "repeat_detection_days": 1,
+    "delimiter_auto_migrated": true
+  },
+  "rules": [
+    {
+      "name": "ORDERCHECK",
+      "priority": 1,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "Order_Fulfillment_Status",
+              "operator": "equals",
+              "value": "Fulfillable"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "O"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SMALLBAG",
+      "priority": 2,
+      "level": "order",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "total_quantity",
+              "operator": "is less than or equal",
+              "value": "6"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "SMALL_BAG"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LARGEBAG",
+      "priority": 3,
+      "level": "order",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "total_quantity",
+              "operator": "is greater than",
+              "value": "6"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "LARGE_BAG"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "NO_SKU",
+      "priority": 4,
+      "level": "article",
+      "steps": [
+        {
+          "conditions": [
+            {
+              "field": "SKU",
+              "operator": "contains",
+              "value": "NO_SKU"
+            }
+          ],
+          "match": "ALL",
+          "actions": [
+            {
+              "type": "ALERT_NOTIFICATION",
+              "message": "NOSKU",
+              "severity": "error"
+            },
+            {
+              "type": "ADD_INTERNAL_TAG",
+              "value": "NOSKU"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "order_rules": [],
+  "packing_list_configs": [
+    {
+      "name": "ALL",
+      "output_filename": "ALL_LIDAGREEN.xlsx",
+      "filters": [
+        {
+          "field": "Order_Fulfillment_Status",
+          "operator": "==",
+          "value": "Fulfillable"
+        }
+      ],
+      "exclude_skus": []
+    }
+  ],
+  "stock_export_configs": [
+    {
+      "name": "ALL",
+      "output_filename": "ALL_LIDAGREEN.xls",
+      "filters": [
+        {
+          "field": "Order_Fulfillment_Status",
+          "operator": "==",
+          "value": "Fulfillable"
+        }
+      ]
+    }
+  ],
+  "set_decoders": {
+    "516": [
+      {
+        "sku": "501",
+        "quantity": 3
+      }
+    ],
+    "517": [
+      {
+        "sku": "504",
+        "quantity": 3
+      }
+    ],
+    "518": [
+      {
+        "sku": "514",
+        "quantity": 1
+      },
+      {
+        "sku": "515",
+        "quantity": 1
+      }
+    ],
+    "519": [
+      {
+        "sku": "501",
+        "quantity": 1
+      },
+      {
+        "sku": "504",
+        "quantity": 1
+      },
+      {
+        "sku": "503",
+        "quantity": 1
+      }
+    ],
+    "533": [
+      {
+        "sku": "529",
+        "quantity": 3
+      }
+    ],
+    "535": [
+      {
+        "sku": "534",
+        "quantity": 1
+      },
+      {
+        "sku": "504",
+        "quantity": 1
+      }
+    ],
+    "536": [
+      {
+        "sku": "534",
+        "quantity": 1
+      },
+      {
+        "sku": "515",
+        "quantity": 1
+      }
+    ],
+    "537": [
+      {
+        "sku": "531",
+        "quantity": 1
+      },
+      {
+        "sku": "532",
+        "quantity": 1
+      },
+      {
+        "sku": "511",
+        "quantity": 1
+      }
+    ]
+  },
+  "packaging_rules": [],
+  "weight_config": {
+    "volumetric_divisor": 6000,
+    "products": {},
+    "boxes": []
+  },
+  "tag_categories": {
+    "version": 2,
+    "categories": {
+      "packaging": {
+        "label": "Packaging",
+        "color": "#4CAF50",
+        "order": 1,
+        "tags": [
+          "SMALL_BAG",
+          "LARGE_BAG"
+        ],
+        "sku_writeoff": {
+          "enabled": true,
+          "mappings": {
+            "SMALL_BAG": [
+              {
+                "sku": "200064",
+                "quantity": 1.0
+              }
+            ],
+            "LARGE_BAG": [
+              {
+                "sku": "200065",
+                "quantity": 1.0
+              }
+            ]
+          }
+        }
+      },
+      "priority": {
+        "label": "Priority",
+        "color": "#FF9800",
+        "order": 2,
+        "tags": [
+          "URGENT",
+          "HIGH_VALUE",
+          "DOUBLE_TRACK"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "status": {
+        "label": "Status",
+        "color": "#2196F3",
+        "order": 3,
+        "tags": [
+          "CHECKED",
+          "PROBLEM",
+          "VERIFIED"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "order_type": {
+        "label": "Order Type",
+        "color": "#9C27B0",
+        "order": 4,
+        "tags": [
+          "RETAIL",
+          "WHOLESALE",
+          "RETURN",
+          "EXCHANGE"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "accessories": {
+        "label": "Accessories",
+        "color": "#E91E63",
+        "order": 5,
+        "tags": [
+          "STICKER",
+          "BUSINESS_CARD",
+          "GIFT_BOX"
+        ],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "delivery": {
+        "label": "Delivery",
+        "color": "#FF5722",
+        "order": 6,
+        "tags": [],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      },
+      "custom": {
+        "label": "Other",
+        "color": "#9E9E9E",
+        "order": 999,
+        "tags": [],
+        "sku_writeoff": {
+          "enabled": false,
+          "mappings": {}
+        }
+      }
+    }
+  }
+}

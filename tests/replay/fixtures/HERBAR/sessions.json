@@ -1,0 +1,859 @@
+[
+  {
+    "session_name": "2026-08-14_1",
+    "status": "archived",
+    "created_at": "2026-08-14T11:55:17.311617+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-19_1",
+    "status": "archived",
+    "created_at": "2026-08-19T09:12:10.295524+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-19_2",
+    "status": "archived",
+    "created_at": "2026-08-19T09:13:41.754421+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-08-19T09:24:21.818408+03:00",
+        "updated_at": "2026-08-19T10:55:22.715042+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-08-20_1",
+    "status": "archived",
+    "created_at": "2026-08-20T09:47:27.663079+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "in_progress",
+        "started_at": "2026-08-20T09:58:59.473860+03:00",
+        "updated_at": "2026-08-20T10:49:45.082779+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-08-21_1",
+    "status": "archived",
+    "created_at": "2026-08-21T08:29:36.193708+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-21_2",
+    "status": "archived",
+    "created_at": "2026-08-21T08:30:05.224599+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-21_3",
+    "status": "archived",
+    "created_at": "2026-08-21T08:30:54.503914+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-21_4",
+    "status": "archived",
+    "created_at": "2026-08-21T08:34:21.021695+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-08-21T10:25:37.669780+03:00",
+        "updated_at": "2026-08-21T11:36:53.217577+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-08-24_1",
+    "status": "archived",
+    "created_at": "2026-08-24T08:58:30.324373+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-24_2",
+    "status": "archived",
+    "created_at": "2026-08-24T09:00:19.569330+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-08-24T09:06:19.811634+03:00",
+        "updated_at": "2026-08-24T11:31:16.232372+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-08-25_1",
+    "status": "archived",
+    "created_at": "2026-08-25T11:53:47.125273+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-08-25T12:03:15.539273+03:00",
+        "updated_at": "2026-08-25T12:42:49.633589+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-08-26_1",
+    "status": "archived",
+    "created_at": "2026-08-26T10:59:24.144480+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "in_progress",
+        "started_at": "2026-08-26T11:06:38.306643+03:00",
+        "updated_at": null,
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-08-27_1",
+    "status": "archived",
+    "created_at": "2026-08-27T10:12:51.266923+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "in_progress",
+        "started_at": "2026-08-27T10:24:22.063994+03:00",
+        "updated_at": null,
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-08-28_1",
+    "status": "archived",
+    "created_at": "2026-08-28T10:28:17.526373+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-28_2",
+    "status": "archived",
+    "created_at": "2026-08-28T11:02:36.427933+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-08-31_1",
+    "status": "archived",
+    "created_at": "2026-08-31T09:28:54.597112+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-08-31T09:40:19.291632+03:00",
+        "updated_at": "2026-08-31T10:26:18.618428+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-01_1",
+    "status": "archived",
+    "created_at": "2026-09-01T09:24:32.632795+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-01T09:55:49.370636+03:00",
+        "updated_at": "2026-09-01T10:22:08.605258+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-02_1",
+    "status": "archived",
+    "created_at": "2026-09-02T09:16:04.726274+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "in_progress",
+        "started_at": "2026-09-02T09:45:07.904810+03:00",
+        "updated_at": null,
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-03_1",
+    "status": "archived",
+    "created_at": "2026-09-03T09:10:48.927295+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-03T09:38:58.748967+03:00",
+        "updated_at": "2026-09-03T09:57:00.982874+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-04_1",
+    "status": "archived",
+    "created_at": "2026-09-04T09:55:01.557648+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-04T09:56:10.304022+03:00",
+        "updated_at": "2026-09-04T10:03:37.687992+03:00",
+        "completed_orders": [
+          "#100341",
+          "#100342",
+          "#100343",
+          "#100344",
+          "#100345"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-08_1",
+    "status": "archived",
+    "created_at": "2026-09-08T09:51:54.322326+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-08T10:25:32.413161+03:00",
+        "updated_at": "2026-09-08T10:51:52.455324+03:00",
+        "completed_orders": [
+          "#100315",
+          "#100316",
+          "#100317",
+          "#100346",
+          "#100347",
+          "#100348",
+          "#100349",
+          "#100350",
+          "#100351",
+          "#100352",
+          "#100353",
+          "#100354",
+          "#100355",
+          "#100356",
+          "#100357",
+          "#100358",
+          "#100359",
+          "#100360",
+          "#100361",
+          "#100362",
+          "#100363",
+          "#100365",
+          "#100366",
+          "#100367",
+          "#100368",
+          "#100369",
+          "#100370",
+          "#100371",
+          "#100372",
+          "#100373",
+          "#100374",
+          "#100375",
+          "#100364"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-09_1",
+    "status": "completed",
+    "created_at": "2026-09-09T10:22:57.008359+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-09T10:31:13.430023+03:00",
+        "updated_at": "2026-09-09T11:01:39.950833+03:00",
+        "completed_orders": [
+          "#100376",
+          "#100377",
+          "#100378",
+          "#100379",
+          "#100384"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-10_1",
+    "status": "completed",
+    "created_at": "2026-09-10T09:56:40.740283+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-10T10:08:36.982423+03:00",
+        "updated_at": "2026-09-10T10:22:44.338554+03:00",
+        "completed_orders": [
+          "#100385",
+          "#100386",
+          "#100387",
+          "#100388",
+          "#100389",
+          "#100390",
+          "#100391",
+          "#100392",
+          "#100393",
+          "#100394",
+          "#100382",
+          "#100383",
+          "#100381",
+          "#100380"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-11_1",
+    "status": "completed",
+    "created_at": "2026-09-11T09:46:40.767477+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-11T09:51:56.303543+03:00",
+        "updated_at": "2026-09-11T10:33:10.166036+03:00",
+        "completed_orders": [
+          "#100398",
+          "#100399",
+          "#100400",
+          "#100401",
+          "#100402",
+          "#100403",
+          "#100404",
+          "#100405",
+          "#100406",
+          "#100407",
+          "#100408",
+          "#100409",
+          "#100397",
+          "#100396",
+          "#100395"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-14_1",
+    "status": "completed",
+    "created_at": "2026-09-14T08:57:55.375101+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-14T10:45:03.097698+03:00",
+        "updated_at": "2026-09-14T11:28:01.150450+03:00",
+        "completed_orders": [
+          "#100410",
+          "#100411",
+          "#100412",
+          "#100413",
+          "#100414",
+          "#100415",
+          "#100416",
+          "#100417",
+          "#100418",
+          "#100419",
+          "#100420",
+          "#100421",
+          "#100422",
+          "#100423",
+          "#100424",
+          "#100425",
+          "#100426",
+          "#100427",
+          "#100428",
+          "#100429",
+          "#100430",
+          "#100431",
+          "#100432",
+          "#100433",
+          "#100434",
+          "#100435",
+          "#100436",
+          "#100437",
+          "#100438",
+          "#100439",
+          "#100440",
+          "#100441"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-15_1",
+    "status": "completed",
+    "created_at": "2026-09-15T10:20:01.412752+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-15T10:31:22.812533+03:00",
+        "updated_at": "2026-09-15T10:54:04.691413+03:00",
+        "completed_orders": [
+          "#100442",
+          "#100443",
+          "#100444",
+          "#100445",
+          "#100446",
+          "#100447",
+          "#100448",
+          "#100450"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-16_1",
+    "status": "archived",
+    "created_at": "2026-09-16T10:32:11.103105+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "in_progress",
+        "started_at": "2026-09-16T10:36:08.275381+03:00",
+        "updated_at": "2026-09-16T10:36:08.275381+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-17_1",
+    "status": "completed",
+    "created_at": "2026-09-17T10:30:40.519743+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-17T10:49:07.604852+03:00",
+        "updated_at": "2026-09-17T10:56:41.260264+03:00",
+        "completed_orders": null
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-17_2",
+    "status": "completed",
+    "created_at": "2026-09-17T10:56:46.076224+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-17T11:05:15.220017+03:00",
+        "updated_at": "2026-09-17T11:20:19.006057+03:00",
+        "completed_orders": [
+          "#100459",
+          "#100460",
+          "#100461",
+          "#100462",
+          "#100463",
+          "#100464",
+          "#100465",
+          "#100466"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-18_1",
+    "status": "completed",
+    "created_at": "2026-09-18T09:54:48.337569+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-18T09:58:15.460983+03:00",
+        "updated_at": "2026-09-18T10:14:56.342491+03:00",
+        "completed_orders": [
+          "#100467",
+          "#100468",
+          "#100469",
+          "#100471",
+          "#100472",
+          "#100473",
+          "#100474",
+          "#100475",
+          "#100470"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-21_1",
+    "status": "completed",
+    "created_at": "2026-09-21T10:39:12.363943+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-21T10:45:49.652951+03:00",
+        "updated_at": "2026-09-21T11:08:39.809449+03:00",
+        "completed_orders": [
+          "#100476",
+          "#100477",
+          "#100478"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-23_1",
+    "status": "completed",
+    "created_at": "2026-09-23T11:05:55.218843+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-23T11:11:00.133899+03:00",
+        "updated_at": "2026-09-23T11:32:18.530385+03:00",
+        "completed_orders": [
+          "#100503",
+          "#100506",
+          "#100507",
+          "#100508",
+          "#100510",
+          "#100511",
+          "#100512",
+          "#100513",
+          "#100514",
+          "#100515",
+          "#100516",
+          "#100517",
+          "#100518",
+          "#100519"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-23_2",
+    "status": "archived",
+    "created_at": "2026-09-23T12:36:23.413846+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-09-23_3",
+    "status": "active",
+    "created_at": "2026-09-23T16:04:31.606857+03:00",
+    "packing_progress": {}
+  },
+  {
+    "session_name": "2026-09-24_1",
+    "status": "completed",
+    "created_at": "2026-09-24T10:13:36.411256+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-24T10:15:47.481540+03:00",
+        "updated_at": "2026-09-24T11:23:25.360089+03:00",
+        "completed_orders": [
+          "#100479",
+          "#100480",
+          "#100481",
+          "#100482",
+          "#100483",
+          "#100484",
+          "#100485",
+          "#100486",
+          "#100487",
+          "#100488",
+          "#100489",
+          "#100490",
+          "#100491",
+          "#100492",
+          "#100493",
+          "#100494",
+          "#100495",
+          "#100496",
+          "#100497",
+          "#100498",
+          "#100499",
+          "#100500",
+          "#100501",
+          "#100502",
+          "#100504",
+          "#100505",
+          "#100509",
+          "#100520",
+          "#100521",
+          "#100522",
+          "#100523",
+          "#100524",
+          "#100525",
+          "#100526",
+          "#100527"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-25_1",
+    "status": "completed",
+    "created_at": "2026-09-25T10:18:43.508576+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-25T10:29:29.622003+03:00",
+        "updated_at": "2026-09-25T11:21:04.106619+03:00",
+        "completed_orders": [
+          "#100538",
+          "#100537",
+          "#100536",
+          "#100535",
+          "#100534",
+          "#100533",
+          "#100532",
+          "#100531",
+          "#100530",
+          "#100529",
+          "#100528"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-28_1",
+    "status": "completed",
+    "created_at": "2026-09-28T10:21:27.342744+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-28T10:23:36.989125+03:00",
+        "updated_at": "2026-09-28T10:52:36.501665+03:00",
+        "completed_orders": [
+          "#100539",
+          "#100540",
+          "#100541",
+          "#100542",
+          "#100543",
+          "#100544",
+          "#100545",
+          "#100546",
+          "#100547",
+          "#100548",
+          "#100549",
+          "#100551",
+          "#100552",
+          "#100553",
+          "#100554",
+          "#100555",
+          "#100556",
+          "#100557",
+          "#100558"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-29_1",
+    "status": "completed",
+    "created_at": "2026-09-29T10:34:02.780994+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-29T10:38:18.603599+03:00",
+        "updated_at": "2026-09-29T10:55:39.410183+03:00",
+        "completed_orders": [
+          "#100559",
+          "#100560",
+          "#100561",
+          "#100562",
+          "#100563",
+          "#100564",
+          "#100565",
+          "#100566",
+          "#100567"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-09-30_1",
+    "status": "completed",
+    "created_at": "2026-09-30T09:22:33.612613+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-09-30T09:25:06.452917+03:00",
+        "updated_at": "2026-09-30T10:17:12.206695+03:00",
+        "completed_orders": [
+          "#100568",
+          "#100569",
+          "#100570",
+          "#100572",
+          "#100573",
+          "#100574",
+          "#100575",
+          "#100576",
+          "#100577",
+          "#100578",
+          "#100579",
+          "#100580",
+          "#100581",
+          "#100582",
+          "#100583",
+          "#100585",
+          "#100571"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-10-01_1",
+    "status": "completed",
+    "created_at": "2026-10-01T09:45:24.869528+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-10-01T09:50:33.951644+03:00",
+        "updated_at": "2026-10-01T10:00:45.985091+03:00",
+        "completed_orders": [
+          "#100591",
+          "#100586",
+          "#100587",
+          "#100588",
+          "#100589",
+          "#100590",
+          "#100592"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-10-02_1",
+    "status": "completed",
+    "created_at": "2026-10-02T10:29:50.538589+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-10-02T10:35:14.846879+03:00",
+        "updated_at": "2026-10-02T10:53:17.038212+03:00",
+        "completed_orders": [
+          "#100593",
+          "#100594",
+          "#100595",
+          "#100596",
+          "#100597",
+          "#100598",
+          "#100599",
+          "#100600",
+          "#100601",
+          "#100602",
+          "#100603",
+          "#100604",
+          "#100605",
+          "#100606"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-10-05_1",
+    "status": "completed",
+    "created_at": "2026-10-05T09:58:51.529972+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-10-05T10:00:54.799322+03:00",
+        "updated_at": "2026-10-05T10:29:02.062483+03:00",
+        "completed_orders": [
+          "#100607",
+          "#100608",
+          "#100609",
+          "#100610",
+          "#100611",
+          "#100612",
+          "#100613",
+          "#100614",
+          "#100615",
+          "#100616",
+          "#100617",
+          "#100618",
+          "#100619",
+          "#100620",
+          "#100621",
+          "#100622",
+          "#100623",
+          "#100624",
+          "#100625",
+          "#100626",
+          "#100627"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-10-06_1",
+    "status": "completed",
+    "created_at": "2026-10-06T09:39:47.775121+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-10-06T09:41:51.239513+03:00",
+        "updated_at": "2026-10-06T10:06:54.157470+03:00",
+        "completed_orders": [
+          "#100628",
+          "#100629",
+          "#100630",
+          "#100631",
+          "#100632",
+          "#100633",
+          "#100634",
+          "#100635"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-10-07_1",
+    "status": "completed",
+    "created_at": "2026-10-07T09:39:37.156756+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-10-07T09:40:43.881148+03:00",
+        "updated_at": "2026-10-07T11:11:10.580754+03:00",
+        "completed_orders": [
+          "#100640",
+          "#100639",
+          "#100638",
+          "#100636"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-10-08_1",
+    "status": "completed",
+    "created_at": "2026-10-08T09:52:52.077779+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-10-08T09:57:06.961227+03:00",
+        "updated_at": "2026-10-08T10:13:24.911724+03:00",
+        "completed_orders": [
+          "#100641",
+          "#100642",
+          "#100643",
+          "#100644",
+          "#100646",
+          "#100647",
+          "#100648",
+          "#100649"
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "2026-10-09_1",
+    "status": "active",
+    "created_at": "2026-10-09T09:55:33.811522+03:00",
+    "packing_progress": {
+      "ALL_HERBAR": {
+        "status": "completed",
+        "started_at": "2026-10-09T10:00:11.414268+03:00",
+        "updated_at": "2026-10-09T10:07:20.389654+03:00",
+        "completed_orders": [
+          "#100550",
+          "#100645",
+          "#100650",
+          "#100651",
+          "#100652",
+          "#100653",
+          "#100654"
+        ]
+      }
+    }
+  }
+]

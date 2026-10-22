@@ -348,6 +348,16 @@ A loaded stock file is always used as it is; memory stands in only when a run ha
 kept in the session. A re-run of that session starts from its baseline, not
 from memory it has already drawn down.
 
+## Clients
+
+**Archived client** — a client whose folders were moved into `Clients/_archive/`
+and `Sessions/_archive/`. Neither tool lists it; Archived clients… restores it.
+Not the session status "archived".
+
+**Client profile** — a client's name, group, colour and pin, kept in
+`client_config.json` and edited on Client settings › Profile. Its fulfilment
+settings are in `shopify_config.json`.
+
 ## Sessions
 
 **Blocked order** — an order this session cannot fulfil, counted as
@@ -394,6 +404,15 @@ ships: one row per order per session, dated when that session first recorded
 it. It follows the session state, not the run. Distinguished from the
 **Packer signal**, the orders Packing Tool has actually packed, which each
 session's `session_info.json` records.
+
+**Packing fingerprint** — what a packing list would make the Packer pack: each fulfillable
+order's SKUs and quantities, hashed. Tags and notes are not in it. Each list records the one it
+was written from. ADR 0019.
+
+**Withdrawn packing list** — a list moved to `packing_lists/withdrawn/` because an edit or a
+re-run changed the packing fingerprint before the Packer started it. The Packer cannot open
+it; generating the list again replaces it. Not **stale**, which is about a PC's copy of the
+session state.
 
 ## Printing
 

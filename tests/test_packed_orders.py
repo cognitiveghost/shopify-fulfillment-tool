@@ -398,3 +398,19 @@ class TestPackedDateUsesWarehouseLocalDate:
         ])
         out = load_session_signals(pm, "ALMADERM")[0]
         assert out.iloc[0]["Execution_Date"] == "2026-07-02"
+
+
+def test_signals_from_entries_reads_packed_orders_and_live_sessions():
+    from shopify_tool import packed_orders
+
+    entries = [
+        {"session_name": "S1", "status": "completed",
+         "packing_progress": {"ALL": {"started_at": "2026-10-05T09:14:52+03:00", "completed_orders": ["#1", "#2"]}}},
+        {"session_name": "S2", "status": "abandoned"},
+    ]
+    packed, live = packed_orders.signals_from_entries(entries)
+    assert sorted(packed["Order_Number"]) == ["#1", "#2"]
+    assert set(packed["Execution_Date"]) == {"2026-10-05"}
+    assert live == {"S1"}
+    packed, live = packed_orders.signals_from_entries([])
+    assert packed.empty and live is None

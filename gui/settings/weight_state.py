@@ -14,33 +14,36 @@ import pandas as pd
 
 from gui.settings.contract import FileProblem, PageContract
 from gui.settings.page_state import _shaped
-from gui.settings.sets_state import _plural, _text, whole_text
+from gui.settings.sets_state import _text, whole_text
+from shared.i18n import N_, _, _n
 from shopify_tool.csv_utils import detect_csv_delimiter, resolve_delimiter
 
 MAX_DIVISOR = 100000
 PRODUCT_LIMIT = 200
+EXPORT_NOUN = {"products": N_("products"), "boxes": N_("boxes")}
 # (the entry's key, the stored key)
 DIMENSIONS = (("l", "length_cm"), ("w", "width_cm"), ("h", "height_cm"))
 PRODUCT_TEXTS = ("sku", "name", "l", "w", "h")
 BOX_TEXTS = ("name", "l", "w", "h")
 
-SUBTITLE = "Product and box sizes, for volumetric weight and the box an order needs."
-DIVISOR_UNIT = "cm³ per kg"
-DIVISOR_HINT = (
+SUBTITLE = N_("Product and box sizes, for volumetric weight and the box an order needs.")
+DIVISOR_UNIT = N_("cm³ per kg")
+DIVISOR_HINT = N_(
     "Volumetric weight is L × W × H ÷ divisor. 6000 is DPD and Speedy; 5000 is DHL and FedEx."
 )
-DIVISOR_PROBLEM = f"Type a whole number from 1 to {MAX_DIVISOR}."
-NUMBER_PROBLEM = "Type a number, 0 or more."
-NO_SKU_HINT = "Type a SKU, or this row isn't saved."
-NO_NAME_HINT = "Type a name, or this row isn't saved."
-PRODUCTS_TEXT = "Each SKU's size in cm. No packaging: the SKU ships as it is and needs no box."
-PRODUCTS_EMPTY = "No products yet. Add one, or import them from a CSV."
-PRODUCT_FILTER = "Filter by SKU or name"
-PRODUCT_HEADS = ["SKU", "Name", "L", "W", "H", "Vol. weight", "No packaging"]
-BOXES_TEXT = "The boxes orders are packed in. The analysis picks the smallest one an order fits."
-BOXES_NOTE = "order_min_box holds the box's name, or NO_BOX_NEEDED, NO_BOX_FITS or UNKNOWN_DIMS."
-BOXES_EMPTY = "No boxes yet."
-BOX_HEADS = ["Name", "L", "W", "H", "Vol. weight"]
+DIVISOR_PROBLEM_TEMPLATE = N_("Type a whole number from 1 to {max}.")
+DIVISOR_PROBLEM = DIVISOR_PROBLEM_TEMPLATE.format(max=MAX_DIVISOR)
+NUMBER_PROBLEM = N_("Type a number, 0 or more.")
+NO_SKU_HINT = N_("Type a SKU, or this row isn't saved.")
+NO_NAME_HINT = N_("Type a name, or this row isn't saved.")
+PRODUCTS_TEXT = N_("Each SKU's size in cm. No packaging: the SKU ships as it is and needs no box.")
+PRODUCTS_EMPTY = N_("No products yet. Add one, or import them from a CSV.")
+PRODUCT_FILTER = N_("Filter by SKU or name")
+PRODUCT_HEADS = [N_("SKU"), N_("Name"), N_("L"), N_("W"), N_("H"), N_("Vol. weight"), N_("No packaging")]
+BOXES_TEXT = N_("The boxes orders are packed in. The analysis picks the smallest one an order fits.")
+BOXES_NOTE = N_("order_min_box holds the box's name, or NO_BOX_NEEDED, NO_BOX_FITS or UNKNOWN_DIMS.")
+BOXES_EMPTY = N_("No boxes yet.")
+BOX_HEADS = [N_("Name"), N_("L"), N_("W"), N_("H"), N_("Vol. weight")]
 
 # The columns an import looks for, lower-cased, in order of preference.
 STOCK_SKU_COLUMNS = ("SKU", "Артикул", "sku", "Article")
@@ -108,35 +111,36 @@ def _dimension(row, column) -> str:
 
 
 def _import_text(added: int, updated: int, skipped: int) -> str:
-    text = f"Added {added}."
+    # Each sentence is whole; the toast joins them with a space.
+    sentences = [_("Added {count}.", count=added)]
     if updated:
-        text += f" Updated {updated}."
+        sentences.append(_("Updated {count}.", count=updated))
     if skipped:
-        text += f" Skipped {skipped} already in the table."
-    return text
+        sentences.append(_("Skipped {count} already in the table.", count=skipped))
+    return " ".join(sentences)
 
 
 class WeightDraft(PageContract):
     """Volumetric weight config, stored under config_data["weight_config"]."""
 
     imports: ClassVar[dict[str, str]] = {
-        "products-stock": "Import SKUs from Stock CSV",
-        "products-dims": "Import Product Dimensions from CSV",
-        "boxes": "Import Boxes from CSV",
+        "products-stock": N_("Import SKUs from Stock CSV"),
+        "products-dims": N_("Import Product Dimensions from CSV"),
+        "boxes": N_("Import Boxes from CSV"),
     }
     exports: ClassVar[dict[str, tuple[str, str]]] = {
-        "products": ("Export Product Dimensions to CSV", "weight_products.csv"),
-        "boxes": ("Export Boxes to CSV", "weight_boxes.csv"),
+        "products": (N_("Export Product Dimensions to CSV"), "weight_products.csv"),
+        "boxes": (N_("Export Boxes to CSV"), "weight_boxes.csv"),
     }
     # kind -> the headline of a failure that is not a FileProblem
     import_failed: ClassVar[dict[str, str]] = {
-        "products-stock": "The SKUs weren't imported",
-        "products-dims": "The dimensions weren't imported",
-        "boxes": "The boxes weren't imported",
+        "products-stock": N_("The SKUs weren't imported"),
+        "products-dims": N_("The dimensions weren't imported"),
+        "boxes": N_("The boxes weren't imported"),
     }
     export_failed: ClassVar[dict[str, str]] = {
-        "products": "The products weren't exported",
-        "boxes": "The boxes weren't exported",
+        "products": N_("The products weren't exported"),
+        "boxes": N_("The boxes weren't exported"),
     }
 
     def __init__(self, weight_config: dict, column_mappings: dict, stock_csv_delimiter: str):
@@ -262,16 +266,25 @@ class WeightDraft(PageContract):
         key = f"{kind}-{row['uid']}"
         invalid = [short for short, _stored in DIMENSIONS if parse_number(row[short]) is None]
         if invalid:
-            return NUMBER_PROBLEM, f"{key}-{invalid[0]}", invalid
+            return _(NUMBER_PROBLEM), f"{key}-{invalid[0]}", invalid
         if duplicate:
-            return f"{row['sku'].strip()} is in the list twice.", f"{key}-sku", ["sku"]
+            sentence = _("{sku} is in the list twice.", sku=row["sku"].strip())
+            return sentence, f"{key}-sku", ["sku"]
         return "", "", []
 
     def _blocking(self) -> list[tuple[str, str, str]]:
         """(blocker, data-key, validate()'s line) for everything that blocks."""
         found = []
+        divisor_name = _("Divisor")
         if _divisor(self.divisor) is None:
-            found.append(("Set Divisor", "divisor", f"Divisor: {DIVISOR_PROBLEM}"))
+            sentence = _(DIVISOR_PROBLEM_TEMPLATE, max=MAX_DIVISOR)
+            found.append(
+                (
+                    _("Set {what}", what=divisor_name),
+                    "divisor",
+                    _("{what}: {sentence}", what=divisor_name, sentence=sentence),
+                )
+            )
         duplicates = self._duplicates()
         for product in self.products:
             sentence, key, _fields = self._row_problem(
@@ -279,16 +292,16 @@ class WeightDraft(PageContract):
             )
             if sentence:
                 sku = product["sku"].strip()
-                blocker = f"Fix product “{sku}”" if sku else "Fix the new product"
-                who = f"Product “{sku}”" if sku else "The new product"
-                found.append((blocker, key, f"{who}: {sentence}"))
+                blocker = _("Fix product “{sku}”", sku=sku) if sku else _("Fix the new product")
+                who = _("Product “{sku}”", sku=sku) if sku else _("The new product")
+                found.append((blocker, key, _("{who}: {sentence}", who=who, sentence=sentence)))
         for box in self.boxes:
             sentence, key, _fields = self._row_problem("box", box, False)
             if sentence:
                 name = box["name"].strip()
-                blocker = f"Fix box “{name}”" if name else "Fix the new box"
-                who = f"Box “{name}”" if name else "The new box"
-                found.append((blocker, key, f"{who}: {sentence}"))
+                blocker = _("Fix box “{name}”", name=name) if name else _("Fix the new box")
+                who = _("Box “{name}”", name=name) if name else _("The new box")
+                found.append((blocker, key, _("{who}: {sentence}", who=who, sentence=sentence)))
         return found
 
     def blocker(self) -> str | None:
@@ -368,7 +381,8 @@ class WeightDraft(PageContract):
             sku_column = next((c for c in STOCK_SKU_COLUMNS if c in df.columns), None)
         if sku_column is None:
             raise FileProblem(
-                "No SKU column found", "Check the Stock mapping page, then import again."
+                _("No SKU column found"),
+                _("Check the Stock mapping page, then import again."),
             )
         name_column = by_internal.get("Product_Name")
         if name_column not in df.columns:
@@ -386,15 +400,17 @@ class WeightDraft(PageContract):
                 continue
             self.products.append(self._product(sku, {"name": _cell(row, name_column)}))
             added += 1
-        return f"Added {added}. Skipped {skipped} already existing.", False
+        return _("Added {added}. Skipped {skipped} already existing.", added=added, skipped=skipped), False
 
     def _import_dimensions(self, df, update: bool) -> tuple[str, bool]:
         sku_column = _find_column(df.columns, SKU_COLUMNS)
         if sku_column is None:
             raise FileProblem(
-                "No SKU column found",
-                f"Available columns: {', '.join(map(str, df.columns))}. "
-                "Expected one of: SKU, Артикул, Article, Код.",
+                _("No SKU column found"),
+                _(
+                    "Available columns: {columns}. Expected one of: SKU, Артикул, Article, Код.",
+                    columns=", ".join(map(str, df.columns)),
+                ),
             )
         columns = {
             "name": _find_column(df.columns, NAME_COLUMNS),
@@ -434,9 +450,11 @@ class WeightDraft(PageContract):
         name_column = _find_column(df.columns, BOX_NAME_COLUMNS)
         if name_column is None:
             raise FileProblem(
-                "No box name column found",
-                f"Available columns: {', '.join(map(str, df.columns))}. "
-                "Expected one of: Name, Box Name, Size, Box.",
+                _("No box name column found"),
+                _(
+                    "Available columns: {columns}. Expected one of: Name, Box Name, Size, Box.",
+                    columns=", ".join(map(str, df.columns)),
+                ),
             )
         columns = {
             "l": _find_column(df.columns, L_COLUMNS),
@@ -492,7 +510,7 @@ class WeightDraft(PageContract):
                 for box in self.boxes
             ]
         pd.DataFrame(rows).to_csv(str(path), sep=";", index=False, encoding="utf-8-sig")
-        return f"Exported {len(rows)} {kind}."
+        return _("Exported {count} {what}.", count=len(rows), what=_(EXPORT_NOUN[kind]))
 
     # --- what the page draws -----------------------------------------------
 
@@ -524,7 +542,7 @@ class WeightDraft(PageContract):
             "no_packaging": product["no_packaging"],
             "invalid": invalid,
             "problem": problem,
-            "hint": NO_SKU_HINT
+            "hint": _(NO_SKU_HINT)
             if not problem and not product["sku"].strip() and (other or product["no_packaging"])
             else "",
         }
@@ -541,7 +559,7 @@ class WeightDraft(PageContract):
             "weight": self._weight(box),
             "invalid": invalid,
             "problem": problem,
-            "hint": NO_NAME_HINT if not problem and not box["name"].strip() and sized else "",
+            "hint": _(NO_NAME_HINT) if not problem and not box["name"].strip() and sized else "",
         }
 
     def _products_view(self) -> dict:
@@ -559,25 +577,29 @@ class WeightDraft(PageContract):
         revealed = self._find(self.products, self.revealed) if self.revealed else None
         if revealed is not None and revealed not in shown:
             shown.append(revealed)
-        count = _plural(len(self.products), "product")
+        count = _n("{n} product", "{n} products", len(self.products))
         unsized = sum(1 for product in self.products if not self._sized(product))
         if unsized:
-            count += f", {unsized} with no size"
+            count = _("{products}, {unsized} with no size", products=count, unsized=unsized)
         duplicates = self._duplicates()
         return {
-            "text": PRODUCTS_TEXT,
+            "text": _(PRODUCTS_TEXT),
             "filter": self.filter,
-            "filter_placeholder": PRODUCT_FILTER,
+            "filter_placeholder": _(PRODUCT_FILTER),
             "count": count,
-            "no_hits": f"No product matches “{self.filter.strip()}”."
+            "no_hits": _("No product matches “{query}”.", query=self.filter.strip())
             if self.products and not shown
             else "",
-            "more": f"Showing {PRODUCT_LIMIT} of {len(listed)}. Filter to find the rest."
+            "more": _(
+                "Showing {shown} of {total}. Filter to find the rest.",
+                shown=PRODUCT_LIMIT,
+                total=len(listed),
+            )
             if len(listed) > PRODUCT_LIMIT
             else "",
-            "empty": "" if self.products else PRODUCTS_EMPTY,
+            "empty": "" if self.products else _(PRODUCTS_EMPTY),
             "can_export": bool(self.products),
-            "heads": PRODUCT_HEADS,
+            "heads": [_(head) for head in PRODUCT_HEADS],
             "rows": [self._product_row(product, duplicates) for product in shown],
         }
 
@@ -585,23 +607,23 @@ class WeightDraft(PageContract):
         divisor_ok = _divisor(self.divisor) is not None
         return {
             "page": "weight",
-            "title": "Weight",
-            "subtitle": SUBTITLE,
+            "title": _("Weight"),
+            "subtitle": _(SUBTITLE),
             "action": "",
             "weight": {
                 "divisor": {
                     "value": self.divisor,
-                    "unit": DIVISOR_UNIT,
-                    "hint": DIVISOR_HINT,
-                    "problem": "" if divisor_ok else DIVISOR_PROBLEM,
+                    "unit": _(DIVISOR_UNIT),
+                    "hint": _(DIVISOR_HINT),
+                    "problem": "" if divisor_ok else _(DIVISOR_PROBLEM_TEMPLATE, max=MAX_DIVISOR),
                 },
                 "products": self._products_view(),
                 "boxes": {
-                    "text": BOXES_TEXT,
-                    "note": BOXES_NOTE,
-                    "empty": "" if self.boxes else BOXES_EMPTY,
+                    "text": _(BOXES_TEXT),
+                    "note": _(BOXES_NOTE),
+                    "empty": "" if self.boxes else _(BOXES_EMPTY),
                     "can_export": bool(self.boxes),
-                    "heads": BOX_HEADS,
+                    "heads": [_(head) for head in BOX_HEADS],
                     "rows": [self._box_row(box) for box in self.boxes],
                 },
             },

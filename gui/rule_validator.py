@@ -13,6 +13,8 @@ validation and execution.
 
 import logging
 
+from shared.i18n import _
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,11 +39,11 @@ def validate_regex(pattern: str) -> tuple[bool, str | None]:
     from shopify_tool.rules import _compile_regex_safe
 
     if not pattern or not pattern.strip():
-        return (False, "Regex pattern cannot be empty")
+        return (False, _("Regex pattern cannot be empty"))
 
     compiled = _compile_regex_safe(pattern)
     if compiled is None:
-        return (False, "Invalid regex syntax")
+        return (False, _("Invalid regex syntax"))
 
     return (True, None)
 
@@ -73,11 +75,11 @@ def validate_date(date_str: str) -> tuple[bool, str | None]:
     from shopify_tool.rules import _parse_date_safe
 
     if not date_str or not str(date_str).strip():
-        return (False, "Date cannot be empty")
+        return (False, _("Date cannot be empty"))
 
     parsed = _parse_date_safe(date_str)
     if parsed is None:
-        return (False, "Invalid date format. Use: YYYY-MM-DD, DD/MM/YYYY, or DD.MM.YYYY")
+        return (False, _("Invalid date format. Use: YYYY-MM-DD, DD/MM/YYYY, or DD.MM.YYYY"))
 
     return (True, None)
 
@@ -101,11 +103,15 @@ def validate_range(range_str: str) -> tuple[bool, str | None, str | None]:
 
     text = str(range_str or "").strip()
     if not text:
-        return (False, "Range cannot be empty", None)
+        return (False, _("Range cannot be empty"), None)
     if not RANGE_PATTERN.match(text):
-        return (False, "Invalid format. Use: start-end (e.g., 10-100)", None)
+        return (False, _("Invalid format. Use: start-end (e.g., 10-100)"), None)
     if _parse_range(text) is None:
-        return (False, "Start is greater than end. Write the smaller number first, for example 10-100.", None)
+        return (
+            False,
+            _("Start is greater than end. Write the smaller number first, for example 10-100."),
+            None,
+        )
     return (True, None, None)
 
 
@@ -136,13 +142,13 @@ def validate_list(list_str: str) -> tuple[bool, int, str | None]:
         (False, 0, "List cannot be empty")
     """
     if not list_str or not str(list_str).strip():
-        return (False, 0, "List cannot be empty")
+        return (False, 0, _("List cannot be empty"))
 
     # Split, trim, count non-empty items
     items = [item.strip() for item in str(list_str).split(",") if item.strip()]
 
     if not items:
-        return (False, 0, "No valid items in list")
+        return (False, 0, _("No valid items in list"))
 
     return (True, len(items), None)
 
@@ -170,13 +176,13 @@ def validate_numeric(value_str: str) -> tuple[bool, str | None]:
         (False, "Value must be a number")
     """
     if not value_str or not str(value_str).strip():
-        return (False, "Value cannot be empty")
+        return (False, _("Value cannot be empty"))
 
     try:
         float(value_str)
         return (True, None)
     except ValueError:
-        return (False, "Value must be a number")
+        return (False, _("Value must be a number"))
 
 
 _NUMERIC_OPERATORS = {

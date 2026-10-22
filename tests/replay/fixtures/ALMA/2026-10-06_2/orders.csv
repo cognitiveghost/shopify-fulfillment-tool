@@ -1,0 +1,21 @@
+Name,Financial Status,Fulfillment Status,Subtotal,Total,Shipping Method,Created at,Lineitem quantity,Lineitem name,Lineitem sku,Shipping Name,Shipping Country,Notes,Tags
+#100002070,pending,unfulfilled,28.64,28.64,ОФИС НА СПИДИ: ДИМИТРОВГРАД - ЕКО (АВТОМАТ),2026-10-05 11:23:54 +0300,1,Azelia+ | Азелаинов серум за петна и пъпки - 30ML,01-FACE-1007,Customer,BG,,VIP_CUSTOMER
+#100002071,paid,unfulfilled,12.64,13.91,ОФИС НА СПИДИ: СОФИЯ - ЛЮЛИН 8 (АВТОМАТ),2026-10-05 11:37:53 +0300,1,ReGen+ | Reusable Eye Patches,05-ADD-5002,Customer,BG,,FIRST_ORDER
+#100002072,pending,unfulfilled,36.64,36.64,Доставка със СПИДИ до адрес,2026-10-05 11:47:08 +0300,1,Eterna+ | Пептиден околоочен серум с екзозоми - 15ML,01-FACE-1005,Customer,BG,,
+#100002074,paid,unfulfilled,89.28,89.28,ОФИС НА СПИДИ: СТАРА ЗАГОРА - ОПЪЛЧЕНСКИ (АВТОМАТ),2026-10-05 12:35:51 +0300,1,Sébula+ | Липиден серум със сквалан за чувствителна кожа - 15ML,01-FACE-1003,Customer,BG,,FIRST_ORDER
+#100002074,,,,,,2026-10-05 12:35:51 +0300,1,Purity+ | Нежен крем-клензър за лице pH 4.89 - 150ML,01-FACE-1001,,,,
+#100002077,pending,unfulfilled,59.80,59.80,ОФИС НА СПИДИ: РУСЕ - ЦЕНТРАЛЕН ПАЗАР (АВТОМАТ),2026-10-05 13:00:02 +0300,1,Timeless+ | Anti-age крем с екзозоми - 30ML,01-FACE-1004,Customer,BG,,VIP_CUSTOMER
+#100002081,pending,unfulfilled,27.84,27.84,ОФИС НА СПИДИ: БЛАГОЕВГРАД - КИРИЛ И МЕТОДИЙ (БУЛ.),2026-10-05 13:25:53 +0300,1,SOLARIX+ | Body & Face Sunscreen Fluid SPF 50+ - 150 ml,01-BODY-1010,Customer,BG,,FIRST_ORDER
+#100002093,pending,unfulfilled,44.64,44.64,ОФИС НА СПИДИ: СТАРА ЗАГОРА - КАУФЛАНД БЕДЕЧКА (АВТОМАТ),2026-10-05 15:39:02 +0300,1,HydraX+ | Бариерен крем за лице със серамиди - 30ML,01-FACE-1002,Customer,BG,,FIRST_ORDER
+#100002107,paid,unfulfilled,31.84,31.84,Доставка със СПИДИ до адрес,2026-10-05 18:29:24 +0300,1,SOLERA+ | Face Sunscreen Fluid SPF 50+ - 50 ml,01-FACE-1009,Customer,BG,,FIRST_ORDER
+#100002108,paid,unfulfilled,31.84,31.84,ОФИС НА СПИДИ: ВАРНА - ЪПТАУН ШОПИНГ ЦЕНТЪР (АВТОМАТ),2026-10-05 18:46:43 +0300,1,LumiX+ | Озаряващ околоочен booster серум с кофеин - 15ML,01-FACE-1006,Customer,BG,,FIRST_ORDER
+#100002109,pending,unfulfilled,36.64,36.64,Доставка със СПИДИ до адрес,2026-10-05 18:50:13 +0300,1,Purity+ | Нежен крем-клензър за лице pH 4.89 - 150ML,01-FACE-1001,Customer,BG,,VIP_CUSTOMER
+#100002111,pending,unfulfilled,44.64,44.64,ОФИС НА СПИДИ: БУРГАС - ЛУКОЙЛ БРАТЯ МИЛАДИНОВИ (АВТОМАТ),2026-10-05 19:27:52 +0300,1,HydraX+ | Бариерен крем за лице със серамиди - 30ML,01-FACE-1002,Customer,BG,,
+#100002118,paid,unfulfilled,15.04,16.31,ОФИС НА СПИДИ: РУСЕ - УМБАЛ КАНЕВ (АВТОМАТ),2026-10-05 22:26:18 +0300,1,NeedleX+ Пластир с активни микроигли срещу пъпки,01-FACE-2002,Customer,BG,,
+#100002120,pending,unfulfilled,31.84,31.84,ОФИС НА СПИДИ: САНДАНСКИ - ХРИСТО БОТЕВ (УЛ.),2026-10-05 22:59:17 +0300,1,LumiX+ | Озаряващ околоочен booster серум с кофеин - 15ML,01-FACE-1006,Customer,BG,,FIRST_ORDER
+#100002124,pending,unfulfilled,44.48,44.48,ОФИС НА СПИДИ: СОФИЯ - ГЕОРГИ РАКОВСКИ,2026-10-06 00:32:06 +0300,1,ReGen+ | Reusable Eye Patches,05-ADD-5002,Customer,BG,,
+#100002124,,,,,,2026-10-06 00:32:06 +0300,1,LumiX+ | Озаряващ околоочен booster серум с кофеин - 15ML,01-FACE-1006,,,,
+#100002127,pending,unfulfilled,36.64,36.64,Доставка със СПИДИ до адрес,2026-10-06 07:49:55 +0300,1,Муселинова кърпа - подарък,05-ADD-5001,Customer,BG,,
+#100002127,,,,,,2026-10-06 07:49:55 +0300,1,Purity+ | Нежен крем-клензър за лице pH 4.89 - 150ML,01-FACE-1001,,,,
+#100002128,pending,unfulfilled,31.84,31.84,ОФИС НА СПИДИ: КОЗЛОДУЙ - ЛУКОЙЛ (АВТОМАТ),2026-10-06 08:31:03 +0300,1,SOLERA+ | Face Sunscreen Fluid SPF 50+ - 50 ml,01-FACE-1009,Customer,BG,,FIRST_ORDER
+#100002130,pending,unfulfilled,23.84,25.11,ОФИС НА СПИДИ: СОФИЯ - ФАНТАСТИКО ЙЕРУСАЛИМ (АВТОМАТ),2026-10-06 09:05:58 +0300,1,ToniX+ | Комбуча хидратиращ essence toner за лице - 120ML,01-FACE-1008,Customer,BG,,

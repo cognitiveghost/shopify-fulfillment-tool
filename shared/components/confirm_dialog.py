@@ -11,10 +11,12 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QLabel,
+    QLineEdit,
     QPushButton,
     QVBoxLayout,
 )
 
+from shared.i18n import _
 from shared.theme import apply_dialog_button_roles, font_css
 
 _VERBS_THAT_NAME_NO_ACT = {"ok", "yes", "confirm", "continue"}
@@ -23,7 +25,9 @@ _VERBS_THAT_NAME_NO_ACT = {"ok", "yes", "confirm", "continue"}
 class ConfirmDialog(QDialog):
     """Title asks the question, body states count and consequence, verb acts."""
 
-    def __init__(self, parent, *, title: str, body: str, verb: str) -> None:
+    def __init__(
+        self, parent, *, title: str, body: str, verb: str, require_text: str | None = None
+    ) -> None:
         if verb.strip().lower() in _VERBS_THAT_NAME_NO_ACT:
             raise ValueError(f"A confirm names its act; {verb!r} does not")
         super().__init__(parent)
@@ -43,6 +47,14 @@ class ConfirmDialog(QDialog):
         self.body_label.setStyleSheet(font_css("body"))
         layout.addWidget(self.body_label)
 
+        self.confirm_input = None
+        if require_text is not None:
+            self.confirm_input = QLineEdit(self)
+            self.confirm_input.setPlaceholderText(
+                _("Type {require_text} to confirm", require_text=require_text)
+            )
+            layout.addWidget(self.confirm_input)
+
         self.buttons = QDialogButtonBox(self)
         self.cancel_button = self.buttons.addButton(
             QDialogButtonBox.StandardButton.Cancel
@@ -56,7 +68,16 @@ class ConfirmDialog(QDialog):
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
 
+        if self.confirm_input is not None:
+            self.verb_button.setEnabled(False)
+            self.confirm_input.textChanged.connect(
+                lambda text: self.verb_button.setEnabled(text.strip() == require_text)
+            )
+
     @classmethod
-    def ask(cls, parent, *, title: str, body: str, verb: str) -> bool:
+    def ask(
+        cls, parent, *, title: str, body: str, verb: str, require_text: str | None = None
+    ) -> bool:
         """Show the confirm and return True only if the verb was pressed."""
-        return bool(cls(parent, title=title, body=body, verb=verb).exec())
+        dialog = cls(parent, title=title, body=body, verb=verb, require_text=require_text)
+        return bool(dialog.exec())

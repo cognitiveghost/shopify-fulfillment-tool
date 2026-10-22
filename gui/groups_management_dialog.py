@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from gui.components import ConfirmDialog, show_error, toast
 from gui.theme_manager import apply_dialog_button_roles, get_theme_manager
+from shared.i18n import _
 from shopify_tool.groups_manager import GroupsManager, GroupsManagerError
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class GroupsManagementDialog(QDialog):
         self.groups_manager = groups_manager
         self.profile_manager = profile_manager
 
-        self.setWindowTitle("Manage Client Groups")
+        self.setWindowTitle(_("Manage Client Groups"))
         self.setModal(True)
         self.setMinimumSize(600, 400)
 
@@ -63,7 +64,9 @@ class GroupsManagementDialog(QDialog):
         # Table for groups
         self.groups_table = QTableWidget()
         self.groups_table.setColumnCount(4)
-        self.groups_table.setHorizontalHeaderLabels(["Name", "Color", "Clients", "ID"])
+        self.groups_table.setHorizontalHeaderLabels(
+            [_("Name"), _("Color"), _("Clients"), _("ID")]
+        )
         self.groups_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.groups_table.setSelectionMode(QTableWidget.SingleSelection)
         self.groups_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -86,16 +89,16 @@ class GroupsManagementDialog(QDialog):
         # Buttons layout
         buttons_layout = QHBoxLayout()
 
-        self.create_btn = QPushButton("Create Group")
+        self.create_btn = QPushButton(_("Create Group"))
         self.create_btn.clicked.connect(self._create_group)
         buttons_layout.addWidget(self.create_btn)
 
-        self.edit_btn = QPushButton("Edit Group")
+        self.edit_btn = QPushButton(_("Edit Group"))
         self.edit_btn.clicked.connect(self._edit_group)
         self.edit_btn.setEnabled(False)
         buttons_layout.addWidget(self.edit_btn)
 
-        self.delete_btn = QPushButton("Delete Group")
+        self.delete_btn = QPushButton(_("Delete Group"))
         self.delete_btn.clicked.connect(self._delete_group)
         self.delete_btn.setEnabled(False)
         buttons_layout.addWidget(self.delete_btn)
@@ -161,7 +164,7 @@ class GroupsManagementDialog(QDialog):
 
         except Exception:
             logger.exception("Failed to load groups")
-            show_error(self, "Groups didn't load", "Details are in Logs.")
+            show_error(self, _("Groups didn't load"), _("Details are in Logs."))
 
     def _on_selection_changed(self):
         """Handle table selection change."""
@@ -187,7 +190,9 @@ class GroupsManagementDialog(QDialog):
         """Create new group."""
         theme = get_theme_manager().get_current_theme()
         # Get group name
-        name, ok = QInputDialog.getText(self, "Create Group", "Enter group name:")
+        name, ok = QInputDialog.getText(
+            self, _("Create Group"), _("Enter group name:")
+        )
 
         if not ok or not name.strip():
             return
@@ -198,7 +203,7 @@ class GroupsManagementDialog(QDialog):
         color = QColorDialog.getColor(
             QColor(theme.accent_fill),  # Default blue
             self,
-            "Select Group Color",
+            _("Select Group Color"),
         )
 
         if not color.isValid():
@@ -211,17 +216,17 @@ class GroupsManagementDialog(QDialog):
             group_id = self.groups_manager.create_group(name, color_hex)
             logger.info(f"Created group: {name} (ID: {group_id}, Color: {color_hex})")
 
-            toast(self, f"Group {name} created.")
+            toast(self, _("Group {name} created.", name=name))
 
             # Reload table
             self._load_groups()
 
         except GroupsManagerError:
             logger.exception("Failed to create group")
-            show_error(self, "The group wasn't created", "Details are in Logs.")
+            show_error(self, _("The group wasn't created"), _("Details are in Logs."))
         except Exception:
             logger.exception("Unexpected error creating group")
-            show_error(self, "The group wasn't created", "Details are in Logs.")
+            show_error(self, _("The group wasn't created"), _("Details are in Logs."))
 
     def _edit_group(self):
         """Edit selected group."""
@@ -236,8 +241,8 @@ class GroupsManagementDialog(QDialog):
             logger.warning(f"Group {group_id} not found")
             show_error(
                 self,
-                "The group wasn't found",
-                "It may have been deleted on another PC. The list is reloaded.",
+                _("The group wasn't found"),
+                _("It may have been deleted on another PC. The list is reloaded."),
             )
             self._load_groups()
             return
@@ -247,7 +252,10 @@ class GroupsManagementDialog(QDialog):
 
         # Get new name
         name, ok = QInputDialog.getText(
-            self, "Edit Group", "Enter new group name:", text=current_name
+            self,
+            _("Edit Group"),
+            _("Enter new group name:"),
+            text=current_name,
         )
 
         if not ok:
@@ -256,14 +264,17 @@ class GroupsManagementDialog(QDialog):
         name = name.strip() if name else None
 
         # Get new color
-        color = QColorDialog.getColor(QColor(current_color), self, "Select Group Color")
+        color = QColorDialog.getColor(
+            QColor(current_color), self, _("Select Group Color")
+        )
 
         color_hex = color.name() if color.isValid() else None
 
         # Update group (if any changes)
         if name == current_name:
             name = None  # No change
-        if color_hex == current_color:
+        # QColor.name() is lower case; a stored "#FF0000" is the same colour (AUDIT-10-10).
+        if color_hex is not None and color_hex.lower() == str(current_color).lower():
             color_hex = None  # No change
 
         if name is None and color_hex is None:
@@ -273,17 +284,17 @@ class GroupsManagementDialog(QDialog):
             self.groups_manager.update_group(group_id, name=name, color=color_hex)
             logger.info(f"Updated group: {group_id}")
 
-            toast(self, f"Group {name or current_name} updated.")
+            toast(self, _("Group {name} updated.", name=name or current_name))
 
             # Reload table
             self._load_groups()
 
         except GroupsManagerError:
             logger.exception("Failed to update group")
-            show_error(self, "The group wasn't updated", "Details are in Logs.")
+            show_error(self, _("The group wasn't updated"), _("Details are in Logs."))
         except Exception:
             logger.exception("Unexpected error updating group")
-            show_error(self, "The group wasn't updated", "Details are in Logs.")
+            show_error(self, _("The group wasn't updated"), _("Details are in Logs."))
 
     def _delete_group(self):
         """Delete selected group."""
@@ -297,8 +308,8 @@ class GroupsManagementDialog(QDialog):
             logger.warning(f"Group {group_id} not found")
             show_error(
                 self,
-                "The group wasn't found",
-                "It may have been deleted on another PC. The list is reloaded.",
+                _("The group wasn't found"),
+                _("It may have been deleted on another PC. The list is reloaded."),
             )
             self._load_groups()
             return
@@ -313,9 +324,12 @@ class GroupsManagementDialog(QDialog):
 
         if not ConfirmDialog.ask(
             self,
-            title=f"Delete group {name}?",
-            body=f"{client_count} client(s) lose this group. Clients are not deleted.",
-            verb="Delete group",
+            title=_("Delete group {name}?", name=name),
+            body=_(
+                "{client_count} client(s) lose this group. Clients are not deleted.",
+                client_count=client_count,
+            ),
+            verb=_("Delete group"),
         ):
             return
 
@@ -324,14 +338,14 @@ class GroupsManagementDialog(QDialog):
             self.groups_manager.delete_group(group_id, self.profile_manager)
             logger.info(f"Deleted group: {name} (ID: {group_id})")
 
-            toast(self, f"Group {name} deleted.")
+            toast(self, _("Group {name} deleted.", name=name))
 
             # Reload table
             self._load_groups()
 
         except GroupsManagerError:
             logger.exception("Failed to delete group")
-            show_error(self, "The group wasn't deleted", "Details are in Logs.")
+            show_error(self, _("The group wasn't deleted"), _("Details are in Logs."))
         except Exception:
             logger.exception("Unexpected error deleting group")
-            show_error(self, "The group wasn't deleted", "Details are in Logs.")
+            show_error(self, _("The group wasn't deleted"), _("Details are in Logs."))

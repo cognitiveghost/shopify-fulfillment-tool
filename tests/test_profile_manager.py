@@ -370,3 +370,113 @@ class TestConfigBackups:
         profile_manager.save_shopify_config("M", cfg)
         backups = list((profile_manager.clients_dir / "CLIENT_M" / "backups").glob("shopify_config_*.json"))
         assert len(backups) == 2
+
+
+# --- sets, config files and metadata (Audit 10, part A) -----------------------------------
+
+
+class TestSetDecoders:
+    def test_add_set_round_trips_and_replaces(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        assert profile_manager.get_set_decoders("ACME") == {}
+        assert profile_manager.add_set("ACME", "SET-1", [{"sku": "A", "quantity": 1}]) is True
+        assert profile_manager.add_set("ACME", "SET-1", [{"sku": "B", "quantity": 2}]) is True
+        assert profile_manager.get_set_decoders("ACME") == {"SET-1": [{"sku": "B", "quantity": 2}]}
+
+    @pytest.mark.parametrize(
+        ("set_sku", "components", "message"),
+        [
+            ("", [{"sku": "A", "quantity": 1}], "set_sku"),
+            ("SET-1", [], "components"),
+            ("SET-1", ["A"], "must be a dictionary"),
+            ("SET-1", [{"quantity": 1}], "missing 'sku'"),
+            ("SET-1", [{"sku": "A"}], "missing 'quantity'"),
+            ("SET-1", [{"sku": "A", "quantity": 0}], "must be positive"),
+            ("SET-1", [{"sku": "A", "quantity": "x"}], "must be an integer"),
+        ],
+    )
+    def test_add_set_rejects_a_bad_definition_and_stores_nothing(self, profile_manager, set_sku, components, message):
+        from shopify_tool.profile_manager import ValidationError
+
+        profile_manager.create_client_profile("ACME", "Acme")
+        with pytest.raises(ValidationError, match=message):
+            profile_manager.add_set("ACME", set_sku, components)
+        assert profile_manager.get_set_decoders("ACME") == {}
+
+    def test_delete_set(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        profile_manager.add_set("ACME", "SET-1", [{"sku": "A", "quantity": 1}])
+        assert profile_manager.delete_set("ACME", "SET-1") is True
+        assert profile_manager.delete_set("ACME", "SET-1") is False  # already gone
+        assert profile_manager.get_set_decoders("ACME") == {}
+
+    def test_sets_of_an_unknown_client_are_empty_and_cannot_be_saved(self, profile_manager):
+        from shopify_tool.profile_manager import ProfileManagerError
+
+        assert profile_manager.get_set_decoders("NOPE") == {}
+        with pytest.raises(ProfileManagerError):
+            profile_manager.save_set_decoders("NOPE", {})
+
+
+class TestClientConfigFiles:
+    def test_invalid_json_gives_none(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        path = profile_manager.get_client_directory("ACME") / "client_config.json"
+        path.write_text("{not json", encoding="utf-8")
+        profile_manager._config_cache.clear()
+        assert profile_manager.load_client_config("ACME") is None
+
+    def test_a_missing_client_gives_none(self, profile_manager):
+        assert profile_manager.load_client_config("NOPE") is None
+        assert profile_manager.get_client_config_extended("NOPE") == {}
+
+    def test_list_clients_ignores_folders_that_are_not_clients(self, profile_manager):
+        profile_manager.create_client_profile("BBB", "B")
+        profile_manager.create_client_profile("AAA", "A")
+        (profile_manager.clients_dir / "notes").mkdir()
+        (profile_manager.clients_dir / "CLIENT_FILE").write_text("x", encoding="utf-8")
+        assert profile_manager.list_clients() == ["AAA", "BBB"]
+
+    def test_update_last_accessed_stamps_the_metadata(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        assert profile_manager.update_last_accessed("ACME") is True
+        assert profile_manager.load_client_config("ACME")["metadata"]["last_accessed"]
+        assert profile_manager.update_last_accessed("NOPE") is False
+
+    def test_the_extended_config_carries_ui_settings_and_metadata(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        extended = profile_manager.get_client_config_extended("ACME")
+        assert extended["ui_settings"]["is_pinned"] is False
+        assert extended["metadata"]["total_sessions"] == 0
+
+    def test_a_cached_read_is_a_copy(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        first = profile_manager.load_client_config("ACME")
+        first["client_name"] = "CHANGED"
+        assert profile_manager.load_client_config("ACME")["client_name"] == "Acme"
+
+
+class TestMetadata:
+    def test_it_counts_dated_session_folders_and_reports_the_latest(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        root = profile_manager.sessions_dir / "CLIENT_ACME"
+        for name in ("2026-10-01_1", "2026-10-05_2", "2026-10-05_10", "scratch"):
+            (root / name).mkdir(parents=True)
+        (root / "2026-10-09_1").write_text("a file, not a session", encoding="utf-8")
+        meta = profile_manager.calculate_metadata("ACME", force_refresh=True)
+        assert meta["total_sessions"] == 3
+        assert meta["last_session_date"] == "2026-10-05"
+
+    def test_the_cache_holds_until_it_is_invalidated(self, profile_manager):
+        profile_manager.create_client_profile("ACME", "Acme")
+        assert profile_manager.calculate_metadata("ACME")["total_sessions"] == 0
+        (profile_manager.sessions_dir / "CLIENT_ACME" / "2026-10-01_1").mkdir(parents=True)
+        assert profile_manager.calculate_metadata("ACME")["total_sessions"] == 0  # cached
+        profile_manager.invalidate_metadata_cache("ACME")
+        assert profile_manager.calculate_metadata("ACME")["total_sessions"] == 1
+        profile_manager.invalidate_metadata_cache()
+        assert profile_manager._metadata_cache == {}
+
+    def test_a_client_without_sessions_has_none(self, profile_manager):
+        meta = profile_manager.calculate_metadata("NOPE")
+        assert (meta["total_sessions"], meta["last_session_date"]) == (0, None)

@@ -1,0 +1,102 @@
+/* User guide stylesheet (A4 print). build.py prepends the :root colour tokens from shared.theme. */
+
+@page {
+  size: A4;
+  margin: 22mm 18mm;
+  @top-center { content: string(title); font-size: 9pt; color: var(--text-secondary); }
+  @bottom-center { content: counter(page); font-size: 9pt; color: var(--text-secondary); }
+}
+
+@page :first {
+  @top-center { content: none; }
+  @bottom-center { content: none; }
+}
+
+body {
+  font-family: sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.cover {
+  break-after: page;
+  padding-top: 80mm;
+}
+
+.cover h1 {
+  font-size: 30pt;
+  string-set: title content();
+}
+
+.cover-meta {
+  color: var(--text-secondary);
+}
+
+.toc {
+  break-after: page;
+}
+
+.toc-title {
+  font-size: 16pt;
+  font-weight: bold;
+}
+
+.toc ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.toc ul ul {
+  padding-left: 1.2em;
+}
+
+.toc a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+h2 {
+  break-before: page;
+  font-size: 18pt;
+}
+
+h3 {
+  font-size: 13pt;
+  margin-top: 1.4em;
+}
+
+figure {
+  margin: 1em 0;
+  break-inside: avoid;
+}
+
+figure img {
+  width: 100%;
+  border: 1px solid var(--border);
+}
+
+figcaption {
+  font-size: 9pt;
+  color: var(--text-secondary);
+  margin-top: 4pt;
+}
+
+blockquote {
+  margin: 1em 0;
+  padding: 0.4em 0.9em;
+  border-left: 4px solid var(--accent);
+  background: var(--surface-sunken);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 4pt 6pt;
+  text-align: left;
+}

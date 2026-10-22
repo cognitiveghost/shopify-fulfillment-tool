@@ -22,10 +22,10 @@ from gui.tools_state import (
     BarcodeFacts,
     PackingList,
     ToolRun,
-    counted,
     short_path,
 )
 from gui.worker import Worker
+from shared.i18n import _, _n
 from shopify_tool.barcode_processor import (
     barcode_pdf_path,
     barcodes_dir,
@@ -205,8 +205,8 @@ class BarcodeTool(QObject):
             self.changed.emit()
             show_error(
                 self._host,
-                "The packing lists weren't read",
-                "Check the server connection, then Refresh.",
+                _("The packing lists weren't read"),
+                _("Check the server connection, then Refresh."),
             )
             return
         self._lists = [entry for entry, _orders in found]
@@ -245,12 +245,13 @@ class BarcodeTool(QObject):
         folder = barcodes_dir(self._session, entry.name)
         if barcode_pdf_path(folder, entry.name).exists() and not ConfirmDialog.ask(
             self._host,
-            title=f"Replace barcodes for {entry.name}?",
-            body=(
-                f"The existing PDF is overwritten with {entry.count} new barcodes. "
-                "This cannot be undone."
+            title=_("Replace barcodes for {name}?", name=entry.name),
+            body=_(
+                "The existing PDF is overwritten with {count} new barcodes. "
+                "This cannot be undone.",
+                count=entry.count,
             ),
-            verb="Replace barcodes",
+            verb=_("Replace barcodes"),
         ):
             return
         base = fulfillable_only(frame)
@@ -272,7 +273,7 @@ class BarcodeTool(QObject):
         worker.signals.error.connect(self._on_error)
         worker.signals.finished.connect(self._on_finished)
         self._run_worker = worker
-        self._run = ToolRun(f"Preparing {entry.count:,} labels…")
+        self._run = ToolRun(_("Preparing {count} labels…", count=f"{entry.count:,}"))
         logger.info(f"Started barcode generation for packing list {entry.name!r}")
         self.changed.emit()
         self._start(worker)
@@ -303,15 +304,23 @@ class BarcodeTool(QObject):
                 if path:
                     QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         if outcome["pdf"]:
-            text = f"{counted(outcome['labels'], 'barcode label')} saved to {short_path(folder)}"
+            text = _n(
+                "{labels} barcode label saved to {folder}",
+                "{labels} barcode labels saved to {folder}",
+                outcome["labels"],
+                labels=f"{outcome['labels']:,}",
+                folder=short_path(folder),
+            )
             if outcome["qr_pdf"]:
-                text += ". QR labels too."
+                text = _("{saved}. QR labels too.", saved=text)
             self.toast.emit(text, folder)
 
     def _on_error(self, error_info) -> None:
         _exctype, value, _traceback_str = error_info
         logger.error("Barcode generation failed", exc_info=value)
-        show_error(self._host, "The barcode PDF wasn't created", "Details are in Logs.")
+        show_error(
+            self._host, _("The barcode PDF wasn't created"), _("Details are in Logs.")
+        )
 
     def _on_finished(self) -> None:
         self._run = None

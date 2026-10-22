@@ -15,11 +15,11 @@ function writeoffRow(e, uid, m, row) {
       .join("");
   return `<div class="list-part" data-map="${m}">
     <div class="map-row">
-      ${ruleSelect(`${key}-tag`, "Tag", row.tag, false, menu, "map-tag")}
-      <input class="field mono${row.invalid === "sku" ? " invalid" : ""}" type="text" value="${esc(row.sku)}" placeholder="SKU to write off" aria-label="SKU to write off" data-input="map_sku" data-uid="${uid}" data-m="${m}" data-key="${key}-sku">
+      ${ruleSelect(`${key}-tag`, t("Tag"), row.tag, false, menu, "map-tag")}
+      <input class="field mono${row.invalid === "sku" ? " invalid" : ""}" type="text" value="${esc(row.sku)}" placeholder="${t("SKU to write off")}" aria-label="${t("SKU to write off")}" data-input="map_sku" data-uid="${uid}" data-m="${m}" data-key="${key}-sku">
       <span class="times">×</span>
-      <input class="field mono amount${row.invalid === "quantity" ? " invalid" : ""}" type="text" inputmode="decimal" value="${esc(row.quantity)}" aria-label="Quantity" data-input="map_quantity" data-uid="${uid}" data-m="${m}" data-key="${key}-quantity">
-      <button class="btn ghost compact icon" type="button" title="Remove write-off" aria-label="Remove write-off" data-act="map-remove" data-uid="${uid}" data-m="${m}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
+      <input class="field mono amount${row.invalid === "quantity" ? " invalid" : ""}" type="text" inputmode="decimal" value="${esc(row.quantity)}" aria-label="${t("Quantity")}" data-input="map_quantity" data-uid="${uid}" data-m="${m}" data-key="${key}-quantity">
+      <button class="btn ghost compact icon" type="button" title="${t("Remove write-off")}" aria-label="${t("Remove write-off")}" data-act="map-remove" data-uid="${uid}" data-m="${m}" data-key="${key}-remove">${svg(GLYPH.x, "glyph")}</button>
     </div>
     ${row.problem ? problemLine(row.problem) : ""}
   </div>`;
@@ -33,13 +33,13 @@ function categoryEditor(row) {
   const chips = e.tags
     .map(
       (tag) =>
-        `<span class="chip"><span class="mono">${esc(tag)}</span><button class="chip-remove" type="button" title="Remove" aria-label="Remove ${esc(tag)}" data-act="tag-remove" data-uid="${uid}" data-tag="${esc(tag)}" data-key="${esc(`${key}-tag-remove:${tag}`)}">${svg(GLYPH.x, "glyph")}</button></span>`,
+        `<span class="chip"><span class="mono">${esc(tag)}</span><button class="chip-remove" type="button" title="${t("Remove")}" aria-label="${esc(t("Remove {name}", { name: tag }))}" data-act="tag-remove" data-uid="${uid}" data-tag="${esc(tag)}" data-key="${esc(`${key}-tag-remove:${tag}`)}">${svg(GLYPH.x, "glyph")}</button></span>`,
     )
     .join("");
   return `<div class="list-editor">
     ${e.label_problem ? problemLine(e.label_problem) : ""}
     <div class="editor-line">
-      <span class="editor-label">Tags</span>
+      <span class="editor-label">${t("Tags")}</span>
       <div class="editor-content">
         <div class="report-chips">
           ${chips}
@@ -56,12 +56,12 @@ function categoryEditor(row) {
           <span class="hint">${esc(w.hint)}</span>
         </div>
         ${w.rows.map((mapping, m) => writeoffRow(e, uid, m, mapping)).join("")}
-        <button class="btn ghost compact add-row" type="button" title="${esc(w.add_title)}" data-act="map-add" data-uid="${uid}" data-count="${w.rows.length}" data-key="${key}-map-add"${off(!w.can_add)}>${svg(GLYPH.plus, "glyph")}Add write-off</button>
+        <button class="btn ghost compact add-row" type="button" title="${esc(w.add_title)}" data-act="map-add" data-uid="${uid}" data-count="${w.rows.length}" data-key="${key}-map-add"${off(!w.can_add)}>${svg(GLYPH.plus, "glyph")}${t("Add write-off")}</button>
       </div>
     </div>
     <div class="editor-foot">
       <span class="spacer"></span>
-      <button class="btn secondary" type="button" data-act="cat-close" data-uid="${uid}" data-key="${key}-done">Done</button>
+      <button class="btn secondary" type="button" data-act="cat-close" data-uid="${uid}" data-key="${key}-done">${t("Done")}</button>
     </div>
   </div>`;
 }
@@ -69,7 +69,7 @@ function categoryEditor(row) {
 function categoryRow(row) {
   const key = `cat-${row.uid}`;
   const name = row.open
-    ? `<input class="field list-name-field${row.editor.label_problem ? " invalid" : ""}" type="text" value="${esc(row.name)}" placeholder="Category name" aria-label="Category name" data-input="cat_label" data-uid="${row.uid}" data-key="${key}-label">`
+    ? `<input class="field list-name-field${row.editor.label_problem ? " invalid" : ""}" type="text" value="${esc(row.name)}" placeholder="${t("Category name")}" aria-label="${t("Category name")}" data-input="cat_label" data-uid="${row.uid}" data-key="${key}-label">`
     : `<button class="list-name" type="button" data-act="cat-open" data-uid="${row.uid}" data-key="${key}-label">${esc(row.label)}</button>`;
   let chips = "";
   if (!row.open) {
@@ -86,25 +86,25 @@ function categoryRow(row) {
       ${!row.open && row.problem ? problemLine(row.problem) : ""}
     </div>
     <div class="list-actions">
-      ${move("up", RULE_GLYPH.up, row.can_up, "Move up")}
-      ${move("down", GLYPH.chevron, row.can_down, "Move down")}
-      <button class="btn ghost compact icon" type="button" title="Delete category" aria-label="Delete category" data-act="cat-delete" data-uid="${row.uid}" data-key="${key}-delete">${svg(GLYPH.x, "glyph")}</button>
+      ${move("up", RULE_GLYPH.up, row.can_up, t("Move up"))}
+      ${move("down", GLYPH.chevron, row.can_down, t("Move down"))}
+      <button class="btn ghost compact icon" type="button" title="${t("Delete category")}" aria-label="${t("Delete category")}" data-act="cat-delete" data-uid="${row.uid}" data-key="${key}-delete">${svg(GLYPH.x, "glyph")}</button>
     </div>
     ${row.open ? categoryEditor(row) : ""}
   </div>`;
 }
 
-function tagsPage(t) {
-  if (t.empty) {
+function tagsPage(page) {
+  if (page.empty) {
     return `<section class="card state rules-empty" data-card="tags-empty">
-      <p class="state-title">${esc(t.empty.title)}</p>
-      <p class="state-text">${esc(t.empty.text)}</p>
-      <button class="btn primary" type="button" data-act="cat-add" data-key="cat-add">${svg(GLYPH.plus, "glyph")}${esc(t.empty.action)}</button>
+      <p class="state-title">${esc(page.empty.title)}</p>
+      <p class="state-text">${esc(page.empty.text)}</p>
+      <button class="btn primary" type="button" data-act="cat-add" data-key="cat-add">${svg(GLYPH.plus, "glyph")}${esc(page.empty.action)}</button>
     </section>`;
   }
   return `<section class="card" data-card="tags">
-    <div class="list-bar"><span class="list-count">${esc(t.count)}</span></div>
-    ${t.rows.map(categoryRow).join("")}
+    <div class="list-bar"><span class="list-count">${esc(page.count)}</span></div>
+    ${page.rows.map(categoryRow).join("")}
   </section>`;
 }
 

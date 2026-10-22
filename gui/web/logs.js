@@ -9,6 +9,10 @@
 // on rows and rebuilds nothing. A log message can hold text from a CSV, so
 // nothing from a row goes through innerHTML: textContent only.
 //
+// Labels are thunks, so t() reads the catalogue at display time. A key is a
+// stream, band or level name from Python: it is matched as it is, and only
+// its label is drawn in the PC's language.
+//
 // ponytail: no row windowing. Measured with 10,000 rows in QtWebEngine: a
 // filter change 20 ms, a batch of 200 entries 26 ms. Window the rows, as
 // results.js does, if the capacity ever grows tenfold.
@@ -29,16 +33,24 @@ const GLYPH = {
 };
 
 const STREAMS = [
-  { key: "all", label: "All" },
-  { key: "Activity", label: "Activity" },
-  { key: "Execution", label: "Execution" },
+  { key: "all", label: () => t("All") },
+  { key: "Activity", label: () => t("Activity") },
+  { key: "Execution", label: () => t("Execution") },
 ];
 const BANDS = [
-  { key: "all", label: "All" },
-  { key: "info", label: "Info" },
-  { key: "warning", label: "Warning" },
-  { key: "error", label: "Error" },
+  { key: "all", label: () => t("All") },
+  { key: "info", label: () => t("Info") },
+  { key: "warning", label: () => t("Warning") },
+  { key: "error", label: () => t("Error") },
 ];
+// The level names Python gives a row, as the badge reads them.
+const LEVELS = {
+  Debug: () => t("Debug"),
+  Info: () => t("Info"),
+  Warning: () => t("Warning"),
+  Error: () => t("Error"),
+  Critical: () => t("Critical"),
+};
 // A band's badge tone in the kit.
 const TONE = { error: "danger", warning: "warning", info: "neutral" };
 
@@ -56,7 +68,16 @@ function svg(path, cls) {
 }
 
 function entries(n) {
-  return n === 1 ? "1 entry" : `${n} entries`;
+  return tn("{n} entry", "{n} entries", n);
+}
+
+function streamLabel(key) {
+  const found = STREAMS.find((stream) => stream.key === key);
+  return found ? found.label() : key;
+}
+
+function levelLabel(level) {
+  return LEVELS[level] ? LEVELS[level]() : level;
 }
 
 // --- building a row ------------------------------------------------------------
@@ -82,12 +103,12 @@ function rowEl(data) {
     chevron.innerHTML = svg(GLYPH.right, "glyph");
   }
   const level = cell("cell-level", "");
-  level.appendChild(cell(`badge ${TONE[data.band] || "neutral"}`, data.level));
+  level.appendChild(cell(`badge ${TONE[data.band] || "neutral"}`, levelLabel(data.level)));
   el.append(
     chevron,
     cell("cell-time mono", data.time, `${data.date} ${data.time}`),
     level,
-    cell("cell-from", data.stream),
+    cell("cell-from", streamLabel(data.stream)),
     cell("cell-source mono", data.short, data.source),
     cell("cell-message", data.message),
   );
@@ -104,9 +125,9 @@ function blockEl(data) {
   const copy = document.createElement("button");
   copy.className = "btn secondary compact";
   copy.type = "button";
-  copy.textContent = "Copy";
+  copy.textContent = t("Copy");
   copy.dataset.copy = String(data.id);
-  head.append(cell("tb-title", "Traceback"), cell("mono", data.source), cell("spacer", ""), copy);
+  head.append(cell("tb-title", t("Traceback")), cell("mono", data.source), cell("spacer", ""), copy);
   const text = document.createElement("pre");
   text.className = "tb-text mono";
   text.textContent = data.traceback;
@@ -168,18 +189,19 @@ function drawEmpty(visible) {
   els.list.hidden = empty;
   els.empty.hidden = !empty;
   if (!empty) return;
-  const scope = [
-    view.band === "all" ? "" : BANDS.find((band) => band.key === view.band).label,
-    view.stream === "all" ? "" : view.stream,
-  ].filter(Boolean).join(" ");
-  let title = "No entries match";
+  const band = view.band === "all" ? "" : BANDS.find((option) => option.key === view.band).label();
+  const stream = view.stream === "all" ? "" : streamLabel(view.stream);
+  const scope = [band, stream].filter(Boolean).join(" ");
+  let title = t("No entries match");
   let text = "";
   if (view.query) {
-    text = `Nothing${scope ? ` in ${scope}` : ""} contains “${view.typed}” in its message or source.`;
+    text = scope
+      ? t("Nothing in {scope} contains “{typed}” in its message or source.", { scope, typed: view.typed })
+      : t("Nothing contains “{typed}” in its message or source.", { typed: view.typed });
   } else if (scope) {
-    text = `No ${scope} entries yet.`;
+    text = t("No {scope} entries yet.", { scope });
   } else {
-    title = "No entries yet";
+    title = t("No entries yet");
   }
   els.emptyTitle.textContent = title;
   els.emptyText.textContent = text;
@@ -194,7 +216,9 @@ function draw() {
   drawSegments(els.streams, view.stream, n);
   drawSegments(els.bands, view.band, n);
   els.count.textContent =
-    visible === rows.length ? entries(rows.length) : `${visible} of ${entries(rows.length)}`;
+    visible === rows.length
+      ? entries(rows.length)
+      : t("{visible} of {total}", { visible, total: entries(rows.length) });
   els.save.disabled = visible === 0;
   els.card.classList.toggle("one-stream", view.stream !== "all");
   els.list.classList.toggle("wrap", view.wrap);
@@ -203,8 +227,8 @@ function draw() {
   els.follow.checked = view.follow;
   els.paused.hidden = view.follow || visible === 0;
   els.pausedText.textContent = view.unseen
-    ? `${view.unseen} new ${view.unseen === 1 ? "entry" : "entries"} below`
-    : "Paused while scrolled up";
+    ? tn("{n} new entry below", "{n} new entries below", view.unseen)
+    : t("Paused while scrolled up");
   if (view.follow) els.list.scrollTop = els.list.scrollHeight;
   page.renders += 1;
   document.documentElement.dataset.renders = String(page.renders);
@@ -365,8 +389,16 @@ function segments(options, counted) {
       ? `<span class="seg-dot ${option.key}"></span>`
       : "";
     const count = counted ? `<span class="segment-count">0</span>` : "";
-    return `<button class="segment" type="button" role="radio" aria-checked="false" tabindex="-1" data-key="${option.key}">${dot}${option.label}${count}</button>`;
+    return `<button class="segment" type="button" role="radio" aria-checked="false" tabindex="-1" data-key="${option.key}">${dot}${option.label()}${count}</button>`;
   }).join("");
+}
+
+// The chips and the save label are built once the strings are known: bind()
+// runs before the bridge connects, so the channel callback calls this again.
+function paintChrome() {
+  els.streams.innerHTML = segments(STREAMS, false);
+  els.bands.innerHTML = segments(BANDS, true);
+  els.save.innerHTML = `${svg(GLYPH.download, "glyph")}${t("Save as text")}`;
 }
 
 function bind() {
@@ -380,10 +412,8 @@ function bind() {
   for (const name of Object.keys(ids)) els[name] = document.getElementById(ids[name]);
 
   // The fixed parts of the page: the two controls and the glyphs.
-  els.streams.innerHTML = segments(STREAMS, false);
-  els.bands.innerHTML = segments(BANDS, true);
+  paintChrome();
   els.searchBox.insertAdjacentHTML("afterbegin", svg(GLYPH.search, "glyph"));
-  els.save.innerHTML = `${svg(GLYPH.download, "glyph")}Save as text`;
   els.empty.insertAdjacentHTML("afterbegin", svg(GLYPH.searchX, "state-glyph"));
   els.toastDismiss.innerHTML = svg(GLYPH.x, "glyph");
 
@@ -426,6 +456,8 @@ draw();
 
 new QWebChannel(qt.webChannelTransport, function (channel) {
   const bridge = channel.objects.logs;
+  applyStrings(bridge);
+  paintChrome();
   page.bridge = bridge;
   page.capacity = bridge.capacity;
   view.wrap = bridge.wrap;

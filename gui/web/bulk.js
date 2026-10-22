@@ -19,12 +19,8 @@ function markableKeys() {
   return state.view.filter((r) => state.selected.has(r.key) && !isFulfillable(r.o)).map((r) => r.key);
 }
 
-function countedWord(n, word) {
-  return NUMBER.format(n) + " " + word + (n === 1 ? "" : "s");
-}
-
 function theseOrders(n) {
-  return n === 1 ? "this order" : "these " + countedWord(n, "order");
+  return n === 1 ? t("this order") : t("these {orders}", { orders: orderCount(n) });
 }
 
 function renderSelectionBar() {
@@ -36,11 +32,11 @@ function renderSelectionBar() {
     return;
   }
   if (bulkKeys && bulkKeys.join("\n") !== selectedKeys().join("\n")) closeBulkPopover();
-  els.selectionCount.textContent = NUMBER.format(n) + " selected";
+  els.selectionCount.textContent = t("{n} selected", { n: NUMBER.format(n) });
   const markable = markableKeys().length;
-  els.selectionMark.textContent = "Mark " + NUMBER.format(markable || n) + " fulfillable";
+  els.selectionMark.textContent = t("Mark {n} fulfillable", { n: NUMBER.format(markable || n) });
   els.selectionMark.disabled = markable === 0;
-  els.selectionHold.textContent = n === 1 ? "Hold this" : "Hold these " + NUMBER.format(n);
+  els.selectionHold.textContent = n === 1 ? t("Hold this") : t("Hold these {n}", { n: NUMBER.format(n) });
 }
 
 function bindSelectionBar() {
@@ -92,37 +88,42 @@ function selectionTags() {
 
 function moreItems() {
   const n = state.selected.size;
-  const orders = countedWord(n, "order");
+  const orders = orderCount(n);
   const tagged = selectionTags().length > 0;
   return [
-    { id: "more-add-tag", label: "Add a tag to " + orders, run: () => openTagPopover("add") },
+    { id: "more-add-tag", label: t("Add a tag to {orders}", { orders }), run: () => openTagPopover("add") },
     {
       id: "more-remove-tag",
-      label: "Remove a tag from " + orders,
+      label: t("Remove a tag from {orders}", { orders }),
       disabled: !tagged,
       title: tagged
         ? ""
         : n === 1
-          ? "This order doesn't carry a tag"
-          : "None of these " + orders + " carry a tag",
+          ? t("This order doesn't carry a tag")
+          : t("None of these {orders} carry a tag", { orders }),
       run: () => openTagPopover("remove"),
     },
-    { id: "more-copy", label: "Copy " + countedWord(n, "order number"), hint: "Ctrl+C", run: copySelection },
+    {
+      id: "more-copy",
+      label: tn("Copy {n} order number", "Copy {n} order numbers", n, { n: NUMBER.format(n) }),
+      hint: "Ctrl+C",
+      run: copySelection,
+    },
     { separator: true },
     {
       id: "more-export-xlsx",
-      label: "Export " + theseOrders(n) + " to Excel",
+      label: t("Export {orders} to Excel", { orders: theseOrders(n) }),
       run: () => exportSelectionAs("xlsx"),
     },
     {
       id: "more-export-csv",
-      label: "Export " + theseOrders(n) + " to CSV",
+      label: t("Export {orders} to CSV", { orders: theseOrders(n) }),
       run: () => exportSelectionAs("csv"),
     },
     { separator: true },
-    { id: "more-remove-sku", label: "Remove a SKU from " + theseOrders(n), danger: true, run: () => openSkuPopover("line") },
-    { id: "more-remove-orders", label: "Remove whole orders containing a SKU", danger: true, run: () => openSkuPopover("order") },
-    { id: "more-exclude", label: "Exclude " + theseOrders(n) + " from the run", danger: true, run: openExcludePopover },
+    { id: "more-remove-sku", label: t("Remove a SKU from {orders}", { orders: theseOrders(n) }), danger: true, run: () => openSkuPopover("line") },
+    { id: "more-remove-orders", label: t("Remove whole orders containing a SKU"), danger: true, run: () => openSkuPopover("order") },
+    { id: "more-exclude", label: t("Exclude {orders} from the run", { orders: theseOrders(n) }), danger: true, run: openExcludePopover },
   ];
 }
 
@@ -130,7 +131,7 @@ function moreItems() {
 function copySelection() {
   const keys = state.selected.size ? selectedKeys() : [state.cursorKey];
   state.bridge.copyText(keys.join("\n"));
-  raiseToast(countedWord(keys.length, "order number") + " copied", false);
+  raiseToast(tn("{n} order number copied", "{n} order numbers copied", keys.length, { n: NUMBER.format(keys.length) }), false);
 }
 
 function exportSelectionAs(fmt) {
@@ -201,7 +202,10 @@ function renderTagList(host, rows, badge, onPick) {
       const on = badge ? badge.counts.get(tag) || 0 : 0;
       if (on) {
         button.appendChild(
-          el("span", "bulk-count", "on " + NUMBER.format(on) + " of " + NUMBER.format(badge.total))
+          el("span", "bulk-count", t("on {count} of {total}", {
+            count: NUMBER.format(on),
+            total: NUMBER.format(badge.total),
+          }))
         );
       }
       button.addEventListener("click", () => onPick(tag, button));
@@ -245,6 +249,7 @@ function openBulkPopover(opts) {
   box.id = "bulk-popover";
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", opts.title);
+  // opts.title, opts.prompt and the verb's text are already in the PC's language.
   // Never taller than the table under the bar, so the foot stays on screen.
   box.style.maxHeight = Math.max(200, els.tableArea.clientHeight - HEADER_PX - 12) + "px";
 
@@ -259,7 +264,7 @@ function openBulkPopover(opts) {
   const changes = el("div", "bulk-changes");
   changes.id = "bulk-changes";
   changes.hidden = true;
-  const hint = el("p", "bulk-hint", "You can undo this from the confirmation that follows.");
+  const hint = el("p", "bulk-hint", t("You can undo this from the confirmation that follows."));
   hint.hidden = !opts.changes;
   body.append(list, changes, hint);
 
@@ -272,7 +277,7 @@ function openBulkPopover(opts) {
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "btn secondary";
-  cancel.textContent = "Cancel";
+  cancel.textContent = t("Cancel");
   cancel.addEventListener("click", closeBulkPopover);
   const footer = el("div", "bulk-footer");
   footer.append(cancel, verb);
@@ -319,34 +324,34 @@ function openBulkPopover(opts) {
 function renderBulkChanges(host, lines) {
   host.textContent = "";
   host.hidden = false;
-  host.append(el("div", "bulk-changes-title", "What will change"));
+  host.append(el("div", "bulk-changes-title", t("What will change")));
   for (const line of lines) host.append(el("div", "bulk-change", line));
 }
 
 function openTagPopover(mode) {
   const n = state.selected.size;
-  const orders = countedWord(n, "order");
+  const orders = orderCount(n);
   const categories = (state.bridge && state.bridge.tagCategories) || {};
   const present = new Set(selectionTags());
   const add = mode === "add";
   // Section 5.2: the remove list is ungrouped, so its one row carries no label.
   const rows = add ? tagRows(categories, null) : [{ id: "on", label: "", tags: [...present] }];
   const known = new Set();
-  for (const row of rows) for (const t of row.tags) known.add(t);
+  for (const row of rows) for (const tag of row.tags) known.add(tag);
   const badge = { total: n, counts: tagCounts(known) };
 
   openBulkPopover({
-    title: (add ? "Add a tag to " : "Remove a tag from ") + orders,
+    title: add ? t("Add a tag to {orders}", { orders }) : t("Remove a tag from {orders}", { orders }),
     danger: false,
-    prompt: "Pick a tag",
+    prompt: t("Pick a tag"),
     fill: (host, onPick) => {
       renderTagList(host, rows, badge, onPick);
       if (!add) return;
-      host.appendChild(el("div", "menu-group", "NEW"));
+      host.appendChild(el("div", "menu-group", t("NEW")));
       const input = el("input", "field new-tag");
       input.id = "bulk-new-tag";
-      input.placeholder = "New tag";
-      input.setAttribute("aria-label", "New tag");
+      input.placeholder = t("New tag");
+      input.setAttribute("aria-label", t("New tag"));
       input.addEventListener("keydown", (e) => {
         const tag = input.value.trim();
         if (e.key !== "Enter" || !tag) return;
@@ -360,10 +365,10 @@ function openTagPopover(mode) {
       const on = badge.counts.get(tag) || 0;
       if (add) {
         return on === n
-          ? { text: "Already on all " + NUMBER.format(n), disabled: true }
-          : { text: "Add to " + countedWord(n - on, "order"), disabled: false };
+          ? { text: t("Already on all {n}", { n: NUMBER.format(n) }), disabled: true }
+          : { text: t("Add to {orders}", { orders: orderCount(n - on) }), disabled: false };
       }
-      return { text: "Remove from " + countedWord(on, "order"), disabled: on === 0 };
+      return { text: t("Remove from {orders}", { orders: orderCount(on) }), disabled: on === 0 };
     },
     onCommit: (tag, keys) => {
       if (add) state.bridge.addTag(keys, tag);
@@ -392,15 +397,15 @@ function skuCounts() {
 function orderList(orders) {
   const ids = orders.map((o) => str(o.Order_Number));
   if (ids.length <= 4) return ids.join(", ");
-  return ids.slice(0, 3).join(", ") + " and " + NUMBER.format(ids.length - 3) + " more";
+  return t("{names} and {count} more", { names: ids.slice(0, 3).join(", "), count: NUMBER.format(ids.length - 3) });
 }
 
 // `leaving` fulfillable orders drop out of the export.
 function exportLine(leaving) {
   const s = (state.bridge && state.bridge.summary) || {};
   const from = num(s.fulfillable) || 0;
-  if (leaving === 0) return "Export stays at " + countedWord(from, "order");
-  return "Export goes from " + NUMBER.format(from) + " to " + countedWord(from - leaving, "order");
+  if (leaving === 0) return t("Export stays at {orders}", { orders: orderCount(from) });
+  return t("Export goes from {from} to {orders}", { from: NUMBER.format(from), orders: orderCount(from - leaving) });
 }
 
 function skuLinesOf(o, sku) {
@@ -415,33 +420,40 @@ function unitsOf(lines) {
 // give units back.
 function skuRemovalChanges(sku) {
   const hit = selectedOrders().filter((o) => skuLinesOf(o, sku).length);
-  if (!hit.length) return ["None of these orders contain " + sku];
+  if (!hit.length) return [t("None of these orders contain {sku}", { sku })];
   const lines = hit.reduce((sum, o) => sum + skuLinesOf(o, sku).length, 0);
   const emptied = hit.filter((o) => skuLinesOf(o, sku).length === (o.lines || []).length);
   const blocked = hit.filter((o) => !emptied.includes(o) && !isFulfillable(o));
   const units = unitsOf(hit.filter(isFulfillable).flatMap((o) => skuLinesOf(o, sku)));
-  const out = [NUMBER.format(lines) + " " + sku + (lines === 1 ? " line" : " lines") + " removed from " + orderList(hit)];
+  const out = [tn("{n} {sku} line removed from {orders}", "{n} {sku} lines removed from {orders}", lines,
+    { n: NUMBER.format(lines), sku, orders: orderList(hit) })];
   if (emptied.length) {
-    out.push(orderList(emptied) + (emptied.length === 1
-      ? " has no lines left and leaves the session"
-      : " have no lines left and leave the session"));
+    out.push(tn("{orders} has no lines left and leaves the session", "{orders} have no lines left and leave the session",
+      emptied.length, { orders: orderList(emptied) }));
   }
-  if (units) out.push(countedWord(units, "unit") + " of " + sku + (units === 1 ? " goes" : " go") + " back to stock");
+  if (units) {
+    out.push(tn("{n} unit of {sku} goes back to stock", "{n} units of {sku} go back to stock", units,
+      { n: NUMBER.format(units), sku }));
+  }
   if (blocked.length) {
-    out.push(orderList(blocked) + (blocked.length === 1 ? " stays" : " stay") + " Blocked until marked fulfillable");
+    out.push(tn("{orders} stays Blocked until marked fulfillable", "{orders} stay Blocked until marked fulfillable",
+      blocked.length, { orders: orderList(blocked) }));
   }
   out.push(exportLine(emptied.filter(isFulfillable).length));
   return out;
 }
 
 function orderRemovalChanges(hit, sku) {
-  if (!hit.length) return ["None of these orders contain " + sku];
+  if (!hit.length) return [t("None of these orders contain {sku}", { sku })];
   const ready = hit.filter(isFulfillable);
   const units = unitsOf(ready.flatMap((o) => (o.lines || []).filter((line) => str(line.SKU).trim())));
-  const out = [orderList(hit) + (hit.length === 1 ? " leaves" : " leave") + " the session: results, export and labels"];
+  const out = [tn("{orders} leaves the session: results, export and labels", "{orders} leave the session: results, export and labels",
+    hit.length, { orders: orderList(hit) })];
   if (units) {
-    out.push(countedWord(units, "unit") + (units === 1 ? " goes" : " go") + " back to stock."
-      + " Other orders do not get them until you mark them fulfillable or run the analysis again");
+    out.push(tn(
+      "{n} unit goes back to stock. Other orders do not get them until you mark them fulfillable or run the analysis again",
+      "{n} units go back to stock. Other orders do not get them until you mark them fulfillable or run the analysis again",
+      units, { n: NUMBER.format(units) }));
   }
   out.push(exportLine(ready.length));
   return out;
@@ -457,10 +469,10 @@ function openSkuPopover(mode) {
 
   openBulkPopover({
     title: line
-      ? "Remove a SKU from " + theseOrders(n)
-      : "Remove whole orders containing a SKU",
+      ? t("Remove a SKU from {orders}", { orders: theseOrders(n) })
+      : t("Remove whole orders containing a SKU"),
     danger: true,
-    prompt: "Pick a SKU",
+    prompt: t("Pick a SKU"),
     changes: (sku) =>
       line
         ? skuRemovalChanges(sku)
@@ -470,8 +482,8 @@ function openSkuPopover(mode) {
         const search = el("input", "field bulk-search");
         search.id = "bulk-search";
         search.type = "search";
-        search.placeholder = "Find a SKU";
-        search.setAttribute("aria-label", "Find a SKU");
+        search.placeholder = t("Find a SKU");
+        search.setAttribute("aria-label", t("Find a SKU"));
         search.addEventListener("input", () => {
           const q = search.value.trim().toLowerCase();
           for (const row of host.querySelectorAll(".bulk-row")) {
@@ -480,12 +492,14 @@ function openSkuPopover(mode) {
         });
         host.appendChild(search);
       }
-      renderTagList(host, [{ id: "skus", label: "SKUs on these orders", tags: skus }], badge, onPick);
+      renderTagList(host, [{ id: "skus", label: t("SKUs on these orders"), tags: skus }], badge, onPick);
     },
     verb: (sku) => {
       const on = badge.counts.get(sku) || 0;
       return {
-        text: line ? "Remove " + sku + " from " + NUMBER.format(on) : "Remove " + countedWord(on, "order"),
+        text: line
+          ? t("Remove {sku} from {n}", { sku, n: NUMBER.format(on) })
+          : t("Remove {orders}", { orders: orderCount(on) }),
         disabled: on === 0,
       };
     },
@@ -501,10 +515,10 @@ function openSkuPopover(mode) {
 function openExcludePopover() {
   const n = state.selected.size;
   openBulkPopover({
-    title: "Exclude " + theseOrders(n) + " from the run",
+    title: t("Exclude {orders} from the run", { orders: theseOrders(n) }),
     danger: true,
     changes: () => orderRemovalChanges(selectedOrders(), ""),
-    verb: () => ({ text: "Exclude " + countedWord(n, "order"), disabled: n === 0 }),
+    verb: () => ({ text: t("Exclude {orders}", { orders: orderCount(n) }), disabled: n === 0 }),
     onCommit: (_none, keys) => state.bridge.excludeOrders(keys),
   });
 }

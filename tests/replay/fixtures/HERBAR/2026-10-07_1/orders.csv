@@ -1,0 +1,11 @@
+Name,Subtotal,Total,Shipping Method,Created at,Lineitem quantity,Lineitem name,Lineitem sku,Shipping Name,Shipping Country,Notes,Tags
+#100636,0.00,0.00,,2026-10-06 00:21:23 +0100,24,The Face Oil - 50ml,OIL-50,Customer,AU,,
+#100636,,,,2026-10-06 00:21:23 +0100,56,The Gua-Shroom - Dalmatian,GUASHROOM-DALMATION,,,,
+#100636,,,,2026-10-06 00:21:23 +0100,56,The Gua-Shroom - Unakite,GUASHROOM-UNAKITE,,,,
+#100636,,,,2026-10-06 00:21:23 +0100,55,The Face Nectar,NECTAR-30,,,,
+#100637,3250.00,3250.00,,2026-10-06 18:57:06 +0100,1,TCM INTERNSHIP - SHARED ROOM €3250,,,,,
+#100638,45.90,50.90,Standard Shipping 4 - 7 business days,2026-10-06 20:38:34 +0100,1,The Barrier Cream - Barrier Cream,Barrier_Cream-1,Customer,FR,,
+#100639,136.00,136.00,Standard 5-10 business days,2026-10-06 20:47:08 +0100,1,The Face Nectar,NECTAR-30,Customer,DK,,
+#100639,,,,2026-10-06 20:47:08 +0100,1,The Barrier Repair Set,THE_BARRIER_SET,,,,
+#100640,153.00,153.00,Standard 5-10 business days,2026-10-06 21:42:58 +0100,1,The Hydration Set,SET-YINGYANG,Customer,SI,,
+#100640,,,,2026-10-06 21:42:58 +0100,1,The Bestsellers Set,SET_BESTSELLERS,,,,

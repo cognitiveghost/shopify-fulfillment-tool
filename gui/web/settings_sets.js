@@ -20,10 +20,10 @@ function setEditor(row) {
     .map(
       (part, c) => `<div class="list-part" data-comp="${c}">
         <div class="comp-row">
-          <input class="field mono" type="text" value="${esc(part.sku)}" placeholder="Component SKU" aria-label="Component SKU" data-input="comp_sku" data-uid="${uid}" data-c="${c}" data-key="${key}-c${c}-sku">
+          <input class="field mono" type="text" value="${esc(part.sku)}" placeholder="${t("Component SKU")}" aria-label="${t("Component SKU")}" data-input="comp_sku" data-uid="${uid}" data-c="${c}" data-key="${key}-c${c}-sku">
           <span class="times">×</span>
-          <input class="field mono amount${part.invalid ? " invalid" : ""}" type="text" inputmode="numeric" value="${esc(part.quantity)}" aria-label="Quantity" data-input="comp_quantity" data-uid="${uid}" data-c="${c}" data-key="${key}-c${c}-quantity">
-          <button class="btn ghost compact icon" type="button" title="Remove component" aria-label="Remove component" data-act="comp-remove" data-uid="${uid}" data-c="${c}" data-key="${key}-c${c}-remove">${svg(GLYPH.x, "glyph")}</button>
+          <input class="field mono amount${part.invalid ? " invalid" : ""}" type="text" inputmode="numeric" value="${esc(part.quantity)}" aria-label="${t("Quantity")}" data-input="comp_quantity" data-uid="${uid}" data-c="${c}" data-key="${key}-c${c}-quantity">
+          <button class="btn ghost compact icon" type="button" title="${t("Remove component")}" aria-label="${t("Remove component")}" data-act="comp-remove" data-uid="${uid}" data-c="${c}" data-key="${key}-c${c}-remove">${svg(GLYPH.x, "glyph")}</button>
         </div>
         ${part.problem ? problemLine(part.problem) : ""}
       </div>`,
@@ -32,16 +32,16 @@ function setEditor(row) {
   return `<div class="list-editor">
     ${e.sku_problem ? problemLine(e.sku_problem) : ""}
     <div class="editor-line">
-      <span class="editor-label">Components</span>
+      <span class="editor-label">${t("Components")}</span>
       <div class="editor-content">
         ${components}
         ${e.components_problem ? problemLine(e.components_problem) : ""}
-        <button class="btn ghost compact add-row" type="button" data-act="comp-add" data-uid="${uid}" data-count="${e.components.length}" data-key="${key}-comp-add">${svg(GLYPH.plus, "glyph")}Add component</button>
+        <button class="btn ghost compact add-row" type="button" data-act="comp-add" data-uid="${uid}" data-count="${e.components.length}" data-key="${key}-comp-add">${svg(GLYPH.plus, "glyph")}${t("Add component")}</button>
       </div>
     </div>
     <div class="editor-foot">
       <span class="spacer"></span>
-      <button class="btn secondary" type="button" data-act="set-close" data-uid="${uid}" data-key="${key}-done">Done</button>
+      <button class="btn secondary" type="button" data-act="set-close" data-uid="${uid}" data-key="${key}-done">${t("Done")}</button>
     </div>
   </div>`;
 }
@@ -49,7 +49,7 @@ function setEditor(row) {
 function setRow(row) {
   const key = `set-${row.uid}`;
   const name = row.open
-    ? `<input class="field mono list-name-field${row.editor.sku_problem ? " invalid" : ""}" type="text" value="${esc(row.sku)}" placeholder="Set SKU" aria-label="Set SKU" data-input="set_sku" data-uid="${row.uid}" data-key="${key}-sku">`
+    ? `<input class="field mono list-name-field${row.editor.sku_problem ? " invalid" : ""}" type="text" value="${esc(row.sku)}" placeholder="${t("Set SKU")}" aria-label="${t("Set SKU")}" data-input="set_sku" data-uid="${row.uid}" data-key="${key}-sku">`
     : `<button class="list-name mono" type="button" data-act="set-open" data-uid="${row.uid}" data-key="${key}-sku">${esc(row.label)}</button>`;
   const chips = row.open
     ? ""
@@ -61,7 +61,7 @@ function setRow(row) {
       ${!row.open && row.problem ? problemLine(row.problem) : ""}
     </div>
     <div class="list-actions">
-      <button class="btn ghost compact icon" type="button" title="Delete set" aria-label="Delete set" data-act="set-delete" data-uid="${row.uid}" data-key="${key}-delete">${svg(GLYPH.x, "glyph")}</button>
+      <button class="btn ghost compact icon" type="button" title="${t("Delete set")}" aria-label="${t("Delete set")}" data-act="set-delete" data-uid="${row.uid}" data-key="${key}-delete">${svg(GLYPH.x, "glyph")}</button>
     </div>
     ${row.open ? setEditor(row) : ""}
   </div>`;
@@ -72,8 +72,8 @@ function setsImportMenu(s) {
     `<button class="menu-item" type="button" role="menuitem" data-act="sets-import" data-kind="${kind}" data-key="${key}"><span class="menu-label">${label}</span></button>`;
   return `<div class="menu add-menu" role="menu">
     <div class="menu-group">${esc(s.import_hint)}</div>
-    ${item("sets-merge", "Add and update sets…", "sets-import-merge")}
-    ${item("sets-replace", "Replace all sets…", "sets-import-replace")}
+    ${item("sets-merge", t("Add and update sets…"), "sets-import-merge")}
+    ${item("sets-replace", t("Replace all sets…"), "sets-import-replace")}
   </div>`;
 }
 
@@ -97,10 +97,10 @@ function setsPage(s) {
       <span class="spacer"></span>
       <span class="list-count">${esc(s.count)}</span>
       <div class="menu-anchor">
-        <button class="btn secondary compact" type="button" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="sets-import" data-key="sets-import">Import${svg(GLYPH.chevron, "glyph")}</button>
+        <button class="btn secondary compact" type="button" aria-haspopup="menu" aria-expanded="${open}" data-act="menu" data-menu="sets-import" data-key="sets-import">${t("Import")}${svg(GLYPH.chevron, "glyph")}</button>
         ${open ? setsImportMenu(s) : ""}
       </div>
-      <button class="btn secondary compact" type="button" data-act="sets-export" data-key="sets-export"${off(!s.can_export)}>Export</button>
+      <button class="btn secondary compact" type="button" data-act="sets-export" data-key="sets-export"${off(!s.can_export)}>${t("Export")}</button>
     </div>
     ${s.rows.map(setRow).join("")}
     ${none}

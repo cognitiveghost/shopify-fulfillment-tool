@@ -265,7 +265,12 @@ def test_settings_that_save_but_fail_to_reload_say_so(monkeypatch):
     )
     monkeypatch.setattr(
         "gui.actions_handler.SettingsWindow",
-        lambda **kwargs: SimpleNamespace(exec=lambda: True, deleteLater=lambda: None),
+        lambda **kwargs: SimpleNamespace(
+            exec=lambda: True,
+            deleteLater=lambda: None,
+            removed_client=None,
+            profile_saved=False,
+        ),
     )
     profile_manager = Mock()
     profile_manager.load_shopify_config.side_effect = [
@@ -275,6 +280,7 @@ def test_settings_that_save_but_fail_to_reload_say_so(monkeypatch):
     mw = SimpleNamespace(
         current_client_id="M",
         profile_manager=profile_manager,
+        groups_manager=Mock(),
         analysis_results_df=None,
         orders_file_path=None,
         stock_file_path=None,
@@ -293,7 +299,10 @@ def test_the_settings_window_is_told_which_files_are_loaded(monkeypatch):
     def window(**kwargs):
         seen.update(kwargs)
         return SimpleNamespace(
-            exec=lambda: False, deleteLater=lambda: deleted.append(True)
+            exec=lambda: False,
+            deleteLater=lambda: deleted.append(True),
+            removed_client=None,
+            profile_saved=False,
         )
 
     monkeypatch.setattr("gui.actions_handler.SettingsWindow", window)
@@ -302,6 +311,7 @@ def test_the_settings_window_is_told_which_files_are_loaded(monkeypatch):
     mw = SimpleNamespace(
         current_client_id="M",
         profile_manager=profile_manager,
+        groups_manager=Mock(),
         analysis_results_df=None,
         orders_file_path="/data/orders.csv",
         stock_file_path=None,
@@ -324,7 +334,12 @@ def test_with_no_session_the_settings_window_gets_no_session_name(monkeypatch):
 
     def window(**kwargs):
         seen.update(kwargs)
-        return SimpleNamespace(exec=lambda: False, deleteLater=lambda: None)
+        return SimpleNamespace(
+            exec=lambda: False,
+            deleteLater=lambda: None,
+            removed_client=None,
+            profile_saved=False,
+        )
 
     monkeypatch.setattr("gui.actions_handler.SettingsWindow", window)
     profile_manager = Mock()
@@ -332,6 +347,7 @@ def test_with_no_session_the_settings_window_gets_no_session_name(monkeypatch):
     mw = SimpleNamespace(
         current_client_id="M",
         profile_manager=profile_manager,
+        groups_manager=Mock(),
         analysis_results_df=None,
         orders_file_path=None,
         stock_file_path=None,

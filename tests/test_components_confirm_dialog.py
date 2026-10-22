@@ -52,3 +52,28 @@ def test_the_title_and_body_are_shown(qapp):
 def test_ask_answers_with_the_dialog_result(qapp, monkeypatch, code, expected):
     monkeypatch.setattr(ConfirmDialog, "exec", lambda self: code)
     assert ConfirmDialog.ask(None, title="t", body="b", verb="Delete group") is expected
+
+
+def test_without_require_text_there_is_no_field_and_the_verb_is_live(qapp):
+    dialog = _dialog()
+    assert dialog.confirm_input is None
+    assert dialog.verb_button.isEnabled()
+
+
+def test_require_text_keeps_the_verb_off_until_the_exact_text_is_typed(qapp):
+    dialog = ConfirmDialog(
+        None,
+        title="Delete CLIENT_X for good?",
+        body="Gone.",
+        verb="Delete",
+        require_text="X",
+    )
+    assert dialog.confirm_input is not None
+    assert dialog.confirm_input.placeholderText() == "Type X to confirm"
+    assert not dialog.verb_button.isEnabled()
+    dialog.confirm_input.setText("x")
+    assert not dialog.verb_button.isEnabled()  # case-sensitive
+    dialog.confirm_input.setText(" X ")
+    assert dialog.verb_button.isEnabled()  # stripped
+    dialog.confirm_input.setText("XY")
+    assert not dialog.verb_button.isEnabled()

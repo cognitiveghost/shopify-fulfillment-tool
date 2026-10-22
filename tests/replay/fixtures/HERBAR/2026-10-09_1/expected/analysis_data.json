@@ -1,0 +1,321 @@
+{
+  "analyzed_at": "2026-10-09T09:55:50.866713+03:00",
+  "total_orders": 7,
+  "fulfillable_orders": 6,
+  "not_fulfillable_orders": 1,
+  "orders": [
+    {
+      "order_number": "#100550",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "DK",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "DK",
+      "tags": [
+        "express"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SAMPLENEWLAUCH",
+          "product_name": "New Product Launch Lab Sample",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100645",
+      "order_type": "Single",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Not Fulfillable",
+      "destination_country": "PL",
+      "courier": "POST",
+      "status": "Not Fulfillable",
+      "shipping_country": "PL",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "Cannot fulfill: Barrier_Cream-Refill: Out of stock",
+      "internal_tags": [],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream-Refill",
+          "product_name": "The Barrier Cream - Core Refill",
+          "quantity": 1,
+          "order_fulfillment_status": "Not Fulfillable",
+          "status_note": "",
+          "system_note": "Cannot fulfill: Barrier_Cream-Refill: Out of stock"
+        }
+      ]
+    },
+    {
+      "order_number": "#100650",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "FR",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "FR",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "OIL-50",
+          "product_name": "The Face Oil-50ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100651",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "FI",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "FI",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "OIL-50",
+          "product_name": "The Face Oil-50ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100652",
+      "order_type": "Single",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "GB",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "GB",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "OIL-50",
+          "product_name": "The Face Oil-50ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100653",
+      "order_type": "Multi",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "US",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "US",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "DHL",
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "OIL-50",
+          "product_name": "The Face Oil-50ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-30",
+          "product_name": "The Face Nectar 30 ml",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "NECTAR-DROPPER",
+          "product_name": "The Face Nectar Dropper",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "Sunshieldspf",
+          "product_name": "The Sun Shield SPF 30",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        },
+        {
+          "sku": "SET-CORDUROY",
+          "product_name": "Corduroy Bag",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    },
+    {
+      "order_number": "#100654",
+      "order_type": "Single",
+      "shipping_provider": "POST",
+      "order_fulfillment_status": "Fulfillable",
+      "destination_country": "US",
+      "courier": "POST",
+      "status": "Fulfillable",
+      "shipping_country": "US",
+      "tags": [
+        "nan"
+      ],
+      "notes": "nan",
+      "system_note": "",
+      "internal_tags": [
+        "DHL",
+        "O",
+        "BOX"
+      ],
+      "order_min_box": null,
+      "items": [
+        {
+          "sku": "Barrier_Cream",
+          "product_name": "The Barrier Cream",
+          "quantity": 1,
+          "order_fulfillment_status": "Fulfillable",
+          "status_note": "",
+          "system_note": ""
+        }
+      ]
+    }
+  ]
+}

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from shared.i18n import _
 from shared.theme import current_tokens, font_css, on_theme_changed, set_button_role
 
 
@@ -38,7 +39,7 @@ class Toast(QFrame):
     def __init__(self, host: QWidget) -> None:
         super().__init__(host)
         self.setObjectName("toast")
-        self.setAccessibleName("Notification")
+        self.setAccessibleName(_("Notification"))
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._host = host
         self._count = 0

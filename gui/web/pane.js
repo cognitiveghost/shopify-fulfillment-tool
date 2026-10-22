@@ -4,8 +4,6 @@
 // comes back.
 "use strict";
 
-const RUN_SOURCE = "Detected by the run, not set by a person.";
-const HAND_SOURCE = "Set by a person, not detected by the run.";
 const CHEVRON_RIGHT = "m9 18 6-6-6-6";
 const CHEVRON_LEFT = "m15 18-6-6 6-6";
 const FLAG_CODES = [["_repeat", "REPEAT_CUSTOMER"], ["Unknown_SKU", "UNKNOWN_SKU"], ["Low_Stock", "LOW_STOCK"]];
@@ -39,22 +37,22 @@ function paneButton(cls, text, label) {
 
 function problemSentence(p) {
   if (p.code === "short") {
-    return "There were " + NUMBER.format(p.have) + " units of " + p.sku +
-      " left for this order, and it wants " + NUMBER.format(p.need) + ".";
+    return t("There were {have} units of {sku} left for this order, and it wants {need}.",
+      { have: NUMBER.format(p.have), sku: p.sku, need: NUMBER.format(p.need) });
   }
-  if (p.code === "out_of_stock") return p.sku + " had none left.";
-  if (p.code === "invalid_quantity") return p.sku + " has no valid quantity in the orders file.";
+  if (p.code === "out_of_stock") return t("{sku} had none left.", { sku: p.sku });
+  if (p.code === "invalid_quantity") return t("{sku} has no valid quantity in the orders file.", { sku: p.sku });
   if (p.code === "no_sku") {
-    return p.lines === 1
-      ? "1 line has no SKU, so no stock can be matched to it."
-      : NUMBER.format(p.lines) + " lines have no SKU, so no stock can be matched to them.";
+    return tn("{n} line has no SKU, so no stock can be matched to it.",
+      "{n} lines have no SKU, so no stock can be matched to them.", p.lines);
   }
-  if (p.code === "rule_hold") return "Rule “" + p.rule + "” held this order.";
+  if (p.code === "rule_hold") return t("Rule “{rule}” held this order.", { rule: p.rule });
   const text = str(p.text).trim();
   return /[.!?]$/.test(text) ? text : text + ".";
 }
 
-// One template per reason code, with the run's numbers in it (§6.3).
+// One template per reason code, with the run's numbers in it (§6.3). The copy
+// is drawn in the PC's language; the reason codes themselves are not (paneCodes).
 function verdictCopy(o) {
   const v = o.Verdict || { state: "ready", by_hand: false, problems: [] };
   const lines = o.lines || [];
@@ -62,30 +60,35 @@ function verdictCopy(o) {
   const k = lines.filter((line) => line.Short).length;
   const sentences = (v.problems || []).map(problemSentence).join(" ");
   if (v.state === "ready") {
-    const value = num(o.Total_Price) === null ? "" : ", " + fmtMoney(o.Total_Price);
     const opening = n === 1
-      ? "Its one line is in stock and reserved for this order."
-      : "All " + NUMBER.format(n) + " lines are in stock and reserved for this order.";
-    return { role: "success", title: "Ships complete", source: "",
-      text: opening + " One parcel, " + plural(num(o.Units) || 0, "unit") + value + ". Nothing is waiting on anyone." };
+      ? t("Its one line is in stock and reserved for this order.")
+      : t("All {n} lines are in stock and reserved for this order.", { n: NUMBER.format(n) });
+    const units = unitCount(num(o.Units) || 0);
+    const parcel = num(o.Total_Price) === null
+      ? t("One parcel, {units}.", { units })
+      : t("One parcel, {units}, {amount}.", { units, amount: fmtMoney(o.Total_Price) });
+    return { role: "success", title: t("Ships complete"), source: "",
+      text: [opening, parcel, t("Nothing is waiting on anyone.")].join(" ") };
   }
   if (v.state === "short") {
-    const rest = n - k === 1 ? " The other line is covered."
-      : n > k ? " The other " + NUMBER.format(n - k) + " lines are covered." : "";
-    return { role: "danger", source: "", text: sentences + rest,
-      title: "Cannot ship: " + NUMBER.format(k) + " of " + plural(n, "line") + (k === 1 ? " is short" : " are short") };
+    const rest = n - k === 1 ? t("The other line is covered.")
+      : n > k ? t("The other {n} lines are covered.", { n: NUMBER.format(n - k) }) : "";
+    const shortTitle = k === 1
+      ? t("Cannot ship: {short} of {lines} is short", { short: NUMBER.format(k), lines: lineCount(n) })
+      : t("Cannot ship: {short} of {lines} are short", { short: NUMBER.format(k), lines: lineCount(n) });
+    return { role: "danger", source: "", text: [sentences, rest].filter(Boolean).join(" "), title: shortTitle };
   }
   if (!v.by_hand && (v.problems || []).some((p) => p.code === "rule_hold")) {
-    return { role: "warning", title: "Held by a rule", source: RUN_SOURCE,
-      text: sentences + " Change the rule, or mark the order fulfillable if it should ship." };
+    return { role: "warning", title: t("Held by a rule"), source: "run",
+      text: [sentences, t("Change the rule, or mark the order fulfillable if it should ship.")].join(" ") };
   }
-  if (!v.by_hand) return { role: "warning", title: "Fix the data before this ships", text: sentences, source: RUN_SOURCE };
+  if (!v.by_hand) return { role: "warning", title: t("Fix the data before this ships"), text: sentences, source: "run" };
   if (isFulfillable(o)) {
-    return { role: "warning", title: "Marked fulfillable by hand", source: HAND_SOURCE,
-      text: "The run could not ship it. " + sentences + " Someone marked it fulfillable anyway." };
+    return { role: "warning", title: t("Marked fulfillable by hand"), source: "hand",
+      text: t("The run could not ship it. {problems} Someone marked it fulfillable anyway.", { problems: sentences }) };
   }
-  return { role: "warning", title: "On hold", source: HAND_SOURCE,
-    text: "Nothing in this order is short now. It stays blocked until someone marks it fulfillable." };
+  return { role: "warning", title: t("On hold"), source: "hand",
+    text: t("Nothing in this order is short now. It stays blocked until someone marks it fulfillable.") };
 }
 
 function paneRecord() {
@@ -100,11 +103,11 @@ function renderPane() {
   const hit = paneRecord();
 
   const head = el("div", "pane-head");
-  const title = el("span", "pane-title", hit ? "Order " : "Order detail");
+  const title = el("span", "pane-title", hit ? t("Order") + " " : t("Order detail"));
   if (hit) title.append(el("span", "pane-order", str(hit.o.Order_Number)));
   head.append(title);
   if (hit) head.append(statusBadge(hit.o));
-  const hide = paneButton("ghost icon compact", undefined, "Hide detail");
+  const hide = paneButton("ghost icon compact", undefined, t("Hide detail"));
   hide.id = "pane-hide";
   hide.innerHTML = svg(CHEVRON_RIGHT, "glyph");
   hide.addEventListener("click", hidePane);
@@ -115,9 +118,9 @@ function renderPane() {
     const empty = el("div", "pane-empty");
     empty.id = "pane-empty";
     empty.append(
-      el("p", "state-title", "No order selected"),
-      el("p", "state-text", "Click a row to see whether it can ship and, if it cannot, why. ↑ ↓ moves through the " +
-        NUMBER.format(state.view.length) + " shown."),
+      el("p", "state-title", t("No order selected")),
+      el("p", "state-text", t("Click a row to see whether it can ship and, if it cannot, why. ↑ ↓ moves through the {n} shown.",
+        { n: NUMBER.format(state.view.length) })),
     );
     pane.append(empty);
     return;
@@ -139,13 +142,17 @@ function paneVerdict(o) {
   // The mark: hollow when the run detected it, solid when a person set it.
   title.append(el("span", "mark" + (v.by_hand ? " solid" : "")), document.createTextNode(copy.title));
   box.append(title, el("p", "verdict-text", copy.text));
-  if (copy.source) box.append(el("p", "verdict-source", copy.source));
+  if (copy.source === "run") {
+    box.append(el("p", "verdict-source", t("Detected by the run, not set by a person.")));
+  } else if (copy.source === "hand") {
+    box.append(el("p", "verdict-source", t("Set by a person, not detected by the run.")));
+  }
   return box;
 }
 
 function paneMeta(o) {
   const parts = [o.Customer, o.Destination_Country, o.Shipping_Provider].map((v) => str(v).trim()).filter(Boolean);
-  if (ageMs(o.Created_At) !== null) parts.push(fmtAge(o.Created_At) + " old");
+  if (ageMs(o.Created_At) !== null) parts.push(t("{age} old", { age: fmtAge(o.Created_At) }));
   if (num(o.Total_Price) !== null) parts.push(fmtMoney(o.Total_Price));
   return el("div", "pane-meta", parts.length ? parts.join(" · ") : DASH);
 }
@@ -174,13 +181,14 @@ function stockSentence(o, line) {
     // Only the short problem: the SKU may carry another one (a bad quantity) first.
     const p = ((o.Verdict && o.Verdict.problems) || []).find((x) => x.sku === sku && x.code === "short");
     if (p) {
-      return { short: true, text: NUMBER.format(p.have) + " of " + NUMBER.format(p.need) +
-        " in stock, short " + NUMBER.format(p.need - p.have) };
+      return { short: true, text: t("{have} of {need} in stock, short {short}", {
+        have: NUMBER.format(p.have), need: NUMBER.format(p.need), short: NUMBER.format(p.need - p.have),
+      }) };
     }
-    return { short: true, text: "None in stock" };
+    return { short: true, text: t("None in stock") };
   }
   const left = num(line.Final_Stock);
-  return left === null ? null : { short: false, text: NUMBER.format(left) + " left in stock" };
+  return left === null ? null : { short: false, text: t("{n} left in stock", { n: NUMBER.format(left) }) };
 }
 
 // The run writes "1" where the stock file has no lot; that is not a label.
@@ -197,8 +205,8 @@ function lotTexts(line) {
   const real = lots.filter((lot) => lot && typeof lot === "object");
   return real.map((lot) => {
     const parts = [];
-    if (lotWord(lot.batch)) parts.push("Lot " + lotWord(lot.batch));
-    if (lotWord(lot.expiry)) parts.push("exp " + lotWord(lot.expiry));
+    if (lotWord(lot.batch)) parts.push(t("Lot {batch}", { batch: lotWord(lot.batch) }));
+    if (lotWord(lot.expiry)) parts.push(t("exp {expiry}", { expiry: lotWord(lot.expiry) }));
     if (parts.length && real.length > 1 && num(lot.qty_allocated) !== null) {
       parts.push("×" + NUMBER.format(lot.qty_allocated));
     }
@@ -210,7 +218,7 @@ function paneLines(o) {
   const order = str(o.Order_Number);
   const lines = o.lines || [];
   const wrap = el("div", "pane-lines");
-  wrap.append(el("div", "pane-numbers", plural(lines.length, "line") + " · " + plural(num(o.Units) || 0, "unit")));
+  wrap.append(el("div", "pane-numbers", lineCount(lines.length) + " · " + unitCount(num(o.Units) || 0)));
   const box = el("div", "lines");
   lines.forEach((line, index) => {
     const sku = str(line.SKU);
@@ -228,12 +236,12 @@ function paneLines(o) {
     const stock = stockSentence(o, line);
     if (stock) main.append(el("div", "line-stock" + (stock.short ? " short" : ""), stock.text));
     for (const text of lotTexts(line)) main.append(el("div", "line-lot", text));
-    const more = paneButton("ghost icon compact line-menu-button", "⋯", "Actions for this line");
+    const more = paneButton("ghost icon compact line-menu-button", "⋯", t("Actions for this line"));
     more.addEventListener("click", () => openPaneMenu(more, "line-menu", [
-      ["Remove this line", () => state.bridge.removeLine(order, index, sku),
-        lines.length < 2 ? "Last line: exclude the order instead" : ""],
-      ["Change quantity…", () => openQtyMenu(more, order, index, sku, line.Quantity)],
-      ["Copy SKU", () => state.bridge.copyText(sku)],
+      [t("Remove this line"), () => state.bridge.removeLine(order, index, sku),
+        lines.length < 2 ? t("Last line: exclude the order instead") : ""],
+      [t("Change quantity…"), () => openQtyMenu(more, order, index, sku, line.Quantity)],
+      [t("Copy SKU"), () => state.bridge.copyText(sku)],
     ]));
     row.append(main, more);
     box.append(row);
@@ -246,13 +254,13 @@ function paneTags(o) {
   const order = str(o.Order_Number);
   const box = el("div", "pane-tags");
   for (const tag of (o.Tag_List || []).map(String)) {
-    const chip = paneButton("", tag + "  ×", "Remove tag " + tag);
+    const chip = paneButton("", tag + "  ×", t("Remove tag {tag}", { tag }));
     chip.className = "chip-filter tag-chip";
     chip.dataset.tag = tag;
     chip.addEventListener("click", () => state.bridge && state.bridge.removeOrderTag(order, tag));
     box.append(chip);
   }
-  const add = paneButton("ghost compact", "+ Tag");
+  const add = paneButton("ghost compact", t("+ Tag"));
   add.id = "pane-add-tag";
   add.addEventListener("click", () => openTagMenu(add, o));
   box.append(add);
@@ -261,8 +269,8 @@ function paneTags(o) {
 
 function paneNotes(o) {
   const parts = [str(o.Notes).trim(), str(o.Status_Note).trim()].filter(Boolean);
-  if (str(o.Tags).trim()) parts.push("Shopify tags: " + str(o.Tags).trim());
-  return el("p", "pane-notes", parts.length ? parts.join("\n") : "No notes on this order.");
+  if (str(o.Tags).trim()) parts.push(t("Shopify tags: {tags}", { tags: str(o.Tags).trim() }));
+  return el("p", "pane-notes", parts.length ? parts.join("\n") : t("No notes on this order."));
 }
 
 // Never a primary: the screen's one primary is Export. Copy order number
@@ -271,14 +279,14 @@ function paneFooter(o, index) {
   const order = str(o.Order_Number);
   const fulfillable = isFulfillable(o);
   const box = el("div", "pane-actions");
-  const verb = paneButton("secondary compact", fulfillable ? "Hold" : "Mark fulfillable");
+  const verb = paneButton("secondary compact", fulfillable ? t("Hold") : t("Mark fulfillable"));
   verb.id = "pane-status-verb";
   verb.addEventListener("click", () => {
     if (!state.bridge) return;
     if (fulfillable) state.bridge.holdOrder(order);
     else state.bridge.fulfillOrder(order);
   });
-  const exclude = paneButton("ghost danger compact", "Exclude order");
+  const exclude = paneButton("ghost danger compact", t("Exclude order"));
   exclude.id = "pane-exclude";
   exclude.addEventListener("click", () => state.bridge && state.bridge.excludeOrder(order));
   const position = el("span", "pane-position",
@@ -350,8 +358,8 @@ function openTagMenu(anchor, o) {
   });
   const input = el("input", "field new-tag");
   input.id = "new-tag";
-  input.placeholder = "New tag";
-  input.setAttribute("aria-label", "New tag");
+  input.placeholder = t("New tag");
+  input.setAttribute("aria-label", t("New tag"));
   input.addEventListener("keydown", (e) => {
     const tag = input.value.trim();
     if (e.key !== "Enter" || !tag) return;
@@ -374,7 +382,7 @@ function openQtyMenu(anchor, order, index, sku, current) {
   input.min = "1";
   input.step = "1";
   input.value = own === null ? "" : String(own);
-  input.setAttribute("aria-label", "Quantity");
+  input.setAttribute("aria-label", t("Quantity"));
   input.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     const n = input.value.trim() === "" ? NaN : Number(input.value);

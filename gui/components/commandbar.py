@@ -8,7 +8,16 @@ section 8). Replaces the sidebar of 70px client cards with a dropdown.
 
 import enum
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import (
+    QEvent,
+    QModelIndex,
+    QPoint,
+    QRect,
+    QSize,
+    QSortFilterProxyModel,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QIcon,
@@ -18,18 +27,27 @@ from PySide6.QtGui import (
     QStandardItemModel,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLayout,
+    QLineEdit,
+    QListView,
     QMenu,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
 from gui.theme_manager import font_css, get_theme_manager, set_button_role
 from shared.components.overflow import OverflowMenu, overflow_button
+from shared.i18n import N_, _
 from shared.icons import icon
 from shared.theme import on_theme_changed
 
@@ -55,12 +73,18 @@ class BarState(enum.Enum):
 ROW_SECTION = "section"
 ROW_CLIENT = "client"
 ROW_ACTION = "action"
+# A client row's ID, for the delegate and the filter. The name is the display text.
+ROLE_CLIENT_ID = Qt.UserRole + 2
 
 _DOT_PX = 10  # matches StatusDot's default diameter
-_NEW_CLIENT = "New client…"
-_MANAGE_GROUPS = "Manage groups…"
-_REFRESH = "Refresh clients"
-_ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS)
+# The action rows' raw values are compared by _on_row_activated; the text shown is _()'d.
+_NEW_CLIENT = N_("New client…")
+_MANAGE_GROUPS = N_("Manage groups…")
+_ARCHIVED = N_("Archived clients…")
+_REFRESH = N_("Refresh clients")
+_ACTIONS = (_REFRESH, _NEW_CLIENT, _MANAGE_GROUPS, _ARCHIVED)
+_PINNED_NAME = N_("Pinned")
+_ALL_CLIENTS_NAME = N_("All Clients")
 
 # The ladder, widest trigger first. Qt's own elision has no order and would
 # take the session ID first because it is the longest string in the row --
@@ -73,6 +97,148 @@ _LADDER = (
 )
 
 
+class _ClientFilter(QSortFilterProxyModel):
+    """Clients whose name or ID holds the text; a caption while it still has
+    one; the divider and the actions always."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._text = ""
+
+    def set_text(self, text: str) -> None:
+        self.beginFilterChange()
+        self._text = text.strip().casefold()
+        self.endFilterChange()
+
+    def _client_matches(self, row: int) -> bool:
+        index = self.sourceModel().index(row, 0)
+        name = (index.data(Qt.DisplayRole) or "").casefold()
+        cid = (index.data(ROLE_CLIENT_ID) or "").casefold()
+        return self._text in name or self._text in cid
+
+    def filterAcceptsRow(self, row, parent) -> bool:
+        if not self._text:
+            return True
+        model = self.sourceModel()
+        kind = model.index(row, 0).data(Qt.UserRole)
+        if kind == ROW_CLIENT:
+            return self._client_matches(row)
+        if kind == ROW_SECTION and model.index(row, 0).data(Qt.DisplayRole):
+            nxt = row + 1
+            while nxt < model.rowCount() and model.index(nxt, 0).data(Qt.UserRole) == ROW_CLIENT:
+                if self._client_matches(nxt):
+                    return True
+                nxt += 1
+            return False
+        return True  # blank divider, actions
+
+
+class _ClientPopup(QFrame):
+    """The open client list: a filter field over the combo's own rows."""
+
+    _MIN_WIDTH = 280
+    _MAX_HEIGHT = 420
+
+    def __init__(self, combo):
+        super().__init__(combo, Qt.Popup)
+        self.combo = combo
+        # A QWidget subclass paints no QSS background without this.
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        on_theme_changed(self, self._apply_theme)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+        self.filter_edit = QLineEdit(self)
+        self.filter_edit.setPlaceholderText(_("Filter clients"))
+        self.filter_edit.setClearButtonEnabled(True)
+        self.proxy = _ClientFilter(self)
+        self.proxy.setSourceModel(combo.model())
+        self.list_view = QListView(self)
+        self.list_view.setModel(self.proxy)
+        self.list_view.setItemDelegate(_ClientRowDelegate(self.list_view))
+        self.list_view.setUniformItemSizes(True)
+        layout.addWidget(self.filter_edit)
+        layout.addWidget(self.list_view)
+        self.filter_edit.textChanged.connect(self._on_text)
+        self.filter_edit.installEventFilter(self)
+        self.list_view.clicked.connect(self.pick)
+
+    def _apply_theme(self, theme=None) -> None:
+        theme = theme or get_theme_manager().get_current_theme()
+        self.setStyleSheet(
+            f"_ClientPopup {{ background-color: {theme.surface};"
+            f" border: 1px solid {theme.border}; }}"
+        )
+
+    def _pickable(self, index) -> bool:
+        return index.isValid() and index.data(Qt.UserRole) in (ROW_CLIENT, ROW_ACTION)
+
+    def _first_client(self):
+        for r in range(self.proxy.rowCount()):
+            index = self.proxy.index(r, 0)
+            if index.data(Qt.UserRole) == ROW_CLIENT:
+                return index
+        return QModelIndex()
+
+    def _on_text(self, text: str) -> None:
+        self.proxy.set_text(text)
+        self.list_view.setCurrentIndex(self._first_client())
+
+    def _step(self, delta: int) -> None:
+        r = self.list_view.currentIndex().row()
+        r = -1 if r < 0 and delta > 0 else (self.proxy.rowCount() if r < 0 else r)
+        r += delta
+        while 0 <= r < self.proxy.rowCount():
+            index = self.proxy.index(r, 0)
+            if self._pickable(index):
+                self.list_view.setCurrentIndex(index)
+                return
+            r += delta
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.filter_edit and event.type() == QEvent.KeyPress:
+            key = event.key()
+            if key in (Qt.Key_Down, Qt.Key_Up):
+                self._step(1 if key == Qt.Key_Down else -1)
+                return True
+            if key in (Qt.Key_Return, Qt.Key_Enter):
+                index = self.list_view.currentIndex()
+                if not self._pickable(index):
+                    index = self._first_client()
+                if index.isValid():
+                    self.pick(index)
+                return True
+            if key == Qt.Key_Escape:
+                self.close()
+                return True
+        return super().eventFilter(obj, event)
+
+    def pick(self, index) -> None:
+        if not self._pickable(index):
+            return
+        row = self.proxy.mapToSource(index).row()
+        self.close()
+        if index.data(Qt.UserRole) == ROW_CLIENT:
+            self.combo.setCurrentIndex(row)
+        self.combo.activated.emit(row)
+
+    def open_under(self) -> None:
+        combo = self.combo
+        self.filter_edit.clear()
+        width = max(combo.width(), self._MIN_WIDTH)
+        rows = max(self.proxy.rowCount(), 1)
+        height = min(
+            self.list_view.sizeHintForRow(0) * rows + self.filter_edit.sizeHint().height() + 16,
+            self._MAX_HEIGHT,
+        )
+        self.setGeometry(QRect(combo.mapToGlobal(combo.rect().bottomLeft()), QSize(width, height)))
+        current = self.proxy.mapFromSource(combo.model().index(combo.currentIndex(), 0))
+        if current.isValid():
+            self.list_view.setCurrentIndex(current)
+        self.show()
+        self.filter_edit.setFocus()
+
+
 class _ClientCombo(QComboBox):
     """A client picker the wheel and the arrow keys cannot misfire.
 
@@ -83,6 +249,21 @@ class _ClientCombo(QComboBox):
     the config and clears the undo history. Disabling the rows does not help:
     QComboBox navigation only tests Qt.ItemIsEnabled.
     """
+
+    popup = None
+    on_popup = None  # CommandBar sets it to wire the context menu onto the popup's list
+
+    def showPopup(self) -> None:
+        if self.popup is None:
+            self.popup = _ClientPopup(self)
+            if self.on_popup is not None:
+                self.on_popup(self.popup)
+        self.popup.open_under()
+
+    def hidePopup(self) -> None:
+        if self.popup is not None and self.popup.isVisible():
+            self.popup.close()
+        super().hidePopup()
 
     def wheelEvent(self, event) -> None:
         event.ignore()  # a client switch is never a scroll gesture
@@ -104,6 +285,40 @@ class _ClientCombo(QComboBox):
             i += delta
 
 
+class _ClientRowDelegate(QStyledItemDelegate):
+    """A client row: its name, then its ID in the secondary text colour."""
+
+    def paint(self, painter, option, index):
+        if index.data(Qt.UserRole) != ROW_CLIENT:
+            super().paint(painter, option, index)
+            return
+        name = index.data(Qt.DisplayRole) or ""
+        cid = index.data(ROLE_CLIENT_ID) or ""
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        style = opt.widget.style() if opt.widget else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        text_rect = style.subElementRect(QStyle.SE_ItemViewItemText, opt, opt.widget)
+        theme = get_theme_manager().get_current_theme()
+        selected = bool(option.state & QStyle.State_Selected)
+        painter.save()
+        painter.setPen(
+            opt.palette.highlightedText().color()
+            if selected
+            else QColor(theme.text)
+        )
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, name)
+        if cid and cid != name:
+            used = opt.fontMetrics.horizontalAdvance(name + "  ")
+            if not selected:
+                painter.setPen(QColor(theme.text_secondary))
+            painter.drawText(
+                text_rect.adjusted(used, 0, 0, 0), Qt.AlignVCenter | Qt.AlignLeft, cid
+            )
+        painter.restore()
+
+
 class CommandBar(QWidget):
     """Emits selections and the action; owns no application state."""
 
@@ -111,6 +326,7 @@ class CommandBar(QWidget):
     clientMenuRequested = Signal(str, QPoint)
     createClientRequested = Signal()
     manageGroupsRequested = Signal()
+    archivedClientsRequested = Signal()
     refreshRequested = Signal()
     newSessionRequested = Signal()
     sessionChosen = Signal(str)
@@ -126,6 +342,7 @@ class CommandBar(QWidget):
         get_theme_manager().theme_changed.connect(self._apply_theme)
 
         self._repopulating = False
+        self._client_loading = False
         self._restore_client = ""
         self._announced = ""  # the last client clientChanged carried
         self._show_chip = False
@@ -148,12 +365,13 @@ class CommandBar(QWidget):
 
         self.client_selector = _ClientCombo(self)
         self.client_selector.setModel(QStandardItemModel(self.client_selector))
-        self.client_selector.setPlaceholderText("Choose a client")
-        self.client_selector.currentTextChanged.connect(self._on_client_changed)
+        self.client_selector.setPlaceholderText(_("Choose a client"))
+        self.client_selector.currentIndexChanged.connect(self._on_client_changed)
         self.client_selector.activated.connect(self._on_row_activated)
         view = self.client_selector.view()
-        view.setContextMenuPolicy(Qt.CustomContextMenu)
-        view.customContextMenuRequested.connect(self._on_row_context_menu)
+        view.setItemDelegate(_ClientRowDelegate(self.client_selector))
+        self._wire_context_menu(view)
+        self.client_selector.on_popup = lambda popup: self._wire_context_menu(popup.list_view)
         layout.addWidget(self.client_selector)
 
         self.setFixedHeight(BAR_HEIGHT)
@@ -161,7 +379,7 @@ class CommandBar(QWidget):
 
         # Always there: a session can be started from any screen. Secondary,
         # because the screen's primary is the page's own.
-        self.new_session_button = QPushButton("New session", self)
+        self.new_session_button = QPushButton(_("New session"), self)
         set_button_role(self.new_session_button, "secondary")
         self.new_session_button.clicked.connect(self.newSessionRequested.emit)
         # A QIcon is a snapshot: re-rendered on a theme change.
@@ -177,10 +395,15 @@ class CommandBar(QWidget):
         self.session_button.setAutoRaise(True)
         self.session_button.setPopupMode(QToolButton.InstantPopup)
         self.session_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.session_button.setText("Open recent")
+        self.session_button.setText(_("Open recent"))
         self.session_menu = QMenu(self.session_button)
         self.session_button.setMenu(self.session_menu)
         layout.addWidget(self.session_button)
+
+        # Shown while a client's settings load; see set_client_loading.
+        self.loading_label = QLabel("", self)
+        self.loading_label.hide()
+        layout.addWidget(self.loading_label)
 
         # The open session's name, never elided: an elided ID is a wrong ID.
         self.session_chip = QLabel("", self)
@@ -202,7 +425,7 @@ class CommandBar(QWidget):
         self.step_name_label = QLabel("", self)
         self.step_name_label.hide()
         layout.addWidget(self.step_name_label)
-        self.running_button = QPushButton("Running…", self)
+        self.running_button = QPushButton(_("Running…"), self)
         set_button_role(self.running_button, "primary")
         self.running_button.setEnabled(False)
         self.running_button.hide()
@@ -251,6 +474,7 @@ class CommandBar(QWidget):
         )
         quiet = f"{font_css('caption')} color: {theme.text_secondary};"
         self.meta_label.setStyleSheet(quiet)
+        self.loading_label.setStyleSheet(quiet)
         self.step_count_label.setStyleSheet(
             f"{quiet} font-family: {theme.font_family_mono};"
         )
@@ -288,8 +512,8 @@ class CommandBar(QWidget):
         """Rebuild the dropdown from ClientDirectory.gather()'s dict.
 
         Pinned, then each non-empty group, then everyone not yet listed. A
-        pinned client that is also in a group appears under both -- that is
-        the sidebar's own behaviour, ported rather than corrected.
+        client is listed once: under Pinned if pinned, else under the first
+        group that holds it, else under All Clients.
         """
         # _restore_client, not current_client(): refresh() is async, so a
         # set_current_client() for a client the model does not hold yet must
@@ -304,7 +528,7 @@ class CommandBar(QWidget):
 
             pinned = [c for c in data["all_clients"] if c in data["pinned_client_ids"]]
             if pinned:
-                self._add_section(special.get("pinned", {}).get("name", "Pinned"))
+                self._add_section(_(special.get("pinned", {}).get("name", _PINNED_NAME)))
                 for client_id in pinned:
                     self._add_client(client_id, data)
                 listed.update(pinned)
@@ -313,18 +537,18 @@ class CommandBar(QWidget):
                 members = [
                     c
                     for c in data["group_members"].get(group.get("id"), [])
-                    if c in data["all_clients"]
+                    if c in data["all_clients"] and c not in listed
                 ]
                 if not members:
                     continue
-                self._add_section(group.get("name", "Unknown"))
+                self._add_section(group["name"] if "name" in group else _("Unknown"))
                 for client_id in members:
                     self._add_client(client_id, data)
                 listed.update(members)
 
             rest = [c for c in data["all_clients"] if c not in listed]
             if rest:
-                self._add_section(special.get("all", {}).get("name", "All Clients"))
+                self._add_section(_(special.get("all", {}).get("name", _ALL_CLIENTS_NAME)))
                 for client_id in rest:
                     self._add_client(client_id, data)
 
@@ -354,10 +578,13 @@ class CommandBar(QWidget):
         self.client_selector.model().appendRow(item)
 
     def _add_client(self, client_id: str, data: dict) -> None:
-        settings = data["card_data"].get(client_id, {}).get("ui_settings", {})
-        item = QStandardItem(client_id)
+        card = data["card_data"].get(client_id, {})
+        settings = card.get("ui_settings", {})
+        name = (card.get("client_name") or "").strip() or client_id
+        item = QStandardItem(name)
         item.setData(ROW_CLIENT, Qt.UserRole)
         item.setData(client_id, Qt.UserRole + 1)
+        item.setData(client_id, ROLE_CLIENT_ID)
         # The hex is the client's own custom_color, read from disk -- user
         # data, not a literal, so style_lint has nothing to object to.
         colour = settings.get("custom_color")
@@ -368,7 +595,7 @@ class CommandBar(QWidget):
     def _add_action(self, label: str) -> None:
         # No QComboBox.insertSeparator(): it inserts a real, dataless row
         # into the model, which would show up in every row-indexed lookup.
-        item = QStandardItem(label)
+        item = QStandardItem(_(label))
         item.setData(ROW_ACTION, Qt.UserRole)
         item.setData(label, Qt.UserRole + 1)
         self.client_selector.model().appendRow(item)
@@ -389,7 +616,7 @@ class CommandBar(QWidget):
         item = self.client_selector.model().item(index)
         return None if item is None else item.data(Qt.UserRole)
 
-    def _on_client_changed(self, _text: str) -> None:
+    def _on_client_changed(self, _index: int) -> None:
         # Repopulating fires currentTextChanged per removal/insert; a consumer
         # reloading a client per signal would thrash the network file server.
         # An action row or a caption landing in the box is not a change either.
@@ -426,15 +653,27 @@ class CommandBar(QWidget):
             self.createClientRequested.emit()
         elif label == _MANAGE_GROUPS:
             self.manageGroupsRequested.emit()
+        elif label == _ARCHIVED:
+            self.archivedClientsRequested.emit()
         else:
             self.refreshRequested.emit()
 
-    def _on_row_context_menu(self, position: QPoint) -> None:
-        view = self.client_selector.view()
+    def _wire_context_menu(self, view) -> None:
+        view.setContextMenuPolicy(Qt.CustomContextMenu)
+        view.customContextMenuRequested.connect(
+            lambda pos, v=view: self._on_row_context_menu(pos, v)
+        )
+
+    def _on_row_context_menu(self, position: QPoint, view) -> None:
         index = view.indexAt(position)
         if not index.isValid():
             return
-        item = self.client_selector.model().item(index.row())
+        row = (
+            view.model().mapToSource(index).row()
+            if isinstance(view.model(), QSortFilterProxyModel)
+            else index.row()
+        )
+        item = self.client_selector.model().item(row)
         if item.data(Qt.UserRole) != ROW_CLIENT:
             return
         self.clientMenuRequested.emit(
@@ -448,8 +687,20 @@ class CommandBar(QWidget):
             return ""
         return self.client_selector.model().item(index).data(Qt.UserRole + 1)
 
+    def set_client_loading(self, loading: bool, name: str = "") -> None:
+        """While a client's settings load: no session can be started or opened."""
+        self._client_loading = loading
+        self.loading_label.setText(_("Loading {name}…", name=name) if loading else "")
+        self.loading_label.setVisible(loading)
+        self._refresh()
+
     def set_current_client(self, client_id: str) -> None:
         """Select the first row for this client. Unknown ids are ignored."""
+        if not client_id:
+            self._restore_client = ""
+            self._announced = ""
+            self.client_selector.setCurrentIndex(-1)
+            return
         # Recorded before the search: an id the model does not hold yet is
         # honoured by the next set_clients_from(), not silently dropped.
         self._restore_client = client_id
@@ -477,7 +728,7 @@ class CommandBar(QWidget):
             )
         if self._recent:
             self.session_menu.addSeparator()
-        browse = self.session_menu.addAction("Browse all sessions…\tCtrl+3")
+        browse = self.session_menu.addAction(_("Browse all sessions…") + "\tCtrl+3")
         browse.triggered.connect(lambda _checked=False: self.browseAllRequested.emit())
         self._refresh()
 
@@ -515,7 +766,7 @@ class CommandBar(QWidget):
         """
         state = self._state
         has_session = state in (BarState.SESSION, BarState.RUNNING)
-        usable = state in (BarState.NO_SESSION, BarState.SESSION)
+        usable = state in (BarState.NO_SESSION, BarState.SESSION) and not self._client_loading
 
         self.new_session_button.setEnabled(usable)
         self.session_button.setEnabled(usable)
@@ -545,10 +796,12 @@ class CommandBar(QWidget):
         )
 
         index, total, name = self._step
-        self.step_count_label.setText(f"Step {index + 1} of {total}" if total else "")
+        self.step_count_label.setText(
+            _("Step {index} of {total}", index=index + 1, total=total) if total else ""
+        )
         self.step_name_label.setText(name)
         self.step_name_label.setVisible(
             self._state is BarState.RUNNING and "step" not in fired and bool(name)
         )
 
-        self.new_session_button.setText("" if "new_session" in fired else "New session")
+        self.new_session_button.setText("" if "new_session" in fired else _("New session"))

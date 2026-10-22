@@ -82,3 +82,12 @@ def test_the_client_menu_offers_no_delete(directory, profile_manager, qapp):
     profile_manager.create_client_profile("M", "Client M")
     menu = directory.menu_for("M", QWidget())
     assert not [a for a in menu.actions() if "Delete" in a.text()]
+
+
+def test_edit_settings_asks_for_that_clients_profile(directory, profile_manager, qapp):
+    profile_manager.create_client_profile("ACME", "Acme")
+    asked = []
+    directory.editClientRequested.connect(asked.append)
+    menu = directory.menu_for("ACME", QWidget())
+    next(a for a in menu.actions() if a.text() == "Edit Settings...").trigger()
+    assert asked == ["ACME"]
