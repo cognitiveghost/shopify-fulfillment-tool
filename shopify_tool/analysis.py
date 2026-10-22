@@ -915,7 +915,7 @@ def _detect_repeated_orders(
     source = h["Source"] if "Source" in h.columns else pd.Series("history", index=h.index)
     if "Execution_Date" in h.columns:
         # Deliberately naive: pd.to_datetime yields tz-naive dates.
-        today = pd.Timestamp(today or datetime.now().date())  # noqa: DTZ005
+        today = pd.Timestamp(today or datetime.now().date())
         dates = pd.to_datetime(h["Execution_Date"], errors="coerce", format="mixed").dt.normalize()
         before_today = dates.isna() | (dates < today)
     else:

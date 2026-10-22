@@ -56,6 +56,9 @@ else
     "$REPO/.venv/bin/python" -m pip install -q -r requirements.txt -r requirements-dev.txt
 fi
 
+# A floor bump in requirements must reach the shared venv (zebrafy 2.0 was missed).
+"$REPO/.venv/bin/python" -m pip install -q -r requirements.txt -r requirements-dev.txt
+
 have_deps "$REPO/.venv" || { echo "venv still missing PySide6/pytest — see errors above." >&2; exit 1; }
 
 # --- 2. .vscode/ ------------------------------------------------------------

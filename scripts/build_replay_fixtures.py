@@ -77,7 +77,7 @@ def _backups(client):
     for p in (client / "backups").glob("shopify_config_*.json"):
         m = _BACKUP.match(p.name)
         if m:
-            found.append((datetime.strptime(m.group(1), "%Y%m%d_%H%M%S"), p))  # noqa: DTZ007 -- backup names are local time
+            found.append((datetime.strptime(m.group(1), "%Y%m%d_%H%M%S"), p))
     return found
 
 
