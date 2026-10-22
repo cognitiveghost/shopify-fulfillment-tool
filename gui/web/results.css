@@ -94,6 +94,14 @@
 
 .search { flex: 0 0 260px; }
 
+.search-mode {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .chips { display: flex; gap: var(--spacing-sm); min-width: 0; overflow: hidden; }
 
 /* A filter chip states its filter; only its x removes it. */

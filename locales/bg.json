@@ -834,6 +834,7 @@
   "Start a session for today's orders, or reopen one from this client.": "Започни сесия за днешните поръчки или отвори отново една от този клиент.",
   "Start from another client's settings": "Започни от настройките на друг клиент",
   "Start is greater than end. Write the smaller number first, for example 10-100.": "Началото е по-голямо от края. Първо напишете по-малкото число, например 10-100.",
+  "Starts with": "Започва с",
   "Statistics": "Статистика",
   "Status": "Статус",
   "Status note": "Бележка за статуса",
