@@ -211,7 +211,7 @@ def test_alt_up_moves_a_column_before_the_previous_row(qtbot, doc):
         "new KeyboardEvent('keydown', {key: 'ArrowUp', altKey: true, bubbles: true, cancelable: true}))",
     )
     order = stored["order"]
-    assert order.index("age") == order.index("units") - 1
+    assert order.index("age") == order.index("courier") - 1
 
 
 def test_a_drop_on_the_top_half_moves_the_column_before_that_row(qtbot, doc):
@@ -257,7 +257,7 @@ def test_a_drop_above_the_pinned_pair_lands_after_order(qtbot, doc):
     assert stored["order"][:3] == ["status", "order", "age"]
 
 
-def test_the_search_hides_groups_with_no_match_and_the_handles(qtbot, doc):
+def test_the_search_filters_rows_and_hides_the_handles(qtbot, doc):
     view, _ = doc
     _open_columns(qtbot, view)
     _eval(
@@ -269,28 +269,27 @@ def test_the_search_hides_groups_with_no_match_and_the_handles(qtbot, doc):
     assert _json(
         qtbot,
         view,
-        "[...document.querySelectorAll('.col-group')].map(g => g.dataset.group)",
-    ) == ["Shipping"]
-    assert _json(
-        qtbot,
-        view,
         "[...document.querySelectorAll('.col-row')].map(r => r.dataset.key)",
     ) == ["method"]
     assert _eval(qtbot, view, ROW.format("method", ".col-grip") + ".innerHTML") == ""
 
 
-def test_the_group_header_counts_shown_of_that_group(qtbot, doc):
+def test_the_popover_lists_columns_in_table_order(qtbot, doc):
     view, _ = doc
     _open_columns(qtbot, view)
-    # Order holds status, order, lines, units, age, type, reason; five are shown.
-    assert (
-        _eval(
-            qtbot,
-            view,
-            "document.querySelector('.col-group[data-group=\"Order\"]').textContent",
-        )
-        == "ORDER 5 of 7"
+    shown_in_popover = _json(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('.col-row')]"
+        ".filter(r => r.querySelector('.col-check').checked).map(r => r.dataset.key)",
     )
+    shown_in_table = _json(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('#header .cell[data-sort]')].map(c => c.dataset.sort)",
+    )
+    assert shown_in_popover == shown_in_table
+    assert _eval(qtbot, view, "document.querySelectorAll('.col-group').length") == 0
 
 
 def test_the_footer_checkbox_sets_auto_hide_and_the_row_says_empty(qtbot, doc):
@@ -380,23 +379,6 @@ def test_hiding_the_sorted_column_clears_the_sort(qtbot, doc):
     assert "customer" not in stored["visible"]
     _until_js(qtbot, view, "!" + _has_header("Customer"))
     assert _sorted_header(qtbot, view) == ""
-
-
-def test_the_group_header_stays_above_the_rows_it_is_stuck_over(qtbot, doc):
-    """Spec §6.9: sticky means visible. .col-row is positioned and comes later,
-    so without a z-index the rows paint over the header."""
-    view, _ = doc
-    _open_columns(qtbot, view)
-    assert _eval(
-        qtbot,
-        view,
-        "(() => { const s = document.getElementById('columns-scroller');"
-        " s.scrollTop = 120;"
-        " const g = s.querySelector('.col-group');"
-        " const r = g.getBoundingClientRect();"
-        " const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);"
-        " return Boolean(hit && hit.closest('.col-group')); })()",
-    )
 
 
 def test_the_bridge_echoing_the_pages_own_layout_does_not_rerender(qtbot, doc):

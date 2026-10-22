@@ -506,22 +506,6 @@
 
 .columns-scroller { max-height: 340px; overflow-y: auto; scrollbar-gutter: stable; }
 
-.col-group {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky); /* .col-row is positioned and comes later, so it paints over an auto z-index */
-  height: 22px;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  background: var(--surface-overlay);
-  font-size: var(--type-caption-size);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
-}
-.col-group-count { font-weight: 400; letter-spacing: normal; }
-
 .col-row {
   position: relative;
   height: 30px;

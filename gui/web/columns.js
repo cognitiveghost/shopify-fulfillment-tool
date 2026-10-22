@@ -1,53 +1,42 @@
 // The column registry (Bundle 13 spec §6.8). Keys are persisted per client,
-// so never rename one. Python stores only names; titles, groups, defaults and
+// so never rename one. Python stores only names; titles, defaults and
 // pinning live here. Loaded before results.js: nothing at top level may call
 // into it, only function bodies.
 "use strict";
 
-const COLUMN_GROUPS = ["Order", "Customer", "Money", "Shipping", "Tags & notes", "Other"];
-// The group headings as drawn; COLUMN_GROUPS is what the registry matches on.
-const GROUP_TITLES = {
-  "Order": () => t("Order"),
-  "Customer": () => t("Customer"),
-  "Money": () => t("Money"),
-  "Shipping": () => t("Shipping"),
-  "Tags & notes": () => t("Tags & notes"),
-  "Other": () => t("Other"),
-};
-
 const REGISTRY = [
-  { key: "status", title: () => t("Status"), group: "Order", width: 108, pinned: true, shown: true,
+  { key: "status", title: () => t("Status"), width: 108, pinned: true, shown: true,
     text: (o) => statusText(o), sortValue: (o) => (isFulfillable(o) ? 0 : 1) },
-  { key: "order", title: () => t("Order"), group: "Order", width: 64, pinned: true, shown: true, mono: true,
+  { key: "order", title: () => t("Order"), width: 64, pinned: true, shown: true, mono: true,
     text: (o) => str(o.Order_Number) },
-  { key: "customer", title: () => t("Customer"), group: "Customer", stretch: true, shown: true, text: (o) => str(o.Customer) },
-  { key: "lines", title: () => t("Lines"), group: "Order", width: 52, shown: true, numeric: true, mono: true,
+  { key: "customer", title: () => t("Customer"), stretch: true, shown: true, text: (o) => str(o.Customer) },
+  { key: "lines", title: () => t("Lines"), width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtInt(o.Items), sortValue: (o) => num(o.Items) },
-  { key: "units", title: () => t("Units"), group: "Order", width: 52, shown: true, numeric: true, mono: true,
+  { key: "units", title: () => t("Units"), width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtInt(o.Units), sortValue: (o) => num(o.Units) },
-  { key: "value", title: () => t("Value"), group: "Money", width: 76, shown: true, numeric: true, mono: true,
+  { key: "value", title: () => t("Value"), width: 76, shown: true, numeric: true, mono: true,
     text: (o) => fmtMoney(o.Total_Price), sortValue: (o) => num(o.Total_Price) },
-  { key: "courier", title: () => t("Courier"), group: "Shipping", width: 72, shown: true, text: (o) => str(o.Shipping_Provider) },
-  { key: "age", title: () => t("Age"), group: "Order", width: 52, shown: true, numeric: true, mono: true,
+  { key: "courier", title: () => t("Courier"), width: 72, shown: true, text: (o) => str(o.Shipping_Provider) },
+  { key: "age", title: () => t("Age"), width: 52, shown: true, numeric: true, mono: true,
     text: (o) => fmtAge(o.Created_At), sortValue: (o) => ageMs(o.Created_At) },
-  { key: "type", title: () => t("Type"), group: "Order", width: 64, maxWidth: 120, text: (o) => str(o.Order_Type) },
-  { key: "reason", title: () => t("Reason"), group: "Order", width: 120, maxWidth: 240, text: (o) => str(o.Blocker) },
-  { key: "country", title: () => t("Country"), group: "Customer", width: 64, maxWidth: 120, text: (o) => str(o.Destination_Country) },
-  { key: "subtotal", title: () => t("Subtotal"), group: "Money", width: 84, numeric: true, mono: true,
+  { key: "type", title: () => t("Type"), width: 64, maxWidth: 120, text: (o) => str(o.Order_Type) },
+  { key: "reason", title: () => t("Reason"), width: 120, maxWidth: 240, text: (o) => str(o.Blocker) },
+  { key: "country", title: () => t("Country"), width: 64, maxWidth: 120, text: (o) => str(o.Destination_Country) },
+  { key: "subtotal", title: () => t("Subtotal"), width: 84, numeric: true, mono: true,
     text: (o) => fmtMoney(o.Subtotal), sortValue: (o) => num(o.Subtotal) },
-  { key: "method", title: () => t("Shipping method"), group: "Shipping", width: 120, maxWidth: 240, text: (o) => str(o.Shipping_Method) },
-  { key: "internal_tags", title: () => t("Internal tags"), group: "Tags & notes", width: 120, maxWidth: 240,
+  { key: "method", title: () => t("Shipping method"), width: 120, maxWidth: 240, text: (o) => str(o.Shipping_Method) },
+  { key: "internal_tags", title: () => t("Internal tags"), width: 120, maxWidth: 240,
     text: (o) => (o.Tag_List || []).map(String).join(", ") },
-  { key: "shopify_tags", title: () => t("Shopify tags"), group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Tags) },
-  { key: "notes", title: () => t("Notes"), group: "Tags & notes", width: 160, maxWidth: 240, text: (o) => str(o.Notes) },
-  { key: "status_note", title: () => t("Status note"), group: "Tags & notes", width: 120, maxWidth: 240, text: (o) => str(o.Status_Note) },
-  { key: "repeat", title: () => t("Repeat"), group: "Tags & notes", width: 76, shown: true, text: (o) => (o._repeat === true ? t("Repeat") : "") },
+  { key: "shopify_tags", title: () => t("Shopify tags"), width: 120, maxWidth: 240, text: (o) => str(o.Tags) },
+  { key: "notes", title: () => t("Notes"), width: 160, maxWidth: 240, text: (o) => str(o.Notes) },
+  { key: "status_note", title: () => t("Status note"), width: 120, maxWidth: 240, text: (o) => str(o.Status_Note) },
+  { key: "repeat", title: () => t("Repeat"), width: 76, shown: true, text: (o) => (o._repeat === true ? t("Repeat") : "") },
 ];
 const PINNED_KEYS = REGISTRY.filter((c) => c.pinned).map((c) => c.key);
 
 function allColumns() {
   const extras = (state.columnSettings.extras || []).map((field) => ({
-    key: "extra:" + field, title: String(field).replace(/_/g, " "), group: "Other", extra: true,
+    key: "extra:" + field, title: String(field).replace(/_/g, " "), extra: true,
     width: 120, maxWidth: 240, text: (o) => str(o[field]),
   }));
   return REGISTRY.concat(extras).map((col) => (col.sortValue ? col : Object.assign({ sortValue: col.text }, col)));
@@ -92,9 +81,8 @@ function storeColumns(changes, send) {
 }
 
 // --- the column manager (spec §6.9) -----------------------------------------
-// A popover under the Columns button (phase 2 spec section 5.8). It shows every
-// column grouped for finding, while the table behind it keeps the one order a
-// drop rearranges.
+// A popover under the Columns button (phase 2 spec section 5.8). It lists every
+// column in the table's own order, the one a drop rearranges.
 
 // Six dots, drawn as zero-length round-capped subpaths.
 const GRIP = "M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01";
@@ -176,21 +164,9 @@ function renderColumnRows() {
   const keepCheck = Boolean(keep && active.classList.contains("col-check"));
 
   const query = columnQuery.trim().toLowerCase();
-  const visible = new Set(visibleColumns().map((c) => c.key));
-  const ordered = orderedColumns();
   scroller.textContent = "";
-  for (const group of COLUMN_GROUPS) {
-    const cols = ordered.filter((c) => c.group === group);
-    const hits = cols.filter((c) => colTitle(c).toLowerCase().includes(query));
-    if (!hits.length) continue;
-    const head = el("div", "col-group", GROUP_TITLES[group]().toUpperCase() + " ");
-    head.dataset.group = group;
-    head.append(el("span", "col-group-count", t("{shown} of {total}", {
-      shown: NUMBER.format(cols.filter((c) => visible.has(c.key)).length),
-      total: NUMBER.format(cols.length),
-    })));
-    scroller.append(head);
-    for (const col of hits) scroller.append(columnRow(col));
+  for (const col of orderedColumns()) {
+    if (colTitle(col).toLowerCase().includes(query)) scroller.append(columnRow(col));
   }
   if (!keepKey) return;
   const row = scroller.querySelector('.col-row[data-key="' + CSS.escape(keepKey) + '"]');
