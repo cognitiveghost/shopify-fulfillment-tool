@@ -18,7 +18,7 @@
   height: 100%;
   padding: 16px 24px 20px;
   display: grid;
-  grid-template-rows: 88px var(--control-height) minmax(0, 1fr);
+  grid-template-rows: 88px auto minmax(0, 1fr);
   row-gap: var(--spacing-md);
   container-type: inline-size;
 }
@@ -87,6 +87,7 @@
 
 .filterbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-sm);
   min-width: 0;
@@ -94,7 +95,15 @@
 
 .search { flex: 0 0 260px; }
 
-.chips { display: flex; gap: var(--spacing-sm); min-width: 0; overflow: hidden; }
+.search-mode {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); min-width: 0; }
 
 /* A filter chip states its filter; only its x removes it. */
 .chip-filter {
@@ -505,22 +514,6 @@
 .columns-search { width: 100%; }
 
 .columns-scroller { max-height: 340px; overflow-y: auto; scrollbar-gutter: stable; }
-
-.col-group {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky); /* .col-row is positioned and comes later, so it paints over an auto z-index */
-  height: 22px;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  background: var(--surface-overlay);
-  font-size: var(--type-caption-size);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
-}
-.col-group-count { font-weight: 400; letter-spacing: normal; }
 
 .col-row {
   position: relative;

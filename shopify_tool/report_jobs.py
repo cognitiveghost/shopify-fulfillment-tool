@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from shared.atomic_write import atomic_write_json
+
 from . import barcode_processor, core, packing_lists, report_filters, stock_export
 
 logger = logging.getLogger(__name__)
@@ -176,27 +178,27 @@ def generate_report(
                 withdraw_lists(session_path, [Path(output_file).stem])
                 raise
 
-            # The module applies the filters itself.
-            written = packing_lists.create_packing_list(
-                analysis_df=analysis_df,
-                output_file=output_file,
-                report_name=report_name,
-                filters=filters,
-                exclude_skus=report_config.get("exclude_skus"),
-                columns=report_config.get("columns"),
-            )
-
             json_path = str(Path(output_file).with_suffix(".json"))
-            if not written:
-                # An empty list must not leave the last run's files behind
-                # for the packers to pick up (AUDIT-04-3)
-                Path(output_file).unlink(missing_ok=True)
-                Path(json_path).unlink(missing_ok=True)
-                outcome.removed_empty = True
-            else:
-                logger.info(f"Packing list XLSX created: {output_file}")
-                outcome.fingerprint = packing_fingerprint(analysis_df)
-                try:
+            try:
+                # The module applies the filters itself.
+                written = packing_lists.create_packing_list(
+                    analysis_df=analysis_df,
+                    output_file=output_file,
+                    report_name=report_name,
+                    filters=filters,
+                    exclude_skus=report_config.get("exclude_skus"),
+                    columns=report_config.get("columns"),
+                )
+
+                if not written:
+                    # An empty list must not leave the last run's files behind
+                    # for the packers to pick up (AUDIT-04-3)
+                    Path(output_file).unlink(missing_ok=True)
+                    Path(json_path).unlink(missing_ok=True)
+                    outcome.removed_empty = True
+                else:
+                    logger.info(f"Packing list XLSX created: {output_file}")
+                    outcome.fingerprint = packing_fingerprint(analysis_df)
                     filtered_df = report_filters.apply_report_filters(
                         report_filters.fulfillable_only(analysis_df), filters
                     )
@@ -204,13 +206,13 @@ def generate_report(
                     json_df = report_filters.exclude_skus(
                         filtered_df, report_config.get("exclude_skus")
                     )
-                    # ponytail: written in place; atomic writes are AUDIT-09-O5 (#370)
-                    with open(json_path, "w", encoding="utf-8") as f:
-                        json.dump(packing_list_json(json_df, session_id), f, ensure_ascii=False, indent=2)
+                    atomic_write_json(json_path, packing_list_json(json_df, session_id))
                     logger.info(f"Packing list JSON created: {json_path}")
-                except Exception:
-                    logger.exception("Failed to create JSON")
-                    # Don't fail the whole report if JSON fails
+            except Exception:
+                # The XLSX or JSON may now disagree with the old list, so the Packer must not
+                # open the old one (AUDIT-10-4, AUDIT-09-O5). The failure reaches the outcome below.
+                withdraw_lists(session_path, [Path(output_file).stem])
+                raise
 
         else:
             outcome.packaging_file = stock_export.create_stock_export(
@@ -261,8 +263,8 @@ def generate_reports(
             )
         outcomes.append(outcome)
 
-    # Failed ones count too: a failed regeneration withdraws the old list (AUDIT-10-4),
-    # and the statistics must follow.
+    # Failed ones count too: every failed packing-list write withdraws the old list
+    # (AUDIT-10-4, AUDIT-09-O5), and the statistics must follow.
     if session_manager is not None and any(o.report_type == "packing_lists" for o in outcomes):
         update_packing_list_statistics(session_manager, session_path, outcomes)
     return outcomes

@@ -134,8 +134,8 @@ def test_get_label_print_history_accepts_naive_dates_from_the_gui(tmp_path):
     manager = StatsManager(str(tmp_path))
     manager.record_label_print(client_id="M", sku="SKU-1", copies=1)
 
-    naive_start = datetime.now() - timedelta(days=1)  # noqa: DTZ005 -- naive on purpose, see docstring
-    naive_end = datetime.now() + timedelta(days=1)  # noqa: DTZ005 -- naive on purpose, see docstring
+    naive_start = datetime.now() - timedelta(days=1)
+    naive_end = datetime.now() + timedelta(days=1)
 
     history = manager.get_label_print_history(start_date=naive_start, end_date=naive_end)
     assert len(history) == 1
@@ -145,7 +145,7 @@ def test_get_label_print_history_filters_out_of_range_dates(tmp_path):
     manager = StatsManager(str(tmp_path))
     manager.record_label_print(client_id="M", sku="SKU-1", copies=1)
 
-    far_future_start = datetime.now() + timedelta(days=30)  # noqa: DTZ005 -- naive input, same regression coverage as above
+    far_future_start = datetime.now() + timedelta(days=30)
     history = manager.get_label_print_history(start_date=far_future_start)
     assert history == []
 

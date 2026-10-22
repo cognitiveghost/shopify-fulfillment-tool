@@ -12,7 +12,7 @@ SHARED_BG = ROOT / "shared" / "assets" / "locales" / "bg.json"
 APP_BG = ROOT / "locales" / "bg.json"
 
 SHARED_PY = [p for p in c.files(ROOT / "shared", "*.py") if p.name != "i18n_check.py"]
-APP_PY = c.files(ROOT / "gui", "*.py") + [ROOT / "gui_main.py"]
+APP_PY = c.files(ROOT / "gui", "*.py") + [ROOT / "gui_main.py", ROOT / "shopify_tool" / "core.py"]
 APP_HTML = c.files(ROOT / "gui" / "web", "*.html")
 APP_JS = c.files(ROOT / "gui" / "web", "*.js")
 

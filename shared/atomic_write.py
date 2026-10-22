@@ -8,6 +8,31 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Windows refuses to replace a file another PC has open for reading; that is
+# brief, so back off (0.05 s doubling, capped at 1 s) for about 5 s in total.
+REPLACE_FIRST_DELAY = 0.05
+REPLACE_MAX_DELAY = 1.0
+REPLACE_BUDGET = 5.0
+
+
+def replace_with_retry(src, dst) -> None:
+    """os.replace(src, dst), retrying on PermissionError only.
+
+    Raises the last PermissionError once the backoff budget is spent; any
+    other error propagates at once.
+    """
+    delay, slept = REPLACE_FIRST_DELAY, 0.0
+    while True:
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if slept >= REPLACE_BUDGET:
+                raise
+            time.sleep(delay)
+            slept += delay
+            delay = min(delay * 2, REPLACE_MAX_DELAY)
+
 
 def atomic_write_json(path, data, *, indent=2, ensure_ascii=False, retries=3, retry_delay=0.15):
     """Write `data` as JSON to `path` atomically (temp file in same dir + rename).
@@ -23,15 +48,17 @@ def atomic_write_json(path, data, *, indent=2, ensure_ascii=False, retries=3, re
         tmp_path = None
         try:
             fd, tmp_str = tempfile.mkstemp(
-                dir=path.parent, prefix=f".{path.stem}_tmp_", suffix=path.suffix
+                dir=path.parent, prefix=f".{path.stem}_tmp_", suffix=".tmp"
             )
+            # Not `path.suffix`: a complete `.json` temp file would match the
+            # `*.json` scans of the folder (packing lists) until it is renamed.
             tmp_path = Path(tmp_str)
             # fdopen owns fd from here: its `with` closes it on success and on
             # failure, so a second os.close() would raise EBADF over the real
             # error, or close another thread's newly opened file.
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=indent, ensure_ascii=ensure_ascii)
-            tmp_path.replace(path)
+            replace_with_retry(tmp_path, path)
             return
         except Exception as e:
             last_exc = e

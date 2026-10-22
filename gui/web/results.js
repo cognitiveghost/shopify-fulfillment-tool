@@ -42,9 +42,10 @@ const SLOT_NARROW_PX = TABLE_MIN_PX + PANE_PX; // below this the pane folds to i
 const els = {};
 const state = {
   bridge: null,
-  records: [], // {o, index, key, hay} in frame order
+  records: [], // {o, index, key, hay, fields} in frame order
   view: [], // records that pass the filters, in display order
   query: "",
+  prefix: false, // "Starts with": a field must start with the query, not contain it
   chips: [], // {kind, value}
   sort: null, // {key, dir: 1 | -1}
   selected: new Set(), // order numbers
@@ -236,7 +237,12 @@ function toggleChip(chip) {
 // Search AND every group; within Courier and within Tags, OR.
 function matches(record) {
   const o = record.o;
-  if (state.query && !record.hay.includes(state.query)) return false;
+  if (state.query) {
+    const hit = state.prefix
+      ? record.fields.some((f) => f.startsWith(state.query))
+      : record.hay.includes(state.query);
+    if (!hit) return false;
+  }
   const of = (kind) => state.chips.filter((c) => c.kind === kind);
   for (const c of of("status")) {
     if ((c.value === "fulfillable") !== isFulfillable(o)) return false;
@@ -255,7 +261,7 @@ function matches(record) {
 // A lot stays findable by its batch and by both expiry forms, the raw
 // stock-file string and the parsed date (#285). A Lot_Details cell read back
 // from disk as text is searched whole, as the Qt filter did.
-function searchText(o) {
+function searchParts(o) {
   const parts = [o.Order_Number, o.Customer, o.Shipping_Provider].concat(o.Tag_List || []);
   for (const line of o.lines || []) {
     parts.push(line.SKU, line.Product_Name);
@@ -265,7 +271,18 @@ function searchText(o) {
       else parts.push(lot);
     }
   }
-  return parts.map(str).join(" ").toLowerCase();
+  return parts.map(str);
+}
+function searchText(o) {
+  return searchParts(o).join(" ").toLowerCase();
+}
+// "Starts with" tests each field on its own, so a prefix never runs across two.
+// The order number is in the list twice: as-is and without its leading "#".
+function searchFields(o) {
+  const fields = searchParts(o).map((p) => p.toLowerCase()).filter(Boolean);
+  const number = str(o.Order_Number);
+  if (number.startsWith("#")) fields.push(number.slice(1).toLowerCase());
+  return fields;
 }
 
 // Empty values sort last in both directions; ties keep frame order.
@@ -297,6 +314,13 @@ function recompute() {
 }
 
 // --- rendering ----------------------------------------------------------------
+
+// A filter, search or mode change starts the list at the top. Sort and row
+// clicks must not jump, so they call render() directly.
+function filterChanged() {
+  els.scroller.scrollTop = 0;
+  render();
+}
 
 function render() {
   recompute();
@@ -407,7 +431,7 @@ function renderChips() {
     remove.innerHTML = svg(X_MARK, "glyph");
     remove.addEventListener("click", () => {
       toggleChip(chip);
-      render();
+      filterChanged();
     });
     // The text node is the space a reader hears; flex ignores it for layout.
     box.append(key, " ", value, remove);
@@ -463,7 +487,7 @@ function renderMenu() {
       button.addEventListener("click", () => {
         toggleChip(item);
         closeMenu();
-        render();
+        filterChanged();
       });
       els.menu.appendChild(button);
     }
@@ -791,7 +815,7 @@ function clearFilters() {
   state.query = "";
   els.search.value = "";
   state.chips = [];
-  render();
+  filterChanged();
 }
 
 // A different session is opening (bridge.sessionEpoch): nothing of the last
@@ -819,7 +843,9 @@ function resetView() {
 function onOrders() {
   const orders = state.bridge.orders || [];
   closeBulkPopover(); // what it said was true of the orders it was opened on
-  state.records = orders.map((o, index) => ({ o: o, index: index, key: str(o.Order_Number), hay: searchText(o) }));
+  state.records = orders.map((o, index) => ({
+    o: o, index: index, key: str(o.Order_Number), hay: searchText(o), fields: searchFields(o),
+  }));
   renderKpis();
   refreshColumns();
 }
@@ -835,7 +861,7 @@ function onTheme() {
 
 function bind() {
   const ids = {
-    kpis: "kpis", search: "search", chips: "chips", addFilter: "add-filter", menu: "filter-menu",
+    kpis: "kpis", search: "search", searchPrefix: "search-prefix", chips: "chips", addFilter: "add-filter", menu: "filter-menu",
     clearAll: "clear-all", count: "count", screenMenu: "screen-menu", exportBtn: "export",
     tableArea: "table-area", table: "table", scroller: "scroller", header: "header", rows: "rows",
     empty: "results-empty", noMatch: "results-no-match", noMatchClear: "no-match-clear", noMatchText: "no-match-text",
@@ -853,7 +879,11 @@ function bind() {
 
   els.search.addEventListener("input", () => {
     state.query = els.search.value.trim().toLowerCase();
-    render();
+    filterChanged();
+  });
+  els.searchPrefix.addEventListener("change", () => {
+    state.prefix = els.searchPrefix.checked;
+    filterChanged();
   });
   els.addFilter.addEventListener("click", () => (els.menu.hidden ? openMenu() : closeMenu()));
   els.menu.addEventListener("keydown", (e) => {

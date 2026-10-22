@@ -18,7 +18,7 @@ This account runs on a limited budget, so avoid subagents unless asked, and read
   `tests/audit/test_07_core_io.py`, `test_08_rules_undo.py` and `test_09_outputs_sets_ledger.py`. Shared fixtures
   live in `tests/audit/audit_support.py`. Do not add a `tests/audit/conftest.py`: it shadows `tests/conftest.py`.
 - **Step 2 and group A are done** (PR #369). The overview plan is
-  `docs/superpowers/plans/2026-10-05-audit-07-09-fixes.md`. It holds the owner decisions, each group's findings,
+  `2026-10-05-audit-07-09-fixes.md` (in git history). It holds the owner decisions, each group's findings,
   files, tests and risk, and the Step 4 coverage targets. Group A fixed 07-H1, 07-M6, 08-U1 and 07-M7.
 - **Group C is deferred** to issue #370 (07-M2, M3, M4, 09-O5). Do not plan it. Where another group touches the
   same files (`core.py`, `fulfillment_history.py`), leave its fixes to #370.
@@ -91,7 +91,7 @@ runs. If the plan needs any new decision, ask the owner before writing that part
 
 - Reports: `docs/audit/07-core-io-review.md`, `08-rules-undo-review.md`, `09-outputs-sets-ledger-review.md`. Read
   each "Verification, 2026-10-05" section.
-- Repro scripts: `docs/audit/repro/*.py`. Run with `.venv/bin/python docs/audit/repro/<file>.py`.
+- Repro scripts: removed after the fixes landed (in git history: `docs/audit/repro/`).
 - The xfail tests named in the overview plan, per group.
 - `docs/adr/` (0008 last-writer-wins, 0010 stock left, 0011 stale check, 0015 lots) and `CONTEXT.md`.
 

@@ -162,4 +162,4 @@ def test_a_failed_state_save_still_writes_the_packing_data(files, tmp_path, monk
                            profile_manager=sessions.profile_manager, session_path=str(session))
     assert ok
     assert (Path(session) / "analysis" / "analysis_data.json").exists()
-    assert any("Permission denied saving session state" in r.getMessage() for r in caplog.records)
+    assert any("Could not save the session state files" in r.getMessage() for r in caplog.records)

@@ -95,7 +95,7 @@ class TestParseCreatedAt:
         # Assert the *local* offset, not merely "aware": the tempting
         # .replace(tzinfo=timezone.utc) is the bug the docstring warns
         # against, and it satisfies a bare `tzinfo is not None`.
-        naive = datetime(2026, 7, 20, 10, 0, 0)  # noqa: DTZ001 -- naive is the subject
+        naive = datetime(2026, 7, 20, 10, 0, 0)
         parsed = parse_created_at("2026-07-20T10:00:00")
         assert parsed.utcoffset() == naive.astimezone().utcoffset()
         assert parsed.replace(tzinfo=None) == naive

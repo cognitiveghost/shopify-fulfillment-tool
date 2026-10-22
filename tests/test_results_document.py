@@ -396,6 +396,50 @@ def test_chips_and_across_groups_and_or_within_one(qtbot, doc):
     _count_is(qtbot, view, "312 orders")
 
 
+def test_a_filter_change_starts_the_list_at_the_top(qtbot, doc):
+    view, _ = doc
+    _eval(qtbot, view, "document.getElementById('scroller').scrollTop = 2000; true")
+    _until_js(qtbot, view, "document.getElementById('scroller').scrollTop > 0")
+    _choose_filter(qtbot, view, "Blocked")
+    # No scroll event is awaited: the reset must come from the filter change itself.
+    assert _eval(qtbot, view, "document.getElementById('scroller').scrollTop") == 0
+    assert _eval(qtbot, view, "document.querySelector('#rows .row').style.top") == "0px"
+    assert _shown_orders(qtbot, view).split(",")[0] == "#10004"
+    drawn = _eval(
+        qtbot,
+        view,
+        "(function () { var n = +document.getElementById('table').dataset.visibleRows;"
+        " return Array.from(document.querySelectorAll('#rows .row'))"
+        ".filter(function (r) { return parseInt(r.style.top, 10) < n * 32; }).length; })()",
+    )
+    assert drawn == min(14, 31)
+
+
+def test_chips_wrap_instead_of_clipping(qtbot, doc):
+    view, _ = doc
+    _resize(qtbot, view, 900, 692)
+    for label in ("Blocked", "Courier: DHL", "Courier: DPD", "Courier: Packeta", "Tag: vip"):
+        _choose_filter(qtbot, view, label)
+    rights = json.loads(
+        _eval(
+            qtbot,
+            view,
+            "JSON.stringify(Array.from(document.querySelectorAll('#chips .chip-filter'))"
+            ".map(function (e) { return e.getBoundingClientRect().right; }))",
+        )
+    )
+    assert len(rights) == 5
+    assert all(right <= 900 for right in rights)
+    # The table shows exactly the whole rows the table area has room for.
+    _until_js(
+        qtbot,
+        view,
+        "document.getElementById('table').dataset.visibleRows === String("
+        "Math.min(Math.floor((document.getElementById('table-area').clientHeight - 36) / 32),"
+        " state.view.length))",
+    )
+
+
 def test_the_filter_bar_reads_search_add_filter_then_chips(qtbot, doc):
     view, _ = doc
     order = json.loads(
@@ -406,7 +450,7 @@ def test_the_filter_bar_reads_search_add_filter_then_chips(qtbot, doc):
             ".map(function (e) { return e.id || e.className; }))",
         )
     )
-    assert order[:4] == ["input search", "filter-anchor", "chips", "clear-all"]
+    assert order[:5] == ["input search", "search-mode", "filter-anchor", "chips", "clear-all"]
     assert order[-3:] == ["columns-anchor", "screen-menu", "export"]
 
 
@@ -736,6 +780,86 @@ def test_the_pane_footer_fits_its_longest_verb_and_a_three_digit_position(qtbot,
         " return f.scrollWidth <= f.clientWidth; })()",
     )
     assert fits is True
+
+
+def _two_orders():
+    """#4010 (SKU AB-77) and #1140 (SKU X-4B): "4" starts one order number only."""
+    base = {
+        "Order_Fulfillment_Status": "Fulfillable",
+        "Shipping_Provider": "DHL",
+        "Created_At": "2026-09-01 10:15:00 +0200",
+        "Total_Price": 10.0,
+        "Product_Name": "Mug",
+        "Quantity": 1,
+        "Internal_Tags": "[]",
+        "System_note": "",
+        "Stock_Alert": "",
+        "Has_SKU": True,
+    }
+    return pd.DataFrame(
+        [
+            {**base, "Order_Number": "#4010", "Customer": "Ana", "SKU": "AB-77"},
+            {**base, "Order_Number": "#1140", "Customer": "Ben", "SKU": "X-4B"},
+        ]
+    )
+
+
+@pytest.fixture
+def two_orders(qtbot):
+    view = QWebEngineView()
+    qtbot.addWidget(view)
+    bridge = mount_results_page(view)
+    view.resize(1310, 692)
+    view.show()
+    _until_js(qtbot, view, "document.documentElement.dataset.bridge === 'ready'")
+    bridge.set_export_enabled(True)
+    bridge.set_orders(_two_orders())
+    _until_js(qtbot, view, "document.querySelectorAll('#rows .row').length === 2")
+    return view
+
+
+def _starts_with(qtbot, view, on):
+    _eval(
+        qtbot,
+        view,
+        "var c = document.getElementById('search-prefix');"
+        f" c.checked = {str(on).lower()}; c.dispatchEvent(new Event('change')); true",
+    )
+
+
+def _shown_orders(qtbot, view):
+    return _eval(
+        qtbot,
+        view,
+        "Array.from(document.querySelectorAll('#rows .row')).map(r => r.dataset.order).join(',')",
+    )
+
+
+def test_starts_with_matches_the_order_number_prefix(qtbot, two_orders):
+    _starts_with(qtbot, two_orders, True)
+    _search(qtbot, two_orders, "4")
+    _count_is(qtbot, two_orders, "1 of 2 orders")
+    assert _shown_orders(qtbot, two_orders) == "#4010"
+
+
+def test_starts_with_off_keeps_substring_search(qtbot, two_orders):
+    _search(qtbot, two_orders, "4")
+    _count_is(qtbot, two_orders, "2 orders")
+
+
+def test_starts_with_matches_a_sku_prefix_not_a_middle(qtbot, two_orders):
+    _starts_with(qtbot, two_orders, True)
+    _search(qtbot, two_orders, "ab")
+    _count_is(qtbot, two_orders, "1 of 2 orders")
+    assert _shown_orders(qtbot, two_orders) == "#4010"
+    _search(qtbot, two_orders, "4b")
+    _count_is(qtbot, two_orders, "0 of 2 orders")
+
+
+def test_starts_with_and_an_empty_query_shows_all(qtbot, two_orders):
+    _starts_with(qtbot, two_orders, True)
+    _search(qtbot, two_orders, "  ")
+    _count_is(qtbot, two_orders, "2 orders")
 
 
 def test_the_pane_footer_stays_on_one_row_for_a_forty_order_session(qtbot, doc):

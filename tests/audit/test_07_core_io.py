@@ -284,7 +284,6 @@ def test_AUDIT_07_M1_a_lot_column_does_not_change_the_answer():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M2: to_pickle and open('w') on the share")
 def test_AUDIT_07_M2_the_run_writes_its_state_files_atomically(
     sessions, analysis_run, in_place_writes
 ):
@@ -302,11 +301,20 @@ def test_AUDIT_07_M2_the_run_writes_its_state_files_atomically(
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M3: the save failure is logged and swallowed")
 def test_AUDIT_07_M3_a_failed_state_save_is_reported(sessions, analysis_run):
     path = sessions.create_session("M")
     # A directory where the pickle goes: the write fails for real.
     (Path(path) / "analysis" / "current_state.pkl").mkdir(parents=True)
+
+    ok, _msg, _df, stats = analysis_run(path)
+
+    assert _save_failure_reported(ok, stats)
+
+
+def test_a_failed_packer_data_export_is_reported(sessions, analysis_run):
+    path = sessions.create_session("M")
+    # analysis_data.json is what the packer reads; a stale one must not be silent.
+    (Path(path) / "analysis" / "analysis_data.json").mkdir(parents=True)
 
     ok, _msg, _df, stats = analysis_run(path)
 
@@ -354,7 +362,6 @@ def _write_history(tmp_path):
     return pd.read_csv(tmp_path / "h.csv", dtype=str).equals(df)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M4: 3 x 0.15 s gives up before the reader is done")
 @pytest.mark.parametrize(
     "write", [_write_json, _write_state, _write_history],
     ids=["atomic_write_json", "session_state.save_state", "fulfillment_history"],

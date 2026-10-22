@@ -194,3 +194,33 @@ def test_recorded_fingerprints_ignores_junk():
     info = {"statistics": {"packing_list_fingerprints": {"ALL": "ab", "X": 3}}}
     assert report_jobs.recorded_fingerprints(info) == {"ALL": "ab"}
     assert report_jobs.recorded_fingerprints(None) == {}
+
+
+def test_an_xlsx_write_failure_withdraws_the_old_list(tmp_path, monkeypatch):
+    lists = tmp_path / "packing_lists"
+    lists.mkdir()
+    (lists / "ALL.json").write_text("{}", encoding="utf-8")
+    (lists / "ALL.xlsx").write_bytes(b"old")
+
+    def locked(*a, **k):
+        raise PermissionError(13, "denied", str(lists / "ALL.xlsx"))
+
+    monkeypatch.setattr(report_jobs.packing_lists, "create_packing_list", locked)
+    outcome = report_jobs.generate_report(PACKING_ALL, tmp_path, FRAME, {}, "s")
+    assert outcome.failed
+    assert (lists / "withdrawn" / "ALL.json").exists()
+    assert not (lists / "ALL.json").exists()
+
+
+def test_a_json_write_failure_fails_and_withdraws(tmp_path, monkeypatch):
+    lists = tmp_path / "packing_lists"
+    lists.mkdir()
+    (lists / "ALL.json").write_text("{}", encoding="utf-8")
+
+    def broken(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(report_jobs, "atomic_write_json", broken)
+    outcome = report_jobs.generate_report(PACKING_ALL, tmp_path, FRAME, {}, "s")
+    assert outcome.failed
+    assert not (lists / "ALL.json").exists()

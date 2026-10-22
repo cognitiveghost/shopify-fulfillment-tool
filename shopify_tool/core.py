@@ -14,8 +14,9 @@ import numpy as np
 import pandas as pd
 
 from shared.atomic_write import atomic_write_json
+from shared.i18n import N_
 
-from . import analysis, fulfillment_history
+from . import analysis, fulfillment_history, session_state
 from .csv_utils import AUTO_DELIMITER, normalize_sku, resolve_delimiter
 from .packed_orders import load_session_signals, union_history_with_packed
 from .rules import RuleEngine
@@ -36,6 +37,11 @@ SYSTEM_TAGS = ["Repeat", "Priority", "Error"]
 HISTORY_WARNING = (
     "Fulfillment history couldn't be read, so this run didn't check or record repeats. "
     "Fix or restore fulfillment_history.csv in the client folder. Details are in Logs."
+)
+
+STATE_WARNING = N_(
+    "This run's results could not be saved to the session folder, so reopening the "
+    "session may show the previous run. Run the analysis again. Details are in Logs."
 )
 
 logger = logging.getLogger("ShopifyToolLogger")
@@ -243,67 +249,20 @@ def _create_analysis_data_for_packing(
     Returns:
         Dict[str, Any]: Dictionary containing analysis data in Packing Tool format
     """
+    # A build error propagates: a failed run must not save an empty session (AUDIT-09-O5).
     stamp = (now or datetime.now().astimezone()).isoformat()
-    try:
-        orders_data = build_packing_orders(final_df)
-
-        # Calculate statistics
-        total_orders = len(orders_data)
-        fulfillable_orders = len(
-            [o for o in orders_data if o["order_fulfillment_status"] == "Fulfillable"]
-        )
-        not_fulfillable_orders = total_orders - fulfillable_orders
-
-        analysis_data = {
-            "analyzed_at": stamp,
-            "total_orders": total_orders,
-            "fulfillable_orders": fulfillable_orders,
-            "not_fulfillable_orders": not_fulfillable_orders,
-            "orders": orders_data,
-        }
-
-        return analysis_data
-
-    except KeyError as e:
-        logger.exception("Missing required column in DataFrame for packing analysis")
-        return {
-            "analyzed_at": stamp,
-            "total_orders": 0,
-            "fulfillable_orders": 0,
-            "not_fulfillable_orders": 0,
-            "orders": [],
-            "error": f"Missing required column: {e}",
-        }
-    except (ValueError, TypeError) as e:
-        logger.exception("Invalid data type in DataFrame for packing analysis")
-        return {
-            "analyzed_at": stamp,
-            "total_orders": 0,
-            "fulfillable_orders": 0,
-            "not_fulfillable_orders": 0,
-            "orders": [],
-            "error": f"Invalid data type: {e}",
-        }
-    except AttributeError as e:
-        logger.exception("Invalid DataFrame object for packing analysis")
-        return {
-            "analyzed_at": stamp,
-            "total_orders": 0,
-            "fulfillable_orders": 0,
-            "not_fulfillable_orders": 0,
-            "orders": [],
-            "error": f"Invalid DataFrame: {e}",
-        }
-    except Exception as e:
-        logger.exception("Unexpected error creating analysis data for packing")
-        return {
-            "analyzed_at": stamp,
-            "total_orders": 0,
-            "fulfillable_orders": 0,
-            "not_fulfillable_orders": 0,
-            "orders": [],
-            "error": str(e),
-        }
+    orders_data = build_packing_orders(final_df)
+    total_orders = len(orders_data)
+    fulfillable_orders = len(
+        [o for o in orders_data if o["order_fulfillment_status"] == "Fulfillable"]
+    )
+    return {
+        "analyzed_at": stamp,
+        "total_orders": total_orders,
+        "fulfillable_orders": fulfillable_orders,
+        "not_fulfillable_orders": total_orders - fulfillable_orders,
+        "orders": orders_data,
+    }
 
 
 def _validate_dataframes(orders_df, stock_df, config):
@@ -1356,6 +1315,11 @@ def _save_results_and_reports(
                 worksheet.set_row(row_num + 1, None, highlight_format)
     logger.info(f"Excel report saved to '{output_file_path}'")
 
+    # The packing data is built before history and any state file is written,
+    # so a build error fails the run and leaves the previous run's files in place.
+    if use_session_mode and analysis_data is None:
+        analysis_data = _create_analysis_data_for_packing(final_df)
+
     # Record this session's orders in fulfillment history. Before the stats
     # file is written, so it carries any warning.
     if history_readable:
@@ -1379,40 +1343,22 @@ def _save_results_and_reports(
     if use_session_mode:
         try:
             logger.info("Saving initial session state files...")
-
-            # Define file paths
-            current_state_pkl = Path(analysis_dir) / "current_state.pkl"
-            stats_json = Path(analysis_dir) / "analysis_stats.json"
-
-            # Save DataFrame to pickle (fast loading)
-            logger.info(f"Saving current_state.pkl: {current_state_pkl}")
-            final_df.to_pickle(current_state_pkl)
-
-            # Save statistics to JSON
-            logger.info(f"Saving analysis_stats.json: {stats_json}")
-            with open(stats_json, "w", encoding="utf-8") as f:
-                json.dump(stats, f, indent=2, ensure_ascii=False)
-
-            logger.info("Initial session state files saved successfully")
-
-        except PermissionError:
-            logger.exception("Permission denied saving session state files")
-            # Continue with the workflow even if initial state save fails
-        except OSError:
-            logger.exception(
-                "File system error saving session state (disk full or invalid path?)"
+            # The run replaces the state whatever is on disk, a re-run included, so
+            # it checks against the stamp it finds rather than one it loaded.
+            session_state.save_state(
+                working_path, final_df, session_state.state_stamp(working_path)
             )
-            # Continue with the workflow even if initial state save fails
+            atomic_write_json(Path(analysis_dir) / "analysis_stats.json", stats)
+            logger.info("Initial session state files saved successfully")
         except Exception:
-            logger.exception("Unexpected error saving initial session state")
-            # Continue with the workflow even if initial state save fails
+            # The run still succeeds: history and inventory memory are already saved.
+            logger.exception("Could not save the session state files")
+            stats["state_warning"] = STATE_WARNING
 
     # Session mode: Export analysis_data.json and update session_info
     if use_session_mode:
         try:
             logger.info("Exporting analysis_data.json for Packing Tool integration...")
-            if analysis_data is None:
-                analysis_data = _create_analysis_data_for_packing(final_df)
 
             # The config of the day, so the session can be replayed later (spec Part B2):
             # backups rotate within days. Without derived data and run-only keys.
@@ -1431,8 +1377,7 @@ def _save_results_and_reports(
 
             # Save analysis_data.json
             analysis_data_path = Path(analysis_dir) / "analysis_data.json"
-            with open(analysis_data_path, "w", encoding="utf-8") as f:
-                json.dump(analysis_data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(analysis_data_path, analysis_data)
 
             logger.info(f"analysis_data.json saved to: {analysis_data_path}")
 
@@ -1460,18 +1405,22 @@ def _save_results_and_reports(
 
         except PermissionError:
             logger.exception("Permission denied exporting analysis data")
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
         except OSError:
             logger.exception(
                 "File system error exporting analysis data (disk full or invalid path?)"
             )
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
         except SessionManagerError:
             logger.exception("Session manager error updating session info")
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
         except Exception:
             logger.exception("Unexpected error exporting analysis data")
-            # Continue with the workflow even if export fails
+            # The run continues, but the packer would read the previous run's data.
+            stats["state_warning"] = STATE_WARNING
 
     # Persist inventory memory if enabled (or unconditionally update the SKU snapshot)
     if (

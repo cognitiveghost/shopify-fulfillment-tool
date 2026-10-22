@@ -1,4 +1,3 @@
-# ruff: noqa: DTZ001  (backup times are naive local time, as in the snapshot)
 from datetime import datetime
 from pathlib import Path
 

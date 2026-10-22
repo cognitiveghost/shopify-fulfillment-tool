@@ -319,6 +319,8 @@ class ActionsHandler(QObject):
             )
             if stats and stats.get("history_warning"):
                 self._results_toast(stats["history_warning"])
+            if stats and stats.get("state_warning"):
+                self._results_toast(_(stats["state_warning"]))
 
             # Inventory memory is persisted by core.run_full_analysis using the
             # true post-fulfillment Final_Stock (groupby('SKU').last()). Do not
