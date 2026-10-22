@@ -284,7 +284,6 @@ def test_AUDIT_07_M1_a_lot_column_does_not_change_the_answer():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M2: to_pickle and open('w') on the share")
 def test_AUDIT_07_M2_the_run_writes_its_state_files_atomically(
     sessions, analysis_run, in_place_writes
 ):
@@ -302,7 +301,6 @@ def test_AUDIT_07_M2_the_run_writes_its_state_files_atomically(
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M3: the save failure is logged and swallowed")
 def test_AUDIT_07_M3_a_failed_state_save_is_reported(sessions, analysis_run):
     path = sessions.create_session("M")
     # A directory where the pickle goes: the write fails for real.

@@ -195,7 +195,6 @@ def test_AUDIT_09_O5_the_packing_list_json_is_written_atomically(tmp_path, in_pl
     assert in_place == []
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O5: a build error is saved as an empty session")
 def test_AUDIT_09_O5_a_failed_packing_build_does_not_empty_the_session(
     sessions, analysis_run, monkeypatch
 ):

@@ -937,6 +937,7 @@
   "This condition has no operator, so it never matches.": "Това условие няма оператор, затова никога не съвпада.",
   "This order doesn't carry a tag": "Тази поръчка няма таг",
   "This packing list couldn't be read. Details are in Logs.": "Списъкът за опаковане не можа да се прочете. Подробностите са в журнала.",
+  "This run's results could not be saved to the session folder, so reopening the session may show the previous run. Run the analysis again. Details are in Logs.": "Резултатите от този анализ не можаха да се запишат в папката на сесията, затова при повторно отваряне може да се покаже предишният анализ. Пуснете анализа отново. Подробности има в Логове.",
   "This session has no analysis loaded. Run it on Setup.": "В тази сесия няма зареден анализ. Стартирай го в Настройка.",
   "This session's stock file couldn't be found": "Файлът с наличности на тази сесия не можа да се намери",
   "This version does not know this action, so it does nothing.": "Тази версия не познава това действие, затова то не прави нищо.",
