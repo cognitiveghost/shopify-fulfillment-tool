@@ -14,7 +14,7 @@ sets the phases that follow.
 2. `docs/design/ui-refresh/roadmap.md`: nine phases, each one task, with a title ready to paste into Todoist.
    dev-runner cannot create Todoist tasks from Stage A, so the owner adds phases 2 to 9 from that table.
 3. `docs/adr/0018-contrast-floors-outrank-the-mockup-palette.md`.
-4. Phase 1 itself, built at Stages B and C from `docs/superpowers/plans/2026-09-30-ui-refresh-phase1-shell.md`.
+4. Phase 1 itself, built at Stages B and C from `2026-09-30-ui-refresh-phase1-shell.md` (in git history).
    The rest of this spec describes it.
 
 ## 2. Owner's decisions (2026-09-30)

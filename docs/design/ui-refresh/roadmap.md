@@ -46,7 +46,7 @@ Phase 2, phases 3 to 6 are independent and can run in any order. 7 to 10 run in 
 ### 1. Shell sidebar and Polaris palette (built in run 35)
 
 Spec: `docs/superpowers/specs/2026-09-30-ui-refresh-phase1-shell-design.md`.
-Plan: `docs/superpowers/plans/2026-09-30-ui-refresh-phase1-shell.md`.
+Plan: `2026-09-30-ui-refresh-phase1-shell.md` (in git history).
 
 The mockup palette in `shared/theme.py`, fitted to the contrast floors. Five new tokens. Disabled buttons that
 look disabled. The 200px sidebar that collapses to a 56px rail: header, destinations, and a footer holding
@@ -57,7 +57,7 @@ the session has been analysed.
 ### 2. Results to mockup, and the web kit (built in run 38)
 
 Spec: `docs/superpowers/specs/2026-10-01-ui-refresh-phase2-results-kit-design.md`.
-Plan: `docs/superpowers/plans/2026-10-01-ui-refresh-phase2-results-kit.md`.
+Plan: `2026-10-01-ui-refresh-phase2-results-kit.md` (in git history).
 
 Built as listed below, with these differences. Two more tokens, `critical_fill` and `on_critical`, for the
 popover's confirm button. The kit has a sheet, `tests/web/kit_sheet.html`, where the components no screen
@@ -79,7 +79,7 @@ kept two. The column manager is the mockup's popover holding the full manager.
 ### 3. Setup to the web tier (built in run 41)
 
 Spec: `docs/superpowers/specs/2026-10-01-ui-refresh-phase3-setup-web-design.md`.
-Plan: `docs/superpowers/plans/2026-10-01-ui-refresh-phase3-setup-web.md`.
+Plan: `2026-10-01-ui-refresh-phase3-setup-web.md` (in git history).
 
 Built as listed below, with these differences. The second view was measured on Linux only (about +31 MB and
 at most +0.15 s); the Windows check over RDP is in the PR and is done before the release. With a client and
@@ -102,7 +102,7 @@ web page that is showing.
 ### 4. Browse to the web tier (built in run 44)
 
 Spec: `docs/superpowers/specs/2026-10-01-ui-refresh-phase4-browse-web-design.md`.
-Plan: `docs/superpowers/plans/2026-10-01-ui-refresh-phase4-browse-web.md`.
+Plan: `2026-10-01-ui-refresh-phase4-browse-web.md` (in git history).
 
 Built as listed below, with these differences. Export combined stock stays in the selection bar (two or more
 checked). Column sorting is gone: rows are newest first inside each group. The auto-archive countdown moved
@@ -119,7 +119,7 @@ toast for every change. The packing progress bar. The archived footer. Double-cl
 ### 5. Tools to the web tier (built in run 47)
 
 Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase5-tools-web-design.md`.
-Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase5-tools-web.md`.
+Plan: `2026-10-02-ui-refresh-phase5-tools-web.md` (in git history).
 
 Built as listed below, with these differences. Reference labels has the count and Cancel; Barcode labels
 says "Writing 120 barcode labels…" with neither, because its render is one call. Print prints what exists:
@@ -138,7 +138,7 @@ names the folder and offers Open folder. A bad mapping CSV is flagged under its 
 ### 6. Logs to the web tier (built in run 50)
 
 Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase6-logs-web-design.md`.
-Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase6-logs-web.md`.
+Plan: `2026-10-02-ui-refresh-phase6-logs-web.md` (in git history).
 
 Built as listed below, with these differences. The counts are on Level only, as the mockup draws them. Save
 as text opens a save dialog first, then the toast names the file. The count of entries below is of the
@@ -155,7 +155,7 @@ that arrive below. Entries stream through the bridge in batches, never one messa
 ### 7. Client settings on the web tier: frame, General, mappings (built in run 53)
 
 Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase7-settings-web-design.md`.
-Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase7-settings-web.md`.
+Plan: `2026-10-02-ui-refresh-phase7-settings-web.md` (in git history).
 
 Built as listed below, with these differences. The frame stays Qt, restyled to the mockup: a Qt page cannot
 be drawn over a web view (ADR 0007), so a web frame could not hold the five pages that are still Qt. One
@@ -175,7 +175,7 @@ state. The pages not ported yet keep their Qt widgets inside the same dialog unt
 ### 8. Client settings on the web tier: Rules and Test rule (built in run 56)
 
 Spec: `docs/superpowers/specs/2026-10-02-ui-refresh-phase8-rules-web-design.md`.
-Plan: `docs/superpowers/plans/2026-10-02-ui-refresh-phase8-rules-web.md`.
+Plan: `2026-10-02-ui-refresh-phase8-rules-web.md` (in git history).
 
 Built as listed below, with these differences. It fitted one PR. The mockup stops at "Edit": a rule's row
 opens in place into an editor that is its summary with the words turned into controls. Article rules always
@@ -198,7 +198,7 @@ the settings document phase 7 built (`gui/web/settings.*`).
 ### 9. Client settings on the web tier: Sets, Weight, Reports, Tag categories (built in run 59)
 
 Spec: `docs/superpowers/specs/2026-10-04-ui-refresh-phase9-settings-lists-design.md`.
-Plan: `docs/superpowers/plans/2026-10-04-ui-refresh-phase9-settings-lists.md`.
+Plan: `2026-10-04-ui-refresh-phase9-settings-lists.md` (in git history).
 
 Built as listed below, with these differences. It fitted one PR. Sets, Reports and Tag categories are
 lists whose row opens in place, as Rules is; Weight is three cards, with products edited in the table, 200
