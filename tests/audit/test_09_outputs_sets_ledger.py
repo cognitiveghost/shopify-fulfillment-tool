@@ -173,10 +173,10 @@ def _packing_list_handler(df):
     mw = Mock()
     mw.analysis_results_df = df
     mw.session_path = None
+    mw._list_fingerprints = {}  # the main window's dict (main_window_pyside.py)
     return ActionsHandler(mw)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-09-O5: open(json_path, 'w') next to the XLSX")
 def test_AUDIT_09_O5_the_packing_list_json_is_written_atomically(tmp_path, in_place_writes):
     df = pd.DataFrame(
         {"Order_Number": ["#1"], "SKU": ["A"], "Quantity": [1],
