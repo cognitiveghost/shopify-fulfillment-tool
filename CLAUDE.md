@@ -162,7 +162,8 @@ the GitHub UI — nothing builds for it.
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
-- **Always run `graphify update .` right after modifying code, not just "eventually"** — a stale graph returns wrong answers about `shared/` ownership and theme delegation silently, with no error. This repo is the canonical source for `shared/`, so a stale graph here also feeds wrong assumptions into packing-tool work.
+- **Ask the graph before sweeping files.** For "where is X / what touches Y / what breaks if I change Z", run `graphify query "…" --budget 1500`, `graphify affected "X"` or `graphify path "A" "B"` first. Treat the Start nodes as leads and confirm each with `rg`/Read. If you already know the exact string, `rg` is faster. Never read `graphify-out/GRAPH_REPORT.md` whole (~28k tokens).
+- **Don't run `graphify update` yourself.** The `post-commit` hook refreshes the graph, and the runner builds it in each new worktree. Uncommitted edits aren't in the graph, so verify `shared/` ownership and theme delegation in the code itself.
 
 ---
 
