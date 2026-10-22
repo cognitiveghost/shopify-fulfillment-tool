@@ -13,12 +13,12 @@ lose each other's rows (AUDIT-02-7).
 import logging
 import os
 import tempfile
-import time
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
+from shared.atomic_write import replace_with_retry
 from shared.file_lock import locked_file
 from shopify_tool import stock_ledger
 from shopify_tool.utils import get_persistent_data_path
@@ -92,15 +92,7 @@ def _write_atomic(path: Path, df: pd.DataFrame) -> None:
     os.close(fd)
     try:
         df.to_csv(tmp, index=False, columns=COLUMNS)
-        # Windows refuses to replace a file another PC has open; that's brief.
-        for attempt in range(3):
-            try:
-                os.replace(tmp, path)
-                break
-            except PermissionError:
-                if attempt == 2:
-                    raise
-                time.sleep(0.15)
+        replace_with_retry(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise

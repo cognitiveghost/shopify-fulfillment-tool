@@ -354,7 +354,6 @@ def _write_history(tmp_path):
     return pd.read_csv(tmp_path / "h.csv", dtype=str).equals(df)
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT-07-M4: 3 x 0.15 s gives up before the reader is done")
 @pytest.mark.parametrize(
     "write", [_write_json, _write_state, _write_history],
     ids=["atomic_write_json", "session_state.save_state", "fulfillment_history"],

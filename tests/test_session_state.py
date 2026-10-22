@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from shared import atomic_write
 from shopify_tool import session_state
 from shopify_tool.session_state import StaleSessionError
 
@@ -90,7 +91,7 @@ def test_a_replace_blocked_by_a_reader_is_retried(tmp_path, monkeypatch):
         real_replace(src, dst)
 
     monkeypatch.setattr(session_state.os, "replace", reader_has_it_open_once)
-    monkeypatch.setattr(session_state.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(atomic_write.time, "sleep", lambda _s: None)
 
     stamp = session_state.save_state(tmp_path, _df("Fulfillable"), None)
 

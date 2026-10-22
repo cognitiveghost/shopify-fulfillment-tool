@@ -8,9 +8,9 @@ file on disk is refused. ADR 0011.
 
 import os
 import tempfile
-import time
 from pathlib import Path
 
+from shared.atomic_write import replace_with_retry
 from shared.file_lock import locked_file
 from shopify_tool import stock_ledger
 
@@ -58,16 +58,7 @@ def save_state(session_path, df, loaded_stamp):
         os.close(fd)
         try:
             df.to_pickle(tmp)
-            # Windows refuses to replace a file another PC has open for reading
-            # (opening the session, the stock export); that is brief, so retry.
-            for attempt in range(3):
-                try:
-                    os.replace(tmp, path)
-                    break
-                except PermissionError:
-                    if attempt == 2:
-                        raise
-                    time.sleep(0.15)
+            replace_with_retry(tmp, path)
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
             raise
