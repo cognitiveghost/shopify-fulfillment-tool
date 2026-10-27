@@ -93,7 +93,9 @@ def _get_sku_dtype_dict(column_mappings: dict, file_type: str) -> dict:
 
 
 def _text_or_blank(value) -> str:
-    """str(value or ""): what each JSON text field has always held (NaN gives "nan")."""
+    """The cell as text. A missing cell (None, NaN, NaT) is blank, not "nan"."""
+    if value is None or (pd.api.types.is_scalar(value) and pd.isna(value)):
+        return ""
     return str(value or "")
 
 
@@ -185,7 +187,7 @@ def build_packing_orders(df: pd.DataFrame) -> list[dict[str, Any]]:
         except (json.JSONDecodeError, TypeError):
             internal_tags = []
 
-        tags_value = first["Tags"][g] or ""
+        tags_value = _text_or_blank(first["Tags"][g])
         tags_list = (
             [t.strip() for t in str(tags_value).split(",") if t.strip()]
             if str(tags_value).strip()
@@ -878,7 +880,7 @@ def _run_analysis_and_rules(
         stock_df: Stock DataFrame
         history_df: Detection frame (see packed_orders.union_history_with_packed)
         config: Configuration dict with column_mappings, courier_mappings, rules, settings
-        current_session: Name of this run's session, for repeat detection
+        current_session: Name of this run's session (unused by repeat detection, ADR 0023)
         today: The day repeat detection treats as today; None is the real date
 
     Returns:

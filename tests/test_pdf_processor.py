@@ -2,6 +2,7 @@
 barcode strip. See
 docs/superpowers/specs/2026-08-10-print-polish-and-reference-barcode-design.md."""
 import inspect
+import sys
 
 import pytest
 from pypdf import PdfReader
@@ -491,3 +492,118 @@ class TestCsvMappingRows:
         csv_path.write_text("Order,Tracking,Date\n#1,TR1,2026-09-30\n")
         with pytest.raises(pdf_processor.InvalidCSVError):
             pdf_processor.load_csv_mapping(str(csv_path))
+
+
+def _mapping(tracking_to_ref: dict) -> dict:
+    return {
+        'by_postone': {},
+        'by_tracking': {t: {'ref': ref, 'name': ""} for t, ref in tracking_to_ref.items()},
+        'by_name': {},
+        'refs': set(tracking_to_ref.values()),
+        'rows': len(tracking_to_ref),
+    }
+
+
+class TestTrackingMatch:
+    def test_tracking_printed_with_spaces_matches(self):
+        m = _mapping({"9L37349396976": "#119850"})
+        assert pdf_processor.match_reference("Poids\n9L 3734939697 6\nSite", m)["ref"] == "#119850"
+
+    def test_ten_digit_tracking_matches(self):
+        m = _mapping({"9819014181": "#120090"})
+        r = pdf_processor.match_reference("AWB Nr\n9819014181\nOrigin", m)
+        assert (r["ref"], r["method"]) == ("#120090", "tracking")
+
+    def test_tracking_inside_a_longer_number_does_not_match(self):
+        m = _mapping({"9L37349396973": "#1"})
+        assert pdf_processor.match_reference("x 119L 37349396973 y", m) is None
+
+    def test_short_or_empty_tracking_never_matches(self):
+        m = _mapping({"1234": "#1", "": "#2"})
+        assert pdf_processor.match_reference("ref 1234 here", m) is None
+
+    def test_two_trackings_for_different_refs_is_no_tracking_match(self):
+        m = _mapping({"AB12345678": "#1", "CD87654321": "#2"})
+        assert pdf_processor.match_reference("AB12345678 CD87654321", m) is None
+
+    def test_two_trackings_for_the_same_ref_match(self):
+        m = _mapping({"AB12345678": "#1", "CD87654321": "#1"})
+        assert pdf_processor.match_reference("AB12345678 CD87654321", m)["ref"] == "#1"
+
+
+def _barcode_only_pdf(path, value):
+    """A page with no text layer, only a Code-128 drawn as vector bars (mimics Packeta)."""
+    from reportlab.graphics.barcode import code128
+
+    c = canvas.Canvas(str(path), pagesize=(360, 286))
+    code128.Code128(value, barHeight=60, barWidth=1.2).drawOn(c, 20, 100)
+    c.showPage()
+    c.save()
+
+
+class TestBarcodeFallback:
+    def test_match_barcodes_exact_postone(self):
+        m = {**_mapping({}), "by_postone": {"P3362241198": {"ref": "#119770", "name": ""}}}
+        assert pdf_processor.match_barcodes(["P3362241198"], m)["ref"] == "#119770"
+
+    def test_match_barcodes_tracking_as_token_inside_value(self):
+        r = pdf_processor.match_barcodes(["40858732093-14008"], _mapping({"40858732093": "#121000"}))
+        assert (r["ref"], r["method"], r["verified"]) == ("#121000", "barcode", False)
+
+    def test_match_barcodes_tracking_inside_longer_digits_does_not_match(self):
+        assert pdf_processor.match_barcodes(["408587320939"], _mapping({"40858732093": "#1"})) is None
+
+    def test_match_barcodes_ambiguous_or_none(self):
+        m = _mapping({"AB12345678": "#1", "CD87654321": "#2"})
+        assert pdf_processor.match_barcodes(["AB12345678", "CD87654321"], m) is None
+        assert pdf_processor.match_barcodes(["ZZZ"], m) is None
+
+    def _run_packeta(self, tmp_path):
+        pdf = tmp_path / "packeta.pdf"
+        _barcode_only_pdf(pdf, "40858732093-14008")
+        csv_path = tmp_path / "m.csv"
+        csv_path.write_text("PostOne,Tracking,Reference,C3,C4,C5,Product\nP3286312240,40858732093,#121000,,,,X\n")
+        out = tmp_path / "out"
+        out.mkdir()
+        return pdf_processor.process_reference_labels(str(pdf), str(csv_path), str(out))
+
+    def test_textless_page_matches_by_barcode(self, tmp_path):
+        r = self._run_packeta(tmp_path)
+        assert (r["matched"], r["barcode_matched"], r["missing_refs"]) == (1, 1, [])
+
+    def test_run_completes_when_zxing_is_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(sys.modules, "zxingcpp", None)  # makes `import zxingcpp` raise ImportError
+        r = self._run_packeta(tmp_path)
+        assert (r["matched"], r["unmatched"], r["barcode_matched"]) == (0, 1, 0)
+
+
+class TestCustomsPages:
+    """Spec 4.3: a CN23 customs declaration repeats the REF of its parcel's label, so it is not a duplicate."""
+
+    _CSV = "PostOne,Tracking,Reference,C3,C4,C5,Product\nP3286312240,AB12345678,#7,,,,X\n"
+
+    def _run(self, tmp_path, page_texts):
+        pdf_path = tmp_path / "pages.pdf"
+        c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))
+        for text in page_texts:
+            for row, line in enumerate(text.split("\n")):
+                c.drawString(20, 400 - 20 * row, line)
+            c.showPage()
+        c.save()
+        csv_path = tmp_path / "m.csv"
+        csv_path.write_text(self._CSV)
+        out = tmp_path / "out"
+        out.mkdir()
+        return pdf_processor.process_reference_labels(str(pdf_path), str(csv_path), str(out))
+
+    def test_a_customs_page_with_the_same_ref_is_not_a_duplicate(self, tmp_path):
+        r = self._run(tmp_path, ["P3286312240 Acme", "Customs Declaration - CN23\nAB12345678"])
+        assert (r["duplicate_refs"], r["matched"]) == ([], 2)
+
+    def test_two_label_pages_with_the_same_ref_are_still_a_duplicate(self, tmp_path):
+        r = self._run(tmp_path, ["P3286312240 Acme", "P3286312240 Acme"])
+        assert r["duplicate_refs"] == ["#7"]
+
+    def test_is_customs_page_needs_the_heading_and_no_postone(self):
+        assert pdf_processor.is_customs_page("Customs Declaration - CN23") is True
+        assert pdf_processor.is_customs_page("CN22 P1234567890 label") is False

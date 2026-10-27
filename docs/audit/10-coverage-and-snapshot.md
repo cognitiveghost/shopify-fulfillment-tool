@@ -145,6 +145,5 @@ folder from now on, so later sessions replay exactly. Operation replay (B4) is a
 
 ## Open questions
 
-- An empty Notes cell is written to `analysis_data.json` and to the packing list as the text `nan`
-  (`core._text_or_blank`, kept on purpose "for what each JSON text field has always held"). The Packer
-  may show it. Not changed here: it needs a decision on whether the Packer or old sessions depend on it.
+- Resolved in patch 2.4.3 (§7): an empty Notes or Tags cell is now written as `""` / `[]`, not the text `nan`.
+  Replay fixtures were rewritten to match; old sessions on disk still hold `nan`.

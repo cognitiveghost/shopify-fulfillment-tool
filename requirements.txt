@@ -35,6 +35,7 @@ PySide6>=6.11.2         # Qt6 for Python - cross-platform GUI framework
 pypdf>=6.19.0           # page text for Reference Labels matching
 pikepdf>=10.15.0           # Reference Labels page handling (rotation, overlay, merge)
 reportlab>=5.0.1       # PDF generation and text overlay
+zxing-cpp>=3.0           # barcode reading for Reference Labels pages with no text layer
 
 # Barcode Generation (Feature #5 - Barcode Generator)
 # ----------------------------------------------------

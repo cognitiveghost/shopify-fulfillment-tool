@@ -366,15 +366,15 @@ class TestMalformedCrossToolDataNeverAborts:
 
 
 class TestUnionToleratesLegacyHistory:
-    def test_history_without_execution_date_is_returned_untouched(self):
-        """analysis._detect_repeated_orders has its own branch for this shape.
-        Unioning here raised KeyError and aborted the analysis instead."""
+    def test_history_without_execution_date_still_keeps_packed_rows(self):
+        """Unioning this shape raised KeyError and aborted the analysis. History
+        never marks a repeat (ADR 0023), so it is dropped and packed rows stay."""
         history = pd.DataFrame({"Order_Number": ["#A"]})
         packed = pd.DataFrame({"Order_Number": ["#B"], "Execution_Date": ["2026-07-01"]})
 
         out = union_history_with_packed(history, packed)
-        assert list(out.columns) == ["Order_Number"]
-        assert set(out["Order_Number"]) == {"#A"}
+        assert list(out["Order_Number"]) == ["#B"]
+        assert list(out["Source"]) == ["packed"]
 
     def test_legacy_date_format_does_not_win_earliest_by_string_sort(self):
         """'27/11/2025' sorts after '2026-07-01' lexicographically but is

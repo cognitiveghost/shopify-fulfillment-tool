@@ -142,11 +142,9 @@ def signals_from_entries(entries: list) -> tuple[pd.DataFrame, set[str] | None]:
 def _to_date(timestamp) -> str | None:
     """ISO timestamp -> 'YYYY-MM-DD', or None if unparseable.
 
-    Deliberately NOT utc=True. The stamp carries the warehouse's local
-    offset, and `analysis._detect_repeated_orders` compares against a naive
-    local `datetime.now()`. Normalising to UTC would date orders packed
-    after midnight-minus-offset to the previous day, flagging a fresh order
-    as a repeat on the same working day.
+    Deliberately NOT utc=True: the stamp carries the warehouse's local
+    offset, and normalising to UTC would date orders packed after
+    midnight-minus-offset to the previous day.
     """
     if not isinstance(timestamp, str) or not timestamp:
         return None
@@ -162,9 +160,9 @@ def union_history_with_packed(
     """Combine analysis history with packed orders into the detection frame.
 
     Columns: [Order_Number, Execution_Date, Session, Source], Source being
-    "history" or "packed". The two sources follow different rules in
-    `_detect_repeated_orders`, so a row per (order, session, source) is kept,
-    the earliest date each. The result is for detection only -- it must never
+    "history" or "packed". Only "packed" rows mark a repeat in
+    `_detect_repeated_orders` (ADR 0023); history rows are kept for the
+    record. A row per (order, session, source) is kept, the earliest date each. The result is for detection only -- it must never
     be written to fulfillment_history.csv, which is this repo's own record of
     what it analyzed.
 
@@ -172,17 +170,14 @@ def union_history_with_packed(
     deleted sessions) are dropped. `live_sessions=None` means the session
     index couldn't be read: nothing is filtered.
 
-    Returns `history_df` untouched if it cannot be unioned, so the
-    backward-compatibility branch in `_detect_repeated_orders` still sees
-    the shape it expects.
+    A history frame missing Order_Number or Execution_Date (a legacy file)
+    is left out, so packed rows still mark repeats.
     """
     if history_df is not None and not history_df.empty:
         missing = [c for c in ("Order_Number", "Execution_Date") if c not in history_df.columns]
         if missing:
-            # Legacy history file. _detect_repeated_orders handles this
-            # shape itself; unioning here would only break it.
-            logger.debug(f"History missing {missing}; skipping packed-order union")
-            return history_df
+            logger.debug(f"History missing {missing}; leaving it out of the detection frame")
+            history_df = None
 
     out_cols = COLUMNS + ["Source"]
     frames = [

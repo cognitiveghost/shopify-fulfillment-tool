@@ -191,13 +191,13 @@ def test_order_packed_earlier_today_in_another_session_is_flagged(shop):
     assert repeat(df, "#1")
 
 
-def test_raising_the_repeat_window_still_flags_yesterdays_order(shop):
+def test_raising_the_repeat_window_does_not_flag_yesterdays_history_alone(shop):
     shop.write_history([("#1", YESTERDAY)])
     df = shop.run([("#1", "A", 1)], [("A", 5)], window=7)
-    assert repeat(df, "#1")
+    assert not repeat(df, "#1")
 
 
-def test_order_marked_fulfillable_by_a_person_is_flagged_next_day(shop):
+def test_order_marked_fulfillable_by_a_person_is_not_flagged_next_day_without_packing(shop):
     # Stock covers one of the two. A person swaps them: hold #1, ship #2.
     lines = [("#1", "A", 3), ("#2", "A", 3)]
     df = shop.run(lines, [("A", 3)], session_path=str(shop.dir / "2026-09-25_1"))
@@ -214,7 +214,7 @@ def test_order_marked_fulfillable_by_a_person_is_flagged_next_day(shop):
     )
     # #2 shipped without Packing Tool, so the packed signal stays empty.
     df2 = shop.run(lines, [("A", 3)], session_path=str(shop.dir / "2026-09-25_2"))
-    assert repeat(df2, "#2")
+    assert not repeat(df2, "#2")
 
 
 def test_order_held_after_analysis_is_not_a_repeat_next_day(shop):
@@ -268,25 +268,25 @@ def test_concurrent_runs_keep_both_sides_history(shop, monkeypatch):
     assert {"#A", "#B"} <= set(shop.history_rows())
 
 
-def test_packing_list_marks_a_repeat_order(shop, tmp_path):
+def test_packing_list_does_not_mark_a_history_only_order(shop, tmp_path):
     shop.write_history([("#1", YESTERDAY)])
     df = shop.run([("#1", "A", 1), ("#2", "A", 1)], [("A", 5)])
-    assert repeat(df, "#1")
+    assert not repeat(df, "#1")
     out = tmp_path / "list.xlsx"
     create_packing_list(df, str(out))
     sheet = pd.read_excel(out, header=None, dtype=str).fillna("")
     rows_for_1 = sheet[
         sheet.apply(lambda r: r.str.contains("#1", regex=False).any(), axis=1)
     ]
-    assert rows_for_1.apply(lambda r: r.str.contains("Repeat").any(), axis=1).any()
+    assert not rows_for_1.apply(lambda r: r.str.contains("Repeat").any(), axis=1).any()
 
 
-def test_memory_mode_run_reads_history(shop):
+def test_memory_mode_run_does_not_flag_history_alone(shop):
     shop.write_history([("#1", YESTERDAY)])
     pm = MemoryProfile(shop.dir, {"A": 10.0})
     shop.history = shop.dir / "fulfillment_history.csv"  # client dir == tmp_path
     df = shop.run([("#1", "A", 2)], None, client_id="AUDIT", profile_manager=pm)
-    assert repeat(df, "#1")
+    assert not repeat(df, "#1")
 
 
 def test_memory_mode_run_writes_memory_and_history(shop):
@@ -317,10 +317,10 @@ def test_order_packed_on_an_earlier_day_is_flagged_even_without_history(shop):
     assert repeat(df, "#1") and not repeat(df, "#2")
 
 
-def test_order_in_history_from_an_earlier_day_is_flagged(shop):
+def test_order_in_history_from_an_earlier_day_is_not_flagged(shop):
     shop.write_history([("#1", "2026-01-05")])
     df = shop.run([("#1", "A", 1), ("#2", "A", 1)], [("A", 5)])
-    assert repeat(df, "#1") and not repeat(df, "#2")
+    assert not repeat(df, "#1") and not repeat(df, "#2")
 
 
 def test_rerunning_the_same_export_today_does_not_flag_its_own_orders(shop):

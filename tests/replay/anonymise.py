@@ -112,8 +112,8 @@ def packing_doc(doc: dict, omap: OrderMap, note_words: list[str] | None = None) 
     out = copy.deepcopy(doc)
     for order in out.get("orders", []):
         order["order_number"] = omap.map(order.get("order_number"))
-        # "nan" is what an empty Notes cell becomes (core._text_or_blank) and holds no words;
-        # masking it would make the replay, which also gives "nan", look different.
+        # Today an empty Notes cell is "" (core._text_or_blank). Old sessions still hold "nan", which
+        # holds no words; masking it would make a replay look different, so the guard stays.
         if order.get("notes") not in ("", "nan", None):
             order["notes"] = mask_text(order["notes"], "Note", note_words or [])
     return out
