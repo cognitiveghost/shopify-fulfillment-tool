@@ -138,8 +138,11 @@ def _progress_blocks(entry: dict) -> list[dict]:
 
 
 def _has_paused_list(entry: dict) -> bool:
+    # packing-tool writes `incomplete` for a run ended with orders unpacked
+    # (gui/main_window.py:1470) and never `paused`, so both need attention.
     return any(
-        block.get("status") == "paused" for block in _progress_blocks(entry)
+        block.get("status") in ("paused", "incomplete")
+        for block in _progress_blocks(entry)
     )
 
 

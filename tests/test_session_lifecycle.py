@@ -269,6 +269,17 @@ class TestDisplayStatus:
                        updated=NOW - timedelta(days=1))
         assert display_status(entry, NOW) == "paused"
 
+    def test_an_incomplete_list_reads_paused(self):
+        entry = _lifecycle_entry(lists=["a"], progress={"a": {"status": "incomplete"}},
+                                 updated=NOW - timedelta(days=1))
+        assert display_status(entry, NOW) == "paused"
+
+    def test_stored_completed_with_an_incomplete_list_stays_incomplete(self):
+        entry = _lifecycle_entry(lists=["a"], progress={"a": {"status": "incomplete"}},
+                                 updated=NOW - timedelta(days=1))
+        entry["status"] = "completed"
+        assert display_status(entry, NOW) == "incomplete"
+
     def test_in_progress_untouched_a_week_is_stale(self):
         entry = _lifecycle_entry(lists=["a", "b"], progress={"a": {"status": "completed"}},
                        updated=NOW - timedelta(days=8))
