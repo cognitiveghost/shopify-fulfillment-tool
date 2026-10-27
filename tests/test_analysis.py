@@ -210,14 +210,14 @@ class TestNoSkuHandling:
 
 
 class TestRepeatDetection:
-    def test_order_executed_yesterday_is_marked_repeat_with_default_window(self):
+    def test_order_executed_yesterday_is_not_repeat_without_packing(self):
         import datetime
         yesterday = (datetime.datetime.now().astimezone() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         orders = _orders([{"Name": "#1", "Lineitem sku": "A1", "Lineitem quantity": 1}])
         stock = _stock([{"Артикул": "A1", "Наличност": 10}])
         history = _history([{"Order_Number": "#1", "Execution_Date": yesterday}])
         final_df, *_ = _run(orders, stock, history)
-        assert final_df.iloc[0]["System_note"] == "Repeat"
+        assert final_df.iloc[0]["System_note"] == ""
 
     def test_order_executed_today_is_not_marked_repeat_with_default_window(self):
         import datetime
@@ -573,18 +573,18 @@ def _flags(orders, rows, current=None):
 
 
 class TestRepeatRule:
-    def test_history_from_another_session_today_counts(self):
-        assert _flags(["#1"], [("#1", _TODAY, "S0", "history")], current="S1") == [True]
+    def test_history_from_another_session_today_is_not_flagged_without_packing(self):
+        assert _flags(["#1"], [("#1", _TODAY, "S0", "history")], current="S1") == [False]
 
     def test_history_from_this_session_never_counts(self):
         assert _flags(["#1"], [("#1", "2026-01-01", "S1", "history")], current="S1") == [False]
 
-    def test_legacy_history_counts_before_today_only(self):
+    def test_legacy_history_is_not_flagged_without_packing(self):
         rows = [("#1", _YESTERDAY, "", "history"), ("#2", _TODAY, "", "history")]
-        assert _flags(["#1", "#2"], rows) == [True, False]
+        assert _flags(["#1", "#2"], rows) == [False, False]
 
-    def test_legacy_row_with_garbage_date_counts(self):
-        assert _flags(["#1"], [("#1", "garbage", "", "history")]) == [True]
+    def test_legacy_row_with_garbage_date_is_not_flagged_without_packing(self):
+        assert _flags(["#1"], [("#1", "garbage", "", "history")]) == [False]
 
     def test_packed_in_this_session_counts(self):
         assert _flags(["#1"], [("#1", _TODAY, "S1", "packed")], current="S1") == [True]
@@ -595,10 +595,22 @@ class TestRepeatRule:
                              "Session": ["S0"], "Source": ["packed"]})
         assert list(analysis._detect_repeated_orders(final, hist) == "Repeat") == [True]
 
-    def test_plain_two_column_history_is_legacy(self):
+    def test_plain_two_column_history_is_not_flagged_without_source(self):
         final = pd.DataFrame({"Order_Number": ["#1"]})
         hist = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": [_YESTERDAY]})
-        assert list(analysis._detect_repeated_orders(final, hist) == "Repeat") == [True]
+        assert list(analysis._detect_repeated_orders(final, hist) == "Repeat") == [False]
+
+    def test_order_only_in_another_sessions_history_is_not_repeat(self):
+        final = pd.DataFrame({"Order_Number": ["#1"]})
+        hist = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": ["2026-10-01"],
+                             "Session": ["S0"], "Source": ["history"]})
+        assert list(analysis._detect_repeated_orders(final, hist, current_session="S1")) == [""]
+
+    def test_order_packed_in_this_session_is_still_repeat(self):
+        final = pd.DataFrame({"Order_Number": ["#1"]})
+        hist = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": ["2026-10-01"],
+                             "Session": ["S1"], "Source": ["packed"]})
+        assert list(analysis._detect_repeated_orders(final, hist, current_session="S1")) == ["Repeat"]
 
 
 def test_fulfillment_reasons_join_the_existing_note():
@@ -613,7 +625,7 @@ def test_fulfillment_reasons_join_the_existing_note():
         "Repeat; Cannot fulfill: A short", "", "Cannot fulfill: Unknown reason", "x", "y"]
 
 
-def test_repeat_detection_uses_the_given_day():
+def test_history_alone_is_not_repeat_on_any_given_day():
     from datetime import date
 
     from shopify_tool.analysis import _detect_repeated_orders
@@ -621,4 +633,4 @@ def test_repeat_detection_uses_the_given_day():
     final = pd.DataFrame({"Order_Number": ["#1"]})
     history = pd.DataFrame({"Order_Number": ["#1"], "Execution_Date": ["2026-10-05"], "Session": [""]})
     assert list(_detect_repeated_orders(final, history, None, today=date(2026, 10, 5))) == [""]
-    assert list(_detect_repeated_orders(final, history, None, today=date(2026, 10, 6))) == ["Repeat"]
+    assert list(_detect_repeated_orders(final, history, None, today=date(2026, 10, 6))) == [""]

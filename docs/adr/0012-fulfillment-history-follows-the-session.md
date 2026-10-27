@@ -1,5 +1,7 @@
 # 0012 — Fulfillment history follows the session, and detection compares sessions, not dates
 
+**Superseded in part by 0023** (detection: only packed orders are Repeat).
+
 **Status:** Accepted, 2026-09-25
 **Context:** `docs/superpowers/specs/2026-09-25-phase14-bundle3-repeat-history-design.md`,
 `docs/audit/02-repeat-orders.md` (AUDIT-02-1 to -4)

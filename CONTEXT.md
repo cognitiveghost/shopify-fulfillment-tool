@@ -394,10 +394,10 @@ Not **stored status**, which lives in `session_info.json`.
 server, because another PC saved it after this PC loaded or last saved it. A
 stale PC's saves and exports are refused until it reopens the session.
 
-**Repeat order** — an order another live session has already handled: it is
-in another session's fulfillment history, or the Packer packed it in any
-session. Marked, never held: a repeat order stays fulfillable. A **live
-session** is one that exists and is not stored as abandoned. ADR 0012.
+**Repeat order** — an order the Packer has already packed in any live session
+(this one included). Being in fulfillment history alone does not make it a
+repeat. Marked, never held: a repeat order stays fulfillable. A **live
+session** is one that exists and is not stored as abandoned. ADR 0012, 0023.
 
 **Fulfillment history** — per client, the orders each session currently
 ships: one row per order per session, dated when that session first recorded

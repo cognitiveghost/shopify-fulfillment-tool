@@ -1,7 +1,7 @@
 import copy
 import logging
 import math
-from datetime import date, datetime
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -882,50 +882,26 @@ def _detect_repeated_orders(
     current_session: str | None = None,
     today: date | None = None,
 ) -> pd.Series:
-    """Mark orders already shipped by another session as "Repeat" (ADR 0012).
+    """Mark orders the Packer has packed as "Repeat" (ADR 0023).
 
-    Sessions are compared, not dates. `history_df` is the detection frame from
-    `packed_orders.union_history_with_packed`: [Order_Number, Execution_Date,
-    Session, Source]. A row makes its order Repeat when:
+    `history_df` is the detection frame from `packed_orders.union_history_with_packed`:
+    [Order_Number, Execution_Date, Session, Source]. Only rows with Source "packed"
+    count, in any live session, this one included. History rows never count, so an
+    order another session only analysed or listed is not a repeat. A frame without a
+    Source column flags nothing. Order numbers compare as `str(x).strip()` on both
+    sides, so numeric and text forms match.
 
-    | source                           | counts when                                  |
-    |----------------------------------|----------------------------------------------|
-    | history, Session set             | Session != current_session                   |
-    | history, Session empty (legacy)  | its date is before today, or unparseable     |
-    | packed (Packer signal)           | always (any live session, this one included) |
-
-    A frame without a Session column is all legacy rows; one without Source is
-    all history; one without Execution_Date counts every row. With
-    `current_session=None` every sessioned history row counts. Order numbers
-    compare as `str(x).strip()` on both sides, so numeric and text forms match.
-
-    `today` is the day the legacy rule treats as today; None is the real date
-    (a replay passes the session's).
+    `current_session` and `today` no longer change the result; callers still pass them.
 
     Returns:
         pd.Series (string) with "Repeat" for repeated orders, "" otherwise
     """
     logger.debug("Phase 5/7: Detecting repeated orders...")
 
-    if history_df is None or history_df.empty:
+    if history_df is None or history_df.empty or "Source" not in history_df.columns:
         return pd.Series("", index=final_df.index)
-    h = history_df
-    keys = h["Order_Number"].astype(str).str.strip()
-    session = h["Session"].fillna("").astype(str) if "Session" in h.columns else pd.Series("", index=h.index)
-    source = h["Source"] if "Source" in h.columns else pd.Series("history", index=h.index)
-    if "Execution_Date" in h.columns:
-        # Deliberately naive: pd.to_datetime yields tz-naive dates.
-        today = pd.Timestamp(today or datetime.now().date())
-        dates = pd.to_datetime(h["Execution_Date"], errors="coerce", format="mixed").dt.normalize()
-        before_today = dates.isna() | (dates < today)
-    else:
-        before_today = pd.Series(True, index=h.index)
-    counts = (
-        (source == "packed")
-        | ((session != "") & (session != (current_session or "")))
-        | ((session == "") & before_today)
-    )
-    repeated_orders = set(keys[counts])
+    keys = history_df["Order_Number"].astype(str).str.strip()
+    repeated_orders = set(keys[history_df["Source"] == "packed"])
     repeated = np.where(final_df["Order_Number"].astype(str).str.strip().isin(repeated_orders), "Repeat", "")
 
     logger.debug(f"Found {(repeated == 'Repeat').sum()} repeated orders")
