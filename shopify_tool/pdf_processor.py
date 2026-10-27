@@ -173,6 +173,8 @@ def process_reference_labels(
                 'method': ref_data['method'] if ref_data else None,
             })
 
+        _barcode_pass(pdf_path, page_data_list, mapping)
+
         # Step 4: Sort pages by reference number
         sorted_pages = sort_pages_by_reference(page_data_list)
 
@@ -181,6 +183,7 @@ def process_reference_labels(
 
         stamped_refs = []
         name_matched = 0
+        barcode_matched = 0
         for done, page_data in enumerate(sorted_pages, start=1):
             page, ref = page_data['page'], page_data['ref']
             stamped = False
@@ -189,6 +192,7 @@ def process_reference_labels(
                     _stamp_reference(out, page, ref)
                     stamped_refs.append(ref)
                     name_matched += page_data['method'] == 'name'
+                    barcode_matched += page_data['method'] == 'barcode'
                     stamped = True
                 except Exception:
                     logger.exception(f"Failed to add overlay for ref {ref}; page kept unstamped")
@@ -229,6 +233,7 @@ def process_reference_labels(
             'duplicate_refs': duplicate_refs,
             'missing_refs': missing_refs,
             'name_matched': name_matched,
+            'barcode_matched': barcode_matched,
             'processing_time': processing_time
         }
 
@@ -496,6 +501,65 @@ def match_reference(page_text: str, mapping: dict) -> dict | None:
     if found:
         logger.info(f"Name fallback refused, ambiguous: {found}")
     return None
+
+
+def match_barcodes(values: list[str], mapping: dict) -> dict | None:
+    """
+    Match decoded barcode texts to a REF. A value equal to a PostOne key gives
+    its REF; a tracking key (8+ chars) standing alone as a token inside a value
+    gives its REF (Packeta's "40858732093-14008" carries "40858732093").
+    One REF across all hits matches, anything else does not.
+    """
+    refs = set()
+    for value in values:
+        if value in mapping['by_postone']:
+            refs.add(mapping['by_postone'][value]['ref'])
+        upper = value.upper()
+        for tracking, data in mapping['by_tracking'].items():
+            if len(tracking) >= 8 and tracking.upper() in upper and re.search(
+                    r"(?<![A-Z0-9])" + re.escape(tracking.upper()) + r"(?![A-Z0-9])", upper):
+                refs.add(data['ref'])
+    if len(refs) == 1:
+        return {'ref': refs.pop(), 'verified': False, 'method': 'barcode'}
+    return None
+
+
+def _barcode_values(pdf_path: str, indices: list[int]) -> dict[int, list[str]]:
+    """
+    Decoded barcode texts per page index. Empty when zxing-cpp or pdfium cannot
+    load: those pages then stay unmatched, as before the fallback existed.
+    """
+    try:
+        import pypdfium2 as pdfium
+        import zxingcpp
+        doc = pdfium.PdfDocument(pdf_path)
+    except Exception:
+        logger.warning(f"Barcode fallback unavailable for {pdf_path}", exc_info=True)
+        return {}
+    values = {}
+    try:
+        for i in indices:
+            try:
+                image = doc[i].render(scale=300 / 72, grayscale=True).to_numpy()
+                values[i] = [r.text for r in zxingcpp.read_barcodes(image)]
+            except Exception as e:
+                logger.warning(f"Barcode read failed on page {i+1}: {e}")
+    finally:
+        doc.close()
+    return values
+
+
+def _barcode_pass(pdf_path: str, page_data_list: list, mapping: dict) -> None:
+    """Match the pages text could not match by their barcodes."""
+    # ponytail: no progress phase for the barcode pass; add one if all-image PDFs make Cancel feel stuck.
+    unmatched = [p for p in page_data_list if p['ref'] is None]
+    if not unmatched:
+        return
+    values = _barcode_values(pdf_path, [p['original_order'] for p in unmatched])
+    for p in unmatched:
+        found = match_barcodes(values.get(p['original_order'], []), mapping)
+        if found:
+            p.update(ref=found['ref'], verified=found['verified'], method=found['method'])
 
 
 def extract_postone_number(text: str) -> str | None:

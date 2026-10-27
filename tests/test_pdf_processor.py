@@ -2,6 +2,7 @@
 barcode strip. See
 docs/superpowers/specs/2026-08-10-print-polish-and-reference-barcode-design.md."""
 import inspect
+import sys
 
 import pytest
 from pypdf import PdfReader
@@ -528,3 +529,49 @@ class TestTrackingMatch:
     def test_two_trackings_for_the_same_ref_match(self):
         m = _mapping({"AB12345678": "#1", "CD87654321": "#1"})
         assert pdf_processor.match_reference("AB12345678 CD87654321", m)["ref"] == "#1"
+
+
+def _barcode_only_pdf(path, value):
+    """A page with no text layer, only a Code-128 drawn as vector bars (mimics Packeta)."""
+    from reportlab.graphics.barcode import code128
+
+    c = canvas.Canvas(str(path), pagesize=(360, 286))
+    code128.Code128(value, barHeight=60, barWidth=1.2).drawOn(c, 20, 100)
+    c.showPage()
+    c.save()
+
+
+class TestBarcodeFallback:
+    def test_match_barcodes_exact_postone(self):
+        m = {**_mapping({}), "by_postone": {"P3362241198": {"ref": "#119770", "name": ""}}}
+        assert pdf_processor.match_barcodes(["P3362241198"], m)["ref"] == "#119770"
+
+    def test_match_barcodes_tracking_as_token_inside_value(self):
+        r = pdf_processor.match_barcodes(["40858732093-14008"], _mapping({"40858732093": "#121000"}))
+        assert (r["ref"], r["method"], r["verified"]) == ("#121000", "barcode", False)
+
+    def test_match_barcodes_tracking_inside_longer_digits_does_not_match(self):
+        assert pdf_processor.match_barcodes(["408587320939"], _mapping({"40858732093": "#1"})) is None
+
+    def test_match_barcodes_ambiguous_or_none(self):
+        m = _mapping({"AB12345678": "#1", "CD87654321": "#2"})
+        assert pdf_processor.match_barcodes(["AB12345678", "CD87654321"], m) is None
+        assert pdf_processor.match_barcodes(["ZZZ"], m) is None
+
+    def _run_packeta(self, tmp_path):
+        pdf = tmp_path / "packeta.pdf"
+        _barcode_only_pdf(pdf, "40858732093-14008")
+        csv_path = tmp_path / "m.csv"
+        csv_path.write_text("PostOne,Tracking,Reference,C3,C4,C5,Product\nP3286312240,40858732093,#121000,,,,X\n")
+        out = tmp_path / "out"
+        out.mkdir()
+        return pdf_processor.process_reference_labels(str(pdf), str(csv_path), str(out))
+
+    def test_textless_page_matches_by_barcode(self, tmp_path):
+        r = self._run_packeta(tmp_path)
+        assert (r["matched"], r["barcode_matched"], r["missing_refs"]) == (1, 1, [])
+
+    def test_run_completes_when_zxing_is_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(sys.modules, "zxingcpp", None)  # makes `import zxingcpp` raise ImportError
+        r = self._run_packeta(tmp_path)
+        assert (r["matched"], r["unmatched"], r["barcode_matched"]) == (0, 1, 0)
