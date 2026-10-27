@@ -16,7 +16,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -72,7 +72,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -127,7 +127,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -183,7 +183,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -239,7 +239,7 @@
         "BUNDLE_ORDER",
         "VIP_CUSTOMER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -294,7 +294,7 @@
         "BUNDLE_ORDER",
         "VIP_CUSTOMER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -348,7 +348,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -404,7 +404,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -460,7 +460,7 @@
         "BUNDLE_ORDER",
         "VIP_CUSTOMER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -516,7 +516,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -572,7 +572,7 @@
         "BUNDLE_ORDER",
         "VIP_CUSTOMER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -686,7 +686,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -742,7 +742,7 @@
         "BUNDLE_ORDER",
         "VIP_CUSTOMER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -797,7 +797,7 @@
         "BUNDLE_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -852,7 +852,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -907,7 +907,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -963,7 +963,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -1019,7 +1019,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -1070,10 +1070,8 @@
       "courier": "SPEEDY",
       "status": "Fulfillable",
       "shipping_country": "BG",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -1129,7 +1127,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -1186,7 +1184,7 @@
         "VIP_CUSTOMER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -1242,7 +1240,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -1298,7 +1296,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -1355,7 +1353,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -1411,7 +1409,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -1467,7 +1465,7 @@
         "FIRST_ORDER",
         "Loox - Referral Friend Discount"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -1521,7 +1519,7 @@
       "tags": [
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -1575,7 +1573,7 @@
       "tags": [
         "VIP_CUSTOMER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",

@@ -93,7 +93,9 @@ def _get_sku_dtype_dict(column_mappings: dict, file_type: str) -> dict:
 
 
 def _text_or_blank(value) -> str:
-    """str(value or ""): what each JSON text field has always held (NaN gives "nan")."""
+    """The cell as text. A missing cell (None, NaN, NaT) is blank, not "nan"."""
+    if value is None or (pd.api.types.is_scalar(value) and pd.isna(value)):
+        return ""
     return str(value or "")
 
 
@@ -185,7 +187,7 @@ def build_packing_orders(df: pd.DataFrame) -> list[dict[str, Any]]:
         except (json.JSONDecodeError, TypeError):
             internal_tags = []
 
-        tags_value = first["Tags"][g] or ""
+        tags_value = _text_or_blank(first["Tags"][g])
         tags_list = (
             [t.strip() for t in str(tags_value).split(",") if t.strip()]
             if str(tags_value).strip()

@@ -13,10 +13,8 @@
       "courier": "Unknown",
       "status": "Fulfillable",
       "shipping_country": "AU",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "STOKIST"
@@ -74,10 +72,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "FR",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -104,10 +100,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "DK",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -174,10 +168,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "SI",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",

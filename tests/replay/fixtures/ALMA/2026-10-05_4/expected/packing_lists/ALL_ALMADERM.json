@@ -16,7 +16,7 @@
       "tags": [
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -63,7 +63,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -109,7 +109,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -156,7 +156,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -202,7 +202,7 @@
       "tags": [
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -250,7 +250,7 @@
         "FIRST_ORDER",
         "VIP_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "MASK",
@@ -298,7 +298,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -345,7 +345,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -392,7 +392,7 @@
         "BUNDLE_ORDER",
         "FIRST_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -435,10 +435,8 @@
       "courier": "SPEEDY",
       "status": "Fulfillable",
       "shipping_country": "BG",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -484,7 +482,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -530,7 +528,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -576,7 +574,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -622,7 +620,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -668,7 +666,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",
@@ -762,7 +760,7 @@
       "tags": [
         "BUNDLE_ORDER"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "BOX",

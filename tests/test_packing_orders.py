@@ -14,6 +14,11 @@ from shopify_tool.stock_ledger import FULFILLABLE, NOT_FULFILLABLE, is_fulfillab
 
 
 # the pre-D implementation, frozen to pin behaviour
+def _text(value) -> str:
+    """A cell as text. Patch 2.4.3: a missing cell (NaN) is blank, not "nan"; the only deliberate change here."""
+    return "" if pd.isna(value) else str(value or "")
+
+
 def _order_reference(order_number: str, group: pd.DataFrame) -> dict[str, Any]:
     first_row = group.iloc[0]
 
@@ -23,7 +28,7 @@ def _order_reference(order_number: str, group: pd.DataFrame) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         internal_tags = []
 
-    tags_value = first_row.get("Tags", "") or ""
+    tags_value = _text(first_row.get("Tags", ""))
     tags_list = (
         [t.strip() for t in str(tags_value).split(",") if t.strip()]
         if str(tags_value).strip()
@@ -37,14 +42,14 @@ def _order_reference(order_number: str, group: pd.DataFrame) -> dict[str, Any]:
         else None
     )
 
-    shipping_provider = str(first_row.get("Shipping_Provider", "") or "")
+    shipping_provider = _text(first_row.get("Shipping_Provider", ""))
     if "Order_Fulfillment_Status" in group.columns and "Order_Number" in group.columns:
         fulfillment_status = (
             FULFILLABLE if is_fulfillable(group, first_row["Order_Number"]) else NOT_FULFILLABLE
         )
     else:
         fulfillment_status = "Unknown"
-    destination_country = str(first_row.get("Destination_Country", "") or "")
+    destination_country = _text(first_row.get("Destination_Country", ""))
 
     items = []
     for _, row in group.iterrows():
@@ -61,15 +66,15 @@ def _order_reference(order_number: str, group: pd.DataFrame) -> dict[str, Any]:
                 "sku": str(row.get("SKU", "")),
                 "product_name": str(warehouse_name),
                 "quantity": quantity,
-                "order_fulfillment_status": str(row.get("Order_Fulfillment_Status", "") or ""),
-                "status_note": str(row.get("Status_Note", "") or ""),
-                "system_note": str(row.get("System_note", "") or ""),
+                "order_fulfillment_status": _text(row.get("Order_Fulfillment_Status", "")),
+                "status_note": _text(row.get("Status_Note", "")),
+                "system_note": _text(row.get("System_note", "")),
             }
         )
 
     return {
         "order_number": str(order_number),
-        "order_type": str(first_row.get("Order_Type", "") or ""),
+        "order_type": _text(first_row.get("Order_Type", "")),
         "shipping_provider": shipping_provider,
         "order_fulfillment_status": fulfillment_status,
         "destination_country": destination_country,
@@ -77,8 +82,8 @@ def _order_reference(order_number: str, group: pd.DataFrame) -> dict[str, Any]:
         "status": fulfillment_status,
         "shipping_country": destination_country,
         "tags": tags_list,
-        "notes": str(first_row.get("Notes", "") or ""),
-        "system_note": str(first_row.get("System_note", "") or ""),
+        "notes": _text(first_row.get("Notes", "")),
+        "system_note": _text(first_row.get("System_note", "")),
         "internal_tags": internal_tags,
         "order_min_box": order_min_box,
         "items": items,
@@ -122,6 +127,22 @@ def test_without_a_status_column_the_status_is_unknown():
     expected = [_order_reference(str(n), g) for n, g in frame.groupby("Order_Number")]
     assert core.build_packing_orders(frame) == expected
     assert {o["status"] for o in expected} == {"Unknown"}
+
+
+def test_text_or_blank_treats_missing_as_blank():
+    assert core._text_or_blank(float("nan")) == ""
+    assert core._text_or_blank(None) == ""
+    assert core._text_or_blank(pd.NaT) == ""
+    assert core._text_or_blank("x") == "x"
+
+
+def test_empty_notes_and_tags_are_blank():
+    frame = FRAME.iloc[[0]].copy()
+    frame["Notes"] = NAN
+    frame["Tags"] = NAN
+    order = core.build_packing_orders(frame)[0]
+    assert order["notes"] == ""
+    assert order["tags"] == []
 
 
 def test_a_row_without_an_order_number_is_left_out_not_a_crash():

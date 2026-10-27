@@ -16,7 +16,7 @@
       "tags": [
         "express"
       ],
-      "notes": "nan",
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -67,10 +67,8 @@
       "courier": "POST",
       "status": "Not Fulfillable",
       "shipping_country": "PL",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "Cannot fulfill: Barrier_Cream-Refill: Out of stock",
       "internal_tags": [],
       "order_min_box": null,
@@ -94,10 +92,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "FR",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -148,10 +144,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "FI",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -194,10 +188,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "GB",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -224,10 +216,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "US",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "DHL",
@@ -295,10 +285,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "US",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "DHL",

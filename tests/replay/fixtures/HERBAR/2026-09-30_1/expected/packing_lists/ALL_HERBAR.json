@@ -13,10 +13,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "PT",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -67,10 +65,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "FR",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -121,10 +117,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "PL",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -175,10 +169,8 @@
       "courier": "Unknown",
       "status": "Fulfillable",
       "shipping_country": "DK",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "STOKIST"
@@ -220,10 +212,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "NL",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -282,10 +272,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "BE",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -368,10 +356,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "GR",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -446,10 +432,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "NL",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -508,10 +492,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "IT",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -562,10 +544,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "CH",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -624,10 +604,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "GB",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -678,10 +656,8 @@
       "courier": "Unknown",
       "status": "Fulfillable",
       "shipping_country": "US",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "DHL",
@@ -725,10 +701,8 @@
       "courier": "Express 2-3 Business Days",
       "status": "Fulfillable",
       "shipping_country": "GB",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -787,10 +761,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "BG",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "SPEEDY",
@@ -842,10 +814,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "FI",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
@@ -912,10 +882,8 @@
       "courier": "Unknown",
       "status": "Fulfillable",
       "shipping_country": "US",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "DHL",
@@ -959,10 +927,8 @@
       "courier": "POST",
       "status": "Fulfillable",
       "shipping_country": "DK",
-      "tags": [
-        "nan"
-      ],
-      "notes": "nan",
+      "tags": [],
+      "notes": "",
       "system_note": "",
       "internal_tags": [
         "O",
