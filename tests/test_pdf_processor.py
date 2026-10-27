@@ -575,3 +575,35 @@ class TestBarcodeFallback:
         monkeypatch.setitem(sys.modules, "zxingcpp", None)  # makes `import zxingcpp` raise ImportError
         r = self._run_packeta(tmp_path)
         assert (r["matched"], r["unmatched"], r["barcode_matched"]) == (0, 1, 0)
+
+
+class TestCustomsPages:
+    """Spec 4.3: a CN23 customs declaration repeats the REF of its parcel's label, so it is not a duplicate."""
+
+    _CSV = "PostOne,Tracking,Reference,C3,C4,C5,Product\nP3286312240,AB12345678,#7,,,,X\n"
+
+    def _run(self, tmp_path, page_texts):
+        pdf_path = tmp_path / "pages.pdf"
+        c = canvas.Canvas(str(pdf_path), pagesize=(288, 432))
+        for text in page_texts:
+            for row, line in enumerate(text.split("\n")):
+                c.drawString(20, 400 - 20 * row, line)
+            c.showPage()
+        c.save()
+        csv_path = tmp_path / "m.csv"
+        csv_path.write_text(self._CSV)
+        out = tmp_path / "out"
+        out.mkdir()
+        return pdf_processor.process_reference_labels(str(pdf_path), str(csv_path), str(out))
+
+    def test_a_customs_page_with_the_same_ref_is_not_a_duplicate(self, tmp_path):
+        r = self._run(tmp_path, ["P3286312240 Acme", "Customs Declaration - CN23\nAB12345678"])
+        assert (r["duplicate_refs"], r["matched"]) == ([], 2)
+
+    def test_two_label_pages_with_the_same_ref_are_still_a_duplicate(self, tmp_path):
+        r = self._run(tmp_path, ["P3286312240 Acme", "P3286312240 Acme"])
+        assert r["duplicate_refs"] == ["#7"]
+
+    def test_is_customs_page_needs_the_heading_and_no_postone(self):
+        assert pdf_processor.is_customs_page("Customs Declaration - CN23") is True
+        assert pdf_processor.is_customs_page("CN22 P1234567890 label") is False

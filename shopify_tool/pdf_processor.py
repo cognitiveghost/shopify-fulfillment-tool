@@ -171,6 +171,7 @@ def process_reference_labels(
                 'original_order': i,
                 'verified': ref_data['verified'] if ref_data else False,
                 'method': ref_data['method'] if ref_data else None,
+                'customs': is_customs_page(page_texts[i]),
             })
 
         _barcode_pass(pdf_path, page_data_list, mapping)
@@ -182,6 +183,7 @@ def process_reference_labels(
         out = pikepdf.new()
 
         stamped_refs = []
+        label_refs = []  # stamped refs on non-customs pages: only these can be duplicates
         name_matched = 0
         barcode_matched = 0
         for done, page_data in enumerate(sorted_pages, start=1):
@@ -191,6 +193,8 @@ def process_reference_labels(
                 try:
                     _stamp_reference(out, page, ref)
                     stamped_refs.append(ref)
+                    if not page_data['customs']:
+                        label_refs.append(ref)
                     name_matched += page_data['method'] == 'name'
                     barcode_matched += page_data['method'] == 'barcode'
                     stamped = True
@@ -204,9 +208,9 @@ def process_reference_labels(
         # "matched" is pages actually stamped, not pages a REF was found for
         matched = len(stamped_refs)
         unmatched = total_pages - matched
-        counts = Counter(stamped_refs)
-        duplicate_refs = sorted((r for r, n in counts.items() if n > 1), key=reference_sort_key)
-        missing_refs = sorted(mapping['refs'] - set(counts), key=reference_sort_key)
+        label_counts = Counter(label_refs)
+        duplicate_refs = sorted((r for r, n in label_counts.items() if n > 1), key=reference_sort_key)
+        missing_refs = sorted(mapping['refs'] - set(stamped_refs), key=reference_sort_key)
         logger.info(f"Matching complete: {matched} matched, {unmatched} unmatched")
 
         # Step 6: Save output PDF. The last call a callback gets: a run that
@@ -581,6 +585,11 @@ def extract_postone_number(text: str) -> str | None:
         return match.group(1) + match.group(2) if match else None
     except Exception:
         return None
+
+
+def is_customs_page(text: str) -> bool:
+    """A CN23 customs declaration: it repeats its parcel's REF, so it is not a duplicate label."""
+    return "customs declaration" in text.lower() and extract_postone_number(text) is None
 
 
 def check_name_presence(name: str, page_text: str) -> bool:
