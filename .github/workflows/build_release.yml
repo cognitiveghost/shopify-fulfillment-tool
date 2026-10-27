@@ -151,9 +151,13 @@ jobs:
         #
         # qico.dll is Qt's .ico reader: without it brand_icon() loads nothing
         # and the window and taskbar show a blank icon.
+        #
+        # zxingcpp*.pyd is the barcode reader for Reference Labels pages with no
+        # text layer. It is imported lazily and an ImportError only logs a
+        # warning, so a missing module would leave those labels unmatched.
         shell: pwsh
         run: |
-          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html", "setup.html", "browse.html", "tools.html", "logs.html", "pikepdf", "fulfilment-tool.ico", "qico.dll", "bg.json", "scan-barcode.svg", "download.svg") {
+          foreach ($name in "package.svg", "Inter-Regular.ttf", "QtWebEngineProcess.exe", "results.html", "setup.html", "browse.html", "tools.html", "logs.html", "pikepdf", "fulfilment-tool.ico", "qico.dll", "bg.json", "scan-barcode.svg", "download.svg", "zxingcpp*.pyd") {
             if (-not (Get-ChildItem -Path "dist\FulfilmentTool" -Recurse -Filter $name)) {
               throw "PyInstaller did not bundle $name."
             }

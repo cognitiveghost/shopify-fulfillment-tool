@@ -880,7 +880,7 @@ def _run_analysis_and_rules(
         stock_df: Stock DataFrame
         history_df: Detection frame (see packed_orders.union_history_with_packed)
         config: Configuration dict with column_mappings, courier_mappings, rules, settings
-        current_session: Name of this run's session, for repeat detection
+        current_session: Name of this run's session (unused by repeat detection, ADR 0023)
         today: The day repeat detection treats as today; None is the real date
 
     Returns:

@@ -108,6 +108,10 @@ def process_reference_labels(
             'pages_processed': int,
             'matched': int,
             'unmatched': int,
+            'duplicate_refs': list,
+            'missing_refs': list,
+            'name_matched': int,
+            'barcode_matched': int,
             'processing_time': float
         }
 
@@ -428,6 +432,19 @@ def normalize_text(text: str) -> str:
     return re.sub(r'\s+', ' ', str(text)).strip().lower()
 
 
+def _has_tracking(tracking: str, text: str, compact: str) -> bool:
+    """
+    True when tracking (8+ chars) stands alone as a token in text, ignoring
+    whitespace inside it. compact is text upper-cased with whitespace removed,
+    a cheap prefilter computed once per text.
+    """
+    if len(tracking) < 8 or tracking.upper() not in compact:
+        return False
+    pattern = (r"(?<![A-Z0-9])" + r"\s*".join(map(re.escape, tracking.upper()))
+               + r"(?![A-Z0-9])")
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
 def match_reference(page_text: str, mapping: dict) -> dict | None:
     """
     Match page text to reference using 3-step verification:
@@ -465,11 +482,7 @@ def match_reference(page_text: str, mapping: dict) -> dict | None:
     compact = re.sub(r"\s+", "", page_text).upper()
     refs = {}
     for tracking, data in mapping['by_tracking'].items():
-        if len(tracking) < 8 or tracking.upper() not in compact:
-            continue
-        pattern = (r"(?<![A-Z0-9])" + r"\s*".join(map(re.escape, tracking.upper()))
-                   + r"(?![A-Z0-9])")
-        if re.search(pattern, page_text, re.IGNORECASE):
+        if _has_tracking(tracking, page_text, compact):
             refs.setdefault(data['ref'], (tracking, data))
     if len(refs) == 1:
         ref, (tracking, data) = next(iter(refs.items()))
@@ -518,10 +531,9 @@ def match_barcodes(values: list[str], mapping: dict) -> dict | None:
     for value in values:
         if value in mapping['by_postone']:
             refs.add(mapping['by_postone'][value]['ref'])
-        upper = value.upper()
+        compact = re.sub(r"\s+", "", value).upper()
         for tracking, data in mapping['by_tracking'].items():
-            if len(tracking) >= 8 and tracking.upper() in upper and re.search(
-                    r"(?<![A-Z0-9])" + re.escape(tracking.upper()) + r"(?![A-Z0-9])", upper):
+            if _has_tracking(tracking, value, compact):
                 refs.add(data['ref'])
     if len(refs) == 1:
         return {'ref': refs.pop(), 'verified': False, 'method': 'barcode'}

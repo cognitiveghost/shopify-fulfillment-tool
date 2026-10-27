@@ -1364,8 +1364,8 @@ def run_analysis(
             2. Legacy: {"dhl": "DHL"}
             If None or empty, uses hardcoded fallback rules for backward compatibility.
         current_session (str, optional): Name of the session this run belongs
-            to. History rows from this session never mark a repeat; rows from
-            other sessions do. See `_detect_repeated_orders`.
+            to. Repeat detection no longer reads it (ADR 0023). See
+            `_detect_repeated_orders`.
         mode (str, optional): Order prioritization strategy.
             ``"multi_first"`` (default): multi-item orders processed first —
             maximizes the number of complete orders fulfilled.
