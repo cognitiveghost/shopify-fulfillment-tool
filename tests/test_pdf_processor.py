@@ -491,3 +491,40 @@ class TestCsvMappingRows:
         csv_path.write_text("Order,Tracking,Date\n#1,TR1,2026-09-30\n")
         with pytest.raises(pdf_processor.InvalidCSVError):
             pdf_processor.load_csv_mapping(str(csv_path))
+
+
+def _mapping(tracking_to_ref: dict) -> dict:
+    return {
+        'by_postone': {},
+        'by_tracking': {t: {'ref': ref, 'name': ""} for t, ref in tracking_to_ref.items()},
+        'by_name': {},
+        'refs': set(tracking_to_ref.values()),
+        'rows': len(tracking_to_ref),
+    }
+
+
+class TestTrackingMatch:
+    def test_tracking_printed_with_spaces_matches(self):
+        m = _mapping({"9L37349396976": "#119850"})
+        assert pdf_processor.match_reference("Poids\n9L 3734939697 6\nSite", m)["ref"] == "#119850"
+
+    def test_ten_digit_tracking_matches(self):
+        m = _mapping({"9819014181": "#120090"})
+        r = pdf_processor.match_reference("AWB Nr\n9819014181\nOrigin", m)
+        assert (r["ref"], r["method"]) == ("#120090", "tracking")
+
+    def test_tracking_inside_a_longer_number_does_not_match(self):
+        m = _mapping({"9L37349396973": "#1"})
+        assert pdf_processor.match_reference("x 119L 37349396973 y", m) is None
+
+    def test_short_or_empty_tracking_never_matches(self):
+        m = _mapping({"1234": "#1", "": "#2"})
+        assert pdf_processor.match_reference("ref 1234 here", m) is None
+
+    def test_two_trackings_for_different_refs_is_no_tracking_match(self):
+        m = _mapping({"AB12345678": "#1", "CD87654321": "#2"})
+        assert pdf_processor.match_reference("AB12345678 CD87654321", m) is None
+
+    def test_two_trackings_for_the_same_ref_match(self):
+        m = _mapping({"AB12345678": "#1", "CD87654321": "#1"})
+        assert pdf_processor.match_reference("AB12345678 CD87654321", m)["ref"] == "#1"

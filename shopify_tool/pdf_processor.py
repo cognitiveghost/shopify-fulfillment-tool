@@ -450,23 +450,34 @@ def match_reference(page_text: str, mapping: dict) -> dict | None:
             'method': 'postone'
         }
 
-    # Step 2: Try Tracking Number
-    tracking_nums = extract_tracking_numbers(page_text)
-    for tracking in tracking_nums:
-        if tracking in mapping['by_tracking']:
-            data = mapping['by_tracking'][tracking]
-            is_verified = check_name_presence(data['name'], page_text)
+    # Step 2: Tracking number. Whitespace in the page is ignored, and the number
+    # must stand alone as a token, so one printed inside a longer number never
+    # matches. Short tracking values (under 8 chars) are too weak to trust.
+    compact = re.sub(r"\s+", "", page_text).upper()
+    refs = {}
+    for tracking, data in mapping['by_tracking'].items():
+        if len(tracking) < 8 or tracking.upper() not in compact:
+            continue
+        pattern = (r"(?<![A-Z0-9])" + r"\s*".join(map(re.escape, tracking.upper()))
+                   + r"(?![A-Z0-9])")
+        if re.search(pattern, page_text, re.IGNORECASE):
+            refs.setdefault(data['ref'], (tracking, data))
+    if len(refs) == 1:
+        ref, (tracking, data) = next(iter(refs.items()))
+        is_verified = check_name_presence(data['name'], page_text)
 
-            logger.debug(
-                f"Matched by Tracking: {tracking} → {data['ref']} "
-                f"(verified: {is_verified})"
-            )
+        logger.debug(
+            f"Matched by Tracking: {tracking} → {ref} "
+            f"(verified: {is_verified})"
+        )
 
-            return {
-                'ref': data['ref'],
-                'verified': is_verified,
-                'method': 'tracking'
-            }
+        return {
+            'ref': ref,
+            'verified': is_verified,
+            'method': 'tracking'
+        }
+    if refs:
+        logger.info(f"Tracking match ambiguous across {len(refs)} REFs, trying name")
 
     # Step 3: Name fallback. Only whole-word matches count, a name inside a
     # longer matching name gives way to it, and the page matches only if one
@@ -506,25 +517,6 @@ def extract_postone_number(text: str) -> str | None:
         return match.group(1) + match.group(2) if match else None
     except Exception:
         return None
-
-
-def extract_tracking_numbers(text: str) -> list:
-    """
-    Extract potential tracking numbers from text.
-
-    Args:
-        text: Input text
-
-    Returns:
-        list: List of tracking number strings
-    """
-    try:
-        # Looking for long alphanumeric strings (common in tracking)
-        # Excluding the R/P numbers
-        matches = re.findall(r'(?<![RP])([A-Z0-9]{12,})', text)
-        return matches if matches else []
-    except Exception:
-        return []
 
 
 def check_name_presence(name: str, page_text: str) -> bool:
