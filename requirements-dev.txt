@@ -7,14 +7,14 @@
 
 # Testing Framework
 # -----------------
-pytest>=9.1.1          # Unit testing framework
+pytest>=9.2.0          # Unit testing framework
 pytest-qt>=4.5.0       # Pytest plugin for testing PySide6/Qt applications
 pytest-mock>=3.17.0    # Mocking and monkey-patching for pytest
 pytest-cov>=7.1.0      # Code coverage reporting for pytest
 
 # Code Quality Tools
 # ------------------
-ruff>=0.17.2,<0.18      # Fast Python linter and formatter (replaces black + flake8).
+ruff>=0.17.3,<0.18      # Fast Python linter and formatter (replaces black + flake8).
                         # 0.17+: its default rule set drops DTZ, so no per-line DTZ noqa is needed.
 
 # Build and Distribution
