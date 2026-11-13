@@ -14,11 +14,11 @@ pytest-cov>=7.1.0      # Code coverage reporting for pytest
 
 # Code Quality Tools
 # ------------------
-ruff>=0.17.3,<0.18      # Fast Python linter and formatter (replaces black + flake8).
+ruff>=0.17.4,<0.18      # Fast Python linter and formatter (replaces black + flake8).
                         # 0.17+: its default rule set drops DTZ, so no per-line DTZ noqa is needed.
 
 # Build and Distribution
 # ----------------------
 pyinstaller>=6.22.3     # Package application into standalone executables
-pyinstaller-hooks-contrib>=2026.9  # Additional hooks for PyInstaller
-markdown>=3.11.2  # user guide build (shared/guide/build.py)
+pyinstaller-hooks-contrib>=2026.10  # Additional hooks for PyInstaller
+markdown>=3.11.3  # user guide build (shared/guide/build.py)
