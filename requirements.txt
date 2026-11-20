@@ -6,7 +6,7 @@
 # Core Data Processing
 # --------------------
 pandas>=3.1.1          # Data manipulation, analysis, and DataFrame operations
-numpy>=2.5.4           # Numerical computing and array operations (pandas dependency)
+numpy>=2.5.5           # Numerical computing and array operations (pandas dependency)
 python-dateutil>=4.0.0 # Date/time parsing, manipulation, and timezone handling
 pytz>=2026.6           # Timezone definitions and conversions
 tzdata>=2026.6         # IANA timezone database
@@ -32,8 +32,8 @@ PySide6>=6.12.0         # Qt6 for Python - cross-platform GUI framework
 
 # PDF Processing (Feature #4 - Reference Labels)
 # -----------------------------------------------
-pypdf>=7.0.1           # page text for Reference Labels matching
-pikepdf>=10.18.0           # Reference Labels page handling (rotation, overlay, merge)
+pypdf>=7.1.0           # page text for Reference Labels matching
+pikepdf>=10.18.2           # Reference Labels page handling (rotation, overlay, merge)
 reportlab>=5.1.0       # PDF generation and text overlay
 zxing-cpp>=3.1.1           # barcode reading for Reference Labels pages with no text layer
 
