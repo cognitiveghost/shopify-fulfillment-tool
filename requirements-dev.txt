@@ -14,7 +14,7 @@ pytest-cov>=7.1.0      # Code coverage reporting for pytest
 
 # Code Quality Tools
 # ------------------
-ruff>=0.17.4,<0.18      # Fast Python linter and formatter (replaces black + flake8).
+ruff>=0.17.5,<0.18      # Fast Python linter and formatter (replaces black + flake8).
                         # 0.17+: its default rule set drops DTZ, so no per-line DTZ noqa is needed.
 
 # Build and Distribution
